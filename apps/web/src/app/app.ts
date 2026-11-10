@@ -17,7 +17,8 @@ import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
 import { OverviewScreen } from './organisation/overview';
 import { assistantCreateGroupId, normalisePathname, organisationPage,
-  organisationPageLabel, peopleGroupId, peopleMemberId, toolExplanationServerId }
+  organisationPageLabel, peopleGroupId, peopleMemberId, toolExplanationServerId,
+  type OrganisationPage }
   from './organisation/pages';
 import { AccountScreen } from './settings/account-screen';
 import { PersonalSettingsShell } from './settings/personal-settings-shell';
@@ -51,6 +52,7 @@ import { PersonaReview } from './welcome/persona-review';
 })
 export class App {
   protected readonly overviewAccessLost = signal(false);
+  protected readonly overviewPages = signal<readonly OrganisationPage[]>([]);
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';

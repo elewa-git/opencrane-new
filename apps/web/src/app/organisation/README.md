@@ -14,13 +14,15 @@ admin page or an authorised evidence view.
 flowchart LR
   web[Website] --> overview[Overview]
   web --> shell[Organisation frame]
-  overview --> server[Server task read]
-  shell --> admin[Admin pages]
+  overview --> server[Server overview read]
+  server --> shell
+  shell --> admin[Permitted page links]
 ```
 
 ## What it is responsible for
 
-- Lists Overview, People & groups, Models & providers, Spending, Integrations, Routines and Change history.
+- Shows each organisation link when the current overview read permits it.
+- Keeps links hidden while that read is pending and clears them when access is refused.
 - Marks the current page and recognises member, group, assistant-setup and integration addresses.
 - Shows a sidebar on larger screens and a keyboard-friendly menu on phones.
 - Opens Overview for `/org` and `/org/overview`.

@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, Component, input, signal,
+  ChangeDetectionStrategy, Component, computed, effect, input, signal,
 } from '@angular/core';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface } from '../ui/paper';
@@ -18,8 +18,20 @@ export class OrganisationShell {
   readonly activePage = input<OrganisationPage>();
   readonly organisationName = input('Your organisation');
   readonly accessLost = input(false);
-  protected readonly pages = organisationPages;
+  readonly permittedPages = input<readonly OrganisationPage[] | undefined>();
+  protected readonly pages = computed(() => {
+    const permitted = this.permittedPages();
+    if (this.accessLost()) return [];
+    if (permitted === undefined) return organisationPages;
+    return organisationPages.filter((page) => permitted.includes(page.id));
+  });
   protected readonly menuOpen = signal(false);
+
+  constructor() {
+    effect(() => {
+      if (this.accessLost() || this.pages().length === 0) this.menuOpen.set(false);
+    });
+  }
 
   protected pageLabel(): string {
     return organisationPageLabel(this.activePage()) ?? 'Organisation settings';

@@ -8,7 +8,7 @@
     </div>
     @if (!accessLost()) {
     <nav aria-label="Organisation settings">
-      @for (page of pages; track page.id) {
+      @for (page of pages(); track page.id) {
         <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
           {{ page.label }}
         </a>
@@ -33,7 +33,7 @@
   <div class="organisation">
     <strong>{{ organisationName() }}</strong>
   </div>
-  @for (page of pages; track page.id) {
+  @for (page of pages(); track page.id) {
     <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
       {{ page.label }}
     </a>
