@@ -38,22 +38,22 @@ function checksOwnershipAndCleanup(): void {
     }
     assert.equal(run(), 0);
     assert.equal(readFileSync(calls, 'utf8'),
-      'up --id 1 --fresh\nattempt 1 1\ndown --id 1\n');
+      'up --id 1\nattempt 1 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_ATTEMPT_STATUS = 'signal';
     assert.equal(run(), 1);
     assert.equal(readFileSync(calls, 'utf8'),
-      'up --id 1 --fresh\nattempt 1 1\ndown --id 1\n');
+      'up --id 1\nattempt 1 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_START_STATUS = '1';
     assert.equal(run(), 1);
-    assert.equal(readFileSync(calls, 'utf8'), 'up --id 1 --fresh\ndown --id 1\n');
+    assert.equal(readFileSync(calls, 'utf8'), 'up --id 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_START_STATUS = '0';
     env.FIXTURE_ATTEMPT_STATUS = '1';
     assert.equal(run(), 1);
     assert.equal(readFileSync(calls, 'utf8'),
-      'up --id 1 --fresh\nattempt 1 1\ndown --id 1\n');
+      'up --id 1\nattempt 1 1\ndown --id 1\n');
     writeFileSync(calls, '');
     env.FIXTURE_CLAIM = 'owner';
     assert.equal(run(), 1);
