@@ -74,6 +74,15 @@ function storeWithoutLostReply(store, state) {
   return { readStream: store.readStream.bind(store), append };
 }
 
+export function createOffsetClock(clock) {
+  // Keep the real clock before an upload temporarily replaces Date.now.
+  const originalNow = Date.now;
+  function currentTime() {
+    return originalNow() + clock.offset;
+  }
+  return currentTime;
+}
+
 export async function startRealUploadFixture(inputs) {
   const directory = await mkdtemp(join(tmpdir(), 'real-upload-scan-'));
   let scanner;
@@ -84,9 +93,7 @@ export async function startRealUploadFixture(inputs) {
   let lastProof;
   const state = { loseAcknowledgement: false };
   const clock = { offset: 0 };
-  function currentTime() {
-    return Date.now() + clock.offset;
-  }
+  const currentTime = createOffsetClock(clock);
 
   async function closeService() {
     if (!service) return;
