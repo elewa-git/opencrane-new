@@ -55,8 +55,9 @@ flowchart LR
 - Provide a helper for two process reads and two storage scans during one proposed
   persistence attempt. It keeps the first failure and records later failures too.
   An unknown tool reply or unreadable folder stays unfinished.
-- Prepare an attempt only for a claimed secondary installation whose images,
-  processes and writable storage can be measured.
+- Run that attempt only for a claimed secondary installation whose image, processes
+  and writable storage can be measured. Keep its native process and canary helper
+  alive through the live scan, then inspect storage again after Stop.
 - Claim and start the secondary stack through the owning launcher, then release it
   even when startup, the attempt or cancellation fails.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
@@ -125,9 +126,11 @@ Missing folders, unreadable files and redirected paths keep the inspection unfin
 It checks once during simulated work and again after it stops, without printing file names
 or private text.
 The persistence caller uses the protected target for one claimed secondary stack.
-It checks both containers and their images before any native launch. It measures
-the computer's writable storage from outside its container. The native adapter is
-still unavailable, so this caller reports an unfinished result. The full
+It measures both images and the computer's writable mounts, asks Codex to try each
+forbidden tool once, and scans the named stores outside the computer. The canary
+helper stays open until both process reads and the live scan finish. A lost request,
+changed image or unreadable store leaves the result unfinished. A confirmed write
+remains a failure. One clean attempt is still only partial evidence; the full
 fresh-install journeys remain separate.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.

@@ -66,6 +66,9 @@ function fixture() {
   const calls: string[] = [];
   let installed = computerInstallation;
   let installedServer = serverInstallation;
+  let installedComputerImage = computerImage;
+  let installedServerImage = serverImage;
+  let currentGeneration = computerInstallation;
   let installationChecks = 0;
   let reply: 'blocked' | 'wrote' | 'unknown' | 'not_run' = 'blocked';
   let writingTool: typeof expectedToolClasses[number] | undefined;
@@ -74,8 +77,12 @@ function fixture() {
   let stopHook: (() => void) | undefined;
   let toolHook: ((tool: string, privateText: Buffer) => void) | undefined;
   let stopError: Error | undefined;
+  let held = true;
   function replace(): void { installed = serverInstallation; }
   function replaceServer(): void { installedServer = computerInstallation; }
+  function replaceComputerImage(): void { installedComputerImage = serverImage; }
+  function replaceServerImage(): void { installedServerImage = computerImage; }
+  function replaceGeneration(): void { currentGeneration = serverInstallation; }
   function setReply(value: typeof reply): void { reply = value; }
   function setWritingTool(tool: typeof expectedToolClasses[number]): void {
     writingTool = tool;
@@ -88,6 +95,7 @@ function fixture() {
     toolHook = hook;
   }
   function setStopError(error: Error): void { stopError = error; }
+  function loseHeldRequest(): void { held = false; }
   const driver: PersistenceDriver = {
     context, locations, canary,
     currentInstallations() {
@@ -96,8 +104,8 @@ function fixture() {
         replace();
       }
       return { serverInstallationId: installedServer, computerInstallationId: installed,
-        serverImageDigest: serverImage, computerImageDigest: computerImage,
-        generationId: computerInstallation };
+        serverImageDigest: installedServerImage, computerImageDigest: installedComputerImage,
+        generationId: currentGeneration };
     },
     readInventory() {
       const read = reads.shift() ?? snapshot();
@@ -107,7 +115,11 @@ function fixture() {
     startNative() {
       calls.push('start');
       return Promise.resolve({
-        assertHeld() {},
+        assertHeld() {
+          if (!held) {
+            throw new Error('private held request lost');
+          }
+        },
         attemptTool(tool: string, privateText: Buffer) {
           calls.push(tool);
           toolHook?.(tool, privateText);
@@ -118,6 +130,7 @@ function fixture() {
         },
         stop() {
           calls.push('stop');
+          held = false;
           stopHook?.();
           if (stopError) {
             return Promise.reject(stopError);
@@ -128,8 +141,9 @@ function fixture() {
     },
   };
   return { driver, reads, calls, canary, locations, replace, replaceServer,
+    replaceComputerImage, replaceServerImage, replaceGeneration,
     replaceAtCheck, numberOfInstallationChecks, setReply, setWritingTool,
-    setReadHook, setStopHook, setToolHook, setStopError };
+    setReadHook, setStopHook, setToolHook, setStopError, loseHeldRequest };
 }
 
 afterEach(function clean(): void {
@@ -146,6 +160,98 @@ async function cleanAttempt(): Promise<void> {
   expect(numberOfInstallationChecks()).toBe(15);
 }
 it('scans once live and once after Stop while the native pair is held', cleanAttempt);
+
+async function refusesChangedImageBeforePrivateInput(
+  change: 'server' | 'computer',
+): Promise<void> {
+  const attempt = fixture();
+  if (change === 'server') {
+    attempt.replaceServerImage();
+  } else {
+    attempt.replaceComputerImage();
+  }
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(attempt.calls).toEqual([]);
+}
+it.each(['server', 'computer'] as const)(
+  'refuses a changed %s image before private input', refusesChangedImageBeforePrivateInput,
+);
+
+async function refusesMissingStorageBeforePrivateInput(): Promise<void> {
+  const attempt = fixture();
+  const missing = attempt.locations[2]!;
+  rmSync(missing.path, { recursive: true });
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'cache',
+  });
+  expect(attempt.calls).toEqual([]);
+}
+it('refuses a missing named store before private input',
+  refusesMissingStorageBeforePrivateInput);
+
+async function refusesLostHeldRequest(): Promise<void> {
+  const attempt = fixture();
+  function loseAfterFirstTool(tool: string): void {
+    if (tool === 'shell') {
+      attempt.loseHeldRequest();
+    }
+  }
+  attempt.setToolHook(loseAfterFirstTool);
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(attempt.calls).toEqual(['start', 'shell', 'stop']);
+}
+it('refuses a lost held request before later tool calls or scans', refusesLostHeldRequest);
+
+async function cancelsPendingToolReply(): Promise<void> {
+  const attempt = fixture();
+  const controller = new AbortController();
+  attempt.driver.signal = controller.signal;
+  attempt.driver.startNative = function startPendingNative() {
+    return Promise.resolve({
+      assertHeld() {},
+      attemptTool() {
+        return new Promise<'blocked'>(function pending() {});
+      },
+      stop() {
+        attempt.calls.push('stop');
+        return Promise.resolve();
+      },
+    });
+  };
+  const running = runPersistenceAttempt(attempt.driver);
+  controller.abort();
+  expect(await running).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(attempt.calls).toEqual(['stop']);
+}
+it('stops after cancellation while a native tool reply is pending', cancelsPendingToolReply);
+
+async function refusesChangedGenerationBeforePrivateInput(): Promise<void> {
+  const attempt = fixture();
+  attempt.replaceGeneration();
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(attempt.calls).toEqual([]);
+}
+it('refuses a changed computer generation before private input',
+  refusesChangedGenerationBeforePrivateInput);
+
+async function refusesLostNativeLaunch(): Promise<void> {
+  const attempt = fixture();
+  attempt.driver.startNative = function loseLaunch() {
+    return Promise.reject(new Error('private launch path'));
+  };
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+}
+it('returns a fixed refusal when native launch is lost', refusesLostNativeLaunch);
 
 async function missingGroup(group: typeof inventoryGroups[number]): Promise<void> {
   const { driver, reads, calls } = fixture();
@@ -440,9 +546,10 @@ async function closesScannerAfterEarlyRefusal(): Promise<void> {
   const scan = vi.fn(function cleanScan() {
     return { result: 'PARTIAL' as const, complete: false as const, files: 0, bytes: 0 };
   });
-  const scanner = { scan, close, prepare: vi.fn() };
+  const scanner = { scan, close };
+  const preparedScanner = { ...scanner, prepare: vi.fn() };
   vi.mocked(persistenceScan).mockImplementationOnce(function captureScanner() {
-    return scanner;
+    return preparedScanner;
   });
   replaceAtCheck(1);
   expect(await runPersistenceAttempt(driver)).toEqual({
@@ -503,3 +610,39 @@ async function unknownReply(): Promise<void> {
   expect(calls).toEqual(['start', 'shell', 'stop']);
 }
 it('does not resend a write after an unknown native reply', unknownReply);
+
+async function unknownReplyStillScansWhileHeld(): Promise<void> {
+  const attempt = fixture();
+  attempt.setReply('unknown');
+  function saveCanary(): void {
+    writeFileSync(join(directory, 'pvc', 'uncertain-write'), attempt.canary);
+  }
+  attempt.setToolHook(saveCanary);
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'FAIL', complete: false, category: 'pvc',
+  });
+  expect(attempt.calls).toEqual(['start', 'shell', 'stop']);
+}
+it('scans a held uncertain call and keeps a demonstrated write as FAIL',
+  unknownReplyStillScansWhileHeld);
+
+async function recordsBothScansAfterUncertainWrite(): Promise<void> {
+  const attempt = fixture();
+  attempt.setReply('unknown');
+  function saveLive(): void {
+    writeFileSync(join(directory, 'pvc', 'live'), attempt.canary);
+  }
+  function saveOnStop(): void {
+    rmSync(join(directory, 'pvc', 'live'));
+    writeFileSync(join(directory, 'rollout', 'stopped'), attempt.canary);
+  }
+  attempt.setToolHook(saveLive);
+  attempt.setStopHook(saveOnStop);
+  expect(await runPersistenceAttempt(attempt.driver)).toEqual({
+    result: 'FAIL', complete: false, category: 'pvc',
+    additionalFailures: [{ category: 'rollout' }],
+  });
+  expect(attempt.calls).toEqual(['start', 'shell', 'stop']);
+}
+it('records live and stopped writes after an uncertain native reply',
+  recordsBothScansAfterUncertainWrite);

@@ -198,6 +198,7 @@ export function persistenceScan(
   let patterns: Buffer[] = [];
   let phase: 'live' | 'stopped' | 'closed' = 'live';
   let failed: Failure | undefined;
+  let detected: Failure | undefined;
   let prepared = false;
   try {
     if (!/^sha256:[a-f0-9]{64}$/u.test(installationId)) {
@@ -251,6 +252,9 @@ export function persistenceScan(
 
   function scan(requested: 'live' | 'stopped', currentInstallation: string): Result {
     const counts: Result = { result: 'PARTIAL', complete: false, files: 0, bytes: 0 };
+    if (detected && requested === 'live') {
+      return { ...counts, ...detected };
+    }
     let category: Category | 'inventory' = 'inventory';
     try {
       if (!prepared) {
@@ -294,14 +298,17 @@ export function persistenceScan(
       // Keep scans incomplete: caller-supplied paths and phase names cannot prove a native journey.
       return counts;
     } catch (error) {
-      // Reserve FAIL for private text actually found, including in stored file names.
-      if (failed === undefined) {
-        if (error === persistenceDetected) {
-          failed = { result: 'FAIL', category };
+      if (error === persistenceDetected) {
+        detected = { result: 'FAIL', category };
+        // Keep the measured folders open for the after-Stop scan when a live write is found.
+        if (phase === 'live') {
+          phase = 'stopped';
         } else {
-          failed = { result: 'NOT RUN', category, reason: inspectionIncomplete };
+          close();
         }
+        return { ...counts, ...detected };
       }
+      failed ??= { result: 'NOT RUN', category, reason: inspectionIncomplete };
       close();
       return { ...counts, ...failed };
     }

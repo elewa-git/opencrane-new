@@ -11,10 +11,38 @@ import type { Readable, Writable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { proveNativePair } from './native-process-proof.ts';
+import type { ToolClass } from './persistence-attempt.ts';
 
 // Pin the Linux x64 executable from the integrity-checked Codex 0.159.2 npm release.
 const nativeDigest = '1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e';
 const object = z.record(z.string(), z.unknown());
+const nativeToolItems = new Set([
+  'commandExecution', 'fileChange', 'mcpToolCall', 'dynamicToolCall',
+  'collabAgentToolCall', 'webSearch',
+]);
+
+function runtimeModule(name: string): string {
+  if (existsSync('/app/src/entrypoint.ts')) {
+    return `/app/src/${name}.ts`;
+  }
+  return `../../apps/computer/src/${name}.ts`;
+}
+
+function isPrivateLaunch(value: unknown): value is typeof import('../../apps/computer/src/private-codex.ts').privateCodexLaunch {
+  return typeof value === 'function';
+}
+
+function isCodexConnection(value: unknown): value is typeof import('../../apps/computer/src/codex-connection.ts').codexConnection {
+  return typeof value === 'function';
+}
+
+function isPrivateConfig(value: unknown): value is typeof import('../../apps/computer/src/codex-config.ts').privateConfig {
+  return typeof value === 'function';
+}
+
+function isPrivateEnvironments(value: unknown): value is typeof import('../../apps/computer/src/codex-config.ts').privateEnvironments {
+  return typeof value === 'function';
+}
 
 function binaryDigest(binary: string): string {
   const hash = createHash('sha256');
@@ -116,7 +144,9 @@ function checkThread(value: unknown): string {
 
 function prepareHome(
   home: string,
-  configuration: typeof import('../../apps/computer/src/codex-config.ts'),
+  configuration: Pick<typeof import('../../apps/computer/src/codex-config.ts'),
+    'privateConfig' | 'privateEnvironments'>,
+  modelPort = 8080,
 ): void {
   assert.equal(statfsSync(home).type, 0x01021994);
   const directoryOptions = { mode: 0o700 };
@@ -125,7 +155,10 @@ function prepareHome(
     chownSync(`${home}/${directory}`, 1003, 1003);
   }
   const fileOptions = { mode: 0o444 };
-  const config = configuration.privateConfig('gpt-6.1-sol');
+  const defaultConfig = configuration.privateConfig('gpt-6.1-sol');
+  const config = modelPort === 8080 ? defaultConfig :
+    defaultConfig.replace('http://127.0.0.1:8080/v1', `http://127.0.0.1:${modelPort}/v1`);
+  assert(config.includes(`http://127.0.0.1:${modelPort}/v1`));
   writeFileSync(`${home}/codex/config.toml`, config, fileOptions);
   const environments = configuration.privateEnvironments();
   writeFileSync(`${home}/codex/environments.toml`, environments, fileOptions);
@@ -143,6 +176,7 @@ function superviseChild(
   let size = 0;
   const state = {
     failed: false,
+    toolObserved: false,
     nativePid: undefined as number | undefined,
     nativeStart: undefined as string | undefined,
     wrapperStart: undefined as string | undefined,
@@ -169,6 +203,18 @@ function superviseChild(
   function message(value: Record<string, unknown>): void {
     if (value['id'] !== undefined) {
       fail();
+    }
+    const method = value['method'];
+    if (typeof method === 'string') {
+      if (method.startsWith('mcpServer/')) {
+        state.toolObserved = true;
+      }
+      if (method.startsWith('item/')) {
+        const parts = method.slice(5).split('/');
+        if (nativeToolItems.has(parts[0] ?? '')) {
+          state.toolObserved = true;
+        }
+      }
     }
   }
   const handlers = { message, failed: fail };
@@ -237,14 +283,14 @@ async function checkNativeRpc(
 
 type NativeObservation = Awaited<ReturnType<typeof checkNativeRpc>>;
 
-function listenServer(server: Server): Promise<void> {
+function listenServer(server: Server, port: number): Promise<void> {
   function start(resolve: () => void, reject: (reason: Error) => void): void {
     function listening(): void {
       server.off('error', reject);
       resolve();
     }
     server.once('error', reject);
-    server.listen(8080, '127.0.0.1', listening);
+    server.listen(port, '127.0.0.1', listening);
   }
   return new Promise<void>(start);
 }
@@ -259,18 +305,20 @@ function closeServer(server: Server): Promise<void> {
   return new Promise<void>(stop);
 }
 
-export async function heldModel(): Promise<{ bind(caller: string, thread: string): void;
-  wait(): Promise<void>; assertHeld(): void; close(): Promise<void> }> {
+export async function heldModel(port = 8080): Promise<{ bind(caller: string, thread: string): void;
+  wait(): Promise<void>; assertHeld(): void; close(): Promise<void>;
+  completeTool(item: Record<string, unknown>, callId: string): Promise<boolean> }> {
   let received: (() => void) | undefined;
   let expectedCaller: string | undefined;
   let expectedThread: string | undefined;
   let activeResponse: ServerResponse | undefined;
+  let requestBody: unknown;
   function markReady(resolve: () => void): void {
     received = resolve;
   }
   let requestReceived = new Promise<void>(markReady);
-  function accept(request: import('node:http').IncomingMessage,
-    response: ServerResponse): void {
+  async function acceptRequest(request: import('node:http').IncomingMessage,
+    response: ServerResponse): Promise<void> {
     if (!expectedCaller || !expectedThread || request.method !== 'POST' ||
         request.url !== '/v1/responses' ||
         request.headers.authorization !== `Bearer ${expectedCaller}` ||
@@ -284,15 +332,41 @@ export async function heldModel(): Promise<{ bind(caller: string, thread: string
         requestReceived = new Promise<void>(markReady);
       }
     }
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const chunk of request) {
+      if (!Buffer.isBuffer(chunk)) {
+        throw new Error('native_model_request_invalid');
+      }
+      bytes += chunk.length;
+      if (bytes > 131_072) {
+        throw new Error('native_model_request_too_large');
+      }
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks);
+    try {
+      requestBody = body.length === 0 ? {} : JSON.parse(body.toString('utf8')) as unknown;
+    } finally {
+      body.fill(0);
+      for (const chunk of chunks) {
+        chunk.fill(0);
+      }
+    }
     response.once('close', responseClosed);
     activeResponse = response;
-    request.resume();
     response.writeHead(200, { 'content-type': 'text/event-stream' });
     response.flushHeaders();
     received?.();
   }
+  function accept(request: import('node:http').IncomingMessage,
+    response: ServerResponse): void {
+    void acceptRequest(request, response).catch(function refuseRequest(): void {
+      response.destroy();
+    });
+  }
   const server: Server = createServer(accept);
-  await listenServer(server);
+  await listenServer(server, port);
   function assertHeld(): void {
     if (activeResponse === undefined || activeResponse.destroyed ||
         activeResponse.writableEnded) {
@@ -323,12 +397,66 @@ export async function heldModel(): Promise<{ bind(caller: string, thread: string
     server.closeAllConnections();
     await closeServer(server);
   }
+  function emit(response: ServerResponse, event: { type: string; [name: string]: unknown }): void {
+    response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+  function responseClosed(response: ServerResponse): Promise<void> {
+    function closed(resolve: () => void): void {
+      response.once('close', resolve);
+    }
+    return new Promise<void>(closed);
+  }
+  function refusedTool(callId: string): boolean {
+    const body = requestBody;
+    requestBody = undefined;
+    const parsed = z.object({ input: z.array(z.unknown()),
+      tools: z.array(z.unknown()) }).safeParse(body);
+    if (!parsed.success || parsed.data.tools.length !== 0) {
+      return false;
+    }
+    const outputSchema = z.object({
+      type: z.enum(['function_call_output', 'custom_tool_call_output']),
+      call_id: z.string(), output: z.string(),
+    });
+    let output: string | undefined;
+    for (const value of parsed.data.input) {
+      const item = outputSchema.safeParse(value);
+      if (!item.success || item.data.call_id !== callId) {
+        continue;
+      }
+      if (output !== undefined) {
+        return false;
+      }
+      output = item.data.output;
+    }
+    if (output === undefined) {
+      return false;
+    }
+    return /unknown (?:tool|function)|tool (?:is )?(?:not available|disabled)|unsupported tool/iu
+      .test(output);
+  }
+  async function completeTool(item: Record<string, unknown>, callId: string): Promise<boolean> {
+    assertHeld();
+    const response = activeResponse!;
+    const responseId = `response_${randomUUID()}`;
+    emit(response, { type: 'response.created', response: { id: responseId } });
+    emit(response, { type: 'response.output_item.done', output_index: 0, item });
+    const usage = { input_tokens: 20, output_tokens: 10, total_tokens: 30 };
+    emit(response, { type: 'response.completed', response: {
+      id: responseId, status: 'completed', usage,
+    } });
+    const closed = responseClosed(response);
+    response.end();
+    await closed;
+    await wait();
+    return refusedTool(callId);
+  }
   function bind(caller: string, thread: string): void {
     assert(!expectedCaller && !expectedThread);
     expectedCaller = caller;
     expectedThread = thread;
   }
-  return { bind, wait, assertHeld, close };
+  return { bind, wait, assertHeld, close, completeTool };
 }
 
 async function checkStillRunning(
@@ -594,5 +722,128 @@ export async function checkNative(challengeId: string): Promise<void> {
     } finally {
       await model.close();
     }
+  }
+}
+
+function persistenceToolItem(tool: ToolClass, canary: Buffer): {
+  item: Record<string, unknown>; callId: string;
+} {
+  const callId = `call_${randomUUID()}`;
+  const text = canary.toString('utf8');
+  const path = '/home/agent/workspace/private-persistence-check';
+  let name: string = tool;
+  let args: Record<string, unknown> = { text };
+  if (tool === 'shell') {
+    name = 'exec_command';
+    args = { cmd: `printf %s ${text} > ${path}` };
+  } else if (tool === 'file') {
+    name = 'apply_patch';
+    args = { patch: `*** Begin Patch\n*** Add File: ${path}\n+${text}\n*** End Patch` };
+  } else if (tool === 'browser') {
+    name = 'web.run';
+    args = { open: [{ ref_id: `http://127.0.0.1/${text}` }] };
+  } else if (tool === 'codeHost') {
+    name = 'mcp__code_host__write_file';
+    args = { path, content: text };
+  } else if (tool === 'externalMcp') {
+    name = 'mcp__external__write';
+    args = { path, content: text };
+  } else if (tool === 'skills') {
+    name = 'use_skill';
+    args = { name: text };
+  } else if (tool === 'plugins') {
+    name = 'install_plugin';
+    args = { name: text };
+  } else if (tool === 'spawn') {
+    name = 'spawn_agent';
+    args = { task_name: 'private_check', message: text, fork_turns: 'none' };
+  }
+  if (tool === 'file') {
+    const item = { type: 'custom_tool_call', id: `tool_${randomUUID()}`,
+      name, call_id: callId, input: args['patch'] };
+    return { item, callId };
+  }
+  const item = { type: 'function_call', id: `tool_${randomUUID()}`,
+    name, call_id: callId, arguments: JSON.stringify(args) };
+  return { item, callId };
+}
+
+export async function startPersistenceNative(challengeId: string) {
+  z.uuid().parse(challengeId);
+  const binary = pinnedBinary();
+  assert.equal(statfsSync('/run').type, 0x01021994);
+  assert.equal(statfsSync('/home/private').type, 0x01021994);
+  const launchModule: unknown = await import(runtimeModule('private-codex'));
+  const configModule: unknown = await import(runtimeModule('codex-config'));
+  const connectionModule: unknown = await import(runtimeModule('codex-connection'));
+  const launch = z.object({ privateCodexLaunch:
+    z.custom<typeof import('../../apps/computer/src/private-codex.ts').privateCodexLaunch>(
+      isPrivateLaunch) }).parse(launchModule);
+  const configuration = z.object({ privateConfig:
+    z.custom<typeof import('../../apps/computer/src/codex-config.ts').privateConfig>(
+      isPrivateConfig),
+    privateEnvironments:
+      z.custom<typeof import('../../apps/computer/src/codex-config.ts').privateEnvironments>(
+        isPrivateEnvironments) }).parse(configModule);
+  const connection = z.object({ codexConnection:
+    z.custom<typeof import('../../apps/computer/src/codex-connection.ts').codexConnection>(
+      isCodexConnection) })
+    .parse(connectionModule);
+  const childId = randomUUID();
+  const home = `/home/private/turn-${childId}`;
+  const recordPath = `/run/opencrane-native-${childId}.identity`;
+  const model = await heldModel(18080);
+  const children: SupervisedChild[] = [];
+  const homes: string[] = [];
+  const records: string[] = [];
+  let stopping: Promise<void> | undefined;
+  async function stopResources(): Promise<void> {
+    try {
+      await cleanup(children, homes, records);
+    } finally {
+      await model.close();
+    }
+  }
+  function stop(): Promise<void> {
+    stopping ??= stopResources();
+    return stopping;
+  }
+  try {
+    writeFileSync(recordPath, `${challengeId}\n`, { flag: 'wx', mode: 0o600 });
+    records.push(recordPath);
+    mkdirSync(home, { mode: 0o700 });
+    homes.push(home);
+    prepareHome(home, configuration, 18080);
+    const nativeLaunch = launch.privateCodexLaunch(home, childId);
+    const child = spawn(nativeLaunch.command, nativeLaunch.args, nativeLaunch.options);
+    const supervised = superviseChild(child, connection.codexConnection, home, childId,
+      challengeId, recordPath);
+    children.push(supervised);
+    if (child.pid !== undefined) {
+      supervised.state.wrapperStart = processStart(child.pid);
+    }
+    const observation = await checkNativeRpc(supervised, binary);
+    model.bind(childId, observation.threadId);
+    const input = [{ type: 'text', text: 'qualification', text_elements: [] }];
+    await supervised.connection.rpc('turn/start', { threadId: observation.threadId, input });
+    await model.wait();
+    function assertHeld(): void {
+      model.assertHeld();
+      checkPairProtection(supervised, binary);
+      assert.equal(supervised.state.failed, false);
+    }
+    async function attemptTool(tool: ToolClass, canary: Buffer):
+      Promise<'blocked' | 'unknown'> {
+      assertHeld();
+      supervised.state.toolObserved = false;
+      const attempt = persistenceToolItem(tool, canary);
+      const blocked = await model.completeTool(attempt.item, attempt.callId);
+      assertHeld();
+      return blocked && !supervised.state.toolObserved ? 'blocked' : 'unknown';
+    }
+    return { assertHeld, attemptTool, stop };
+  } catch (error) {
+    await stop();
+    throw error;
   }
 }
