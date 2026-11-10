@@ -24,7 +24,7 @@ export async function readAdminConnectionProfile(store: EventStore, binding: Bin
   let result: z.infer<typeof adminMetadataSchema> | null = null;
   let failure: Error | undefined;
   try {
-    result = await loadMetadata(store, binding.silo, reference);
+    result = await loadPersonalProfileMetadata(store, binding.silo, reference);
   } catch (error) {
     failure = new Error('Profile history unavailable', { cause: error });
   }
@@ -36,7 +36,8 @@ export async function readAdminConnectionProfile(store: EventStore, binding: Bin
   return result;
 }
 
-async function loadMetadata(store: EventStore, silo: string, reference: Reference) {
+export async function loadPersonalProfileMetadata(store: EventStore, silo: string,
+  reference: Reference) {
   const { userId, serverId, profileId } = reference;
   const subject = `connection-${userId}-${serverId}-${profileId}`;
   const controlSubject = `connection-control-${userId}-${serverId}`;

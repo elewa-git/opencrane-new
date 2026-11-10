@@ -4446,6 +4446,13 @@ replace the first save. Current availability stays separate; the receipt does no
 confirm catalogue validity, publication or gateway acknowledgement. Publication
 and lifecycle receipt recovery remain outside this change.
 
+## Personal connection list metadata
+
+`loadPersonalProfileMetadata` supplies the same exact profile, control and server
+history checks to the admin detail read and the member's paged list. It does not
+check access itself. The list loads the page first and checks current membership once,
+including after a missing profile or failed history. It never reads custody material.
+
 ## Original personal connection receipts
 
 `readOwnConnectionChange` takes the authenticated member separately from strict

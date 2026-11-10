@@ -728,6 +728,8 @@ that history could not be loaded. A permission refusal takes precedence over a h
 Admins can block a member's personal connections to one server, including later
 reconnects with a new profile. Both changes keep the
 stored token until cleanup can prove deletion is safe.
+The server reads a saved profile's status from its exact event history when listing
+a member's connections. It checks current membership once after loading the page.
 A live maintenance function checks one staged secret while holding the same lock as
 staging and saving. It keeps current references. After the save deadline, it records
 that the unsaved operation is closed, so a delayed save cannot succeed. Only a confirmed

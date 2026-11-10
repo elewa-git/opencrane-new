@@ -72,6 +72,10 @@ flowchart LR
 
 ## What it is responsible for
 
+A small connection index records where each person's profile was first saved.
+The server uses it to find a page, then reads the saved events for current status.
+Rebuilding the index cannot change a profile or grant access.
+
 Tool checks keep an acknowledged publication while its definitions stay unchanged.
 OAuth settings change records move the saved tool server position. They leave its
 review, tool modes and publication state as they were.

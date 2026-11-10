@@ -249,6 +249,8 @@ restart and SIGKILL after creation before the delivery can acknowledge completio
 
 `npm run worker -w apps/ops -- members`, `-- mcp-catalogue` and `-- computers` run the
 projections continuously with projection-reader NATS credentials and `DATABASE_URL`.
+The `mcp-catalogue` worker also builds `connectionProfiles`. It creates the table with
+the shared setup lock and catches up its own checkpoint before starting another pass.
 `-- dispatcher` runs durable dispatch, OpenFGA and the lifecycle reactions. It uses
 dispatcher NATS credentials for delivery and `COMMAND_NATS_*` credentials for the
 single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,

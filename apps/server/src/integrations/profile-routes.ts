@@ -8,6 +8,7 @@ import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { registerConnectionProfileRevoke } from './profile-revoke-route.ts';
 import { registerConnectionSelection } from './selection-route.ts';
+import { registerConnectionProfileList } from './profile-list-route.ts';
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const parameters = z.strictObject({ serverId: id, profileId: id });
@@ -17,10 +18,17 @@ const adminChangeParameters = adminParameters.extend({ changeRef: id });
 const selectionParameters = z.strictObject({ serverId: id, changeRef: id });
 const emptyQuery = z.strictObject({});
 
+function hasGetBody(request: FastifyRequest) {
+  const length = request.headers['content-length'];
+  return request.body !== undefined || request.headers['transfer-encoding'] !== undefined ||
+    (length !== undefined && length !== '0');
+}
+
 export function registerConnectionProfileRead(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   registerConnectionSelection(app, config, options);
   registerConnectionProfileRevoke(app, config, options);
+  registerConnectionProfileList(app, config, options);
   app.get('/api/integrations/:serverId/members/:userId/profiles/:profileId', adminHandler);
   app.get('/api/integrations/:serverId/members/:userId/profiles/:profileId/disable/changes/:changeRef',
     adminChangeHandler);
@@ -67,9 +75,7 @@ export function registerConnectionProfileRead(app: FastifyInstance, config: Auth
       const reference = schema.parse(request.params);
       emptyQuery.parse(request.query);
       // Reject body framing too: Fastify does not parse bodies on GET requests.
-      const length = request.headers['content-length'];
-      if (request.body !== undefined || request.headers['transfer-encoding'] !== undefined ||
-          (length !== undefined && length !== '0')) {
+      if (hasGetBody(request)) {
         return reply.code(400).send({ status: 'refused' });
       }
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);

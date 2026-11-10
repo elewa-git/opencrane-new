@@ -6301,6 +6301,17 @@ saved revision, confirming one saved event and the same receipt.
 
 ## Admin personal profile metadata (Part of #49)
 
+`GET /api/my/tools/:serverId/profiles` lists the signed-in member's personal profiles.
+The strict query accepts `limit` (1–50, default 20), `status` (all, saved or unavailable)
+and a signed cursor. It never accepts an owner id. The read checks projection progress,
+loads exact profile, control, server and selection histories, then checks current
+membership once. A changed event position or projection generation returns 409 restart.
+Missing membership returns 403; dependency failure returns 503. All replies use
+`no-store`, and no credential or provider data is read. Company choices are not in
+this personal page. `test/connection-profile-list.test.ts` covers owner isolation,
+60-row paging, status, cursor changes, removal, an IAM outage, a slow history read,
+concurrent revocation and replay. Live qualification is NOT RUN.
+
 `GET /api/integrations/:serverId/members/:userId/profiles/:profileId` uses the existing
 profile route's organisation session, member lookup, strict input and no-store replies.
 Cookie roles grant nothing. Query overrides and GET body framing are refused.
