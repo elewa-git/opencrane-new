@@ -95,7 +95,9 @@ function fixture() {
       if (installationChecks === replacementCheck) {
         replace();
       }
-      return { serverInstallationId: installedServer, computerInstallationId: installed };
+      return { serverInstallationId: installedServer, computerInstallationId: installed,
+        serverImageDigest: serverImage, computerImageDigest: computerImage,
+        generationId: computerInstallation };
     },
     readInventory() {
       const read = reads.shift() ?? snapshot();
@@ -105,6 +107,7 @@ function fixture() {
     startNative() {
       calls.push('start');
       return Promise.resolve({
+        assertHeld() {},
         attemptTool(tool: string, privateText: Buffer) {
           calls.push(tool);
           toolHook?.(tool, privateText);
@@ -434,7 +437,7 @@ async function closesScannerAfterEarlyRefusal(): Promise<void> {
   const scan = vi.fn(function cleanScan() {
     return { result: 'PARTIAL' as const, complete: false as const, files: 0, bytes: 0 };
   });
-  const scanner = { scan, close };
+  const scanner = { scan, close, prepare: vi.fn() };
   vi.mocked(persistenceScan).mockImplementationOnce(function captureScanner() {
     return scanner;
   });
