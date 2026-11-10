@@ -33,6 +33,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid #0a8497; outline-offs
 .dialog textarea:focus-visible, .dialog h2:focus-visible { outline: 2px solid #0a8497;
   outline-offset: 2px; }
 .field-error { color: #ac301d; }
+.conflict-note { margin-top: 16px; padding: 16px; border: 1px solid #dcbf77;
+  border-radius: 9px; background: #fff8e9; }
+.conflict-note p { margin: 8px 0; }
+.conflict-note .conflict-revision { font-weight: 600; }
 .consequences { margin: 0; padding: 16px 16px 16px 34px; border: 1px solid #d7dddd;
   border-radius: 9px; line-height: 1.6; }
 .consequences li + li { margin-top: 8px; }

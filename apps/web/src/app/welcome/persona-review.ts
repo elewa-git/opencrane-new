@@ -2,7 +2,7 @@ import { afterNextRender, ChangeDetectionStrategy, Component, signal, type OnDes
   from '@angular/core';
 import { z } from 'zod';
 import { personaEditError } from './persona-edit-text';
-import { focusById, focusEdit, focusRestart } from './persona-review-focus';
+import { focusById, focusEdit, focusRestart, keepFocusInDialog } from './persona-review-focus';
 import { pendingStates, type PendingKind, type ReviewState } from './persona-review-state';
 
 const revisionIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/u);
@@ -73,6 +73,7 @@ export class PersonaReview implements OnDestroy {
   private progress: Progress | null = null;
   private commandId: string | null = null;
   private openerId: 'edit-open' | 'restart-open' | null = null;
+  private hasUnsavedConflict = false;
   private request = new AbortController();
 
   constructor() {
@@ -85,6 +86,7 @@ export class PersonaReview implements OnDestroy {
     this.approvalTime.set(null);
     this.approvedRevision.set(null);
     this.editText.set('');
+    this.hasUnsavedConflict = false;
   }
 
   private start(): void {
@@ -115,6 +117,7 @@ export class PersonaReview implements OnDestroy {
     this.approvalTime.set(null);
     this.approvedRevision.set(null);
     this.editText.set('');
+    this.hasUnsavedConflict = false;
     this.progress = null;
     this.commandId = null;
     this.state.set(status === 401 ? 'signed_out' : 'refused');
@@ -269,9 +272,9 @@ export class PersonaReview implements OnDestroy {
     const detail = this.detail();
     if (!detail || (this.state() !== 'ready' && this.state() !== 'approved')) return;
     this.openerId = 'edit-open';
-    this.editText.set(detail.replacement);
+    if (!this.hasUnsavedConflict) this.editText.set(detail.replacement);
     this.editError.set('');
-    this.state.set('editing');
+    this.state.set(this.hasUnsavedConflict ? 'edit_conflict' : 'editing');
     setTimeout(focusEdit);
   }
 
@@ -290,8 +293,13 @@ export class PersonaReview implements OnDestroy {
     setTimeout(focusRestart);
   }
 
-  protected cancelDialog(): void {
-    if (this.state() !== 'editing' && this.state() !== 'restart_review') return;
+  protected cancelDialog(discardConflict = true): void {
+    if (this.state() !== 'editing' && this.state() !== 'edit_conflict' &&
+        this.state() !== 'restart_review') return;
+    if (this.state() === 'edit_conflict' && discardConflict) {
+      this.editText.set('');
+      this.hasUnsavedConflict = false;
+    }
     this.state.set(this.approvedRevision() === this.detail()?.revision ? 'approved' : 'ready');
     setTimeout(focusById.bind(null, this.openerId));
   }
@@ -301,19 +309,11 @@ export class PersonaReview implements OnDestroy {
       event.preventDefault();
       this.cancelDialog();
     }
-    if (event.key !== 'Tab') return;
-    const dialog = event.currentTarget;
-    if (!(dialog instanceof HTMLElement)) return;
-    const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button, textarea, [tabindex="0"]'));
-    const first = controls[0];
-    const last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first && last) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last && first) {
-      event.preventDefault();
-      first.focus();
-    }
+    keepFocusInDialog(event);
+  }
+
+  private editIsOpen(): boolean {
+    return this.state() === 'editing' || this.state() === 'edit_conflict';
   }
 
   private validEdit(): boolean {
@@ -324,7 +324,7 @@ export class PersonaReview implements OnDestroy {
 
   protected async saveEdit(): Promise<void> {
     const progress = this.progress;
-    if (this.state() !== 'editing' || !progress) return;
+    if (!this.editIsOpen() || !progress) return;
     if (!this.validEdit()) {
       focusEdit();
       return;
@@ -349,6 +349,7 @@ export class PersonaReview implements OnDestroy {
         this.commandId = null;
         this.changed.set(true);
         await this.load(false);
+        this.showEditConflict();
       } else if (response.ok) {
         await this.confirmEdit(response, request);
       } else {
@@ -362,6 +363,13 @@ export class PersonaReview implements OnDestroy {
     }
   }
 
+  private showEditConflict(): void {
+    if (!this.detail() || (this.state() !== 'ready' && this.state() !== 'approved')) return;
+    this.hasUnsavedConflict = true;
+    this.state.set('edit_conflict');
+    setTimeout(focusEdit);
+  }
+
   private async confirmEdit(response: Response, request: AbortController): Promise<void> {
     const parsed = revisionReceiptSchema.safeParse(await readBodyOrNull(response));
     if (!this.active(request)) return;
@@ -371,6 +379,7 @@ export class PersonaReview implements OnDestroy {
     }
     this.commandId = null;
     this.editText.set('');
+    this.hasUnsavedConflict = false;
     await this.load(false);
   }
 

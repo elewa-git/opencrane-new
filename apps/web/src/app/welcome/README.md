@@ -26,6 +26,7 @@ flowchart LR
   only after access checks.
 - Approve the exact current version and check an uncertain approval by its command id.
 - Save an edit as a new version while the earlier approval stays active.
+- Keep unsaved words visible beside a newer version when another device saves first.
 - Explain the effect of restarting the survey before saving that choice.
 - Show when approval was saved and link to the welcome chat.
 - Link to unfinished survey or persona review before offering a welcome start.
@@ -43,9 +44,10 @@ flowchart LR
 2. **Persona review.** The screen reads progress, the current version list and that
    version's text. If there is no version yet, it asks the server to create one
    from the saved answers. It checks an uncertain creation without sending it again.
-   A competing edit makes the screen read the latest version again.
+   A competing edit makes the screen read the latest version again and keeps
+   unsaved words in the editor so the person can compare them.
 3. **Edit and restart.** An edit saves a new version without approving it. Restart
-   asks for confirmation and keeps the approved version active. An uncertain save
+   asks for confirmation and explains when no version is approved yet. An uncertain save
    is checked with its original command id.
 4. **Approval.** The screen sends one command. If the result is uncertain, it checks
    that same command. Confirmed approval shows the saved time and opens welcome.

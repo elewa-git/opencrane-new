@@ -27,8 +27,10 @@ keep private text out of addresses, storage and error messages.
 Edit opens the displayed revision in a plain text field. The browser checks
 the server's 4,096 UTF-8 byte limit and rejects empty or invalid text. One
 `operation: revise`, `mode: replace` command saves a new immutable revision;
-approval remains separate. A 409 closes the editor and reloads the current
-revision for review. An unknown result keeps its command id and checks status
+approval remains separate. A 409 reloads the current revision while keeping
+the member's unsaved words in the editor beside the other device's revision.
+Reviewing the newer revision leaves those words available on reopening Edit;
+Cancel discards them. An unknown result keeps its command id and checks status
 without repeating the POST. The saved approval stays visible when a newer
 draft appears.
 

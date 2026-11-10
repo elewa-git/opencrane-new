@@ -160,10 +160,15 @@ describe('saved persona review', () => {
   });
 
   it('says no persona is approved when restarting from the first draft', async () => {
-    const screen = open((url) => {
+    const screen = open((url, init) => {
       if (url === '/api/onboarding') return reply(progress());
       if (url === '/api/onboarding/persona/revisions') {
         return reply({ currentRevision: 2, revisions: [revision] });
+      }
+      if (url === '/api/onboarding/survey' && init?.method === 'POST') {
+        const command = z.object({ commandId: z.string() }).parse(parseCommandBody(init));
+        return reply({ status: 'confirmed', operation: 'onboarding.survey_restarted',
+          commandId: command.commandId });
       }
       return reply(revision);
     });
@@ -173,6 +178,9 @@ describe('saved persona review', () => {
     const dialog = screen.root.querySelector('[role="dialog"]');
     expect(dialog?.textContent).toContain('No persona is approved yet.');
     expect(dialog?.textContent).not.toContain('Approved revision r2 stays active');
+    button(screen.root, 'Restart survey').click();
+    await show(screen, 'Survey restarted. No persona is approved yet.');
+    expect(screen.root.textContent).not.toContain('Approved revision r2');
   });
 
   it('keeps an unsaved edit beside the newer revision after a conflict', async () => {

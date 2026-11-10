@@ -2,7 +2,8 @@
   <section class="review-card" aria-labelledby="review-title">
     <span class="ear" aria-hidden="true"></span>
     @if (state() === 'ready' || state() === 'saving' || state() === 'unknown' ||
-         state() === 'approved' || state() === 'editing' || state() === 'edit_saving' ||
+         state() === 'approved' || state() === 'editing' || state() === 'edit_conflict' ||
+         state() === 'edit_saving' ||
          state() === 'edit_unknown' || state() === 'restart_review' ||
          state() === 'restarting' || state() === 'restart_unknown') {
       <h1 id="review-title">Review your assistant’s persona</h1>
@@ -55,9 +56,11 @@
         <a class="button-link" href="/welcome/survey">Open survey</a>
         <a class="button-link" href="/welcome">Open welcome</a>
       } @else if (state() === 'restarted') {
-        <p role="status">Survey restarted. Your approved revision stays active until you approve another.</p>
         @if (approvedRevision() !== null) {
+          <p role="status">Survey restarted. Your approved revision stays active until you approve another.</p>
           <p>Approved revision r{{ approvedRevision() }} remains active.</p>
+        } @else {
+          <p role="status">Survey restarted. No persona is approved yet.</p>
         }
         <a class="button-link" href="/welcome/survey">Continue survey</a>
       } @else if (state() === 'stale') {
@@ -77,7 +80,7 @@
       <p role="status">Proposal changed on another device. Review this version before approving.</p>
     }
   </section>
-  @if (state() === 'editing') {
+  @if (state() === 'editing' || state() === 'edit_conflict') {
     <div class="dialog-backdrop">
       <section class="review-card dialog" role="dialog" aria-modal="true"
         aria-labelledby="edit-title" (keydown)="dialogKeydown($event)">
@@ -87,6 +90,16 @@
         <textarea id="persona-edit" [value]="editText()" (input)="updateEdit($event)"
           [attr.aria-describedby]="editError() ? 'edit-error' : null"></textarea>
         @if (editError()) { <p id="edit-error" class="field-error" role="alert">{{ editError() }}</p> }
+        @if (state() === 'edit_conflict') {
+          <div class="conflict-note" role="alert">
+            <strong>A newer revision exists</strong>
+            <p>Revision r{{ detail()?.revision }} was saved on another device.
+              Your words above have not been saved.</p>
+            <p class="conflict-revision">Their revision:</p>
+            <div class="persona-text">{{ detail()?.replacement }}</div>
+            <button type="button" (click)="cancelDialog(false)">Review r{{ detail()?.revision }}</button>
+          </div>
+        }
         <div class="dialog-actions">
           <button class="approve" type="button" (click)="saveEdit()">Save as new revision</button>
           <button type="button" (click)="cancelDialog()">Cancel</button>
@@ -101,8 +114,11 @@
         <h2 id="restart-title" tabindex="0">Restart the survey?</h2>
         <ul class="consequences">
           <li>Your answers in steps 1–4 will be replaced when you finish again.</li>
-          <li>Approved revision r{{ approvedRevision() ?? detail()?.revision }} stays active until you
-            approve a new one.</li>
+          @if (approvedRevision() !== null) {
+            <li>Approved revision r{{ approvedRevision() }} stays active until you approve a new one.</li>
+          } @else {
+            <li>No persona is approved yet. Restarting leaves your current draft unapproved.</li>
+          }
           <li>Restarting doesn’t approve anything.</li>
         </ul>
         <div class="dialog-actions">
