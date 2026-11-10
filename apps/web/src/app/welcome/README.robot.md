@@ -24,12 +24,26 @@ approved revision in checked progress. A 401 or 403 clears private
 text and invalidates earlier replies. Reads and writes use `no-store` and
 keep private text out of addresses, storage and error messages.
 
-Editing, replacement and restart are unavailable on this screen. The server
-supports those commands, but their browser review and confirmation states
-belong to the next part. The Assistant settings page remains unavailable.
+Edit opens the displayed revision in a plain text field. The browser checks
+the server's 4,096 UTF-8 byte limit and rejects empty or invalid text. One
+`operation: revise`, `mode: replace` command saves a new immutable revision;
+approval remains separate. A 409 closes the editor and reloads the current
+revision for review. An unknown result keeps its command id and checks status
+without repeating the POST. The saved approval stays visible when a newer
+draft appears.
+
+Restart opens a consequence review with focus on its title. Cancel or Escape
+returns focus to the opener and writes nothing. Confirmation sends one
+`operation: restart` to `/api/onboarding/survey` with the checked generation
+and position. Its receipt opens the survey. The earlier approved persona stays
+active until another approval. A no-assistant read of `/api/onboarding/welcome`
+shows the truthful route to welcome without generating a persona.
+
+Replacing an older revision and the Assistant settings page remain unavailable.
 
 Run `npm run visual:screen-p4-19-persona` for intercepted captures at both
 desktop and phone widths.
+Run `npm run visual:screen-p4-19-edit` for edit, restart and problem captures.
 
 `/welcome` reads `GET /api/onboarding/welcome`. A `not_started` result names
 the next required step. The page links to the survey until all four answers

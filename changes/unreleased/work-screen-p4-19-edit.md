@@ -1,0 +1,1 @@
+People can edit their private onboarding persona and restart the survey from its review screen. An edit creates a new version without changing the active approval, and restarting explains its effects before saving.

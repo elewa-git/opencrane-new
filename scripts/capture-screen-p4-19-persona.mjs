@@ -5,7 +5,9 @@ import { chromium } from 'playwright';
 import { serveWebBuild } from './serve-web-build.mjs';
 import { pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 
-const output = resolve('docs/process/screen-p4-19-persona');
+const editCapture = process.env.PERSONA_EDIT_CAPTURE === '1';
+const output = resolve(editCapture ? 'docs/process/screen-p4-19-edit'
+  : 'docs/process/screen-p4-19-persona');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://screen-p4-19-persona.opencrane.test';
 const revisionId = 'saved-revision-two';
@@ -17,7 +19,7 @@ function progress(state) {
   const steps = savedSteps.map(step => ({
     time: '2026-10-14T09:30:00.000Z', answers: { step },
   }));
-  const approval = state === 'approved' ? { revision: 2, revisionId,
+  const approval = state === 'approved' || state === 'restart' ? { revision: 2, revisionId,
     time: '2026-10-14T09:35:00.000Z' } : null;
   return { state: 'review', survey: { generation: 1, position: 6,
     nextStep: null, steps }, currentRevision: state === 'absent' ? null : 2, approval };
@@ -25,6 +27,10 @@ function progress(state) {
 
 async function serve(state, route) {
   const url = new URL(route.request().url());
+  if (url.pathname === '/api/onboarding/welcome') {
+    await route.fulfill({ json: { status: 'not_started', assistantAssigned: true } });
+    return;
+  }
   if (url.pathname === '/api/onboarding') {
     if (state === 'denied' || state === 'unavailable') {
       const status = state === 'denied' ? 403 : 503;
@@ -42,6 +48,10 @@ async function serve(state, route) {
   if (url.pathname === `/api/onboarding/persona/revisions/${revisionId}`) {
     await route.fulfill({ json: { revision: 2, revisionId, generation: 1,
       current: true, approved: state === 'approved', replacement } });
+    return;
+  }
+  if (url.pathname === '/api/onboarding/persona' && route.request().method() === 'POST') {
+    await route.fulfill({ status: 503, json: { status: 'unknown' } });
     return;
   }
   if (url.pathname.startsWith('/api/')) assert.fail(`Unexpected request: ${url.pathname}`);
@@ -68,12 +78,28 @@ async function capture(browser, width, state) {
     const words = { review: replacement, approved: 'Approved revision r2',
       absent: 'No persona yet', stale: 'Proposal changed',
       denied: 'Your access has changed', unavailable: 'Persona service unavailable' };
-    const expected = words[state];
-    await page.getByText(expected).waitFor();
+    if (state === 'edit') {
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      await page.locator('textarea').fill(replacement + ' Follow my style.'.repeat(300));
+      await page.getByRole('button', { name: 'Save as new revision' }).click();
+      await page.getByText('Keep it under 4 KiB.').waitFor();
+      const focused = await page.locator('textarea').evaluate(element =>
+        element === element.ownerDocument.activeElement);
+      assert(focused, 'The edit field keeps focus after a size error');
+      await page.locator('textarea').evaluate(element => { element.scrollTop = 0; });
+    } else if (state === 'restart') {
+      await page.getByRole('button', { name: 'Restart survey' }).click();
+      await page.waitForFunction('document.activeElement?.id === "restart-title"');
+    } else if (state === 'unknown') {
+      await page.getByRole('button', { name: 'Approve this version' }).click();
+      await page.getByText('Save status unknown.', { exact: false }).waitFor();
+    } else {
+      await page.getByText(words[state]).waitFor();
+    }
     if (state === 'approved') {
       assert.equal(await page.locator('time').getAttribute('datetime'),
         '2026-10-14T09:35:00.000Z');
-      assert.equal(await page.locator('a.button-link.approve').getAttribute('href'), '/workspace');
+      assert.equal(await page.locator('a.button-link.approve').getAttribute('href'), '/welcome');
     }
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `Overflow at ${width}px`);
@@ -87,6 +113,16 @@ async function capture(browser, width, state) {
       assert.equal(await page.getByRole('button', { name: 'Approve this version' }).count(), 0);
     }
     await page.screenshot({ path: `${output}/${state}-${width}.png`, fullPage: true });
+    if (editCapture && width === 390 && (state === 'edit' || state === 'restart')) {
+      await page.setViewportSize({ width: 390, height: 500 });
+      const actions = await page.getByRole('dialog').getByRole('button').all();
+      for (const action of actions) {
+        await action.scrollIntoViewIfNeeded();
+        const bounds = await action.boundingBox();
+        assert(bounds && bounds.y >= 0 && bounds.y + bounds.height <= 500,
+          'Dialog actions are reachable above a short phone viewport');
+      }
+    }
   } finally {
     await page.close();
   }
@@ -96,7 +132,10 @@ await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   for (const width of [1280, 390]) {
-    for (const state of ['review', 'approved', 'absent', 'stale', 'denied', 'unavailable']) {
+    const states = editCapture
+      ? ['edit', 'restart', 'absent', 'stale', 'unknown', 'denied', 'unavailable']
+      : ['review', 'approved', 'absent', 'stale', 'denied', 'unavailable'];
+    for (const state of states) {
       await capture(browser, width, state);
     }
   }

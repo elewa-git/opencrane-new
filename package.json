@@ -94,6 +94,7 @@
     "visual:screen-p3-8-bearer": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-screen-p3-8-bearer.mjs",
     "visual:screen-p4-19-survey3": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey3.mjs",
     "visual:screen-p4-19-persona": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-persona.mjs",
+    "visual:screen-p4-19-edit": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-screen-p4-19-edit.mjs",
     "visual:screen-p4-20-welcome": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-20-welcome.mjs",
     "visual:screen-p4-20-list": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-20-list.mjs",
     "visual:screen-p4-6-read": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-6-read.mjs",

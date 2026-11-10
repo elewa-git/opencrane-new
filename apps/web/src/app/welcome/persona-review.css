@@ -19,10 +19,36 @@ button, .button-link { display: inline-flex; align-items: center; justify-conten
 .approve { border-color: #0aa3b8; background: #0db5cc; font-weight: 600; }
 button:focus-visible, a:focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
 .unavailable-controls { margin-bottom: 0; font-size: 13px; }
+.approval-note { display: grid; gap: 4px; margin-top: 20px; padding: 14px;
+  border: 1px solid #d5e8dd; border-radius: 9px; background: #eff7f2; }
+.approval-note span { color: #384e42; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 5; display: grid;
+  place-items: center; padding: 16px; background: #16191a55; }
+.dialog { width: min(100%, 640px); max-height: calc(100dvh - 32px); overflow-y: auto; }
+.dialog h2 { margin: 0 0 20px; font-size: 22px; }
+.dialog label { display: block; margin-bottom: 8px; font-weight: 600; }
+.dialog textarea { display: block; width: 100%; min-height: 150px; padding: 12px;
+  border: 1px solid #aebbbc; border-radius: 9px; background: white;
+  color: inherit; font: inherit; line-height: 1.5; resize: vertical; }
+.dialog textarea:focus-visible, .dialog h2:focus-visible { outline: 2px solid #0a8497;
+  outline-offset: 2px; }
+.field-error { color: #ac301d; }
+.consequences { margin: 0; padding: 16px 16px 16px 34px; border: 1px solid #d7dddd;
+  border-radius: 9px; line-height: 1.6; }
+.consequences li + li { margin-top: 8px; }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.dialog-actions button { margin: 0; }
 @media (max-width: 700px) {
   .review-page { display: block; padding: 16px; }
   .review-card { padding: 20px; }
   button, .button-link { width: 100%; margin-right: 0; }
+  .dialog-backdrop { display: block; padding: 0; background: #fbfcfc; }
+  .dialog { width: 100%; min-height: 100dvh; max-height: 100dvh; border: 0;
+    border-radius: 0; box-shadow: none; }
+  .restart-dialog { display: flex; flex-direction: column; }
+  .restart-dialog .dialog-actions { margin-top: auto; }
+  .dialog-actions { position: sticky; bottom: 0; display: grid; padding: 12px 0;
+    background: #fbfcfc; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important;
   transition: none !important; } }

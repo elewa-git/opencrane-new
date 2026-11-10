@@ -1,6 +1,9 @@
 import { afterNextRender, ChangeDetectionStrategy, Component, signal, type OnDestroy }
   from '@angular/core';
 import { z } from 'zod';
+import { personaEditError } from './persona-edit-text';
+import { focusById, focusEdit, focusRestart } from './persona-review-focus';
+import { pendingStates, type PendingKind, type ReviewState } from './persona-review-state';
 
 const revisionIdSchema = z.string().min(1).max(200).regex(/^[A-Za-z0-9_-]+$/u);
 const progressSchema = z.object({
@@ -30,11 +33,15 @@ const revisionReceiptSchema = z.object({
   status: z.literal('confirmed'), operation: z.literal('onboarding.persona_revised'),
   commandId: z.string(), revision: z.number().int().positive(), revisionId: revisionIdSchema,
 });
+const restartReceiptSchema = z.object({
+  status: z.literal('confirmed'), operation: z.literal('onboarding.survey_restarted'),
+  commandId: z.string(),
+});
+const welcomeAvailabilitySchema = z.object({
+  status: z.string(), assistantAssigned: z.boolean().optional(),
+});
 type Progress = z.infer<typeof progressSchema>;
 type Detail = z.infer<typeof detailSchema>;
-type ReviewState = 'loading' | 'generating' | 'generation_unknown' | 'ready'
-  | 'absent' | 'stale' | 'saving' | 'unknown'
-  | 'unavailable' | 'signed_out' | 'refused' | 'approved';
 
 function matchesCurrentRevision(detail: Detail, revisionId: string, progress: Progress): boolean {
   return detail.current && detail.revision === progress.currentRevision &&
@@ -60,8 +67,12 @@ export class PersonaReview implements OnDestroy {
   protected readonly detail = signal<Detail | null>(null);
   protected readonly changed = signal(false);
   protected readonly approvalTime = signal<string | null>(null);
+  protected readonly approvedRevision = signal<number | null>(null);
+  protected readonly editText = signal('');
+  protected readonly editError = signal('');
   private progress: Progress | null = null;
   private commandId: string | null = null;
+  private openerId: 'edit-open' | 'restart-open' | null = null;
   private request = new AbortController();
 
   constructor() {
@@ -72,6 +83,8 @@ export class PersonaReview implements OnDestroy {
     this.request.abort();
     this.detail.set(null);
     this.approvalTime.set(null);
+    this.approvedRevision.set(null);
+    this.editText.set('');
   }
 
   private start(): void {
@@ -100,6 +113,8 @@ export class PersonaReview implements OnDestroy {
     this.request = new AbortController();
     this.detail.set(null);
     this.approvalTime.set(null);
+    this.approvedRevision.set(null);
+    this.editText.set('');
     this.progress = null;
     this.commandId = null;
     this.state.set(status === 401 ? 'signed_out' : 'refused');
@@ -111,6 +126,7 @@ export class PersonaReview implements OnDestroy {
     this.request = request;
     this.detail.set(null);
     this.approvalTime.set(null);
+    this.approvedRevision.set(null);
     this.progress = null;
     this.state.set('loading');
     try {
@@ -118,11 +134,14 @@ export class PersonaReview implements OnDestroy {
       if (!this.checkAccess(progressResponse) || !this.active(request)) return;
       const progress = progressSchema.parse(await progressResponse.json());
       if (!this.active(request)) return;
+      if (!await this.checkAssistantAvailability(request)) return;
       if (progress.survey.steps.length !== 4) {
         this.state.set('absent');
         return;
       }
       this.progress = progress;
+      this.approvedRevision.set(progress.approval?.revision ?? null);
+      this.approvalTime.set(progress.approval?.time ?? null);
       if (progress.currentRevision === null) {
         if (allowGeneration) {
           await this.generateFirstRevision(progress, request);
@@ -135,6 +154,23 @@ export class PersonaReview implements OnDestroy {
     } catch {
       if (this.active(request)) this.state.set('unavailable');
     }
+  }
+
+  private async checkAssistantAvailability(request: AbortController): Promise<boolean> {
+    const response = await this.read('/api/onboarding/welcome', request);
+    if (!this.checkAccess(response) || !this.active(request)) return false;
+    const availability = welcomeAvailabilitySchema.parse(await response.json());
+    if (!this.active(request)) return false;
+    if (availability.status !== 'not_started') return true;
+    if (availability.assistantAssigned === false) {
+      this.state.set('no_assistant');
+      return false;
+    }
+    if (availability.assistantAssigned !== true) {
+      this.state.set('unavailable');
+      return false;
+    }
+    return true;
   }
 
   private async loadCurrentRevision(progress: Progress, request: AbortController): Promise<void> {
@@ -159,7 +195,6 @@ export class PersonaReview implements OnDestroy {
     this.detail.set(detail);
     if (progress.approval?.revisionId === detail.revisionId &&
         progress.approval.revision === detail.revision) {
-      this.approvalTime.set(progress.approval.time);
       this.state.set('approved');
     } else {
       this.state.set('ready');
@@ -230,6 +265,163 @@ export class PersonaReview implements OnDestroy {
     void this.load();
   }
 
+  protected openEdit(): void {
+    const detail = this.detail();
+    if (!detail || (this.state() !== 'ready' && this.state() !== 'approved')) return;
+    this.openerId = 'edit-open';
+    this.editText.set(detail.replacement);
+    this.editError.set('');
+    this.state.set('editing');
+    setTimeout(focusEdit);
+  }
+
+  protected updateEdit(event: Event): void {
+    const input = event.target;
+    if (input instanceof HTMLTextAreaElement) {
+      this.editText.set(input.value);
+      this.editError.set('');
+    }
+  }
+
+  protected openRestart(): void {
+    if (!this.detail() || (this.state() !== 'ready' && this.state() !== 'approved')) return;
+    this.openerId = 'restart-open';
+    this.state.set('restart_review');
+    setTimeout(focusRestart);
+  }
+
+  protected cancelDialog(): void {
+    if (this.state() !== 'editing' && this.state() !== 'restart_review') return;
+    this.state.set(this.approvedRevision() === this.detail()?.revision ? 'approved' : 'ready');
+    setTimeout(focusById.bind(null, this.openerId));
+  }
+
+  protected dialogKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.cancelDialog();
+    }
+    if (event.key !== 'Tab') return;
+    const dialog = event.currentTarget;
+    if (!(dialog instanceof HTMLElement)) return;
+    const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button, textarea, [tabindex="0"]'));
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first && last) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last && first) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  private validEdit(): boolean {
+    const error = personaEditError(this.editText());
+    this.editError.set(error ?? '');
+    return error === null;
+  }
+
+  protected async saveEdit(): Promise<void> {
+    const progress = this.progress;
+    if (this.state() !== 'editing' || !progress) return;
+    if (!this.validEdit()) {
+      focusEdit();
+      return;
+    }
+    const commandId = crypto.randomUUID();
+    this.commandId = commandId;
+    this.state.set('edit_saving');
+    const request = this.request;
+    try {
+      const response = await fetch('/api/onboarding/persona', {
+        method: 'POST', cache: 'no-store', signal: request.signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation: 'revise', mode: 'replace', commandId,
+          generation: progress.survey.generation, expectedPosition: progress.survey.position,
+          replacement: this.editText() }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        this.clearAccess(response.status);
+      } else if (!this.active(request)) {
+        return;
+      } else if (response.status === 409) {
+        this.commandId = null;
+        this.changed.set(true);
+        await this.load(false);
+      } else if (response.ok) {
+        await this.confirmEdit(response, request);
+      } else {
+        const body = await readBodyOrNull(response);
+        if (!this.active(request)) return;
+        const unknown = z.object({ status: z.literal('unknown') }).safeParse(body);
+        this.state.set(unknown.success ? 'edit_unknown' : 'unavailable');
+      }
+    } catch {
+      if (this.active(request)) this.state.set('edit_unknown');
+    }
+  }
+
+  private async confirmEdit(response: Response, request: AbortController): Promise<void> {
+    const parsed = revisionReceiptSchema.safeParse(await readBodyOrNull(response));
+    if (!this.active(request)) return;
+    if (!parsed.success || parsed.data.commandId !== this.commandId) {
+      this.state.set('edit_unknown');
+      return;
+    }
+    this.commandId = null;
+    this.editText.set('');
+    await this.load(false);
+  }
+
+  protected async restart(): Promise<void> {
+    const progress = this.progress;
+    if (this.state() !== 'restart_review' || !progress) return;
+    const commandId = crypto.randomUUID();
+    this.commandId = commandId;
+    this.state.set('restarting');
+    const request = this.request;
+    try {
+      const response = await fetch('/api/onboarding/survey', {
+        method: 'POST', cache: 'no-store', signal: request.signal,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation: 'restart', commandId,
+          generation: progress.survey.generation, expectedPosition: progress.survey.position }),
+      });
+      if (response.status === 401 || response.status === 403) {
+        this.clearAccess(response.status);
+      } else if (!this.active(request)) {
+        return;
+      } else if (response.status === 409) {
+        this.commandId = null;
+        this.changed.set(true);
+        await this.load(false);
+      } else if (response.ok) {
+        await this.confirmRestart(response, request);
+      } else {
+        const body = await readBodyOrNull(response);
+        if (!this.active(request)) return;
+        const unknown = z.object({ status: z.literal('unknown') }).safeParse(body);
+        this.state.set(unknown.success ? 'restart_unknown' : 'unavailable');
+      }
+    } catch {
+      if (this.active(request)) this.state.set('restart_unknown');
+    }
+  }
+
+  private async confirmRestart(response: Response, request: AbortController): Promise<void> {
+    const parsed = restartReceiptSchema.safeParse(await readBodyOrNull(response));
+    if (!this.active(request)) return;
+    if (!parsed.success || parsed.data.commandId !== this.commandId) {
+      this.state.set('restart_unknown');
+      return;
+    }
+    this.commandId = null;
+    this.detail.set(null);
+    this.editText.set('');
+    this.state.set('restarted');
+  }
+
   protected async approve(): Promise<void> {
     const progress = this.progress;
     const detail = this.detail();
@@ -278,15 +470,15 @@ export class PersonaReview implements OnDestroy {
     this.commandId = null;
     this.changed.set(false);
     this.approvalTime.set(parsed.data.time);
+    this.approvedRevision.set(parsed.data.revision);
     this.state.set('approved');
   }
 
   protected async checkStatus(): Promise<void> {
     const commandId = this.commandId;
-    const generation = this.state() === 'generation_unknown';
-    if (this.state() !== 'unknown' && !generation) return;
-    if (!commandId) return;
-    this.state.set(generation ? 'generating' : 'saving');
+    const kind = this.pendingKind();
+    if (!commandId || !kind) return;
+    this.state.set(pendingStates[kind].busy);
     const request = this.request;
     try {
       const response = await this.read(`/api/personal/changes/${commandId}`, request);
@@ -295,11 +487,22 @@ export class PersonaReview implements OnDestroy {
       } else if (!this.active(request)) {
         return;
       } else {
-        await this.handleStatusResponse(response, generation, request);
+        if (kind === 'edit') await this.confirmEdit(response, request);
+        else if (kind === 'restart') await this.confirmRestart(response, request);
+        else await this.handleStatusResponse(response, kind === 'generation', request);
       }
     } catch {
-      if (this.active(request)) this.state.set(generation ? 'generation_unknown' : 'unknown');
+      if (this.active(request)) this.state.set(pendingStates[kind].unknown);
     }
+  }
+
+  private pendingKind(): PendingKind | null {
+    const state = this.state();
+    if (state === 'generation_unknown') return 'generation';
+    if (state === 'edit_unknown') return 'edit';
+    if (state === 'restart_unknown') return 'restart';
+    if (state === 'unknown') return 'approve';
+    return null;
   }
 
   private async handleStatusResponse(response: Response, generation: boolean,

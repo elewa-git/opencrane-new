@@ -26,6 +26,7 @@
         "scripts/capture-p4-27-pr15.mjs",
         "scripts/capture-screen-p4-27-history.mjs",
         "scripts/capture-screen-p3-8-bearer.mjs",
+        "scripts/capture-screen-p4-19-edit.mjs",
         "scripts/capture-uploads-reasons.mjs",
         "scripts/capture-chat-drag-drop.mjs",
         "scripts/capture-screen-p4-8-pr12a.mjs",
