@@ -1134,6 +1134,8 @@ async function refusesAcknowledgement() {
 it('a saved start with refused credentials cannot complete dispatch', refusesAcknowledgement);
 
 async function uncertainDelivery(kind: string) {
+  // Hold fixture time so slow scheduling cannot expire access before the send fault.
+  holdFixtureClock();
   const send = preparedComputer.send;
   function losesReply(bytes: Parameters<typeof send>[0]) {
     send(bytes);

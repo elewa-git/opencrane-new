@@ -34,7 +34,7 @@ import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.
 import * as routineSession from '../src/routine-session.ts';
 import * as credentials from '../src/chat/turn-credentials.ts';
 import { prepareRoutineComputer } from '../src/routine-computer.ts';
-import { admitRoutineActivation } from '../src/routine-activation.ts';
+import { admitRoutineActivation, readRoutineActivation } from '../src/routine-activation.ts';
 import { inspectRoutineSender } from '../src/routine-sender.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -301,6 +301,9 @@ async function retainsUncertainHold() {
   await actor.uncertain(hold, 'settle_timeout');
   const before = await nats.store.head();
   expect(await inspect()).toMatchObject({ status: 'unknown', rootId: root.rootId });
+  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+    'sender-attempt');
+  await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
   expect(rootTotals(actor.state, root.rootId)).toEqual({
     settledCents: 0, heldCents: 100, availableCents: 900 });
   expect(await nats.store.head()).toBe(before);
@@ -599,6 +602,7 @@ async function savedStarts() {
 async function handsOffOnce() {
   const authority = sender();
   const computer = await recordingComputer();
+  const root = actor.state.roots[0]!;
   const budgetPosition = await nats.store.head('budget-test');
   const head = nats.store.head.bind(nats.store);
   let activity = 0;
@@ -623,6 +627,9 @@ async function handsOffOnce() {
   }
   async function wake() {
     advanceWake();
+    // Hold fixture time after the long wake so slow scheduling cannot end the send window.
+    const afterWake = performance.now();
+    vi.spyOn(performance, 'now').mockReturnValue(afterWake);
     vi.spyOn(nats.store, 'head').mockImplementation(unrelated);
     return computer.wake();
   }
@@ -647,6 +654,8 @@ async function handsOffOnce() {
     expect(startAppends).toBe(2);
     expect(await nats.store.head('budget-test')).toBe(budgetPosition);
     expect(actor.state.reservations).toEqual([]);
+    expect(rootTotals(actor.state, root.rootId)).toEqual({
+      settledCents: 0, heldCents: 0, availableCents: 1000 });
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
     expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
     function isInput(row: typeof rows[number]) {
