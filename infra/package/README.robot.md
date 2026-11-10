@@ -1759,3 +1759,15 @@ proves that other copied code or dependencies are absent. Licence grants, comple
 vulnerability clearance, exact-source R3 and image promotion remain blocked. The
 [receipt](../../docs/process/p5-4-images15/receipt.md) gives the exact boundary and
 own check results. `scripts/p5-4-images15.test.mjs` runs the refusal fixtures in CI.
+
+## Typanion source review
+
+The [typanion record](../../docs/process/p5-4-images16/grant.json) names one
+Corepack 0.34.6 range. Its [checker](../../docs/process/p5-4-images16/check-typanion.py)
+uses the existing signed Node, Corepack inventory, archived Dockerfile and both
+candidate layer checks. It compares the exact public Git revision with a saved
+source archive and the retained range. The upstream README carries complete MIT
+terms and attribution. The Git tree has no built module, and the published npm
+module differs from the retained bundle range. The build change is unproved, so
+this grant stays BLOCKED. The [receipt](../../docs/process/p5-4-images16/receipt.md)
+records the boundary. `scripts/p5-4-images16.test.mjs` runs the refusal fixtures.

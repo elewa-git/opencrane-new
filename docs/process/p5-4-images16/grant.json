@@ -1,0 +1,90 @@
+{
+  "status": "BLOCKED",
+  "reason": "The upstream Git tree contains TypeScript source and complete MIT terms in README.md, but no built lib/index.mjs. The npm-built module differs from the retained Corepack range, and its exact transformation has not been proved. No typanion grant or Corepack-wide approval follows.",
+  "sourceCommit": "ab9f045afc697c998aff66992ad48cb8ba3478a4",
+  "sourceURL": "https://github.com/arcanis/typanion/tree/ab9f045afc697c998aff66992ad48cb8ba3478a4",
+  "sourceFiles": [
+    [
+      "README.md",
+      3577,
+      "1a5035a89293fe3ca49f5473525159d63624388421ba170f82ee6cf56e90556a"
+    ],
+    [
+      "package.json",
+      993,
+      "f03ebd77ec583a13bcb401df83493784cb70bf2d0697c0388981ff63ac4c49fb"
+    ],
+    [
+      "rollup.config.js",
+      358,
+      "e577268734dc6146c2d77ec2b63d6aedf58df765559babb35bcd93ee704031b0"
+    ],
+    [
+      "sources/index.ts",
+      193,
+      "dd957557925ce5c039b764b1791aaf7db7ba3d7cc03c014e3dcfa5ba34090687"
+    ],
+    [
+      "sources/internal/format.ts",
+      1329,
+      "521af7a7775ca8ed3532a7c68d35634157c0a70ba8fff2160eb089d869624f81"
+    ],
+    [
+      "sources/internal/regexps.ts",
+      883,
+      "f7918416f3da83ca5b5244a3c1102844034db05fa7e167876210cb783aec1090"
+    ],
+    [
+      "sources/internal/tools.ts",
+      799,
+      "1ea875df933b20e7ac9a3ff8b65470756e475463c84ff3a878b905e001a5a180"
+    ],
+    [
+      "sources/predicates/cascadingPredicates.ts",
+      9096,
+      "c5d2566b85c67ea34bbd6aa93bddcee3fcc67ca8ff07a04f6e04d0264a2366a2"
+    ],
+    [
+      "sources/predicates/helperPredicates.ts",
+      9127,
+      "f7b825b0c354a7979846061e5ebd27e7e8899c9cb12880f5d187075de6408041"
+    ],
+    [
+      "sources/predicates/typePredicates.ts",
+      26659,
+      "0d8fff74751f0d47ccced4d085bd89f01071f9133356674cc765d105af3d764c"
+    ],
+    [
+      "sources/tools.ts",
+      5475,
+      "ccfa0b1a90ee14985afe84421f2e9a5ebfc60af0f1a8573c74f3d580365cf4dc"
+    ],
+    [
+      "sources/types.ts",
+      849,
+      "b6b017f217c77465804232d8bf79fe01e9e9de415d34626dd9bb8be00a980297"
+    ]
+  ],
+  "sourceFixtureSha256": "4f92579794b2929d0a9e17ece742a60364f36dba28cd1de5500bbf9426e95934",
+  "inventorySha256": "076e9fb77d031a7a138c4e39c54299670ddc241fe4b43d600c84ed3b6a838f87",
+  "regionsFixtureSha256": "4286a20cc5b9bf718f8c34071a88b29a1a75d49534673848f762b232ba406c96",
+  "candidateSha256": "365bc4d4c4039ba62a6ce982aaae68508b2986df5edb7605355b92055457a2da",
+  "module": [
+    "typanion",
+    "3.14.0",
+    ".yarn/cache/typanion-npm-3.14.0-8af344c436-8b03b19844.zip",
+    1,
+    "06d8ad8f743e18cc50b4c1543f89bb458fc1ffb0108a4985168d0289c26de333",
+    "BLOCKED"
+  ],
+  "range": [
+    1685,
+    40250,
+    ".yarn/cache/typanion-npm-3.14.0-8af344c436-8b03b19844.zip/node_modules/typanion/lib/index.mjs",
+    "06d8ad8f743e18cc50b4c1543f89bb458fc1ffb0108a4985168d0289c26de333"
+  ],
+  "attribution": "Copyright © 2020 Mael Nison",
+  "licence": "MIT terms in upstream README.md; full permission, condition and disclaimer retained there",
+  "unresolved": "Other unknown modules, npm missing tree, Go, kubectl, agentgateway, vulnerabilities, exact-source R3 and image promotion remain BLOCKED",
+  "corepackSourceSha256": "9fe2ff11cd60f04de8fadc7021165336cd1c5a4918347c181ef14fa3b1b1d5fb"
+}
