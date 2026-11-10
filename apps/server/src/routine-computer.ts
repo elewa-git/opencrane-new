@@ -34,8 +34,8 @@ export async function prepareRoutineComputer(store: Arguments[0], keys: Argument
     await prepareRoutineInput(store, keys, worker, input);
     await allocateRoutineRoot(store, keys, worker, input, actor, selection, confirmCompany);
     return selection;
-  } catch {
+  } catch (cause) {
     if (turnId && conversationId) cancelRoutineThread(link.socket, turnId, conversationId);
-    throw new Error('Routine computer unavailable');
+    throw new Error('Routine computer unavailable', { cause });
   }
 }
