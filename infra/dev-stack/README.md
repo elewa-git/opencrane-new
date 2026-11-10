@@ -20,7 +20,7 @@ flowchart LR
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|shares memory settings and dispatcher readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership, nodes and backup credentials| package["infra/package<br/>Helm install"]
+  stack -->|checks ownership, nodes and backup leases| package["infra/package<br/>Helm install"]
   stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
 ```
@@ -92,6 +92,8 @@ available for diagnosis.
   A renewal closes the earlier credential record before requesting a new lease.
   The new lease needs a fresh token and Secret generation for the same owned storage.
   If renewal fails, the earlier record cannot approve another check.
+  The marker check reads that record again after its final Kubernetes read. It refuses
+  if a renewal or expiry closed the record while the read was waiting.
   The installer still blocks backup and recovery settings.
   Requires runtime and setup replica settings to match the chart before Helm runs.
   Checks mounted event-log certificates and keys, connection settings and account rules.

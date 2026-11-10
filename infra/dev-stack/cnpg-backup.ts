@@ -428,6 +428,8 @@ async function check(backup: Backup, namespace: string, kubectl: Kubectl,
   }
   const limits = { signal, deadline };
   commandTimeout(30_000, limits);
+  // Renewal can close this record while the last Kubernetes read is waiting.
+  verifyRecord();
 }
 
 export async function checkCnpgBackupReferences(backup: Backup, namespace: string,

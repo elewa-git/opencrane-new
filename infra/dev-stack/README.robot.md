@@ -2291,7 +2291,9 @@ that a credential is limited to its silo. The fixed policy in the signed lease a
 the provisioner-held record supply that check. A record mismatch returns
 `CNPG backup credential is not confined to its bucket and prefix` before marker
 PUT. The checker rechecks every named Kubernetes object after removing its marker.
-It still refuses changed UIDs or resource versions and failed cleanup.
+It then rechecks the issued record before returning. A renewal or expiry during the
+last Kubernetes read therefore refuses the check. It still refuses changed UIDs or
+resource versions and failed cleanup.
 
 Responses allow at most 128 body bytes and 8 KiB of headers. Error bodies are not
 parsed. The HTTPS agent closes all its connections when the check ends.
