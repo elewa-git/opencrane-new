@@ -46,6 +46,7 @@ let directory: string;
 let now: number;
 let owned: boolean;
 let preparedComputer: Awaited<ReturnType<typeof startComputer>>;
+let advanceFixtureClock: ((milliseconds: number) => void) | undefined;
 const proposedEvent = z.object({ type: z.string() });
 const frameSchema = z.record(z.string(), z.unknown());
 const input = { routineId: 'orders', occurrenceId: 'occurrence' };
@@ -67,6 +68,9 @@ function record(id: string, subject: string, type: string, data: unknown): Event
 }
 function forbidden(): never {
   throw new Error('private-service-canary');
+}
+function advanceFixtureTime(milliseconds: number) {
+  advanceFixtureClock?.(milliseconds);
 }
 async function apply(events: EventEnvelope[]) {
   await nats.seed(events);
@@ -139,6 +143,14 @@ async function projectPreparedSession() {
   afterProjection();
 }
 async function prepareSenderFixture() {
+  const fixtureStartedAt = performance.now();
+  let elapsedFixtureTime = 0;
+  function advanceClock(milliseconds: number) {
+    elapsedFixtureTime += milliseconds;
+  }
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockImplementation(() => fixtureStartedAt + elapsedFixtureTime);
+  advanceFixtureClock = advanceClock;
   const prepareSession = routineSession.prepareRoutineSession;
   let stage = 'preparation';
   async function projectSession(...args: Parameters<typeof prepareSession>) {
@@ -155,10 +167,12 @@ async function prepareSenderFixture() {
   try {
     const link = await preparedComputer.wake();
     return await prepareRoutineComputer(nats.store, keys, worker(), input, actor, link, 1);
-  } catch {
-    throw new Error(`Sender fixture stage: ${stage}`);
+  } catch (cause) {
+    throw new Error(`Sender fixture stage: ${stage}`, { cause });
   } finally {
     projection.mockRestore();
+    advanceFixtureClock = undefined;
+    monotonicClock.mockRestore();
   }
 }
 async function cleanup() {
@@ -1063,7 +1077,17 @@ it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as c
 
 
 async function startRunning() {
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  const fixtureTime = performance.now();
+  function fixedFixtureTime() {
+    return fixtureTime;
+  }
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockImplementation(fixedFixtureTime);
+  try {
+    expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  } finally {
+    monotonicClock.mockRestore();
+  }
   await until(preparedComputer.executed);
   return preparedComputer.wake();
 }
@@ -1482,11 +1506,7 @@ it.each(['terminal', 'timeout', 'connection loss'] as const)(
 
 function delayedFixtureProjection() {
   function delayProjectionClock() {
-    const monotonic = performance.now.bind(performance);
-    function afterWait() {
-      return monotonic() + 2100;
-    }
-    vi.spyOn(performance, 'now').mockImplementation(afterWait);
+    advanceFixtureTime(2100);
   }
   function delayProjection() {
     afterProjection = delayProjectionClock;
