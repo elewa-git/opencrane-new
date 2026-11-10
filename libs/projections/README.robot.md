@@ -271,6 +271,15 @@ The members worker also maintains the flat-group view (`groups`, `group_members`
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
 
+## Personal connection list index
+
+`connectionProfiles` indexes valid personal `connection.created` records by silo,
+member, server and first saved position. Its table stores identifiers and a position,
+never profile payloads or custody references. The `mcp-catalogue` worker runs it
+alongside the catalogue projection. Readers compare its checkpoint with the latest
+connection event position and bind pages to its rebuild generation. Exact profile
+history remains the source of current status; replay cannot release credentials.
+
 ## Member reads without routine references
 
 `readInventoryReferences` and `inventoryCategoryPositions` accept

@@ -44,6 +44,10 @@ owner and preceding claim position. The internal confirmation command stages the
 saved reply first; no material-derived digest enters the event. The fold requires the
 two preceding consent records and keeps OAuth unavailable for selection and release.
 Legacy records without activation and bearer saves still parse unchanged.
+`personalConnectionCreation` checks the saved activation and matching profile subject.
+The profile index and personal metadata reader both use this rule. The reader also
+checks the full saved history before returning metadata.
+
 `connection.refreshed` also accepts the same OAuth account fields. Its fold requires
 one matching refresh start and claim, unchanged account and scopes, and exactly the next
 generation. The internal save checks current access and policy before publication and

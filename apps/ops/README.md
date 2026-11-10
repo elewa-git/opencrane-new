@@ -5,6 +5,7 @@
 This package runs the background workers that keep OpenCrane's screens, permissions
 and assistant computers up to date. It also provides recovery tools that rebuild
 data from the saved record of changes.
+The tool catalogue worker also fills a small index for members' saved connection lists.
 
 ## Where it fits
 

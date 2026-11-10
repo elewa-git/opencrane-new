@@ -4446,6 +4446,13 @@ replace the first save. Current availability stays separate; the receipt does no
 confirm catalogue validity, publication or gateway acknowledgement. Publication
 and lifecycle receipt recovery remain outside this change.
 
+## Personal connection list metadata
+
+`loadPersonalProfileMetadata` supplies the same exact profile, control and server
+history checks to the admin detail read and the member's paged list. It does not
+check access itself. The list loads the page first and checks current membership once,
+including after a missing profile or failed history. It never reads custody material.
+
 ## Original personal connection receipts
 
 `readOwnConnectionChange` takes the authenticated member separately from strict
@@ -4651,11 +4658,13 @@ access. Missing and failed loads still check current access; refusal takes prece
 It uses no write check, stream-position polling or conversation history.
 
 The existing profile and server folds supply lifecycle and availability. A valid original
-personal activation is required before exposing bindings. Foreign, company, validation
-and incomplete legacy targets reveal none. Rotation and revoke keep the exact profile
-sequence; any valid member/server block covers replacement profiles too. Saved identity
-stays unverified and `callsAvailable` stays false. No custody, provider, append, selection
-or release operation runs. Lists, mutations, projections and OAuth are outside this read.
+personal activation is required before exposing bindings. OAuth needs its valid start,
+claim and creation history; the first event alone is not an activation. Foreign,
+company, validation and incomplete legacy targets reveal none. Rotation and revoke
+keep the exact profile sequence; any valid member/server block covers replacement
+profiles too. Saved identity stays unverified and `callsAvailable` stays false.
+No custody, provider, append, selection or release operation runs. Mutations and
+projections are outside this read.
 
 `readAdminDisableChange` checks the original disable reference on the member/server
 control stream. It loads profile and control history under one ten-second deadline,

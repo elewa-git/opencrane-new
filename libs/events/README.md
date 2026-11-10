@@ -129,6 +129,7 @@ A first account confirmation records the verified issuer and account, granted sc
 expiry and exact private storage reference. It follows the consent and callback records.
 A refresh saves the next generation after a matching refresh start and claim.
 Replaying these records starts no work and grants no tool access.
+The profile list and profile reader use the same check for a person's saved creation.
 
 A personal callback claim records the one worker allowed to continue the attempt.
 It contains only references. It does not confirm a provider request or activate an account.

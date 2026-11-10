@@ -324,6 +324,7 @@ If it changes after the save, the sender records a delivery Stop.
 - Shows owners and admins a short organisation overview with clear gaps when a source is unavailable.
 - Returns permitted change history, saved results and memory facts.
 - Returns a person’s own saved tool profile without reading its credentials.
+- Lists a person's saved profiles for one tool server in small pages.
 - Returns saved routine metadata and small run pages to its owner and silo owners and admins.
 - Runs the separate models process that checks AI calls, records costs and starts the gateway.
 
@@ -351,6 +352,9 @@ assistant can call. These reads check current admin rights after loading the fac
 Members can inspect their own saved bearer profile even when an admin has disabled it.
 The reply separates the saved revision, admin block and server availability. Saving
 credentials does not verify an upstream identity or enable calls.
+The list shows the same safe facts for each saved personal profile, including a revoked
+or blocked one. It marks the person's explicit choice. A changed list asks the screen
+to start paging again.
 Current owners and admins can inspect one member’s personal profile metadata.
 They also see the saved admin block revision, without reading credentials.
 The admin who disabled a profile can check its original saved result after a lost reply.

@@ -7,7 +7,7 @@ import { rm, writeFile } from 'node:fs/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore, type EventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
-  mcpCatalogue, computers, modelAccess, egressPolicy, delegations, routines,
+  mcpCatalogue, connectionProfiles, computers, modelAccess, egressPolicy, delegations, routines,
   conversations, childRequests, files, personalSettings, conversationKeys, memoryKeys,
   memoryProjection,
   type Projection, type Db,
@@ -115,6 +115,13 @@ async function runProjectionWorker(projection: Projection, store: EventStore) {
   if (mode === 'members') {
     await db.db.lock!('initialise', initialiseGroups);
   }
+  async function initialiseConnectionProfiles(locked: Db) {
+    const profileRunner = new ProjectionRunner(locked, store, logger);
+    await profileRunner.initialise(connectionProfiles);
+  }
+  if (mode === 'mcp-catalogue') {
+    await db.db.lock!('initialise', initialiseConnectionProfiles);
+  }
   if (mode === 'conversations') {
     // Build this table with the writer account; the server can only read projections.
     async function initialiseChildRequests(locked: Db) {
@@ -128,6 +135,9 @@ async function runProjectionWorker(projection: Projection, store: EventStore) {
   }
   while (!stop.signal.aborted) {
     await runner.run(projection, { signal: stop.signal });
+    if (mode === 'mcp-catalogue') {
+      await runner.run(connectionProfiles, { signal: stop.signal });
+    }
     if (mode === 'conversations') {
       await runner.run(childRequests, { signal: stop.signal });
     }

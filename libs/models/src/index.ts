@@ -70,7 +70,8 @@ export { mcpInstanceWorkerRegistration, mcpInstanceObservation }
 
 export { readOwnConnectionChange } from './connection-change-read.ts';
 export { readOwnSelectionChange } from './connection-selection-change-read.ts';
-export { readAdminConnectionProfile } from './connection-profile-admin-read.ts';
+export { readAdminConnectionProfile, loadPersonalProfileMetadata }
+  from './connection-profile-admin-read.ts';
 export { readAdminDisableChange } from './connection-admin-disable-change-read.ts';
 export { readOwnConnectionProfile } from './connection-profile-read.ts';
 export { saveBearerConnection, foldConnection, changePersonalConnection }
