@@ -20,6 +20,7 @@ vi.mock('node:child_process', mockProcesses);
 const issuer = 'https://scanner.invalid/';
 const state = `${'c'.repeat(64)} sha256:${'a'.repeat(64)} 2026-10-25T12:00:00Z true 0`;
 let directory, server, scanner, now, updated, tokens, key, ca, mode, supplied, shutdown;
+let tls, trust;
 let continued, lastRequest, logs, output;
 const requests = [];
 const sockets = [];
@@ -118,9 +119,9 @@ async function setup() {
     databaseUpdatedAt: manifest.databaseUpdatedAt };
   spawn.mockImplementation(scanProcess);
   ca = await readFile(join(directory, 'ca.crt'));
-  const tls = { key: await readFile(join(directory, 'server.key')),
+  tls = { key: await readFile(join(directory, 'server.key')),
     cert: await readFile(join(directory, 'server.crt')) };
-  const trust = [{ issuer, jwks: tokens.jwks, services: { server: 'silo-one' } }];
+  trust = [{ issuer, jwks: tokens.jwks, services: { server: 'silo-one' } }];
   const { createScannerService } = await import('../infra/clamav/service.mjs');
   server = createScannerService({ scanner, tls, trust, clock });
   server.listen(0, '127.0.0.1');
@@ -351,6 +352,30 @@ async function transferExpiry(kind) {
   expect(supplied).toHaveLength(0);
 }
 test.each(['pass', 'database'])('refuses %s expiry during transfer', transferExpiry);
+
+async function serviceDatabaseDeadline() {
+  server.closeAllConnections();
+  server.close();
+  await once(server, 'close');
+  now = updated + 86400000 - 500;
+  const value = await input();
+  async function cleanAfterDeadline(input) {
+    now += 500;
+    return { sha256: input.sha256, byteCount: input.byteCount, verdict: 'clean',
+      databaseUpdatedAt: scanner.databaseUpdatedAt,
+      checkedAt: new Date(now - 500).toISOString(),
+      expiresAt: new Date(now + 60000).toISOString() };
+  }
+  const isolatedScanner = { ...scanner, scan: cleanAfterDeadline };
+  const { createScannerService } = await import('../infra/clamav/service.mjs');
+  server = createScannerService({ scanner: isolatedScanner, tls, trust, clock });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  refused(await send(value));
+  expect(continued).toBe(true);
+}
+test('refuses a clean engine result after database expiry with a valid caller pass',
+  serviceDatabaseDeadline);
 async function cancelWork(kind) {
   mode = 'hang';
   const value = await input();
