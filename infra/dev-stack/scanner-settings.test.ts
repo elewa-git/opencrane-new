@@ -33,6 +33,7 @@ async function rejectsScanner() {
     assert.deepEqual(await scannerSettings(valid), {
       SCANNER_URL: valid.DEV_SCANNER_URL,
       SCANNER_CA_FILE: caFile,
+      SCANNER_MANIFEST_DIGEST: `sha256:${'0'.repeat(64)}`,
     });
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -165,7 +166,8 @@ async function checkScannerCase(scannerCase: ScannerCase) {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Missing scanner port');
     const settings = { SCANNER_URL: `https://127.0.0.1:${address.port}/scan/upload`,
-      SCANNER_CA_FILE: `${directory}/scanner-ca.crt` };
+      SCANNER_CA_FILE: `${directory}/scanner-ca.crt`,
+      SCANNER_MANIFEST_DIGEST: `sha256:${'0'.repeat(64)}` };
     const identity = { silo: 'this-stack', issuer, privateKeyPath };
     const ready = await scannerReady(settings, identity);
     assert.equal(ready, scannerCase === 'clean');

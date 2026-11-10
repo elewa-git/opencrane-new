@@ -428,3 +428,7 @@ Both releases must pass the launcher's current 24-hour database check.
 Run `timeout 20m nice -n 10 npx vitest run scripts/real-upload-scanner.test.mjs
 --maxWorkers=1` after supplying both sets. Without them, Vitest marks the real
 checks skipped; that is NOT RUN evidence, even if other scanner fixture tests pass.
+The negative replay cases keep all current upload bindings except one changed
+field: silo, request, bytes, file id, purpose, manifest digest or expiry. The
+replacement release changes the approved manifest for later requests; a saved
+response from the first release remains unusable.

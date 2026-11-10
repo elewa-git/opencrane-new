@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
@@ -74,6 +74,15 @@ function storeWithoutLostReply(store, state) {
   return { readStream: store.readStream.bind(store), append };
 }
 
+export function createOffsetClock(clock) {
+  // Keep the real clock before an upload temporarily replaces Date.now.
+  const originalNow = Date.now;
+  function currentTime() {
+    return originalNow() + clock.offset;
+  }
+  return currentTime;
+}
+
 export async function startRealUploadFixture(inputs) {
   const directory = await mkdtemp(join(tmpdir(), 'real-upload-scan-'));
   let scanner;
@@ -84,9 +93,7 @@ export async function startRealUploadFixture(inputs) {
   let lastProof;
   const state = { loseAcknowledgement: false };
   const clock = { offset: 0 };
-  function currentTime() {
-    return Date.now() + clock.offset;
-  }
+  const currentTime = createOffsetClock(clock);
 
   async function closeService() {
     if (!service) return;
@@ -151,7 +158,10 @@ export async function startRealUploadFixture(inputs) {
       const address = service.address();
       if (!address || typeof address === 'string') throw new Error('Scanner fixture refused');
       const url = `https://127.0.0.1:${address.port}/scan/upload`;
-      for (const settings of credentials.settings.values()) settings.url = url;
+      for (const settings of credentials.settings.values()) {
+        settings.url = url;
+        settings.manifestDigest = `sha256:${reviewedInputs.approvedSha}`;
+      }
     }
 
     await startScanner(inputs);
@@ -221,17 +231,38 @@ export async function startRealUploadFixture(inputs) {
       await startScanner(reviewedInputs);
     }
 
-    async function replayProof(proof, silo, key, bytes) {
+    async function replayProof(proof, silo, key, bytes, changedField) {
       const selected = credentials.settings.get(silo);
       if (!selected) throw new Error('Unknown fixture silo');
       const originalUrl = selected.url;
       const replay = createServer(tls);
+      function alteredProof(request) {
+        if (!changedField) return proof;
+        const digest = createHash('sha256');
+        digest.update(bytes);
+        const candidate = { ...proof, purpose: 'upload', silo,
+          requestId: request.headers['x-scan-request-id'],
+          fileId: request.headers['x-scan-file-id'], sha256: digest.digest('hex'),
+          byteCount: bytes.length };
+        if (changedField === 'silo') candidate.silo = proof.silo;
+        if (changedField === 'request') candidate.requestId = proof.requestId;
+        if (changedField === 'bytes') candidate.sha256 = proof.sha256;
+        if (changedField === 'file') candidate.fileId = proof.fileId;
+        if (changedField === 'purpose') candidate.purpose = 'image';
+        if (changedField === 'generation') {
+          candidate.manifestDigest = `sha256:${'f'.repeat(64)}`;
+        }
+        if (changedField === 'expiry') {
+          candidate.expiresAt = '2020-01-01T00:00:00.000Z';
+        }
+        return candidate;
+      }
       function answer(request, response) {
         response.writeContinue();
         request.resume();
         function finish() {
           response.setHeader('content-type', 'application/json');
-          response.end(JSON.stringify(proof));
+          response.end(JSON.stringify(alteredProof(request)));
         }
         request.once('end', finish);
       }

@@ -22,3 +22,10 @@ a different approved manifest hash. The test refuses an old database, a bad
 caller, an untrusted TLS connection and an outage before checking recovery.
 Run it with a process deadline of 20 minutes. The launcher has its own
 15-minute startup limit, and each upload scan has a 60-second limit.
+
+`scanner.ts` requires `SCANNER_MANIFEST_DIGEST` from trusted deployment settings.
+It must match the manifest digest in the authenticated reply at first validation
+and again before upload admission. Missing or changed values return the typed
+scanner 503. The expiry check covers both the reply's deadline and the verified
+database's 24-hour deadline. The upload refusal fixture changes one response
+binding at a time and holds one reply across the database deadline.

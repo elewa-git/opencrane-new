@@ -2041,7 +2041,10 @@ requires the separate reviewed image and database checks in `infra/clamav/launch
 `DEV_SCANNER_URL` and `DEV_SCANNER_CA_FILE` are optional together. When supplied, the
 stack checks that HTTPS service instead of starting its own service. Missing or
 insecure settings, or a service that does not answer over trusted TLS, stop startup.
-Only the server receives `SCANNER_URL` and `SCANNER_CA_FILE`. The dispatcher and model
+The stack also gives the server `SCANNER_MANIFEST_DIGEST` set to the fixed local
+fixture marker. An external development scanner must return that same marker or
+startup refuses it. Production supplies a separately approved manifest digest.
+Only the server receives `SCANNER_URL`, `SCANNER_CA_FILE` and this digest. The dispatcher and model
 worker do not read scanner settings.
 
 ## Ownership browser check

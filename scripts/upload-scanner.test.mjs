@@ -17,6 +17,7 @@ function commands() {
 }
 vi.mock('../apps/server/src/files/commands.ts', commands);
 let directory, server, settings, tls, now, mode, received, requests, options, previous;
+let heldReply;
 const bytes = Buffer.from('Meeting at ten.');
 function hash(value) {
   const digest = createHash('sha256');
@@ -50,7 +51,7 @@ function response(request, reply) {
   function receive(chunk) {
     chunks.push(chunk);
   }
-  function finish() {
+  async function finish() {
     const content = Buffer.concat(chunks);
     received.push(content);
     const input = { purpose: 'upload', silo: request.headers['x-scan-silo'],
@@ -67,6 +68,10 @@ function response(request, reply) {
       mode(result);
     }
     previous = result;
+    if (heldReply) {
+      server.emit('reply-ready');
+      await heldReply;
+    }
     reply.setHeader('content-type', 'application/json');
     let body = JSON.stringify(result);
     if (mode === 'large') {
@@ -90,12 +95,14 @@ async function setup() {
   mode = '';
   received = [];
   requests = [];
+  heldReply = undefined;
   directory = await mkdtemp(join(tmpdir(), 'upload-https-'));
   await sharedCertificates(directory);
   tls = { key: await readFile(join(directory, 'server.key')),
     cert: await readFile(join(directory, 'server.crt')) };
   settings = { silo: 'test', caFile: join(directory, 'ca.crt'),
-    privateKeyPath: join(directory, 'server.key'), issuer: 'https://issuer.invalid' };
+    privateKeyPath: join(directory, 'server.key'), issuer: 'https://issuer.invalid',
+    manifestDigest: `sha256:${'b'.repeat(64)}` };
   server = createServer(tls);
   server.on('checkContinue', response);
   await listen();
@@ -255,6 +262,63 @@ async function copiedAcrossSilos() {
   await refused();
 }
 test('refuses a copied clean response in another silo', copiedAcrossSilos);
+
+const changedProofFields = [
+  ['silo', { silo: 'other' }],
+  ['request', { requestId: randomUUID() }],
+  ['bytes', { sha256: 'f'.repeat(64) }],
+  ['file id', { fileId: randomUUID() }],
+  ['purpose', { purpose: 'image' }],
+  ['database generation', { manifestDigest: `sha256:${'c'.repeat(64)}` }],
+  ['response expiry', { expiresAt: '2020-01-01T00:00:00.000Z' }],
+];
+async function oneChangedProofField(_name, patch) {
+  function alter(result) {
+    Object.assign(result, patch);
+  }
+  mode = alter;
+  await refused();
+}
+test.each(changedProofFields)('refuses a clean response with only changed %s',
+  oneChangedProofField);
+
+async function replyAcrossDatabaseDeadline() {
+  const actualNow = Date.now;
+  function scriptedNow() {
+    return now;
+  }
+  Date.now = scriptedNow;
+  function alter(result) {
+    const databaseUpdatedAt = now - 86400000 + 500;
+    result.databaseUpdatedAt = new Date(databaseUpdatedAt).toISOString();
+    for (const database of result.databases) {
+      database.builtAt = new Date(databaseUpdatedAt - 1000).toISOString();
+    }
+    // Model a service that incorrectly extends a previously clean reply.
+    result.expiresAt = new Date(now + 60000).toISOString();
+  }
+  mode = alter;
+  let releaseReply;
+  function hold(resolve) {
+    releaseReply = resolve;
+  }
+  heldReply = new Promise(hold);
+  try {
+    const ready = once(server, 'reply-ready');
+    const pending = refused();
+    await ready;
+    now += 500;
+    releaseReply();
+    await pending;
+    expect(fileCommand).not.toHaveBeenCalled();
+    expect(options.objects.putObject).not.toHaveBeenCalled();
+  } finally {
+    releaseReply();
+    Date.now = actualNow;
+  }
+}
+test('refuses a held clean reply after database expiry with a valid caller pass',
+  replyAcrossDatabaseDeadline);
 async function timeout() {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   mode = 'timeout';

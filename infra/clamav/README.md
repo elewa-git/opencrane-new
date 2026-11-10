@@ -117,6 +117,8 @@ A copied result grants nothing. Caller expiry and database expiry are checked ag
 before replying. Upload callers now check this response before storage. They keep
 the same file identity when retrying, with a new request each time. Deployed service
 startup and key rotation still need qualification.
+The upload server checks the approved virus list digest in each reply. A result
+from an earlier list cannot save a file after the reviewed list changes.
 
 The local upload proof starts this reviewed launcher and HTTPS service with
 fresh approved virus definitions. It sends clean and virus test bytes through
