@@ -1,5 +1,13 @@
 import { ConversationList, findConversation } from './conversations-data';
 
+function conversationIds(list: ConversationList): string[] {
+  const ids: string[] = [];
+  for (const item of list.rows()) {
+    if (item.kind !== 'welcome') ids.push(item.conversationId);
+  }
+  return ids;
+}
+
 function row(id: string, mode: 'agent_session' | 'group' = 'agent_session') {
   const common = { conversationId: id, createdAt: '2026-10-14T00:00:00Z', title: id };
   if (mode === 'group') return { ...common, mode, participantIds: ['me', 'you'] };
@@ -17,6 +25,32 @@ function changedReply(): Response {
 describe('server-backed conversations list', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('keeps one saved welcome across recent, search and later pages', async () => {
+    const welcome = { kind: 'welcome', welcomeId: 'saved-welcome', route: '/welcome',
+      title: 'Welcome', createdAt: '2026-10-14T09:02:00.000Z',
+      activityAt: '2026-10-14T09:03:00.000Z', unread: 0,
+      archived: false, archivePosition: 0 };
+    const page = (rows: unknown[], nextCursor: string | null = null) =>
+      new Response(JSON.stringify({ rows, nextCursor }));
+    const fetcher = vi.fn().mockResolvedValueOnce(page([row('ordinary')], 'next'))
+      .mockResolvedValueOnce(page([welcome, welcome]))
+      .mockResolvedValueOnce(page([welcome]))
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValueOnce(page([{ ...welcome, archived: true, archivePosition: 12 }]));
+    const list = new ConversationList(fetcher);
+
+    await list.change('recent', '');
+    await list.loadMore();
+    expect(list.rows()).toContainEqual(welcome);
+    expect(list.rows()).toHaveLength(2);
+    await list.change('recent', 'welcome');
+    expect(list.rows()).toEqual([welcome]);
+    await list.change('archived', '');
+    expect(list.rows()).toEqual([]);
+    await list.change('archived', 'welcome');
+    expect(list.rows()).toEqual([{ ...welcome, archived: true, archivePosition: 12 }]);
+  });
+
   it('loads more with the same filters, deduplicates and blocks concurrent clicks', async () => {
     let finish!: (response: Response) => void;
     const pending = new Promise<Response>(resolve => { finish = resolve; });
@@ -32,7 +66,7 @@ describe('server-backed conversations list', () => {
     expect(list.announcement()).toBe('Loading more conversations…');
     finish(reply([row('first'), row('second')]));
     await loading;
-    expect(list.rows().map(item => item.conversationId)).toEqual(['first', 'second']);
+    expect(conversationIds(list)).toEqual(['first', 'second']);
     expect(list.empty()).toBe(false);
   });
 
@@ -58,7 +92,7 @@ describe('server-backed conversations list', () => {
     const list = new ConversationList(fetcher);
     await list.change('recent', '');
     await list.loadMore();
-    expect(list.rows().map(item => item.conversationId)).toEqual(['fresh']);
+    expect(conversationIds(list)).toEqual(['fresh']);
     expect(list.announcement()).toBe('Conversation list changed. Showing the latest results.');
     expect(fetcher).toHaveBeenCalledTimes(3);
     await list.loadMore();
@@ -113,7 +147,7 @@ describe('server-backed conversations list', () => {
     await list.change('archived', 'new');
     finish(reply([row('stale')]));
     await old;
-    expect(list.rows().map(item => item.conversationId)).toEqual(['current']);
+    expect(conversationIds(list)).toEqual(['current']);
     await list.change('recent', '');
     expect(list.rows()).toEqual([]);
     expect(list.denied()).toBe(true);

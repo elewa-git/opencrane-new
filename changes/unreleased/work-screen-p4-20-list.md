@@ -1,0 +1,1 @@
+Completed welcomes now appear in Recent and Archived, open as read-only history, and can be archived or restored without changing their saved answer. People without an assistant can open an unsent colleague or group draft from their completed welcome.

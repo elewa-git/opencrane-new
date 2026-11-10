@@ -51,7 +51,7 @@
           </div>
         }
         <ul class="conversation-list">
-          @for (row of list.rows(); track row.conversationId) {
+          @for (row of list.rows(); track rowId(row)) {
             <li><a [href]="href(row)">
               <oc-icon [name]="glyph(row)" />
               <span><small>{{ mode(row) }}</small><strong>{{ row.title || 'Untitled conversation' }}</strong></span>

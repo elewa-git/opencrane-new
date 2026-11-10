@@ -1269,6 +1269,9 @@ assistant check open rather than guessing an answer.
 - Shows Recent and Archived conversations at `/workspace/conversations`. People can
   search titles, load more results and open an older chat from its saved link. If the
   list changes during that search, the website starts it again once.
+- Reads the server's separate completed welcome row in those lists. The saved welcome
+  opens `/welcome`, including from Archived. Its archive control checks the saved
+  welcome id and archive position. A lost reply checks the original command id.
 - Lets people archive or unarchive a direct or group chat from its header. The server
   saves the choice for their own list. An archived chat stays readable and can still
   receive messages. An uncertain save keeps the person in that chat until they check

@@ -52,6 +52,7 @@ export {
   chatOriginSchema,
   type ChatRow,
   type ChatConversation,
+  type WelcomeListRow,
 } from './chat.ts';
 
 export { toolPolicySchema, type ToolPolicy } from './integrations.ts';

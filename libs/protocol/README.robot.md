@@ -18,8 +18,9 @@ also checks the effect and separate content and IAM progress from the status GET
 
 `chatStateCommandSchema` strictly checks archive/read command ids and join ids.
 `chatListWithWelcomeSchema` accepts a strict welcome row beside ordinary
-conversation rows. The older `chatListSchema` accepts the reply but filters
-welcome rows for browser code that still handles only conversations.
+conversation rows. The browser's Recent and Archived screen uses that full reply.
+The older `chatListSchema` accepts the reply but filters welcome rows for code
+that still handles only conversations.
 The welcome has `kind: welcome`, its own id and route, a fixed title, completion
 activity time, zero unread count and archive choice. It has no conversation mode,
 participant or Close permission.

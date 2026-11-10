@@ -106,7 +106,7 @@ describe('saved welcome chat', () => {
       requiredStep: caseUnderTest.requiredStep }));
     await show(screen, caseUnderTest.words);
     expect(screen.root.querySelector(`a[href="${caseUnderTest.link}"]`)).not.toBeNull();
-    expect(screen.root.querySelector('button')).toBeNull();
+    expect(screen.root.querySelector('.notice button')).toBeNull();
   });
 
   it('marks a saved active question as resumed after a fresh page load', async () => {
@@ -152,7 +152,14 @@ describe('saved welcome chat', () => {
     const complete = { ...active, status: 'completed', answered: 1, nextStep: null,
       question: null, answer: 'Saved private answer',
       completedAt: '2026-10-14T09:03:00.000Z' };
-    const screen = mount(() => reply(complete));
+    const screen = mount(url => {
+      if (url.startsWith('/api/conversations?')) return reply({ rows: [{
+        kind: 'welcome', welcomeId: complete.welcomeId, route: '/welcome',
+        title: 'Welcome', createdAt: complete.startedAt,
+        activityAt: complete.completedAt, unread: 0, archived: true,
+        archivePosition: 12 }], nextCursor: null });
+      return reply(complete);
+    });
     await show(screen, 'Saved private answer');
     expect(screen.root.textContent).toContain('Welcome complete');
     const confirmationTime = screen.root.querySelectorAll('.assistant-row')[1]
@@ -163,7 +170,9 @@ describe('saved welcome chat', () => {
     expect(creaseTime?.getAttribute('datetime')).toBe(complete.completedAt);
     expect(creaseTime?.textContent?.trim()).toBe('14 Oct 2026, 09:03');
     expect(screen.root.querySelector('textarea')).toBeNull();
-    expect(screen.root.textContent).toContain('read-only');
+    expect(screen.root.textContent).toContain('Read-only');
+    await show(screen, 'Restore to list');
+    expect(screen.root.querySelector('a[href="/workspace/direct?conversation="]')).toBeNull();
   });
 
   it('clears private words when access is denied after an earlier read', async () => {
@@ -216,11 +225,25 @@ describe('saved welcome chat', () => {
 
   it('offers direct and group drafts after no-assistant completion', async () => {
     const noAssistant = { ...active, status: 'completed', variant: 'no_assistant',
-      assignmentStatus: 'not_requested', answered: 1, nextStep: null,
+      assignmentStatus: 'assigned', answered: 1, nextStep: null,
       question: null, answer: 'Continue to workspace',
       completedAt: '2026-10-14T09:03:00.000Z' };
-    const screen = mount(() => reply(noAssistant));
-    await show(screen, 'Start a direct or group chat');
+    const screen = mount(url => {
+      if (url.startsWith('/api/conversations?')) return reply({ rows: [{
+        kind: 'welcome', welcomeId: noAssistant.welcomeId, route: '/welcome',
+        title: 'Welcome', createdAt: noAssistant.startedAt,
+        activityAt: noAssistant.completedAt, unread: 0, archived: false,
+        archivePosition: 0 }], nextCursor: null });
+      return reply(noAssistant);
+    });
+    await show(screen, 'Message a colleague');
+    await show(screen, 'Message a group');
+    expect(screen.root.querySelector('.no-assistant-notice')?.textContent)
+      .toContain('No personal assistant assigned yet');
+    expect(screen.root.querySelector('.no-assistant-notice')?.textContent)
+      .toContain('Welcome complete');
+    expect(screen.root.querySelector('.transcript')).toBeNull();
+    expect(screen.root.textContent).not.toContain('Continue to workspace');
     expect(screen.root.querySelector('a[href="/workspace/direct"]')).not.toBeNull();
     expect(screen.root.querySelector('.completed-dock a[href="/workspace"]')).toBeNull();
     expect(screen.root.querySelector('textarea')).toBeNull();
