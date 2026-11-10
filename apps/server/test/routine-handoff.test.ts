@@ -573,7 +573,7 @@ it('resumes the saved checked due once after disabled delivery and a broker rest
 type ReleaseChange = 'ceiling' | 'payer_ceiling' | 'assistant_ceiling' |
   'reserved' | 'settled' | 'exhausted' | 'exhausted_global_reason' |
   'exhausted_payer_reason' | 'exhausted_assistant_reason' | 'exhausted_other_reason' |
-  'exhausted_work' | 'exhausted_other_work' | 'stop' | 'grant' | 'leadership' | 'deadline';
+  'exhausted_work' | 'stop' | 'grant' | 'leadership' | 'deadline';
 function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId?: string) {
   return { scope, ...(scopeId ? { scopeId } : {}), kind: 'monthly' as const,
     reason: 'bound_refused' as const,
@@ -581,13 +581,15 @@ function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId
     ceilingCents: 1000, settledCents: 1000, reservedCents: 0, attemptedBoundCents: 1,
     configurationId: 'budget-config' };
 }
-function modernExhaustionData(kind: string, work?: { conversationId: string; turnId: string }) {
+function modernExhaustionData(kind: string, assistantId: string, work?: {
+  conversationId: string; turnId: string;
+}) {
   if (kind.endsWith('_reason')) {
     let reason;
     if (kind === 'exhausted_global_reason') reason = exhaustedReason('global');
     else if (kind === 'exhausted_payer_reason') reason = exhaustedReason('paying_group', 'sales');
     else if (kind === 'exhausted_assistant_reason') {
-      reason = exhaustedReason('assistant', 'sales-assistant');
+      reason = exhaustedReason('assistant', assistantId);
     } else reason = exhaustedReason('assistant', 'other-assistant');
     return { reasons: [reason] };
   }
@@ -645,7 +647,7 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
       } else if (kind.startsWith('exhausted_')) {
         const run = (await runState()).activeRun!;
         const work = { conversationId: run.conversationId, turnId: run.turnId };
-        const data = modernExhaustionData(kind, work);
+        const data = modernExhaustionData(kind, run.definition.assistantId, work);
         const exhausted = record(`exhausted-${kind}`, 'budget-test', 'budget.exhausted', data);
         await nats.seed([exhausted]);
       } else if (kind === 'stop') {
@@ -673,7 +675,7 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
     return append(...supplied);
   }
   vi.spyOn(nats.store, 'append').mockImplementation(interruptRelease);
-  const shouldRefuse = kind !== 'exhausted_other_reason' && kind !== 'exhausted_other_work';
+  const shouldRefuse = kind !== 'exhausted_other_reason';
   if (shouldRefuse) {
     await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
   } else {
@@ -694,7 +696,7 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
 it.each(['ceiling', 'payer_ceiling', 'assistant_ceiling', 'reserved', 'settled',
   'exhausted', 'exhausted_global_reason', 'exhausted_payer_reason',
   'exhausted_assistant_reason', 'exhausted_other_reason', 'exhausted_work',
-  'exhausted_other_work', 'stop', 'grant', 'leadership', 'deadline'] as const)(
+  'stop', 'grant', 'leadership', 'deadline'] as const)(
   'refuses %s before the final routine release and keeps the scan pending',
   changeBeforeFinalRelease);
 
