@@ -115,6 +115,14 @@ async function capture(browser, width, frame) {
         element.getBoundingClientRect().top);
       assert(top < 900, `${frame} phone result visible without scrolling`);
     }
+    if (width === 390 && frame === 'OVR-22') {
+      const dialog = await page.locator('.history-detail').boundingBox();
+      assert(dialog && dialog.x === 0 && dialog.width === width,
+        'phone detail covers the whole viewport');
+      const action = await page.getByRole('link', { name: 'Open People & groups' }).boundingBox();
+      assert(action && action.width >= width - 32,
+        'phone detail action spans the available width');
+    }
     await page.screenshot({ path: resolve(output, `${frame}-${width}.png`) });
   } finally {
     await page.close();

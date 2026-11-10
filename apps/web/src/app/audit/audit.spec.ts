@@ -236,6 +236,28 @@ it('keeps the frame filters compact and names all history families', async () =>
   expect(root.querySelector('.advanced')).toBeNull();
 });
 
+it.each([
+  ['Members & owners', 'members'],
+  ['Tools & models', 'tools'],
+  ['Spending & effects', 'spending'],
+  ['Memory', 'memory'],
+  ['Routines', 'routines'],
+])('requests the whole %s family', async (label, family) => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, { rows: [] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce());
+  const button = [...root.querySelectorAll<HTMLButtonElement>('.families button')]
+    .find(candidate => candidate.textContent?.trim() === label);
+  expect(button).toBeDefined();
+  button!.click();
+  await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+  const request = new URL(String(fetchSpy.mock.calls[1]![0]), 'https://example.test');
+  expect(request.searchParams.get('family')).toBe(family);
+  expect(request.searchParams.has('type')).toBe(false);
+});
+
 it('shows readable ownership evidence and uses a native modal', async () => {
   const ownershipRecord = {
     eventId: 'owner-change', type: 'member.role_changed', position: 2,
