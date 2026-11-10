@@ -37,6 +37,7 @@ flowchart LR
   persona step before the person chooses a start.
 - Saves the next scripted answer and shows it as pending until a worker confirms completion.
 - Shows a completed welcome as read-only after survey or assistant changes.
+- Saves and restores the member's welcome archive choice without starting a chat.
 
 Reads check current membership after loading, before opening private answers.
 Opening a persona revision loads that version before checking membership. Writes
@@ -61,6 +62,7 @@ until a worker confirms the saved answer. Completion keeps the original words.
 | [history.ts](history.ts) | Reads saved history and opens authorised encrypted answers. |
 | [persona.ts](persona.ts) | Builds the first persona from saved survey answers. |
 | [welcome.ts](welcome.ts) | Checks the assignment, start and next answer. |
+| [archive.ts](archive.ts) | Saves and checks the completed welcome's archive choice. |
 | [script.ts](script.ts) | Keeps the ordered questions for each saved script version. |
 
 ## How it connects

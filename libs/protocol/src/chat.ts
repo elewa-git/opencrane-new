@@ -140,6 +140,7 @@ export const memoryAdmissionSchema = z.object({
 }).strict();
 export type MemoryAdmission = z.infer<typeof memoryAdmissionSchema>;
 const conversationDisplay = {
+  kind: z.literal('conversation').optional(),
   conversationId: z.string(), createdBy: z.string(), createdAt: z.string(),
   title: z.string().optional(),
   status: z.enum(['open', 'working', 'done', 'closed', 'failed', 'stopped', 'lost']).optional(),
@@ -148,7 +149,7 @@ const conversationDisplay = {
   throughPosition: z.int().nonnegative().optional(), throughEventId: chatIdSchema.optional(),
   canClose: z.boolean().optional(),
 };
-export const chatListSchema = z.object({ rows: z.array(z.union([
+const chatConversationSchema = z.union([
   z.object({
     ...conversationDisplay, assistantId: z.string(), payingGroupId: z.string().optional(),
     assistantKind: z.enum(['personal', 'team']).optional(),
@@ -163,7 +164,25 @@ export const chatListSchema = z.object({ rows: z.array(z.union([
     participantIds: z.array(z.string()),
     groupId: z.string().optional(), groupSnapshotPosition: z.int().nonnegative().optional(),
   }).strict(),
+]);
+export const welcomeListRowSchema = z.strictObject({
+  kind: z.literal('welcome'), welcomeId: chatIdSchema, route: z.literal('/welcome'),
+  title: z.literal('Welcome'), createdAt: z.string().datetime(),
+  activityAt: z.string().datetime(), unread: z.literal(0),
+  archived: z.boolean(), archivePosition: z.int().nonnegative(),
+});
+export const chatListWithWelcomeSchema = z.object({ rows: z.array(z.union([
+  chatConversationSchema, welcomeListRowSchema,
 ])), nextCursor: z.string().max(2000).nullable().optional() });
+export type ChatConversation = z.infer<typeof chatConversationSchema>;
+type ListRow = z.infer<typeof chatListWithWelcomeSchema>['rows'][number];
+function isConversationRow(row: ListRow): row is ChatConversation {
+  return row.kind !== 'welcome';
+}
+export const chatListSchema = chatListWithWelcomeSchema.transform(function legacyChatRows(reply) {
+  const rows = reply.rows.filter(isConversationRow);
+  return { ...reply, rows };
+});
 export const chatColleaguesSchema = z.object({
   rows: z.array(z.object({ memberId: z.string(), displayName: z.string().nullable() }).strict()),
   next: z.string().nullable(),
@@ -188,7 +207,6 @@ export const chatContextSchema = z.object({
   assistantId: z.string().nullable(), memoryAdmission: memoryAdmissionSchema.optional(),
 });
 export type ChatRow = z.infer<typeof chatRowSchema>;
-export type ChatConversation = z.infer<typeof chatListSchema>['rows'][number];
 
 /** A title is a display of the first message, never separately stored business state. */
 export function sessionSlug(text: string): string {

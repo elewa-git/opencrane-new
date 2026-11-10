@@ -11,6 +11,7 @@ import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
 import { welcomeAssistantAssigned, welcomeCommand, welcomeReceipt,
   welcomeRequiredStep } from './welcome.ts';
 import { welcomeScripts } from './script.ts';
+import { welcomeArchiveCommand, WelcomeNotFound } from './archive.ts';
 import { welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema } from '@opencrane/events';
 
 const parameters = z.strictObject({ commandId: idSchema });
@@ -28,6 +29,7 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
   app.route(writeRoute);
   app.route({ ...writeRoute, url: '/api/onboarding/persona' });
   app.route({ ...writeRoute, url: '/api/onboarding/welcome' });
+  app.route({ ...writeRoute, url: '/api/onboarding/welcome/archive' });
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     try {
       const checks = { write: request.method === 'POST' };
@@ -35,12 +37,7 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       const configured = context.options;
       const memberId = context.memberId;
       if (checks.write) {
-        if (request.routeOptions.url === '/api/onboarding/welcome') {
-          return await welcomeCommand(configured, memberId, request.body);
-        }
-        let route: 'survey' | 'persona' = 'survey';
-        if (request.routeOptions.url === '/api/onboarding/persona') route = 'persona';
-        return await surveyCommand(configured, memberId, request.body, route);
+        return await writeOnboardingRoute(request, configured, memberId);
       }
       const history = await surveyHistory(configured, memberId);
       if (request.routeOptions.url === '/api/onboarding/persona/revisions/:revisionId') {
@@ -89,6 +86,20 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
   }
 }
 
+function writeOnboardingRoute(request: FastifyRequest, options: ChatOptions,
+  memberId: string) {
+  const path = request.routeOptions.url;
+  if (path === '/api/onboarding/welcome/archive') {
+    return welcomeArchiveCommand(options, memberId, request.body);
+  }
+  if (path === '/api/onboarding/welcome') {
+    return welcomeCommand(options, memberId, request.body);
+  }
+  let route: 'survey' | 'persona' = 'survey';
+  if (path === '/api/onboarding/persona') route = 'persona';
+  return surveyCommand(options, memberId, request.body, route);
+}
+
 type History = Awaited<ReturnType<typeof surveyHistory>>;
 async function readWelcomeAssignment(request: FastifyRequest, options: ChatOptions,
   memberId: string, history: History): Promise<boolean | null> {
@@ -109,6 +120,9 @@ async function readSpecial(request: FastifyRequest, options: ChatOptions,
     if (saved.row.event.type === 'onboarding.welcome_started' ||
         saved.row.event.type === 'onboarding.welcome_answer_recorded') {
       return welcomeReceipt(saved.row);
+    }
+    if (saved.row.event.type === 'onboarding.welcome_archive_set') {
+      return surveyReceipt(saved.row);
     }
     return surveyReceipt(saved.row);
   }
@@ -195,6 +209,9 @@ function surveyRefusal(reply: FastifyReply, error: unknown) {
   if (error instanceof z.ZodError) return reply.code(422).send({ status: 'invalid' });
   if (error instanceof SurveyConflict || isAuthorityChanged(error)) {
     return reply.code(409).send({ status: 'conflict' });
+  }
+  if (error instanceof WelcomeNotFound) {
+    return reply.code(404).send({ status: 'not_found' });
   }
   if (isChatRefused(error)) return reply.code(403).send({ status: 'refused' });
   if (error instanceof ChatAccessApplying || error instanceof AuthorityApplying) {

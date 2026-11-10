@@ -10,6 +10,10 @@ This package is the typed event catalogue used by server validation and the even
 core. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
+`onboarding.welcome_archive_set` requires the member's personal subject and
+human principal. Its strict data contains the member, frozen welcome id and
+generation, and archive choice. It contains no answer text.
+
 `agent.command_ran` accepts an optional label from seven fixed plain phrases and
 an optional encrypted `view` with `ciphertext` and `keyId`. It refuses a plain
 `preview` and keeps older events without a view readable.

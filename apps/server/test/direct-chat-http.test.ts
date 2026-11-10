@@ -1998,7 +1998,8 @@ async function hidesPersonalSessionHistoryBeforeJoin() {
     const response = await fixture.app.inject(request);
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ rows: [{
-      conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
+      kind: 'conversation', conversationId, mode: 'agent_session', createdBy: 'alice',
+      assistantId: 'assistant',
       assistantKind: 'personal', canClose: false,
       createdAt: joinedAt.toISOString(), title: 'New session', status: 'open',
       joinEventId: joined.id, archived: false, archivePosition: 0, throughPosition: 0,

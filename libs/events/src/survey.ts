@@ -94,11 +94,15 @@ export const onboardingCompletedDataSchema = z.strictObject({
   variant: z.enum(['assistant', 'no_assistant']), finalAnswerId: chatIdSchema,
   confirmationRef: z.literal('welcome-v1-complete'),
 });
+export const welcomeArchiveSetDataSchema = z.strictObject({
+  ...identity, welcomeId: chatIdSchema, archived: z.boolean(),
+});
 const personalIdentitySchema = z.object({ memberId: chatIdSchema });
 const personalEventTypes = new Set([
   'onboarding.persona_revised', 'onboarding.persona_approved',
   'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
   'onboarding.completed',
+  'onboarding.welcome_archive_set',
 ]);
 export function validSurveyEvent(record: EventEnvelope): boolean {
   if (!record.type.startsWith('onboarding.survey_') &&
@@ -154,4 +158,8 @@ export const surveyEvents: readonly EventDefinition[] = [
     { ...exampleIdentity, welcomeId: 'welcome-1', scriptVersion: 'welcome-v1',
       variant: 'no_assistant', finalAnswerId: 'answer-1',
       confirmationRef: 'welcome-v1-complete' }),
+  event('onboarding.welcome_archive_set', 'personal',
+    'A member changed the archive choice for their completed welcome.',
+    welcomeArchiveSetDataSchema,
+    { ...exampleIdentity, welcomeId: 'welcome-1', archived: true }),
 ];

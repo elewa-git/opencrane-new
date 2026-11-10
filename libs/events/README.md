@@ -7,6 +7,8 @@ Saved hosted image attempts now queue a private image check through the worker l
 Reading or replaying these events does not call the scanner.
 Private persona revisions carry encrypted bytes and a checked digest, never plain text.
 An approval records the exact saved version a member chose, without copying its text.
+A completed welcome's archive choice is a separate personal event. It leaves its
+answer and assistant choice intact.
 
 A routine Stop can name the exact saved denial or expiry of its held tool approval.
 A new routine definition can name the MCP server separately from its connection.

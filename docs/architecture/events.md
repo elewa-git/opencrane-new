@@ -102,6 +102,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `onboarding.welcome_started` | admitted member, checked assignment and approved persona when assigned, exact personal position and generation | personal-settings: frozen script, variant, assignment and revision reference | none |
 | `onboarding.welcome_answer_recorded` | admitted member, exact next scripted step and expected personal position | personal-settings: encrypted answer and pending completion progress | complete-welcome |
 | `onboarding.completed` | onboarding-completion system command, saved final answer and current member | personal-settings: permanent read-only welcome with original answer reference | none |
+| `onboarding.welcome_archive_set` | admitted member, own completed welcome and expected archive position | personal-settings: member's welcome archive choice, separate from conversations | none |
 
 These events require schema version 1, the member's exact personal subject and a command id.
 Member writes use a matching human principal and the server source. Completion uses the

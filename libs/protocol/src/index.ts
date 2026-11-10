@@ -36,6 +36,8 @@ export {
   chatRowSchema,
   chatFeedSchema,
   chatListSchema,
+  chatListWithWelcomeSchema,
+  welcomeListRowSchema,
   chatGroupsSchema,
   chatGroupSnapshotSchema,
   chatContextSchema,
