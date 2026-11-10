@@ -212,3 +212,50 @@ it('does not restore a selected detail after the filters change', async () => {
   await vi.waitFor(() => expect(root.textContent).toContain('No history matches'));
   expect(root.querySelector('.history-detail')).toBeNull();
 });
+
+it('keeps the frame filters compact and names all history families', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, { rows: [row] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('article')).not.toBeNull());
+  expect(root.querySelector('.families-and-search')).not.toBeNull();
+  expect(root.textContent).toContain('Members & owners');
+  expect(root.textContent).toContain('Tools & models');
+  expect(root.textContent).toContain('Spending & effects');
+  expect(root.textContent).toContain('Routines');
+  expect(root.querySelector('.refresh')).toBeNull();
+  expect(root.querySelector('.advanced')).toBeNull();
+});
+
+it('shows readable ownership evidence and uses a native modal', async () => {
+  const ownershipRecord = {
+    eventId: 'owner-change', type: 'member.role_changed', position: 2,
+    source: 'authoritative', status: 'recorded',
+    recordedAt: '2026-11-08T10:50:00.000Z', operation: 'appointment',
+    newRole: 'owner', actor: { kind: 'person', id: 'member-Marie' },
+    progress: { readModel: 'current', iam: 'current', checkedAt: '2026-11-08T10:51:00.000Z' },
+  };
+  const ownershipRow = { id: 'owner-change', decision: 'not_recorded',
+    outcome: 'recorded', records: [ownershipRecord] };
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [ownershipRow] }))
+    .mockResolvedValueOnce(reply(200, { id: 'owner-change', records: [ownershipRecord] }));
+  const showModal = vi.fn();
+  HTMLDialogElement.prototype.showModal = showModal;
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('.row-button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('.row-button')!.click();
+  await vi.waitFor(() => expect(showModal).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(root.textContent).toContain('Owner appointed'));
+  expect(document.activeElement).toBe(root.querySelector('.history-detail h2'));
+  expect(root.textContent).toContain('Confirmed observation');
+  expect(root.textContent).toContain('Affected scope');
+  expect(root.textContent).toContain('Verified actor');
+  expect(root.querySelector<HTMLAnchorElement>('a[href="/org/people"]')?.textContent)
+    .toContain('Open People & groups');
+  expect(root.textContent).not.toContain('member.role_changed');
+  expect(root.textContent).not.toContain('member-Marie');
+});
