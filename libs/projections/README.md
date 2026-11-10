@@ -16,6 +16,8 @@ Provider read tables keep a retired connection's safe details and apply its
 reviewed binding choices in one database transaction. Rebuilding them reads only
 saved events and does not contact a model provider.
 The member's welcome stays complete after later survey and assistant changes.
+Its archive choice and completion position rebuild from personal events. The
+welcome is not a conversation row.
 Workers save adjacent pieces of a streamed reply together. This keeps live
 text and the final Stop result from waiting behind hundreds of separate commits.
 Conversation readers can request the newest messages and then read older pages.

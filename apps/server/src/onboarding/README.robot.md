@@ -47,3 +47,14 @@ Its private bytes use the personal key. The last answer returns
 `onboarding.completed`, welcome reads return `completed` and `completedAt`.
 Survey restarts and later assignment changes retain this frozen welcome. The
 original answer command receipt still reports its saved pending result.
+
+`POST /api/onboarding/welcome/archive` accepts `commandId`, `welcomeId`,
+`archived` and `expectedArchivePosition`. It checks the member's completed
+welcome in personal history, then checks current membership before one
+conditional append of `onboarding.welcome_archive_set`. The archive position
+starts at zero and changes to the saved event position. A stale opposite choice
+returns 409. An unknown or foreign welcome id returns 404 without its content.
+An identical command returns its original receipt after a lost reply; changing
+its choice or expected position returns 409. `GET /api/personal/changes/:commandId`
+reads that original event and appends nothing. Completion, answer and frozen
+assistant choice stay the same after archive and restore.

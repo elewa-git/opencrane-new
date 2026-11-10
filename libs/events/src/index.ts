@@ -95,6 +95,7 @@ export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausing
 export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema,
   personaApprovedDataSchema,
   personaRevisedDataSchema, welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
+  welcomeArchiveSetDataSchema,
   onboardingCompletedDataSchema }
   from './survey.ts';
 export { routineDefinitionSchema, routineRecordIdentitySchema, routineMissedSchema,

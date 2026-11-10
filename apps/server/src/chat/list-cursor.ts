@@ -3,6 +3,11 @@ import { z } from 'zod';
 
 export class ConversationListChanged extends Error {}
 export class ConversationListIncomplete extends Error {}
+export function newestListMatch(left: { position: [number, number] },
+  right: { position: [number, number] }) {
+  if (left.position[0] !== right.position[0]) return right.position[0] - left.position[0];
+  return right.position[1] - left.position[1];
+}
 export const conversationListQuery = z.strictObject({
   section: z.enum(['recent', 'archived']).default('recent'),
   q: z.string().max(100).default(''),

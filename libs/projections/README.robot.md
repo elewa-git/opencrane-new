@@ -21,6 +21,11 @@ adapters, the checkpoint runner, the members read model and the MCP catalogue.
 Authorisation and reactions belong elsewhere; replay never sends mail,
 changes OpenFGA or performs other external effects.
 
+`personal_settings.survey.welcome` keeps `completionPosition`, `archived` and
+`archivePosition`. The server checks current membership and exact personal
+event position before showing that row in the conversation list. Replay folds
+the archive event without opening a key, starting a turn or creating a chat.
+
 The provider projection marks `provider.retired` with its saved time and choices.
 It checks each old binding before replacing that read row with the reviewed pause
 or target. The choice updates and provider metadata commit in the same runner

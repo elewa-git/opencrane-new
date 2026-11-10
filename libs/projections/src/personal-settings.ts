@@ -1,6 +1,7 @@
 import { parseEventByType, surveyStepSavedDataSchema, surveyRestartedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
   welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
+  welcomeArchiveSetDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
@@ -16,7 +17,8 @@ type Survey = { generation: number; steps: SavedStep[]; nextStep: number | null;
     generation: number; revision: number | null; revisionId: string | null;
     assistantId: string | null; startedAt: string; answered: number;
     status: 'welcome_active' | 'completion_pending' | 'completed';
-    completedAt?: string; finalAnswerId?: string;
+    completedAt?: string; completionPosition?: number; finalAnswerId?: string;
+    archived?: boolean; archivePosition?: number;
     answers: { eventId: string; commandId: string; position: number;
       encrypted: string; encryptedDigest: string; keyRef: string }[] } };
 
@@ -95,7 +97,7 @@ function startWelcome(survey: Survey, event: EventEnvelope) {
     variant: data.variant, assignmentStatus: data.assignmentStatus,
     generation: data.generation, revision: data.revision,
     revisionId: data.revisionId, assistantId: data.assistantId, startedAt: event.time,
-    answered: 0, status: 'welcome_active', answers: [] };
+    answered: 0, status: 'welcome_active', answers: [], archived: false, archivePosition: 0 };
 }
 function recordWelcomeAnswer(survey: Survey, event: EventEnvelope, position: number) {
   const data = welcomeAnswerRecordedDataSchema.parse(event.data);
@@ -111,7 +113,7 @@ function recordWelcomeAnswer(survey: Survey, event: EventEnvelope, position: num
   welcome.answered = 1;
   welcome.status = 'completion_pending';
 }
-function completeWelcome(survey: Survey, event: EventEnvelope) {
+function completeWelcome(survey: Survey, event: EventEnvelope, position: number) {
   const data = onboardingCompletedDataSchema.parse(event.data);
   const welcome = survey.welcome;
   if (!welcome || welcome.status !== 'completion_pending' ||
@@ -122,7 +124,18 @@ function completeWelcome(survey: Survey, event: EventEnvelope) {
   }
   welcome.status = 'completed';
   welcome.completedAt = event.time;
+  welcome.completionPosition = position;
   welcome.finalAnswerId = data.finalAnswerId;
+}
+function setWelcomeArchive(survey: Survey, event: EventEnvelope, position: number) {
+  const data = welcomeArchiveSetDataSchema.parse(event.data);
+  const welcome = survey.welcome;
+  if (!welcome || welcome.status !== 'completed' || data.welcomeId !== welcome.welcomeId ||
+      data.generation !== welcome.generation) {
+    throw new Error('Invalid welcome archive choice');
+  }
+  welcome.archived = data.archived;
+  welcome.archivePosition = position;
 }
 function saveStep(survey: Survey, event: EventEnvelope, position: number, commandId: string) {
   const data = surveyStepSavedDataSchema.parse(event.data);
@@ -145,6 +158,7 @@ const personalTypes = new Set([
   'onboarding.persona_revised', 'onboarding.persona_approved',
   'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
   'onboarding.completed',
+  'onboarding.welcome_archive_set',
 ]);
 async function apply(db: Query, event: EventEnvelope, position: number): Promise<void> {
   if (!personalTypes.has(event.type)) {
@@ -156,7 +170,7 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   const dataSchema = surveyStepSavedDataSchema.or(surveyRestartedDataSchema)
     .or(personaRevisedDataSchema).or(personaApprovedDataSchema)
     .or(welcomeStartedDataSchema).or(welcomeAnswerRecordedDataSchema)
-    .or(onboardingCompletedDataSchema);
+    .or(onboardingCompletedDataSchema).or(welcomeArchiveSetDataSchema);
   const data = dataSchema.parse(event.data);
   const current = await readSurvey(db, event.silo, data.memberId);
   const survey: Survey = current ?? { generation: 1, steps: [], nextStep: 1, position: 0 };
@@ -171,7 +185,9 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   } else if (event.type === 'onboarding.welcome_answer_recorded') {
     recordWelcomeAnswer(survey, event, position);
   } else if (event.type === 'onboarding.completed') {
-    completeWelcome(survey, event);
+    completeWelcome(survey, event, position);
+  } else if (event.type === 'onboarding.welcome_archive_set') {
+    setWelcomeArchive(survey, event, position);
   } else {
     saveStep(survey, event, position, event.commandId);
   }

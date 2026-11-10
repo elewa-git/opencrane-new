@@ -1,5 +1,14 @@
 # Chat contracts
 
+`GET /api/conversations` includes one completed own welcome with `kind: welcome`,
+its welcome id, `/welcome` route, fixed title, completion time, zero unread count
+and archive position. It uses the same section, title search, limit and signed
+cursor as ordinary conversations. A welcome archive change invalidates an older
+cursor. A pending welcome completion or archive projection returns
+`access_applying`; unrelated survey or persona saves leave the row readable.
+A list read checks
+membership after loading the row. No conversation or participant row is created.
+
 Message commands accept up to 100 file ids with text, or files alone. Each id must
 name a clean upload by the sender in that conversation. The server reads these file
 events before its short write access check and saves one `message.posted` event.

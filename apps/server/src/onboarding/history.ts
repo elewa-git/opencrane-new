@@ -1,6 +1,7 @@
 import { parseEventByType, surveyRestartedDataSchema, surveyStepSavedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
   welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
+  welcomeArchiveSetDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { readStreamSummary, readEventAt, type StoredEvent, type SummaryKind }
   from '@opencrane/event-store';
@@ -8,6 +9,7 @@ import type { ChatOptions } from '../chat/access.ts';
 
 type Reference = ReturnType<typeof surveyReceipt> & {
   sequence: number; previousPosition: number; generation: number;
+  previousArchivePosition: number | undefined;
 };
 export type PersonaReference = { revision: number; sequence: number; eventId: string;
   time: string; generation: number };
@@ -15,7 +17,8 @@ type Survey = { generation: number; position: number; steps: StoredEvent[];
   commands: Map<string, Reference>; revisions: PersonaReference[];
   currentRevision: number | null;
   approval: { revision: number; revisionId: string; time: string } | null;
-  welcome: { start: StoredEvent; answers: StoredEvent[]; completion: StoredEvent | null } | null };
+  welcome: { start: StoredEvent; answers: StoredEvent[]; completion: StoredEvent | null;
+    archive: { archived: boolean; position: number } } | null };
 function empty(): Survey {
   return { generation: 1, position: 0, steps: [], commands: new Map(),
     revisions: [], currentRevision: null, approval: null, welcome: null };
@@ -37,7 +40,8 @@ function addWelcomeStart(survey: Survey, row: StoredEvent) {
       !validWelcomeVariant(survey, data)) {
     throw new Error('Invalid welcome start');
   }
-  survey.welcome = { start: row, answers: [], completion: null };
+  survey.welcome = { start: row, answers: [], completion: null,
+    archive: { archived: false, position: 0 } };
 }
 function addWelcomeAnswer(survey: Survey, row: StoredEvent) {
   const data = welcomeAnswerRecordedDataSchema.parse(row.event.data);
@@ -65,6 +69,14 @@ function addCompletion(survey: Survey, row: StoredEvent) {
   }
   welcome.completion = row;
 }
+function addArchive(survey: Survey, row: StoredEvent) {
+  const data = welcomeArchiveSetDataSchema.parse(row.event.data);
+  const welcome = survey.welcome;
+  const start = welcome && welcomeStartedDataSchema.parse(welcome.start.event.data);
+  if (!welcome?.completion || !start || data.welcomeId !== start.welcomeId ||
+      data.generation !== start.generation) throw new Error('Invalid welcome archive choice');
+  welcome.archive = { archived: data.archived, position: row.sequence };
+}
 function addApproval(survey: Survey, row: StoredEvent) {
   const data = personaApprovedDataSchema.parse(row.event.data);
   const candidate = survey.revisions.at(-1);
@@ -88,7 +100,7 @@ function addRevision(survey: Survey, row: StoredEvent) {
 const personalTypes = new Set(['onboarding.survey_step_saved', 'onboarding.survey_restarted',
   'onboarding.persona_revised', 'onboarding.persona_approved',
   'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
-  'onboarding.completed']);
+  'onboarding.completed', 'onboarding.welcome_archive_set']);
 function applyChange(survey: Survey, row: StoredEvent) {
   const event = row.event;
   if (event.type === 'onboarding.survey_restarted') {
@@ -104,6 +116,8 @@ function applyChange(survey: Survey, row: StoredEvent) {
     addWelcomeAnswer(survey, row);
   } else if (event.type === 'onboarding.completed') {
     addCompletion(survey, row);
+  } else if (event.type === 'onboarding.welcome_archive_set') {
+    addArchive(survey, row);
   } else if (event.type === 'onboarding.persona_approved') {
     addApproval(survey, row);
   } else if (event.type === 'onboarding.persona_revised') {
@@ -126,7 +140,8 @@ function add(survey: Survey, row: StoredEvent) {
     throw new Error('Invalid survey event');
   }
   const reference = { ...surveyReceipt(row), sequence: row.sequence,
-    previousPosition: survey.position, generation: survey.generation };
+    previousPosition: survey.position, generation: survey.generation,
+    previousArchivePosition: survey.welcome?.archive.position };
   applyChange(survey, row);
   if (event.type !== 'onboarding.completed') survey.commands.set(event.commandId, reference);
   survey.position = row.sequence;
@@ -142,7 +157,8 @@ export function surveyHistory(options: ChatOptions, memberId: string) {
     return { ...survey, steps: [...survey.steps], commands: new Map(survey.commands),
       revisions: [...survey.revisions],
       welcome: survey.welcome ? { start: survey.welcome.start,
-        answers: [...survey.welcome.answers], completion: survey.welcome.completion } : null,
+        answers: [...survey.welcome.answers], completion: survey.welcome.completion,
+        archive: { ...survey.welcome.archive } } : null,
       sequence };
   }
   return readStreamSummary(options.store, options.silo, `personal-${memberId}`,

@@ -7,7 +7,8 @@ import { creationEvent, privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
 import { summary } from './list-summary.ts';
 import { childOrigin } from './origin.ts';
-import { conversationListQuery, conversationListCursor, ConversationListChanged,
+import { conversationListQuery, conversationListCursor, newestListMatch,
+  ConversationListChanged,
   ConversationListIncomplete }
   from './list-cursor.ts';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -18,6 +19,7 @@ import {
   conversationListCandidates, conversationListRevision,
 } from '@opencrane/projections';
 import {
+  chatAccess,
   writeChatAccess,
   activeChatMember,
   isChatRefused,
@@ -33,6 +35,7 @@ import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } f
 import { memoryAdmission } from './memory-admission.ts';
 import { stateCommand, stateChange, listPreference } from './state.ts';
 import { closeCommand, closeChange } from './close.ts';
+import { welcomeListChoice } from './list-welcome.ts';
 
 export type { ChatOptions } from './access.ts';
 type Fresh = Awaited<ReturnType<typeof writeChatAccess>>;
@@ -251,7 +254,8 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
         && access.created.contextKind === 'shared_child';
       const canClose = await listCanClose(options, memberId, candidate,
         access.participantIds, display.status, sharedChild);
-      const details = { ...display, ...preference, canClose };
+      const details = { ...display, ...preference, canClose,
+        kind: 'conversation' as const };
       const normalisedSearch = query.q.normalize('NFC');
       const search = normalisedSearch.toLowerCase();
       const normalisedTitle = display.title.normalize('NFC');
@@ -302,27 +306,43 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
 async function conversationList(options: ChatOptions, memberId: string,
   input: unknown, secret: string) {
   const query = conversationListQuery.parse(input);
+  const welcome = await welcomeListChoice(options, memberId);
   const candidates = await conversationListCandidates(options.db, options.silo, memberId);
   // Refuse a partial scan without returning rows or positions from denied chats.
   if (candidates.length === 100) throw new ConversationListIncomplete();
   const visible = await visibleListMatches(options, memberId, query, candidates);
   const { matches, authorised, isVisible } = visible;
   const revision = await conversationListRevision(options.db, authorised);
-  const identity = [options.silo, memberId, query.section, query.q, query.limit, revision];
+  const welcomeRevision = welcome?.revision ?? null;
+  const identity = [options.silo, memberId, query.section, query.q, query.limit,
+    revision, welcomeRevision];
   const cursor = conversationListCursor(secret, identity, query.cursor);
   const currentCandidates = await conversationListCandidates(options.db, options.silo, memberId);
   if (currentCandidates.length === 100) throw new ConversationListIncomplete();
   const currentVisible = currentCandidates.filter(isVisible);
   const currentRevision = await conversationListRevision(options.db, currentVisible);
   if (currentRevision !== revision) throw new ConversationListChanged();
-  function beforeCursor(match: (typeof matches)[number]) {
+  const currentWelcome = await welcomeListChoice(options, memberId);
+  if ((currentWelcome?.revision ?? null) !== welcomeRevision) {
+    throw new ConversationListChanged();
+  }
+  await chatAccess(options, { memberId });
+  const allMatches: { row: unknown; position: [number, number] }[] = [...matches];
+  if (welcome && welcome.archived === (query.section === 'archived')) {
+    const title = welcome.row.title.toLowerCase();
+    const search = query.q.normalize('NFC').toLowerCase();
+    if (title.includes(search)) allMatches.push({ row: welcome.row,
+      position: welcome.position });
+  }
+  allMatches.sort(newestListMatch);
+  function beforeCursor(match: (typeof allMatches)[number]) {
     const [activity, joined] = match.position;
     const [beforeActivity, beforeJoined] = cursor.before;
     return activity < beforeActivity || (activity === beforeActivity && joined < beforeJoined);
   }
-  const remaining = matches.filter(beforeCursor);
+  const remaining = allMatches.filter(beforeCursor);
   const page = remaining.slice(0, query.limit);
-  function summaryRow(match: (typeof matches)[number]) {
+  function summaryRow(match: (typeof allMatches)[number]) {
     return match.row;
   }
   const rows = page.map(summaryRow);

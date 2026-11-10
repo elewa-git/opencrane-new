@@ -13,6 +13,7 @@ import { conversationKeys, pgDb, personalSettings, readSurvey, conversations, co
   ProjectionRunner }
   from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
+import { chatListWithWelcomeSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { welcomeCompletionHandler } from '@opencrane/models';
 
@@ -1169,30 +1170,61 @@ function listed(section = 'recent', q = '') {
 
 async function welcomeArchiveAndList() {
   const welcomeId = await completedWelcomeForArchive();
+  const ordinary = { ...event('ordinary-list', 'conversation-ordinary',
+    'conversation.created'), source: 'opencrane-server',
+  principal: { kind: 'human' as const, id: 'alice' },
+  data: { conversationId: 'ordinary', mode: 'group', createdBy: 'alice',
+    participantIds: ['alice', 'bob'] } };
+  expect((await nats.store.append({ event: ordinary, expectedSequence: 0 })).status)
+    .toBe('appended');
+  await memberAuthorisation(binding).handler.handle(ordinary, pgDb(dbs.queue));
+  await runner.run(conversations);
   const recent = await listed();
   expect(recent.statusCode).toBe(200);
+  expect(chatListWithWelcomeSchema.parse(recent.json()).rows).toHaveLength(2);
   expect(recent.json<{ rows: unknown[] }>().rows).toMatchObject([
+    { kind: 'conversation', conversationId: 'ordinary' },
     { kind: 'welcome', welcomeId, title: 'Welcome', archived: false, unread: 0 },
   ]);
+  const firstPage = await app.inject({ url: '/api/conversations?limit=1', headers });
+  expect(firstPage.json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ conversationId: 'ordinary' }]);
+  const cursor = firstPage.json<{ nextCursor: string }>().nextCursor;
+  const secondPage = await app.inject({ url:
+    `/api/conversations?limit=1&cursor=${encodeURIComponent(cursor)}`, headers });
+  expect(secondPage.json<{ rows: unknown[]; nextCursor: string | null }>())
+    .toMatchObject({ rows: [{ kind: 'welcome', welcomeId }], nextCursor: null });
   expect((await listed('recent', 'WELCOME')).json<{ rows: unknown[] }>().rows)
     .toHaveLength(1);
   expect((await listed('recent', 'absent')).json<{ rows: unknown[] }>().rows)
     .toHaveLength(0);
   const first = { commandId: 'archive-welcome', welcomeId, archived: true,
     expectedArchivePosition: 0 };
-  const saved = await archiveWelcome(first);
-  expect(saved.statusCode).toBe(200);
-  const receipt = saved.json<{ position: number }>();
-  expect((await archiveWelcome(first)).json()).toEqual(saved.json());
-  expect((await archiveWelcome({ ...first, archived: false })).statusCode).toBe(409);
+  const append = nats.store.append.bind(nats.store);
+  nats.store.append = async function loseArchiveReply(command) {
+    await append(command);
+    throw new Error('Reply lost');
+  };
+  const lost = await archiveWelcome(first);
+  nats.store.append = append;
+  expect(lost.json()).toEqual({ status: 'unknown' });
   const status = await app.inject({ url: '/api/personal/changes/archive-welcome', headers });
-  expect(status.json()).toEqual(saved.json());
+  expect(status.statusCode).toBe(200);
+  const receipt = status.json<{ position: number }>();
+  expect((await archiveWelcome(first)).json()).toEqual(status.json());
+  expect((await archiveWelcome({ ...first, archived: false })).statusCode).toBe(409);
+  const beforeUnknown = await nats.store.head('personal-alice');
   expect((await app.inject({ url: '/api/personal/changes/missing-welcome', headers })).json())
     .toEqual({ status: 'unknown' });
+  expect(await nats.store.head('personal-alice')).toBe(beforeUnknown);
   await runner.run(personalSettings);
-  expect((await listed()).json<{ rows: unknown[] }>().rows).toHaveLength(0);
+  expect((await listed()).json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ conversationId: 'ordinary' }]);
   expect((await listed('archived')).json<{ rows: unknown[] }>().rows)
     .toMatchObject([{ kind: 'welcome', welcomeId, archived: true }]);
+  const oldCursor = await app.inject({ url:
+    `/api/conversations?limit=1&cursor=${encodeURIComponent(cursor)}`, headers });
+  expect(oldCursor.statusCode).toBe(409);
   const stale = { commandId: 'stale-restore', welcomeId, archived: false,
     expectedArchivePosition: 0 };
   expect((await archiveWelcome(stale)).statusCode).toBe(409);
@@ -1200,19 +1232,97 @@ async function welcomeArchiveAndList() {
   expect(restored.statusCode).toBe(200);
   await runner.run(personalSettings);
   expect((await listed()).json<{ rows: unknown[] }>().rows)
-    .toMatchObject([{ kind: 'welcome', welcomeId, archived: false }]);
+    .toMatchObject([{ conversationId: 'ordinary' },
+      { kind: 'welcome', welcomeId, archived: false }]);
   expect((await listed('archived')).json<{ rows: unknown[] }>().rows).toHaveLength(0);
   expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
     .toMatchObject({ status: 'completed', welcomeId, answer: 'Continue to workspace',
       assistantId: null });
   expect((await archiveWelcome({ ...first, commandId: 'forged',
     welcomeId: 'foreign-welcome' })).statusCode).toBe(404);
-  await runner.rebuild(personalSettings);
+  const beforeReplay = await nats.store.head();
+  const encrypt = vi.spyOn(keys, 'encrypt');
+  const decrypt = vi.spyOn(keys, 'decrypt');
+  const appendDuringReplay = vi.spyOn(nats.store, 'append');
+  try {
+    await runner.rebuild(personalSettings);
+    expect(encrypt).not.toHaveBeenCalled();
+    expect(decrypt).not.toHaveBeenCalled();
+    expect(appendDuringReplay).not.toHaveBeenCalled();
+  } finally {
+    encrypt.mockRestore();
+    decrypt.mockRestore();
+    appendDuringReplay.mockRestore();
+  }
+  expect(await nats.store.head()).toBe(beforeReplay);
   expect((await listed()).json<{ rows: unknown[] }>().rows)
-    .toMatchObject([{ kind: 'welcome', welcomeId, archived: false }]);
+    .toMatchObject([{ conversationId: 'ordinary' },
+      { kind: 'welcome', welcomeId, archived: false }]);
+  const later = await post({ operation: 'restart', commandId: 'later-survey',
+    generation: 1, expectedPosition: restored.json<PositionReceipt>().position });
+  expect(later.statusCode).toBe(200);
+  expect((await listed()).json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ conversationId: 'ordinary' },
+      { kind: 'welcome', welcomeId, archived: false }]);
+  const delayedArchive = await archiveWelcome({ commandId: 'delayed-archive',
+    welcomeId, archived: true,
+    expectedArchivePosition: restored.json<PositionReceipt>().position });
+  expect(delayedArchive.statusCode).toBe(200);
+  const applying = await listed();
+  expect(applying.statusCode).toBe(425);
+  expect(applying.json()).toEqual({ status: 'access_applying' });
+  await runner.run(personalSettings);
+  expect((await listed()).json<{ rows: unknown[] }>().rows)
+    .toMatchObject([{ conversationId: 'ordinary' }]);
 }
 it('lists one completed welcome and saves only its own archive choice',
   welcomeArchiveAndList, 60_000);
+
+async function welcomeArchiveAdmission() {
+  const welcomeId = await completedWelcomeForArchive();
+  const foreignHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config,
+    { ...session, sub: 'bob' })}` };
+  const ownArchive = { commandId: 'private-archive', welcomeId, archived: true,
+    expectedArchivePosition: 0 };
+  const foreign = await app.inject({ method: 'POST',
+    url: '/api/onboarding/welcome/archive', headers: foreignHeaders, payload: ownArchive });
+  expect(foreign.statusCode).toBe(403);
+  expect(foreign.body).not.toContain(welcomeId);
+  const forged = await archiveWelcome({ ...ownArchive, welcomeId: 'forged-welcome' });
+  expect(forged.statusCode).toBe(404);
+  expect(forged.body).not.toContain(welcomeId);
+
+  const head = nats.store.head.bind(nats.store);
+  let personalReads = 0;
+  nats.store.head = async function removeDuringList(subject, deadline) {
+    if (subject === 'personal-alice') {
+      personalReads += 1;
+      if (personalReads === 2) {
+        const removal = { ...event('archive-removal', 'member-alice', 'member.removed'),
+          data: { memberId: 'alice', removedBy: 'owner' } };
+        await nats.store.append({ event: removal, expectedSequence: 1 });
+      }
+    }
+    return head(subject, deadline);
+  };
+  let delayed;
+  try {
+    delayed = await listed();
+  } finally {
+    nats.store.head = head;
+  }
+  expect(delayed.statusCode).toBe(403);
+  expect(delayed.body).not.toContain(welcomeId);
+  expect(delayed.body).not.toContain('Continue to workspace');
+  const stale = await archiveWelcome(ownArchive);
+  expect(stale.statusCode).toBe(403);
+  expect(stale.body).not.toContain(welcomeId);
+  const status = await app.inject({ url: '/api/personal/changes/private-archive', headers });
+  expect(status.statusCode).toBe(403);
+  expect(status.body).not.toContain(welcomeId);
+}
+it('keeps foreign and removed members from a welcome or delayed list reply',
+  welcomeArchiveAdmission, 60_000);
 
 async function pendingNoAssistant() {
   const position = await completeSurvey();
