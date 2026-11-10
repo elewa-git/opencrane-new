@@ -309,7 +309,7 @@ afterEach(cleanup);
 
 type Options = Parameters<typeof createRoutineComposition>[0];
 function syntheticConfirmCredentialUse(_authorisedVersion: string) {
-  return Promise.resolve();
+  return Promise.resolve('1');
 }
 function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
   computerGeneration: number) {
@@ -317,7 +317,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     return Promise.resolve();
   }
   function confirmCredentialUse(_authorisedVersion: string) {
-    return Promise.resolve();
+    return Promise.resolve('1');
   }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
     computerGeneration, configurationDigest: 'a'.repeat(64),
@@ -363,6 +363,7 @@ async function assertCounts(threadId = 'native-1') {
   expect(await saved('routine.run_activation_admitted', 'routine-orders')).toHaveLength(1);
   const sendAuthorisations = await saved('routine.run_send_authorised', 'routine-orders');
   expect(sendAuthorisations).toHaveLength(1);
+  expect(await saved('routine.run_send_release_authorised', 'routine-orders')).toHaveLength(1);
   expect(sendAuthorisations[0]!.event.data).toMatchObject({
     configurationDigest: 'a'.repeat(64),
     custodyRecordVersion: '1',
@@ -465,7 +466,7 @@ it('binds the saved company profile to one enabled automatic native delivery',
 
 type LateCompanyChange = 'choice' | 'member' | 'team' | 'assistant' | 'grant' |
   'profile' | 'oauth' | 'schema' | 'destination' | 'tariff' | 'allowance' |
-  'root' | 'stop' |
+  'root' | 'stop' | 'block' | 'ask' |
   'credential_uid' | 'credential_version' | 'lease';
 
 async function recordLateCompanyChange(kind: LateCompanyChange) {
@@ -510,6 +511,11 @@ async function recordLateCompanyChange(kind: LateCompanyChange) {
     type = 'grant.revoked';
     data = { resourceType: 'mcp_server', resourceId: 'odoo',
       granteeKind: 'member', granteeId: 'alice', revokedBy: 'admin' };
+  } else if (kind === 'block' || kind === 'ask') {
+    subject = 'mcp-odoo';
+    type = 'mcp.tool_mode_set';
+    data = { serverId: 'odoo', connectionId: 'installed', toolName: 'read',
+      toolRevision: company.tool.revision, mode: kind, setBy: 'admin' };
   } else if (kind === 'profile') {
     subject = 'connection-company:odoo:orders-bot';
     type = 'connection.refreshed';
@@ -923,7 +929,7 @@ async function refusesCredentialChangeAfterFinalRead(
     function confirmCredentialUse(authorisedVersion: string) {
       if (resourceVersion !== authorisedVersion) throw new Error('Credential changed');
       toolCalls += 1;
-      return Promise.resolve();
+      return Promise.resolve(authorisedVersion);
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
       computerGeneration, configurationDigest: 'a'.repeat(64),
@@ -977,7 +983,8 @@ it.each(['deleted', 'changed', 'deleted-and-access-lost', 'access-lost'] as cons
   'refuses a credential %s after the final read and before publication',
   refusesCredentialChangeAfterFinalRead);
 
-async function refusesChangeDuringFinalCustodyRead(kind: 'stop' | 'grant' | 'block' | 'deadline') {
+async function refusesChangeDuringFinalCustodyRead(
+  kind: 'stop' | 'grant' | 'block' | 'ask' | 'deadline') {
   holdFixtureClock();
   const waiting = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
@@ -997,20 +1004,17 @@ async function refusesChangeDuringFinalCustodyRead(kind: 'stop' | 'grant' | 'blo
       expect(authorisedVersion).toBe('1');
       waiting.resolve();
       await resume.promise;
+      return authorisedVersion;
     }
     return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
       computerGeneration, configurationDigest: 'a'.repeat(64),
       custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse });
   }
-  const sending = compose({ enabled: true, companyPreflight }).send(preparedComputer.wake);
+  const options = { enabled: true, companyPreflight };
+  const sending = compose(options).send(preparedComputer.wake);
   try {
     await waiting.promise;
-    if (kind === 'block') {
-      const blocked = record('late-block', 'mcp-odoo', 'mcp.tool_mode_set', {
-        serverId: 'odoo', connectionId: 'installed', toolName: 'read',
-        toolRevision: company.tool.revision, mode: 'block', setBy: 'admin' });
-      await nats.seed([blocked]);
-    } else if (kind === 'deadline') {
+    if (kind === 'deadline') {
       const expired = performance.now() + 10_000;
       function pastDeadline() {
         return expired;
@@ -1024,14 +1028,64 @@ async function refusesChangeDuringFinalCustodyRead(kind: 'stop' | 'grant' | 'blo
   }
   expect(await sending).toEqual({ status: 'unknown' });
   expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
+  expect(await saved('routine.run_send_release_authorised', 'routine-orders')).toEqual([]);
   function isTurn(frame: Record<string, unknown>) {
     return frame['type'] === 'turn';
   }
   expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
 }
-it.each(['stop', 'grant', 'block', 'deadline'] as const)(
-  'refuses %s saved while the final custody read is pending',
+it.each(['stop', 'grant', 'block', 'ask', 'deadline'] as const)(
+  'refuses %s during the final custody read',
   refusesChangeDuringFinalCustodyRead);
+
+async function refusesChangeDuringCustodyRecovery(kind: 'stop' | 'grant' | 'block') {
+  holdFixtureClock();
+  const waiting = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  let readingFinalCredential = false;
+  async function holdRecovery() {
+    if (readingFinalCredential) {
+      waiting.resolve();
+      await resume.promise;
+    }
+    return { status: 'recovered' as const, identity: {
+      reference: 'synthetic', uid: 'uid', resourceVersion: '1' } };
+  }
+  company.recover.mockImplementation(holdRecovery);
+  const custody = { recover: company.recover };
+  const nativePreflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    company.loadConfiguration, custody);
+  async function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    const checked = await nativePreflight(run, computerGeneration);
+    async function confirmCurrent() {
+      await checked.confirmCurrent();
+    }
+    async function confirmCredentialUse(authorisedVersion: string) {
+      readingFinalCredential = true;
+      return checked.confirmCredentialUse(authorisedVersion);
+    }
+    return { ...checked, confirmCurrent, confirmCredentialUse };
+  }
+  const options = { enabled: true, companyPreflight };
+  const sending = compose(options).send(preparedComputer.wake);
+  try {
+    await waiting.promise;
+    await recordLateCompanyChange(kind);
+  } finally {
+    resume.resolve();
+  }
+  expect(await sending).toEqual({ status: 'unknown' });
+  expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
+  expect(await saved('routine.run_send_release_authorised', 'routine-orders')).toEqual([]);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+}
+it.each(['stop', 'grant', 'block'] as const)(
+  'refuses saved %s while credential recovery is pending',
+  refusesChangeDuringCustodyRecovery);
 
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();

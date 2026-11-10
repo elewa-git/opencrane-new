@@ -7209,13 +7209,15 @@ Before its internal socket send, the sender saves `routine.run_send_authorised` 
 the routine stream. The append checks current routine state and company facts inside
 the event store's conditional publish. It saves the OAuth configuration digest and
 the authorised Kubernetes custody record version, then reads custody again
-before releasing the turn. A missing or changed credential records a delivery Stop
+before releasing the turn. It saves `routine.run_send_release_authorised` through a second
+conditional append. This checks the routine, company grants, tool rule and deadline
+after the custody read. A missing or changed credential records a delivery Stop
 with reason `credential_changed` and the sender does not release the turn. It cannot
 call a company tool because company execution remains disabled. The authorisation
 check still reads custody before saving the event. It also
 re-reads the configuration inside that same conditional append. A changed digest,
 conflict or uncertain result prevents a
-send. The record is an authorisation point, not proof of delivery. Production
+send. Neither record is proof of delivery. Production
 company sending stays disabled.
 Existing records without `serverId` remain readable but cannot pass this check.
 
@@ -7334,10 +7336,13 @@ false, and replay cannot send. The tick worker has no caller for this binding.
 The public `executionAvailable` fields remain false. The recording native peer
 test enables this binding explicitly, sends the original turn once and checks the
 saved authorisation and custody version. The sender repeats company and access
-checks after authorisation, then reads credential custody immediately before the
-turn goes to the computer. Company result and settlement work remains
-separate. The source was based on main at `b077fddde5bccb8ed8d9e7d5471bdfaffac7759f`,
+checks after authorisation, then reads credential custody and saves one final
+conditional access check before the turn goes to the computer. Company result and
+settlement work remain separate. The source was based on main at
+`b077fddde5bccb8ed8d9e7d5471bdfaffac7759f`,
 which contains the saved-profile reader and credential use-time check.
+`test/routine-composition.test.ts` holds the custody recovery reply while it saves
+Stop, grant revocation or Block. Each case requires no turn frame.
 
 ## Credential custody in routine send authorisation
 

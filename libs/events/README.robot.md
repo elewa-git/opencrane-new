@@ -937,6 +937,9 @@ resource version. Its fold
 requires the active run, matching activation, active status and no saved Stop. The
 record permits one live sender attempt but never proves that bytes reached the computer.
 No handler subscribes to it, and replay never sends the turn.
+`routine.run_send_release_authorised` carries the same strict data. Its fold requires the same
+active admission and no saved Stop. The live sender saves it only after the custody
+read and uses the returned result before sending. Replay cannot use either record.
 
 ## Company bearer creation (P3-8 PR 4d)
 

@@ -426,7 +426,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     return Promise.resolve();
   }
   function confirmCredentialUse(_authorisedVersion: string) {
-    return Promise.resolve();
+    return Promise.resolve('1');
   }
   const company = { occurrenceId: run.occurrenceId, rootId: run.rootId,
     computerGeneration, configurationDigest: 'a'.repeat(64),

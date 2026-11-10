@@ -98,7 +98,8 @@ function saveOtherFact(state: RoutineState, event: EventEnvelope): RoutineState 
     requireActiveRun(state, activation);
     return { ...state, activation };
   }
-  if (event.type === 'routine.run_send_authorised') {
+  if (event.type === 'routine.run_send_authorised' ||
+      event.type === 'routine.run_send_release_authorised') {
     const authorised = schemas.routineSendAuthorisationSchema.parse(event.data);
     requireActiveRun(state, authorised);
     const activation = state.activation;

@@ -348,7 +348,7 @@ function sender(enabled = true, replay = false) {
     return Promise.resolve();
   }
   function confirmCredentialUse(_authorisedVersion: string) {
-    return Promise.resolve();
+    return Promise.resolve('1');
   }
   const options = { enabled, replay, confirmCompany,
     configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
@@ -358,7 +358,7 @@ function sender(enabled = true, replay = false) {
 }
 async function missingCompanyConfirmation() {
   function confirmCredentialUse(_authorisedVersion: string) {
-    return Promise.resolve();
+    return Promise.resolve('1');
   }
   const options = { enabled: true, configurationDigest: 'a'.repeat(64),
     custodyRecordVersion: '1', confirmCredentialUse };

@@ -16,7 +16,7 @@ type Run = Awaited<ReturnType<typeof loadRoutinePreparation>>['run'];
 type CompanyBinding = { occurrenceId: string; rootId: string; computerGeneration: number;
   configurationDigest: string; custodyRecordVersion: string;
   confirmCurrent: () => Promise<void>;
-  confirmCredentialUse: (authorisedVersion: string) => Promise<void> };
+  confirmCredentialUse: (authorisedVersion: string) => Promise<string> };
 type CompanyPreflight = (run: Run, generation: number) => Promise<CompanyBinding>;
 type Options = { enabled?: boolean; replay?: boolean; companyPreflight?: CompanyPreflight };
 type CompanyDeliveryOptions = {
