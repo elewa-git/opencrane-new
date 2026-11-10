@@ -2,7 +2,7 @@ import { joinInventory, type InventoryContext, type InventorySnapshot,
   type InventoryCode } from './joined-inventory.ts';
 import { persistenceScan } from './persistence.ts';
 
-export const toolClasses = [
+const toolClasses = [
   'shell', 'file', 'browser', 'codeHost', 'externalMcp', 'skills', 'plugins', 'spawn',
 ] as const;
 type ToolClass = typeof toolClasses[number];
@@ -102,7 +102,9 @@ export async function runPersistenceAttempt(driver: PersistenceDriver): Promise<
       }
     }
     if (!currentInstallation(driver)) {
-      return { result: 'NOT RUN', complete: false, category: 'inventory' };
+      return retainKnownFailure(outcome, {
+        result: 'NOT RUN', complete: false, category: 'inventory',
+      });
     }
     const live = scanner.scan('live', driver.context.computerInstallationId);
     const liveFailure = scanOutcome(live);
@@ -111,12 +113,14 @@ export async function runPersistenceAttempt(driver: PersistenceDriver): Promise<
     }
     const final = checkedInventory(driver, first.snapshot);
     if (isOutcome(final)) {
-      return final;
+      return retainKnownFailure(outcome, final);
     }
     await native.stop();
     stopped = true;
     if (!currentInstallation(driver)) {
-      return { result: 'NOT RUN', complete: false, category: 'inventory' };
+      return retainKnownFailure(outcome, {
+        result: 'NOT RUN', complete: false, category: 'inventory',
+      });
     }
     const afterStop = scanner.scan('stopped', driver.context.computerInstallationId);
     const stoppedFailure = scanOutcome(afterStop);

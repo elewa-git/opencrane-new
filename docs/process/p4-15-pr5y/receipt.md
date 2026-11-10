@@ -1,14 +1,14 @@
 # Held native persistence attempt
 
-Date: 10 November 2026. Source: [implementation commit](https://github.com/elewa-git/opencrane-new/commit/eb849b9045c75b7c69a494aa8a8427b4ebfc6378).
+Date: 10 November 2026. Source: this branch's held persistence attempt helper.
 Image digest and deployment identity: NOT RUN; no reviewed immutable image or fresh install
-was measured. Secondary slot 1 was claimed and released without starting a stack.
+was measured.
 
 The `work/p4-15-pr5x` branch tip was `3c0c752184b013cb3f1d8282ba4311a353734787`;
 its native protection reached main as `aef7fc3030636d861d99d8d3f132e1bdbd02176d`.
-The `work/p4-15-pr4n` branch tip was `ba0c6195201afdb9c2975a64b6ec51e8ec7ece9a`.
-It was not merged into the synced main revision `e11aecedfcf5950f5533616cbdfa77eee4646132`.
-The required native memory catalogue was therefore unavailable for a real attempt.
+The native memory catalogue from #888 reached main as `4ae99f3d0` and is an ancestor
+of this branch. It does not block the next step. A reviewed image, a deployment caller
+and a held live native turn are still needed before a real attempt.
 Expected for a live attempt: every forbidden tool is blocked, all named storage is
 readable and clean during the turn and after Stop, and both process reads match.
 Observed: the live attempt was NOT RUN.
@@ -29,9 +29,11 @@ Observed: the live attempt was NOT RUN.
 | After Stop scan | NOT RUN | No live Stop was issued. |
 | Complete fresh-install qualifications | NOT RUN | Two installations and full journeys remain outstanding. |
 
-The failing-first test commit reproduced the missing attempt runner. The implementation
-then passed the three focused test files twice: 163 tests on each run. The unchanged
-event security rules passed once: 482 tests. Scoped ESLint, workspace typecheck,
-event catalogue check, Knip, changelog lint and Markdown lint passed. These are local
-source checks. They do not establish a native tool refusal or clean deployment storage.
+The new failing-first tests exposed five cases where a known tool write was lost.
+After the fix, the focused attempt tests passed twice: 51 tests on each run.
+The whole private-memory-qualification directory passed with one worker: 34 files
+and 803 tests. Scoped ESLint, Markdown lint, workspace and helper typechecks,
+event catalogue check, Knip, changelog lint and public privacy check passed.
+These are local source checks. They do not establish a native tool refusal or clean
+deployment storage. The root suite and live qualifications were NOT RUN.
 The persistence journey remains `NOT RUN` and admission remains disabled.
