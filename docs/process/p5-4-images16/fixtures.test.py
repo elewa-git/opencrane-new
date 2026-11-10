@@ -48,10 +48,10 @@ class TypanionTests(unittest.TestCase):
             for name, _size, _digest in self.review["sourceFiles"]:
                 self.source[name] = archive.extractfile(name).read()
 
-    def assert_removed_guard_fails(self, function, guard, call):
+    def assert_removed_guard_fails(self, function, guard, call, replacement="pass"):
         original = inspect.getsource(function)
         self.assertIn(guard, original)
-        changed = original.replace(guard, "pass", 1)
+        changed = original.replace(guard, replacement, 1)
         namespace = vars(self.checker).copy()
         namespace["trusted_review"] = self.checker.trusted_review
         exec(changed, namespace)
@@ -212,6 +212,55 @@ class TypanionTests(unittest.TestCase):
                 archive_path.write_bytes(archive_path.read_bytes() + b"changed")
                 with self.assertRaises(ValueError):
                     self.checker.read_saved(self.review)
+
+    def test_saved_archive_checksums_each_have_a_removal_sensitive_case(self):
+        record_path = self.checker.corepack.RECORD
+        source_path = record_path.with_name("corepack-source.tar.gz")
+        regions_path = record_path.with_name("regions.json.gz")
+        with tempfile.TemporaryDirectory() as temporary:
+            saved_dir = Path(temporary)
+            for original_path in (record_path, source_path, regions_path):
+                shutil.copyfile(original_path, saved_dir / original_path.name)
+            saved_record = saved_dir / record_path.name
+            saved_source = saved_dir / source_path.name
+            saved_regions = saved_dir / regions_path.name
+            with patch.object(self.checker.corepack, "RECORD", saved_record):
+                source_bytes = saved_source.read_bytes()
+                changed_source = (source_bytes[:4] + b"\x01\x00\x00\x00"
+                                  + source_bytes[8:])
+                saved_source.write_bytes(changed_source)
+                with self.assertRaises(ValueError):
+                    self.checker.read_saved(self.review)
+
+                source_guard = (
+                    "source_bytes = corepack.candidate.checked_bytes(\n"
+                    "        source_path, review[\"corepackSourceSha256\"])"
+                )
+                self.assert_removed_guard_fails(
+                    self.checker.read_saved,
+                    source_guard,
+                    lambda read_saved: self.assertRaises(
+                        ValueError, read_saved, self.review),
+                    "source_bytes = source_path.read_bytes()")
+
+                saved_source.write_bytes(source_bytes)
+                regions_bytes = saved_regions.read_bytes()
+                changed_regions = (regions_bytes[:4] + b"\x01\x00\x00\x00"
+                                   + regions_bytes[8:])
+                saved_regions.write_bytes(changed_regions)
+                regions_guard = (
+                    "compressed = corepack.candidate.checked_bytes(\n"
+                    "        regions_path, review[\"regionsFixtureSha256\"])"
+                )
+                with patch.object(self.checker.corepack, "check_review"):
+                    with self.assertRaises(ValueError):
+                        self.checker.read_saved(self.review)
+                    self.assert_removed_guard_fails(
+                        self.checker.read_saved,
+                        regions_guard,
+                        lambda read_saved: self.assertRaises(
+                            ValueError, read_saved, self.review),
+                        "compressed = regions_path.read_bytes()")
 
     def test_candidate_binding_and_saved_archive_checks_are_called(self):
         bundle, regions = self.checker.read_saved(self.review)
