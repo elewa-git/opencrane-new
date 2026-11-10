@@ -38,6 +38,7 @@ it('renders loading, unknown outcome, filters, empty, unavailable and access los
   await vi.waitFor(() => expect(root.textContent).toContain('Outcome unknown'));
   expect(root.textContent).toContain('Decision: allow'); expect(root.textContent).toContain('Observation: Outcome unknown');
   expect(root.textContent).toContain('Observation missing');
+  expect(root.textContent).not.toContain('Request request');
   fetch.mockResolvedValueOnce(reply(200, { rows: [] }));
   reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
