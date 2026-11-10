@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { authorityFence, history, readActiveMember } from '@opencrane/models';
@@ -8,7 +8,7 @@ import type { StoredEvent } from '@opencrane/event-store';
 import { selectMaintenanceInputs, type MaintenanceFact } from '@opencrane/projections';
 import { memoryAccessChecks, scopeAccess, readAssistant, MemoryRefused,
   type MemoryOptions, type Scope } from './access.ts';
-import { MemoryConflict, memorySnapshot } from './reads.ts';
+import { MemoryConflict, memorySnapshot, pageCursor, readCursor } from './reads.ts';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const bindingFields = memoryMaintenanceBoundDataSchema.pick({ assistantId: true,
@@ -42,6 +42,63 @@ function maintenanceFact(row: FactRow): MaintenanceFact {
 }
 
 type MaintenanceRun = ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>;
+type SavedRun = { event_id: string; data: unknown; saved_at: string | null };
+
+function runReference(secret: string, row: SavedRun): string {
+  // Keep older deterministic night ids out of URLs and responses.
+  const hash = createHmac('sha256', secret);
+  hash.update(`memory-run:${row.event_id}`);
+  return hash.digest('hex');
+}
+
+function safeRun(secret: string, row: SavedRun) {
+  const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
+  return { runId: runReference(secret, row), action: run.action, reason: run.reason,
+    intendedAt: run.intendedAt, selectedAt: run.selectedAt, observedAt: row.saved_at,
+    money: { status: 'unavailable' } };
+}
+
+function cursorBinding(options: MemoryOptions, scope: Scope, requester: string,
+  snapshot: Awaited<ReturnType<typeof memorySnapshot>>) {
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['maintenance', options.silo, scope.scopeId, requester,
+    snapshot.position, snapshot.generation]));
+  return hash.digest('hex');
+}
+
+async function confirmSnapshot(options: MemoryOptions, scope: Scope,
+  saved: Awaited<ReturnType<typeof memorySnapshot>>) {
+  const current = await memorySnapshot(options, scope);
+  if (current.position !== saved.position || current.generation !== saved.generation) {
+    throw new Error('Memory maintenance read table changed');
+  }
+}
+
+function historyPage(secret: string, binding: string, rows: SavedRun[], offset: number,
+  status: object) {
+  const history: ReturnType<typeof safeRun>[] = [];
+  for (let index = offset; index < rows.length; index++) {
+    if (history.length === 20) {
+      break;
+    }
+    const row = rows[index]!;
+    const next = safeRun(secret, row);
+    const trial = { ...status, history: [...history, next],
+      nextCursor: pageCursor(secret, binding, offset + history.length + 1, new Date(0)) };
+    if (Buffer.byteLength(JSON.stringify(trial)) > 16_384) {
+      break;
+    }
+    history.push(next);
+  }
+  if (history.length === 0 && offset < rows.length) {
+    throw new Error('Memory maintenance page unavailable');
+  }
+  let nextCursor: string | null = null;
+  if (offset + history.length < rows.length) {
+    nextCursor = pageCursor(secret, binding, offset + history.length, new Date(0));
+  }
+  return { ...status, history, nextCursor };
+}
 
 function visibleMaintenanceStatus(run: MaintenanceRun | undefined,
   calculated: string): string {
@@ -82,7 +139,8 @@ async function factChangeStatus(options: MemoryOptions, scope: Scope, position: 
   return { status, nextAt, waitingCount: selection.waitingCount };
 }
 
-export async function maintenanceStatus(options: MemoryOptions, scope: Scope, requester: string) {
+export async function maintenanceStatus(options: MemoryOptions, scope: Scope, requester: string,
+  secret: string, cursor?: string) {
   const snapshot = await memorySnapshot(options, scope);
   const result = await options.db.query<{ data: unknown; saved_at: string | null }>(
     `SELECT binding.data, binding.saved_at
@@ -97,15 +155,15 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
   let status = 'not_configured';
   if (result.rows[0].data !== null) {
     binding = memoryMaintenanceBoundDataSchema.parse(result.rows[0].data);
-    if (binding.memberId !== requester) {
+    if (scope.scopeKind === 'person' && binding.memberId !== requester) {
       throw new MemoryRefused();
     }
     status = 'disabled';
   }
-  const runs = await options.db.query<{ data: unknown }>(
-    `SELECT run.data FROM projection_checkpoints checkpoint
+  const runs = await options.db.query<SavedRun>(
+    `SELECT run.event_id, run.data, run.saved_at FROM projection_checkpoints checkpoint
      JOIN projection_generations generation USING (name)
-     LEFT JOIN LATERAL (SELECT data FROM memory_maintenance_runs
+     LEFT JOIN LATERAL (SELECT event_id, data, saved_at FROM memory_maintenance_runs
        WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC) run ON true
      WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
     [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
@@ -128,22 +186,51 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
     waitingCount = state.waitingCount;
     status = visibleMaintenanceStatus(allRuns[0], status);
   }
-  const history = [];
-  const empty = { status, binding, dispatch: 'disabled', nextAt, waitingCount, history: [] };
-  const encodedEmpty = JSON.stringify(empty);
-  let bytes = Buffer.byteLength(encodedEmpty);
-  for (const run of allRuns) {
-    if (history.length === 20) {
-      break;
-    }
-    const encodedRun = JSON.stringify(run);
-    bytes += Buffer.byteLength(encodedRun) + 1;
-    if (bytes > 16_384) {
-      break;
-    }
-    history.push(run);
+  const bindingValue = cursorBinding(options, scope, requester, snapshot);
+  const { offset } = readCursor(secret, bindingValue, cursor);
+  const savedRuns = runs.rows.filter(function saved(row) {
+    return row.data !== null;
+  });
+  const visible = { status, binding, dispatch: 'disabled', nextAt, waitingCount };
+  const page = historyPage(secret, bindingValue, savedRuns, offset, visible);
+  await confirmSnapshot(options, scope, snapshot);
+  return page;
+}
+
+export async function maintenanceDetail(options: MemoryOptions, scope: Scope,
+  runId: string, secret: string) {
+  const snapshot = await memorySnapshot(options, scope);
+  const result = await options.db.query<SavedRun>(
+    `SELECT run.event_id, run.data, run.saved_at FROM projection_checkpoints checkpoint
+     JOIN projection_generations generation USING (name)
+     LEFT JOIN LATERAL (SELECT event_id, data, saved_at FROM memory_maintenance_runs
+       WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC) run ON true
+     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
+    [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
+  if (!result.rows.length) {
+    throw new Error('Memory maintenance detail unavailable');
   }
-  return { status, binding, dispatch: 'disabled', nextAt, waitingCount, history };
+  let detail: ReturnType<typeof safeRun> & { bindingRevision: number;
+    memberId: string; rootId: string | null; allowanceCents: number | null;
+    startedAt: null } | undefined;
+  for (const row of result.rows) {
+    if (row.data === null) {
+      continue;
+    }
+    const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
+    if (runReference(secret, row) !== runId) {
+      continue;
+    }
+    const allowanceCents = run.action === 'prepared' ? run.acceptedCapCents : null;
+    detail = { ...safeRun(secret, row), bindingRevision: run.bindingRevision,
+      memberId: run.memberId, rootId: run.rootId ?? null, allowanceCents,
+      startedAt: null };
+  }
+  await confirmSnapshot(options, scope, snapshot);
+  if (!detail) {
+    throw new MemoryRefused();
+  }
+  return detail;
 }
 
 function requireMatchingScope(scope: Scope, input: BindingInput,

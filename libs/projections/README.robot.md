@@ -843,7 +843,8 @@ is recorded without claiming work ran. The indexed read stays bounded on pages a
 rebuilds. This projection does not call maintenance.
 
 `memory_maintenance_runs` copies checked maintenance records in the memory runner's
-transaction with its checkpoint. Offline memory replay rebuilds these rows without
+transaction with its checkpoint, including the saved event time. Older tables
+gain the save-time column on worker startup. Offline memory replay rebuilds these rows without
 a scheduler, model, tool, computer or spending port. Rebuild memory on upgrade
 with readers and workers stopped to create this new table.
 The shared TypeScript selector compares these reviewed references with current fact

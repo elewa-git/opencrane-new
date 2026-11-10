@@ -1,5 +1,18 @@
 # Memory contracts
 
+The maintenance GET returns at most 20 safe receipts and 16 KiB per page.
+Its signed cursor belongs to the requester, silo, scope, saved scope position
+and read-table generation. A later scope change or rebuild rejects the old
+cursor. Each receipt has a server-keyed run id; a deterministic night id never
+leaves this route. The detail GET looks up one original saved receipt and gives
+its saved action, intended, selected and observed times, binding member and
+revision. It gives the root and accepted 100-cent allowance only for a saved
+prepared receipt. An absent start time and unjoined spending are unavailable;
+the allowance is never presented as a charge. Both GETs check current scope
+read rights after loading, including after a failed load. They return no fact
+text, input references, model output or source text. The organisation audit
+link still opens the same authorised status GET.
+
 Nightly preflight reads the saved scope history before any later short access check.
 Only the original scope and date claim can receive a result. A changed binding or
 fact revision, occupied scope, expired window or unavailable managed route records

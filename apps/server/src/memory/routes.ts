@@ -10,7 +10,7 @@ import { scopeAccess, scopeFor, resolveScope, memoryAccessChecks, MemoryRefused,
 import { detailFact, listFacts, memorySnapshot, readInput, readParams,
   scopeInput, limits, MemoryConflict } from './reads.ts';
 
-import { maintenanceStatus } from './maintenance.ts';
+import { maintenanceDetail, maintenanceStatus } from './maintenance.ts';
 import { previewParams, turnMemoryPreview } from './turn-preview.ts';
 
 export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
@@ -19,6 +19,7 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
   app.get('/api/memory/turns/:conversationId/:turnId', handle);
   app.get('/api/memory/:scopeId/facts', handle);
   app.get('/api/memory/:scopeId/maintenance', handle);
+  app.get('/api/memory/:scopeId/maintenance/:runId', handle);
   app.get('/api/memory/:scopeId/facts/:memoryId', handle);
 
   async function handle(request: FastifyRequest, reply: FastifyReply) {
@@ -37,6 +38,9 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
       const requester = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!requester) {
         throw new MemoryRefused();
+      }
+      if (request.routeOptions.url?.includes('/maintenance')) {
+        return await readMaintenance(request, options, requester, config.cookieSecret);
       }
       const checks = memoryAccessChecks(options, requester);
       await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
@@ -67,6 +71,38 @@ export function registerMemoryReads(app: FastifyInstance, config: AuthConfig,
       return reply.code(status).send({ status: 'refused' });
     }
   }
+}
+
+async function readMaintenance(request: FastifyRequest, options: MemoryOptions,
+  requester: string, secret: string) {
+  const params = readParams.strip().parse(request.params);
+  const scope = await resolveScope(options, requester, params.scopeId);
+  let loading: Promise<unknown>;
+  if (request.routeOptions.url?.endsWith('/maintenance/:runId')) {
+    z.strictObject({}).parse(request.query);
+    const detail = z.object({ runId: z.string().regex(/^[a-f0-9]{64}$/u) })
+      .safeParse(request.params);
+    if (!detail.success) {
+      throw new MemoryRefused();
+    }
+    loading = maintenanceDetail(options, scope, detail.data.runId, secret);
+  } else {
+    const query = z.strictObject({ cursor: z.string().max(2000).optional() })
+      .parse(request.query);
+    loading = maintenanceStatus(options, scope, requester, secret, query.cursor);
+  }
+  const [loaded] = await Promise.allSettled([loading]);
+  // Check access after loading, including failed loads, so removal wins over a slow read.
+  const checks = memoryAccessChecks(options, requester);
+  await readActiveMember(options.store, options.binding, requester, 'member', checks.applied);
+  const access = await scopeAccess(options, requester, scope, false, checks);
+  if (!access.canRead) {
+    throw new MemoryRefused();
+  }
+  if (loaded.status === 'rejected') {
+    throw loaded.reason;
+  }
+  return loaded.value;
 }
 
 function isRefused(error: unknown) {
@@ -121,10 +157,6 @@ async function readContent(request: FastifyRequest, options: MemoryOptions, requ
   const access = await scopeAccess(options, requester, scope, describeRights, checks);
   if (!access.canRead) {
     throw new MemoryRefused();
-  }
-  if (request.routeOptions.url?.endsWith('/maintenance')) {
-    z.strictObject({}).parse(request.query);
-    return await maintenanceStatus(options, scope, requester);
   }
   if (request.routeOptions.url?.endsWith('/:memoryId')) {
     const detail = await readDetail(request, options, requester, scope);

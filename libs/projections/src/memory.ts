@@ -14,7 +14,9 @@ type MemoryWrite = Extract<SavedMemoryWrite, { schemaVersion: 1 }>;
 async function create(db: Query): Promise<void> {
   await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_runs (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, event_id TEXT NOT NULL, data JSONB NOT NULL,
-    position BIGINT NOT NULL, PRIMARY KEY (silo, scope_id, event_id))`);
+    position BIGINT NOT NULL, saved_at TEXT,
+    PRIMARY KEY (silo, scope_id, event_id))`);
+  await db.query('ALTER TABLE memory_maintenance_runs ADD COLUMN IF NOT EXISTS saved_at TEXT');
   await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_bindings (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, data JSONB NOT NULL, position BIGINT NOT NULL,
     saved_at TEXT,
@@ -181,8 +183,11 @@ function prepareMaintenance(envelope: EventEnvelope) {
         (silo, scope_id, data, position, saved_at) VALUES ($1,$2,$3,$4,$5)
         ON CONFLICT (silo, scope_id) DO UPDATE SET data=$3, position=$4, saved_at=$5`, values);
     } else {
-      const runValues = [envelope.silo, data.scopeId, envelope.id, JSON.stringify(data), position];
-      await db.query('INSERT INTO memory_maintenance_runs VALUES ($1,$2,$3,$4,$5)', runValues);
+      const runValues = [envelope.silo, data.scopeId, envelope.id,
+        JSON.stringify(data), position, envelope.time];
+      await db.query(`INSERT INTO memory_maintenance_runs
+        (silo, scope_id, event_id, data, position, saved_at)
+        VALUES ($1,$2,$3,$4,$5,$6)`, runValues);
     }
   }
   return applyMaintenance;

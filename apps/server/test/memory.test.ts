@@ -2962,9 +2962,11 @@ it('allows disable after payer or assistant loss and refuses renewed enablement'
 
 it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 
-it('shows blocked and missed history only to the binding owner', nightlyHistory, 90_000);
+it('shows blocked and missed history to authorised scope readers', nightlyHistory, 90_000);
 it('pages safe maintenance receipts and opens only an original saved run',
   pagedMaintenanceHistory, 90_000);
+it('checks group and notes readers after a slow maintenance load',
+  maintenanceReadAccess, 90_000);
 
 
 function forget(memoryId: string, commandId: string, expectedRevision = 1,
@@ -3753,7 +3755,8 @@ async function nightlyHistory() {
   const facts = await get(`${shared}/facts`, 'admin');
   expect(facts.statusCode).toBe(200);
   const sharedMaintenance = await get(`${shared}/maintenance`, 'admin');
-  expect(sharedMaintenance.statusCode).toBe(404);
+  expect(sharedMaintenance.statusCode).toBe(200);
+  expect(sharedMaintenance.json()).toMatchObject({ history: [] });
   const position = await nats.store.head();
   await runner.rebuild(projection);
   await runner.rebuild(projection);
@@ -3786,11 +3789,14 @@ async function pagedMaintenanceHistory() {
   for (let day = 1; day <= 23; day++) {
     const date = `2026-09-${String(day).padStart(2, '0')}`;
     const nightId = String(day).padStart(64, '0');
+    const inputRefs = day === 23
+      ? [{ memoryId: 'private-source', revision: 1, expiresAt: null, position: 1 }]
+      : [];
     await append(`scope-${scopeId}`, 'memory.maintenance_recorded', {
       scopeId, nightId, batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64),
       date, bindingRevision: 1, memberId: 'pager', acceptedCapCents: 100,
       intendedAt: `${date}T02:00:00.000Z`, selectedAt: `${date}T02:01:00.000Z`,
-      action: 'missed', reason: 'window_missed', inputRefs: [],
+      action: 'missed', reason: 'window_missed', inputRefs,
     });
   }
   await runner.run(projection);
@@ -3802,6 +3808,7 @@ async function pagedMaintenanceHistory() {
   expect(page.nextCursor).toEqual(expect.any(String));
   expect(first.body).not.toContain('nightId');
   expect(first.body).not.toContain('inputRefs');
+  expect(first.body).not.toContain('private-source');
   const second = await get(`${maintenancePath}?cursor=${page.nextCursor}`, 'pager');
   expect(second.statusCode).toBe(200);
   const later = second.json<typeof page>();
@@ -3809,21 +3816,125 @@ async function pagedMaintenanceHistory() {
   const references = [...page.history, ...later.history].map(function runId(run) {
     return run.runId;
   });
+  expect(references).toHaveLength(23);
   expect(new Set(references).size).toBe(references.length);
+  expect(later.nextCursor).toBeNull();
+  expect(page.history[0]!.action).toBe('missed');
   expect((await get(`${path('pager-sales', 'group')}/maintenance?cursor=${page.nextCursor}`,
     'pager')).statusCode).toBe(409);
+  expect((await get(`${maintenancePath}?cursor=${page.nextCursor}`, 'pager',
+    'other-org')).statusCode).toBe(404);
   const detail = await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager');
   expect(detail.statusCode).toBe(200);
   expect(detail.json()).toMatchObject({ runId: page.history[0]!.runId,
-    action: 'missed', intendedAt: expect.any(String), selectedAt: expect.any(String),
-    money: { status: 'unavailable' } });
+    action: 'missed', money: { status: 'unavailable' } });
+  const times = z.object({ intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
+    observedAt: z.iso.datetime() }).parse(detail.json());
+  expect(times.intendedAt).toBe('2026-09-23T02:00:00.000Z');
   expect(detail.body).not.toContain('nightId');
   expect(detail.body).not.toContain('inputRefs');
+  expect(detail.body).not.toContain('private-source');
   expect((await get(`${maintenancePath}/forged`, 'pager')).statusCode).toBe(404);
   expect((await get(`${maintenancePath}/${page.history[0]!.runId}`, 'admin')).statusCode).toBe(404);
+  expect((await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager',
+    'other-org')).statusCode).toBe(404);
   await runner.rebuild(projection);
   const rebuilt = await get(maintenancePath, 'pager');
-  expect(rebuilt.json()).toEqual(first.json());
+  const rebuiltPage = rebuilt.json<typeof page>();
+  expect(rebuiltPage.history).toEqual(page.history);
+  expect((await get(`${maintenancePath}?cursor=${page.nextCursor}`, 'pager'))
+    .statusCode).toBe(409);
+}
+
+async function maintenanceReadAccess() {
+  const groupScopeId = memoryScopeId('acme', 'group', 'pager-sales');
+  const notesScopeId = memoryScopeId('acme', 'assistant_notes', 'pager-shared');
+  await append('assistant-pager-shared', 'assistant.created',
+    { assistantId: 'pager-shared', kind: 'team', ownerId: 'pager-sales' });
+  await append(grantStream('memory_read', notesScopeId), 'grant.given', {
+    resourceType: 'memory_read', resourceId: notesScopeId,
+    granteeKind: 'member', granteeId: 'pager', grantedBy: 'owner',
+  });
+  await runner.run(computers);
+  for (const [scopeId, scopeKind] of [
+    [groupScopeId, 'group'], [notesScopeId, 'assistant_notes'],
+  ] as const) {
+    await append(`scope-${scopeId}`, 'memory.maintenance_recorded', {
+      scopeId, scopeKind, nightId: 'a'.repeat(64), batchKey: 'b'.repeat(64),
+      inputRevision: 'c'.repeat(64), date: '2026-10-20', bindingRevision: 1,
+      memberId: 'pager', acceptedCapCents: 100,
+      intendedAt: '2026-10-20T02:00:00.000Z',
+      selectedAt: '2026-10-20T02:01:00.000Z',
+      action: 'missed', reason: 'window_missed', inputRefs: [],
+    });
+  }
+  await runner.run(projection);
+  const groupPath = `${path('pager-sales', 'group')}/maintenance`;
+  const notesPath = `${path('pager-shared', 'assistant_notes')}/maintenance`;
+  expect((await get(groupPath, 'pager')).statusCode).toBe(200);
+  expect((await get(notesPath, 'pager')).statusCode).toBe(200);
+  expect((await get(groupPath, 'admin')).statusCode).toBe(404);
+  expect((await get(notesPath, 'admin')).statusCode).toBe(404);
+  await append('conversation-pager-chat', 'conversation.created', {
+    conversationId: 'pager-chat', createdBy: 'pager', mode: 'direct',
+    participantIds: ['pager', 'owner'],
+  });
+  await append('conversation-pager-chat', 'message.posted', {
+    conversationId: 'pager-chat', authorId: 'pager', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+  });
+  expect((await get(groupPath, 'pager')).statusCode).toBe(200);
+
+  const original = memory.db.query.bind(memory.db);
+  let signalStart!: () => void;
+  let releaseLoad!: () => void;
+  const started = new Promise<void>(function wait(resolve) { signalStart = resolve; });
+  const held = new Promise<void>(function wait(resolve) { releaseLoad = resolve; });
+  async function slow<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    if (sql.includes('SELECT run.event_id')) {
+      signalStart();
+      await held;
+    }
+    return original<Row>(sql, values);
+  }
+  const spy = vi.spyOn(memory.db, 'query').mockImplementation(slow);
+  try {
+    const pending = get(groupPath, 'pager');
+    await started;
+    await append('team-pager-sales', 'team.member_removed',
+      { teamId: 'pager-sales', memberId: 'pager', removedBy: 'owner' });
+    releaseLoad();
+    expect((await pending).statusCode).toBe(404);
+  } finally {
+    releaseLoad();
+    spy.mockRestore();
+  }
+  expect((await get(notesPath, 'pager')).statusCode).toBe(404);
+  const personal = `${path('pager')}/maintenance`;
+  const pendingRun = { scopeId: memoryScopeId('acme', 'person', 'pager'),
+    nightId: 'd'.repeat(64), batchKey: 'e'.repeat(64), inputRevision: 'f'.repeat(64),
+    date: '2026-10-21', bindingRevision: 1, memberId: 'pager', acceptedCapCents: 100,
+    intendedAt: '2026-10-21T02:00:00.000Z', selectedAt: '2026-10-21T02:01:00.000Z',
+    action: 'missed', reason: 'window_missed', inputRefs: [] };
+  await append(`scope-${pendingRun.scopeId}`, 'memory.maintenance_recorded', pendingRun);
+  expect((await get(personal, 'pager')).statusCode).toBe(503);
+  await runner.run(projection);
+  expect((await get(personal, 'pager')).statusCode).toBe(200);
+  const query = memory.db.query.bind(memory.db);
+  async function timeout<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    if (sql.includes('SELECT run.event_id')) {
+      throw new Error('Private database timeout');
+    }
+    return query<Row>(sql, values);
+  }
+  const outage = vi.spyOn(memory.db, 'query').mockImplementation(timeout);
+  try {
+    const unavailable = await get(personal, 'pager');
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain('Private database timeout');
+  } finally {
+    outage.mockRestore();
+  }
 }
 
 async function replayBinding() {

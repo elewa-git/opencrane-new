@@ -51,7 +51,7 @@ function cursorSignature(secret: string, encoded: string) {
   signature.update(`memory-page:${encoded}`);
   return signature.digest();
 }
-function pageCursor(secret: string, binding: string, offset: number, asOf: Date) {
+export function pageCursor(secret: string, binding: string, offset: number, asOf: Date) {
   const payload = JSON.stringify([binding, offset, asOf.toISOString()]);
   const bytes = Buffer.from(payload);
   const encoded = bytes.toString('base64url');
@@ -59,7 +59,7 @@ function pageCursor(secret: string, binding: string, offset: number, asOf: Date)
   const signature = signed.toString('base64url');
   return `${encoded}.${signature}`;
 }
-function readCursor(secret: string, binding: string, cursor?: string) {
+export function readCursor(secret: string, binding: string, cursor?: string) {
   if (cursor === undefined) {
     return { offset: 0, asOf: new Date() };
   }

@@ -15,6 +15,8 @@ This folder lets people review, save, correct and forget information the assista
   personal nightly scope. It does not start a computer or send a call.
   If a root was saved but its reply was lost, preparation finds that same root
   before checking whether a new night could start.
+- Shows permitted readers a page of saved nightly choices and a safe detail for
+  one choice. Money stays unavailable until a saved spending record proves it.
 
 When a loaded fact changes, expires or loses access, the saved withdrawal stops the
 computer and asks the original browser to clear its completed reply. The reply identity
@@ -94,7 +96,7 @@ flowchart LR
   chat["Chat"] -->|supplies saved turn facts| memory
   gateway["AI gateway"] -->|passes checked recall, remember, correct and forget calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
-  memory -->|checks access, facts and nightly allowance| models["Models library"]
+  memory -->|checks access, facts, nightly records and allowance| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
 ```
 
