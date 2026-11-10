@@ -18,7 +18,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 
 ```mermaid
 flowchart LR
-  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>collects observed results"]
+  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>checks results and storage"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
@@ -52,6 +52,9 @@ flowchart LR
   process namespace and dumpability result. A missing or changed group stops collection.
 - Hold one private Codex turn while checking its wrapper and native child against
   protected launch records and live kernel settings.
+- Provide a helper for two process reads and two storage scans during one proposed
+  persistence attempt. It keeps the first failure and records later failures too.
+  An unknown tool reply or unreadable folder stays unfinished.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.
@@ -117,6 +120,10 @@ It reports private text found in storage separately from an inspection that coul
 Missing folders, unreadable files and redirected paths keep the inspection unfinished.
 It checks once during simulated work and again after it stops, without printing file names
 or private text.
+An attempt helper keeps the native turn open while it checks the processes and the first scan.
+It tries each forbidden tool at most once and checks storage again after Stop. The deployment collector
+does not call this helper yet, so no live persistence attempt has run. If a tool writes
+private text, later failed checks add evidence without hiding that tool write.
 These folder tests do not establish which storage a deployment uses or prove native tool refusal.
 The runner still leaves the persistence journey unfinished.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
