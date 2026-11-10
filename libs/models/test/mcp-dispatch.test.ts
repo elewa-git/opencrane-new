@@ -3020,7 +3020,7 @@ async function hidesCredentialEchoInRemoteResult(testCase: typeof credentialRepl
   const response = await send(setup, value);
   expect(response.status).toBe(200);
   const returned = await response.text();
-  expect(JSON.parse(returned)).toEqual({ jsonrpc: '2.0', id: JSON.parse(body).id,
+  expect(JSON.parse(returned)).toEqual({ jsonrpc: '2.0', id: capture.body.id,
     error: { code: -32603, message: 'Remote tool error' } });
   expect(remote.received).toHaveLength(1);
   expect(remote.received[0]!.headers.authorization).toBe(`Bearer ${testCase.material}`);
@@ -3035,12 +3035,30 @@ async function hidesCredentialEchoInRemoteContentType() {
   const response = await send(setup, value);
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toBe('application/json');
-  expect(await response.json()).toEqual({ jsonrpc: '2.0', id: JSON.parse(body).id,
+  expect(await response.json()).toEqual({ jsonrpc: '2.0', id: capture.body.id,
     error: { code: -32603, message: 'Remote tool error' } });
   expect(remote.received).toHaveLength(1);
 }
 it('does not forward credential text in an upstream content type',
   hidesCredentialEchoInRemoteContentType, 60_000);
+
+async function hidesCredentialEchoInRemoteRequestId() {
+  const { setup, remote, headers } = await selectedPersonalFixture();
+  const raw = body.replace('"id":2', '"id":"alice-access"');
+  function echoedResult() {
+    return JSON.stringify({ jsonrpc: '2.0', id: 'alice-access',
+      result: { content: [{ type: 'text', text: 'alice-access' }] } });
+  }
+  remote.respond(echoedResult);
+  const value = await permit(setup, headers, raw);
+  const response = await send(setup, value, raw);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ jsonrpc: '2.0', id: null,
+    error: { code: -32603, message: 'Remote tool error' } });
+  expect(remote.received).toHaveLength(1);
+}
+it('does not copy a credential-bearing request id into a sanitised refusal',
+  hidesCredentialEchoInRemoteRequestId, 60_000);
 
 async function refusesScopeMismatchBeforePermit() {
   const { setup, remote, headers, saved } = await selectedPersonalFixture();
