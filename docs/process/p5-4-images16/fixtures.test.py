@@ -8,6 +8,7 @@ import inspect
 import io
 import json
 import shutil
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -186,6 +187,61 @@ class TypanionTests(unittest.TestCase):
                 with patch.object(self.checker, "trusted_review", return_value=changed_review):
                     with self.assertRaises(ValueError):
                         self.checker.check_source_fixture(changed_review, changed)
+
+    def test_saved_source_equality_check_fails_when_removed(self):
+        changed = dict(self.source)
+        changed["package.json"] += b"x"
+        archive = archive_bytes(list(self.source.items()))
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture_dir = Path(temporary)
+            fixture_path = fixture_dir / "typanion-source.tar.gz"
+            fixture_path.write_bytes(archive)
+            review = copy.deepcopy(self.review)
+            review["sourceFixtureSha256"] = hashlib.sha256(archive).hexdigest()
+            with patch.object(self.checker, "HERE", fixture_dir):
+                with patch.object(self.checker, "trusted_review", return_value=review):
+                    guard = ('if saved != source:\n'
+                             '        raise ValueError("Saved upstream source changed")')
+                    self.assert_removed_guard_fails(
+                        self.checker.check_source_fixture,
+                        guard,
+                        lambda check: self.assertRaises(ValueError, check, review, changed))
+
+    def test_saved_candidate_binding_check_fails_when_removed(self):
+        changed_review = copy.deepcopy(self.review)
+        changed_review["candidateSha256"] = "0" * 64
+        guard = ('if review["candidateSha256"] != inventory["candidateSha256"]:\n'
+                 '        raise ValueError("Candidate binding changed")')
+        self.assert_removed_guard_fails(
+            self.checker.read_saved,
+            guard,
+            lambda read_saved: self.assertRaises(ValueError, read_saved, changed_review))
+
+    def test_inventory_checksum_and_git_read_guards_fail_when_removed(self):
+        corepack = self.checker.corepack
+        inventory_path = corepack.RECORD
+        original_inventory = inventory_path.read_bytes()
+        with tempfile.TemporaryDirectory() as temporary:
+            changed_inventory_path = Path(temporary) / inventory_path.name
+            changed_inventory_path.write_bytes(original_inventory + b" ")
+            with patch.object(corepack, "RECORD", changed_inventory_path):
+                with self.assertRaises(ValueError):
+                    corepack.trusted_review()
+                guard = "return json.loads(candidate.checked_bytes(RECORD, INVENTORY))"
+                original = inspect.getsource(corepack.trusted_review)
+                self.assertIn(guard, original)
+                changed = original.replace(
+                    guard, "return json.loads(RECORD.read_bytes())", 1)
+                namespace = vars(corepack).copy()
+                exec(changed, namespace)
+                with self.assertRaises(AssertionError):
+                    with self.assertRaises(ValueError):
+                        namespace["trusted_review"]()
+
+        repository = HERE.parents[2]
+        self.assertTrue(self.checker.run_git(repository, "HEAD", "README.md"))
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.checker.run_git(repository, "HEAD", "missing-file")
 
     def test_saved_inventory_and_region_helpers_refuse_changed_inputs(self):
         corepack = self.checker.corepack
