@@ -393,6 +393,7 @@ export async function startDecision(
             await currentAuthority(actor.store, binding, turnToken.requester,
               computer.assistant, turnToken.conversation, 'mcp_server', serverId,
               freshCurrent, conversation, undefined, undefined, latestReader);
+            await memory.confirm(freshCurrent, true);
             await confirmDecisionAccess(activity, current, needsApproval, true);
             return;
           }
