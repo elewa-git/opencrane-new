@@ -8,7 +8,7 @@ import { tokenIssuer } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { natsFixture, event } from '@opencrane/event-store/testing';
-import { foldRoutine, type EventEnvelope } from '@opencrane/events';
+import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/models';
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -21,10 +21,15 @@ import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt
 import { startOAuthConfigurationChange, finishOAuthConfigurationChange }
   from '../../../libs/models/src/oauth-configuration-change.ts';
 import { toolPolicyFromRows } from '../../../libs/models/src/tool-policy.ts';
+import { foldCompanyConnection } from '../../../libs/models/src/company-bearer.ts';
+import { foldConnectionSelection } from '../../../libs/models/src/connection-selection.ts';
+import { companySelectionFacts } from '../../../libs/models/src/company-selection.ts';
+import { readCurrentCompanyProfile } from '../../../libs/models/src/company-profile-reader.ts';
 import * as routineSession from '../src/routine-session.ts';
 import { createRoutineComposition, createRoutineCompanyDelivery }
   from '../src/routine-composition.ts';
 import { bindRoutineBudgetOwner } from '../src/routine-delivery-owner.ts';
+import { routineCompanyPreflightFromCustody } from '../src/routine-company-preflight.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -40,6 +45,9 @@ const input = { routineId: 'orders', occurrenceId: 'occurrence' };
 const conversationId = 'routine-session-occurrence';
 const messageId = 'routine-input-occurrence';
 const turnId = 'routine-turn-occurrence';
+const rootHash = createHash('sha256');
+rootHash.update(JSON.stringify(['test', conversationId, turnId]));
+const rootId = rootHash.digest('hex');
 const proposedEvent = z.object({ type: z.string() });
 const frameSchema = z.record(z.string(), z.unknown());
 function clock() {
@@ -82,9 +90,12 @@ async function prepareCompany() {
   const serverId = 'odoo';
   const profileId = 'orders-bot';
   const optInSubject = `connection-company-${serverId}`;
-  const optIn = record('company-opt-in', optInSubject, 'connection.company_opt_in_set', {
+  const optIn = record(connectionOperationId('test', optInSubject, 'enable'),
+    optInSubject, 'connection.company_opt_in_set', {
     serverId, connectionId: 'installed', registrationRevision: serverRows[0]!.sequence,
     enabled: true, changedBy: 'alice', expectedSequence: 0 });
+  optIn.commandId = 'enable';
+  optIn.principal = { kind: 'human', id: 'alice' };
   await nats.seed([optIn]);
   const profileSubject = `connection-company:${serverId}:${profileId}`;
   const operationId = connectionOperationId('test', profileSubject, 'save');
@@ -102,6 +113,8 @@ async function prepareCompany() {
   const profile = record(operationId, profileSubject, 'connection.created', {
     siloId: 'test', custodianId: 'alice', serverId, profile: profileId,
     secretRef: 'secret:synthetic', activation });
+  profile.commandId = 'save';
+  profile.principal = { kind: 'human', id: 'alice' };
   await nats.seed([profile]);
   const profileRevision = await nats.store.head(profileSubject);
   const selectionSubject = `connection-selection-alice-${serverId}`;
@@ -111,6 +124,8 @@ async function prepareCompany() {
     action: 'select', userId: 'alice', serverId, connectionId: 'installed', profileId,
     profileRevision, expectedSequence: 0, ownerKind: 'company', siloId: 'test',
     generation: 1, accountDigest: accountHash.digest('hex') });
+  choice.commandId = 'choice';
+  choice.principal = { kind: 'human', id: 'alice' };
   await nats.seed([choice]);
   const change = await startOAuthConfigurationChange(nats.store, 'test', serverId);
   await finishOAuthConfigurationChange(nats.store, 'test', serverId, change,
@@ -159,7 +174,7 @@ async function setup() {
   await apply(events);
   const due = { version: 1, routineId: 'orders', definitionRevision: 1,
     scheduleRevision: 1, controlRevision: 1, definition, occurrenceId: 'occurrence',
-    conversationId, messageId, turnId, rootId: 'routine-root-occurrence', source: 'scheduled',
+    conversationId, messageId, turnId, rootId, source: 'scheduled',
     slot: original.next!, firedAt: original.next!.at, startBy: '2026-10-11T07:01:00Z' };
   const claimed = record('due', 'routine-orders', 'routine.due', due);
   claimed.principal = { kind: 'system', id: 'opencrane-server' };
@@ -392,6 +407,7 @@ it('sends one checked due to its native thread, despite duplicate invocation and
   reachesPreparedThread);
 
 async function productionCompanyDelivery() {
+  holdFixtureClock();
   const signal = new AbortController();
   function requireLeader() {
     return Promise.resolve();
@@ -411,6 +427,19 @@ async function productionCompanyDelivery() {
   expect(await replay(due, leadership)).toEqual({ status: 'unknown' });
   expect(preparedComputer.frames).toEqual([]);
   expect(company.recover).not.toHaveBeenCalled();
+  const prepared = await routineSession.loadRoutinePreparation(nats.store, keys, worker(), input);
+  const profileRows = await history(nats.store, 'connection-company:odoo:orders-bot', 'test');
+  expect(foldCompanyConnection(profileRows).status).toBe('verified');
+  const choiceRows = await history(nats.store, 'connection-selection-alice-odoo', 'test');
+  const choice = foldConnectionSelection(choiceRows).selected!;
+  expect(choice).not.toBeNull();
+  const readProfile = readCurrentCompanyProfile(companyOptions.custody);
+  await expect(companySelectionFacts(nats.store, 'test', choice,
+    company.loadConfiguration, readProfile)).resolves.toMatchObject({ available: true });
+  const preflight = routineCompanyPreflightFromCustody(nats.store, binding, 'test',
+    company.loadConfiguration, companyOptions.custody);
+  await expect(preflight(prepared.run, 1)).resolves.toMatchObject({
+    occurrenceId: 'occurrence', rootId });
   const enabled = createRoutineCompanyDelivery({ ...companyOptions, enabled: true },
     nats.store, keys, identity, actor, preparedComputer.wake, owner);
   expect(await enabled(due, leadership)).toEqual({ status: 'sent' });
@@ -418,6 +447,14 @@ async function productionCompanyDelivery() {
   expect(await enabled(due, leadership)).toEqual({ status: 'unknown' });
   expect(preparedComputer.executedThreads).toEqual(['native-1']);
   expect(company.recover).toHaveBeenCalled();
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  const turns = preparedComputer.frames.filter(isTurn);
+  expect(turns).toHaveLength(1);
+  expect(turns[0]).toMatchObject({ requesterId: 'alice', rootId,
+    conversationId, messageId, id: turnId, assistantId: 'sales-assistant',
+    executionMode: 'restricted' });
   const authorisations = await saved('routine.run_send_authorised', 'routine-orders');
   expect(authorisations).toHaveLength(1);
   expect(authorisations[0]!.event.data).toMatchObject({ custodyRecordVersion: '1' });
@@ -425,6 +462,232 @@ async function productionCompanyDelivery() {
 }
 it('binds the saved company profile to one enabled automatic native delivery',
   productionCompanyDelivery);
+
+type LateCompanyChange = 'choice' | 'member' | 'team' | 'assistant' | 'grant' |
+  'profile' | 'oauth' | 'schema' | 'destination' | 'tariff' | 'allowance' |
+  'root' | 'stop' |
+  'credential_uid' | 'credential_version' | 'lease';
+
+async function recordLateCompanyChange(kind: LateCompanyChange) {
+  if (kind === 'lease') {
+    owned = false;
+    return;
+  }
+  if (kind === 'credential_uid' || kind === 'credential_version') {
+    const identity = { reference: 'synthetic', uid: 'uid', resourceVersion: '1' };
+    if (kind === 'credential_uid') identity.uid = 'other-uid';
+    if (kind === 'credential_version') identity.resourceVersion = '2';
+    company.recover.mockResolvedValue({ status: 'recovered', identity });
+    return;
+  }
+  let subject: string;
+  let type: string;
+  let data: unknown;
+  let commandId = `late-${kind}`;
+  let eventId = commandId;
+  if (kind === 'choice') {
+    subject = 'connection-selection-alice-odoo';
+    type = 'connection.selected';
+    data = { action: 'clear', userId: 'alice', serverId: 'odoo',
+      connectionId: 'installed', expectedSequence: 1 };
+    commandId = 'clear';
+    eventId = connectionOperationId('test', subject, commandId);
+  } else if (kind === 'member') {
+    subject = 'member-alice';
+    type = 'member.removed';
+    data = { memberId: 'alice', removedBy: 'admin' };
+  } else if (kind === 'team') {
+    subject = 'team-sales';
+    type = 'team.member_removed';
+    data = { teamId: 'sales', memberId: 'alice', removedBy: 'admin' };
+  } else if (kind === 'assistant') {
+    subject = 'assistant-sales-assistant';
+    type = 'assistant.settings_changed';
+    data = { assistantId: 'sales-assistant', changedBy: 'alice',
+      changedFields: ['active'], active: false };
+  } else if (kind === 'grant') {
+    subject = grantStream('mcp_server', 'odoo');
+    type = 'grant.revoked';
+    data = { resourceType: 'mcp_server', resourceId: 'odoo',
+      granteeKind: 'member', granteeId: 'alice', revokedBy: 'admin' };
+  } else if (kind === 'profile') {
+    subject = 'connection-company:odoo:orders-bot';
+    type = 'connection.refreshed';
+    const rows = await history(nats.store, subject, 'test');
+    const saved = foldCompanyConnection(rows).data!;
+    commandId = 'rotate';
+    eventId = connectionOperationId('test', subject, commandId);
+    const activation: Record<string, unknown> = { ...saved.activation,
+      reason: 'bearer_rotation', generation: 2, uid: 'rotated-uid', resourceVersion: '2',
+      operationId: eventId, expectedSequence: rows.at(-1)!.sequence };
+    Reflect.deleteProperty(activation, 'account');
+    Reflect.deleteProperty(activation, 'configurationDigest');
+    data = { ...saved, secretRef: 'secret:rotated', activation };
+  } else if (kind === 'oauth') {
+    subject = 'mcp-odoo';
+    type = 'mcp.oauth_configuration_recorded';
+    data = { serverId: 'odoo', changeId: '00000000-0000-4000-8000-000000000001',
+      status: 'changing' };
+  } else if (kind === 'schema') {
+    subject = 'mcp-odoo';
+    type = 'mcp.tools_changed';
+    data = { serverId: 'odoo', previousSchemaDigest: company.tool.schemaDigest,
+      newSchemaDigest: 'f'.repeat(64) };
+  } else if (kind === 'destination') {
+    subject = 'mcp-odoo';
+    type = 'mcp.server_registered';
+    data = { serverId: 'odoo', kind: 'remote', locator: 'https://other.test/mcp',
+      registeredBy: 'admin' };
+  } else if (kind === 'tariff') {
+    subject = 'mcp-odoo';
+    type = 'mcp.server_discovered';
+    const rows = await history(nats.store, subject, 'test');
+    function isDiscovery(row: typeof rows[number]) {
+      return row.event.type === type;
+    }
+    const previous = rows.find(isDiscovery)!;
+    const payload = z.object({ tools: z.array(z.record(z.string(), z.unknown())) })
+      .passthrough().parse(previous.event.data);
+    function raiseReadPrice(tool: Record<string, unknown>) {
+      if (tool['name'] === 'read') return { ...tool, costCents: 1 };
+      return tool;
+    }
+    const tools = payload.tools.map(raiseReadPrice);
+    data = { ...payload, tools };
+  } else if (kind === 'allowance') {
+    subject = 'budget-test';
+    type = 'budget.root_allowance_set';
+    const rows = await history(nats.store, subject, 'test');
+    function isAllowance(row: typeof rows[number]) {
+      return row.event.type === type;
+    }
+    const previous = rows.find(isAllowance)!;
+    const payload = z.record(z.string(), z.unknown()).parse(previous.event.data);
+    data = { ...payload, allowanceCents: 999 };
+  } else if (kind === 'root') {
+    subject = 'budget-test';
+    type = 'budget.root_stopped';
+    data = { rootId: actor.state.roots[0]!.rootId, reason: 'ceiling_stop',
+      stopId: 'late-root-stop' };
+  } else {
+    subject = 'routine-orders';
+    type = 'routine.run_stop_requested';
+    const example = getEventDefinition(type)!.example;
+    const payload = z.record(z.string(), z.unknown()).parse(example);
+    data = { ...payload, routineId: 'orders', occurrenceId: 'occurrence',
+      rootId, conversationId, messageId, turnId };
+  }
+  const changed = record(eventId, subject, type, data);
+  changed.commandId = commandId;
+  if (kind === 'choice' || kind === 'profile' || kind === 'stop' || kind === 'assistant') {
+    changed.principal = { kind: 'human', id: 'alice' };
+  }
+  await nats.seed([changed]);
+}
+
+async function refusesCompanyChange(kind: LateCompanyChange, afterAuthorisation: boolean) {
+  holdFixtureClock();
+  const signal = new AbortController();
+  function requireLeader() {
+    return Promise.resolve();
+  }
+  const owner = bindRoutineBudgetOwner(actor, nats.store, 'test', signal.signal, requireLeader);
+  const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const options = { enabled: true, loadConfiguration: company.loadConfiguration,
+    custody: { recover: company.recover } };
+  const due = { status: 'confirmed' as const, executionAvailable: false as const,
+    routineId: 'orders', occurrenceId: 'occurrence', turnId };
+  const leadership = { signal: signal.signal, checkCurrent };
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function changeAtAuthorisation(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_authorised' && !changed && !afterAuthorisation) {
+      changed = true;
+      await recordLateCompanyChange(kind);
+    }
+    const result = await append(...supplied);
+    if (proposed.type === 'routine.run_send_authorised' && !changed &&
+        afterAuthorisation && result.status === 'appended') {
+      changed = true;
+      await recordLateCompanyChange(kind);
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeAtAuthorisation);
+  const deliver = createRoutineCompanyDelivery(options, nats.store, keys, identity,
+    actor, preparedComputer.wake, owner);
+  expect(await deliver(due, leadership)).toEqual({ status: 'unknown' });
+  expect(changed).toBe(true);
+  const authorisations = await saved('routine.run_send_authorised', 'routine-orders');
+  expect(authorisations).toHaveLength(afterAuthorisation ? 1 : 0);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+  signal.abort();
+}
+function refusesLateCompanyChange(kind: LateCompanyChange) {
+  return refusesCompanyChange(kind, false);
+}
+function refusesAfterCompanyAuthorisation(kind: LateCompanyChange) {
+  return refusesCompanyChange(kind, true);
+}
+it.each<LateCompanyChange>(['choice', 'member', 'team', 'assistant', 'grant',
+  'profile', 'oauth', 'schema', 'destination', 'tariff', 'allowance', 'root', 'stop',
+  'credential_uid', 'credential_version', 'lease'])(
+  'refuses a late %s change before authorising company delivery',
+  refusesLateCompanyChange);
+it.each<LateCompanyChange>(['choice', 'member', 'team', 'assistant', 'grant',
+  'profile', 'oauth', 'schema', 'destination', 'tariff', 'allowance', 'root', 'stop',
+  'credential_uid', 'credential_version', 'lease'])(
+  'refuses a late %s change before releasing company delivery',
+  refusesAfterCompanyAuthorisation);
+
+async function refusesChangedCredentialBeforeUse() {
+  holdFixtureClock();
+  const signal = new AbortController();
+  function requireLeader() {
+    return Promise.resolve();
+  }
+  const owner = bindRoutineBudgetOwner(actor, nats.store, 'test', signal.signal, requireLeader);
+  const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
+  const options = { enabled: true, loadConfiguration: company.loadConfiguration,
+    custody: { recover: company.recover } };
+  const due = { status: 'confirmed' as const, executionAvailable: false as const,
+    routineId: 'orders', occurrenceId: 'occurrence', turnId };
+  const leadership = { signal: signal.signal, checkCurrent };
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function changeAfterAuthorisation(...supplied: Parameters<typeof append>) {
+    const result = await append(...supplied);
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_authorised' && result.status === 'appended') {
+      company.recover.mockResolvedValue({ status: 'recovered', identity: {
+        reference: 'synthetic', uid: 'uid', resourceVersion: '2' } });
+      changed = true;
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeAfterAuthorisation);
+  const deliver = createRoutineCompanyDelivery(options, nats.store, keys, identity,
+    actor, preparedComputer.wake, owner);
+  expect(await deliver(due, leadership)).toEqual({ status: 'unknown' });
+  expect(changed).toBe(true);
+  expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
+  const stops = await saved('routine.run_stop_requested', 'routine-orders');
+  expect(stops).toHaveLength(1);
+  expect(stops[0]!.event.data).toMatchObject({ reason: 'credential_changed' });
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+  expect(preparedComputer.executedThreads).toEqual([]);
+  signal.abort();
+}
+it('records changed custody after authorisation and before native release',
+  refusesChangedCredentialBeforeUse);
 
 async function changedCompanyDuringPreparation(kind: 'profile' | 'opt-in') {
   let current = true;

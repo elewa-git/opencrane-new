@@ -86,7 +86,9 @@ It refuses to send unless a company confirmation check is supplied.
 After the computer wakes, routine preparation checks the owner's saved company choice
 against a current verified account and the exact saved profile. A changed account,
 profile or scope stops preparation before it reserves money. The check uses the usual
-MCP connection rules. Automatic company calls are still unavailable.
+MCP connection rules. The internal delivery entry can now use the saved company
+profile and its current private credential for one checked turn. Its production
+switch is off, so scheduled company calls are still unavailable.
 It also requires a finished OAuth settings change with a matching digest in the saved
 tool server history. A later change stops the routine send before publication.
 It checks access after wake, just before sending, and after saving the turn start.

@@ -5704,8 +5704,9 @@ There is no production caller for the inspector.
 
 ### Internal routine hand-off
 
-`createRoutineSender({ enabled, replay }, ...admissionArguments)` is internal and
-has no production caller. Omitted `enabled`, false, or replay refuses before wake.
+`createRoutineSender({ enabled, replay }, ...admissionArguments)` is internal. The
+checked company delivery binding calls it when explicitly enabled. The deployed
+scheduler does not call that binding. Omitted `enabled`, false, or replay refuses before wake.
 Only `AppendOutcome.kind=appended` creates one live sender. Duplicate receipts,
 missing publication replies and restart return unknown. The sender is consumed before
 waiting for wake; it cannot repeat. The wake callback returns the existing connected
@@ -7182,8 +7183,8 @@ connection, profile revisions, verified account id and scopes to match one expli
 company choice. It reuses `companySelectionFacts` for installation, opt-in, OAuth
 configuration, account evidence and available tools. The trusted profile reader can
 use `readCurrentCompanyProfile` to confirm the saved verified account and its exact
-credential in custody. No production company profile confirmation writer or routine
-delivery entry is installed. It also reads the
+credential in custody. The checked delivery binding supplies this reader, but no
+deployed scheduler installs the binding. It also reads the
 saved tool name, revision, catalogue digest, destination digest, policy revision and
 zero-cent price. The current published review must still allow that exact tool, with
 the same installation and required scopes. Missing tool or price facts refuse.
@@ -7310,7 +7311,7 @@ check. `routine-sender.ts` calls that check inside the conditional send-authoris
 append, which samples the global event position before the callback. A settings
 change saved after the callback's last OAuth read therefore conflicts with the
 append. An unfinished change refuses preflight. No production settings editor or
-company sender is registered, so company sending remains disabled.
+deployed scheduler caller is registered, so company sending remains disabled.
 
 ## Conversation tail pages
 
@@ -7323,6 +7324,20 @@ projection generation, computer state and dispatcher state. Limits are 1 to 100.
 The route loads participation and rows before checking current access once. It
 decrypts text only after that check. It never uses a conversation stream in the
 two-second write check.
+
+## Checked company delivery binding
+
+`createRoutineCompanyDelivery` supplies the saved-profile reader and credential
+custody to the existing checked due hand-off. It uses the existing routine sender,
+budget owner and authenticated computer wake. Its `enabled` option defaults to
+false, and replay cannot send. The tick worker has no caller for this binding.
+The public `executionAvailable` fields remain false. The recording native peer
+test enables this binding explicitly, sends the original turn once and checks the
+saved authorisation and custody version. The sender repeats company and access
+checks after authorisation, then reads credential custody immediately before the
+turn goes to the computer. Company result and settlement work remains
+separate. The source was based on main at `b077fddde5bccb8ed8d9e7d5471bdfaffac7759f`,
+which contains the saved-profile reader and credential use-time check.
 
 ## Credential custody in routine send authorisation
 

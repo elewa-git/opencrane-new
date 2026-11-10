@@ -114,6 +114,10 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
   }
   try {
     await checked.fresh();
+    // Repeat the company check after the saved authorisation. Its account, tool,
+    // grants or OAuth settings may have changed before the turn is released.
+    await confirmCompany();
+    await checked.fresh();
   } catch {
     // A changed credential can also fail the usual post-save access check.
     try {
