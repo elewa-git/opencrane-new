@@ -246,6 +246,15 @@ async function copied() {
   await refused();
 }
 test('refuses a copied response even for the same bytes and file', copied);
+async function copiedAcrossSilos() {
+  await upload();
+  vi.clearAllMocks();
+  options.silo = 'other';
+  settings.silo = 'other';
+  mode = 'copied';
+  await refused();
+}
+test('refuses a copied clean response in another silo', copiedAcrossSilos);
 async function timeout() {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   mode = 'timeout';
