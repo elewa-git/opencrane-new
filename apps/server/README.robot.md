@@ -7391,6 +7391,14 @@ Any reservation or settlement after the allowance also refuses release because i
 change the silo's shared capacity. An exhaustion record refuses release when it names
 the silo, fixed payer or assistant, or this turn. The conditional append conflicts if
 a budget event is saved after its check reads the budget stream.
+A saved activation receipt remains readable after a later reservation or settlement.
+This only recovers the earlier admission. `fresh()` still refuses the changed budget
+before a turn can be sent. The start check refuses it too. A Stop for this root still
+refuses the receipt. `test/routine-session.test.ts` and `test/routine-sender.test.ts` cover
+receipt recovery with an uncertain hold; the hand-off fixture starts without a
+competing reservation. The uncertain-write fixture holds its test clock until the
+send fault, and the sender fixture holds its test clock after a long wake. Slow host
+scheduling therefore cannot expire the access period before either fault is injected.
 
 `test/routine-handoff.test.ts` starts with a saved checked due while delivery is off.
 It restarts NATS, enables the internal test delivery, then checks that one session,

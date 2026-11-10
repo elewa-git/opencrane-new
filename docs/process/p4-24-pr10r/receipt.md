@@ -11,6 +11,13 @@ receipts never enter the delivery callback.
 
 A spending ceiling change saved after the fixed root allowance now refuses the
 turn. A later reservation, settlement or matching spending stop also refuses it.
+The first pushed-head run found that this check also refused a saved activation
+receipt after a later uncertain reservation. Receipt recovery now checks the saved
+admission and current access without requiring a new spending release. The sender's
+separate check still refuses release after that reservation. The hand-off fixture
+no longer places an uncertain reservation before a new release. Two send-fault
+fixtures now hold their test clocks across slow host scheduling. Their production
+deadlines and money assertions are unchanged.
 The final release tests cover matching payer and assistant ceilings, a competing
 call that uses the remaining shared ceiling, Stop, a revoked model grant, lost
 leadership and the end of the two-second access deadline. A reservation saved after
@@ -33,6 +40,14 @@ reviewed images and full dependency proof. Automatic execution remains off.
 - PASS: reservation, settlement and exhaustion tests first failed because the
   scan completed. They passed after the release check changed. Matching payer and
   assistant ceiling cases and an unrelated assistant control also passed.
+- PASS: the saved-receipt and sender-inspection tests failed after the release
+  check, then passed after receipt recovery was separated from new release.
+  The sender's fresh release check still refuses the uncertain reservation.
+- PASS: seven focused routine session, hand-off and sender cases passed 7/7 twice
+  with one worker and disposable test services after the fixture fixes.
+- PARTIAL: a local full hand-off diagnostic passed 56 cases and failed the uncertain
+  turn-write case before its fixture clock was held. That case then passed alone
+  and within both focused seven-case runs. The full files have not yet passed twice.
 - PASS: the eight changed release cases passed 8/8 twice with one worker,
   disposable PostgreSQL, NATS, OpenFGA and a scripted native peer.
 - PARTIAL: one complete hand-off file run passed 57/65. Seven existing tests
