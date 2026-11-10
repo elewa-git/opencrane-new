@@ -52,6 +52,8 @@ flowchart LR
   process namespace and dumpability result. A missing or changed group stops collection.
 - Hold one private Codex turn while checking its wrapper and native child against
   protected launch records and live kernel settings.
+- Provide a helper for two process reads and two storage scans during one proposed
+  persistence attempt. An unknown tool reply or unreadable folder stays unfinished.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.
@@ -117,6 +119,9 @@ It reports private text found in storage separately from an inspection that coul
 Missing folders, unreadable files and redirected paths keep the inspection unfinished.
 It checks once during simulated work and again after it stops, without printing file names
 or private text.
+An attempt helper keeps the native turn open while it checks the processes and the first scan.
+It tries each forbidden tool at most once and checks storage again after Stop. The deployment collector
+does not call this helper yet, so no live persistence attempt has run.
 These folder tests do not establish which storage a deployment uses or prove native tool refusal.
 The runner still leaves the persistence journey unfinished.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.

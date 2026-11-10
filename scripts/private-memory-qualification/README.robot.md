@@ -768,3 +768,21 @@ and storage scans during live and fault conditions with pinned Codex and
 gVisor. The persistence row is NOT RUN until a held native turn attempts all
 eight forbidden tool classes and the scanner reads the computer PVC,
 session and reload state, caches, outbox, logs and dumps outside its namespace.
+
+## Held persistence attempt helper
+
+`runPersistenceAttempt` joins the existing process inventory before private input and
+again while the same native turn is open. It checks both measured installation ids
+around each read and tool call. It calls `persistenceScan` in its own process, once
+while the turn is live and again after Stop. The caller owns the canary and the named
+storage inventory. The helper copies and clears its canary bytes. An unknown native
+response is never retried. A known tool write or stored canary is FAIL. An unexercised
+tool, changed installation or unreadable store is NOT RUN. Every other result remains
+PARTIAL with `complete: false`; this helper cannot qualify admission.
+
+The collector has no deployment caller for this helper yet. The native memory tool
+catalogue and reviewed image must be present before a live attempt. The caller must
+derive all writable storage directories from the measured computer and read them from
+outside its namespace. It must hold the pinned wrapper, child, canary helper and all
+other private-text groups until both process reads finish. The existing tests supply
+recorded process observations and temporary folders. They do not prove a live scan.

@@ -7,7 +7,9 @@ import {
   inventoryGroups, type InventoryContext, type InventorySnapshot,
   type ProtectionRecord, type TrustedLaunch,
 } from './joined-inventory.ts';
-import { runPersistenceAttempt, toolClasses } from './persistence-attempt.ts';
+import {
+  runPersistenceAttempt, toolClasses, type PersistenceDriver,
+} from './persistence-attempt.ts';
 
 const serverInstallation = `sha256:${'a'.repeat(64)}`;
 const computerInstallation = `sha256:${'b'.repeat(64)}`;
@@ -22,7 +24,9 @@ const context: InventoryContext = {
 };
 let directory: string;
 
-function snapshot(): InventorySnapshot {
+function snapshot(): InventorySnapshot & {
+  records: ProtectionRecord[]; launches: TrustedLaunch[];
+} {
   const records: ProtectionRecord[] = [];
   const launches: TrustedLaunch[] = [];
   for (const [index, group] of inventoryGroups.entries()) {
@@ -55,23 +59,40 @@ function fixture() {
   const reads = [snapshot(), snapshot()];
   const calls: string[] = [];
   let installed = computerInstallation;
-  const driver = {
+  let reply: 'blocked' | 'wrote' | 'unknown' | 'not_run' = 'blocked';
+  let readHook: (() => void) | undefined;
+  let stopHook: (() => void) | undefined;
+  function replace(): void { installed = serverInstallation; }
+  function setReply(value: typeof reply): void { reply = value; }
+  function setReadHook(hook: () => void): void { readHook = hook; }
+  function setStopHook(hook: () => void): void { stopHook = hook; }
+  const driver: PersistenceDriver = {
     context, locations, canary,
-    currentInstallation() { return installed; },
-    readInventory() { return reads.shift() ?? snapshot(); },
-    async startNative() {
+    currentInstallations() {
+      return { serverInstallationId: serverInstallation, computerInstallationId: installed };
+    },
+    readInventory() {
+      const read = reads.shift() ?? snapshot();
+      readHook?.();
+      return read;
+    },
+    startNative() {
       calls.push('start');
-      return {
-        async attemptTool(tool: string, _privateText: Buffer) {
+      return Promise.resolve({
+        attemptTool(tool: string, _privateText: Buffer) {
           calls.push(tool);
-          return 'blocked' as const;
+          return Promise.resolve(reply);
         },
-        async stop() { calls.push('stop'); },
-      };
+        stop() {
+          calls.push('stop');
+          stopHook?.();
+          return Promise.resolve();
+        },
+      });
     },
   };
-  return { driver, reads, calls, canary, locations,
-    replace() { installed = serverInstallation; } };
+  return { driver, reads, calls, canary, locations, replace, setReply,
+    setReadHook, setStopHook };
 }
 
 afterEach(function clean(): void {
@@ -91,7 +112,7 @@ it('scans once live and once after Stop while the native pair is held', cleanAtt
 async function missingGroup(group: typeof inventoryGroups[number]): Promise<void> {
   const { driver, reads, calls } = fixture();
   const changed = reads[1]!;
-  changed.records = (changed.records as ProtectionRecord[]).filter(
+  changed.records = changed.records.filter(
     function keep(record) { return record.group !== group; });
   const result = await runPersistenceAttempt(driver);
   expect(result).toEqual({ result: 'FAIL', complete: false, group });
@@ -109,9 +130,28 @@ async function missingFirstGroup(): Promise<void> {
 }
 it('refuses an omitted group before private input', missingFirstGroup);
 
+async function changedFirstGroup(): Promise<void> {
+  const { driver, reads, calls } = fixture();
+  reads[0]!.records[4]!.startTime = '9999';
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, group: 'nativeWrapper',
+  });
+  expect(calls).toEqual(['start', 'stop']);
+}
+it('refuses a changed native launch at the first read', changedFirstGroup);
+
+async function changedSecondNative(): Promise<void> {
+  const { driver, reads } = fixture();
+  reads[1]!.records[5]!.startTime = '9999';
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, group: 'nativeChild',
+  });
+}
+it('refuses a changed native child at the second read', changedSecondNative);
+
 async function stoppedHelper(): Promise<void> {
   const { driver, reads } = fixture();
-  const final = reads[1]!.records as ProtectionRecord[];
+  const final = reads[1]!.records;
   const helper = final.find(function isHelper(record) { return record.group === 'canaryHelper'; });
   helper!.startTime = '9999';
   expect(await runPersistenceAttempt(driver)).toEqual({
@@ -121,13 +161,8 @@ async function stoppedHelper(): Promise<void> {
 it('refuses a stopped or replaced canary helper', stoppedHelper);
 
 async function replacement(): Promise<void> {
-  const { driver, replace } = fixture();
-  const original = driver.readInventory;
-  driver.readInventory = function changedAfterFirst() {
-    const read = original();
-    replace();
-    return read;
-  };
+  const { driver, replace, setReadHook } = fixture();
+  setReadHook(replace);
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'NOT RUN', complete: false, category: 'inventory',
   });
@@ -143,6 +178,18 @@ async function storedCanary(category: typeof categories[number]): Promise<void> 
 }
 it.each(categories)('finds a canary in %s outside the native namespace', storedCanary);
 
+async function storedAfterStop(): Promise<void> {
+  const { driver, canary, setStopHook } = fixture();
+  function saveCanary(): void {
+    writeFileSync(join(directory, 'rollout', 'late'), canary);
+  }
+  setStopHook(saveCanary);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, category: 'rollout',
+  });
+}
+it('finds bytes saved during Stop in the second scan', storedAfterStop);
+
 async function unreadable(): Promise<void> {
   const { driver } = fixture();
   chmodSync(join(directory, 'outbox'), 0);
@@ -153,30 +200,36 @@ async function unreadable(): Promise<void> {
 it('never succeeds after a partial storage inspection', unreadable);
 
 async function attemptedWrite(): Promise<void> {
-  const { driver } = fixture();
-  const start = driver.startNative;
-  driver.startNative = async function writeAttempt() {
-    const native = await start();
-    native.attemptTool = async function result() { return 'wrote' as const; };
-    return native;
-  };
+  const { driver, setReply } = fixture();
+  setReply('wrote');
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'FAIL', complete: false, tool: 'shell',
   });
 }
 it('reports an attempted tool write as failure', attemptedWrite);
 
+async function writeWithUnreadableStore(): Promise<void> {
+  const { driver, setReply } = fixture();
+  setReply('wrote');
+  chmodSync(join(directory, 'outbox'), 0);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+}
+it('does not erase a known tool write after an incomplete scan', writeWithUnreadableStore);
+
+async function unexercisedTool(): Promise<void> {
+  const { driver, setReply } = fixture();
+  setReply('not_run');
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'NOT RUN', complete: false, tool: 'shell',
+  });
+}
+it('reports an unexercised tool as NOT RUN', unexercisedTool);
+
 async function unknownReply(): Promise<void> {
-  const { driver, calls } = fixture();
-  const start = driver.startNative;
-  driver.startNative = async function uncertainAttempt() {
-    const native = await start();
-    native.attemptTool = async function result(tool) {
-      calls.push(tool);
-      return 'unknown' as const;
-    };
-    return native;
-  };
+  const { driver, calls, setReply } = fixture();
+  setReply('unknown');
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'NOT RUN', complete: false, tool: 'shell',
   });
