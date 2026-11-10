@@ -7379,3 +7379,20 @@ The composition fixture holds its monotonic clock during the unrelated-thread an
 worker-loss injections and around saved-stage recovery sends. Scheduling delays cannot
 spend the production access period before the intended race or retry. Assertions and
 production deadlines remain unchanged.
+
+## Saved routine delivery and ceiling changes
+
+`routine-activation.ts` reads budget events before its short access check. A ceiling
+change saved after this root's allowance refuses the activation or a later send check
+when it applies to the silo, fixed payer or assistant. Changes for another group or
+assistant do not affect this root. The final conditional send release remains the
+commit point; this check does not add a pre-send read after that append.
+
+`test/routine-handoff.test.ts` starts with a saved checked due while delivery is off.
+It restarts NATS, enables the internal test delivery, then checks that one session,
+input, root and native start use the same occurrence. It checks that missed and skipped
+receipts never enter the callback. The final release cases change a ceiling, save Stop,
+revoke a grant or end leadership before the append. Each refuses the turn and leaves
+the scan without completed progress. The existing held-start, uncertain transport and
+fourteen-second wake cases remain in that suite. These are fixture checks, not a
+fresh-install or paid company call qualification. Production delivery stays off.

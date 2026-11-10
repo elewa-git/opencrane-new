@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
-import { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema,
+import { budgetCeilingSetDataSchema, budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema,
   routineActivationSchema } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import { verifySaved } from './chat/child-requests.ts';
@@ -43,6 +43,19 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   hash.update(JSON.stringify([worker.silo, run.conversationId, run.turnId]));
   const rootId = hash.digest('hex');
   let allocation: StoredEvent | undefined;
+  function affectsRootCeiling(row: StoredEvent) {
+    const ceiling = budgetCeilingSetDataSchema.parse(row.event.data);
+    if (ceiling.scope === 'global') return true;
+    if (ceiling.scope === 'paying_group') {
+      return ceiling.scopeId === run.definition.payingGroupId;
+    }
+    return ceiling.scopeId === run.definition.assistantId;
+  }
+  function checkCeiling(row: StoredEvent) {
+    if (row.event.type === 'budget.ceiling_set' && affectsRootCeiling(row)) {
+      throw new Error('Routine activation refused');
+    }
+  }
   function checkBudget(row: StoredEvent) {
     if (row.event.silo !== worker.silo || row.event.subject !== budgetSubject) {
       throw new Error('Routine activation refused');
@@ -51,6 +64,8 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
       const stopped = budgetRootStoppedDataSchema.parse(row.event.data);
       if (stopped.rootId === rootId) throw new Error('Routine activation refused');
     }
+    // A saved allowance cannot authorise a turn after its spending limits change.
+    if (allocation) checkCeiling(row);
     if (row.event.type !== 'budget.root_allowance_set') return;
     const saved = budgetRootAllowanceSetDataSchema.parse(row.event.data);
     if (saved.rootId !== rootId && saved.conversationId !== run.conversationId) return;

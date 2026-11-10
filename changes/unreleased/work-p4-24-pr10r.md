@@ -1,0 +1,1 @@
+A saved routine due can resume one checked private send after delivery is enabled in the test fixture, while a later spending ceiling change stops release before the turn is sent. Automatic execution remains off.

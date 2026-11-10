@@ -52,6 +52,10 @@ const frameSchema = z.record(z.string(), z.unknown());
 function clock() {
   return now;
 }
+function holdFixtureClock() {
+  const fixedTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
+}
 function record(id: string, subject: string, type: string, data: unknown): EventEnvelope {
   return { ...event(id, subject, type), source: 'opencrane-server', commandId: id, data };
 }
@@ -517,6 +521,7 @@ async function assertSingleRun() {
   return run;
 }
 async function reachesNativeThread() {
+  holdFixtureClock();
   expect(await dispatch()).toMatchObject({ examined: 1 });
   await until(preparedComputer.executed);
   const original = await assertSingleRun();
@@ -533,6 +538,7 @@ it('hands a checked due to its prepared thread once across duplicate delivery an
   reachesNativeThread);
 
 async function resumesOneSavedDueAfterDeliveryWasDisabled() {
+  holdFixtureClock();
   const observed = vi.fn();
   const disabledWake = vi.fn(forbidden);
   wake = disabledWake;
@@ -563,10 +569,12 @@ async function resumesOneSavedDueAfterDeliveryWasDisabled() {
 it('resumes the saved checked due once after disabled delivery and a broker restart',
   resumesOneSavedDueAfterDeliveryWasDisabled);
 
-async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' | 'leadership') {
+async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' |
+  'leadership' | 'deadline') {
   const fixedTime = performance.now();
+  let elapsed = 0;
   const clockSpy = vi.spyOn(performance, 'now');
-  clockSpy.mockImplementation(() => fixedTime);
+  clockSpy.mockImplementation(() => fixedTime + elapsed);
   const append = nats.store.append.bind(nats.store);
   let changed = false;
   async function interruptRelease(...supplied: Parameters<typeof append>) {
@@ -593,6 +601,8 @@ async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' | 'le
         const revoked = record('revoked-before-release',
           grantStream('model', 'gpt-6.1-sol'), 'grant.revoked', data);
         await nats.seed([revoked]);
+      } else if (kind === 'deadline') {
+        elapsed = 2001;
       } else {
         stop.abort();
       }
@@ -608,9 +618,33 @@ async function changeBeforeFinalRelease(kind: 'ceiling' | 'stop' | 'grant' | 'le
   expect(preparedComputer.frames.some(isTurn)).toBe(false);
   expect(preparedComputer.executedThreads).toEqual([]);
 }
-it.each(['ceiling', 'stop', 'grant', 'leadership'] as const)(
+it.each(['ceiling', 'stop', 'grant', 'leadership', 'deadline'] as const)(
   'refuses %s before the final routine release and keeps the scan pending',
   changeBeforeFinalRelease);
+
+async function unrelatedCeilingDoesNotStopRelease() {
+  const fixedTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function changeOtherGroup(...supplied: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      const limit = { scope: 'paying_group' as const, scopeId: 'other',
+        ceilingCents: 0, setBy: 'admin' };
+      await actor.configure(limit);
+    }
+    return append(...supplied);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeOtherGroup);
+  expect(await dispatch()).toMatchObject({ examined: 1 });
+  expect(changed).toBe(true);
+  await until(preparedComputer.executed);
+  await assertSingleRun();
+}
+it('keeps a different group ceiling outside the fixed payer check',
+  unrelatedCeilingDoesNotStopRelease);
 
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
@@ -859,6 +893,7 @@ async function ignoresNonDue(kind: string) {
 it.each(['future', 'missed', 'inactive'])('does not hand off a %s candidate', ignoresNonDue);
 
 async function waitsForStart(stage: string) {
+  holdFixtureClock();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const start = turns.turnCommand;
@@ -1032,6 +1067,7 @@ it.each(['turn', 'ack'])(
   'an uncertain %s write cannot complete progress or authorise another delivery', uncertainDelivery);
 
 async function repeatedReport() {
+  holdFixtureClock();
   const report = Promise.withResolvers<Buffer>();
   function received(bytes: Buffer) {
     const value = frameSchema.parse(JSON.parse(bytes.toString()));
@@ -1074,9 +1110,11 @@ async function skipsMissingTime() {
   await apply([gap]);
   now = Date.parse('2027-03-28T01:00:00Z');
   wake = vi.fn(forbidden);
-  expect(await dispatch()).toMatchObject({ examined: 2 });
+  const onHandoff = vi.fn();
+  expect(await dispatch({ enabled: true }, false, onHandoff)).toMatchObject({ examined: 2 });
   const rows = await history(nats.store, 'routine-gap', 'test');
   expect(rows.at(-1)!.event.type).toBe('routine.occurrence_skipped');
+  expect(onHandoff).not.toHaveBeenCalled();
   expect(wake).not.toHaveBeenCalled();
   expect(actor.state.roots).toEqual([]);
   expect(preparedComputer.frames).toEqual([]);
@@ -1186,6 +1224,7 @@ it('refuses delivery Stop evidence with a changed or non-admission cause',
   refusesForgedDeliveryEvidence);
 
 async function cancelsDuringOwnershipCheck() {
+  holdFixtureClock();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const bind = preparedComputer.link.bindRoutineStart;
