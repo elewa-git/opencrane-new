@@ -7,7 +7,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditResponseSchema, auditDetailSchema } from '@opencrane/protocol';
@@ -52,10 +52,12 @@ function headers(memberId: string) {
 
 async function append(subject: string, type: string, data: object, id: string) {
   let event: EventEnvelope;
-  if (type.startsWith('delegation.')) {
+  if (type.startsWith('delegation.') || type.startsWith('routine.')) {
+    const actorId = z.object({ actorId: z.string().optional() }).parse(data).actorId ??
+      'opencrane-server';
     const parsed = parseEventByType({ id, commandId: id, type, subject, silo: 'test', data,
       source: 'opencrane-server', time: '2026-10-15T12:00:00Z',
-      principal: { kind: 'system', id: 'opencrane-server' },
+      principal: { kind: actorId === 'opencrane-server' ? 'system' : 'human', id: actorId },
       correlation: { conversation: privateText, turn: privateText } });
     if (!parsed.success) throw new Error('Invalid delegation fixture');
     event = parsed.event;
@@ -64,7 +66,9 @@ async function append(subject: string, type: string, data: object, id: string) {
   }
   event.id = id;
   event.time = '2026-10-15T12:00:00Z';
-  if (!type.startsWith('delegation.')) event.principal = { kind: 'human', id: 'owner' };
+  if (!type.startsWith('delegation.') && !type.startsWith('routine.')) {
+    event.principal = { kind: 'human', id: 'owner' };
+  }
   if (type === 'memory.maintenance_recorded') {
     const action = z.object({ action: z.string() }).parse(data).action;
     const scheduler = action === 'due' || action === 'missed';
@@ -793,3 +797,42 @@ it('keeps one row for a pending night and its result, without granting a reader 
 function isMemoryTask(row: { source: string }): boolean {
   return row.source === 'memory';
 }
+
+it('shows only safe routine metadata to two owners and an admin, then refuses removal', async () => {
+  const dueDefinition = getEventDefinition('routine.due');
+  const stopDefinition = getEventDefinition('routine.run_stop_requested');
+  if (!dueDefinition || !stopDefinition) throw new Error('Routine examples unavailable');
+  const due = z.record(z.string(), z.unknown()).parse(dueDefinition.example);
+  const stop = z.record(z.string(), z.unknown()).parse(stopDefinition.example);
+  const originalDefinition = z.record(z.string(), z.unknown()).parse(due['definition']);
+  for (const [routineId, routineOwnerId, occurrenceId] of [
+    ['first', 'owner', 'first-slot'], ['second', 'admin', 'second-slot'],
+  ]) {
+    await append(`routine-${routineId}`, 'routine.due', {
+      ...due, routineId, occurrenceId,
+      definition: { ...originalDefinition, ownerId: routineOwnerId },
+    }, `due-${routineId}`);
+  }
+  await append('routine-first', 'routine.run_stop_requested', {
+    ...stop, routineId: 'first', occurrenceId: 'first-slot', actorId: 'owner',
+  }, 'stop-first');
+  await runner.run(auditTrail);
+  for (const memberId of ['owner', 'admin', 'reviewer']) {
+    const response = await list(memberId, '?family=routines');
+    expect(response.statusCode, response.body).toBe(200);
+    const page = auditResponseSchema.parse(response.json());
+    expect(page.rows).toHaveLength(2);
+    expect(page.rows.some(row => row.records.some(record =>
+      record.actor?.kind === 'person' && record.actor.id === 'owner'))).toBe(true);
+    expect(response.body).not.toContain('ZmFrZS1jaXBoZXJ0ZXh0');
+    expect(response.body).not.toContain('orders:read');
+    expect(response.body).not.toContain(privateText);
+    expect(response.body).not.toContain('routineId');
+    expect(response.body).not.toContain('routineOwnerId');
+  }
+  expect((await list('guest', '?family=routines')).statusCode).toBe(403);
+  await append('member-admin', 'member.removed', {
+    memberId: 'admin', removedBy: 'owner', reason: 'access_removed',
+  }, 'remove-admin-after-routine');
+  expect((await list('admin', '?family=routines')).statusCode).toBe(403);
+});

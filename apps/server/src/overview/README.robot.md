@@ -20,8 +20,11 @@ checked audit detail, never a maintenance command. Memory row ids and detail
 links use the saved random public reference. The original event and night ids
 never leave the audit table through this route. A cursor includes source
 checkpoint states and ordered row keys. Changed states or expiry-driven row moves
-require a fresh first page. Publication and routines remain unavailable
-until their owning reads are built.
+require a fresh first page. Routine rows use bounded audit history and its
+checkpoint, with a checked public reference link. Due, Stop and uncertain sends
+stay unknown; skipped and missed work needs attention. Ready needs the saved
+finish's settlement proof and date. Ask, Run now, retry and final source
+coverage remain unavailable. Publication awaits its owning read.
 
 The [server contract](../../README.robot.md) lists the service tests and the
 remaining fresh-install qualification.

@@ -1,5 +1,5 @@
 /* Keep audit field selection beside its readers. */
-/* eslint max-lines: ["error", { max: 510, skipBlankLines: true, skipComments: true }] */
+/* eslint max-lines: ["error", { max: 545, skipBlankLines: true, skipComments: true }] */
 import { z } from 'zod';
 import { effectResolvedDataSchema, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { auditReasons, auditResponseSchema, auditDetailSchema, type AuditRow,
@@ -14,6 +14,8 @@ import { auditIdentifier as identifier, auditLinks, isDispatchEvent,
 import { maintenanceAuditData, maintenanceAnchor, maintenanceMetadata,
   maintenanceStatus } from './audit-maintenance.ts';
 import { maintenanceOutcome, observedOutcome } from './audit-outcomes.ts';
+import { routineAuditData, routineIsAnchor, routineMetadata, routineOutcome,
+  routineReference } from './audit-routines.ts';
 import { familyCondition, prefixCondition } from './audit-filters.ts';
 export { readAuditOwnershipConfirmation } from './audit-outcomes.ts';
 
@@ -88,6 +90,9 @@ function auditData(event: EventEnvelope): Record<string, unknown> | undefined {
   if (event.type === 'memory.maintenance_recorded') {
     return maintenanceAuditData(event);
   }
+  if (event.type.startsWith('routine.')) {
+    return routineAuditData(event);
+  }
   if (event.type.startsWith('delegation.')) {
     return modernDelegationData(event);
   }
@@ -143,6 +148,7 @@ const verifiedActorFields: Record<string, string> = {
   'takeover.requested': 'requestedBy',
   'takeover.refused': 'actorId',
   'conversation.child_result_published': 'publishedBy',
+  'routine.run_stop_requested': 'actorId',
 };
 function actor(event: EventEnvelope, data: Record<string, unknown>): AuditRecord['actor'] {
   const principal = event.principal;
@@ -161,6 +167,7 @@ function publicAuditId(event: EventEnvelope, data: Record<string, unknown>,
   if (event.type === 'memory.maintenance_recorded' && anchor) {
     return String(data['publicReference']);
   }
+  if (routineIsAnchor(event.type) && anchor) return routineReference(event.id);
   return null;
 }
 function invitationMetadata(event: EventEnvelope, data: Record<string, unknown>) {
@@ -226,13 +233,24 @@ function takeoverMetadata(event: EventEnvelope, data: Record<string, unknown>) {
     takeoverId: safeId(data['takeoverId']), leaseId: safeId(data['leaseId']),
     requesterEventId: safeId(data['requesterEventId']), affectedTurnCount: turns?.length };
 }
-function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
+function eventStatus(event: EventEnvelope, data: Record<string, unknown>): AuditRecord['status'] {
   let status: AuditRecord['status'] | undefined = z.enum([
     'allow', 'ask', 'deny', 'success', 'error', 'unknown', 'not_dispatched',
-  ]).safeParse(d['outcome']).data;
-  if (isDispatchEvent(event.type)) {
-    status = dispatchStatus(d['outcome']);
+  ]).safeParse(data['outcome']).data;
+  if (isDispatchEvent(event.type)) status = dispatchStatus(data['outcome']);
+  if (event.type === 'memory.maintenance_recorded') status = maintenanceStatus(data);
+  if (event.type === 'routine.occurrence_skipped' ||
+      event.type === 'routine.occurrences_missed') return 'not_dispatched';
+  if (event.type === 'routine.run_finished' && data['outcome'] === 'failed') return 'error';
+  if (event.type === 'routine.run_finished' && data['outcome'] === 'succeeded' &&
+      data['resultReference'] !== undefined && Number.isSafeInteger(data['settledCents'])) {
+    return 'success';
   }
+  if (event.type.startsWith('routine.')) status = 'unknown';
+  if (event.type === 'effect.uncertain') return 'unknown';
+  return status ?? 'recorded';
+}
+function metadata(event: EventEnvelope, d: Record<string, unknown>, position: number): AuditRecord {
   let reason: AuditRecord['reason'];
   if (event.type !== 'delegation.completed' && typeof d['reason'] === 'string') {
     reason = Object.entries(auditReasons).find(([code]) => code === d['reason'])?.[1] ??
@@ -244,17 +262,17 @@ function metadata(event: EventEnvelope, d: Record<string, unknown>, position: nu
   if (event.type === 'effect.resolved') {
     savedOutcome = z.enum(['settled', 'released']).parse(d['outcome']);
   }
-  if (event.type === 'memory.maintenance_recorded') status = maintenanceStatus(d);
   return { ...invitationMetadata(event, d), ...takeoverMetadata(event, d),
     ...membershipMetadata(event, d), ...publicationMetadata(event, d),
     ...(event.type === 'memory.maintenance_recorded' ? maintenanceMetadata(d) : {}),
+    ...(event.type.startsWith('routine.') ? routineMetadata(event, d) : {}),
     // Keep a saved money choice separate from observations and budget settlement.
     savedOutcome,
     eventId: visibleEventId(event, d),
     type: event.type, position, recordedAt: event.time,
     actor: actor(event, d), ...(digest ? { commandRef: digest } : {}),
     source: auditSource(event),
-    status: event.type === 'effect.uncertain' ? 'unknown' : status ?? 'recorded',
+    status: eventStatus(event, d),
     ...(reason ? { reason } : {}), ...(cents !== undefined ? { amountCents: cents } : {}) };
 }
 export const auditTrail: Projection = {
@@ -322,7 +340,8 @@ export const auditTrail: Projection = {
       event.type === 'decision.recorded' ? d['outcome'] : null, digest, JSON.stringify(record),
       event.time, event.type, record.actor?.kind === 'unverified' ? null : record.actor?.id,
       record.status, publicId].map(value => value ?? null));
-    if (anchor || ['effect.observed', 'egress.observed', 'budget.settled',
+    if (anchor || event.type.startsWith('routine.') ||
+      ['effect.observed', 'egress.observed', 'budget.settled',
       'security.alert_raised', 'gateway.observation_recorded',
       'tool.dispatch_started', 'tool.dispatch_recorded'].includes(event.type)) {
       await refreshOutcomes(db, event.silo, request, permit, event.id);
@@ -354,6 +373,7 @@ async function refreshOutcomes(db: Query, silo: string, request: string | undefi
 
 function isAnchor(event: EventEnvelope, request: string | undefined, permit: string | undefined,
   approval: string | undefined): boolean {
+  if (event.type.startsWith('routine.')) return routineIsAnchor(event.type);
   // Decisions and alerts always start rows; correlated records attach to their action.
   // Uncorrelated effects stay evidence, while a gateway observation without a permit needs a row.
   if (event.type.startsWith('takeover.')) return true;
@@ -412,7 +432,9 @@ export async function readAudit(db: Query, silo: string,
   if (filter.reference) {
     parameters.push(filter.reference);
     const index = parameters.length;
-    where.push(`((event_id = $${index} AND event_type <> 'memory.maintenance_recorded')
+    where.push(`((event_id = $${index} AND event_type NOT IN
+        ('memory.maintenance_recorded', 'routine.due',
+         'routine.occurrence_skipped', 'routine.occurrences_missed'))
       OR public_id = $${index} OR
       request_id = $${index} OR permit_id = $${index})`);
   }
@@ -448,7 +470,9 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
   before: number | undefined, limit: number, includeAnchor: boolean): Promise<Entry[]> {
   if (anchor['event_type'] === 'conversation.child_result_published' ||
       anchor['event_type'] === 'delegation.completed' ||
-      anchor['event_type'] === 'memory.maintenance_recorded') {
+      anchor['event_type'] === 'memory.maintenance_recorded' ||
+      anchor['event_type'] === 'routine.occurrence_skipped' ||
+      anchor['event_type'] === 'routine.occurrences_missed') {
     if (!includeAnchor || (before !== undefined && Number(anchor.position) >= before)) return [];
     return [anchor];
   }
@@ -458,10 +482,13 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
     anchor.permit_id, anchor.conversation_id, anchor.turn_id, anchor.requester_id];
   const anchorCondition = includeAnchor ? 'e.event_id = $2 OR ' : '';
   const excludeAnchor = includeAnchor ? '' : 'AND e.event_id <> $2';
+  const routineCondition = anchor['event_type'] === 'routine.due'
+    ? "AND e.event_type LIKE 'routine.%'" : '';
   const beforeCondition = before === undefined ? '' : 'AND e.position < $8';
   if (before !== undefined) parameters.push(before);
   parameters.push(limit);
   const sql = `SELECT e.* FROM audit_entries e WHERE e.silo = $1 ${excludeAnchor}
+    ${routineCondition}
     AND e.event_type NOT IN ('conversation.child_result_published',
       'delegation.started', 'delegation.completed')
     ${beforeCondition} AND (${anchorCondition}${direct} OR
@@ -474,6 +501,12 @@ async function readEvidence(db: Query, silo: string, anchor: Entry,
 }
 
 async function readSignals(db: Query, silo: string, anchor: Entry): Promise<Entry[]> {
+  if (anchor['event_type'] === 'routine.due') {
+    const result = await db.query<Entry>(`SELECT DISTINCT ON (event_type) * FROM audit_entries
+      WHERE silo = $1 AND request_id = $2 AND event_type LIKE 'routine.%'
+      ORDER BY event_type, position DESC`, [silo, anchor.request_id]);
+    return result.rows;
+  }
   if (anchor['event_type'] === 'conversation.child_result_published' ||
       anchor['event_type'] === 'memory.maintenance_recorded') return [];
   const types = ['effect.observed', 'egress.observed', 'security.alert_raised',
@@ -493,7 +526,9 @@ export async function readAuditDetail(db: Query, silo: string, auditId: string,
   filter: AuditDetailFilter = { limit: 20 }) {
   const anchor = (await db.query<Entry>(
     `SELECT * FROM audit_entries WHERE silo = $1 AND
-      ((event_id = $2 AND event_type <> 'memory.maintenance_recorded') OR public_id = $2)
+      ((event_id = $2 AND event_type NOT IN ('memory.maintenance_recorded',
+        'routine.due', 'routine.occurrence_skipped', 'routine.occurrences_missed'))
+        OR public_id = $2)
       AND anchor = TRUE`,
     [silo, auditId])).rows[0];
   if (!anchor) return undefined;
@@ -519,8 +554,13 @@ function explain(anchor: Entry, entries: Entry[], signals: Entry[],
   const settlement = summaryRecords.findLast(r => r.type === 'budget.settled');
   const reservation = summaryRecords.find(r => r.type === 'budget.reserved');
   const outcome = observedOutcome(decision, summaryRecords, effect, settlement);
-  const safeOutcome = anchor['event_type'] === 'memory.maintenance_recorded'
+  let safeOutcome = anchor['event_type'] === 'memory.maintenance_recorded'
     ? maintenanceOutcome(records[0]!) : outcome;
+  if (routineIsAnchor(String(anchor['event_type']))) {
+    const state = routineOutcome(summaryRecords);
+    safeOutcome = state.outcome;
+    records[0] = { ...records[0]!, routineState: state.state };
+  }
   return auditResponseSchema.shape.rows.element.parse({
     id: anchor['public_id'] ?? anchor.event_id, decision, outcome: safeOutcome, records,
     ...(hasMoreEvidence ? { hasMoreEvidence } : {}),

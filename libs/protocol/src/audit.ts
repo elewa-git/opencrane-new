@@ -51,6 +51,10 @@ const currentAccounting = z.discriminatedUnion('status', [
   z.object({ status: z.literal('unavailable'), checkedAt: utc }).strict(),
 ]);
 export const auditRecordSchema = z.object({
+  routineState: z.enum(['due', 'skipped', 'missed', 'admitted', 'prepared', 'send_uncertain',
+    'stop_requested', 'finished']).optional(),
+  routineFinishOutcome: z.enum(['succeeded', 'failed', 'cancelled', 'interrupted']).optional(),
+  routineSettled: z.boolean().optional(),
   maintenanceAction: z.enum(['due', 'prepared', 'refused', 'missed', 'no_changes']).optional(),
   maintenanceScopeKind: z.literal('person').optional(),
   maintenanceScopeId: digest.optional(), maintenanceMemberId: id.optional(),

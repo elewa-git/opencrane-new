@@ -17,11 +17,13 @@ const querySchema = z.object({
 }).strict();
 
 type ReadOptions = GroupOptions & { modelDb: Query | undefined };
-type AvailableName = 'people' | 'providers' | 'integrations' | 'spending' | 'memory';
+type AvailableName = 'people' | 'providers' | 'integrations' | 'spending' | 'memory' |
+  'routines';
 const checkpointNames: Record<AvailableName, string> = {
   people: 'members', providers: 'providers', integrations: 'mcp catalogue',
   spending: 'model-budgets',
   memory: 'audit',
+  routines: 'audit',
 };
 type SavedProvider = { providerId: string; revision: number; position: number;
   reachable?: { outcome: string; time: string; changeId: string; revision: number };
@@ -132,6 +134,37 @@ export function memoryRow(record: { public_id: string | null; position: string;
     `/api/org/history/${encodeURIComponent(record.public_id)}`);
 }
 
+export function routineRow(record: { public_id: string | null; position: string;
+  recorded_at: string | Date; latest_at?: string | Date | null;
+  outcome: string | null; finished_at: string | Date | null;
+  metadata: unknown }): OverviewRow | null {
+  const reference = z.string().regex(/^[a-f0-9]{32}$/u).safeParse(record.public_id);
+  const metadata = z.object({ routineState: z.enum([
+    'due', 'skipped', 'missed', 'admitted', 'prepared', 'send_uncertain',
+    'stop_requested', 'finished',
+  ]) }).safeParse(record.metadata);
+  if (!reference.success || !metadata.success) {
+    throw new Error('Routine history unavailable');
+  }
+  let priority: OverviewPriority = 'unknown';
+  let eventAt = record.latest_at ?? record.recorded_at;
+  if (record.outcome === 'not_dispatched' || record.outcome === 'error') {
+    priority = 'failure';
+  }
+  if (record.outcome === 'success' && record.finished_at) {
+    const finished = record.finished_at instanceof Date
+      ? record.finished_at.toISOString() : record.finished_at;
+    if (z.iso.datetime({ offset: true }).safeParse(finished).success) {
+      priority = 'ready';
+      eventAt = finished;
+    }
+  }
+  const date = eventAt instanceof Date ? eventAt.toISOString() : eventAt;
+  return overviewRow('routines', reference.data, `routine:${reference.data}`,
+    priority, date, Number(record.position), 'view_evidence',
+    `/api/org/history/${reference.data}`);
+}
+
 export async function loadSource<T extends Record<string, unknown>>(name: AvailableName, db: Query,
   silo: string, head: number, deadline: number, sql: string,
   convert: (record: T) => OverviewRow | null): Promise<OverviewSource> {
@@ -176,6 +209,26 @@ async function loadOverview(options: ReadOptions, deadline: number): Promise<Ove
     `SELECT public_id, position, recorded_at, metadata FROM audit_entries
       WHERE silo = $1 AND event_type = 'memory.maintenance_recorded' AND anchor = TRUE
       ORDER BY position DESC LIMIT 51`, memoryRow);
+  const routines = loadSource('routines', options.db, silo, head, deadline,
+    `SELECT anchor.public_id, anchor.position, anchor.recorded_at, anchor.outcome,
+      anchor.metadata, latest.recorded_at AS latest_at, finished.recorded_at AS finished_at
+      FROM audit_entries anchor
+      LEFT JOIN LATERAL (
+        SELECT recorded_at FROM audit_entries evidence
+        WHERE evidence.silo = anchor.silo AND evidence.request_id = anchor.request_id
+          AND evidence.event_type LIKE 'routine.%'
+        ORDER BY evidence.position DESC LIMIT 1
+      ) latest ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT recorded_at FROM audit_entries evidence
+        WHERE evidence.silo = anchor.silo AND evidence.request_id = anchor.request_id
+          AND evidence.event_type = 'routine.run_finished'
+        ORDER BY evidence.position DESC LIMIT 1
+      ) finished ON TRUE
+      WHERE anchor.silo = $1 AND anchor.anchor = TRUE
+        AND anchor.event_type IN ('routine.due', 'routine.occurrence_skipped',
+          'routine.occurrences_missed')
+      ORDER BY anchor.position DESC LIMIT 51`, routineRow);
   let spending: Promise<OverviewSource>;
   if (options.modelDb) {
     spending = loadSource('spending', options.modelDb, silo, head, deadline,
@@ -186,9 +239,9 @@ async function loadOverview(options: ReadOptions, deadline: number): Promise<Ove
     spending = Promise.resolve({ name: 'spending', status: 'unavailable', checkpoint: null,
       checkedAt: new Date().toISOString(), rows: [] });
   }
-  const loaded = await Promise.all([people, providers, integrations, spending, memory]);
+  const loaded = await Promise.all([people, providers, integrations, spending, memory, routines]);
   const checkedAt = new Date().toISOString();
-  for (const name of ['publication', 'routines'] as const) {
+  for (const name of ['publication'] as const) {
     loaded.push({ name, status: 'unavailable', checkpoint: null, checkedAt, rows: [] });
   }
   return loaded;

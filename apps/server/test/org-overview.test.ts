@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Query } from '@opencrane/projections';
 import { buildOverview, type OverviewRow, type OverviewSource } from '../src/overview/rows.ts';
-import { loadSource, memoryRow, providerRow } from '../src/overview/routes.ts';
+import { loadSource, memoryRow, providerRow, routineRow } from '../src/overview/routes.ts';
 
 function row(source: OverviewRow['source'], id: string, priority: OverviewRow['priority'],
   time: string): OverviewRow {
@@ -31,6 +31,40 @@ function providerWithChecks(reachable?: ReturnType<typeof providerFact>,
 }
 
 describe('organisation overview rows', () => {
+  it('shows saved routine attention and requires a dated finish for Ready', () => {
+    const reference = '7f6a9d0e4c329b817f6a9d0e4c329b81';
+    const due = { public_id: reference, position: '7', recorded_at: old,
+      outcome: 'unknown', finished_at: null, metadata: { routineState: 'due' } };
+    expect(routineRow(due)?.priority).toBe('unknown');
+    expect(routineRow({ ...due, latest_at: recent })?.eventAt).toBe(recent);
+    expect(routineRow({ ...due, outcome: 'not_dispatched',
+      metadata: { routineState: 'skipped' } })?.priority).toBe('failure');
+    expect(routineRow({ ...due, outcome: 'success' })?.priority).toBe('unknown');
+    const ready = routineRow({ ...due, outcome: 'success', finished_at: recent,
+      metadata: { routineState: 'finished' } });
+    expect(ready?.priority).toBe('ready');
+    expect(ready?.eventAt).toBe(recent);
+    expect(ready?.href).toBe(`/api/org/history/${reference}`);
+    expect(() => routineRow({ ...due, public_id: 'routine-orders' }))
+      .toThrow('Routine history unavailable');
+  });
+
+  it('keeps late and timed-out routine sources unavailable to Ready', async () => {
+    const reference = '7f6a9d0e4c329b817f6a9d0e4c329b81';
+    const saved = { public_id: reference, position: '7', recorded_at: old,
+      outcome: 'success', finished_at: recent, metadata: { routineState: 'finished' } };
+    const lateQuery = vi.fn().mockResolvedValueOnce({ rows: [{ sequence: '7' }] })
+      .mockResolvedValueOnce({ rows: [saved] });
+    const late = await loadSource('routines', { query: lateQuery }, 'test', 8, 100,
+      'SELECT saved LIMIT 51', routineRow);
+    expect(late.status).toBe('applying');
+    const timeout = vi.fn().mockRejectedValue(new Error('timeout'));
+    const unavailable = await loadSource('routines', { query: timeout }, 'test', 8, 100,
+      'SELECT saved LIMIT 51', routineRow);
+    expect(unavailable.status).toBe('unavailable');
+    expect(unavailable.rows).toEqual([]);
+  });
+
   it('keeps a saved night pending until a result and never calls a root Ready', () => {
     function savedNight(action: string) {
       return memoryRow({ public_id: '7f6a9d0e4c329b817f6a9d0e4c329b81',

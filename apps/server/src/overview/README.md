@@ -14,15 +14,19 @@ Ready only when both its connection and model checks passed for its current sett
 An admitted memory root stays unknown until a saved result exists.
 Memory rows use random references so an admin cannot calculate whose personal
 memory produced a status from the member list.
+Routine rows use safe public references. Due and uncertain sends need a check;
+skipped, missed and stopped work need attention. Only a finished run with
+settlement evidence can show a dated clear result.
 
 ```mermaid
-graph LR
-  Server --> Overview
-  Overview --> People
-  Overview --> Providers
-  Overview --> Integrations
-  Overview --> Spending
-  Overview --> Memory
+flowchart LR
+  Server["Server<br/>handles requests"] -->|asks for rows| Overview["Overview<br/>safe attention"]
+  Overview -->|reads| People["People<br/>member state"]
+  Overview -->|reads| Providers["Providers<br/>model checks"]
+  Overview -->|reads| Integrations["Integrations<br/>tool state"]
+  Overview -->|reads| Spending["Spending<br/>held effects"]
+  Overview -->|reads| Memory["Memory<br/>night records"]
+  Overview -->|reads| Routines["Routines<br/>saved occurrences"]
 ```
 
 ## What it is responsible for
