@@ -391,12 +391,12 @@ def check_candidate_server(path):
         raise ValueError("Candidate server changed reviewed operating-system or binary parts")
     osi_ids = set(read_json(PACKAGE / "osi-licences.json"))
     for item in scan["artifacts"]:
+        check_declared_licences(item, osi_ids)
         if item["type"] != "npm":
             continue
         key = (item["type"], item["name"], item["version"])
         if not item.get("licenses") and key not in reviewed_items:
             raise ValueError(f"New application has no declared licence: {item['name']}")
-        check_declared_licences(item, osi_ids)
     print(f"PASS candidate server: {len(scan['artifacts'])} checked components")
 
 

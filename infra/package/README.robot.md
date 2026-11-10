@@ -194,7 +194,8 @@ The build runs npm at nice priority too. An absent or wrong label refuses promot
 
 The [local qualification builder](../../scripts/private-memory-qualification/README.robot.md#local-qualification-image-build)
 checks this Dockerfile's local image without changing its release pin or installing it.
-Its `--candidate-server` gate keeps reviewed non-npm parts exact and checks npm
+Its `--candidate-server` gate keeps reviewed non-npm parts exact, checks declared
+licences for binaries and Go modules, and checks npm
 licence declarations. It does not update or approve the release inventory.
 
 The final stage starts from `scratch` and copies the cleaned runtime filesystem.

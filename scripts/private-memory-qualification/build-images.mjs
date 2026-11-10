@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,9 +16,11 @@ const osiSha256 = 'f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd3630
 const codexSha256 = '1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e';
 let activeChild;
 let cancelled = false;
+const cancellation = new AbortController();
 
 function cancelBuild() {
   cancelled = true;
+  cancellation.abort();
   if (activeChild?.pid) {
     try {
       process.kill(-activeChild.pid, 'SIGTERM');
@@ -192,7 +194,16 @@ async function prepareLicenceTools(attemptDirectory) {
   return { syft: join(attemptDirectory, 'syft'), osiPath };
 }
 
-async function scanAndCheckLicences(plan, computerIdentity, packageIdentity,
+export function reviewedValidationPaths(source) {
+  return {
+    noticeCollector: join(source, 'apps/computer/collect-licences.py'),
+    computerChecker: join(source, 'apps/computer/check-licences.py'),
+    packageChecker: join(source, 'infra/package/check-licences.py'),
+    packageLayers: join(source, 'infra/package/image-layers.test.py'),
+  };
+}
+
+async function scanAndCheckLicences(source, plan, computerIdentity, packageIdentity,
   attemptDirectory, tools) {
   const computerScan = join(attemptDirectory, 'computer-sbom.json');
   const packageScan = join(attemptDirectory, 'package-sbom.json');
@@ -200,16 +211,18 @@ async function scanAndCheckLicences(plan, computerIdentity, packageIdentity,
   await run(tools.syft, ['scan', `docker:${plan.package.tag}`, '-o', `syft-json=${packageScan}`]);
   await checkedScanIdentity(computerScan, plan.computer.tag, computerIdentity);
   await checkedScanIdentity(packageScan, plan.package.tag, packageIdentity);
-  const noticeCollector = await readFile(join(worktree, 'apps/computer/collect-licences.py'));
+  const validationPaths = reviewedValidationPaths(source);
+  const noticeCollector = await readFile(validationPaths.noticeCollector);
   const notices = await run('docker', ['run', '--rm', '--network', 'none', '-i',
     '--entrypoint', '/usr/bin/python3', plan.computer.tag, '-', 'notices'],
   { input: noticeCollector });
   const noticePath = join(attemptDirectory, 'computer-notices.json');
   const inventoryPath = join(attemptDirectory, 'computer-licences.json');
   await writeFile(noticePath, notices, { mode: 0o600 });
-  await run('python3', ['apps/computer/check-licences.py', computerScan,
-    tools.osiPath, inventoryPath, noticePath]);
-  await run('python3', ['infra/package/check-licences.py', '--candidate-server', packageScan]);
+  await run('python3', [validationPaths.computerChecker, computerScan,
+    tools.osiPath, inventoryPath, noticePath], { cwd: source });
+  await run('python3', [validationPaths.packageChecker, '--candidate-server', packageScan],
+    { cwd: source });
 }
 
 async function checkedScanIdentity(path, tag, identity) {
@@ -223,7 +236,7 @@ async function checkedScanIdentity(path, tag, identity) {
   }
 }
 
-async function checkImports(plan, packageArchive) {
+async function checkImports(source, plan, packageArchive) {
   const computerImport = "await import('/scripts/private-memory-qualification/native-checks.ts');"
     + " await import('/scripts/private-memory-qualification/runner-protection.ts');";
   const packageImport = "await import('/app/scripts/private-memory-qualification/native-checks.ts');"
@@ -257,10 +270,31 @@ async function checkImports(plan, packageArchive) {
       `require('${tag === plan.computer.tag ? '/scripts' : '/app/scripts'}`
       + `/private-memory-qualification/runner-protection.node')`]);
   }
-  await run('python3', ['infra/package/image-layers.test.py'], {
+  const validationPaths = reviewedValidationPaths(source);
+  await run('python3', [validationPaths.packageLayers], {
+    cwd: source,
     env: { PACKAGE_IMAGE_NAME: plan.package.tag, PACKAGE_IMAGE_ARCHIVE: packageArchive,
       PACKAGE_IMAGE_REVISION: plan.revision },
   });
+}
+
+export async function writeCompletedRecord(recordPath, record, signal, write = writeFile) {
+  const temporaryPath = `${recordPath}.pending`;
+  let published = false;
+  try {
+    await write(temporaryPath, `${JSON.stringify(record, null, 2)}\n`,
+      { mode: 0o600, flag: 'wx' });
+    if (signal.aborted) throw new Error('Image build cancelled');
+    // Link the complete file only after every check; an existing record must refuse.
+    await link(temporaryPath, recordPath);
+    published = true;
+    await rm(temporaryPath);
+    if (signal.aborted) throw new Error('Image build cancelled');
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    if (published) await rm(recordPath, { force: true });
+    throw error;
+  }
 }
 
 async function main() {
@@ -283,12 +317,12 @@ async function main() {
   const computer = await buildImage(source, { ...plan.computer, revision: plan.revision }, attemptDirectory);
   const packageImage = await buildImage(source, { ...plan.package, revision: plan.revision }, attemptDirectory);
   const licenceTools = await prepareLicenceTools(attemptDirectory);
-  await scanAndCheckLicences(plan, computer, packageImage, attemptDirectory, licenceTools);
-  await checkImports(plan, packageImage.archive);
+  await scanAndCheckLicences(source, plan, computer, packageImage, attemptDirectory, licenceTools);
+  await checkImports(source, plan, packageImage.archive);
   const record = { slot: plan.slot, sourceRevision: plan.revision, computer, package: packageImage,
     computerTag: plan.computer.tag, packageTag: plan.package.tag };
   const recordPath = join(attemptDirectory, 'images.json');
-  await writeFile(recordPath, `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  await writeCompletedRecord(recordPath, record, cancellation.signal);
   process.stdout.write(`${recordPath}\n`);
 }
 

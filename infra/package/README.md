@@ -193,7 +193,8 @@ the image or say whether other copied code is present.
 
 A qualification image build uses this Dockerfile with the computer Dockerfile from
 the same committed source. It checks the local images and saves their identities in
-the claimed spare slot. The build does not install either image.
+the claimed spare slot. Its licence checks use files from that committed source.
+The build does not install either image.
 
 The chart tests check that backup cancellation stops a real child process.
 A controlled clock also checks that earlier ownership checks reduce the time

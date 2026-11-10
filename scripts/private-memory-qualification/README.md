@@ -69,7 +69,8 @@ flowchart LR
 ## Processes it handles
 
 The image builder checks licences and imports from both production images before
-saving their identities in the claimed spare slot. A failed build saves no record.
+saving their identities in the claimed spare slot. It reads its licence checks from
+the same committed source as the images. A failed or cancelled build saves no record.
 
 The deployment owner records the permitted container and silo in a protected file.
 The collector reads that file, Docker and the event store, then starts each check with a new random

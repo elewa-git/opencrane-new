@@ -1,1 +1,1 @@
-Build checked local computer and server images from one committed revision for a claimed spare slot, without publishing them.
+Build checked local computer and server images from one committed revision for a claimed spare slot, without publishing them. Licence checks use that archived revision, refuse non-free binary and Go module declarations, and leave no completed record after cancellation.
