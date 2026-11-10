@@ -368,9 +368,12 @@ it('keeps a known tool write when the stopped scan cannot read storage',
   writeBeforeUnreadableStoppedStore);
 
 async function writeWithUnreadableStore(): Promise<void> {
-  const { driver, setReply } = fixture();
+  const { driver, setReply, setToolHook } = fixture();
   setReply('wrote');
-  chmodSync(join(directory, 'outbox'), 0);
+  function makeStoreUnreadable(): void {
+    chmodSync(join(directory, 'outbox'), 0);
+  }
+  setToolHook(makeStoreUnreadable);
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'FAIL', complete: false, tool: 'shell',
   });
