@@ -282,6 +282,9 @@ it.each(['member', 'assistant', 'team'])(
 async function heldCall(context: Context, change: () => Promise<unknown>, expected = 403,
   approvalId?: string) {
   const append = context.setup.nats.store.append.bind(context.setup.nats.store);
+  const clockStart = performance.now();
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockReturnValue(clockStart);
   let changedAt = 0;
   async function changeAfterStart(command: AppendCommand) {
     const result = await append(command);
@@ -317,6 +320,7 @@ async function heldCall(context: Context, change: () => Promise<unknown>, expect
     }
   } finally {
     writer.mockRestore();
+    clock.mockRestore();
   }
 }
 
@@ -342,8 +346,14 @@ async function revokesBeforeSend(kind: string) {
   }
   await heldCall(context, revoke);
   const started = performance.now();
-  await denied(context);
-  expect(performance.now() - started).toBeLessThan(2000);
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockReturnValue(started);
+  try {
+    await denied(context);
+    expect(performance.now() - started).toBeLessThan(2000);
+  } finally {
+    clock.mockRestore();
+  }
   if (kind === 'team') {
     // Apply the revoked grant before leaving and joining again; the grant stays revoked.
     const rows = await history(context.setup.nats.store, grantSubject, 'test');
@@ -579,7 +589,7 @@ async function raceApprovalCalls(context: Context, approvalId: string, slowHisto
   const store = context.setup.nats.store;
   const append = store.append.bind(store);
   const readStream = store.readStream.bind(store);
-  const now = performance.now.bind(performance);
+  const clockStart = performance.now();
   const ready = Promise.withResolvers<void>();
   const attempts: string[] = [];
   const restoredReads: number[] = [];
@@ -587,10 +597,7 @@ async function raceApprovalCalls(context: Context, approvalId: string, slowHisto
     status?: string; remainingMs?: number }[] = [];
   let elapsed = 0;
   function currentTime() {
-    if (slowHistory) {
-      return now() + elapsed;
-    }
-    return now();
+    return clockStart + elapsed;
   }
   async function save(command: AppendCommand) {
     const event = z.object({ type: z.string(), data: z.unknown() }).parse(command.event);
@@ -679,9 +686,15 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
   const read = store.readStream.bind(store);
   let refused = false;
   let injected = false;
+  let elapsed = 0;
+  const clockStart = performance.now();
   const deadlines: number[] = [];
+  function currentTime() {
+    return clockStart + elapsed;
+  }
   function refuseAdmission() {
     refused = true;
+    elapsed += 1000;
     return Promise.reject(new Error('PRIVATE_REFUSAL_CANARY'));
   }
   async function save(command: AppendCommand) {
@@ -714,9 +727,11 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
   const writer = vi.spyOn(store, 'append');
   const reader = vi.spyOn(store, 'readStream');
   const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  const clock = vi.spyOn(performance, 'now');
   writer.mockImplementation(save);
   reader.mockImplementation(readEvidence);
   admission.mockImplementationOnce(refuseAdmission);
+  clock.mockImplementation(currentTime);
   let response: Awaited<ReturnType<typeof context.call>>;
   try {
     response = await context.call(approvalId);
@@ -726,6 +741,7 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
     writer.mockRestore();
     reader.mockRestore();
     admission.mockRestore();
+    clock.mockRestore();
   }
   expect(injected).toBe(true);
   if (refused) {
@@ -733,7 +749,7 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
     for (const deadline of deadlines) {
       expect(Number.isFinite(deadline)).toBe(true);
       expect(deadline).toBe(deadlines[0]);
-      expect(deadline - performance.now()).toBeLessThanOrEqual(1000);
+      expect(deadline - (clockStart + elapsed)).toBeLessThanOrEqual(1000);
     }
     const timing: unknown = expect.any(Number);
     const diagnostic = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
