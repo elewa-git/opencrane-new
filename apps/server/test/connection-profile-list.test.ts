@@ -9,6 +9,7 @@ import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { ProjectionRunner, connectionProfiles } from '@opencrane/projections';
 import { database } from '../../../libs/projections/test/database.ts';
+import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -19,6 +20,12 @@ type Row = { profileId: string; status: string; generation: number | null;
   callsAvailable: false; adminBlocked: boolean; selected: boolean };
 type Page = { rows: Row[]; next: string | null };
 function profileId(row: Row) { return row.profileId; }
+function findProfile(rows: Row[], id: string) {
+  for (const row of rows) {
+    if (row.profileId === id) return row;
+  }
+  return undefined;
+}
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let storage: Awaited<ReturnType<typeof database>>;
@@ -159,6 +166,62 @@ it('keeps revoked and disabled profiles visible without private data', async () 
   expect(rows.find(blockedRow))
     .toMatchObject({ adminBlocked: true, callsAvailable: false });
   expect(response.body).not.toMatch(/private-profile-canary|secretRef|uid|resourceVersion/u);
+});
+
+it('lists saved, revoked and disabled bearer and OAuth profiles without private data', async () => {
+  const digest = await server();
+  for (const state of ['saved', 'revoked', 'disabled']) {
+    await profile('alice', `bearer-${state}`, digest);
+    await oauthSelectionFixture(nats, 'alice', 'shared', `oauth-${state}`);
+  }
+  for (const kind of ['bearer', 'oauth']) {
+    const revokedSubject = `connection-alice-shared-${kind}-revoked`;
+    const revision = await nats.store.head(revokedSubject);
+    const revoked = envelope('test', revokedSubject, 'connection.revoked',
+      { userId: 'alice', serverId: 'shared', profile: `${kind}-revoked`,
+        revokedBy: 'alice', reason: 'owner_requested', expectedSequence: revision });
+    await nats.seed([revoked]);
+  }
+  await runner.run(connectionProfiles);
+
+  const beforeBlock = await list('alice');
+  expect(beforeBlock.statusCode).toBe(200);
+  const rows = beforeBlock.json<Page>().rows;
+  expect(rows).toHaveLength(6);
+  expect(findProfile(rows, 'bearer-saved')).toMatchObject({
+    status: 'saved_unverified', generation: 1, adminBlocked: false, callsAvailable: false,
+  });
+  expect(findProfile(rows, 'oauth-saved')).toMatchObject({
+    status: 'unavailable', generation: 1, adminBlocked: false, callsAvailable: false,
+  });
+  for (const kind of ['bearer', 'oauth']) {
+    expect(findProfile(rows, `${kind}-revoked`)).toMatchObject({
+      status: 'unavailable', generation: null, adminBlocked: false, callsAvailable: false,
+    });
+  }
+  expect(beforeBlock.body).not.toMatch(
+    /private-profile-canary|secret:synthetic|secretRef|uid|resourceVersion|account|accessToken/u);
+
+  for (const kind of ['bearer', 'oauth']) {
+    const controlSubject = 'connection-control-alice-shared';
+    const revision = await nats.store.head(controlSubject);
+    const disabled = envelope('test', controlSubject, 'connection.disabled',
+      { userId: 'alice', serverId: 'shared', profile: `${kind}-disabled`,
+        disabledBy: 'bob', reason: 'admin_disabled', expectedSequence: revision });
+    await nats.seed([disabled]);
+  }
+  const afterBlock = await list('alice');
+  expect(afterBlock.statusCode).toBe(200);
+  const blockedRows = afterBlock.json<Page>().rows;
+  expect(blockedRows).toHaveLength(6);
+  expect(findProfile(blockedRows, 'bearer-disabled')).toMatchObject({
+    status: 'saved_unverified', generation: 1, adminBlocked: true, callsAvailable: false,
+  });
+  expect(findProfile(blockedRows, 'oauth-disabled')).toMatchObject({
+    status: 'unavailable', generation: 1, adminBlocked: true, callsAvailable: false,
+  });
+  expect(afterBlock.body).not.toMatch(
+    /private-profile-canary|secret:synthetic|secretRef|uid|resourceVersion|account|accessToken/u);
 });
 
 it('marks only the member’s explicit saved choice', async () => {
