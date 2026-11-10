@@ -1152,6 +1152,37 @@ async function stopsAfterReleaseAppend() {
 it('stops and records a running turn when Stop follows the release append',
   stopsAfterReleaseAppend);
 
+async function refusesLateReleaseAppendReply() {
+  const clockSpy = holdFixtureClock();
+  const fixedStart = performance.now();
+  let elapsed = 0;
+  function delayedClock() {
+    return fixedStart + elapsed;
+  }
+  clockSpy.mockImplementation(delayedClock);
+  const append = nats.store.append.bind(nats.store);
+  let releaseReplyDelayed = false;
+  async function delayReleaseReply(...supplied: Parameters<typeof append>) {
+    const result = await append(...supplied);
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised') {
+      elapsed += 2001;
+      releaseReplyDelayed = true;
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(delayReleaseReply);
+  expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(releaseReplyDelayed).toBe(true);
+  expect(await saved('routine.run_send_release_authorised', 'routine-orders')).toHaveLength(1);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+}
+it('does not send when the release append reply arrives after the access deadline',
+  refusesLateReleaseAppendReply);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);

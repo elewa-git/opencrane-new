@@ -407,6 +407,37 @@ async function missingCredentialUseCheck() {
 }
 it('refuses a direct sender without a credential-use check before authorisation',
   missingCredentialUseCheck);
+
+async function refusesCredentialVersionChangedBeforeReleaseReply() {
+  function confirmCompany() {
+    return Promise.resolve();
+  }
+  function confirmCredentialUse(_authorisedVersion: string) {
+    return Promise.resolve('1');
+  }
+  const options = { enabled: true, confirmCompany,
+    configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
+    confirmCredentialUse };
+  const authority = createRoutineSender(options, nats.store, keys, worker(), input,
+    selection, 'sender-attempt');
+  const append = nats.store.append.bind(nats.store);
+  let releaseReplyDelayed = false;
+  async function changeVersionBeforeReply(...supplied: Parameters<typeof append>) {
+    const result = await append(...supplied);
+    const proposed = proposedEvent.parse(supplied[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised') {
+      options.custodyRecordVersion = '2';
+      releaseReplyDelayed = true;
+    }
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(changeVersionBeforeReply);
+  expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(releaseReplyDelayed).toBe(true);
+  expect(preparedComputer.sends).toBe(0);
+}
+it('does not send after the credential version changes before the release reply',
+  refusesCredentialVersionChangedBeforeReleaseReply);
 async function recordingComputer(computerId = 'computer') {
   if (computerId === 'computer') return preparedComputer;
   return startComputer(computerId);
