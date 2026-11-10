@@ -796,14 +796,21 @@ It reads the server image and fresh event stream, the computer image and generat
 the computer's writable mounts, writable layer and log location. It scans those
 host paths, the computer's saved outbox and the host dump directories from outside
 the computer namespace. An absent or replaced path is NOT RUN before private input.
-Other writable non-memory mounts are added to the PVC scan. The caller starts a
-server canary helper and prepares the joined process and storage checks. Its
-native client currently refuses launch, before any tool class is attempted.
-The native client currently refuses launch, so this caller reports NOT RUN. The
-stacked adapter adds the held native process and remote Stop proof. The caller
+Other writable non-memory mounts are added to the PVC scan. The caller starts one
+server canary helper and one pinned native process, checks the seven process groups
+twice, tries the eight fixed tool classes at most once each and scans after Stop.
+The native model endpoint is a local test server. It makes no paid model request.
+The native driver sets zero core limits and checks its own dump protection before
+holding the turn and before each call.
+Only a matching native tool refusal counts as blocked; a lost or unclear reply is
+NOT RUN without retry. Signal cancellation closes a pending native reply and waits
+for Stop. An unclear native reply stays held during the live scan. A found canary
+remains FAIL, and the scanner still checks storage after Stop. Stop is confirmed
+only after the remote runner reports completed cleanup and exits with status zero.
+Transport loss and failed termination have separate internal errors. The caller
 prints only fixed result fields and cannot enable admission.
 
-Until a reviewed immutable image supplies the native runner and the protected
-target names a secure secondary installation, the live attempt is NOT RUN.
-Fixture tests exercise the
+The computer Dockerfile includes the native attempt runner. Until a reviewed
+immutable image supplies it and the protected target names a secure
+secondary installation, the live attempt is NOT RUN. Fixture tests exercise the
 caller and helper but do not prove a live native refusal or clean deployment storage.

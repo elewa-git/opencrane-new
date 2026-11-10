@@ -12,6 +12,10 @@ running wrapper and child, including their executable, UID, cgroup, PID namespac
 core limits and dump protection. Missing or changed proof refuses. The collector
 does not yet hold this pair through both inventory reads.
 
+The image also installs `native-checks.ts` and `native-persistence.ts` at the
+fixed paths used by the held persistence attempt. The runner reports Stop only
+after native cleanup finishes; the collector also requires a clean Docker exit.
+
 ## Retained Ask call limits
 
 The proxy keeps at most 16 original Ask requests and 8 MiB of their request bytes.

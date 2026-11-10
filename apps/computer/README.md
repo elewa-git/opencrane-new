@@ -65,6 +65,8 @@ The computer saves that confirmation without private reply text.
   installed probe also rejects a process that changes its executable after protection.
 - Includes a native process reader that checks protected launch records against
   running processes. A missing or changed process refuses the memory check.
+- Includes the native persistence runner so the collector can hold one turn while
+  checking tool attempts and saved storage.
 - Runs the MCP proxy inside the bridge process. During a private tool call, a live
   protection check can confirm that this process still holds the tool reply. It
   refuses when no private call is open. This check alone does not enable memory.

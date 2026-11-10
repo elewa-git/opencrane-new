@@ -86,8 +86,14 @@ function failureEvidence(outcome: Outcome & { result: 'FAIL' }): FailureEvidence
 function retainKnownFailure(previous: Outcome | undefined, next: Outcome): Outcome {
   if (previous?.result === 'FAIL') {
     if (next.result === 'FAIL') {
-      const additionalFailures = [...(previous.additionalFailures ?? []),
-        failureEvidence(next)];
+      const evidence = failureEvidence(next);
+      const existing = [failureEvidence(previous), ...(previous.additionalFailures ?? [])];
+      if (existing.some(function sameFailure(item): boolean {
+        return JSON.stringify(item) === JSON.stringify(evidence);
+      })) {
+        return previous;
+      }
+      const additionalFailures = [...(previous.additionalFailures ?? []), evidence];
       return { ...previous, additionalFailures };
     }
     return previous;
@@ -183,7 +189,7 @@ export async function runPersistenceAttempt(driver: PersistenceDriver): Promise<
     const live = scanner.scan('live', driver.context.computerInstallationId);
     const liveFailure = scanOutcome(live);
     if (liveFailure) {
-      return retainKnownFailure(outcome, liveFailure);
+      outcome = retainKnownFailure(outcome, liveFailure);
     }
     const final = await checkedInventory(driver, first.snapshot);
     if (isOutcome(final)) {
