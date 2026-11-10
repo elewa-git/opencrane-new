@@ -7387,6 +7387,10 @@ change saved after this root's allowance refuses the activation or a later send 
 when it applies to the silo, fixed payer or assistant. Changes for another group or
 assistant do not affect this root. The final conditional send release remains the
 commit point; this check does not add a pre-send read after that append.
+Any reservation or settlement after the allowance also refuses release because it can
+change the silo's shared capacity. An exhaustion record refuses release when it names
+the silo, fixed payer or assistant, or this turn. The conditional append conflicts if
+a budget event is saved after its check reads the budget stream.
 
 `test/routine-handoff.test.ts` starts with a saved checked due while delivery is off.
 It restarts NATS, enables the internal test delivery, then checks that one session,
@@ -7396,3 +7400,7 @@ revoke a grant or end leadership before the append. Each refuses the turn and le
 the scan without completed progress. The existing held-start, uncertain transport and
 fourteen-second wake cases remain in that suite. These are fixture checks, not a
 fresh-install or paid company call qualification. Production delivery stays off.
+The same suite checks a competing call's reservation, a settlement, an assistant
+exhaustion record, matching payer and assistant ceilings, and an unrelated assistant
+ceiling. A reservation saved after the callback's budget read must conflict with the
+release append.

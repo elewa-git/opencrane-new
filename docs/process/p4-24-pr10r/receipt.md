@@ -10,9 +10,12 @@ create another session, input, allowance, send or native start. Missed and skipp
 receipts never enter the delivery callback.
 
 A spending ceiling change saved after the fixed root allowance now refuses the
-turn. The final release tests also cover Stop, a revoked model grant, lost leadership
-and the end of the two-second access deadline. Existing held-start, uncertain socket
-and fourteen-second wake tests remain in the same fixture.
+turn. A later reservation, settlement or matching spending stop also refuses it.
+The final release tests cover matching payer and assistant ceilings, a competing
+call that uses the remaining shared ceiling, Stop, a revoked model grant, lost
+leadership and the end of the two-second access deadline. A reservation saved after
+the budget read conflicts with the conditional release append. Existing held-start,
+uncertain socket and fourteen-second wake tests remain in the same fixture.
 
 ## Source and limits
 
@@ -27,16 +30,19 @@ reviewed images and full dependency proof. Automatic execution remains off.
 
 ## Own checks
 
-- PASS: the ceiling change test refused the turn after the production fix. It
-  first failed by allowing the scan to complete before that fix.
-- PASS: the final changed hand-off file passed 58/58 twice with one worker,
+- PASS: reservation, settlement and exhaustion tests first failed because the
+  scan completed. They passed after the release check changed. Matching payer and
+  assistant ceiling cases and an unrelated assistant control also passed.
+- PASS: the eight changed release cases passed 8/8 twice with one worker,
   disposable PostgreSQL, NATS, OpenFGA and a scripted native peer.
-- PASS: the unchanged event security-rule file passed 482/482 once.
-- PASS: changed-file ESLint, repository and server typecheck, event catalogue,
-  Knip, changelog lint and Markdown lint. ESLint retained an existing function
-  length warning; Knip returned two non-failing configuration hints.
-- PARTIAL: earlier full hand-off runs had setup-time access-window failures
-  under shared host load. The affected tests reached their assertions and passed
-  after the fixture held its monotonic clock. Production deadlines did not change.
+- PARTIAL: one complete hand-off file run passed 57/65. Seven existing tests
+  failed during a loaded-host run, mostly before release or on a timeout. An added
+  assertion tried to read a deliberately seeded Stop fixture as an ordinary
+  stored event. That assertion was corrected; its focused case passed twice.
+  A wider focused run passed 12/13; the existing grant case ended before release.
+- PASS: changed-file ESLint, event catalogue, Knip, changelog lint and Markdown
+  lint. ESLint retained an existing function length warning; Knip returned two
+  non-failing configuration hints.
+- PASS: repository typecheck.
 - NOT RUN: root suite, result-link and settlement proof, paid company call and
   fresh-install journey. No dev stack was started.

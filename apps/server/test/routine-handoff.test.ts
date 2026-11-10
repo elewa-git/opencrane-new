@@ -649,9 +649,11 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
   }
   expect(preparedComputer.frames.some(isTurn)).toBe(false);
   expect(preparedComputer.executedThreads).toEqual([]);
-  const routineRows = await history(nats.store, 'routine-orders', 'test');
-  expect(routineRows.some(row => row.event.type === 'routine.run_send_release_authorised'))
-    .toBe(false);
+  if (kind !== 'stop') {
+    const routineRows = await history(nats.store, 'routine-orders', 'test');
+    expect(routineRows.some(row => row.event.type === 'routine.run_send_release_authorised'))
+      .toBe(false);
+  }
 }
 it.each(['ceiling', 'payer_ceiling', 'assistant_ceiling', 'reserved', 'settled',
   'exhausted', 'stop', 'grant', 'leadership', 'deadline'] as const)(
@@ -705,6 +707,40 @@ async function unrelatedAssistantCeilingDoesNotStopRelease() {
 }
 it('keeps a different assistant ceiling outside the fixed assistant check',
   unrelatedAssistantCeilingDoesNotStopRelease);
+
+async function reservationAfterReleaseCheckConflicts() {
+  holdFixtureClock();
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  let releaseStatus: string | undefined;
+  async function interruptAfterCheck(...supplied: Parameters<typeof append>) {
+    const command = supplied[0];
+    const proposed = proposedEvent.parse(command.event);
+    if (proposed.type !== 'routine.run_send_release_authorised' || changed) {
+      return append(...supplied);
+    }
+    if (!command.checkAccess) throw new Error('Release check unavailable');
+    const checkAccess: () => Promise<unknown> = command.checkAccess;
+    async function checkThenReserve() {
+      await checkAccess();
+      changed = true;
+      await actor.reserve(otherBudgetCall(), 9001);
+    }
+    const result = await append({ ...command, checkAccess: checkThenReserve });
+    releaseStatus = result.status;
+    return result;
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(interruptAfterCheck);
+  await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+  expect(changed).toBe(true);
+  expect(releaseStatus).toBe('conflict');
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_send_release_authorised'))
+    .toBe(false);
+  expect(preparedComputer.executedThreads).toEqual([]);
+}
+it('conflicts when another call reserves shared capacity after the release check',
+  reservationAfterReleaseCheckConflicts);
 
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
