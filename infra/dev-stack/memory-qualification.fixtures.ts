@@ -30,6 +30,7 @@ let target: string;
 let saved: string;
 let pending: string;
 let container: ReturnType<typeof freshContainer>;
+let computer: ReturnType<typeof freshContainer>;
 let stream: { created: string; lastSequence: number; eventCount: number };
 let host: string;
 let revision: string;
@@ -140,7 +141,7 @@ function docker(file: unknown, args: unknown): string {
     return JSON.stringify(host);
   }
   if (command[2] === 'inspect') {
-    const containers = [container];
+    const containers = [command[5] === computer.Id ? computer : container];
     return JSON.stringify(containers);
   }
   expect(command.slice(2, 4)).toEqual(['image', 'inspect']);
@@ -198,6 +199,7 @@ function prepare(): void {
   saved = 'prior evidence';
   pending = '';
   container = freshContainer();
+  computer = { ...freshContainer(), Id: 'd'.repeat(64) };
   stream = { created: '2026-01-01T00:00:02Z', eventCount: 0, lastSequence: 0 };
   host = 'fixture-host';
   revision = sourceSha;
@@ -313,6 +315,13 @@ async function refusesLocalTarget(kind: string): Promise<void> {
 }
 it.each(['claim', 'owner', 'worktree', 'container', 'project', 'container worktree',
   'silo', 'unsafe', 'source', 'container silo', 'malformed target', 'writable target'])('refuses %s before collection and preserves prior evidence', refusesLocalTarget);
+async function refusesOwnerComputer(): Promise<void> {
+  computer.Config.Labels['com.docker.compose.project'] = 'opencrane-dev-owner';
+  await expect(launch()).rejects.toThrow('memory_qualification_refused');
+  expect(writes).toBe(0);
+  expect(journeys).toBe(0);
+}
+it('refuses a secondary server paired with the owner computer', refusesOwnerComputer);
 async function refusesBeforeJourney(kind: string): Promise<void> {
   if (kind === 'mounted') {
     container.Mounts = [{ Destination: '/app' }];

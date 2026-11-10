@@ -43,6 +43,8 @@ with private certificates and the local ClamAV daemon. Startup makes a signed cl
 scan before it starts the server. It also checks that the routines worker is running.
 The local scanner uses a development virus list marker. The server checks that
 marker in every scan reply.
+The private memory caller checks that its server and computer both belong to
+the claimed secondary slot before it starts a native attempt.
 
 ## What it is responsible for
 
@@ -58,6 +60,8 @@ available for diagnosis.
 - Prepares Kubernetes so background workers can start one
   [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
 - Checks the computer recorded by the deployment owner before collecting private memory results.
+- Checks that a private memory storage attempt belongs to this stack's claimed
+  secondary slot before the collector can send its test text.
 - Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
   The stand-in also runs on its own for computer startup checks.
   A disposable computer test can keep one synthetic private tool reply open while

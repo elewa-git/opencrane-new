@@ -54,7 +54,7 @@ function docker(args: string[]): unknown {
   const arguments_ = ['--host', 'unix:///var/run/docker.sock', ...args];
   return JSON.parse(command('/usr/bin/docker', arguments_)) as unknown;
 }
-async function checkLocalTarget(id: string | undefined, claimed: string) {
+export async function checkLocalTarget(id: string | undefined, claimed: string) {
   const directory = await requireStageBStack(id, claimed, homedir(), root);
   const settings = await readFile(`${directory}/settings.env`, 'utf8');
   const lines = settings.split('\n');
@@ -78,6 +78,25 @@ async function checkLocalTarget(id: string | undefined, claimed: string) {
       labels['com.docker.compose.project'] !== `opencrane-dev-${id}` ||
       labels['com.docker.compose.project.working_dir'] !== `${root}/infra/dev-stack`) {
     throw new Error('wrong_container');
+  }
+  if (target.computerContainerId) {
+    if (target.computerContainerId === target.containerId) {
+      throw new Error('wrong_computer');
+    }
+    const computerObservation = docker(['inspect', '--type', 'container',
+      target.computerContainerId]);
+    const computer = z.array(containerSchema).length(1).parse(computerObservation)[0]!;
+    const computerLabels = computer.Config.Labels;
+    const sameComposeStack =
+      computerLabels['com.docker.compose.project'] === `opencrane-dev-${id}` &&
+      computerLabels['com.docker.compose.project.working_dir'] ===
+        `${root}/infra/dev-stack`;
+    const sameComputerNamespace =
+      computerLabels['io.kubernetes.pod.namespace'] === `opencrane-dev-${id}`;
+    if (computer.Id !== target.computerContainerId ||
+        (!sameComposeStack && !sameComputerNamespace)) {
+      throw new Error('wrong_computer');
+    }
   }
   const images = docker(['image', 'inspect', container.Image]);
   const imageSchema = z.object({ Id: z.string(), Config: z.object({

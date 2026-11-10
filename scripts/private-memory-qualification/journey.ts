@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { existsSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { probeHost } from './host-probe.ts';
 import { probeContainer } from './container-probe.ts';
 import { probePrivateProcessInventory } from './private-processes.ts';
@@ -87,6 +89,17 @@ export async function runJourney(input: string): Promise<Refusal | Receipt> {
     }
   }
   let result: Receipt['result'] = 'NOT RUN';
+  const helperRecord = '/run/opencrane-memory-qualification.lock/helper-identity';
+  if (request.name === 'persistence' && existsSync(helperRecord)) {
+    const release = '/run/opencrane-memory-qualification.lock/persistence-release';
+    const deadline = Date.now() + 100_000;
+    while (!existsSync(release) && Date.now() < deadline) {
+      await delay(25);
+    }
+    if (!existsSync(release)) {
+      return finish({ result: 'FAIL', reason: 'journey_failed' });
+    }
+  }
   if (safeHost && (request.name === 'privateTurns' || request.name === 'nativeRecall')) {
     try {
       const { checkNative } = await import('./native-checks.ts');

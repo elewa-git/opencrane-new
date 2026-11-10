@@ -95,7 +95,9 @@ function fixture() {
       if (installationChecks === replacementCheck) {
         replace();
       }
-      return { serverInstallationId: installedServer, computerInstallationId: installed };
+      return { serverInstallationId: installedServer, computerInstallationId: installed,
+        serverImageDigest: serverImage, computerImageDigest: computerImage,
+        generationId: computerInstallation };
     },
     readInventory() {
       const read = reads.shift() ?? snapshot();
@@ -105,6 +107,7 @@ function fixture() {
     startNative() {
       calls.push('start');
       return Promise.resolve({
+        assertHeld() {},
         attemptTool(tool: string, privateText: Buffer) {
           calls.push(tool);
           toolHook?.(tool, privateText);
@@ -365,9 +368,12 @@ it('keeps a known tool write when the stopped scan cannot read storage',
   writeBeforeUnreadableStoppedStore);
 
 async function writeWithUnreadableStore(): Promise<void> {
-  const { driver, setReply } = fixture();
+  const { driver, setReply, setToolHook } = fixture();
   setReply('wrote');
-  chmodSync(join(directory, 'outbox'), 0);
+  function makeStoreUnreadable(): void {
+    chmodSync(join(directory, 'outbox'), 0);
+  }
+  setToolHook(makeStoreUnreadable);
   expect(await runPersistenceAttempt(driver)).toEqual({
     result: 'FAIL', complete: false, tool: 'shell',
   });
@@ -434,7 +440,7 @@ async function closesScannerAfterEarlyRefusal(): Promise<void> {
   const scan = vi.fn(function cleanScan() {
     return { result: 'PARTIAL' as const, complete: false as const, files: 0, bytes: 0 };
   });
-  const scanner = { scan, close };
+  const scanner = { scan, close, prepare: vi.fn() };
   vi.mocked(persistenceScan).mockImplementationOnce(function captureScanner() {
     return scanner;
   });

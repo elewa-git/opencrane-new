@@ -227,6 +227,7 @@ it('refuses an intermediate symlink without reading the target file', redirected
 
 function unavailableAfterRead() {
   writeFileSync(join(directory, 'pvc', 'status'), 'ended');
+  expect(scan.prepare()).toBeUndefined();
   rmSync(join(directory, 'logs'), { recursive: true });
   expectNotRun(scan.scan('live', installation), 'logs', 1, 5);
   mkdirSync(join(directory, 'logs'));
