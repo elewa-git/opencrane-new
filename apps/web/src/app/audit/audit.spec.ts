@@ -11,7 +11,22 @@ const row = { id: 'decision', requestId: 'request', permitId: 'permit', conversa
   decision: 'allow', outcome: 'unknown', reservedCents: 25,
   records: [{ eventId: 'decision', type: 'decision.recorded', position: 1, source: 'decision', status: 'allow', reason: 'Model call permitted' }] };
 const reply = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status });
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn();
+});
 afterEach(() => vi.restoreAllMocks());
+
+function reload(fixture: ComponentFixture<AuditScreen>): void {
+  fixture.componentInstance.ngOnInit();
+}
+
+function search(root: HTMLElement, value: string): void {
+  const input = root.querySelector<HTMLInputElement>('#history-reference')!;
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  root.querySelector<HTMLFormElement>('.reference-search')!
+    .dispatchEvent(new Event('submit', { cancelable: true }));
+}
 it('renders loading, unknown outcome, filters, empty, unavailable and access loss without retaining protected details', async () => {
   let finish!: (response: Response) => void;
   const fetch = vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
@@ -24,18 +39,16 @@ it('renders loading, unknown outcome, filters, empty, unavailable and access los
   expect(root.textContent).toContain('Decision: allow'); expect(root.textContent).toContain('Observation: Outcome unknown');
   expect(root.textContent).toContain('Observation missing');
   fetch.mockResolvedValueOnce(reply(200, { rows: [] }));
-  const filter = root.querySelector<HTMLSelectElement>('select')!; filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
-  root.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-  await vi.waitFor(() => expect(root.textContent).toContain('No history matches'));
+  reload(fixture);
+  await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
   expect(root.querySelector('article')).toBeNull();
   expect(root.textContent).not.toContain('Not configured');
-  expect(fetch.mock.calls.at(-1)?.[0]).toEqual(expect.stringContaining('decision=deny'));
-  fetch.mockResolvedValueOnce(reply(503, { error: 'bearer-private-canary' })); root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  fetch.mockResolvedValueOnce(reply(503, { error: 'bearer-private-canary' })); reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('History unavailable'));
-  expect(root.textContent).not.toContain('canary'); expect(root.textContent).not.toContain('No history matches');
-  fetch.mockResolvedValueOnce(reply(200, { rows: [row] })); root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  expect(root.textContent).not.toContain('canary'); expect(root.textContent).not.toContain('No entries match');
+  fetch.mockResolvedValueOnce(reply(200, { rows: [row] })); reload(fixture);
   await vi.waitFor(() => expect(root.querySelector('article')).not.toBeNull());
-  fetch.mockResolvedValueOnce(reply(403)); root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  fetch.mockResolvedValueOnce(reply(403)); reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('Access changed'));
   expect(root.querySelector('article')).toBeNull();
 });
@@ -81,11 +94,9 @@ it('appends cursor pages once, keeps equal-time rows distinct and filters on the
   root.querySelector<HTMLButtonElement>('.older-history')!.click();
   await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(2));
   expect(fetchSpy.mock.calls[1]?.[0]).toContain('before=8');
-  const filter = root.querySelector<HTMLSelectElement>('select[aria-label="Decision filter"]')!;
-  filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
-  root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  search(root, 'second');
   await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(1));
-  expect(fetchSpy.mock.calls[2]?.[0]).toContain('decision=deny');
+  expect(fetchSpy.mock.calls[2]?.[0]).toContain('reference=second');
 });
 
 it('opens only the selected detail, pages evidence and returns keyboard focus', async () => {
@@ -99,7 +110,7 @@ it('opens only the selected detail, pages evidence and returns keyboard focus', 
   const opener = root.querySelector<HTMLButtonElement>('article button')!;
   opener.click();
   await vi.waitFor(() => expect(root.querySelector('.history-detail')).not.toBeNull());
-  await vi.waitFor(() => expect(document.activeElement?.classList.contains('close-detail')).toBe(true));
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('history-detail-title'));
   expect(fetchSpy.mock.calls[1]?.[0]).toContain('/api/org/history/decision');
   root.querySelector<HTMLButtonElement>('.more-evidence')!.click();
   await vi.waitFor(() => expect(fetchSpy.mock.calls[2]?.[0]).toContain('before=7'));
@@ -118,10 +129,10 @@ it('keeps dated stale rows on 503, then clears them on denial despite a late det
   const root = screenRoot(fixture);
   await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
   root.querySelector<HTMLButtonElement>('article button')!.click();
-  root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('last checked'));
   expect(root.querySelectorAll('article')).toHaveLength(1);
-  root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  reload(fixture);
   await vi.waitFor(() => expect(root.textContent).toContain('Access changed'));
   finishDetail(reply(200, { id: row.id, records: row.records }));
   await vi.waitFor(() => expect(root.querySelector('.history-detail')).toBeNull());
@@ -171,12 +182,9 @@ it('ignores a previous filter reply after the current filter result', async () =
   const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
   const root = screenRoot(fixture);
   await vi.waitFor(() => expect(root.querySelector('article')).not.toBeNull());
-  const filter = root.querySelector<HTMLSelectElement>('select[aria-label="Decision filter"]')!;
-  filter.value = 'allow'; filter.dispatchEvent(new Event('change'));
-  root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-  filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
-  root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
-  await vi.waitFor(() => expect(root.textContent).toContain('No history matches'));
+  search(root, 'first');
+  search(root, 'second');
+  await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
   finishOld(reply(200, { rows: [row] }));
   await vi.waitFor(() => expect(root.querySelector('article')).toBeNull());
   expect(fetchSpy).toHaveBeenCalledTimes(3);
@@ -205,11 +213,9 @@ it('does not restore a selected detail after the filters change', async () => {
   const root = screenRoot(fixture);
   await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
   root.querySelector<HTMLButtonElement>('article button')!.click();
-  const filter = root.querySelector<HTMLSelectElement>('select[aria-label="Decision filter"]')!;
-  filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
-  root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  search(root, 'second');
   finishDetail(reply(200, { id: row.id, records: row.records }));
-  await vi.waitFor(() => expect(root.textContent).toContain('No history matches'));
+  await vi.waitFor(() => expect(root.textContent).toContain('No entries match'));
   expect(root.querySelector('.history-detail')).toBeNull();
 });
 
@@ -241,8 +247,7 @@ it('shows readable ownership evidence and uses a native modal', async () => {
   vi.spyOn(globalThis, 'fetch')
     .mockResolvedValueOnce(reply(200, { rows: [ownershipRow] }))
     .mockResolvedValueOnce(reply(200, { id: 'owner-change', records: [ownershipRecord] }));
-  const showModal = vi.fn();
-  HTMLDialogElement.prototype.showModal = showModal;
+  const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
   const fixture = TestBed.createComponent(AuditScreen);
   fixture.detectChanges();
   const root = screenRoot(fixture);
@@ -258,4 +263,5 @@ it('shows readable ownership evidence and uses a native modal', async () => {
     .toContain('Open People & groups');
   expect(root.textContent).not.toContain('member.role_changed');
   expect(root.textContent).not.toContain('member-Marie');
+  expect(root.querySelector('.history-detail')?.textContent).not.toContain('owner-change');
 });
