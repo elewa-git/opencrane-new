@@ -37,7 +37,9 @@ flowchart LR
 2. **Navigation.** The shell keeps Account, Preferences, Assistant and My tools
    in one menu. Assistant offers a link to the separate persona review screen.
 3. **Connections.** My tools reads saved profiles for an integration. It opens
-   safe details and checks the original request if a revoke reply is lost.
+   safe details for the last chosen profile. Its review names the profile and
+   integration. If a revoke reply is lost, a return visit can check the original
+   request before another attempt.
 
 ## How to run or test it
 

@@ -13,10 +13,14 @@ no member-facing catalogue of integrations, so the bare settings link asks for
 an integration ID. Rows contain safe profile ids and status only. They do
 not contain verified provider names, scopes, expiry or secrets. Selected is
 shown separately and never means a grant. A blocked profile stays visible.
-The page reads a profile's safe detail before showing Revoke. The review explains
+The page ignores a detail reply after another profile is chosen. It reads a
+profile's safe detail before showing Revoke. The review names its safe profile
+and integration ids and explains
 the local effect and the provider limit. It sends one change reference and saved
-profile revision. A lost reply keeps that reference and only checks its original
-status. A 404 stays unknown and does not unlock another revoke. A refused read
+profile revision. It saves the profile id and change reference in session storage
+before POST, under `my-tools-revoke:<serverId>`. A return visit restores them.
+A lost reply keeps that reference and only checks its original status. A 404
+stays unknown and does not unlock another revoke. A refused read
 clears rows, detail, review and pending reference before late replies can render.
 No token field or token readback exists in this list and revoke slice.
 `npm run visual:screen-p3-8-bearer` uses intercepted replies at both widths.

@@ -35,6 +35,10 @@ const revokeSchema = z.object({
   changeRef: identifier,
   sequence: z.number().int().positive(),
 });
+const pendingChangeSchema = z.object({
+  profileId: identifier,
+  changeRef: identifier,
+});
 type Row = z.infer<typeof rowSchema>;
 type Detail = z.infer<typeof profileSchema>;
 type LoadState = 'loading' | 'ready' | 'failed' | 'access';
@@ -61,11 +65,13 @@ export class MyTools implements OnInit, OnDestroy {
   protected readonly announcement = signal('');
   private request = new AbortController();
   private generation = 0;
+  private detailSelection = 0;
   private reviewOpener?: HTMLElement;
   private pendingProfileId: string | null = null;
 
   ngOnInit(): void {
     if (this.validServerId()) {
+      this.restorePendingChange();
       void this.load(false);
     } else {
       this.loadState.set('ready');
@@ -147,6 +153,7 @@ export class MyTools implements OnInit, OnDestroy {
     this.detail.set(null);
     this.pendingReference.set(null);
     this.pendingProfileId = null;
+    sessionStorage.removeItem(this.pendingChangeKey());
     this.closeReview();
     this.loadState.set('access');
     this.announcement.set('Access changed. Connection details were cleared.');
@@ -154,6 +161,8 @@ export class MyTools implements OnInit, OnDestroy {
   }
 
   protected async openDetail(row: Row): Promise<void> {
+    this.detailSelection += 1;
+    const selection = this.detailSelection;
     this.detail.set(null);
     this.detailLoading.set(true);
     const current = this.generation;
@@ -164,13 +173,44 @@ export class MyTools implements OnInit, OnDestroy {
       if (this.accessRefused(reply)) return;
       if (!reply.ok) throw new Error('Detail unavailable');
       const body: unknown = await reply.json();
-      if (current !== this.generation) return;
-      this.detail.set(profileSchema.parse(body));
+      if (current !== this.generation || selection !== this.detailSelection) return;
+      const profile = profileSchema.parse(body);
+      if (profile.serverId !== this.serverId() || profile.profileId !== row.profileId) {
+        throw new Error('Wrong profile');
+      }
+      this.detail.set(profile);
     } catch {
-      if (current === this.generation) this.outcome.set("We couldn't load this profile.");
+      if (current === this.generation && selection === this.detailSelection) {
+        this.outcome.set("We couldn't load this profile.");
+      }
     } finally {
-      if (current === this.generation) this.detailLoading.set(false);
+      if (current === this.generation && selection === this.detailSelection) {
+        this.detailLoading.set(false);
+      }
     }
+  }
+
+  private pendingChangeKey(): string {
+    return `my-tools-revoke:${this.serverId()}`;
+  }
+
+  private restorePendingChange(): void {
+    const saved = sessionStorage.getItem(this.pendingChangeKey());
+    if (!saved) return;
+    try {
+      const change = pendingChangeSchema.parse(JSON.parse(saved));
+      this.pendingProfileId = change.profileId;
+      this.pendingReference.set(change.changeRef);
+      this.outcome.set('Check the original change before any new action.');
+    } catch {
+      sessionStorage.removeItem(this.pendingChangeKey());
+    }
+  }
+
+  private clearPendingChange(): void {
+    sessionStorage.removeItem(this.pendingChangeKey());
+    this.pendingReference.set(null);
+    this.pendingProfileId = null;
   }
 
   private profileUrl(profileId: string): string {
@@ -205,6 +245,11 @@ export class MyTools implements OnInit, OnDestroy {
     const changeRef = crypto.randomUUID();
     this.pendingReference.set(changeRef);
     this.pendingProfileId = profile.profileId;
+    // Save the reference before sending so a lost reply survives navigation.
+    sessionStorage.setItem(this.pendingChangeKey(), JSON.stringify({
+      profileId: profile.profileId,
+      changeRef,
+    }));
     this.submitting.set(true);
     this.closeReview();
     const current = this.generation;
@@ -221,8 +266,7 @@ export class MyTools implements OnInit, OnDestroy {
       const receipt = revokeSchema.parse(body);
       if (receipt.changeRef !== changeRef) throw new Error('Wrong change');
       this.outcome.set('Connection revoked here. Revoke the token at the provider too.');
-      this.pendingReference.set(null);
-      this.pendingProfileId = null;
+      this.clearPendingChange();
       await this.openDetailById(profile.profileId);
       void this.load(false);
     } catch {
@@ -261,8 +305,7 @@ export class MyTools implements OnInit, OnDestroy {
       if (current !== this.generation) return;
       const change = changeSchema.parse(body);
       if (change.changeRef !== changeRef) throw new Error('Wrong change');
-      this.pendingReference.set(null);
-      this.pendingProfileId = null;
+      this.clearPendingChange();
       this.outcome.set('Connection revoked here. Revoke the token at the provider too.');
       await this.openDetailById(profileId);
       void this.load(false);

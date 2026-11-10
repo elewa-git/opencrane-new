@@ -100,6 +100,10 @@
 
 <dialog #review class="review" (cancel)="cancelReview()">
   <h2 #reviewHeading tabindex="-1">Revoke this connection?</h2>
+  @if (detail(); as profile) {
+    <p>Integration <code>{{ serverId() }}</code>, profile
+      <code>{{ profile.profileId }}</code>.</p>
+  }
   <ul>
     <li>Your assistant will stop using this personal connection.</li>
     <li>Pending approvals for this account will end.</li>

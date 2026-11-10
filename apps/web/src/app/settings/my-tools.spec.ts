@@ -231,6 +231,7 @@ describe('My tools', () => {
     });
     const originalReference = first.element.querySelector('.notice code')?.textContent?.trim();
     expect(originalReference).toBeTruthy();
+    expect(sessionStorage.getItem('my-tools-revoke:odoo')).toContain(originalReference);
     first.fixture.destroy();
     const second = view();
     await vi.waitFor(() => {
@@ -246,6 +247,7 @@ describe('My tools', () => {
     expect(requests.some((address) =>
       address.endsWith(`/alex/changes/${originalReference}`))).toBe(true);
     expect(requests.filter((address) => address.endsWith('/revoke'))).toHaveLength(1);
+    expect(sessionStorage.getItem('my-tools-revoke:odoo')).toContain(originalReference);
   });
 
   it('names the safe integration and profile identifiers in the revoke review', async () => {

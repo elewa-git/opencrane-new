@@ -9,7 +9,8 @@ Compared with the matching INT-60, INT-61, INT-65 and INT-66 handoff frames:
 
 - **PARTIAL:** The paper settings shell, stacked phone rows and full-width phone
   review follow the frames. The review states the local effect, no account
-  fallback and the provider-token limit.
+  fallback and the provider-token limit. It names the safe integration and
+  profile ids in both review captures.
 - **NOT RUN:** The empty frame's eligible, unconnected server cannot be shown.
   The landed member API lists saved profiles for one supplied server only.
 - **NOT RUN:** The list frame's provider account name, scopes and checked time,
@@ -20,4 +21,5 @@ Compared with the matching INT-60, INT-61, INT-65 and INT-66 handoff frames:
   paid service was used for these captures.
 
 The component tests cover loading, empty and paged lists, failed refresh,
-search, refused access, late replies and one unknown revoke reference.
+search, refused access, reversed detail replies and one unknown revoke reference
+restored after navigation.
