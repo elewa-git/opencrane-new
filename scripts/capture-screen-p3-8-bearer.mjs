@@ -65,7 +65,7 @@ async function capture(browser, width, state) {
     if (state === 'INT-66') {
       const opener = page.getByRole('button', { name: 'Revoke this connection' });
       await page.getByRole('button', { name: 'Cancel' }).click();
-      assert(await opener.evaluate((element) => element === document.activeElement));
+      assert(await opener.evaluate((element) => element === element.ownerDocument.activeElement));
       await opener.click();
     }
     const filename = `${state}-${width}.png`;
