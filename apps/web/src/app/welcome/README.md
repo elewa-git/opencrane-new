@@ -3,8 +3,8 @@
 ## What this is
 
 This folder shows the welcome survey and creates a private persona from its four
-saved answers. People can review the text, approve that exact version and answer
-one saved welcome question.
+saved answers. People can review and edit the text, approve an exact version,
+restart the survey and answer one saved welcome question.
 
 ## Where it fits
 
@@ -13,7 +13,7 @@ persona versions and approval results.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey, persona and chat"]
+  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey, persona edit and chat"]
   welcome -->|reads and saves| server["apps/server<br/>private onboarding"]
   chat["chat<br/>Recent and Archived"] -->|opens saved welcome| welcome
   welcome -.->|uses| state["shared-state<br/>status messages"]
@@ -25,6 +25,9 @@ flowchart LR
 - Create the first persona after the survey, then read and show its private text
   only after access checks.
 - Approve the exact current version and check an uncertain approval by its command id.
+- Save an edit as a new version while the earlier approval stays active.
+- Keep unsaved words visible beside a newer version when another device saves first.
+- Explain the effect of restarting the survey before saving that choice.
 - Show when approval was saved and link to the welcome chat.
 - Link to unfinished survey or persona review before offering a welcome start.
 - Show the saved welcome question and answer, then a read-only completion.
@@ -32,7 +35,7 @@ flowchart LR
 - Show a centred completion notice when a welcome began without an assistant,
   then let the person open an unsent colleague or group draft.
 - Clear private text when access ends.
-- Not built yet: persona editing, replacement and survey restart from the review screen.
+- Replacing an older persona version is not available on the review screen yet.
 
 ## Processes it handles
 
@@ -41,15 +44,19 @@ flowchart LR
 2. **Persona review.** The screen reads progress, the current version list and that
    version's text. If there is no version yet, it asks the server to create one
    from the saved answers. It checks an uncertain creation without sending it again.
-   A competing edit makes the screen read the latest version again.
-3. **Approval.** The screen sends one command. If the result is uncertain, it checks
+   A competing edit makes the screen read the latest version again and keeps
+   unsaved words in the editor so the person can compare them.
+3. **Edit and restart.** An edit saves a new version without approving it. Restart
+   asks for confirmation and explains when no version is approved yet. An uncertain save
+   is checked with its original command id.
+4. **Approval.** The screen sends one command. If the result is uncertain, it checks
    that same command. Confirmed approval shows the saved time and opens welcome.
-4. **Welcome.** A person finishes any step the server says is needed, then
+5. **Welcome.** A person finishes any step the server says is needed, then
    chooses a start that the server confirms is ready.
    Returning to a saved question shows a welcome-back notice. The screen checks
    an uncertain answer by its original command and shows the saved completion time
    before closing the composer.
-5. **Saved welcome.** Recent and Archived open the same completed page.
+6. **Saved welcome.** Recent and Archived open the same completed page.
    Archive and restore move its list row without changing the saved answer.
    A welcome completed without an assistant shows its own notice and human chat actions.
 
