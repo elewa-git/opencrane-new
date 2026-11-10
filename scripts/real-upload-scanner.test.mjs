@@ -113,10 +113,10 @@ async function testCleanAndInfectedUploads() {
 }
 
 const longTestOptions = { timeout: 900_000 };
-realTest('accepts a caller pass after scanner startup time advances',
-  testCleanUploadAfterScannerStartup, longTestOptions);
-realTest('admits clean bytes once and refuses real EICAR bytes', testCleanAndInfectedUploads,
-  longTestOptions);
+realTest('accepts a caller pass after scanner startup time advances', longTestOptions,
+  testCleanUploadAfterScannerStartup);
+realTest('admits clean bytes once and refuses real EICAR bytes', longTestOptions,
+  testCleanAndInfectedUploads);
 
 async function testScannerFaultsAndRecovery() {
   expect(replacement.approvedSha).not.toBe(inputs.approvedSha);
@@ -165,4 +165,4 @@ async function testScannerFaultsAndRecovery() {
 }
 
 recoveryTest('refuses scanner faults and recovers only with another reviewed database',
-  testScannerFaultsAndRecovery, longTestOptions);
+  longTestOptions, testScannerFaultsAndRecovery);
