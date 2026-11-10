@@ -23,6 +23,7 @@ interface ScannerSettings {
   caFile: string | undefined;
   privateKeyPath: string | undefined;
   issuer: string | undefined;
+  manifestDigest?: string | undefined;
   silo: string;
 }
 interface UploadBinding { silo: string; fileId: string }
@@ -38,6 +39,11 @@ function requireScan(condition: unknown): asserts condition {
   }
 }
 
+function requireFreshDatabase(now: number, updated: number, expires: number) {
+  const databaseExpiry = updated + 86400000;
+  requireScan(now < databaseExpiry && expires <= databaseExpiry);
+}
+
 export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding: UploadBinding) {
   const controller = new AbortController();
   function expire() {
@@ -49,7 +55,8 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
   const input = { ...binding, purpose: 'upload' as const, requestId: randomUUID(),
     sha256: hash(bytes), byteCount: bytes.length };
   async function prepare() {
-    requireScan(settings.url && settings.caFile && settings.privateKeyPath && settings.issuer);
+    requireScan(settings.url && settings.caFile && settings.privateKeyPath && settings.issuer &&
+      settings.manifestDigest && digest.safeParse(settings.manifestDigest).success);
     requireScan(binding.silo === settings.silo && bytes.length <= 20 * 1024 * 1024);
     const url = new URL(settings.url);
     requireScan(url.protocol === 'https:' && !url.username && !url.password &&
@@ -80,15 +87,16 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
       const updated = Date.parse(result.databaseUpdatedAt);
       // Keep expiry bounded even if wall time moves backwards.
       requireScan(performance.now() - elapsedStart < expires - started);
+      requireFreshDatabase(now, updated, expires);
       requireScan(now >= started && checked <= now && updated <= checked &&
-        now < updated + 86400000 && expires > now && expires <= checked + 120000 &&
-        expires <= updated + 86400000 && expires <= issued.expiresAt);
+        expires > now && expires <= checked + 120000 && expires <= issued.expiresAt);
       const names = new Set<string>();
       for (const database of result.databases) {
         names.add(database.file.split('.')[0]!);
         requireScan(Date.parse(database.builtAt) <= updated);
       }
       requireScan(names.size === 3);
+      requireScan(result.manifestDigest === settings.manifestDigest);
       requireScan(result.silo === input.silo &&
         result.requestId === input.requestId && result.fileId === input.fileId &&
         result.sha256 === input.sha256 && result.byteCount === input.byteCount &&

@@ -74,7 +74,8 @@ async function validatedSettings(url: string, caFile: string) {
     throw new Error(refusal);
   }
 
-  return { SCANNER_URL: url, SCANNER_CA_FILE: caFile };
+  return { SCANNER_URL: url, SCANNER_CA_FILE: caFile,
+    SCANNER_MANIFEST_DIGEST: `sha256:${'0'.repeat(64)}` };
 }
 
 interface ScannerIdentity {
@@ -83,13 +84,14 @@ interface ScannerIdentity {
   privateKeyPath: string;
 }
 
-export async function scannerReady(settings: { SCANNER_URL: string; SCANNER_CA_FILE: string },
+export async function scannerReady(settings: { SCANNER_URL: string; SCANNER_CA_FILE: string;
+  SCANNER_MANIFEST_DIGEST?: string },
   identity: ScannerIdentity) {
   try {
     const sample = Buffer.from('OpenCrane scanner startup check');
     const binding = { silo: identity.silo, fileId: randomUUID() };
     const scanSettings = { url: settings.SCANNER_URL, caFile: settings.SCANNER_CA_FILE,
-      ...identity };
+      manifestDigest: settings.SCANNER_MANIFEST_DIGEST, ...identity };
     const checked = await scanFile(scanSettings, sample, binding);
     // Require the same reply checks that an upload uses before accepting this scanner.
     return checked() === 'clean';

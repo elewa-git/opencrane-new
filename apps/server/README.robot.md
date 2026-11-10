@@ -1308,6 +1308,7 @@ one of its required settings is missing.
 | `MINIO_URL` | Server | Required with MinIO credentials | None | MinIO object-storage address. |
 | `SCANNER_URL` | Server | Uploads | None | Fixed private HTTPS endpoint ending in `/scan/upload`. |
 | `SCANNER_CA_FILE` | Server | Uploads | None | Trusted scanner CA certificate file. |
+| `SCANNER_MANIFEST_DIGEST` | Server | Uploads | None | Digest of the separately approved scanner database manifest. Missing or changed digest refuses scans. |
 | `KUBECONFIG` | Server | Required for chat computers | None | Path to Kubernetes access settings. |
 | `KUBE_NAMESPACE` | Server | Required for chat computers | None | Kubernetes namespace holding computers. |
 | `TOKEN_SIGNING_KEY_FILE` | Server | Required with chat or budget checks | None | Path to the private token-signing key. |
@@ -6330,6 +6331,8 @@ service identity. Each attempt has a fresh request UUID. Node HTTPS verifies the
 configured CA and hostname, rejects redirects and sends bytes only after 100 Continue.
 The complete attempt, including issuance, has 60 seconds; replies have 4 KiB.
 The response must match purpose, silo, request, file hash identity, SHA-256 and count.
+`SCANNER_MANIFEST_DIGEST` must name the reviewed scanner database manifest.
+Without it, upload scans return the typed 503 before sending bytes.
 It must carry strict clean/infected status, image/manifest digests and all three
 database files with valid hashes, versions and build dates. The upstream update
 check must be within 24 hours; expiry is capped by that check, the pass and two minutes.

@@ -41,6 +41,8 @@ memory worker, server and dispatcher. This lets the nightly job scan due work.
 Uploads use a separate authenticated scanner service. Each stack starts that service
 with private certificates and the local ClamAV daemon. Startup makes a signed clean
 scan before it starts the server. It also checks that the routines worker is running.
+The local scanner uses a development virus list marker. The server checks that
+marker in every scan reply.
 
 ## What it is responsible for
 

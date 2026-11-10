@@ -83,7 +83,7 @@ if (chat && process.env['MINIO_CREDENTIALS_FILE']) {
   const objects = storageClient(process.env['MINIO_URL']!, process.env['MINIO_CREDENTIALS_FILE']);
   const scanner = { silo: chat.silo, url: process.env['SCANNER_URL'],
     caFile: process.env['SCANNER_CA_FILE'], privateKeyPath: process.env['TOKEN_SIGNING_KEY_FILE'],
-    issuer: process.env['TOKEN_ISSUER'] };
+    issuer: process.env['TOKEN_ISSUER'], manifestDigest: process.env['SCANNER_MANIFEST_DIGEST'] };
   function scan(bytes: Buffer, binding: { silo: string; fileId: string }) {
     return scanFile(scanner, bytes, binding);
   }

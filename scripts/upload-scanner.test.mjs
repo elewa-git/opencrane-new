@@ -291,7 +291,11 @@ async function replyAcrossDatabaseDeadline() {
   function alter(result) {
     const databaseUpdatedAt = now - 86400000 + 500;
     result.databaseUpdatedAt = new Date(databaseUpdatedAt).toISOString();
-    result.expiresAt = new Date(databaseUpdatedAt + 86400000).toISOString();
+    for (const database of result.databases) {
+      database.builtAt = new Date(databaseUpdatedAt - 1000).toISOString();
+    }
+    // Model a service that incorrectly extends a previously clean reply.
+    result.expiresAt = new Date(now + 60000).toISOString();
   }
   mode = alter;
   let releaseReply;

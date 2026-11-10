@@ -58,23 +58,14 @@ async function testCleanAndInfectedUploads() {
     expect(cleanProof.silo).toBe('silo-one');
     expect(cleanProof.purpose).toBe('upload');
     expect(cleanProof.requestId).toBe(fixture.transportIds.at(-1));
-    await scannerRefused(fixture.replayProof(
-      cleanProof, 'silo-two', 'foreign-proof', Buffer.from('Meeting at ten.'),
-    ));
-    await scannerRefused(fixture.replayProof(
-      cleanProof, 'silo-one', 'new-request', Buffer.from('Meeting at ten.'),
-    ));
-    await scannerRefused(fixture.replayProof(
-      cleanProof, 'silo-one', 'changed-bytes', Buffer.from('Changed meeting'),
-    ));
-    const imageProof = { ...cleanProof, purpose: 'image' };
-    await scannerRefused(fixture.replayProof(
-      imageProof, 'silo-one', 'image-proof', Buffer.from('Meeting at ten.'),
-    ));
-    const expiredProof = { ...cleanProof, expiresAt: '2020-01-01T00:00:00.000Z' };
-    await scannerRefused(fixture.replayProof(
-      expiredProof, 'silo-one', 'expired-proof', Buffer.from('Meeting at ten.'),
-    ));
+    const changedFields = ['silo', 'request', 'bytes', 'file', 'purpose',
+      'generation', 'expiry'];
+    for (const field of changedFields) {
+      const silo = field === 'silo' ? 'silo-two' : 'silo-one';
+      const content = field === 'bytes' ? Buffer.from('Changed meeting')
+        : Buffer.from('Meeting at ten.');
+      await scannerRefused(fixture.replayProof(cleanProof, silo, field, content, field));
+    }
     expect(fixture.savedFiles('silo-one')).toHaveLength(1);
     expect(fixture.savedFiles('silo-two')).toHaveLength(0);
     expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(1);
@@ -157,6 +148,7 @@ async function testScannerFaultsAndRecovery() {
     expect(recovered.status).toBe('appended');
     expect(fixture.lastCleanProof().manifestDigest)
       .toBe(`sha256:${replacement.approvedSha}`);
+    expect(fixture.lastCleanProof().requestId).not.toBe(oldProof.requestId);
     expect(fixture.savedFiles('silo-one')).toHaveLength(2);
     expect(await fixture.savedEvents('silo-one', 'file.uploaded')).toHaveLength(2);
   } finally {

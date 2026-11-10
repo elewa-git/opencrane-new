@@ -726,6 +726,7 @@ The browser can reconnect and keep the chat. Losing access still clears its cont
 Uploads go to the configured private scanner over HTTPS before storage. The server
 checks the exact file and a fresh result again after checking access. Missing trust
 settings, expired results and scanner outages leave uploads unavailable.
+The server also checks the approved virus list named in the scanner reply.
 
 The server tests and memory evidence runner share correction, forgetting and recorded-context
 isolation assertions from the runner's shipped code. These checks do not qualify native memory or enable it.
