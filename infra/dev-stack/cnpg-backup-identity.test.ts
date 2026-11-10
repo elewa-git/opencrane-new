@@ -235,12 +235,12 @@ async function renewedRecordReplacesOld() {
 test('a fresh signed lease with a new generation replaces the prior record',
   renewedRecordReplacesOld);
 
-async function changedRenewalTargetRefuses() {
-  returnedPolicy = undefined;
-  existingBuckets = new Set(['ocn-backup-silo-one']);
-  const first = await identity.provisionCnpgBackupIdentity(binding);
-  for (const field of ['silo', 'namespace', 'namespaceUid', 'serviceUid',
-    'endpointURL', 'ca'] as const) {
+for (const field of ['silo', 'namespace', 'namespaceUid', 'serviceUid',
+  'endpointURL', 'ca'] as const) {
+  async function changedRenewalTargetRefuses() {
+    returnedPolicy = undefined;
+    existingBuckets = new Set(['ocn-backup-silo-one']);
+    const first = await identity.provisionCnpgBackupIdentity(binding);
     const changed = { ...binding, generation: 'new-credential-generation' };
     if (field === 'endpointURL') {
       changed.endpointURL = `https://backup-store.${namespace}.svc:9001`;
@@ -250,18 +250,40 @@ async function changedRenewalTargetRefuses() {
     } else {
       changed[field] = `changed-${field}`;
     }
+    if (field === 'silo') {
+      await writeFile(`${directory}/settings.env`,
+        'MINIO_PORT=9000\nSILO_ID=changed-silo\n');
+    }
+    try {
+      const callsBefore = issuerCalls;
+      await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, changed),
+        { message: 'CNPG backup identity provisioning refused' });
+      assert.equal(issuerCalls, callsBefore);
+    } finally {
+      if (field === 'silo') {
+        await writeFile(`${directory}/settings.env`,
+          'MINIO_PORT=9000\nSILO_ID=silo-one\n');
+      }
+    }
+  }
+  test(`renewal rejects changed ${field} before issuance`, changedRenewalTargetRefuses);
+}
+
+async function unchangedGenerationRefuses() {
+  returnedPolicy = undefined;
+  existingBuckets = new Set(['ocn-backup-silo-one']);
+  const first = await identity.provisionCnpgBackupIdentity(binding);
+  returnedAccessKey = 'renewed-access';
+  try {
     const callsBefore = issuerCalls;
-    await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, changed),
+    await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, binding),
       { message: 'CNPG backup identity provisioning refused' });
     assert.equal(issuerCalls, callsBefore);
+  } finally {
+    returnedAccessKey = 'leased-access';
   }
-  const callsBefore = issuerCalls;
-  await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, binding),
-    { message: 'CNPG backup identity provisioning refused' });
-  assert.equal(issuerCalls, callsBefore);
 }
-test('renewal rejects changed ownership, endpoint, CA and unchanged generation before issuance',
-  changedRenewalTargetRefuses);
+test('renewal rejects an unchanged generation before issuance', unchangedGenerationRefuses);
 
 async function reusedTokenRefuses() {
   returnedPolicy = undefined;

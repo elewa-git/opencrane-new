@@ -675,6 +675,72 @@ async function expiringLeaseRefusesBeforePut(context: import('node:test').TestCo
 test('a lease entering its final 30 seconds during DELETE refuses before PUT',
   expiringLeaseRefusesBeforePut);
 
+async function revokedLeaseRefusesAfterPut() {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const issued = await issueFor(input);
+  let namespaceReads = 0;
+  async function renewDuringFinalNamespaceRead(args: string[]) {
+    const kind = args[args.indexOf('get') + 1];
+    if (kind === 'namespace') {
+      namespaceReads += 1;
+      if (namespaceReads === 2) {
+        const changed = { ...bindingFor(input), silo: 'other-silo' };
+        await assert.rejects(renewCnpgBackupIdentity(issued.evidence, changed));
+      }
+    }
+    return input.kubectl(args);
+  }
+  try {
+    await refused(checkCnpgBackupReferences(input.backup, namespace,
+      renewDuringFinalNamespaceRead, { evidence: issued.evidence }), scopeRefusal);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+    assert.equal(namespaceReads, 2);
+  } finally {
+    await listener.close();
+  }
+}
+test('a lease revoked during the final Namespace read refuses after marker cleanup',
+  revokedLeaseRefusesAfterPut);
+
+async function expiringLeaseRefusesAfterPut(context: import('node:test').TestContext) {
+  const input = fixture();
+  const listener = await peer(directory);
+  atPeer(input, listener.port);
+  const issued = await issueFor(input);
+  const tokenParts = issuedToken.split('.');
+  const claims = JSON.parse(Buffer.from(tokenParts[1]!, 'base64url').toString('utf8'));
+  let now = claims.exp * 1000 - 31_000;
+  function clock() {
+    return now;
+  }
+  let namespaceReads = 0;
+  async function advanceDuringFinalNamespaceRead(args: string[]) {
+    const kind = args[args.indexOf('get') + 1];
+    if (kind === 'namespace') {
+      namespaceReads += 1;
+      if (namespaceReads === 2) {
+        now += 2_000;
+      }
+    }
+    return input.kubectl(args);
+  }
+  context.mock.method(Date, 'now', clock);
+  try {
+    await refused(checkCnpgBackupReferences(input.backup, namespace,
+      advanceDuringFinalNamespaceRead, { evidence: issued.evidence }), scopeRefusal);
+    assert.deepEqual(listener.storage.requests, checkedRequests);
+    assert.equal(listener.storage.objects.size, 0);
+    assert.equal(namespaceReads, 2);
+  } finally {
+    await listener.close();
+  }
+}
+test('a lease entering its final 30 seconds during the last read refuses after cleanup',
+  expiringLeaseRefusesAfterPut);
+
 async function renewedLeasePassesLocalMarker() {
   const input = fixture();
   const listener = await peer(directory);
