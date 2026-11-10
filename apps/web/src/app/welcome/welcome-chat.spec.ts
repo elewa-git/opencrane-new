@@ -77,6 +77,34 @@ describe('saved welcome chat', () => {
     expect(posts).toBe(1);
   });
 
+  it('uses the welcome read to choose a start when the chat projection has not caught up',
+    async () => {
+      const requests: string[] = [];
+      const screen = mount((url) => {
+        requests.push(url);
+        if (url === '/api/onboarding/welcome') {
+          return reply({ status: 'not_started', nextStep: null, answered: 0,
+            assistantAssigned: true });
+        }
+        return reply({}, 404);
+      });
+      await show(screen, 'Continue with your assistant');
+      expect(screen.root.textContent).not.toContain('Continue without an assistant');
+      expect(requests).toEqual(['/api/onboarding/welcome']);
+    });
+
+  it('marks a saved active question as resumed after a fresh page load', async () => {
+    const screen = mount(() => reply(active));
+    await show(screen, active.question);
+    expect(screen.root.textContent).toContain('Welcome back');
+    const notice = screen.root.querySelector('.resume-notice');
+    const question = screen.root.querySelector('.assistant-row');
+    expect(notice).not.toBeNull();
+    expect(question).not.toBeNull();
+    expect(notice!.compareDocumentPosition(question!) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+  });
+
   it('checks an unknown outcome by its original command without sending again', async () => {
     let posts = 0;
     let checked = '';
@@ -111,6 +139,7 @@ describe('saved welcome chat', () => {
     const screen = mount(() => reply(complete));
     await show(screen, 'Saved private answer');
     expect(screen.root.textContent).toContain('Welcome complete');
+    expect(screen.root.textContent).toContain('09:03');
     expect(screen.root.querySelector('textarea')).toBeNull();
     expect(screen.root.textContent).toContain('read-only');
   });

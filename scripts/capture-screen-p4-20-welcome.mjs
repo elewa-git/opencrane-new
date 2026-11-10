@@ -74,6 +74,18 @@ async function capture(browser, state, width) {
     await page.goto(`${origin}/welcome${suffix}`);
     const expected = expectedWords(state);
     await page.getByText(expected).waitFor();
+    if (state === 'ONB-31') {
+      await page.getByText('Welcome back').waitFor();
+    }
+    if (state === 'ONB-30') {
+      assert.equal(await page.getByText('Welcome back').count(), 0);
+    }
+    if (width === 1280 && state.startsWith('ONB-')) {
+      assert.equal(await page.getByRole('navigation', { name: 'Sessions' }).count(), 1);
+    }
+    if (width === 390 && (state === 'ONB-30' || state === 'ONB-31')) {
+      assert.equal(await page.locator('.composer-frame textarea').count(), 1);
+    }
     if (state === 'denied') {
       assert.equal(await page.getByText(answer).count(), 0);
       assert.equal(await page.locator('textarea').count(), 0);

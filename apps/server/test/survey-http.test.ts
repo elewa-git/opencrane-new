@@ -979,6 +979,8 @@ async function approvedAssistantWelcome() {
     .json<RevisionReceipt>();
   const approval = (await approve('approve-for-welcome', revision.position, revision))
     .json<PositionReceipt>();
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', assistantAssigned: false });
   const hash = createHash('sha256');
   hash.update('test\0alice');
   const digest = hash.digest('hex');
@@ -989,6 +991,8 @@ async function approvedAssistantWelcome() {
     data: { assistantId, ownerId: 'alice', kind: 'personal' } };
   expect((await nats.store.append({ event: created, expectedSequence: 0 })).status)
     .toBe('appended');
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', assistantAssigned: true });
   const input = { operation: 'start', commandId: 'assistant-welcome', generation: 1,
     expectedPosition: approval.position, scriptVersion: 'welcome-v1',
     variant: 'assistant', revision: revision.revision, revisionId: revision.revisionId };
