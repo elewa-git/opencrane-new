@@ -17,6 +17,32 @@ function changedReply(): Response {
 describe('server-backed conversations list', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('keeps one saved welcome across recent, search and later pages', async () => {
+    const welcome = { kind: 'welcome', welcomeId: 'saved-welcome', route: '/welcome',
+      title: 'Welcome', createdAt: '2026-10-14T09:02:00.000Z',
+      activityAt: '2026-10-14T09:03:00.000Z', unread: 0,
+      archived: false, archivePosition: 0 };
+    const page = (rows: unknown[], nextCursor: string | null = null) =>
+      new Response(JSON.stringify({ rows, nextCursor }));
+    const fetcher = vi.fn().mockResolvedValueOnce(page([row('ordinary')], 'next'))
+      .mockResolvedValueOnce(page([welcome, welcome]))
+      .mockResolvedValueOnce(page([welcome]))
+      .mockResolvedValueOnce(page([]))
+      .mockResolvedValueOnce(page([{ ...welcome, archived: true, archivePosition: 12 }]));
+    const list = new ConversationList(fetcher);
+
+    await list.change('recent', '');
+    await list.loadMore();
+    expect(list.rows()).toContainEqual(welcome);
+    expect(list.rows()).toHaveLength(2);
+    await list.change('recent', 'welcome');
+    expect(list.rows()).toEqual([welcome]);
+    await list.change('archived', '');
+    expect(list.rows()).toEqual([]);
+    await list.change('archived', 'welcome');
+    expect(list.rows()).toEqual([{ ...welcome, archived: true, archivePosition: 12 }]);
+  });
+
   it('loads more with the same filters, deduplicates and blocks concurrent clicks', async () => {
     let finish!: (response: Response) => void;
     const pending = new Promise<Response>(resolve => { finish = resolve; });
