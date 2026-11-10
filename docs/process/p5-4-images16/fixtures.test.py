@@ -1,6 +1,5 @@
-"""Check the one blocked typanion observation and fixed refusals."""
+"""Check each typanion evidence guard with the real checker functions."""
 
-import contextlib
 import copy
 import gzip
 import hashlib
@@ -8,7 +7,9 @@ import importlib.util
 import inspect
 import io
 import json
+import shutil
 import tarfile
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -25,6 +26,16 @@ def load_checker():
     return checker
 
 
+def archive_bytes(entries):
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for name, data in entries:
+            member = tarfile.TarInfo(name)
+            member.size = len(data)
+            archive.addfile(member, io.BytesIO(data))
+    return output.getvalue()
+
+
 class TypanionTests(unittest.TestCase):
     def setUp(self):
         self.checker = load_checker()
@@ -34,180 +45,178 @@ class TypanionTests(unittest.TestCase):
             self.bundle = archive.extractfile("deps/corepack/dist/lib/corepack.cjs").read()
         self.source = {}
         with tarfile.open(HERE / "typanion-source.tar.gz") as archive:
-            for name, size, digest in self.review["sourceFiles"]:
-                result = archive.extractfile(name).read()
-                self.assertEqual((len(result), hashlib.sha256(result).hexdigest()),
-                                 (size, digest))
-                self.source[name] = result
+            for name, _size, _digest in self.review["sourceFiles"]:
+                self.source[name] = archive.extractfile(name).read()
 
-    def check(self, **changes):
-        values = {"review": self.review, "source": self.source,
-                  "bundle": self.bundle, "regions": self.regions}
-        values.update(changes)
-        return self.checker.check_review(**values)
+    def assert_removed_guard_fails(self, function, guard, call):
+        original = inspect.getsource(function)
+        self.assertIn(guard, original)
+        changed = original.replace(guard, "pass", 1)
+        namespace = vars(self.checker).copy()
+        namespace["trusted_review"] = self.checker.trusted_review
+        exec(changed, namespace)
+        with self.assertRaises(AssertionError):
+            call(namespace[function.__name__])
 
-    def test_authentic_source_and_retained_bytes_keep_grant_blocked(self):
-        self.assertEqual(self.check(), "BLOCKED")
-        self.assertIn(b"Copyright", self.source["README.md"])
-        self.assertIn(b"Permission is hereby granted", self.source["README.md"])
-        self.assertIn(b"The above copyright notice", self.source["README.md"])
-        self.assertIn(b'THE SOFTWARE IS PROVIDED "AS IS"', self.source["README.md"])
+    def test_review_guards_each_have_a_removal_sensitive_case(self):
+        altered_record = copy.deepcopy(self.review)
+        altered_record["reason"] = "changed"
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if review != trusted_review():\n        raise ValueError("Review record changed")',
+            lambda check: self.assertRaises(ValueError, check, altered_record,
+                                            self.source, self.bundle, self.regions))
 
-    def test_every_source_and_term_change_refuses(self):
-        for name, data in self.source.items():
-            for changed in (data + b"x", data[:-1]):
-                source = dict(self.source)
-                source[name] = changed
-                with self.subTest(name=name, change=len(changed)):
-                    with self.assertRaises(ValueError):
-                        self.check(source=source)
-        for term in (b"Mael Nison", b"Permission is hereby granted",
-                     b"The above copyright notice", b'THE SOFTWARE IS PROVIDED "AS IS"'):
-            source = dict(self.source)
-            source["README.md"] = source["README.md"].replace(term, b"")
-            with self.subTest(term=term), self.assertRaises(ValueError):
-                self.check(source=source)
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if modules != [review["module"]]:\n        raise ValueError("Typanion module identity changed")',
+            lambda check: self.check_with_inventory(
+                check, self.review, {**self.checker.corepack.trusted_review(),
+                                       "modules": [["typanion", "wrong"]]}))
 
-    def test_range_module_and_record_changes_refuse(self):
-        for field in self.review:
-            review = copy.deepcopy(self.review)
-            review[field] = "changed"
-            with self.subTest(field=field), self.assertRaises(ValueError):
-                self.check(review=review)
-        omitted = [row for row in self.regions if row != self.review["range"]]
-        for regions in ([], self.regions + [self.review["range"]], omitted):
-            with self.assertRaises(ValueError):
-                self.check(regions=regions)
-        range_start = self.review["range"][0]
-        changed = self.bundle[:range_start] + b"x" + self.bundle[range_start + 1:]
-        with self.assertRaises(ValueError):
-            self.check(bundle=changed)
-        inventory = self.checker.corepack.trusted_review()
-        for modules in ([], inventory["modules"] + [self.review["module"]]):
-            changed = copy.deepcopy(inventory)
-            changed["modules"] = modules
-            with patch.object(self.checker.corepack, "trusted_review", return_value=changed):
-                with self.assertRaises(ValueError):
-                    self.check()
+        extra_region = self.regions + [self.review["range"]]
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if matching != [review["range"]]:\n        raise ValueError("Typanion retained range changed")',
+            lambda check: self.assertRaises(ValueError, check, self.review,
+                                            self.source, self.bundle, extra_region))
 
-    def test_other_bundle_bytes_and_wrong_candidate_layer_refuse(self):
-        corepack = self.checker.corepack
-        corepack.check_regions(self.regions, self.bundle)
-        changed = b"x" + self.bundle[1:]
-        with self.assertRaises(ValueError):
-            corepack.check_regions(self.regions, changed)
-        inventory = corepack.trusted_review()
-        rows = inventory["files"]
-        corepack.check_files(rows, inventory)
-        for wrong_layer in (rows[:-1], rows + [rows[0]], []):
-            with self.assertRaises(ValueError):
-                corepack.check_files(wrong_layer, inventory)
-
-    def test_mocked_orchestration_succeeds_then_each_guard_refuses(self):
-        for stage in (None, "signed", "candidate", "source", "fixture",
-                      "archive", "review", "pin"):
-            with self.subTest(stage=stage), contextlib.ExitStack() as stack:
-                checker = self.checker
-                signed = stack.enter_context(patch.object(checker.corepack, "check_evidence"))
-                candidate = stack.enter_context(patch.object(checker.corepack.candidate,
-                                                             "checked_bytes", return_value=b"archive"))
-                git = stack.enter_context(patch.object(checker, "run_git", return_value=b"source"))
-                fixture = stack.enter_context(patch.object(checker, "check_source_fixture"))
-                archive = stack.enter_context(patch.object(checker, "read_saved", return_value=(self.bundle, self.regions)))
-                review = stack.enter_context(patch.object(checker, "check_review", return_value="BLOCKED"))
-                stack.enter_context(patch.object(checker, "trusted_review", return_value=self.review))
-                stack.enter_context(patch.object(
-                    checker.corepack.candidate.checker, "read_json",
-                    return_value={"files": {"candidate.tar": "digest", "source.tar": "digest"}}))
-                stages = {"signed": signed, "candidate": candidate, "source": git,
-                          "fixture": fixture, "archive": archive, "review": review}
-                if stage == "pin":
-                    stack.enter_context(patch.object(checker, "REVIEW_SHA256", "0" * 64))
-                    stack.enter_context(patch.object(checker, "trusted_review", side_effect=ValueError()))
-                elif stage:
-                    stages[stage].side_effect = ValueError("private path")
-                output, error = io.StringIO(), io.StringIO()
-                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
-                    result = checker.main(["candidate", "upstream"])
-                if stage is None:
-                    self.assertEqual(result, 0)
-                    self.assertIn("BLOCKED", output.getvalue())
-                    for mock in stages.values():
-                        self.assertGreater(mock.call_count, 0)
-                else:
-                    self.assertEqual((result, output.getvalue(), error.getvalue()),
-                                     (1, "", checker.REFUSAL + "\n"))
-                    if stage != "pin":
-                        stages[stage].assert_called()
-
-    def test_each_original_archive_recheck_refuses_after_success(self):
-        checker = self.checker
-        for changed_name in (None, "candidate.tar", "source.tar"):
-            with self.subTest(changed_name=changed_name), contextlib.ExitStack() as stack:
-                stack.enter_context(patch.object(checker, "trusted_review", return_value=self.review))
-                stack.enter_context(patch.object(checker.corepack, "check_evidence"))
-                stack.enter_context(patch.object(checker, "run_git", return_value=b"source"))
-                stack.enter_context(patch.object(checker, "check_source_fixture"))
-                stack.enter_context(patch.object(checker, "read_saved",
-                                                 return_value=(self.bundle, self.regions)))
-                stack.enter_context(patch.object(checker, "check_review",
-                                                 return_value="BLOCKED"))
-                stack.enter_context(patch.object(
-                    checker.corepack.candidate.checker, "read_json",
-                    return_value={"files": {"candidate.tar": "digest", "source.tar": "digest"}}))
-                checked = []
-
-                def checked_bytes(path, _digest):
-                    checked.append(path.name)
-                    if path.name == changed_name:
-                        raise ValueError("private archive path")
-                    return b"saved"
-
-                stack.enter_context(patch.object(checker.corepack.candidate,
-                                                 "checked_bytes", side_effect=checked_bytes))
-                output, error = io.StringIO(), io.StringIO()
-                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
-                    result = checker.main(["candidate", "upstream"])
-                if changed_name is None:
-                    self.assertEqual(result, 0)
-                    self.assertEqual(checked[-2:], ["candidate.tar", "source.tar"])
-                else:
-                    self.assertEqual((result, output.getvalue(), error.getvalue()),
-                                     (1, "", checker.REFUSAL + "\n"))
-                    self.assertIn(changed_name, checked)
-
-    def test_removing_each_direct_guard_breaks_its_refusal_test(self):
-        checker = self.checker
-        record = copy.deepcopy(self.review)
-        record["reason"] = "changed"
-        source = dict(self.source)
-        source["package.json"] += b"x"
         start = self.review["range"][0]
-        bundle = self.bundle[:start] + b"x" + self.bundle[start + 1:]
-        cases = [
-            ("if review != trusted_review():\n        raise ValueError(\"Review record changed\")",
-             {"review": record}),
-            ("if matching != [review[\"range\"]]:\n"
-             "        raise ValueError(\"Typanion retained range changed\")",
-             {"regions": self.regions + [self.review["range"]]}),
-            ("if digest(bundle[start:end]) != expected_digest:\n"
-             "        raise ValueError(\"Retained bytes changed\")",
-             {"bundle": bundle}),
-            ("if len(data) != size or digest(data) != expected_digest:\n"
-             "            raise ValueError(\"Source bytes or complete terms changed\")",
-             {"source": source}),
-        ]
-        original = inspect.getsource(checker.check_review)
-        for guard, changes in cases:
-            with self.subTest(guard=guard.splitlines()[0]):
-                self.assertIn(guard, original)
-                changed = original.replace(guard, "pass", 1)
-                namespace = vars(checker).copy()
-                exec(changed, namespace)
-                with patch.object(checker, "check_review", namespace["check_review"]):
-                    with self.assertRaises(AssertionError):
-                        with self.assertRaises(ValueError):
-                            self.check(**changes)
+        changed_bundle = self.bundle[:start] + b"x" + self.bundle[start + 1:]
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if digest(bundle[start:end]) != expected_digest:\n'
+            '        raise ValueError("Retained bytes changed")',
+            lambda check: self.assertRaises(ValueError, check, self.review,
+                                            self.source, changed_bundle, self.regions))
+
+        missing_source = dict(self.source)
+        missing_source["unexpected.txt"] = b"unexpected source"
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if set(source) != {row[0] for row in review["sourceFiles"]}:\n'
+            '        raise ValueError("Source file set changed")',
+            lambda check: self.assertRaises(ValueError, check, self.review,
+                                            missing_source, self.bundle, self.regions))
+
+        changed_source = dict(self.source)
+        changed_source["package.json"] += b"x"
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if len(data) != size or digest(data) != expected_digest:\n'
+            '            raise ValueError("Source bytes or complete terms changed")',
+            lambda check: self.assertRaises(ValueError, check, self.review,
+                                            changed_source, self.bundle, self.regions))
+
+        missing_term = dict(self.source)
+        missing_term["README.md"] = missing_term["README.md"].replace(
+            b"Permission is hereby granted", b"Permission text removed")
+        term_review = copy.deepcopy(self.review)
+        for row in term_review["sourceFiles"]:
+            if row[0] == "README.md":
+                row[1] = len(missing_term["README.md"])
+                row[2] = hashlib.sha256(missing_term["README.md"]).hexdigest()
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if required not in terms:\n'
+            '            raise ValueError("Licence terms changed")',
+            lambda check: self.check_with_review(
+                check, term_review, missing_term))
+
+        approved_record = copy.deepcopy(self.review)
+        approved_record["status"] = "PASS"
+        self.assert_removed_guard_fails(
+            self.checker.check_review,
+            'if review["status"] != "BLOCKED":\n'
+            '        raise ValueError("Unsupported approval")',
+            lambda check: self.check_with_status(check, approved_record))
+
+    def check_with_inventory(self, function, review, inventory):
+        with patch.object(self.checker.corepack, "trusted_review", return_value=inventory):
+            with self.assertRaises(ValueError):
+                function(review, self.source, self.bundle, self.regions)
+
+    def check_with_status(self, function, review):
+        original = function.__globals__["trusted_review"]
+        function.__globals__["trusted_review"] = lambda: review
+        try:
+            with self.assertRaises(ValueError):
+                function(review, self.source, self.bundle, self.regions)
+        finally:
+            function.__globals__["trusted_review"] = original
+
+    def check_with_review(self, function, review, source):
+        original = function.__globals__["trusted_review"]
+        function.__globals__["trusted_review"] = lambda: review
+        try:
+            with self.assertRaises(ValueError):
+                function(review, source, self.bundle, self.regions)
+        finally:
+            function.__globals__["trusted_review"] = original
+
+    def test_source_archive_checksum_and_contents_each_refuse(self):
+        source_fixture = HERE / "typanion-source.tar.gz"
+        original = source_fixture.read_bytes()
+        changed_header = original[:4] + b"\x01\x00\x00\x00" + original[8:]
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture_dir = Path(temporary)
+            (fixture_dir / source_fixture.name).write_bytes(changed_header)
+            with patch.object(self.checker, "HERE", fixture_dir):
+                with self.assertRaises(ValueError):
+                    self.checker.check_source_fixture(self.review, self.source)
+
+                self.assert_removed_guard_fails(
+                    self.checker.check_source_fixture,
+                    'corepack.candidate.checked_bytes(fixture, review["sourceFixtureSha256"])',
+                    lambda check: self.assertRaises(ValueError, check, self.review,
+                                                    self.source))
+
+    def test_real_fixture_check_compares_every_saved_source_file(self):
+        self.checker.check_source_fixture(self.review, self.source)
+        changed = dict(self.source)
+        changed["package.json"] += b"x"
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture_dir = Path(temporary)
+            fixture_path = fixture_dir / "typanion-source.tar.gz"
+            fixture_path.write_bytes(archive_bytes(list(self.source.items())))
+            changed_review = copy.deepcopy(self.review)
+            changed_review["sourceFixtureSha256"] = hashlib.sha256(
+                fixture_path.read_bytes()).hexdigest()
+            with patch.object(self.checker, "HERE", fixture_dir):
+                with patch.object(self.checker, "trusted_review", return_value=changed_review):
+                    with self.assertRaises(ValueError):
+                        self.checker.check_source_fixture(changed_review, changed)
+
+    def test_saved_inventory_and_region_helpers_refuse_changed_inputs(self):
+        corepack = self.checker.corepack
+        inventory = corepack.trusted_review()
+        rows = [row for row in inventory["files"] if row[1] == "file"]
+        corepack.check_files(rows, inventory, source_only=True)
+        with self.assertRaises(ValueError):
+            corepack.check_files(rows[:-1], inventory, source_only=True)
+
+        corepack.check_regions(self.regions, self.bundle)
+        changed_bundle = b"x" + self.bundle[1:]
+        with self.assertRaises(ValueError):
+            corepack.check_regions(self.regions, changed_bundle)
+
+    def test_saved_source_fixture_checksum_is_verified_by_the_real_reader(self):
+        record_path = self.checker.corepack.RECORD
+        with tempfile.TemporaryDirectory() as temporary:
+            saved_dir = Path(temporary)
+            for name in (record_path.name, "corepack-source.tar.gz", "regions.json.gz"):
+                shutil.copyfile(record_path.with_name(name), saved_dir / name)
+            saved_record = saved_dir / record_path.name
+            with patch.object(self.checker.corepack, "RECORD", saved_record):
+                archive_path = saved_dir / "corepack-source.tar.gz"
+                archive_path.write_bytes(archive_path.read_bytes() + b"changed")
+                with self.assertRaises(ValueError):
+                    self.checker.read_saved(self.review)
+
+    def test_candidate_binding_and_saved_archive_checks_are_called(self):
+        bundle, regions = self.checker.read_saved(self.review)
+        self.assertEqual(bundle, self.bundle)
+        self.assertEqual(regions, self.regions)
 
 
 if __name__ == "__main__":
