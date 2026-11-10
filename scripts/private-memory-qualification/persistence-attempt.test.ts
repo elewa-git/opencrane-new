@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import {
   inventoryGroups, type InventoryContext, type InventorySnapshot,
   type ProtectionRecord, type TrustedLaunch,
@@ -10,6 +10,9 @@ import {
 import {
   runPersistenceAttempt, type PersistenceDriver,
 } from './persistence-attempt.ts';
+import { persistenceScan } from './persistence.ts';
+
+vi.mock('./persistence.ts', { spy: true });
 
 const serverInstallation = `sha256:${'a'.repeat(64)}`;
 const computerInstallation = `sha256:${'b'.repeat(64)}`;
@@ -69,6 +72,8 @@ function fixture() {
   let replacementCheck: number | undefined;
   let readHook: (() => void) | undefined;
   let stopHook: (() => void) | undefined;
+  let toolHook: ((tool: string, privateText: Buffer) => void) | undefined;
+  let stopError: Error | undefined;
   function replace(): void { installed = serverInstallation; }
   function replaceServer(): void { installedServer = computerInstallation; }
   function setReply(value: typeof reply): void { reply = value; }
@@ -79,6 +84,10 @@ function fixture() {
   function numberOfInstallationChecks(): number { return installationChecks; }
   function setReadHook(hook: () => void): void { readHook = hook; }
   function setStopHook(hook: () => void): void { stopHook = hook; }
+  function setToolHook(hook: (tool: string, privateText: Buffer) => void): void {
+    toolHook = hook;
+  }
+  function setStopError(error: Error): void { stopError = error; }
   const driver: PersistenceDriver = {
     context, locations, canary,
     currentInstallations() {
@@ -96,8 +105,9 @@ function fixture() {
     startNative() {
       calls.push('start');
       return Promise.resolve({
-        attemptTool(tool: string, _privateText: Buffer) {
+        attemptTool(tool: string, privateText: Buffer) {
           calls.push(tool);
+          toolHook?.(tool, privateText);
           if (tool === writingTool) {
             return Promise.resolve('wrote' as const);
           }
@@ -106,6 +116,9 @@ function fixture() {
         stop() {
           calls.push('stop');
           stopHook?.();
+          if (stopError) {
+            return Promise.reject(stopError);
+          }
           return Promise.resolve();
         },
       });
@@ -113,7 +126,7 @@ function fixture() {
   };
   return { driver, reads, calls, canary, locations, replace, replaceServer,
     replaceAtCheck, numberOfInstallationChecks, setReply, setWritingTool,
-    setReadHook, setStopHook };
+    setReadHook, setStopHook, setToolHook, setStopError };
 }
 
 afterEach(function clean(): void {
@@ -267,6 +280,24 @@ async function storedAfterStop(): Promise<void> {
 }
 it('finds bytes saved during Stop in the second scan', storedAfterStop);
 
+async function canaryRemovedDuringStop(): Promise<void> {
+  const { driver, canary, calls, setToolHook, setStopHook } = fixture();
+  const storedPath = join(directory, 'pvc', 'temporary');
+  function saveDuringTurn(): void {
+    writeFileSync(storedPath, canary);
+  }
+  function removeDuringStop(): void {
+    rmSync(storedPath);
+  }
+  setToolHook(saveDuringTurn);
+  setStopHook(removeDuringStop);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, category: 'pvc',
+  });
+  expect(calls.at(-1)).toBe('stop');
+}
+it('detects private bytes present only before Stop', canaryRemovedDuringStop);
+
 async function unreadable(): Promise<void> {
   const { driver } = fixture();
   chmodSync(join(directory, 'outbox'), 0);
@@ -342,6 +373,108 @@ async function writeWithUnreadableStore(): Promise<void> {
   });
 }
 it('does not erase a known tool write after an incomplete scan', writeWithUnreadableStore);
+
+async function firstFailureKeepsToolEvidence(): Promise<void> {
+  const { driver, canary, setReply } = fixture();
+  setReply('wrote');
+  writeFileSync(join(directory, 'pvc', 'written'), canary);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+}
+it('keeps the first tool write when live storage also contains the canary',
+  firstFailureKeepsToolEvidence);
+
+async function firstFailureSurvivesStoppedScan(): Promise<void> {
+  const { driver, canary, setReply, setStopHook } = fixture();
+  setReply('wrote');
+  function saveAfterStop(): void {
+    writeFileSync(join(directory, 'pvc', 'written'), canary);
+  }
+  setStopHook(saveAfterStop);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+}
+it('keeps the first tool write when stopped storage also fails',
+  firstFailureSurvivesStoppedScan);
+
+async function firstFailureSurvivesFinalInventory(): Promise<void> {
+  const { driver, reads, setReply } = fixture();
+  setReply('wrote');
+  reads[1]!.records[5]!.startTime = '9999';
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+}
+it('keeps the first tool write when final inventory also fails',
+  firstFailureSurvivesFinalInventory);
+
+async function copiesAndClearsCanary(): Promise<void> {
+  const { driver, canary, setToolHook } = fixture();
+  let privateText: Buffer | undefined;
+  function captureToolCanary(_tool: string, suppliedCanary: Buffer): void {
+    privateText = suppliedCanary;
+  }
+  setToolHook(captureToolCanary);
+  expect(await runPersistenceAttempt(driver)).toEqual({ result: 'PARTIAL', complete: false });
+  expect(privateText).toBeDefined();
+  expect(privateText).not.toBe(canary);
+  expect(privateText).toEqual(Buffer.alloc(canary.length));
+  expect(canary).not.toEqual(Buffer.alloc(canary.length));
+}
+it('copies the caller canary and clears its own copy', copiesAndClearsCanary);
+
+async function closesScannerAfterEarlyRefusal(): Promise<void> {
+  const { driver, replaceAtCheck } = fixture();
+  const close = vi.fn();
+  const scan = vi.fn(function cleanScan() {
+    return { result: 'PARTIAL' as const, complete: false as const, files: 0, bytes: 0 };
+  });
+  const scanner = { scan, close };
+  vi.mocked(persistenceScan).mockImplementationOnce(function captureScanner() {
+    return scanner;
+  });
+  replaceAtCheck(1);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(close).toHaveBeenCalledOnce();
+  expect(scan).not.toHaveBeenCalled();
+}
+it('closes the scanner after an early installation refusal', closesScannerAfterEarlyRefusal);
+
+async function sanitisesThrownInventoryError(): Promise<void> {
+  const { driver } = fixture();
+  driver.readInventory = function throwPrivateError(): InventorySnapshot {
+    throw new Error('private canary and storage path');
+  };
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+}
+it('returns a fixed result when inventory throws private text', sanitisesThrownInventoryError);
+
+async function handlesFailedStop(): Promise<void> {
+  const { driver, calls, setStopError } = fixture();
+  setStopError(new Error('private Stop error'));
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(calls.filter(function isStop(call): boolean { return call === 'stop'; })).toHaveLength(2);
+}
+it('sanitises failed Stop and attempts cleanup again', handlesFailedStop);
+
+async function keepsFailureAfterFailedStop(): Promise<void> {
+  const { driver, calls, setReply, setStopError } = fixture();
+  setReply('wrote');
+  setStopError(new Error('private Stop error'));
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+  expect(calls.filter(function isStop(call): boolean { return call === 'stop'; })).toHaveLength(2);
+}
+it('keeps a known tool failure when both Stop attempts throw', keepsFailureAfterFailedStop);
 
 async function unexercisedTool(): Promise<void> {
   const { driver, setReply } = fixture();
