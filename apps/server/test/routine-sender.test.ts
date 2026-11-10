@@ -868,6 +868,19 @@ async function refusesLateChange(kind: string) {
       } else if (kind === 'budget ceiling') {
         await actor.configure({ scope: 'global', ceilingCents: 0,
           dailyCeilingCents: 0, setBy: 'admin' });
+      } else if (kind === 'budget reason') {
+        const reason = { scope: 'global', kind: 'monthly', reason: 'bound_refused',
+          periodStart: '2026-10-01T00:00:00Z', resetAt: '2026-11-01T00:00:00Z',
+          ceilingCents: 1000, settledCents: 1000, reservedCents: 0,
+          attemptedBoundCents: 1, configurationId: 'budget-config' };
+        const exhausted = record('late-exhaustion-reason', 'budget-test', 'budget.exhausted',
+          { reasons: [reason] });
+        await nats.seed([exhausted]);
+      } else if (kind === 'budget work stop') {
+        const work = { conversationId, turnId };
+        const exhausted = record('late-exhaustion-work', 'budget-test', 'budget.exhausted',
+          { stopId: 'budget-stop', work });
+        await nats.seed([exhausted]);
       } else if (kind === 'payer') {
         const removed = { teamId: 'sales', memberId: 'alice', removedBy: 'admin' };
         const removal = record('late-payer', 'team-sales', 'team.member_removed', removed);
@@ -894,8 +907,8 @@ async function refusesLateChange(kind: string) {
     await computer.close();
   }
 }
-it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
-  'computer'])(
+it.each(['Stop', 'budget ceiling', 'budget reason', 'budget work stop', 'grant', 'payer',
+  'worker', 'routine.paused', 'member', 'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function acceptsOtherThread() {

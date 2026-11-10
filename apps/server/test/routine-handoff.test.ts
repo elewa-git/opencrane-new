@@ -573,7 +573,7 @@ it('resumes the saved checked due once after disabled delivery and a broker rest
 type ReleaseChange = 'ceiling' | 'payer_ceiling' | 'assistant_ceiling' |
   'reserved' | 'settled' | 'exhausted' | 'exhausted_global_reason' |
   'exhausted_payer_reason' | 'exhausted_assistant_reason' | 'exhausted_other_reason' |
-  'exhausted_work' | 'stop' | 'grant' | 'leadership' | 'deadline';
+  'stop' | 'grant' | 'leadership' | 'deadline';
 function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId?: string) {
   return { scope, ...(scopeId ? { scopeId } : {}), kind: 'monthly' as const,
     reason: 'bound_refused' as const,
@@ -581,9 +581,7 @@ function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId
     ceilingCents: 1000, settledCents: 1000, reservedCents: 0, attemptedBoundCents: 1,
     configurationId: 'budget-config' };
 }
-function modernExhaustionData(kind: string, assistantId: string, work?: {
-  conversationId: string; turnId: string;
-}) {
+function modernExhaustionData(kind: string, assistantId: string) {
   if (kind.endsWith('_reason')) {
     let reason;
     if (kind === 'exhausted_global_reason') reason = exhaustedReason('global');
@@ -593,11 +591,7 @@ function modernExhaustionData(kind: string, assistantId: string, work?: {
     } else reason = exhaustedReason('assistant', 'other-assistant');
     return { reasons: [reason] };
   }
-  if (kind === 'exhausted_work') {
-    return { stopId: 'budget-stop', work };
-  }
-  return { stopId: 'budget-stop', work: {
-    conversationId: 'another-conversation', turnId: 'another-turn' } };
+  return { reasons: [exhaustedReason('assistant', 'other-assistant')] };
 }
 function otherBudgetCall() {
   return { requesterId: 'other', conversationId: 'other-conversation',
@@ -646,8 +640,7 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
         await nats.seed([exhausted]);
       } else if (kind.startsWith('exhausted_')) {
         const run = (await runState()).activeRun!;
-        const work = { conversationId: run.conversationId, turnId: run.turnId };
-        const data = modernExhaustionData(kind, run.definition.assistantId, work);
+        const data = modernExhaustionData(kind, run.definition.assistantId);
         const exhausted = record(`exhausted-${kind}`, 'budget-test', 'budget.exhausted', data);
         await nats.seed([exhausted]);
       } else if (kind === 'stop') {
@@ -695,7 +688,7 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
 }
 it.each(['ceiling', 'payer_ceiling', 'assistant_ceiling', 'reserved', 'settled',
   'exhausted', 'exhausted_global_reason', 'exhausted_payer_reason',
-  'exhausted_assistant_reason', 'exhausted_other_reason', 'exhausted_work',
+  'exhausted_assistant_reason', 'exhausted_other_reason',
   'stop', 'grant', 'leadership', 'deadline'] as const)(
   'refuses %s before the final routine release and keeps the scan pending',
   changeBeforeFinalRelease);
