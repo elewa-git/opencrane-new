@@ -246,7 +246,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication and task history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, selected personal tool offers, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
   server -->|checks saved OAuth settings changes before routine sends| nats
   server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime

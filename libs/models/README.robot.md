@@ -5021,9 +5021,9 @@ confirmed release
 append comes before the allowlisted outbound header. Caller cookies, alternate keys and
 profile headers do not reach the tool server. A missing audit or changed access sends
 nothing. Dispatch checks later turn and computer activity before reading the credential.
-Valid upstream JSON-RPC errors return a fixed message and no upstream data, because a
-remote server may echo the bearer it received. An uncertain HTTPS result stays unknown
-and cannot be resent. Company dispatch and fresh-install provider qualification remain
+Valid upstream JSON-RPC errors return a fixed code and message and no upstream data,
+because a remote server may echo the bearer it received. An uncertain HTTPS result stays
+unknown and cannot be resent. Company dispatch and fresh-install provider qualification remain
 NOT RUN.
 
 The company path uses `routine-company-release.ts` to check a frozen run, current

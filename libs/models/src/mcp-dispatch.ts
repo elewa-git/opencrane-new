@@ -573,11 +573,11 @@ function requireRemoteReply(data: Buffer, raw: string): Buffer {
   }
   if (error) {
     const parsedError: unknown = JSON.parse(error.canonical);
-    const checkedError = remoteErrorSchema.parse(parsedError);
-    // Return a fixed message because the remote server may copy our bearer into its error.
+    remoteErrorSchema.parse(parsedError);
+    // Return fixed error fields because the remote server may copy our bearer into them.
     const requestId: unknown = JSON.parse(sent.get('id')!.canonical);
     const safeReply = { jsonrpc: '2.0', id: requestId,
-      error: { code: checkedError.code, message: 'Remote tool error' } };
+      error: { code: -32603, message: 'Remote tool error' } };
     return Buffer.from(JSON.stringify(safeReply));
   }
   return data;
