@@ -5023,10 +5023,12 @@ profile headers do not reach the tool server. A missing audit or changed access 
 nothing. Dispatch checks later turn and computer activity before reading the credential.
 It rechecks loaded memory references and current memory grants during the renewed
 two-second access check. A fact forgotten after permit issue refuses release.
-Valid upstream JSON-RPC errors return a fixed code and message and no upstream data,
-because a remote server may echo the bearer it received. An uncertain HTTPS result stays
-unknown and cannot be resent. Company dispatch and fresh-install provider qualification remain
-NOT RUN.
+The gateway checks every decoded JSON value and key, plus the remote content type,
+for the released access token or bearer. It also checks base64 and URL-encoded text.
+A match returns a fixed JSON-RPC error with no upstream data. Other valid upstream
+JSON-RPC errors also return that fixed error. The gateway sets its own content type.
+An uncertain HTTPS result stays unknown and cannot be resent. Company dispatch and
+fresh-install provider qualification remain NOT RUN.
 
 The company path uses `routine-company-release.ts` to check a frozen run, current
 choice, verified account and free published tool before `confirmCredentialRelease`.

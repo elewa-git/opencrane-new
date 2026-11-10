@@ -3,7 +3,7 @@ import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
 import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
-import { losslessJson } from '@opencrane/events/lossless-json';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -535,7 +535,7 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
   try {
     const received = await exchangeRemote(target, raw, headers, network,
       controller.signal, 1024 * 1024);
-    const safeData = requireRemoteReply(received.data, raw);
+    const safeData = requireRemoteReply(received.data, received.contentType, raw, material);
     reply = { ...received, data: safeData };
   } catch {
     // Keep every failed exchange unknown, including refusal before confirmed receipt.
@@ -548,7 +548,7 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
     return;
   }
   if (reply) {
-    res.writeHead(200, { 'content-type': reply.contentType });
+    res.writeHead(200, { 'content-type': 'application/json' });
     res.end(reply.data);
     return;
   }
@@ -556,9 +556,74 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
   res.end();
 }
 
-function requireRemoteReply(data: Buffer, raw: string): Buffer {
+function credentialPatterns(material: string | undefined): string[] {
+  if (material === undefined) return [];
+  const patterns = new Set<string>();
+  for (const value of [material, `Bearer ${material}`]) {
+    patterns.add(value);
+    patterns.add(Buffer.from(value).toString('base64'));
+    patterns.add(Buffer.from(value).toString('base64url'));
+  }
+  return [...patterns];
+}
+
+function containsCredentialText(value: string, patterns: string[]): boolean {
+  for (const pattern of patterns) {
+    if (value.includes(pattern)) return true;
+  }
+  try {
+    const decoded = decodeURIComponent(value);
+    for (const pattern of patterns) {
+      if (decoded.includes(pattern)) return true;
+    }
+  } catch {
+    // Keep checking the original text when an upstream string has invalid percent escapes.
+  }
+  return false;
+}
+
+function containsCredential(value: JsonValue, patterns: string[]): boolean {
+  if (value.value instanceof Map) {
+    for (const [key, nested] of value.value) {
+      if (containsCredentialText(key, patterns) || containsCredential(nested, patterns)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (Array.isArray(value.value)) {
+    for (const nested of value.value) {
+      if (containsCredential(nested, patterns)) return true;
+    }
+    return false;
+  }
+  return typeof value.value === 'string' && containsCredentialText(value.value, patterns);
+}
+
+function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefined): Buffer {
+  const originalId = sent.get('id')!;
+  const patterns = credentialPatterns(material);
+  let requestId: unknown = null;
+  // Keep a credential-bearing request id out of the refusal too.
+  if (!containsCredential(originalId, patterns)) {
+    requestId = JSON.parse(originalId.canonical);
+  }
+  const safeReply = { jsonrpc: '2.0', id: requestId,
+    error: { code: -32603, message: 'Remote tool error' } };
+  return Buffer.from(JSON.stringify(safeReply));
+}
+
+function replyContainsCredential(reply: JsonValue, contentType: string,
+  material: string | undefined): boolean {
+  const patterns = credentialPatterns(material);
+  return containsCredential(reply, patterns) || containsCredentialText(contentType, patterns);
+}
+
+function requireRemoteReply(data: Buffer, contentType: string, raw: string,
+  material?: string): Buffer {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
-  const reply = losslessJson(text).value;
+  const parsedReply = losslessJson(text);
+  const reply = parsedReply.value;
   const sent = losslessJson(raw).value;
   if (!(reply instanceof Map) || !(sent instanceof Map) ||
       reply.size !== 3 || reply.get('jsonrpc')?.value !== '2.0' ||
@@ -571,14 +636,15 @@ function requireRemoteReply(data: Buffer, raw: string): Buffer {
       (result ?? error)?.kind !== 'object') {
     throw new Error('Remote reply unavailable');
   }
+  // Check decoded JSON values and keys before any upstream text reaches the computer.
+  if (replyContainsCredential(parsedReply, contentType, material)) {
+    return safeRemoteError(sent, material);
+  }
   if (error) {
     const parsedError: unknown = JSON.parse(error.canonical);
     remoteErrorSchema.parse(parsedError);
     // Return fixed error fields because the remote server may copy our bearer into them.
-    const requestId: unknown = JSON.parse(sent.get('id')!.canonical);
-    const safeReply = { jsonrpc: '2.0', id: requestId,
-      error: { code: -32603, message: 'Remote tool error' } };
-    return Buffer.from(JSON.stringify(safeReply));
+    return safeRemoteError(sent, material);
   }
   return data;
 }
