@@ -2994,6 +2994,8 @@ const credentialReplyCases = [
     result: { structuredContent: { account: { token: 'alice-access' } } } },
   { name: 'nested string', material: 'alice-access',
     result: { metadata: [{ details: { credential: 'alice-access' } }] } },
+  { name: 'nested key', material: 'alice-access',
+    result: { structuredContent: { 'alice-access': true } } },
   { name: 'encoded content', material: 'alice-access',
     result: { content: [{ type: 'text', text: 'YWxpY2UtYWNjZXNz' }] } },
   { name: 'URL encoded content', material: 'alice/access',
@@ -3025,6 +3027,20 @@ async function hidesCredentialEchoInRemoteResult(testCase: typeof credentialRepl
 }
 it.each(credentialReplyCases)('refuses a credential echoed in $name',
   hidesCredentialEchoInRemoteResult, 60_000);
+
+async function hidesCredentialEchoInRemoteContentType() {
+  const { setup, remote, headers } = await selectedPersonalFixture();
+  remote.replyFields({ 'content-type': 'application/json; token=alice-access' });
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toBe('application/json');
+  expect(await response.json()).toEqual({ jsonrpc: '2.0', id: JSON.parse(body).id,
+    error: { code: -32603, message: 'Remote tool error' } });
+  expect(remote.received).toHaveLength(1);
+}
+it('does not forward credential text in an upstream content type',
+  hidesCredentialEchoInRemoteContentType, 60_000);
 
 async function refusesScopeMismatchBeforePermit() {
   const { setup, remote, headers, saved } = await selectedPersonalFixture();
