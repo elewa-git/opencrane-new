@@ -581,7 +581,7 @@ function exhaustedReason(scope: 'global' | 'paying_group' | 'assistant', scopeId
     ceilingCents: 1000, settledCents: 1000, reservedCents: 0, attemptedBoundCents: 1,
     configurationId: 'budget-config' };
 }
-function modernExhaustionData(kind: string) {
+function modernExhaustionData(kind: string, work?: { conversationId: string; turnId: string }) {
   if (kind.endsWith('_reason')) {
     let reason;
     if (kind === 'exhausted_global_reason') reason = exhaustedReason('global');
@@ -592,8 +592,7 @@ function modernExhaustionData(kind: string) {
     return { reasons: [reason] };
   }
   if (kind === 'exhausted_work') {
-    return { stopId: 'budget-stop', work: {
-      conversationId: 'routine-session-occurrence', turnId: 'routine-turn-occurrence' } };
+    return { stopId: 'budget-stop', work };
   }
   return { stopId: 'budget-stop', work: {
     conversationId: 'another-conversation', turnId: 'another-turn' } };
@@ -644,7 +643,9 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
           'budget.exhausted', { scope: 'assistant', scopeId: 'sales-assistant' });
         await nats.seed([exhausted]);
       } else if (kind.startsWith('exhausted_')) {
-        const data = modernExhaustionData(kind);
+        const run = (await runState()).activeRun!;
+        const work = { conversationId: run.conversationId, turnId: run.turnId };
+        const data = modernExhaustionData(kind, work);
         const exhausted = record(`exhausted-${kind}`, 'budget-test', 'budget.exhausted', data);
         await nats.seed([exhausted]);
       } else if (kind === 'stop') {
