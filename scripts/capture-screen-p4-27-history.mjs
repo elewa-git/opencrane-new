@@ -117,7 +117,8 @@ async function capture(browser, width, frame) {
     }
     if (width === 390 && frame === 'OVR-22') {
       const dialog = await page.locator('.history-detail').boundingBox();
-      assert(dialog && dialog.x === 0 && dialog.width === width,
+      assert(dialog && dialog.x === 0 && dialog.y === 0 &&
+        dialog.width === width && dialog.height === 900,
         'phone detail covers the whole viewport');
       const action = await page.getByRole('link', { name: 'Open People & groups' }).boundingBox();
       assert(action && action.width >= width - 32,
@@ -147,6 +148,7 @@ await writeFile(resolve(output, 'receipt.md'),
   + 'and an unknown observation. OVR-21 shows an empty selection; OVR-22 shows detail. '
   + 'Reduced motion, horizontal overflow, 44 px targets and visible phone results were checked. '
   + 'The detail was checked for modal focus, Tab, reverse Tab, Escape and focus return. '
+  + 'The 390 px detail covers the viewport and its action spans the available width. '
   + 'No live stack was used.\n\n'
   + 'PARTIAL — Frame comparison is visual and has no pixel comparison gate. '
   + 'The server does not supply display names or an organisation name for these records. '

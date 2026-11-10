@@ -11,16 +11,16 @@
     <div class="families-and-search">
     <nav class="families" aria-label="History families">
       <button type="button" [class.selected]="family === ''" (click)="selectFamily('')">All</button>
-      <button type="button" [class.selected]="family === 'member'"
-        (click)="selectFamily('member')">Members &amp; owners</button>
-      <button type="button" [class.selected]="family === 'tool'"
-        (click)="selectFamily('tool')">Tools &amp; models</button>
-      <button type="button" [class.selected]="family === 'effect'"
-        (click)="selectFamily('effect')">Spending &amp; effects</button>
+      <button type="button" [class.selected]="family === 'members'"
+        (click)="selectFamily('members')">Members &amp; owners</button>
+      <button type="button" [class.selected]="family === 'tools'"
+        (click)="selectFamily('tools')">Tools &amp; models</button>
+      <button type="button" [class.selected]="family === 'spending'"
+        (click)="selectFamily('spending')">Spending &amp; effects</button>
       <button type="button" [class.selected]="family === 'memory'"
         (click)="selectFamily('memory')">Memory</button>
-      <button type="button" [class.selected]="family === 'agent'"
-        (click)="selectFamily('agent')">Routines</button>
+      <button type="button" [class.selected]="family === 'routines'"
+        (click)="selectFamily('routines')">Routines</button>
     </nav>
     <form class="reference-search" (submit)="filter($event)" aria-label="History search">
       <label class="sr-only" for="history-reference">Safe reference</label>

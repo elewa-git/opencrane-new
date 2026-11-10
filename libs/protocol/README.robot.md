@@ -2,6 +2,9 @@
 
 For people, read [README.md](README.md) first.
 
+`auditFilterSchema.family` accepts `members`, `tools`, `spending`, `memory` or
+`routines`. It is separate from the existing single-prefix `type` filter.
+
 `agent.command_ran` display rows accept an optional masked `preview` of at most
 16,384 characters. The server sends it only after decrypting a saved view for a
 current conversation member. Older rows omit it.

@@ -3,6 +3,8 @@
 The organisation list reads `GET /api/org/history` with type, outcome, date
 and reference filters. Search submits the safe reference. `before` loads
 the next page. Rows are keyed by audit id, even when recorded times match.
+The family filter sends `members`, `tools`, `spending`, `memory` or `routines`.
+The server maps each key to the event prefixes in that family before paging.
 
 The selected row reads `GET /api/org/history/:auditId`. Its `before` field
 pages bounded evidence. A link is drawn only from `taskHref` returned by
@@ -11,8 +13,9 @@ The server checks publication and delegation chat rights for each read.
 Memory details show only the allowed metadata.
 The screen shows a short change reference only when the server id is a safe
 `chg_` reference. Other internal ids stay out of the list and detail.
-The detail opens as a browser modal. The browser keeps keyboard focus inside
-it, and Escape returns focus to the selected row. A person actor on an
+The detail opens as a browser modal. At phone widths it covers the full
+viewport and its task action spans the available width. The browser keeps
+keyboard focus inside it, and Escape returns focus to the selected row. A person actor on an
 authoritative record is shown as a verified person without exposing an id.
 An ownership record is called confirmed only when both content and access
 progress are current. The People & groups link opens the normal access-checked page.

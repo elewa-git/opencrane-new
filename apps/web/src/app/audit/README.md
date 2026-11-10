@@ -14,7 +14,7 @@ each reply.
 flowchart LR
   website[Website] --> history[Change history]
   website --> organisation[Organisation pages]
-  history --> server[Server history read]
+  history -->|family and reference| server[Server history read]
   server --> records[Saved event records]
 ```
 
@@ -22,6 +22,7 @@ flowchart LR
 
 - Shows a decision beside what was later observed.
 - Filters and loads older records without repeating a change.
+- Groups related changes so each family shows all of its saved event types.
 - Opens one record's evidence at a time.
 - Keeps focus in the open detail and returns it to the selected row when closed.
 - Shows membership, publication and delegation facts that the server permits.

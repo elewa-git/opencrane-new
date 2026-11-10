@@ -107,7 +107,7 @@ export class AuditScreen implements OnInit {
 
   private listQuery(before?: number): URLSearchParams {
     const query = new URLSearchParams();
-    const fields = { reference: this.reference, type: this.family,
+    const fields = { reference: this.reference, family: this.family,
       outcome: this.outcomeFilter };
     for (const [key, value] of Object.entries(fields)) {
       if (value.trim()) query.set(key, value.trim());

@@ -14,6 +14,7 @@ import { auditIdentifier as identifier, auditLinks, isDispatchEvent,
 import { maintenanceAuditData, maintenanceAnchor, maintenanceMetadata,
   maintenanceStatus } from './audit-maintenance.ts';
 import { maintenanceOutcome, observedOutcome } from './audit-outcomes.ts';
+import { familyCondition, prefixCondition } from './audit-filters.ts';
 export { readAuditOwnershipConfirmation } from './audit-outcomes.ts';
 
 // Free text never enters this projection, including approval reasons and tool arguments.
@@ -33,13 +34,13 @@ const auditPrefixes = [
   'assistant.',
   'grant.',
   'delegation.',
+  // Keep only the reviewed metadata from these events, never their schedules or keys.
+  'budget.',
+  'provider.',
+  'model.',
+  'routine.',
 ];
 const auditTypes = new Set([
-  // Budget records expose amounts and outcomes without request content.
-  'budget.reserved',
-  'budget.settled',
-  'budget.ceiling_set',
-  'budget.exhausted',
   // Security and gateway records explain refused or observed work.
   'tool.approval_requested',
   'tool.dispatch_started',
@@ -395,11 +396,10 @@ export async function readAudit(db: Query, silo: string,
     where.push(`${column} = $${parameters.length}`);
   }
   if (filter.type) {
-    parameters.push(`${filter.type}.`);
-    const start = parameters.length;
-    parameters.push(`${filter.type}/`);
-    where.push(`event_type COLLATE "C" >= $${start}
-      AND event_type COLLATE "C" < $${parameters.length}`);
+    where.push(prefixCondition(filter.type, parameters));
+  }
+  if (filter.family) {
+    where.push(familyCondition(filter.family, parameters));
   }
   if (filter.from) {
     parameters.push(filter.from);

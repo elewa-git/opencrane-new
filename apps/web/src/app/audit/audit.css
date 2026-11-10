@@ -71,7 +71,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .choices button { flex: 1; min-width: 44px; padding: 7px 4px; font-size: 12px; }
   .row-button { grid-template-columns: 1fr 16px; }
   .row-button time { grid-column: 1 / -1; }
-  .history-detail { width: 100%; }
+  .history-detail { width: 100%; max-width: 100%; }
+  .history-detail .task-link { display: flex; width: 100%; justify-content: center;
+    border-radius: 6px; background: #164e58; color: #fff; text-decoration: none; }
   .results { grid-template-columns: 1fr; }
   dl div { grid-template-columns: 1fr; gap: 2px; }
 }
