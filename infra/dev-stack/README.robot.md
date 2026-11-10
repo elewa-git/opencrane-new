@@ -2219,10 +2219,16 @@ generation. The checker matches the exact issued values, owned Namespace and
 Service UIDs, endpoint, CA and
 destination before it sends a storage request. It checks the record again immediately
 before marker PUT. An expired or caller-made record cannot approve a write.
+`renewCnpgBackupIdentity` closes the earlier process-local record before it asks
+for another lease. It accepts only the same silo, namespace and Service UIDs,
+endpoint and CA, with a different Secret generation and signed session token.
+It checks cancellation and the 30-second expiry margin after the storage call.
+A failed or unanswered renewal leaves the earlier record closed. The checker
+still uses the new record only after the owned Secret carries the new generation.
 
 The helper can pass its local marker check, but `preflight.mjs` still rejects every
 backup and recovery setting before Helm. Real MinIO issuance and enforcement,
-renewal, scheduled backup, WAL and restore are not qualified by these local tests.
+scheduled backup, WAL and restore are not qualified by these local tests.
 
 Part of #15, P5-3 PR 3c/3d/3e/3g. `cnpg-backup.ts` extends the existing CNPG checker.
 `preflight.mjs` still refuses every backup and recovery property before Helm,

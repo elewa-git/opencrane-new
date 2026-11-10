@@ -218,8 +218,16 @@ async function renewedRecordReplacesOld() {
     const next = await identity.renewCnpgBackupIdentity(first.evidence, nextBinding);
     assert.equal(identity.inspectCnpgBackupIdentity(next.evidence, nextBinding,
       next.credentials), next.destinationPath);
-    assert.throws(() => identity.inspectCnpgBackupIdentity(first.evidence, binding,
-      first.credentials), { message: 'CNPG backup identity is not confined to its destination' });
+    function inspectPrior() {
+      identity.inspectCnpgBackupIdentity(first.evidence, binding, first.credentials);
+    }
+    assert.throws(inspectPrior,
+      { message: 'CNPG backup identity is not confined to its destination' });
+    const callsBefore = issuerCalls;
+    const laterBinding = { ...binding, generation: 'third-credential-generation' };
+    await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, laterBinding),
+      { message: 'CNPG backup identity provisioning refused' });
+    assert.equal(issuerCalls, callsBefore);
   } finally {
     returnedAccessKey = 'leased-access';
   }
@@ -233,8 +241,15 @@ async function changedRenewalTargetRefuses() {
   const first = await identity.provisionCnpgBackupIdentity(binding);
   for (const field of ['silo', 'namespace', 'namespaceUid', 'serviceUid',
     'endpointURL', 'ca'] as const) {
-    const changed = { ...binding, generation: 'new-credential-generation',
-      [field]: `changed-${field}` };
+    const changed = { ...binding, generation: 'new-credential-generation' };
+    if (field === 'endpointURL') {
+      changed.endpointURL = `https://backup-store.${namespace}.svc:9001`;
+    } else if (field === 'namespace') {
+      changed.namespace = 'other-namespace';
+      changed.endpointURL = 'https://backup-store.other-namespace.svc:9000';
+    } else {
+      changed[field] = `changed-${field}`;
+    }
     const callsBefore = issuerCalls;
     await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, changed),
       { message: 'CNPG backup identity provisioning refused' });
@@ -257,8 +272,11 @@ async function reusedTokenRefuses() {
   try {
     await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, nextBinding),
       { message: 'CNPG backup identity provisioning refused' });
-    assert.throws(() => identity.inspectCnpgBackupIdentity(first.evidence, binding,
-      first.credentials), { message: 'CNPG backup identity is not confined to its destination' });
+    function inspectPrior() {
+      identity.inspectCnpgBackupIdentity(first.evidence, binding, first.credentials);
+    }
+    assert.throws(inspectPrior,
+      { message: 'CNPG backup identity is not confined to its destination' });
   } finally {
     reusedToken = undefined;
   }
@@ -271,14 +289,19 @@ for (const fault of ['issuer failure', 'short expiry', 'lost time', 'cancellatio
     existingBuckets = new Set(['ocn-backup-silo-one']);
     const first = await identity.provisionCnpgBackupIdentity(binding);
     const nextBinding = { ...binding, generation: 'new-credential-generation' };
+    returnedAccessKey = 'renewed-access';
     const controller = new AbortController();
     if (fault === 'issuer failure') issuerFailure = true;
     if (fault === 'short expiry') expirySeconds = 20;
     if (fault === 'lost time' || fault === 'cancellation') {
+      let now = Date.now();
+      function clock() {
+        return now;
+      }
+      context.mock.method(Date, 'now', clock);
       function endCheck() {
         if (fault === 'lost time') {
-          const late = Date.now() + 901_000;
-          context.mock.method(Date, 'now', () => late);
+          now += 901_000;
         } else {
           controller.abort();
         }
@@ -288,12 +311,16 @@ for (const fault of ['issuer failure', 'short expiry', 'lost time', 'cancellatio
     try {
       await assert.rejects(identity.renewCnpgBackupIdentity(first.evidence, nextBinding,
         controller.signal), { message: 'CNPG backup identity provisioning refused' });
-      assert.throws(() => identity.inspectCnpgBackupIdentity(first.evidence, binding,
-        first.credentials), { message: 'CNPG backup identity is not confined to its destination' });
+      function inspectPrior() {
+        identity.inspectCnpgBackupIdentity(first.evidence, binding, first.credentials);
+      }
+      assert.throws(inspectPrior,
+        { message: 'CNPG backup identity is not confined to its destination' });
     } finally {
       issuerFailure = false;
       expirySeconds = 900;
       afterBucketCheck = undefined;
+      returnedAccessKey = 'leased-access';
     }
   }
   test(`a ${fault} during renewal leaves no usable prior lease`, failedRenewalClosesGate);

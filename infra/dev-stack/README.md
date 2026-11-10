@@ -89,6 +89,9 @@ available for diagnosis.
   Backup and recovery installation remain blocked.
   The local helper issues that credential for the silo recorded by this installation
   and checks the policy signed into it.
+  A renewal closes the earlier credential record before requesting a new lease.
+  The new lease needs a fresh token and Secret generation for the same owned storage.
+  If renewal fails, the earlier record cannot approve another check.
   The installer still blocks backup and recovery settings.
   Requires runtime and setup replica settings to match the chart before Helm runs.
   Checks mounted event-log certificates and keys, connection settings and account rules.
