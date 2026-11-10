@@ -1,1 +1,1 @@
-Change history now shows safe membership, publication and delegation details, with paged evidence and clearer access-loss and unknown-outcome states.
+Change history now shows compact filters and readable membership, publication and delegation details. Its detail panel keeps keyboard focus, pages safe evidence and clears protected records when access ends.

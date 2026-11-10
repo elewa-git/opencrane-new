@@ -19,14 +19,12 @@ export class AuditScreen implements OnInit {
   protected readonly nextBefore = signal<number | undefined>(undefined);
   protected readonly detail = signal<AuditRecord[]>([]);
   protected readonly detailId = signal<string | undefined>(undefined);
+  protected readonly selectedRow = signal<AuditRow | undefined>(undefined);
   protected readonly detailBefore = signal<number | undefined>(undefined);
   protected readonly detailState = signal<LoadState>('loading');
   protected family = '';
   protected outcomeFilter = '';
   protected dateRange = 7;
-  protected decision = '';
-  protected requestId = '';
-  protected turnId = '';
   protected reference = '';
   private generation = 0;
   private detailGeneration = 0;
@@ -66,9 +64,6 @@ export class AuditScreen implements OnInit {
     this.family = '';
     this.outcomeFilter = '';
     this.reference = '';
-    this.requestId = '';
-    this.turnId = '';
-    this.decision = '';
     this.startSelection();
   }
 
@@ -112,8 +107,7 @@ export class AuditScreen implements OnInit {
 
   private listQuery(before?: number): URLSearchParams {
     const query = new URLSearchParams();
-    const fields = { decision: this.decision, requestId: this.requestId,
-      turnId: this.turnId, reference: this.reference, type: this.family,
+    const fields = { reference: this.reference, type: this.family,
       outcome: this.outcomeFilter };
     for (const [key, value] of Object.entries(fields)) {
       if (value.trim()) query.set(key, value.trim());
@@ -129,6 +123,7 @@ export class AuditScreen implements OnInit {
   protected async openDetail(row: AuditRow, button: HTMLButtonElement): Promise<void> {
     if (this.conversationId() || this.revoked) return;
     this.opener = button;
+    this.selectedRow.set(row);
     this.detailId.set(row.id);
     this.detail.set([]);
     this.detailBefore.set(undefined);
@@ -137,7 +132,10 @@ export class AuditScreen implements OnInit {
   }
 
   private focusDetail(): void {
-    document.querySelector<HTMLButtonElement>('.close-detail')?.focus();
+    const dialog = document.querySelector<HTMLDialogElement>('.history-detail');
+    if (!dialog || !this.detailId()) return;
+    dialog.showModal();
+    dialog.querySelector<HTMLElement>('h2')?.focus();
   }
 
   protected checkStatus(row: AuditRow, button: HTMLButtonElement): void {
@@ -178,6 +176,7 @@ export class AuditScreen implements OnInit {
   protected closeDetail(restoreFocus = true): void {
     this.detailGeneration++;
     this.detailId.set(undefined);
+    this.selectedRow.set(undefined);
     this.detail.set([]);
     this.detailBefore.set(undefined);
     if (restoreFocus) this.opener?.focus();
@@ -205,14 +204,109 @@ export class AuditScreen implements OnInit {
 
   protected title(row: AuditRow): string {
     const record = row.records[0];
-    if (record?.operation) return `Membership and ownership · ${record.operation.replace('_', ' ')}`;
+    if (record?.operation) return this.membershipTitle(record.operation);
     if (record?.publicationKind) {
       const kind = record.publicationKind === 'interim' ? 'Interim' : 'Final';
       return `${kind} publication`;
     }
     if (record?.delegationAccess) return 'Delegation outcome';
     if (record?.maintenanceAction) return 'Memory maintenance · content restricted';
-    return row.requestId ? `Request ${row.requestId}` : 'Organisation change';
+    if (record?.type.startsWith('effect.')) {
+      if (row.outcome === 'unknown') return 'External effect · outcome unknown';
+      return 'External effect recorded';
+    }
+    if (record?.type.startsWith('decision.')) return 'Decision recorded';
+    return 'Organisation change';
+  }
+
+  protected familyIcon(record?: AuditRecord): string {
+    if (!record) return '•';
+    const family = record.type.split('.')[0];
+    if (family === 'member') return '👤';
+    if (family === 'tool') return '⚙';
+    if (family === 'effect' || family === 'budget') return '€';
+    if (family === 'memory') return '◈';
+    if (family === 'agent') return '◷';
+    if (family === 'conversation' || family === 'delegation') return '↗';
+    return '•';
+  }
+
+  private membershipTitle(operation: NonNullable<AuditRecord['operation']>): string {
+    if (operation === 'appointment') return 'Owner appointed';
+    if (operation === 'ownership_confirmation') return 'Ownership confirmed';
+    if (operation === 'step_down') return 'Owner stepped down';
+    if (operation === 'role_change') return 'Member role changed';
+    return 'Membership changed';
+  }
+
+  protected recordTitle(record: AuditRecord): string {
+    if (record.operation === 'appointment') return 'Ownership appointment';
+    if (record.publicationKind) return 'Child result published';
+    if (record.delegationAccess) return 'Delegated work';
+    if (record.maintenanceAction) return 'Memory work · content restricted';
+    return 'Saved observation';
+  }
+
+  protected shortDate(value?: string): string {
+    if (!value) return 'Time unavailable';
+    return new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
+    }).format(new Date(value));
+  }
+
+  protected fullDate(value?: string): string {
+    if (!value) return 'Time unavailable';
+    return `${new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      timeZone: 'UTC',
+    }).format(new Date(value))} UTC`;
+  }
+
+  protected changeReference(value: string): string | undefined {
+    if (!/^chg_[A-Za-z0-9]{4,}$/u.test(value)) return undefined;
+    if (value.length <= 16) return value;
+    return `${value.slice(0, 12)}…`;
+  }
+
+  protected decisionLabel(decision?: AuditRow['decision']): string {
+    if (decision === 'allow') return 'Approved';
+    if (decision === 'deny') return 'Denied';
+    if (decision === 'ask') return 'Needs approval';
+    return 'No separate decision recorded';
+  }
+
+  protected observationLabel(record: AuditRecord): string {
+    if (record.status === 'unknown') return 'Outcome unknown';
+    if (record.status === 'error') return 'Failed';
+    if (record.progress?.readModel === 'applying' || record.progress?.iam === 'applying') {
+      return 'Still applying';
+    }
+    if (record.operation === 'appointment' && record.newRole === 'owner' &&
+        record.progress?.readModel === 'current' && record.progress.iam === 'current') {
+      return 'Owner role current in content and access';
+    }
+    if (record.status === 'recorded') return 'Change recorded';
+    return record.status;
+  }
+
+  protected affectedScope(record: AuditRecord): string {
+    if (record.operation) {
+      if (record.newRole === 'owner') return 'Organisation owners';
+      return 'Organisation members';
+    }
+    if (record.publicationKind) return 'Permitted parent chat';
+    if (record.delegationAccess) return 'Delegated work';
+    if (record.maintenanceAction) return 'Personal memory · content restricted';
+    return 'Organisation activity';
+  }
+
+  protected actorLabel(record: AuditRecord): string {
+    if (record.actor?.kind === 'person' && record.source === 'authoritative') {
+      return 'Verified person';
+    }
+    if (record.actor?.kind === 'system') return 'System';
+    if (record.actor?.kind === 'agent') return 'Assistant';
+    return 'Actor not verified';
   }
 
   protected safeLink(record: AuditRecord): string | undefined {

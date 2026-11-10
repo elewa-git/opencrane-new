@@ -13,7 +13,8 @@ const recordedAt = '2026-11-08T10:50:00.000Z';
 
 const facts = [
   { id: 'change-owner', type: 'member.role_changed', operation: 'appointment',
-    newRole: 'owner', actor: { kind: 'person', id: 'member-Marie' } },
+    newRole: 'owner', actor: { kind: 'person', id: 'member-Marie' },
+    progress: { readModel: 'current', iam: 'current', checkedAt: recordedAt } },
   { id: 'child-published', type: 'conversation.child_result_published',
     publicationKind: 'interim', parentConversationId: 'parent',
     taskHref: '/workspace?conversation=parent' },
@@ -63,7 +64,9 @@ function touchTargets() {
   const targets = document.querySelectorAll('.history button, .history a, .history-detail button');
   for (const target of targets) {
     const box = target.getBoundingClientRect();
-    if (box.width < 44 || box.height < 44) return false;
+    if (box.width < 44 || box.height < 44) {
+      throw new Error(`${target.textContent?.trim()} ${box.width}x${box.height}`);
+    }
   }
   return true;
 }
@@ -78,18 +81,40 @@ async function capture(browser, width, frame) {
     await page.goto(`${origin}/org/history`);
     if (empty) {
       await page.getByRole('searchbox', { name: 'Safe reference' }).fill('chg_ZZZZ');
-      await page.getByRole('button', { name: 'Apply filters' }).click();
-      await page.getByText('No history matches this selection.').waitFor();
+      await page.getByRole('button', { name: 'Search' }).click();
+      await page.getByText('No entries match chg_ZZZZ.').waitFor();
     } else {
       await page.locator('.row-button').first().waitFor();
     }
     if (frame === 'OVR-22') {
-      await page.locator('.row-button').first().click();
+      const opener = page.locator('.row-button').first();
+      await opener.click();
+      await page.locator('.evidence').first().waitFor();
+      assert(await page.locator('.history-detail').evaluate(dialog => dialog.matches(':modal')),
+        'detail uses a browser modal');
+      assert(await page.locator('#history-detail-title').evaluate(title => title === document.activeElement),
+        'detail title receives focus');
+      await page.keyboard.press('Shift+Tab');
+      assert(await page.locator('.history-detail').evaluate(dialog => dialog.contains(document.activeElement)),
+        'reverse Tab stays in detail');
+      await page.keyboard.press('Tab');
+      assert(await page.locator('.history-detail').evaluate(dialog => dialog.contains(document.activeElement)),
+        'Tab stays in detail');
+      await page.keyboard.press('Escape');
+      assert(await opener.evaluate(button => button === document.activeElement),
+        'Escape returns focus to the opener');
+      await opener.click();
       await page.locator('.evidence').first().waitFor();
     }
     await page.evaluate(waitForFonts);
     assert(await page.evaluate(pageHasNoOverflow), `${frame} ${width} overflow`);
     assert(await page.evaluate(touchTargets), `${frame} ${width} touch targets`);
+    if (width === 390 && frame !== 'OVR-22') {
+      const result = frame === 'OVR-21' ? '.empty-card' : '.row-button';
+      const top = await page.locator(result).first().evaluate(element =>
+        element.getBoundingClientRect().top);
+      assert(top < 900, `${frame} phone result visible without scrolling`);
+    }
     await page.screenshot({ path: resolve(output, `${frame}-${width}.png`) });
   } finally {
     await page.close();
@@ -112,9 +137,10 @@ await writeFile(resolve(output, 'receipt.md'),
   + 'PASS — Six intercepted browser captures at 1280 and 390 pixels. '
   + 'The list includes membership, publication, restricted delegation, memory metadata '
   + 'and an unknown observation. OVR-21 shows an empty selection; OVR-22 shows detail. '
-  + 'Reduced motion, horizontal overflow and 44 px targets were checked. '
+  + 'Reduced motion, horizontal overflow, 44 px targets and visible phone results were checked. '
+  + 'The detail was checked for modal focus, Tab, reverse Tab, Escape and focus return. '
   + 'No live stack was used.\n\n'
-  + 'PARTIAL — Compared with the six OVR-20/21/22 handoff frames. The list and '
-  + 'detail use the same broad layout and phone panel. The captures show safe event '
-  + 'references in place of unavailable permitted names, and the existing server '
-  + 'filter controls take more space than the handoff. No page count is claimed.\n');
+  + 'PARTIAL — Frame comparison is visual and has no pixel comparison gate. '
+  + 'The server does not supply display names or an organisation name for these records. '
+  + 'The captures use readable generic labels for verified people and scope. '
+  + 'No page count is claimed.\n');

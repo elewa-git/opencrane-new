@@ -23,6 +23,7 @@ flowchart LR
 - Shows a decision beside what was later observed.
 - Filters and loads older records without repeating a change.
 - Opens one record's evidence at a time.
+- Keeps focus in the open detail and returns it to the selected row when closed.
 - Shows membership, publication and delegation facts that the server permits.
 - Shows memory work as metadata without fact text.
 - Keeps loaded records during a temporary failure and clears them when access ends.

@@ -5,28 +5,34 @@
       <p>Safe history of decisions and observations. It never contains private conversation text,
         memory facts, arguments, secrets or approval content.</p>
     </div>
-    <button class="refresh" type="button" (click)="load()">Refresh history</button>
   </header>
   @if (conversationId()) { <a class="back" href="/workspace">‹ Back to workspace</a> }
   @if (!conversationId()) {
+    <div class="families-and-search">
     <nav class="families" aria-label="History families">
       <button type="button" [class.selected]="family === ''" (click)="selectFamily('')">All</button>
       <button type="button" [class.selected]="family === 'member'"
-        (click)="selectFamily('member')">Members</button>
-      <button type="button" [class.selected]="family === 'conversation'"
-        (click)="selectFamily('conversation')">Publications</button>
-      <button type="button" [class.selected]="family === 'delegation'"
-        (click)="selectFamily('delegation')">Delegation</button>
+        (click)="selectFamily('member')">Members &amp; owners</button>
+      <button type="button" [class.selected]="family === 'tool'"
+        (click)="selectFamily('tool')">Tools &amp; models</button>
+      <button type="button" [class.selected]="family === 'effect'"
+        (click)="selectFamily('effect')">Spending &amp; effects</button>
       <button type="button" [class.selected]="family === 'memory'"
         (click)="selectFamily('memory')">Memory</button>
+      <button type="button" [class.selected]="family === 'agent'"
+        (click)="selectFamily('agent')">Routines</button>
     </nav>
+    <form class="reference-search" (submit)="filter($event)" aria-label="History search">
+      <label class="sr-only" for="history-reference">Safe reference</label>
+      <input id="history-reference" aria-label="Safe reference" type="search"
+        placeholder="Safe reference, e.g. chg_7F3K" [value]="reference"
+        (input)="reference = $any($event.target).value" maxlength="300">
+      <button type="submit">Search</button>
+    </form>
+    </div>
   }
-  <form (submit)="filter($event)" aria-label="History filters">
+  <div class="compact-filters" aria-label="History filters">
     @if (!conversationId()) {
-      <label class="reference">Safe reference
-        <input aria-label="Safe reference" type="search" [value]="reference"
-          (input)="reference = $any($event.target).value" maxlength="300">
-      </label>
       <fieldset class="choices">
         <legend>Date range</legend>
         <button type="button" [class.selected]="dateRange === 1"
@@ -37,7 +43,7 @@
           (click)="selectDate(30)">30 days</button>
       </fieldset>
       <fieldset class="choices">
-        <legend>Observed outcome</legend>
+        <legend>Outcome</legend>
         <button type="button" [class.selected]="outcomeFilter === ''"
           (click)="selectOutcome('')">Any</button>
         <button type="button" [class.selected]="outcomeFilter === 'success'"
@@ -48,37 +54,20 @@
           (click)="selectOutcome('error')">Failed</button>
       </fieldset>
     }
-    <div class="advanced">
-      <label>Decision
-        <select aria-label="Decision filter" [value]="decision"
-          (change)="decision = $any($event.target).value">
-          <option value="">All decisions</option><option value="allow">Allow</option>
-          <option value="ask">Ask</option><option value="deny">Deny</option>
-        </select>
-      </label>
-      <label>Request id
-        <input aria-label="Request id filter" type="search" [value]="requestId"
-          (input)="requestId = $any($event.target).value" maxlength="300">
-      </label>
-      <label>Turn id
-        <input aria-label="Turn id filter" type="search" [value]="turnId"
-          (input)="turnId = $any($event.target).value" maxlength="300">
-      </label>
-      <button id="apply-audit-filters" type="submit">Apply filters</button>
-    </div>
-  </form>
+  </div>
   <div class="history-status" role="status" aria-live="polite">
     @if (state() === 'access') {
       <p>Access changed. Protected history has been cleared.</p>
     } @else if (state() === 'unavailable') {
       <p>History unavailable.
         @if (evidenceAt()) { Showing saved results last checked {{ evidenceAt() }}. }
-        Refresh history to check again.</p>
+        <button type="button" (click)="load()">Try again</button></p>
     } @else if (state() === 'loading') {
-      <p>Loading history…</p>
+      <p>Loading history…</p><div class="loading-skeleton" aria-hidden="true"></div>
     } @else if (!rows().length) {
-      <p>No history matches this selection.</p>
+      <div class="empty-card"><p>No entries match {{ reference || 'this selection' }}.</p>
       <button type="button" (click)="clearFilters()">Clear filters</button>
+      </div>
     } @else {
       <span class="sr-only">History loaded</span>
     }
@@ -87,11 +76,14 @@
     @for (row of rows(); track row.id) {
       <article>
         <button class="row-button" type="button" (click)="openDetail(row, $any($event.currentTarget))">
-          <time>{{ row.records[0]?.recordedAt || 'Time unavailable' }}</time>
+          <time [attr.datetime]="row.records[0]?.recordedAt">{{ shortDate(row.records[0]?.recordedAt) }}</time>
           <span class="row-main">
-            <strong>{{ title(row) }}</strong>
+            <strong><span class="family-icon" aria-hidden="true">{{ familyIcon(row.records[0]) }}</span>
+              {{ title(row) }}</strong>
             <small>Decision: {{ row.decision === 'not_recorded' ? 'Not recorded' : row.decision }}
-              · Observation: {{ outcome(row) }} · {{ row.id }}</small>
+              · Observation: {{ outcome(row) }}
+              @if (changeReference(row.id); as reference) { · {{ reference }} }
+            </small>
           </span>
           <span aria-hidden="true">›</span>
         </button>
@@ -124,11 +116,12 @@
   </div>
 </section>
 @if (detailId(); as selected) {
-  <div class="detail-backdrop" (click)="closeDetail()"></div>
-  <aside class="history-detail" role="dialog" aria-modal="true" aria-label="History detail"
-    (keydown.escape)="closeDetail()">
+  <dialog class="history-detail" aria-labelledby="history-detail-title"
+    (cancel)="closeDetail()" (close)="closeDetail()">
     <button class="close-detail" type="button" (click)="closeDetail()">‹ Back to history</button>
-    <h2>{{ selected }}</h2>
+    <h2 id="history-detail-title" tabindex="-1">{{ selectedRow() ? title(selectedRow()!) : 'Change detail' }}</h2>
+    <time [attr.datetime]="selectedRow()?.records?.[0]?.recordedAt">
+      {{ fullDate(selectedRow()?.records?.[0]?.recordedAt) }}</time>
     @if (detailState() === 'loading' && !detail().length) { <p role="status">Loading evidence…</p> }
     @if (detailState() === 'unavailable') {
       <p role="status">Evidence unavailable. Saved evidence may be stale.</p>
@@ -136,33 +129,24 @@
     }
     @for (record of detail(); track record.eventId) {
       <section class="evidence">
-        <h3>{{ record.type }}</h3>
+        <h3>{{ recordTitle(record) }}</h3>
         <div class="results">
-          <div><span>Decision</span><strong>{{ record.source === 'decision' ? record.status : 'Not recorded' }}</strong></div>
-          <div><span>Observation</span><strong>{{ record.status }}</strong></div>
+          <div><span>Decision</span><strong>{{ decisionLabel(selectedRow()?.decision) }}</strong></div>
+          <div><span>Observation</span><strong>{{ observationLabel(record) }}</strong></div>
         </div>
         <dl>
-          <div><dt>Recorded</dt><dd>{{ record.recordedAt || 'Time unavailable' }}</dd></div>
-          <div><dt>Reference</dt><dd>{{ record.eventId }}</dd></div>
-          @if (record.actor; as actor) {
-            <div><dt>Actor</dt><dd>{{ actor.kind === 'person' ? actor.id : actor.kind }}</dd></div>
+          <div><dt>Affected scope</dt><dd>{{ affectedScope(record) }}</dd></div>
+          <div><dt>Verified actor</dt><dd>{{ actorLabel(record) }}</dd></div>
+          @if (changeReference(record.eventId); as reference) {
+            <div><dt>Reference</dt><dd>{{ reference }}</dd></div>
           }
-          @if (record.operation) { <div><dt>Operation</dt><dd>{{ record.operation }}</dd></div> }
-          @if (record.memberId) { <div><dt>Affected member</dt><dd>{{ record.memberId }}</dd></div> }
-          @if (record.previousRole) { <div><dt>Prior role</dt><dd>{{ record.previousRole }}</dd></div> }
-          @if (record.newRole) { <div><dt>New role</dt><dd>{{ record.newRole }}</dd></div> }
-          @if (record.publicationKind) { <div><dt>Publication</dt><dd>{{ record.publicationKind }}</dd></div> }
-          @if (record.parentConversationId) { <div><dt>Parent chat</dt><dd>{{ record.parentConversationId }}</dd></div> }
-          @if (record.childConversationId) { <div><dt>Child chat</dt><dd>{{ record.childConversationId }}</dd></div> }
-          @if (record.delegationAccess) { <div><dt>Child work</dt><dd>{{ record.delegationAccess }}</dd></div> }
-          @if (record.executionOutcome) { <div><dt>Execution</dt><dd>{{ record.executionOutcome }}</dd></div> }
           @if (record.joinStatus === 'unavailable') { <div><dt>Related record</dt><dd>Unavailable</dd></div> }
-          @if (record.maintenanceAction) { <div><dt>Memory operation</dt><dd>{{ record.maintenanceAction }}</dd></div> }
           @if (record.progress; as progress) {
-            <div><dt>Content</dt><dd>{{ progress.readModel }}</dd></div>
-            <div><dt>Access</dt><dd>{{ progress.iam }}</dd></div>
+            <div><dt>Content update</dt><dd>{{ progress.readModel }}</dd></div>
+            <div><dt>Access update</dt><dd>{{ progress.iam }}</dd></div>
           }
         </dl>
+        @if (record.operation) { <a class="task-link" href="/org/people">Open People &amp; groups</a> }
         @if (safeLink(record); as href) { <a class="task-link" [href]="href">Open permitted chat</a> }
       </section>
     }
@@ -174,5 +158,5 @@
     @if (detail().length && detail()[0]?.status === 'unknown') {
       <button type="button" (click)="loadDetail(selected)">Check status</button>
     }
-  </aside>
+  </dialog>
 }
