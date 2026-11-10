@@ -18,7 +18,7 @@
       } @else {
         <p role="status">Approved revision r{{ detail()?.revision }}</p>
         <p>Approved <time [attr.datetime]="approvalTime()">{{ formattedApprovalTime() }}</time></p>
-        <a class="button-link approve" href="/workspace">Continue to workspace</a>
+        <a class="button-link approve" href="/welcome">Open welcome chat</a>
       }
       <p class="unavailable-controls">Edit and Restart survey will be available in a later update.</p>
     } @else {

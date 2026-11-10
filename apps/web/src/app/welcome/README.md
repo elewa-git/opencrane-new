@@ -3,7 +3,8 @@
 ## What this is
 
 This folder shows the welcome survey and creates a private persona from its four
-saved answers. People can review the text and approve that exact saved version.
+saved answers. People can review the text, approve that exact version and answer
+one saved welcome question.
 
 ## Where it fits
 
@@ -12,8 +13,8 @@ persona versions and approval results.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey, creation and review"]
-  welcome -->|reads, creates and saves| server["apps/server<br/>private onboarding"]
+  web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey, persona and chat"]
+  welcome -->|reads and saves| server["apps/server<br/>private onboarding"]
   welcome -.->|uses| state["shared-state<br/>status messages"]
 ```
 
@@ -23,7 +24,9 @@ flowchart LR
 - Create the first persona after the survey, then read and show its private text
   only after access checks.
 - Approve the exact current version and check an uncertain approval by its command id.
-- Show when approval was saved and link to the workspace afterwards.
+- Show when approval was saved and link to the welcome chat.
+- Link to unfinished survey or persona review before offering a welcome start.
+- Show the saved welcome question and answer, then a read-only completion.
 - Clear private text when access ends.
 - Not built yet: persona editing, replacement and survey restart from the review screen.
 
@@ -36,7 +39,12 @@ flowchart LR
    from the saved answers. It checks an uncertain creation without sending it again.
    A competing edit makes the screen read the latest version again.
 3. **Approval.** The screen sends one command. If the result is uncertain, it checks
-   that same command. Confirmed approval shows the saved time and opens the workspace.
+   that same command. Confirmed approval shows the saved time and opens welcome.
+4. **Welcome.** A person finishes any step the server says is needed, then
+   chooses a start that the server confirms is ready.
+   Returning to a saved question shows a welcome-back notice. The screen checks
+   an uncertain answer by its original command and shows the saved completion time
+   before closing the composer.
 
 ## How to run or test it
 

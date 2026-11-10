@@ -86,8 +86,22 @@ async function assistantAssignment(options: ChatOptions, memberId: string) {
   return { assistantId, subject, position, assigned, choice };
 }
 
+export async function welcomeAssistantAssigned(options: ChatOptions, memberId: string) {
+  const assignment = await assistantAssignment(options, memberId);
+  return assignment.assigned;
+}
+
+export function welcomeRequiredStep(history: History, assistantAssigned: boolean):
+  'survey' | 'persona' | null {
+  if (history.steps.length !== 4) return 'survey';
+  if (assistantAssigned && !history.approval) return 'persona';
+  return null;
+}
+
 function checkStart(input: z.infer<typeof start>, history: History) {
-  if (history.steps.length !== 4 || history.welcome) throw new SurveyConflict();
+  if (welcomeRequiredStep(history, input.variant === 'assistant') || history.welcome) {
+    throw new SurveyConflict();
+  }
   if (input.variant === 'assistant' &&
       (history.approval?.revision !== input.revision ||
        history.approval?.revisionId !== input.revisionId)) throw new SurveyConflict();
