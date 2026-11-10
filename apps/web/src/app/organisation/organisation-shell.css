@@ -8,7 +8,7 @@ a { font-size: 13px; }
 nav { padding: 0 10px; }
 nav a, oc-navigation-menu a {
   gap: 8px;
-  min-height: 34px;
+  min-height: 44px;
   padding: 6px 10px;
   font-size: 13px;
 }

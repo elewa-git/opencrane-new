@@ -10,6 +10,9 @@ dialog {
   transform-origin: left center;
 }
 dialog[open] { animation: oc-menu-hinge 420ms var(--oc-ease-fold); }
+@media (prefers-reduced-motion: reduce) {
+  dialog[open] { animation: none; }
+}
 nav { padding: 12px 10px; overflow: auto; overscroll-behavior: contain; }
 a {
   display: flex;

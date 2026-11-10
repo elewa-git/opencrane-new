@@ -43,7 +43,8 @@
   <oc-sign-in />
 } @else {
   <oc-organisation-shell [activePage]="activePage" [organisationName]="organisation"
-    [accessLost]="overviewAccessLost()">
+    [accessLost]="overviewAccessLost()"
+    [permittedPages]="activePage === 'overview' ? overviewPages() : undefined">
     @if (assistantCreateGroupId) {
       <oc-shared-assistant-admin [groupId]="assistantCreateGroupId" />
     } @else if (installPage) {
@@ -59,7 +60,8 @@
     } @else if (statesPage) {
       <oc-state-specimen />
     } @else if (activePage === 'overview') {
-      <oc-overview (accessLost)="overviewAccessLost.set(true)" />
+      <oc-overview (accessLost)="overviewAccessLost.set(true); overviewPages.set([])"
+        (navigationReady)="overviewPages.set($event)" />
     } @else if (activePage === 'integrations') {
       <oc-integration-register />
     } @else if (activePage === 'models') {

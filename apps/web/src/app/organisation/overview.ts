@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, output, signal, type OnInit } from '@angular/core';
+import { permittedOrganisationPages, type OrganisationPage } from './pages';
 
 type Priority = 'unknown' | 'needs_input' | 'failure' | 'ready';
 type SourceName = 'people' | 'providers' | 'integrations' | 'spending' |
@@ -26,12 +27,15 @@ interface OverviewReply {
   next: string | null;
   allClear: boolean;
   sources: OverviewSource[];
+  viewer: unknown;
+  capabilities: unknown;
 }
 
 function isOverviewReply(value: unknown): value is OverviewReply {
   if (value === null || typeof value !== 'object') return false;
   if (!('rows' in value) || !Array.isArray(value.rows)) return false;
   if (!('sources' in value) || !Array.isArray(value.sources)) return false;
+  if (!('viewer' in value) || !('capabilities' in value)) return false;
   if (!('next' in value) || !(value.next === null || typeof value.next === 'string')) {
     return false;
   }
@@ -124,6 +128,7 @@ function focusStaleRefresh(): void {
 })
 export class OverviewScreen implements OnInit {
   readonly accessLost = output<void>();
+  readonly navigationReady = output<readonly OrganisationPage[]>();
   protected readonly rows = signal<OverviewRow[]>([]);
   protected readonly sources = signal<OverviewSource[]>([]);
   protected readonly next = signal<string | null>(null);
@@ -239,6 +244,7 @@ export class OverviewScreen implements OnInit {
   }
 
   private acceptPage(page: OverviewReply, append: boolean): void {
+    this.navigationReady.emit(permittedOrganisationPages(page.viewer, page.capabilities));
     if (append) {
       const seen = new Set(this.rows().map(rowKey));
       const unique: OverviewRow[] = [];

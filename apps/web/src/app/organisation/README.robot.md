@@ -15,7 +15,12 @@ current, the same screen also shows the dated Nothing needs your attention notic
 
 An invalid saved cursor restarts at page one once. A failed refresh keeps the
 last loaded page and its checked time. A 401 or 403 clears rows and hides the
-organisation navigation. A late reply cannot restore rows after refusal.
+organisation navigation. A late reply cannot restore rows or links after refusal.
+On the overview route, the shell starts with no organisation links and uses the
+response's viewer and capability flags. People, providers, spending, integrations,
+routines and history each need their own read flag. Overview needs a successful
+Owner/Admin overview read. A 503 keeps links from an earlier successful read.
+Other organisation pages keep their own access checks and content.
 Actions map API evidence paths to browser pages; no API path is a page link.
 Failed refreshes place the Refresh action in the stale notice and move keyboard
 focus there when the earlier Refresh action had focus.
@@ -23,3 +28,5 @@ focus there when the earlier Refresh action had focus.
 `npm run visual:p4-27-pr14` builds the website and captures twelve intercepted
 states at 1280 and 390 pixels. The images and result are in
 `docs/process/p4-27-pr14/`. They do not qualify a live installation.
+`npm run visual:p4-27-pr15` captures the full and restricted navigation at both
+widths in `docs/process/p4-27-pr15/`. It uses an intercepted overview read.

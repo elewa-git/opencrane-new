@@ -141,13 +141,17 @@ it('ignores a response body that finishes after access is revoked', async () => 
   vi.spyOn(response, 'json').mockReturnValue(delayedPage);
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
   const fixture = await mount();
+  const navigationReady = vi.fn();
+  fixture.componentInstance.navigationReady.subscribe(navigationReady);
   fixture.componentInstance['clearAccess']();
-  deliverPage?.({ rows: [row('private-id', 'unknown')], next: null, sources });
+  deliverPage?.({ rows: [row('private-id', 'unknown')], next: null, sources,
+    viewer: { role: 'admin' }, capabilities: { people: { read: true } } });
   await vi.waitFor(() => {
     fixture.detectChanges();
     expect(root(fixture).textContent).toContain('Access changed');
   });
   expect(root(fixture).querySelector('.overview-row')).toBeNull();
+  expect(navigationReady).not.toHaveBeenCalled();
 });
 
 it('uses the saved cursor and rejects duplicate rows', async () => {
