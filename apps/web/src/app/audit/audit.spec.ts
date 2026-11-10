@@ -60,3 +60,65 @@ it('shows only supplied child publication facts and a permitted parent link', as
   expect(root.textContent).not.toContain('child-result');
   expect(root.textContent).not.toContain('private-report-canary');
 });
+
+it('appends cursor pages once, keeps equal-time rows distinct and filters on the server', async () => {
+  const first = { ...row, id: 'first', records: [{ ...row.records[0], eventId: 'first',
+    recordedAt: '2026-10-04T09:30:00.000Z' }] };
+  const second = { ...row, id: 'second', records: [{ ...row.records[0], eventId: 'second',
+    recordedAt: '2026-10-04T09:30:00.000Z' }] };
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [first], nextBefore: 8 }))
+    .mockResolvedValueOnce(reply(200, { rows: [first, second] }))
+    .mockResolvedValueOnce(reply(200, { rows: [second] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = fixture.nativeElement as HTMLElement;
+  await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(1));
+  root.querySelector<HTMLButtonElement>('.older-history')!.click();
+  await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(2));
+  expect(fetchSpy.mock.calls[1]?.[0]).toContain('before=8');
+  const filter = root.querySelector<HTMLSelectElement>('select[aria-label="Decision filter"]')!;
+  filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
+  root.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  await vi.waitFor(() => expect(root.querySelectorAll('article')).toHaveLength(1));
+  expect(fetchSpy.mock.calls[2]?.[0]).toContain('decision=deny');
+});
+
+it('opens only the selected detail, pages evidence and returns keyboard focus', async () => {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockResolvedValueOnce(reply(200, { id: row.id, records: row.records, nextBefore: 7 }))
+    .mockResolvedValueOnce(reply(200, { id: row.id, records: [] }));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = fixture.nativeElement as HTMLElement;
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  const opener = root.querySelector<HTMLButtonElement>('article button')!;
+  opener.click();
+  await vi.waitFor(() => expect(root.querySelector('.history-detail')).not.toBeNull());
+  expect(fetchSpy.mock.calls[1]?.[0]).toContain('/api/org/history/decision');
+  root.querySelector<HTMLButtonElement>('.more-evidence')!.click();
+  await vi.waitFor(() => expect(fetchSpy.mock.calls[2]?.[0]).toContain('before=7'));
+  root.querySelector<HTMLButtonElement>('.close-detail')!.click();
+  expect(document.activeElement).toBe(opener);
+});
+
+it('keeps dated stale rows on 503, then clears them on denial despite a late detail reply', async () => {
+  let finishDetail!: (response: Response) => void;
+  const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [row] }))
+    .mockImplementationOnce(() => new Promise(resolve => { finishDetail = resolve; }))
+    .mockResolvedValueOnce(reply(503))
+    .mockResolvedValueOnce(reply(403));
+  const fixture = TestBed.createComponent(AuditScreen); fixture.detectChanges();
+  const root = fixture.nativeElement as HTMLElement;
+  await vi.waitFor(() => expect(root.querySelector('article button')).not.toBeNull());
+  root.querySelector<HTMLButtonElement>('article button')!.click();
+  root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('last checked'));
+  expect(root.querySelectorAll('article')).toHaveLength(1);
+  root.querySelector<HTMLButtonElement>('.refresh')!.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Access changed'));
+  finishDetail(reply(200, { id: row.id, records: row.records }));
+  await vi.waitFor(() => expect(root.querySelector('.history-detail')).toBeNull());
+  expect(root.textContent).not.toContain('Model call permitted');
+  expect(fetchSpy).toHaveBeenCalledTimes(4);
+});
