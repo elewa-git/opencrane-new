@@ -8,12 +8,18 @@
       }
       <h2>Personal</h2>
       <a class="current" href="/welcome" aria-current="page"># welcome</a>
+      <a href="/workspace/conversations">Recent</a>
+      <a href="/workspace/conversations?section=archived">Archived</a>
     </div>
     <footer><a href="/org/integrations">⚙ Settings</a></footer>
   </nav>
 <main class="welcome-page">
   <header class="topbar">
-    <a href="/workspace/conversations" aria-label="Conversations">☰</a>
+    <button #menuOpener class="menu-toggle" type="button" aria-label="Open navigation"
+      [attr.aria-expanded]="navigationOpen()" (click)="navigationOpen.set(true)">☰</button>
+    @if (state() === 'completed') {
+      <a class="back-link" [href]="listHref()">Back to list</a>
+    }
     <strong><span class="desktop-title">Welcome to OpenCrane</span>
       <span class="phone-title"># welcome</span></strong>
     @if (state() === 'completed') {
@@ -137,13 +143,30 @@
         </div>
       } @else if (state() === 'completed') {
         <div class="dock completed-dock">
-          <p>{{ archived ? 'Completed welcome — archived for you. It won’t reopen or become an assistant turn.'
+          <p>{{ archive.row()?.archived ? 'Completed welcome — archived for you. It won’t reopen or become an assistant turn.'
             : 'This welcome is complete and read-only.' }}</p>
+          @if (archive.state() === 'ready') {
+            <button type="button" class="secondary" (click)="changeArchive()">
+              {{ archive.row()?.archived ? 'Restore to list' : 'Archive welcome' }}
+            </button>
+          } @else if (archive.state() === 'unknown') {
+            <span role="status">List choice unknown.</span>
+            <button type="button" class="secondary" (click)="checkArchive()">Check status</button>
+          } @else if (archive.state() === 'changed') {
+            <span role="status">List choice changed on another device.</span>
+            <button type="button" class="secondary" (click)="reloadArchive()">Review saved choice</button>
+          } @else if (archive.state() === 'unavailable') {
+            <span role="status">List choice unavailable.</span>
+            <button type="button" class="secondary" (click)="reloadArchive()">Try again</button>
+          } @else {
+            <span role="status">{{ archive.state() === 'saving' ? 'Saving list choice…'
+              : 'Loading list choice…' }}</span>
+          }
           @if (welcome.variant === 'assistant') {
             <a class="primary" href="/workspace">Start a new chat</a>
           } @else {
-            <a class="primary" href="/workspace/direct">Start a direct or group chat</a>
-            <p>An assistant session will be available after one is assigned.</p>
+            <a class="primary" href="/workspace/direct">Message a colleague</a>
+            <a class="secondary" href="/workspace/direct">Message a group</a>
           }
         </div>
       }
@@ -151,3 +174,10 @@
   }
 </main>
 </div>
+<oc-navigation-menu [open]="navigationOpen()" label="Workspace navigation"
+  [returnFocusTo]="navigationOpener()?.nativeElement" (closed)="navigationOpen.set(false)">
+  <a [href]="listHref()">Back to list</a>
+  <a href="/workspace/conversations">Recent</a>
+  <a href="/workspace/conversations?section=archived">Archived</a>
+  <a href="/workspace/direct">New colleague or group chat</a>
+</oc-navigation-menu>

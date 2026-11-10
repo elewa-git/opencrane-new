@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, ElementRef, signal, viewChild,
   type OnDestroy, type OnInit } from '@angular/core';
-import type { ChatConversation } from '@opencrane/protocol';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { ChatIcon } from './icon';
-import { ConversationList, type ConversationSection } from './conversations-data';
+import { ConversationList, type ConversationListRow, type ConversationSection }
+  from './conversations-data';
 
 @Component({
   selector: 'oc-conversations',
@@ -48,19 +48,29 @@ export class Conversations implements OnInit, OnDestroy {
     field?.focus();
   }
 
-  protected href(row: ChatConversation): string {
+  protected href(row: ConversationListRow): string {
+    if (row.kind === 'welcome') {
+      return row.archived ? '/welcome?section=archived' : row.route;
+    }
     const base = row.mode === 'agent_session' ? '/workspace' : '/workspace/direct';
     return `${base}?conversation=${encodeURIComponent(row.conversationId)}`;
   }
 
-  protected mode(row: ChatConversation): string {
+  protected mode(row: ConversationListRow): string {
+    if (row.kind === 'welcome') return 'Completed welcome · Read-only';
     if (row.mode === 'group') return 'Group chat';
     if (row.mode === 'direct') return 'Direct chat';
     if (row.assistantKind === 'team') return 'Shared assistant';
     return 'Personal assistant';
   }
 
-  protected glyph(row: ChatConversation): string {
+  protected glyph(row: ConversationListRow): string {
+    if (row.kind === 'welcome') return 'agent';
     return row.mode === 'agent_session' ? 'agent' : 'hash';
+  }
+
+  protected rowId(row: ConversationListRow): string {
+    if (row.kind === 'welcome') return `welcome:${row.welcomeId}`;
+    return `conversation:${row.conversationId}`;
   }
 }

@@ -1,7 +1,10 @@
-import { afterEveryRender, afterNextRender, ChangeDetectionStrategy, Component, signal, type OnDestroy }
+import { afterEveryRender, afterNextRender, ChangeDetectionStrategy, Component,
+  ElementRef, signal, viewChild, type OnDestroy }
   from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { z } from 'zod';
+import { NavigationMenu } from '../ui/navigation-menu';
+import { WelcomeArchive } from './welcome-archive';
 
 const savedWelcomeSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('not_started'), nextStep: z.null(), answered: z.literal(0),
@@ -32,7 +35,7 @@ type ScreenState = 'loading' | 'start' | 'survey' | 'persona' | 'active' | 'savi
 
 @Component({
   selector: 'oc-welcome-chat',
-  imports: [DatePipe],
+  imports: [DatePipe, NavigationMenu],
   templateUrl: './welcome-chat.html',
   styleUrl: './welcome-chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,7 +44,9 @@ export class WelcomeChat implements OnDestroy {
   protected readonly state = signal<ScreenState>('loading');
   protected readonly saved = signal<SavedWelcome | null>(null);
   protected readonly draft = signal('');
-  protected readonly archived = new URLSearchParams(location.search).get('section') === 'archived';
+  protected readonly archive = new WelcomeArchive(this.denied.bind(this));
+  protected readonly navigationOpen = signal(false);
+  protected readonly navigationOpener = viewChild<ElementRef<HTMLButtonElement>>('menuOpener');
   protected readonly assigned = signal<boolean | null>(null);
   protected readonly resumed = signal(false);
   private startedHere = false;
@@ -77,6 +82,7 @@ export class WelcomeChat implements OnDestroy {
     this.draft.set('');
     this.generation = null;
     this.assigned.set(null);
+    this.archive.clear();
   }
 
   private denied(status: number): boolean {
@@ -140,6 +146,28 @@ export class WelcomeChat implements OnDestroy {
     else if (saved.status === 'completed') this.state.set('completed');
     else if (saved.status === 'completion_pending') this.state.set('pending');
     else this.state.set('active');
+    if (saved.status === 'completed') {
+      void this.archive.load(saved.welcomeId, this.request.signal);
+    }
+  }
+
+  protected listHref(): string {
+    return this.archive.row()?.archived
+      ? '/workspace/conversations?section=archived' : '/workspace/conversations';
+  }
+
+  protected changeArchive(): void {
+    void this.archive.change(this.request.signal);
+  }
+
+  protected checkArchive(): void {
+    void this.archive.check(this.request.signal);
+  }
+
+  protected reloadArchive(): void {
+    const saved = this.saved();
+    if (saved?.status !== 'completed') return;
+    void this.archive.load(saved.welcomeId, this.request.signal);
   }
 
   protected assistantAvailable(): boolean {

@@ -15,6 +15,7 @@ persona versions and approval results.
 flowchart LR
   web["apps/web<br/>personal screens"] -->|opens| welcome["welcome<br/>survey, persona and chat"]
   welcome -->|reads and saves| server["apps/server<br/>private onboarding"]
+  chat["chat<br/>Recent and Archived"] -->|opens saved welcome| welcome
   welcome -.->|uses| state["shared-state<br/>status messages"]
 ```
 
@@ -27,6 +28,8 @@ flowchart LR
 - Show when approval was saved and link to the welcome chat.
 - Link to unfinished survey or persona review before offering a welcome start.
 - Show the saved welcome question and answer, then a read-only completion.
+- Open the completed welcome from Recent or Archived and save its archive choice.
+- Let people without an assistant open an unsent colleague or group draft.
 - Clear private text when access ends.
 - Not built yet: persona editing, replacement and survey restart from the review screen.
 
@@ -45,6 +48,8 @@ flowchart LR
    Returning to a saved question shows a welcome-back notice. The screen checks
    an uncertain answer by its original command and shows the saved completion time
    before closing the composer.
+5. **Saved welcome.** Recent and Archived open the same completed page.
+   Archive and restore move its list row without changing the saved answer.
 
 ## How to run or test it
 

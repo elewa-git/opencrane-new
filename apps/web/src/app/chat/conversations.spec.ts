@@ -1,5 +1,13 @@
 import { ConversationList, findConversation } from './conversations-data';
 
+function conversationIds(list: ConversationList): string[] {
+  const ids: string[] = [];
+  for (const item of list.rows()) {
+    if (item.kind !== 'welcome') ids.push(item.conversationId);
+  }
+  return ids;
+}
+
 function row(id: string, mode: 'agent_session' | 'group' = 'agent_session') {
   const common = { conversationId: id, createdAt: '2026-10-14T00:00:00Z', title: id };
   if (mode === 'group') return { ...common, mode, participantIds: ['me', 'you'] };
@@ -58,7 +66,7 @@ describe('server-backed conversations list', () => {
     expect(list.announcement()).toBe('Loading more conversations…');
     finish(reply([row('first'), row('second')]));
     await loading;
-    expect(list.rows().map(item => item.conversationId)).toEqual(['first', 'second']);
+    expect(conversationIds(list)).toEqual(['first', 'second']);
     expect(list.empty()).toBe(false);
   });
 
@@ -84,7 +92,7 @@ describe('server-backed conversations list', () => {
     const list = new ConversationList(fetcher);
     await list.change('recent', '');
     await list.loadMore();
-    expect(list.rows().map(item => item.conversationId)).toEqual(['fresh']);
+    expect(conversationIds(list)).toEqual(['fresh']);
     expect(list.announcement()).toBe('Conversation list changed. Showing the latest results.');
     expect(fetcher).toHaveBeenCalledTimes(3);
     await list.loadMore();
@@ -139,7 +147,7 @@ describe('server-backed conversations list', () => {
     await list.change('archived', 'new');
     finish(reply([row('stale')]));
     await old;
-    expect(list.rows().map(item => item.conversationId)).toEqual(['current']);
+    expect(conversationIds(list)).toEqual(['current']);
     await list.change('recent', '');
     expect(list.rows()).toEqual([]);
     expect(list.denied()).toBe(true);

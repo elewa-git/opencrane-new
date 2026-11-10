@@ -51,8 +51,17 @@ active question shows a welcome-back notice after a fresh page load. A start
 confirmed in the current page opens the question without that notice. Completed
 confirmation and crease show the saved `completedAt` time. The desktop page
 includes the session rail; the phone composer has one frame around the text and
-action. The archived display uses `/welcome?section=archived` and remains read-only; list
-navigation belongs to the next chat-list change. No browser storage is used.
+action. The archived display uses `/welcome?section=archived` and remains read-only.
+The page reads the one `kind: welcome` row from `/api/conversations` to show the
+saved archive state and position. It sends `POST /api/onboarding/welcome/archive`
+with the saved `welcomeId`, a fresh command id, the requested choice and
+`expectedArchivePosition`. A 409 requires a new list read. An uncertain reply
+checks `/api/personal/changes/:commandId` with the original id; the POST is never
+repeated. A confirmed receipt is followed by a list read at or after its saved
+position. A 401 or 403 clears the row and private welcome words. The completed
+no-assistant page links to the existing unsent colleague and group draft picker
+at `/workspace/direct`. No browser storage is used.
 
 Run `npm run visual:screen-p4-20-welcome` for intercepted desktop and phone
 captures. It does not start the development stack.
+Run `npm run visual:screen-p4-20-list` for completed list and archive captures.

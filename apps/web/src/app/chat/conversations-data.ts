@@ -1,6 +1,9 @@
 import { conversationStatus, type Turn } from './chat-state';
 import { computed, signal } from '@angular/core';
-import { chatListSchema, sessionSlug, type ChatConversation, type ChatRow } from '@opencrane/protocol';
+import { chatListWithWelcomeSchema, sessionSlug, type ChatConversation, type ChatRow,
+  type WelcomeListRow } from '@opencrane/protocol';
+
+export type ConversationListRow = ChatConversation | WelcomeListRow;
 
 export interface PendingChatMessage {
   id: string;
@@ -79,7 +82,7 @@ async function readPage(url: string, fetcher: Fetcher, signal?: AbortSignal) {
     throw new Error('unavailable');
   }
   const body: unknown = await response.json();
-  return chatListSchema.parse(body);
+  return chatListWithWelcomeSchema.parse(body);
 }
 
 function hasStatus(value: unknown, status: string): boolean {
@@ -90,7 +93,7 @@ function hasStatus(value: unknown, status: string): boolean {
 export class ConversationList {
   readonly section = signal<ConversationSection>('recent');
   readonly query = signal('');
-  readonly rows = signal<ChatConversation[]>([]);
+  readonly rows = signal<ConversationListRow[]>([]);
   readonly cursor = signal<string | null | undefined>(undefined);
   readonly loading = signal(false);
   readonly error = signal('');
@@ -112,7 +115,6 @@ export class ConversationList {
     this.revision += 1;
     this.section.set(section);
     this.query.set(query.slice(0, 100));
-    this.rows.set([]);
     this.cursor.set(undefined);
     this.error.set('');
     this.denied.set(false);
@@ -154,13 +156,14 @@ export class ConversationList {
     }
   }
 
-  private applyPage(page: ReturnType<typeof chatListSchema.parse>, firstPage: boolean): void {
+  private applyPage(page: ReturnType<typeof chatListWithWelcomeSchema.parse>, firstPage: boolean): void {
     const existing = firstPage ? [] : this.rows();
-    const seen = new Set(existing.map(conversationId));
+    const seen = new Set(existing.map(listRowId));
     const rows = [...existing];
     for (const row of page.rows) {
-      if (seen.has(row.conversationId)) continue;
-      seen.add(row.conversationId);
+      const key = listRowId(row);
+      if (seen.has(key)) continue;
+      seen.add(key);
       rows.push(row);
     }
     this.rows.set(rows);
@@ -189,8 +192,9 @@ export class ConversationList {
   }
 }
 
-function conversationId(row: ChatConversation): string {
-  return row.conversationId;
+function listRowId(row: ConversationListRow): string {
+  if (row.kind === 'welcome') return `welcome:${row.welcomeId}`;
+  return `conversation:${row.conversationId}`;
 }
 
 export async function findConversation(
@@ -223,7 +227,7 @@ async function searchConversationSections(
         : AbortSignal.timeout(15_000);
       const page = await readPage(url, fetcher, requestSignal);
       for (const row of page.rows) {
-        if (row.conversationId === conversationId) return row;
+        if (row.kind !== 'welcome' && row.conversationId === conversationId) return row;
       }
       if (!page.nextCursor) break;
       cursor = page.nextCursor;

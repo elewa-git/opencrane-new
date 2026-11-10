@@ -171,6 +171,7 @@ export const welcomeListRowSchema = z.strictObject({
   activityAt: z.string().datetime(), unread: z.literal(0),
   archived: z.boolean(), archivePosition: z.int().nonnegative(),
 });
+export type WelcomeListRow = z.infer<typeof welcomeListRowSchema>;
 export const chatListWithWelcomeSchema = z.object({ rows: z.array(z.union([
   chatConversationSchema, welcomeListRowSchema,
 ])), nextCursor: z.string().max(2000).nullable().optional() });

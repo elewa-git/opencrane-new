@@ -8,6 +8,8 @@ This folder contains the workspace where people talk to their assistant, exchang
 - Explains when a saved message waits for assistant service maintenance beyond a normal computer start. The notice returns to computer startup when the service is ready.
 - Runs colleague chats at `/workspace/direct`. One colleague makes a direct chat; several make a group chat. The first message creates the chat after recipient review. A typed `@agent` stays ordinary text. A person can review their own saved group message before asking a shared assistant to work on it. The first audience includes people who could see that message. The review shows the checked paying group name. Saved means recorded by the server, rather than delivered to a person.
 - Shows Recent and Archived at `/workspace/conversations`, with title search, more results and saved links. A missing chat leaves the authorised list available. Archiving a colleague chat changes only that person's list; the chat stays readable and can receive messages.
+- Shows one completed welcome in Recent or Archived according to that person's saved
+  choice. Opening it shows the completed welcome page without a message box.
 - Reviews a permanent close in colleague chats and assistant sessions when the server
   allows it. A closed chat keeps its saved history and files, with a read only notice
   in place of the message box.
