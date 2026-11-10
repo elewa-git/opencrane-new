@@ -789,6 +789,9 @@ PARTIAL with `complete: false`; this helper cannot qualify admission.
 after `checkLocalTarget` confirms the claimed secondary slot and image source.
 `persistence-launch.sh` claims a secondary slot, starts or reuses it, runs the caller
 and takes the stack down on every exit path. The claim uses the launcher's PID.
+The launcher sets `DEV_OWNER_BOOTSTRAP=0` for startup. On a fresh stack this
+leaves the event stream empty and skips the separate automatic chat journey,
+which fleet tasks cannot run. An existing stream still fails the freshness check.
 It installs cleanup traps before starting `claim.sh`. If a signal arrives during
 the claim, it waits for the slot number and releases that slot before exiting.
 The launcher fixture runs with the directory's Vitest configuration and sends

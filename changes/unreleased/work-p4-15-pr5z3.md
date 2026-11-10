@@ -1,0 +1,1 @@
+The owned memory persistence launcher now starts an empty secondary installation, allowing its protected deployment check to run without starting the separate chat journey. The live attempt remains unfinished because no protected deployment target was present.

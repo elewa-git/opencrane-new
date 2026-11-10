@@ -59,7 +59,8 @@ flowchart LR
   and writable storage can be measured. Keep its native process and canary helper
   alive through the live scan, then inspect storage again after Stop.
 - Claim and start the secondary stack through the owning launcher, then release it
-  even when startup, the attempt or cancellation fails.
+  even when startup, the attempt or cancellation fails. On a fresh stack it
+  leaves out dev Owner events and the separate chat journey.
 - Save its own result in a protected file and recheck the deployment whenever it is used.
 - Refuse copied, edited, stale or foreign receipts.
 - Keep failures free of private paths and child process output.

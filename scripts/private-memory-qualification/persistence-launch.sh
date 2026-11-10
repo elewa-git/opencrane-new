@@ -47,5 +47,7 @@ esac
 
 export DEV_STACK_ID="$claimed_id"
 export MEMORY_CLAIMED_ID="$claimed_id"
+# Leave dev Owner events and the separate chat journey out of this fresh check.
+export DEV_OWNER_BOOTSTRAP=0
 /bin/sh "$stack_directory/up.sh" --id "$claimed_id"
 node --experimental-strip-types "$script_directory/persistence-run.mjs"
