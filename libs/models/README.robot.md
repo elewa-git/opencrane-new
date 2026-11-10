@@ -4658,11 +4658,13 @@ access. Missing and failed loads still check current access; refusal takes prece
 It uses no write check, stream-position polling or conversation history.
 
 The existing profile and server folds supply lifecycle and availability. A valid original
-personal activation is required before exposing bindings. Foreign, company, validation
-and incomplete legacy targets reveal none. Rotation and revoke keep the exact profile
-sequence; any valid member/server block covers replacement profiles too. Saved identity
-stays unverified and `callsAvailable` stays false. No custody, provider, append, selection
-or release operation runs. Lists, mutations, projections and OAuth are outside this read.
+personal activation is required before exposing bindings. OAuth needs its valid start,
+claim and creation history; the first event alone is not an activation. Foreign,
+company, validation and incomplete legacy targets reveal none. Rotation and revoke
+keep the exact profile sequence; any valid member/server block covers replacement
+profiles too. Saved identity stays unverified and `callsAvailable` stays false.
+No custody, provider, append, selection or release operation runs. Mutations and
+projections are outside this read.
 
 `readAdminDisableChange` checks the original disable reference on the member/server
 control stream. It loads profile and control history under one ten-second deadline,

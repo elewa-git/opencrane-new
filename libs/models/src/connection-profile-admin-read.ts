@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { connectionCreatedDataSchema, connectionRevokedDataSchema } from '@opencrane/events';
+import { connectionCreatedDataSchema, connectionRevokedDataSchema,
+  personalConnectionCreation } from '@opencrane/events';
 import { foldConnection } from './bearer-connections.ts';
 import { metadataSchema } from './connection-profile-read.ts';
 import { connectionServer } from './connection-server.ts';
@@ -64,12 +65,21 @@ export async function loadPersonalProfileMetadata(store: EventStore, silo: strin
   return adminMetadataSchema.parse(metadata);
 }
 
-export function isPersonalProfile(rows: StoredEvent[], subject: string, reference: Reference) {
-  // Require an original personal activation before exposing any binding, even after revocation.
-  const first = rows.slice(0, 1);
-  if (!foldConnection(first).data) {
+function hasOriginalPersonalCreation(rows: StoredEvent[]) {
+  // Require a valid first creation, including its consent history for OAuth profiles.
+  function isCreationRow(row: StoredEvent) {
+    return row.event.type === 'connection.created';
+  }
+  const creationIndex = rows.findIndex(isCreationRow);
+  if (creationIndex < 0 || !personalConnectionCreation(rows[creationIndex]!.event)) {
     return false;
   }
+  const originalHistory = rows.slice(0, creationIndex + 1);
+  return foldConnection(originalHistory).data !== undefined;
+}
+
+export function isPersonalProfile(rows: StoredEvent[], subject: string, reference: Reference) {
+  if (!hasOriginalPersonalCreation(rows)) return false;
   for (const row of rows) {
     const identity = identitySchema.safeParse(row.event.data);
     if (row.event.subject !== subject || !identity.success ||

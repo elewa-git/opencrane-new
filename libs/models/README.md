@@ -776,7 +776,9 @@ Refresh and identity tokens stay private. Public tool routes remain closed.
 
 A member can read their own saved tool profile without using the private credential store.
 The reader loads exact history before checking current membership. Disabled profiles stay
-readable; incomplete records stay unavailable. A saved bearer is not a verified identity.
+readable, including OAuth profiles with a valid saved consent history. Revoked profiles
+stay visible in the list. Incomplete records stay unavailable. A saved bearer is not a
+verified identity.
 A separate admin read checks current owner or admin access after loading one member’s
 profile. It returns safe metadata and the admin block revision without using credentials.
 The admin who saved a disable can check its original reference. This read reports the

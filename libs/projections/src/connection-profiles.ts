@@ -1,8 +1,6 @@
-import { connectionCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
+import { personalConnectionCreation, type EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
-
-const savedProfile = connectionCreatedDataSchema.required({ activation: true });
 
 async function create(db: Query) {
   await db.query(`CREATE TABLE IF NOT EXISTS connection_profiles (
@@ -18,14 +16,8 @@ async function drop(db: Query) {
 }
 
 async function apply(db: Query, event: EventEnvelope, position: number) {
-  if (event.type !== 'connection.created') return;
-  const parsed = savedProfile.safeParse(event.data);
-  if (!parsed.success) return;
-  const profile = parsed.data;
-  if (profile.activation.ownerKind !== 'personal' ||
-      event.subject !== `connection-${profile.userId}-${profile.serverId}-${profile.profile}`) {
-    return;
-  }
+  const profile = personalConnectionCreation(event);
+  if (!profile) return;
   // Keep only the first saved creation position. Current state comes from event history.
   await db.query(`INSERT INTO connection_profiles
     (silo, member_id, server_id, profile_id, position) VALUES ($1, $2, $3, $4, $5)

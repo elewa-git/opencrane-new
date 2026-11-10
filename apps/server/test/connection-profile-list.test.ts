@@ -210,6 +210,7 @@ it('lists saved, revoked and disabled bearer and OAuth profiles without private 
         disabledBy: 'bob', reason: 'admin_disabled', expectedSequence: revision });
     await nats.seed([disabled]);
   }
+  await runner.run(connectionProfiles);
   const afterBlock = await list('alice');
   expect(afterBlock.statusCode).toBe(200);
   const blockedRows = afterBlock.json<Page>().rows;

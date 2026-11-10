@@ -1,1 +1,1 @@
-Members can page through their saved personal tool connections, including blocked or revoked ones, without seeing credentials.
+Members can page through saved bearer and OAuth tool connections, including blocked or revoked ones, without seeing credentials.

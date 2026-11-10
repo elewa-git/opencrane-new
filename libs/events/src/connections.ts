@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { EventEnvelope } from './envelope.ts';
 
 const id = z.string().min(1);
 const digestSchema = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -33,6 +34,18 @@ export const connectionCreatedDataSchema = z
   .object({ userId: id, serverId: id, profile: id, secretRef: secretRefSchema,
     activation: connectionActivationSchema.optional() })
   .strict();
+const personalCreationSchema = connectionCreatedDataSchema.required({ activation: true });
+
+export function personalConnectionCreation(event: EventEnvelope) {
+  if (event.type !== 'connection.created') return null;
+  const parsed = personalCreationSchema.safeParse(event.data);
+  if (!parsed.success) return null;
+  const profile = parsed.data;
+  if (event.subject !== `connection-${profile.userId}-${profile.serverId}-${profile.profile}`) {
+    return null;
+  }
+  return profile;
+}
 
 // Keep company ownership separate from the member-owned legacy and personal variants.
 export const companyConnectionCreatedDataSchema = z.strictObject({
