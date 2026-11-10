@@ -1,5 +1,24 @@
 import { expect, test } from 'vitest';
-import { startRealUploadFixture } from './support/real-upload-scanner.mjs';
+import { createOffsetClock, startRealUploadFixture } from './support/real-upload-scanner.mjs';
+
+function testFixtureClockSurvivesDateReplacement() {
+  const originalNow = Date.now;
+  const clock = { offset: 42_000 };
+  const currentTime = createOffsetClock(clock);
+  Date.now = currentTime;
+  try {
+    const before = originalNow();
+    const observed = Date.now();
+    const after = originalNow();
+    expect(observed).toBeGreaterThanOrEqual(before + clock.offset);
+    expect(observed).toBeLessThanOrEqual(after + clock.offset);
+  } finally {
+    Date.now = originalNow;
+  }
+}
+
+test('fixture clock keeps working while Date.now is replaced',
+  testFixtureClockSurvivesDateReplacement);
 
 const inputs = {
   manifestPath: process.env.P5_SCANNER_MANIFEST,
