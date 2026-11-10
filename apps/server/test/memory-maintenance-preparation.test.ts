@@ -399,8 +399,9 @@ it('admits one eligible night with one exact root and allowance', async function
   await append('mcp-memory', 'mcp.server_registered', { serverId: 'memory',
     kind: 'hosted', locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`,
     registeredBy: 'dreamer' });
-  const checkedAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 300_000).toISOString();
+  const checkedAtDate = new Date();
+  const checkedAt = checkedAtDate.toISOString();
+  const expiresAt = new Date(checkedAtDate.getTime() + 300_000).toISOString();
   await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
     connectionId: 'server', accountMode: 'none', tools: [tool], toolCount: 1,
     schemaDigest: catalogueDigest([tool]), checkedAt, expiresAt });
