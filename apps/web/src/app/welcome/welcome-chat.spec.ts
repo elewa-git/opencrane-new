@@ -84,7 +84,7 @@ describe('saved welcome chat', () => {
         requests.push(url);
         if (url === '/api/onboarding/welcome') {
           return reply({ status: 'not_started', nextStep: null, answered: 0,
-            assistantAssigned: true });
+            assistantAssigned: true, requiredStep: null });
         }
         return reply({}, 404);
       });
@@ -92,6 +92,22 @@ describe('saved welcome chat', () => {
       expect(screen.root.textContent).not.toContain('Continue without an assistant');
       expect(requests).toEqual(['/api/onboarding/welcome']);
     });
+
+  it.each([
+    { requiredStep: 'survey', assistantAssigned: false, link: '/welcome/survey',
+      words: 'Finish your survey' },
+    { requiredStep: 'survey', assistantAssigned: true, link: '/welcome/survey',
+      words: 'Finish your survey' },
+    { requiredStep: 'persona', assistantAssigned: true, link: '/welcome/persona',
+      words: 'Approve your persona' },
+  ] as const)('shows the $requiredStep step before offering a start', async (caseUnderTest) => {
+    const screen = mount(() => reply({ status: 'not_started', nextStep: null, answered: 0,
+      assistantAssigned: caseUnderTest.assistantAssigned,
+      requiredStep: caseUnderTest.requiredStep }));
+    await show(screen, caseUnderTest.words);
+    expect(screen.root.querySelector(`a[href="${caseUnderTest.link}"]`)).not.toBeNull();
+    expect(screen.root.querySelector('button')).toBeNull();
+  });
 
   it('marks a saved active question as resumed after a fresh page load', async () => {
     const screen = mount(() => reply(active));
@@ -139,7 +155,13 @@ describe('saved welcome chat', () => {
     const screen = mount(() => reply(complete));
     await show(screen, 'Saved private answer');
     expect(screen.root.textContent).toContain('Welcome complete');
-    expect(screen.root.textContent).toContain('09:03');
+    const confirmationTime = screen.root.querySelectorAll('.assistant-row')[1]
+      ?.querySelector('time');
+    const creaseTime = screen.root.querySelector('.crease time');
+    expect(confirmationTime?.getAttribute('datetime')).toBe(complete.completedAt);
+    expect(confirmationTime?.textContent?.trim()).toBe('09:03');
+    expect(creaseTime?.getAttribute('datetime')).toBe(complete.completedAt);
+    expect(creaseTime?.textContent?.trim()).toBe('14 Oct 2026, 09:03');
     expect(screen.root.querySelector('textarea')).toBeNull();
     expect(screen.root.textContent).toContain('read-only');
   });

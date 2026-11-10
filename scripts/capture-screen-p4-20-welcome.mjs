@@ -73,6 +73,20 @@ function composerBottom(element) {
   return element.getBoundingClientRect().bottom;
 }
 
+function railGeometry(element) {
+  const style = getComputedStyle(element);
+  const bounds = element.getBoundingClientRect();
+  return { display: style.display, width: bounds.width, height: bounds.height };
+}
+
+function composerFrameStyle(element) {
+  const style = getComputedStyle(element);
+  const frame = element.getBoundingClientRect();
+  const textarea = element.querySelector('textarea')?.getBoundingClientRect();
+  return { borderWidth: parseFloat(style.borderTopWidth), radius: parseFloat(style.borderTopLeftRadius),
+    frameWidth: frame.width, textWidth: textarea?.width ?? 0 };
+}
+
 async function capture(browser, state, width) {
   const fixture = { state, started: false };
   const reducedMotion = state === 'ONB-32-RM' ? 'reduce' : 'no-preference';
@@ -94,10 +108,17 @@ async function capture(browser, state, width) {
       assert.equal(await page.getByText('Welcome back').count(), 0);
     }
     if (width === 1280 && state.startsWith('ONB-')) {
-      assert.equal(await page.getByRole('navigation', { name: 'Sessions' }).count(), 1);
+      const rail = await page.getByRole('navigation', { name: 'Sessions' })
+        .evaluate(railGeometry);
+      assert.equal(rail.display, 'flex', 'Desktop rail is displayed');
+      assert(rail.width >= 230 && rail.height >= 800, 'Desktop rail occupies its column');
     }
     if (width === 390 && (state === 'ONB-30' || state === 'ONB-31')) {
       assert.equal(await page.locator('.composer-frame textarea').count(), 1);
+      const frame = await page.locator('.composer-frame').evaluate(composerFrameStyle);
+      assert(frame.borderWidth >= 1, 'Phone composer has a visible frame border');
+      assert(frame.radius >= 10, 'Phone composer has rounded frame corners');
+      assert(frame.frameWidth > frame.textWidth, 'Phone frame surrounds the answer');
     }
     if (state === 'denied') {
       assert.equal(await page.getByText(answer).count(), 0);

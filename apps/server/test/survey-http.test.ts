@@ -774,6 +774,53 @@ function welcome(payload: object) {
   return app.inject({ method: 'POST', url: '/api/onboarding/welcome', headers, payload });
 }
 
+async function welcomeStartReadiness() {
+  const early = { operation: 'start', commandId: 'before-survey', generation: 1,
+    expectedPosition: 0, scriptVersion: 'welcome-v1', variant: 'no_assistant' };
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', requiredStep: 'survey' });
+  expect((await welcome(early)).statusCode).toBe(409);
+  expect((await save(1, 0)).statusCode).toBe(200);
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', requiredStep: 'survey' });
+  expect((await welcome({ ...early, expectedPosition: 1 })).statusCode).toBe(409);
+  for (let step = 2; step <= 4; step++) {
+    const current = await progress();
+    expect((await save(step, current.survey.position)).statusCode).toBe(200);
+  }
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', requiredStep: null,
+      assistantAssigned: false });
+
+  const hash = createHash('sha256');
+  hash.update('test\0alice');
+  const assistantId = `personal-${hash.digest('hex').slice(0, 32)}`;
+  const created = { ...event('readiness-assistant', `assistant-${assistantId}`, 'assistant.created'),
+    source: 'opencrane-lifecycle', principal: { kind: 'system' as const,
+      id: 'computer-lifecycle' },
+    data: { assistantId, ownerId: 'alice', kind: 'personal' } };
+  expect((await nats.store.append({ event: created, expectedSequence: 0 })).status)
+    .toBe('appended');
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', requiredStep: 'persona',
+      assistantAssigned: true });
+  const current = await progress();
+  expect((await welcome({ ...early, commandId: 'before-approval',
+    expectedPosition: current.survey.position, variant: 'assistant' })).statusCode).toBe(409);
+  const revision = (await revise('readiness-revision', current.survey.position,
+    'Private welcome persona')).json<RevisionReceipt>();
+  const approval = (await approve('readiness-approval', revision.position,
+    revision)).json<PositionReceipt>();
+  expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
+    .toMatchObject({ status: 'not_started', requiredStep: null,
+      assistantAssigned: true });
+  expect((await welcome({ ...early, commandId: 'wrong-approval',
+    expectedPosition: approval.position, variant: 'assistant',
+    revision: revision.revision, revisionId: 'wrong' })).statusCode).toBe(409);
+}
+it('offers only starts that meet the saved survey and approval requirements',
+  welcomeStartReadiness, 60_000);
+
 async function welcomeStartAndAnswer() {
   const surveyPosition = await completeSurvey();
   const premature = await welcome({ operation: 'start', commandId: 'early', generation: 1,
