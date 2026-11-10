@@ -57,6 +57,83 @@ describe('saved persona review', () => {
     TestBed.resetTestingModule();
   });
 
+  it('saves an edited draft while the earlier approval stays active', async () => {
+    let current = 2;
+    let savedBody: unknown;
+    const screen = open((url, init) => {
+      if (url === '/api/onboarding') {
+        return reply({ ...progress(current, current + 4), approval: {
+          revision: 2, revisionId: 'revision-two', time: '2026-10-14T09:35:00.000Z',
+        } });
+      }
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: current,
+          revisions: [{ revision: current, revisionId: `revision-${current}` }] });
+      }
+      if (url.startsWith('/api/onboarding/persona/revisions/')) {
+        return reply({ ...revision, revision: current, revisionId: `revision-${current}`,
+          replacement: `Private saved persona r${current}` });
+      }
+      if (url === '/api/onboarding/persona' && init?.method === 'POST') {
+        savedBody = JSON.parse(String(init.body));
+        current = 3;
+        return reply({ status: 'confirmed', operation: 'onboarding.persona_revised',
+          commandId: z.object({ commandId: z.string() }).parse(savedBody).commandId,
+          revision: 3, revisionId: 'revision-3' });
+      }
+      return reply({}, 503);
+    });
+    await show(screen, 'Approved revision r2');
+    button(screen.root, 'Edit').click();
+    await show(screen, 'Save as new revision');
+    const input = screen.root.querySelector('textarea');
+    expect(input).not.toBeNull();
+    input!.value = 'New private draft';
+    input!.dispatchEvent(new Event('input'));
+    button(screen.root, 'Save as new revision').click();
+    await show(screen, 'Private saved persona r3');
+    expect(screen.root.textContent).toContain('Approved revision r2');
+    expect(screen.root.querySelector('a[href="/welcome"]')).not.toBeNull();
+    expect(savedBody).toMatchObject({ operation: 'revise', mode: 'replace',
+      replacement: 'New private draft', generation: 1, expectedPosition: 6 });
+  });
+
+  it('rejects an oversized multibyte edit without sending it', async () => {
+    const screen = open((url) => {
+      if (url === '/api/onboarding') return reply(progress());
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 2, revisions: [revision] });
+      }
+      return reply(revision);
+    });
+    await show(screen, revision.replacement);
+    button(screen.root, 'Edit').click();
+    const input = screen.root.querySelector('textarea')!;
+    input.value = '🙂'.repeat(1025);
+    input.dispatchEvent(new Event('input'));
+    button(screen.root, 'Save as new revision').click();
+    await show(screen, 'Keep it under 4 KiB');
+    expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
+      .toHaveLength(0);
+  });
+
+  it('asks before restart and cancel writes nothing', async () => {
+    const screen = open((url) => {
+      if (url === '/api/onboarding') return reply(progress());
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 2, revisions: [revision] });
+      }
+      return reply(revision);
+    });
+    await show(screen, revision.replacement);
+    button(screen.root, 'Restart survey').click();
+    await show(screen, 'Your answers in steps 1–4 will be replaced');
+    button(screen.root, 'Cancel').click();
+    await show(screen, revision.replacement);
+    expect(screen.fetchSpy.mock.calls.filter(([url, init]) =>
+      url === '/api/onboarding/survey' && init?.method === 'POST')).toHaveLength(0);
+  });
+
   it('loads the actual current revision after four saved steps', async () => {
     const screen = open((url) => {
       if (url === '/api/onboarding') return reply(progress());
