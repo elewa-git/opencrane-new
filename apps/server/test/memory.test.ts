@@ -2963,6 +2963,8 @@ it('allows disable after payer or assistant loss and refuses renewed enablement'
 it('refuses binding events that claim another member or another scope', invalidBindingEvent);
 
 it('shows blocked and missed history only to the binding owner', nightlyHistory, 90_000);
+it('pages safe maintenance receipts and opens only an original saved run',
+  pagedMaintenanceHistory, 90_000);
 
 
 function forget(memoryId: string, commandId: string, expectedRevision = 1,
@@ -3762,6 +3764,66 @@ async function nightlyHistory() {
   expect(after).toBe(position);
   const denied = await get(maintenancePath, 'admin');
   expect(denied.statusCode).toBe(404);
+}
+
+async function pagedMaintenanceHistory() {
+  const scopeId = memoryScopeId('acme', 'person', 'pager');
+  const maintenancePath = `${path('pager')}/maintenance`;
+  await append('member-pager', 'member.joined', { memberId: 'pager', role: 'member',
+    email: 'pager@example.test', displayName: 'Pager' });
+  await append('team-pager-sales', 'team.created',
+    { teamId: 'pager-sales', name: 'Pager Sales', createdBy: 'owner' });
+  await append('team-pager-sales', 'team.member_added',
+    { teamId: 'pager-sales', memberId: 'pager', addedBy: 'owner' });
+  await append('assistant-pager-personal', 'assistant.created',
+    { assistantId: 'pager-personal', kind: 'personal', ownerId: 'pager' });
+  for (const target of [groups, computers]) {
+    await runner.run(target);
+  }
+  const pagerBinding = { ...bindingInput, commandId: 'bind-pager',
+    assistantId: 'pager-personal', payingGroupId: 'pager-sales' };
+  expect((await bind(path('pager'), pagerBinding, 'pager')).statusCode).toBe(200);
+  for (let day = 1; day <= 23; day++) {
+    const date = `2026-09-${String(day).padStart(2, '0')}`;
+    const nightId = String(day).padStart(64, '0');
+    await append(`scope-${scopeId}`, 'memory.maintenance_recorded', {
+      scopeId, nightId, batchKey: 'b'.repeat(64), inputRevision: 'c'.repeat(64),
+      date, bindingRevision: 1, memberId: 'pager', acceptedCapCents: 100,
+      intendedAt: `${date}T02:00:00.000Z`, selectedAt: `${date}T02:01:00.000Z`,
+      action: 'missed', reason: 'window_missed', inputRefs: [],
+    });
+  }
+  await runner.run(projection);
+  const first = await get(maintenancePath, 'pager');
+  expect(first.statusCode).toBe(200);
+  const page = first.json<{ history: { runId: string; action: string }[];
+    nextCursor: string | null }>();
+  expect(page.history).toHaveLength(20);
+  expect(page.nextCursor).toEqual(expect.any(String));
+  expect(first.body).not.toContain('nightId');
+  expect(first.body).not.toContain('inputRefs');
+  const second = await get(`${maintenancePath}?cursor=${page.nextCursor}`, 'pager');
+  expect(second.statusCode).toBe(200);
+  const later = second.json<typeof page>();
+  expect(later.history.length).toBeGreaterThan(0);
+  const references = [...page.history, ...later.history].map(function runId(run) {
+    return run.runId;
+  });
+  expect(new Set(references).size).toBe(references.length);
+  expect((await get(`${path('pager-sales', 'group')}/maintenance?cursor=${page.nextCursor}`,
+    'pager')).statusCode).toBe(409);
+  const detail = await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager');
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json()).toMatchObject({ runId: page.history[0]!.runId,
+    action: 'missed', intendedAt: expect.any(String), selectedAt: expect.any(String),
+    money: { status: 'unavailable' } });
+  expect(detail.body).not.toContain('nightId');
+  expect(detail.body).not.toContain('inputRefs');
+  expect((await get(`${maintenancePath}/forged`, 'pager')).statusCode).toBe(404);
+  expect((await get(`${maintenancePath}/${page.history[0]!.runId}`, 'admin')).statusCode).toBe(404);
+  await runner.rebuild(projection);
+  const rebuilt = await get(maintenancePath, 'pager');
+  expect(rebuilt.json()).toEqual(first.json());
 }
 
 async function replayBinding() {
