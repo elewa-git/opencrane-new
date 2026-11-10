@@ -59,17 +59,28 @@ function fixture() {
   const reads = [snapshot(), snapshot()];
   const calls: string[] = [];
   let installed = computerInstallation;
+  let installedServer = serverInstallation;
+  let installationChecks = 0;
   let reply: 'blocked' | 'wrote' | 'unknown' | 'not_run' = 'blocked';
+  let writingTool: typeof toolClasses[number] | undefined;
+  let replacementCheck: number | undefined;
   let readHook: (() => void) | undefined;
   let stopHook: (() => void) | undefined;
   function replace(): void { installed = serverInstallation; }
+  function replaceServer(): void { installedServer = computerInstallation; }
   function setReply(value: typeof reply): void { reply = value; }
+  function setWritingTool(tool: typeof toolClasses[number]): void { writingTool = tool; }
+  function replaceAtCheck(check: number): void { replacementCheck = check; }
   function setReadHook(hook: () => void): void { readHook = hook; }
   function setStopHook(hook: () => void): void { stopHook = hook; }
   const driver: PersistenceDriver = {
     context, locations, canary,
     currentInstallations() {
-      return { serverInstallationId: serverInstallation, computerInstallationId: installed };
+      installationChecks += 1;
+      if (installationChecks === replacementCheck) {
+        replace();
+      }
+      return { serverInstallationId: installedServer, computerInstallationId: installed };
     },
     readInventory() {
       const read = reads.shift() ?? snapshot();
@@ -81,6 +92,9 @@ function fixture() {
       return Promise.resolve({
         attemptTool(tool: string, _privateText: Buffer) {
           calls.push(tool);
+          if (tool === writingTool) {
+            return Promise.resolve('wrote' as const);
+          }
           return Promise.resolve(reply);
         },
         stop() {
@@ -91,8 +105,8 @@ function fixture() {
       });
     },
   };
-  return { driver, reads, calls, canary, locations, replace, setReply,
-    setReadHook, setStopHook };
+  return { driver, reads, calls, canary, locations, replace, replaceServer,
+    replaceAtCheck, setReply, setWritingTool, setReadHook, setStopHook };
 }
 
 afterEach(function clean(): void {
@@ -140,6 +154,16 @@ async function changedFirstGroup(): Promise<void> {
 }
 it('refuses a changed native launch at the first read', changedFirstGroup);
 
+async function changedFirstSnapshot(): Promise<void> {
+  const { driver, reads, calls } = fixture();
+  reads[0]!.records[0]!.challengeId = '22222222-2222-4222-8222-222222222222';
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, group: 'serverDelivery',
+  });
+  expect(calls).toEqual(['start', 'stop']);
+}
+it('checks the first complete snapshot before any private tool call', changedFirstSnapshot);
+
 async function changedSecondNative(): Promise<void> {
   const { driver, reads } = fixture();
   reads[1]!.records[5]!.startTime = '9999';
@@ -148,6 +172,18 @@ async function changedSecondNative(): Promise<void> {
   });
 }
 it('refuses a changed native child at the second read', changedSecondNative);
+
+async function replacedFinalSnapshot(): Promise<void> {
+  const { driver, reads, calls } = fixture();
+  const final = reads[1]!;
+  final.records[5]!.pid = 900;
+  final.launches[5]!.pid = 900;
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, group: 'nativeChild',
+  });
+  expect(calls).toEqual(['start', ...toolClasses, 'stop']);
+}
+it('compares two individually valid snapshots of the held native child', replacedFinalSnapshot);
 
 async function stoppedHelper(): Promise<void> {
   const { driver, reads } = fixture();
@@ -168,6 +204,39 @@ async function replacement(): Promise<void> {
   });
 }
 it('refuses a replacement during the same attempt', replacement);
+
+async function replacedServer(): Promise<void> {
+  const { driver, calls, replaceServer, setReadHook } = fixture();
+  setReadHook(replaceServer);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(calls).toEqual(['start', 'stop']);
+}
+it('checks the server installation as well as the computer installation', replacedServer);
+
+const installationPlacements = [
+  { check: 1, calls: [] },
+  { check: 2, calls: ['start', 'stop'] },
+  { check: 3, calls: ['start', 'stop'] },
+  { check: 4, calls: ['start', 'stop'] },
+  { check: 5, calls: ['start', 'shell', 'stop'] },
+  { check: 12, calls: ['start', ...toolClasses, 'stop'] },
+  { check: 13, calls: ['start', ...toolClasses, 'stop'] },
+  { check: 14, calls: ['start', ...toolClasses, 'stop'] },
+  { check: 15, calls: ['start', ...toolClasses, 'stop'] },
+] as const;
+
+async function replacementAtCheck(placement: typeof installationPlacements[number]): Promise<void> {
+  const { driver, calls, replaceAtCheck } = fixture();
+  replaceAtCheck(placement.check);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'NOT RUN', complete: false, category: 'inventory',
+  });
+  expect(calls).toEqual(placement.calls);
+}
+it.each(installationPlacements)(
+  'refuses a replacement at installation check $check', replacementAtCheck);
 
 async function storedCanary(category: typeof categories[number]): Promise<void> {
   const { driver, canary } = fixture();
@@ -207,6 +276,40 @@ async function attemptedWrite(): Promise<void> {
   });
 }
 it('reports an attempted tool write as failure', attemptedWrite);
+
+async function writeInToolClass(tool: typeof toolClasses[number]): Promise<void> {
+  const { driver, calls, setWritingTool } = fixture();
+  setWritingTool(tool);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool,
+  });
+  const toolIndex = toolClasses.indexOf(tool);
+  expect(calls).toEqual(['start', ...toolClasses.slice(0, toolIndex + 1), 'stop']);
+}
+it.each(toolClasses)('reports a write by %s and sends no later tool', writeInToolClass);
+
+async function writeBeforeReplacement(check: number): Promise<void> {
+  const { driver, calls, replaceAtCheck, setReply } = fixture();
+  setReply('wrote');
+  replaceAtCheck(check);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+  expect(calls).toEqual(['start', 'shell', 'stop']);
+}
+it.each([5, 6, 7, 8])(
+  'keeps a known tool write when installation check %s refuses', writeBeforeReplacement);
+
+async function writeDuringStop(): Promise<void> {
+  const { driver, calls, replace, setReply, setStopHook } = fixture();
+  setReply('wrote');
+  setStopHook(replace);
+  expect(await runPersistenceAttempt(driver)).toEqual({
+    result: 'FAIL', complete: false, tool: 'shell',
+  });
+  expect(calls).toEqual(['start', 'shell', 'stop']);
+}
+it('keeps a known tool write when Stop changes the installation', writeDuringStop);
 
 async function writeWithUnreadableStore(): Promise<void> {
   const { driver, setReply } = fixture();
