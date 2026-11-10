@@ -5,6 +5,7 @@ import copy
 import gzip
 import hashlib
 import importlib.util
+import inspect
 import io
 import json
 import tarfile
@@ -60,7 +61,7 @@ class TypanionTests(unittest.TestCase):
                 with self.subTest(name=name, change=len(changed)):
                     with self.assertRaises(ValueError):
                         self.check(source=source)
-        for term in (b"Copyright", b"Permission is hereby granted",
+        for term in (b"Mael Nison", b"Permission is hereby granted",
                      b"The above copyright notice", b'THE SOFTWARE IS PROVIDED "AS IS"'):
             source = dict(self.source)
             source["README.md"] = source["README.md"].replace(term, b"")
@@ -73,8 +74,8 @@ class TypanionTests(unittest.TestCase):
             review[field] = "changed"
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.check(review=review)
-        for regions in ([], self.regions + self.review["range"],
-                        self.regions[:-1]):
+        omitted = [row for row in self.regions if row != self.review["range"]]
+        for regions in ([], self.regions + [self.review["range"]], omitted):
             with self.assertRaises(ValueError):
                 self.check(regions=regions)
         range_start = self.review["range"][0]
@@ -89,19 +90,37 @@ class TypanionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.check()
 
+    def test_other_bundle_bytes_and_wrong_candidate_layer_refuse(self):
+        corepack = self.checker.corepack
+        corepack.check_regions(self.regions, self.bundle)
+        changed = b"x" + self.bundle[1:]
+        with self.assertRaises(ValueError):
+            corepack.check_regions(self.regions, changed)
+        inventory = corepack.trusted_review()
+        rows = inventory["files"]
+        corepack.check_files(rows, inventory)
+        for wrong_layer in (rows[:-1], rows + [rows[0]], []):
+            with self.assertRaises(ValueError):
+                corepack.check_files(wrong_layer, inventory)
+
     def test_mocked_orchestration_succeeds_then_each_guard_refuses(self):
-        for stage in (None, "signed", "candidate", "source", "archive", "review", "pin"):
+        for stage in (None, "signed", "candidate", "source", "fixture",
+                      "archive", "review", "pin"):
             with self.subTest(stage=stage), contextlib.ExitStack() as stack:
                 checker = self.checker
                 signed = stack.enter_context(patch.object(checker.corepack, "check_evidence"))
                 candidate = stack.enter_context(patch.object(checker.corepack.candidate,
                                                              "checked_bytes", return_value=b"archive"))
                 git = stack.enter_context(patch.object(checker, "run_git", return_value=b"source"))
+                fixture = stack.enter_context(patch.object(checker, "check_source_fixture"))
                 archive = stack.enter_context(patch.object(checker, "read_saved", return_value=(self.bundle, self.regions)))
                 review = stack.enter_context(patch.object(checker, "check_review", return_value="BLOCKED"))
                 stack.enter_context(patch.object(checker, "trusted_review", return_value=self.review))
+                stack.enter_context(patch.object(
+                    checker.corepack.candidate.checker, "read_json",
+                    return_value={"files": {"candidate.tar": "digest", "source.tar": "digest"}}))
                 stages = {"signed": signed, "candidate": candidate, "source": git,
-                          "archive": archive, "review": review}
+                          "fixture": fixture, "archive": archive, "review": review}
                 if stage == "pin":
                     stack.enter_context(patch.object(checker, "REVIEW_SHA256", "0" * 64))
                     stack.enter_context(patch.object(checker, "trusted_review", side_effect=ValueError()))
@@ -120,6 +139,75 @@ class TypanionTests(unittest.TestCase):
                                      (1, "", checker.REFUSAL + "\n"))
                     if stage != "pin":
                         stages[stage].assert_called()
+
+    def test_each_original_archive_recheck_refuses_after_success(self):
+        checker = self.checker
+        for changed_name in (None, "candidate.tar", "source.tar"):
+            with self.subTest(changed_name=changed_name), contextlib.ExitStack() as stack:
+                stack.enter_context(patch.object(checker, "trusted_review", return_value=self.review))
+                stack.enter_context(patch.object(checker.corepack, "check_evidence"))
+                stack.enter_context(patch.object(checker, "run_git", return_value=b"source"))
+                stack.enter_context(patch.object(checker, "check_source_fixture"))
+                stack.enter_context(patch.object(checker, "read_saved",
+                                                 return_value=(self.bundle, self.regions)))
+                stack.enter_context(patch.object(checker, "check_review",
+                                                 return_value="BLOCKED"))
+                stack.enter_context(patch.object(
+                    checker.corepack.candidate.checker, "read_json",
+                    return_value={"files": {"candidate.tar": "digest", "source.tar": "digest"}}))
+                checked = []
+
+                def checked_bytes(path, _digest):
+                    checked.append(path.name)
+                    if path.name == changed_name:
+                        raise ValueError("private archive path")
+                    return b"saved"
+
+                stack.enter_context(patch.object(checker.corepack.candidate,
+                                                 "checked_bytes", side_effect=checked_bytes))
+                output, error = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                    result = checker.main(["candidate", "upstream"])
+                if changed_name is None:
+                    self.assertEqual(result, 0)
+                    self.assertEqual(checked[-2:], ["candidate.tar", "source.tar"])
+                else:
+                    self.assertEqual((result, output.getvalue(), error.getvalue()),
+                                     (1, "", checker.REFUSAL + "\n"))
+                    self.assertIn(changed_name, checked)
+
+    def test_removing_each_direct_guard_breaks_its_refusal_test(self):
+        checker = self.checker
+        record = copy.deepcopy(self.review)
+        record["reason"] = "changed"
+        source = dict(self.source)
+        source["package.json"] += b"x"
+        start = self.review["range"][0]
+        bundle = self.bundle[:start] + b"x" + self.bundle[start + 1:]
+        cases = [
+            ("if review != trusted_review():\n        raise ValueError(\"Review record changed\")",
+             {"review": record}),
+            ("if matching != [review[\"range\"]]:\n"
+             "        raise ValueError(\"Typanion retained range changed\")",
+             {"regions": self.regions + [self.review["range"]]}),
+            ("if digest(bundle[start:end]) != expected_digest:\n"
+             "        raise ValueError(\"Retained bytes changed\")",
+             {"bundle": bundle}),
+            ("if len(data) != size or digest(data) != expected_digest:\n"
+             "            raise ValueError(\"Source bytes or complete terms changed\")",
+             {"source": source}),
+        ]
+        original = inspect.getsource(checker.check_review)
+        for guard, changes in cases:
+            with self.subTest(guard=guard.splitlines()[0]):
+                self.assertIn(guard, original)
+                changed = original.replace(guard, "pass", 1)
+                namespace = vars(checker).copy()
+                exec(changed, namespace)
+                with patch.object(checker, "check_review", namespace["check_review"]):
+                    with self.assertRaises(AssertionError):
+                        with self.assertRaises(ValueError):
+                            self.check(**changes)
 
 
 if __name__ == "__main__":

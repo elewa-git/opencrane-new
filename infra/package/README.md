@@ -172,6 +172,9 @@ A separate Corepack inventory compares its files, launcher link and bundled code
 with signed Node inputs and every saved layer. Separate reviews check two dependencies'
 source, bundled code and full MIT terms. Those terms must accompany image distribution.
 The other dependencies’ licences still need review.
+The saved Corepack bundle also contains typanion. Its upstream source has full
+MIT terms, but the exact change from that source to the shipped module is still
+unproved. Its grant remains blocked.
 A separate npm inventory compares its package details, files and launcher links
 with the signed Node source, official download and every saved image layer.
 It records the source files omitted from the official download and refuses the
