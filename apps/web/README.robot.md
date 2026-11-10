@@ -2,6 +2,12 @@
 
 For people, read [README.md](README.md) first.
 
+`/account/tools?serverId=<id>` reads the signed-in person's bounded profiles for
+one integration, then the exact safe profile detail before a local revoke.
+Unknown revoke replies retain their original change reference for read-only status
+checks. See `src/app/settings/README.robot.md` and the intercepted display receipt
+under `docs/process/screen-p3-8-bearer/`.
+
 The organisation History screen reads paged records and a selected record's
 bounded evidence through the existing audit GET routes. It draws only links
 returned by those routes. A failed read keeps dated loaded rows; access refusal

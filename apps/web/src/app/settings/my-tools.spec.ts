@@ -28,6 +28,17 @@ function view(): { fixture: ReturnType<typeof TestBed.createComponent<MyTools>>;
 }
 
 describe('My tools', () => {
+  beforeEach(() => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value(this: HTMLDialogElement) { this.setAttribute('open', ''); },
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+      configurable: true,
+      value(this: HTMLDialogElement) { this.removeAttribute('open'); },
+    });
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     TestBed.resetTestingModule();
@@ -35,7 +46,9 @@ describe('My tools', () => {
 
   it('shows loading, then an empty list', async () => {
     let finish!: (value: Response) => void;
-    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(finish));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>((resolve) => {
+      finish = resolve;
+    }));
     const { fixture, element } = view();
     expect(element.textContent).toContain('Loading');
     finish(new Response(JSON.stringify(page([]))));
@@ -50,7 +63,10 @@ describe('My tools', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
       reads += 1;
       if (reads === 1) return response(page([saved], 'next'));
-      if (reads === 2) return response(page([{ ...saved, profileId: 'second', selected: false }]));
+      if (reads === 2) {
+        return response(page([{ ...saved, profileId: 'second', selected: false,
+          adminBlocked: true }]));
+      }
       return response({ status: 'unavailable' }, 503);
     });
     const { fixture, element } = view();
@@ -62,6 +78,7 @@ describe('My tools', () => {
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(element.textContent).toContain('second');
+      expect(element.textContent).toContain('Disabled by an administrator');
     });
     element.querySelector<HTMLButtonElement>('[data-action="refresh"]')?.click();
     await vi.waitFor(() => {
@@ -96,5 +113,182 @@ describe('My tools', () => {
       expect(element.textContent).toContain('Access changed');
       expect(element.textContent).not.toContain('alex');
     });
+  });
+
+  it('checks one revoke reference after an unknown reply and keeps 404 unknown', async () => {
+    const requests: Array<{ url: string; body?: string }> = [];
+    function serve(url: string | URL | Request, init?: RequestInit): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      const body = typeof init?.body === 'string' ? init.body : '';
+      requests.push({ url: address, body });
+      if (address.endsWith('/revoke')) return response({}, 503);
+      if (address.endsWith('/changes/')) throw new Error('Missing reference');
+      if (address.includes('/changes/')) return response({}, 404);
+      if (address.endsWith('/alex')) return response(saved);
+      return response(page([saved]));
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('alex');
+    });
+    element.querySelector<HTMLButtonElement>('.profile')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Saved version');
+    });
+    element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
+    element.querySelector<HTMLButtonElement>('.danger')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Outcome unknown');
+    });
+    element.querySelector<HTMLButtonElement>('.notice button')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Still unknown');
+    });
+    const posts = requests.filter((request) => request.url.endsWith('/revoke'));
+    expect(posts).toHaveLength(1);
+    const changeRef = /"changeRef":"([\w-]+)"/u.exec(posts[0]!.body ?? '')?.[1];
+    expect(changeRef).toBeTruthy();
+    expect(requests.some((request) => request.url.endsWith(`/changes/${changeRef}`)))
+      .toBe(true);
+    expect(element.querySelector('.danger-outline')).toBeNull();
+  });
+
+  it('accepts a matching revoke receipt and refreshes the safe detail', async () => {
+    let revoked = false;
+    function serve(url: string | URL | Request, init?: RequestInit): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (address.endsWith('/revoke')) {
+        revoked = true;
+        const body = typeof init?.body === 'string' ? init.body : '';
+        const changeRef = /"changeRef":"([\w-]+)"/u.exec(body)?.[1];
+        return response({ status: 'revoked', changeRef, sequence: 4 });
+      }
+      const current = revoked ? { ...saved, status: 'unavailable', profileRevision: 4,
+        generation: null } : saved;
+      if (address.endsWith('/alex')) return response(current);
+      return response(page([current]));
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('alex');
+    });
+    element.querySelector<HTMLButtonElement>('.profile')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Saved version');
+    });
+    element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
+    element.querySelector<HTMLButtonElement>('.danger')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Connection revoked here');
+      expect(element.textContent).toContain('Revoked or unavailable');
+    });
+    expect(element.querySelector('.danger-outline')).toBeNull();
+  });
+
+  it('ignores a late profile detail after membership is refused', async () => {
+    let finishDetail!: (value: Response) => void;
+    let listReads = 0;
+    function serve(url: string | URL | Request): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (address.endsWith('/alex')) {
+        return new Promise<Response>((resolve) => { finishDetail = resolve; });
+      }
+      listReads += 1;
+      if (listReads === 1) return response(page([saved]));
+      return response({ status: 'refused' }, 403);
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('alex');
+    });
+    element.querySelector<HTMLButtonElement>('.profile')?.click();
+    element.querySelector<HTMLButtonElement>('[data-action="refresh"]')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Access changed');
+    });
+    finishDetail(new Response(JSON.stringify(saved)));
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain('alex');
+    expect(element.textContent).not.toContain('Saved version');
+  });
+
+  it('ignores a late list page after a detail read refuses membership', async () => {
+    let finishPage!: (value: Response) => void;
+    function serve(url: string | URL | Request): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (address.includes('cursor=')) {
+        return new Promise<Response>((resolve) => { finishPage = resolve; });
+      }
+      if (address.endsWith('/alex')) return response({ status: 'refused' }, 403);
+      return response(page([saved], 'next'));
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('alex');
+    });
+    element.querySelector<HTMLButtonElement>('[data-action="more"]')?.click();
+    element.querySelector<HTMLButtonElement>('.profile')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Access changed');
+    });
+    finishPage(new Response(JSON.stringify(page([{ ...saved, profileId: 'late' }]))));
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain('late');
+    expect(element.textContent).not.toContain('alex');
+  });
+
+  it('ignores a late revoke reply after membership is refused', async () => {
+    let finishRevoke!: (value: Response) => void;
+    let listReads = 0;
+    function serve(url: string | URL | Request): Promise<Response> {
+      const address = url instanceof Request ? url.url : url.toString();
+      if (address.endsWith('/revoke')) {
+        return new Promise<Response>((resolve) => { finishRevoke = resolve; });
+      }
+      if (address.endsWith('/alex')) return response(saved);
+      listReads += 1;
+      if (listReads === 1) return response(page([saved]));
+      return response({ status: 'refused' }, 403);
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    const { fixture, element } = view();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('alex');
+    });
+    element.querySelector<HTMLButtonElement>('.profile')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Saved version');
+    });
+    element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
+    element.querySelector<HTMLButtonElement>('.danger')?.click();
+    element.querySelector<HTMLButtonElement>('[data-action="refresh"]')?.click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Access changed');
+    });
+    finishRevoke(new Response(JSON.stringify({ status: 'revoked' })));
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain('alex');
+    expect(element.textContent).not.toContain('Connection revoked here');
   });
 });

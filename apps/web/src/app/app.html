@@ -22,6 +22,8 @@
     } @else {
       @if (settingsPage === 'account') {
         <oc-account-screen />
+      } @else if (settingsPage === 'tools') {
+        <oc-my-tools [serverId]="personalToolsServerId" />
       } @else {
         <h1>{{ personalSettingsPageLabel(settingsPage) }}</h1>
         @if (settingsPage === 'preferences') {
