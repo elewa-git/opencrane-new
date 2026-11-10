@@ -15,6 +15,10 @@ does not yet hold this pair through both inventory reads.
 The image also installs `native-checks.ts` and `native-persistence.ts` at the
 fixed paths used by the held persistence attempt. The runner reports Stop only
 after native cleanup finishes; the collector also requires a clean Docker exit.
+The runtime package pins MIT-licensed Zod 4.6.6. A link at
+`/scripts/node_modules/zod` lets the runner load that package from `/scripts`.
+`native-persistence-client.test.ts` builds the image and starts the real runner
+entry without mounts or network to check this import.
 
 ## Retained Ask call limits
 

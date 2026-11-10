@@ -84,6 +84,8 @@ COPY runtime-package.json package.json
 COPY runtime-package-lock.json package-lock.json
 RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/npm \
     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf /root/.npm
+# Resolve the native runner's import from /scripts using the checked runtime package.
+RUN mkdir -p /scripts/node_modules && ln -s /app/node_modules/zod /scripts/node_modules/zod
 COPY --from=project LICENSE /app/LICENSE
 # Copy shared routing and caller checks without adding server dependencies to the image.
 COPY --from=project libs/models/package.json /app/libs/models/package.json

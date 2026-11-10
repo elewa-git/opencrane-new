@@ -789,6 +789,10 @@ PARTIAL with `complete: false`; this helper cannot qualify admission.
 after `checkLocalTarget` confirms the claimed secondary slot and image source.
 `persistence-launch.sh` claims a secondary slot, starts or reuses it, runs the caller
 and takes the stack down on every exit path. The claim uses the launcher's PID.
+It installs cleanup traps before starting `claim.sh`. If a signal arrives during
+the claim, it waits for the slot number and releases that slot before exiting.
+The launcher fixture runs with the directory's Vitest configuration and sends
+TERM during a successful claim to check this case.
 The target check binds both server and computer container ids to that slot before
 native launch. It checks the current computer installation once more immediately
 before starting the native process.
