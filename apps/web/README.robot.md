@@ -2,6 +2,13 @@
 
 For people, read [README.md](README.md) first.
 
+The organisation History screen reads paged records and a selected record's
+bounded evidence through the existing audit GET routes. It draws only links
+returned by those routes. A failed read keeps dated loaded rows; access refusal
+clears rows, detail and the organisation menu. The capture command is
+`npm run visual:screen-p4-27-history`. See `src/app/audit/README.robot.md`
+for the filters and reply rules.
+
 Command activity rows accept optional `preview` only from a member chat reply.
 The transcript and Activity panel show the fixed label first. Expansion shows
 the masked preview when one exists; older rows have no preview. The panel keys

@@ -1,25 +1,44 @@
 # Change history
 
-This folder shows what OpenCrane decided and what happened afterwards. Admins see organisation Change history; people can also open Action history for a conversation they may read.
+## What this is
+
+This page shows saved organisation changes and their observed results.
+People can also read the action history for a conversation they may open.
+
+## Where it fits
+
+The website asks the server for safe records. The server checks access before
+each reply.
+
+```mermaid
+flowchart LR
+  website[Website] --> history[Change history]
+  website --> organisation[Organisation pages]
+  history --> server[Server history read]
+  server --> records[Saved event records]
+```
 
 ## What it is responsible for
 
-- Shows decisions separately from observed results, including unknown outcomes.
-- Filters by Allow, Ask or Deny, request reference and chat turn reference. A turn is one message and the assistant's reply.
-- Loads older history and shows amounts set aside or charged in whole euro cents.
-- Clears history when access is refused and offers refresh when a read fails.
-- Shows a saved child publication's permitted chat references and a parent chat link.
+- Shows a decision beside what was later observed.
+- Filters and loads older records without repeating a change.
+- Opens one record's evidence at a time.
+- Shows membership, publication and delegation facts that the server permits.
+- Shows memory work as metadata without fact text.
+- Keeps loaded records during a temporary failure and clears them when access ends.
 
 ## Main files
 
 | File | What it does |
 | --- | --- |
-| `audit.ts` | Reads and checks history returned by the server. |
-| `audit.html`, `audit.css` | Draw the filters, records and status messages. |
+| `audit.ts` | Reads the list and the selected record's evidence. |
+| `audit.html`, `audit.css` | Draw the filters, list and detail panel. |
 
 ## How it connects
 
-[Page selection](../README.md) opens `/org/history` or `/history/<conversation>`.
-[The server](../../../../server/README.md) supplies the records, using the shared
-[message rules](../../../../../libs/protocol/README.md).
-This page reads history; it does not repeat an action whose result is unknown.
+[Page selection](../README.md) opens Change history.
+[The server](../../../../server/README.md) supplies safe records.
+
+## Where to read more
+
+[README.robot.md](README.robot.md) records the API, access and capture details.
