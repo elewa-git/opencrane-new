@@ -159,6 +159,62 @@ describe('saved persona review', () => {
       url === '/api/onboarding/survey' && init?.method === 'POST')).toHaveLength(0);
   });
 
+  it('says no persona is approved when restarting from the first draft', async () => {
+    const screen = open((url) => {
+      if (url === '/api/onboarding') return reply(progress());
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: 2, revisions: [revision] });
+      }
+      return reply(revision);
+    });
+    await show(screen, revision.replacement);
+    button(screen.root, 'Restart survey').click();
+    await show(screen, 'Restart the survey?');
+    const dialog = screen.root.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain('No persona is approved yet.');
+    expect(dialog?.textContent).not.toContain('Approved revision r2 stays active');
+  });
+
+  it('keeps an unsaved edit beside the newer revision after a conflict', async () => {
+    let current = 2;
+    const screen = open((url, init) => {
+      if (url === '/api/onboarding') return reply(progress(current, current + 4));
+      if (url === '/api/onboarding/persona/revisions') {
+        return reply({ currentRevision: current, revisions: [{ revision: current,
+          revisionId: `revision-${current}` }] });
+      }
+      if (url.startsWith('/api/onboarding/persona/revisions/')) {
+        return reply({ ...revision, revision: current, revisionId: `revision-${current}`,
+          replacement: `Other device revision r${current}` });
+      }
+      if (url === '/api/onboarding/persona' && init?.method === 'POST') {
+        current = 3;
+        return reply({ status: 'conflict' }, 409);
+      }
+      return reply({}, 503);
+    });
+    await show(screen, 'Other device revision r2');
+    button(screen.root, 'Edit').click();
+    await show(screen, 'Save as new revision');
+    const input = screen.root.querySelector('textarea');
+    expect(input).not.toBeNull();
+    input!.value = 'My unsaved words';
+    input!.dispatchEvent(new Event('input'));
+    button(screen.root, 'Save as new revision').click();
+    await show(screen, 'Other device revision r3');
+    expect(screen.root.querySelector('textarea')?.value).toBe('My unsaved words');
+    expect(screen.root.querySelector('[role="dialog"]')?.textContent)
+      .toContain('A newer revision exists');
+    expect(button(screen.root, 'Review r3')).toBeDefined();
+    expect(screen.fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/persona'))
+      .toHaveLength(1);
+    button(screen.root, 'Review r3').click();
+    await show(screen, 'Other device revision r3');
+    button(screen.root, 'Edit').click();
+    await show(screen, 'Save as new revision');
+    expect(screen.root.querySelector('textarea')?.value).toBe('My unsaved words');
+  });
+
   it('shows an unassigned member a truthful state without generating a persona', async () => {
     const screen = open((url) => {
       if (url === '/api/onboarding') return reply(progress(null));
