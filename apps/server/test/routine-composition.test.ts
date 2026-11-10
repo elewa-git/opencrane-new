@@ -977,6 +977,62 @@ it.each(['deleted', 'changed', 'deleted-and-access-lost', 'access-lost'] as cons
   'refuses a credential %s after the final read and before publication',
   refusesCredentialChangeAfterFinalRead);
 
+async function refusesChangeDuringFinalCustodyRead(kind: 'stop' | 'grant' | 'block' | 'deadline') {
+  holdFixtureClock();
+  const waiting = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const grantSubject = grantStream('mcp_server', 'odoo');
+  const grantPosition = await nats.store.head(grantSubject);
+  const toolPosition = await nats.store.head('mcp-odoo');
+  function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
+    computerGeneration: number) {
+    async function confirmCurrent() {
+      const currentGrant = await nats.store.head(grantSubject);
+      const currentTool = await nats.store.head('mcp-odoo');
+      if (currentGrant !== grantPosition || currentTool !== toolPosition) {
+        throw new Error('Company access changed');
+      }
+    }
+    async function confirmCredentialUse(authorisedVersion: string) {
+      expect(authorisedVersion).toBe('1');
+      waiting.resolve();
+      await resume.promise;
+    }
+    return Promise.resolve({ occurrenceId: run.occurrenceId, rootId: run.rootId,
+      computerGeneration, configurationDigest: 'a'.repeat(64),
+      custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse });
+  }
+  const sending = compose({ enabled: true, companyPreflight }).send(preparedComputer.wake);
+  try {
+    await waiting.promise;
+    if (kind === 'block') {
+      const blocked = record('late-block', 'mcp-odoo', 'mcp.tool_mode_set', {
+        serverId: 'odoo', connectionId: 'installed', toolName: 'read',
+        toolRevision: company.tool.revision, mode: 'block', setBy: 'admin' });
+      await nats.seed([blocked]);
+    } else if (kind === 'deadline') {
+      const expired = performance.now() + 10_000;
+      function pastDeadline() {
+        return expired;
+      }
+      vi.spyOn(performance, 'now').mockImplementation(pastDeadline);
+    } else {
+      await recordLateCompanyChange(kind);
+    }
+  } finally {
+    resume.resolve();
+  }
+  expect(await sending).toEqual({ status: 'unknown' });
+  expect(await saved('routine.run_send_authorised', 'routine-orders')).toHaveLength(1);
+  function isTurn(frame: Record<string, unknown>) {
+    return frame['type'] === 'turn';
+  }
+  expect(preparedComputer.frames.filter(isTurn)).toEqual([]);
+}
+it.each(['stop', 'grant', 'block', 'deadline'] as const)(
+  'refuses %s saved while the final custody read is pending',
+  refusesChangeDuringFinalCustodyRead);
+
 async function inert(options: { enabled?: boolean; replay?: boolean }) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
