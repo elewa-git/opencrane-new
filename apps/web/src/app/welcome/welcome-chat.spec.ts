@@ -225,7 +225,7 @@ describe('saved welcome chat', () => {
 
   it('offers direct and group drafts after no-assistant completion', async () => {
     const noAssistant = { ...active, status: 'completed', variant: 'no_assistant',
-      assignmentStatus: 'not_requested', answered: 1, nextStep: null,
+      assignmentStatus: 'assigned', answered: 1, nextStep: null,
       question: null, answer: 'Continue to workspace',
       completedAt: '2026-10-14T09:03:00.000Z' };
     const screen = mount(url => {
@@ -238,6 +238,12 @@ describe('saved welcome chat', () => {
     });
     await show(screen, 'Message a colleague');
     await show(screen, 'Message a group');
+    expect(screen.root.querySelector('.no-assistant-notice')?.textContent)
+      .toContain('No personal assistant assigned yet');
+    expect(screen.root.querySelector('.no-assistant-notice')?.textContent)
+      .toContain('Welcome complete');
+    expect(screen.root.querySelector('.transcript')).toBeNull();
+    expect(screen.root.textContent).not.toContain('Continue to workspace');
     expect(screen.root.querySelector('a[href="/workspace/direct"]')).not.toBeNull();
     expect(screen.root.querySelector('.completed-dock a[href="/workspace"]')).toBeNull();
     expect(screen.root.querySelector('textarea')).toBeNull();
