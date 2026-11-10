@@ -6,9 +6,10 @@ import { promisify } from 'node:util';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue, readPublication,
-  rebuildMcpCatalogueProjection } from '@opencrane/projections';
+  rebuildMcpCatalogueProjection, memoryScopeId } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { gatewayObservationSchema, mcpConfigurationObservationSchema } from '@opencrane/events';
+import { gatewayObservationSchema, mcpConfigurationObservationSchema,
+  memoryContextRecordedEventSchema } from '@opencrane/events';
 import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
@@ -2766,6 +2767,58 @@ async function selectedPersonalCall() {
 }
 it('sends one selected personal credential after a real release append',
   selectedPersonalCall, 60_000);
+
+async function refusesForgottenLoadedMemoryAfterPermit() {
+  const { setup, remote, headers } = await selectedPersonalFixture();
+  const scopeId = memoryScopeId('test', 'person', 'alice');
+  const resources = [['mcp_server', 'memory'], ['memory_read', scopeId]];
+  for (const [resourceType, resourceId] of resources) {
+    for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'assistant']]) {
+      const granted = await setup.append(grantStream(resourceType!, resourceId!), 'grant.given',
+        { resourceType, resourceId, granteeKind, granteeId, grantedBy: 'alice' });
+      await setup.auth.handler.handle(granted, setup.db);
+    }
+  }
+  await setup.append(`scope-${scopeId}`, 'memory.written', { scopeId,
+    scopeKind: 'person', ownerId: 'alice', memoryId: 'fact', revision: 1,
+    schemaVersion: 1, kind: 'preference', pinned: true, expiresAt: null,
+    sources: [], dependsOn: [], ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    keyId: `key:${'a'.repeat(64)}` });
+  const position = await setup.nats.store.head(`scope-${scopeId}`);
+  const context = { conversationId: 'conversation', turnId: 'dispatch', requesterId: 'alice',
+    assistantId: 'assistant', computerId: 'computer', generation: 1,
+    threadId: headers['session-id'], inputGeneration: 'input', action: 'prepared',
+    delivery: null, callDigest: null, dispatchDigest: null, additions: [],
+    scopePositions: [], projectionGeneration: 'projection', byteCount: 0,
+    hasOmissions: false, reason: 'none' };
+  const recorded = { id: 'personal-memory-prepared', commandId: 'personal-memory-prepared',
+    type: 'agent.memory_context_recorded', source: 'opencrane-server',
+    subject: 'conversation-conversation', silo: 'test', time: new Date().toISOString(),
+    principal: { kind: 'system', id: 'server' }, data: context };
+  const prepared = memoryContextRecordedEventSchema.parse(recorded);
+  const loaded = memoryContextRecordedEventSchema.parse({ ...recorded,
+    id: 'personal-memory-loaded', commandId: 'personal-memory-loaded', data: {
+      ...context, action: 'loaded', delivery: 'initial', byteCount: 20,
+      additions: [{ scopeId, memoryId: 'fact', revision: 1 }],
+      scopePositions: [{ scopeId, position }] } });
+  await setup.nats.seed([prepared, loaded]);
+
+  const value = await permit(setup, headers);
+  const requestId = requestFromPermit(value);
+  await setup.append(`scope-${scopeId}`, 'memory.forgotten', { schemaVersion: 1,
+    scopeId, scopeKind: 'person', ownerId: 'alice', memoryId: 'fact',
+    revision: 2, expectedRevision: 1 });
+  const freshDecision = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    { method: 'POST', headers, body });
+  expect(freshDecision.status).toBe(403);
+
+  const response = await send(setup, value);
+  expect(response.status).toBe(403);
+  expect(remote.received).toHaveLength(0);
+  expect(await setup.nats.store.head(`credential-${requestId}`)).toBe(0);
+}
+it('refuses a personal permit after loaded memory is forgotten',
+  refusesForgottenLoadedMemoryAfterPermit, 60_000);
 
 const personalChanges = ['cleared choice', 'revoked profile', 'admin block',
   'changed review', 'expired permit', 'lost release audit', 'closed turn',

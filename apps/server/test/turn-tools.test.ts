@@ -7,7 +7,7 @@ import { buildTurnTools, mayOfferTurnTools, toolsForMessage,
   type TurnDelivery, type TurnToolServerState } from '../src/chat/turn-tools.ts';
 import { turnMessage, type AgentSession, type WatchOptions } from '../src/chat/bridge-conversation.ts';
 import { agentSessionData } from '../src/chat/reports.ts';
-import { parseTurn } from '../../computer/src/turn-frame.ts';
+import { parseComputerTurn } from '../../computer/test/support/turn-parser.ts';
 
 const toolDefinition = JSON.stringify({ name: 'read', inputSchema: { type: 'object' } });
 
@@ -94,7 +94,7 @@ it('offers a personal server only for the requester with a verified explicit cho
   const frame = { id: 'turn', conversationId: 'chat', assistantId: 'assistant',
     text: 'Use a tool', token: 'signed-turn', expiresAt: Date.now() + 60_000,
     tools: alice };
-  expect(parseTurn(frame).tools).toEqual(alice);
+  expect(parseComputerTurn(frame).tools).toEqual(alice);
   expect(Object.keys(alice[0]!).sort()).toEqual([
     'key', 'serverId', 'connectionId', 'serverInfo', 'definitions', 'modes',
   ].sort());
