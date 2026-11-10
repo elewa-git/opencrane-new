@@ -10,14 +10,38 @@ const build = resolve('apps/web/dist/web/browser');
 const output = resolve('docs/process/p4-27-pr15');
 const origin = 'https://navigation-capture.opencrane.test';
 const checkedAt = '2026-11-08T09:40:00.000Z';
+const rows = [
+  { id: 'invitation-delivery', source: 'people', priority: 'needs_input',
+    eventAt: checkedAt, action: 'view_invitation_links', href: '/org/people',
+    affectedPeople: '2 invitees' },
+  { id: 'provider-check', source: 'providers', priority: 'unknown',
+    eventAt: checkedAt, action: 'view_evidence', href: '/org/providers/primary',
+    affectedPeople: 'Sales team' },
+  { id: 'integration-review', source: 'integrations', priority: 'failure',
+    eventAt: checkedAt, action: 'review_tools', href: '/org/integrations/odoo',
+    affectedPeople: 'Sales team' },
+];
 const all = { people: { read: true }, providers: { read: true }, spending: { read: true },
   integrations: { read: true }, routines: { readOwn: true }, changeHistory: { read: true } };
 const restricted = { ...all, spending: { read: false }, integrations: { read: false },
   routines: { readOwn: false } };
 
+function canShowRow(row, capabilities) {
+  if (row.source !== 'integrations') return true;
+  return capabilities.integrations.read;
+}
+
 function response(capabilities) {
-  const body = { rows: [], next: null, allClear: true,
-    sources: [{ name: 'people', status: 'current', checkedAt }],
+  const visibleRows = [];
+  for (const row of rows) {
+    if (canShowRow(row, capabilities)) visibleRows.push(row);
+  }
+  const body = { rows: visibleRows, next: null, allClear: false,
+    sources: [
+      { name: 'people', status: 'current', checkedAt },
+      { name: 'providers', status: 'current', checkedAt },
+      { name: 'integrations', status: 'current', checkedAt },
+    ],
     viewer: { role: 'admin' }, capabilities };
   return JSON.stringify(body);
 }
@@ -30,6 +54,10 @@ function targetSizes() {
     if (box.width < 44 || box.height < 44) return false;
   }
   return true;
+}
+
+function blurActiveElement() {
+  document.activeElement?.blur();
 }
 
 async function capture(browser, width, name, capabilities) {
@@ -86,7 +114,7 @@ async function capture(browser, width, name, capabilities) {
         return wraps;
       });
       assert(longNameWraps, 'Long organisation names wrap on a phone');
-      await page.locator('dialog h2').focus();
+      await page.evaluate(blurActiveElement);
     }
     assert(await page.evaluate(pageHasNoOverflow), `${name} has no horizontal overflow`);
     assert(await page.evaluate(targetSizes), `${name} has 44 px targets`);
@@ -112,7 +140,7 @@ try {
   await browser.close();
 }
 await writeFile(resolve(output, 'receipt.md'),
-  '# Organisation navigation capture\n\nPASS — Four intercepted browser captures at 1280 and '
-  + '390 pixels. Checked reduced motion, overflow, 44 px targets, Tab order, '
+  '# Organisation navigation capture\n\nPASS — Four intercepted browser captures with a populated '
+  + 'task list at 1280 and 390 pixels. Checked reduced motion, overflow, 44 px targets, Tab order, '
   + 'long names and phone menu focus. '
   + 'No live installation was used.\n');
