@@ -2914,6 +2914,24 @@ async function hidesCredentialEchoInRemoteError() {
 it('does not return an upstream error that echoes the injected credential',
   hidesCredentialEchoInRemoteError, 60_000);
 
+async function hidesNumericCredentialEchoInRemoteCode() {
+  const { setup, remote, headers } = await selectedPersonalFixture('allow', '12345');
+  function echoedCode() {
+    return '{"jsonrpc":"2.0","id":REQUEST_ID,"error":{"code":12345,'
+      + '"message":"Remote call failed"}}';
+  }
+  remote.respond(echoedCode);
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  const returned = await response.text();
+  expect(returned).not.toContain('12345');
+  expect(remote.received).toHaveLength(1);
+  expect(remote.received[0]!.headers.authorization).toBe('Bearer 12345');
+}
+it('does not return an upstream error code that echoes a numeric credential',
+  hidesNumericCredentialEchoInRemoteCode, 60_000);
+
 async function refusesScopeMismatchBeforePermit() {
   const { setup, remote, headers, saved } = await selectedPersonalFixture();
   saved.configuration.toolScopes.write.push('missing-scope');
