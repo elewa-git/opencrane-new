@@ -31,9 +31,12 @@ belong to the next part. The Assistant settings page remains unavailable.
 Run `npm run visual:screen-p4-19-persona` for intercepted captures at both
 desktop and phone widths.
 
-`/welcome` reads `GET /api/onboarding/welcome`. A `not_started` result offers
-the assistant or no-assistant start from the event-backed `assistantAssigned`
-field on that same read. It does not use the chat projection. Start reads
+`/welcome` reads `GET /api/onboarding/welcome`. A `not_started` result names
+the next required step. The page links to the survey until all four answers
+are saved. If an assistant is assigned, it then links to persona review until
+the current approval is saved. Only a ready result offers a start. The choice
+uses the event-backed `assistantAssigned` field on that same read. It does not
+use the chat projection. Start reads
 `/api/onboarding` for the current survey generation, position and approval
 reference, then posts
 `operation: start`. Active welcome uses the saved script version, question,

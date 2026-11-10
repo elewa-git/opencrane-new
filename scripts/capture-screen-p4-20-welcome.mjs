@@ -40,7 +40,7 @@ async function serve(fixture, route) {
         operation: 'onboarding.welcome_started' } });
     } else if (fixture.state === 'ONB-30' && !fixture.started) {
       await route.fulfill({ json: { status: 'not_started', nextStep: null, answered: 0,
-        assistantAssigned: true } });
+        assistantAssigned: true, requiredStep: null } });
     } else {
       await route.fulfill({ json: saved(fixture.state) });
     }
@@ -74,13 +74,13 @@ function composerBottom(element) {
 }
 
 function railGeometry(element) {
-  const style = getComputedStyle(element);
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
   const bounds = element.getBoundingClientRect();
   return { display: style.display, width: bounds.width, height: bounds.height };
 }
 
 function composerFrameStyle(element) {
-  const style = getComputedStyle(element);
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
   const frame = element.getBoundingClientRect();
   const textarea = element.querySelector('textarea')?.getBoundingClientRect();
   return { borderWidth: parseFloat(style.borderTopWidth), radius: parseFloat(style.borderTopLeftRadius),

@@ -33,7 +33,8 @@ flowchart LR
 - Lists revision dates and opens one version for its member after an access check.
 - Approves the exact current version and shows its saved time and original receipt.
 - Starts one saved welcome from the member's actual assistant assignment. The
-  welcome read shows the same assignment fact before the person chooses a start.
+  welcome read shows the same assignment fact and the next required survey or
+  persona step before the person chooses a start.
 - Saves the next scripted answer and shows it as pending until a worker confirms completion.
 - Shows a completed welcome as read-only after survey or assistant changes.
 

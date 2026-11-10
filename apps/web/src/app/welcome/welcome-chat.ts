@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const savedWelcomeSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('not_started'), nextStep: z.null(), answered: z.literal(0),
-    assistantAssigned: z.boolean() }),
+    assistantAssigned: z.boolean(), requiredStep: z.enum(['survey', 'persona']).nullable() }),
   z.object({
     status: z.enum(['welcome_active', 'completion_pending', 'completed']),
     welcomeId: z.string(), scriptVersion: z.literal('welcome-v1'),
@@ -27,7 +27,7 @@ const receiptSchema = z.object({ status: z.enum(['confirmed', 'completion_pendin
   commandId: z.string(), operation: z.enum(['onboarding.welcome_started',
     'onboarding.welcome_answer_recorded']) });
 type SavedWelcome = z.infer<typeof savedWelcomeSchema>;
-type ScreenState = 'loading' | 'start' | 'active' | 'saving' | 'unknown' | 'pending'
+type ScreenState = 'loading' | 'start' | 'survey' | 'persona' | 'active' | 'saving' | 'unknown' | 'pending'
   | 'completed' | 'changed' | 'unavailable' | 'signed_out' | 'refused';
 
 @Component({
@@ -134,7 +134,9 @@ export class WelcomeChat implements OnDestroy {
     this.saved.set(saved);
     this.resumed.set(saved.status === 'welcome_active' && !this.startedHere);
     if (changed) this.state.set('changed');
-    else if (saved.status === 'not_started') this.state.set('start');
+    else if (saved.status === 'not_started') {
+      this.state.set(saved.requiredStep ?? 'start');
+    }
     else if (saved.status === 'completed') this.state.set('completed');
     else if (saved.status === 'completion_pending') this.state.set('pending');
     else this.state.set('active');
@@ -162,9 +164,12 @@ export class WelcomeChat implements OnDestroy {
       if (!response.ok) throw new Error('Progress unavailable');
       const progress = progressSchema.parse(await response.json());
       if (this.request.signal.aborted) return;
-      if (progress.survey.steps.length !== 4 ||
-          (variant === 'assistant' && !progress.approval)) {
-        this.state.set('changed');
+      if (progress.survey.steps.length !== 4) {
+        this.state.set('survey');
+        return;
+      }
+      if (variant === 'assistant' && !progress.approval) {
+        this.state.set('persona');
         return;
       }
       const body: Record<string, unknown> = { operation: 'start',

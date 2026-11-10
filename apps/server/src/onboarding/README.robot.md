@@ -26,7 +26,10 @@ Only a later explicit approval changes the approved reference.
 See [apps/server/README.robot.md](../../README.robot.md) for the shared member
 guard, response codes and private key custody rules.
 
-`GET /api/onboarding/welcome` returns `assistantAssigned` before a start. It
+`GET /api/onboarding/welcome` returns `assistantAssigned` and `requiredStep`
+before a start. `requiredStep` is `survey` until all four steps are saved,
+`persona` when an assigned assistant still needs approval, or `null` when
+the offered start is ready. It
 checks the same `assistant.created` event as the start command, so a delayed
 computer projection cannot change the offered choice. Once started, it returns
 the saved variant, frozen references, next question, answer count and pending

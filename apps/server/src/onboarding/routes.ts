@@ -8,7 +8,8 @@ import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { surveyCommand, SurveyConflict, SurveyUnknown } from './commands.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
   personaEvent, personaReceipt, surveyReceipt } from './history.ts';
-import { welcomeAssistantAssigned, welcomeCommand, welcomeReceipt } from './welcome.ts';
+import { welcomeAssistantAssigned, welcomeCommand, welcomeReceipt,
+  welcomeRequiredStep } from './welcome.ts';
 import { welcomeScripts } from './script.ts';
 import { welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema } from '@opencrane/events';
 
@@ -119,8 +120,12 @@ async function readSpecial(request: FastifyRequest, options: ChatOptions,
 function readWelcome(options: ChatOptions, memberId: string, history: History,
   assistantAssigned: boolean | null) {
   const welcome = history.welcome;
-  if (!welcome) return { status: 'not_started', nextStep: null, answered: 0,
-    assistantAssigned };
+  if (!welcome) {
+    if (assistantAssigned === null) throw new Error('Missing assistant assignment');
+    const requiredStep = welcomeRequiredStep(history, assistantAssigned);
+    return { status: 'not_started', nextStep: null, answered: 0,
+      assistantAssigned, requiredStep };
+  }
   const start = welcomeStartedDataSchema.parse(welcome.start.event.data);
   const question = welcomeScripts[start.scriptVersion][start.variant];
   const answer = welcome.answers[0];

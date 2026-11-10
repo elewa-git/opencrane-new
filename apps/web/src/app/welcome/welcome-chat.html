@@ -25,6 +25,18 @@
   </header>
   @if (state() === 'loading') {
     <p class="notice" role="status">Loading your saved welcome…</p>
+  } @else if (state() === 'survey') {
+    <section class="notice">
+      <h1>Finish your survey</h1>
+      <p>Save all four steps before starting your welcome.</p>
+      <a href="/welcome/survey">Continue survey</a>
+    </section>
+  } @else if (state() === 'persona') {
+    <section class="notice">
+      <h1>Approve your persona</h1>
+      <p>Review and approve your persona before starting with your assistant.</p>
+      <a href="/welcome/persona">Review persona</a>
+    </section>
   } @else if (state() === 'start') {
     <section class="notice">
       <h1>Welcome</h1>
