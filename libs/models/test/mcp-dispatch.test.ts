@@ -2685,7 +2685,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
 }
 it.each(remoteGuards)('guards published HTTPS tool calls: %s', guardsRemoteCall);
 
-async function selectedPersonalFixture(mode: 'allow' | 'ask' = 'allow',
+async function selectedPersonalFixture(mode: 'allow' | 'ask' | 'block' = 'allow',
   material = 'alice-access') {
   const context = await publishedFixture(mode, true, true, 'personal');
   const { setup } = context;
@@ -2714,7 +2714,14 @@ async function selectedPersonalFixture(mode: 'allow' | 'ask' = 'allow',
   selected.principal = { kind: 'human', id: 'alice' };
   selected.commandId = 'choice';
   await setup.nats.seed([selected]);
-  function readAccessMaterial() { return Promise.resolve(material); }
+  let materialReads = 0;
+  function readAccessMaterial() {
+    materialReads += 1;
+    return Promise.resolve(material);
+  }
+  function accessMaterialReadCount() {
+    return materialReads;
+  }
   setup.dispatchOptions.credentialDispatch = {
     db: setup.db, custody: { readAccessMaterial },
     loadConfiguration: saved.loadConfiguration,
@@ -2727,8 +2734,21 @@ async function selectedPersonalFixture(mode: 'allow' | 'ask' = 'allow',
   const rawClaims: unknown = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
   expect(rawClaims).toMatchObject({ personalSelections: claims.personalSelections });
   const headers = { ...context.headers, ...context.constants, 'x-turn-token': token };
-  return { setup, remote, headers, saved };
+  return { setup, remote, headers, saved, accessMaterialReadCount };
 }
+
+async function refusesCredentialForBlockedPersonalTool() {
+  const { setup, remote, headers, accessMaterialReadCount } =
+    await selectedPersonalFixture('block');
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    { method: 'POST', headers, body });
+
+  expect(response.status).toBe(403);
+  expect(accessMaterialReadCount()).toBe(0);
+  expect(remote.received).toHaveLength(0);
+}
+it('does not release a personal credential without an approved tool rule',
+  refusesCredentialForBlockedPersonalTool, 60_000);
 
 function requestFromPermit(value: string) {
   const encoded = value.split('.')[0]!;
