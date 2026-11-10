@@ -83,9 +83,9 @@ export async function startRealUploadFixture(inputs) {
   const transportIds = [];
   let lastProof;
   const state = { loseAcknowledgement: false };
-  const clock = { now: Date.now() };
+  const clock = { offset: 0 };
   function currentTime() {
-    return clock.now;
+    return Date.now() + clock.offset;
   }
 
   async function closeService() {
@@ -124,11 +124,11 @@ export async function startRealUploadFixture(inputs) {
       cert: await readFile(join(directory, 'server.crt')) };
 
     async function startScanner(reviewedInputs) {
-      clock.now = Date.now();
       const ownership = join(directory, `scanner-${randomUUID()}`);
-      scanner = await launchScanner({ ...reviewedInputs, ownership, clock: currentTime });
-      service = createScannerService({ scanner, tls, trust: credentials.trust,
-        clock: currentTime });
+      const launchOptions = { ...reviewedInputs, ownership, clock: currentTime };
+      scanner = await launchScanner(launchOptions);
+      const serviceOptions = { scanner, tls, trust: credentials.trust, clock: currentTime };
+      service = createScannerService(serviceOptions);
       function recordTransport(request) {
         const requestId = request.headers['x-scan-request-id'];
         if (typeof requestId === 'string') transportIds.push(requestId);
@@ -145,7 +145,8 @@ export async function startRealUploadFixture(inputs) {
       }
       service.prependListener('checkContinue', recordTransport);
       service.prependListener('checkContinue', captureProof);
-      service.listen(0, '127.0.0.1');
+      const listenOptions = { port: 0, host: '127.0.0.1' };
+      service.listen(listenOptions);
       await once(service, 'listening');
       const address = service.address();
       if (!address || typeof address === 'string') throw new Error('Scanner fixture refused');
@@ -177,8 +178,17 @@ export async function startRealUploadFixture(inputs) {
       if (bytes.length > 1024) throw new Error('Fixture file too large');
       const selected = options.get(silo);
       if (!selected) throw new Error('Unknown fixture silo');
-      return uploadFile(selected, selected.names.member, selected.names.conversation,
-        key, cleanName, bytes, undefined, fresh);
+      const originalNow = Date.now;
+      function fixtureNow() {
+        return currentTime();
+      }
+      Date.now = fixtureNow;
+      try {
+        return await uploadFile(selected, selected.names.member, selected.names.conversation,
+          key, cleanName, bytes, undefined, fresh);
+      } finally {
+        Date.now = originalNow;
+      }
     }
 
     async function savedEvents(silo, type) {
@@ -202,7 +212,8 @@ export async function startRealUploadFixture(inputs) {
     }
 
     function expireDatabase() {
-      clock.now = Date.parse(scanner.databaseUpdatedAt) + 86_400_000;
+      const expiry = Date.parse(scanner.databaseUpdatedAt) + 86_400_000;
+      clock.offset = expiry - Date.now();
     }
 
     async function restart(reviewedInputs) {
@@ -225,7 +236,8 @@ export async function startRealUploadFixture(inputs) {
         request.once('end', finish);
       }
       replay.on('checkContinue', answer);
-      replay.listen(0, '127.0.0.1');
+      const listenOptions = { port: 0, host: '127.0.0.1' };
+      replay.listen(listenOptions);
       await once(replay, 'listening');
       const address = replay.address();
       if (!address || typeof address === 'string') throw new Error('Replay fixture refused');
