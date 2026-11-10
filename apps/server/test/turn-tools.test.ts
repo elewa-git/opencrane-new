@@ -75,6 +75,25 @@ it('offers only reviewed, zero-cost Allow tools on published credential-free ser
   expect(canUse).toHaveBeenCalledWith('allow', 'assistant', 'assistant');
 });
 
+it('offers a personal server only for the requester with a verified explicit choice', async () => {
+  const state = serverState('personal', { accountMode: 'personal' });
+  const input = {
+    rows: [{ serverId: 'personal' }], requesterId: 'alice', assistantId: 'assistant',
+    baseMessageBytes: 100, readServer: () => Promise.resolve(state),
+    canUse: () => Promise.resolve(true),
+    readSelection: (requesterId: string, serverId: string) => Promise.resolve(
+      requesterId === 'alice' && serverId === 'personal'
+        ? { profileId: 'alice-profile', profileRevision: 2, selectionRevision: 1,
+          generation: 1 } : undefined),
+  };
+  const alice = await buildTurnTools(input);
+  const bob = await buildTurnTools({ ...input, requesterId: 'bob' });
+
+  expect(alice).toHaveLength(1);
+  expect(alice[0]).toMatchObject({ profileId: 'alice-profile', generation: 1 });
+  expect(bob).toEqual([]);
+});
+
 it('drops whole servers when their definitions exceed the message budget', async () => {
   const rows = [{ serverId: 'first' }, { serverId: 'second' }];
   const first = serverState('first', {
