@@ -2769,11 +2769,11 @@ it('sends one selected personal credential after a real release append',
 
 const personalChanges = ['cleared choice', 'revoked profile', 'admin block',
   'changed review', 'expired permit', 'lost release audit', 'closed turn',
-  'new Ask message'] as const;
+  'computer rotation', 'turn takeover', 'new Ask message'] as const;
 async function refusesChangedPersonalCall(change: typeof personalChanges[number]) {
   const mode = change === 'new Ask message' ? 'ask' : 'allow';
   const { setup, remote, headers, saved } = await selectedPersonalFixture(mode);
-  let permitHeaders = headers;
+  let permitHeaders: Record<string, string> = headers;
   if (mode === 'ask') {
     const approvalId = await approvalForReviewedTool(setup, headers, true);
     permitHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
@@ -2809,6 +2809,15 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
       assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
       turnId: 'dispatch', threadId: headers['session-id'], requesterId: 'alice',
       task: 'chat_turn', status: 'completed',
+    });
+  } else if (change === 'computer rotation') {
+    await setup.append('computer-assistant', 'computer.claimed', {
+      assistantId: 'assistant', computerId: 'replacement', generation: 2,
+      tokenId: 'token:replacement',
+    });
+  } else if (change === 'turn takeover') {
+    await setup.append('computer-assistant', 'takeover.started', {
+      assistantId: 'assistant', computerId: 'computer', requestedBy: 'alice',
     });
   } else if (change === 'new Ask message') {
     await setup.append('conversation-conversation', 'message.posted', {

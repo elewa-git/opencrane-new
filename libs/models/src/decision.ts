@@ -389,10 +389,11 @@ export async function startDecision(
               include: current.include, head: current.head, deadline: current.deadline,
             });
             const latestReader = authorityHistoryReader(actor.store, freshCurrent);
+            await confirmDecisionAccess(activity, current, needsApproval, true);
             await currentAuthority(actor.store, binding, turnToken.requester,
               computer.assistant, turnToken.conversation, 'mcp_server', serverId,
               freshCurrent, conversation, undefined, undefined, latestReader);
-            await current();
+            await confirmDecisionAccess(activity, current, needsApproval, true);
             return;
           }
           await currentAuthority(actor.store, binding, turnToken.requester,

@@ -775,7 +775,9 @@ including after a lost reply or restart.
 Refresh and identity tokens stay private. Published personal tools can now make one
 approved, zero-cost call to a pinned HTTPS address after a saved release audit.
 The models process checks the requester's choice, approval, profile, review and access
-again at dispatch. Company account calls remain closed.
+again at dispatch. It also checks whether the computer or turn changed, and returns a
+fixed message if an upstream error tries to echo credential text. Company account calls
+remain closed.
 
 A member can read their own saved tool profile without using the private credential store.
 The reader loads exact history before checking current membership. Disabled profiles stay

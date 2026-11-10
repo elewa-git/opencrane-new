@@ -535,8 +535,8 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
   try {
     const received = await exchangeRemote(target, raw, headers, network,
       controller.signal, 1024 * 1024);
-    requireRemoteReply(received.data, raw);
-    reply = received;
+    const safeData = requireRemoteReply(received.data, raw);
+    reply = { ...received, data: safeData };
   } catch {
     // Keep every failed exchange unknown, including refusal before confirmed receipt.
   } finally { clearTimeout(timer); }
@@ -556,7 +556,7 @@ async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, 
   res.end();
 }
 
-function requireRemoteReply(data: Buffer, raw: string) {
+function requireRemoteReply(data: Buffer, raw: string): Buffer {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
   const reply = losslessJson(text).value;
   const sent = losslessJson(raw).value;
@@ -573,8 +573,14 @@ function requireRemoteReply(data: Buffer, raw: string) {
   }
   if (error) {
     const parsedError: unknown = JSON.parse(error.canonical);
-    remoteErrorSchema.parse(parsedError);
+    const checkedError = remoteErrorSchema.parse(parsedError);
+    // Return a fixed message because the remote server may copy our bearer into its error.
+    const requestId: unknown = JSON.parse(sent.get('id')!.canonical);
+    const safeReply = { jsonrpc: '2.0', id: requestId,
+      error: { code: checkedError.code, message: 'Remote tool error' } };
+    return Buffer.from(JSON.stringify(safeReply));
   }
+  return data;
 }
 
 function requireRemoteRevision(saved: string | undefined) {

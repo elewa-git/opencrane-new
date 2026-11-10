@@ -75,12 +75,17 @@ async function selectsProfilesBeforeStartingTheShortAccessCheck() {
   const memoryFreeTurn = { ...turn, executionMode: 'memory_free' as const };
   const report = { conversationId: turn.conversationId, turnId: turn.turnId,
     threadId: turn.threadId };
-  const options = { silo: 'test', store: nats.store, keys, binding: {},
+  function loadOAuthConfiguration() {
+    return Promise.resolve(undefined);
+  }
+  const binding = { apiUrl: 'http://127.0.0.1:0', storeId: 'test',
+    authorizationModelId: 'test', silo: 'test' };
+  const options = { silo: 'test', store: nats.store, keys, binding,
     catalogue: { async rows() {
       await pause(2_200);
       return [];
     } },
-    loadOAuthConfiguration: async () => undefined };
+    loadOAuthConfiguration };
   const acknowledgement: { token?: string; refused?: string } = {};
   const delivered = vi.fn();
   await releaseTurnCredentials(options, context, computer.issuer, report,

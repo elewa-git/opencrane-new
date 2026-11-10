@@ -57,10 +57,6 @@ interface TurnToolServer {
   serverInfo?: { name: string; version: string };
   definitions: string[];
   modes: Record<string, 'allow' | 'ask'>;
-  profileId?: string;
-  profileRevision?: number;
-  selectionRevision?: number;
-  generation?: number;
 }
 
 export interface TurnDelivery {
@@ -272,9 +268,8 @@ async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][
   let state = await input.readServer(row.serverId);
   if (state && memoryTools) state = memoryToolsOnly(state, memoryTools);
   if (!state || !isAvailableServer(state)) return { omitted: false };
-  let selection: Awaited<ReturnType<NonNullable<TurnToolInput['readSelection']>>>;
   if (state.accountMode === 'personal') {
-    selection = await input.readSelection?.(input.requesterId, state.serverId);
+    const selection = await input.readSelection?.(input.requesterId, state.serverId);
     if (!selection) return { omitted: false };
   }
   if (!hasComputerCompatibleFields(state)) return { omitted: true };
@@ -282,12 +277,6 @@ async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][
   if (!selected.definitions.length) return { omitted: false };
   if (!await canUseServer(input, state.serverId)) return { omitted: false };
   const entry = makeTurnToolServer(state, selected);
-  if (selection) {
-    entry.profileId = selection.profileId;
-    entry.profileRevision = selection.profileRevision;
-    entry.selectionRevision = selection.selectionRevision;
-    entry.generation = selection.generation;
-  }
   if (!turnToolFits(entry, tools, keys, availableBytes)) return { omitted: true };
   return { entry, omitted: false };
 }

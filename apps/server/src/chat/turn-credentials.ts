@@ -43,11 +43,11 @@ export async function releaseTurnCredentials(options: BridgeOptions,
       : await initialMemoryFor(options, context, binding, report.replay === true);
     // Finish recall history and deployment reads before starting the short credential check.
     await confirmRecall(recall);
+    const personalSelections = await selectedPersonalProfiles(options, binding.requesterId);
     const confirmMemory = await turnMemoryCheck(options, context, binding);
     await confirmMemory();
     await requireTurnMember(options.store, options.silo, binding.requesterId);
     const credentials = computerCredentials(options.store, tokens, options.silo);
-    const personalSelections = await selectedPersonalProfiles(options, binding.requesterId);
     const turn = { ...binding, assistantId: context.assistantId,
       model: binding.model ?? modelForTask(binding.task), personalSelections };
     const grant = await credentials.turn(turn);

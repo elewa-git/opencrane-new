@@ -423,8 +423,9 @@ The reply confirms the saved choice without claiming the account can be used.
 Verified OAuth choices require current operator settings supplied by the server.
 For a chat turn, the server offers a personal tool only when the requester still has
 a verified choice for that server. The signed turn pass holds the chosen profile and
-choice revision. The offer names its generation, and the models process checks the
-current choice again before sending a call.
+choice revision. The computer sees the usual tool fields, and the models process checks
+the current choice again before sending a call. Account choices load before the short
+access check for the turn starts.
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.
