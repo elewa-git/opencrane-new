@@ -2985,6 +2985,47 @@ async function hidesNumericCredentialEchoInRemoteCode() {
 it('does not return an upstream error code that echoes a numeric credential',
   hidesNumericCredentialEchoInRemoteCode, 60_000);
 
+const credentialReplyCases = [
+  { name: 'result text', material: 'alice-access',
+    result: { content: [{ type: 'text', text: 'Bearer alice-access' }] } },
+  { name: 'tool error text', material: 'alice-access',
+    result: { isError: true, content: [{ type: 'text', text: 'alice-access' }] } },
+  { name: 'structured content', material: 'alice-access',
+    result: { structuredContent: { account: { token: 'alice-access' } } } },
+  { name: 'nested string', material: 'alice-access',
+    result: { metadata: [{ details: { credential: 'alice-access' } }] } },
+  { name: 'encoded content', material: 'alice-access',
+    result: { content: [{ type: 'text', text: 'YWxpY2UtYWNjZXNz' }] } },
+  { name: 'URL encoded content', material: 'alice/access',
+    result: { content: [{ type: 'text', text: 'alice%2Faccess' }] } },
+  { name: 'numeric value', material: '12345',
+    result: { structuredContent: { count: 12345 } } },
+  { name: 'Unicode escaped content', material: 'alice-access',
+    result: { content: [{ type: 'text', text: 'alice-access' }] }, unicode: true },
+] as const;
+
+async function hidesCredentialEchoInRemoteResult(testCase: typeof credentialReplyCases[number]) {
+  const { setup, remote, headers } = await selectedPersonalFixture('allow', testCase.material);
+  function echoedResult() {
+    const encoded = `{"jsonrpc":"2.0","id":REQUEST_ID,"result":${JSON.stringify(testCase.result)}}`;
+    if ('unicode' in testCase) {
+      return encoded.replace('alice-access', 'alice\\u002daccess');
+    }
+    return encoded;
+  }
+  remote.respond(echoedResult);
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  const returned = await response.text();
+  expect(JSON.parse(returned)).toEqual({ jsonrpc: '2.0', id: JSON.parse(body).id,
+    error: { code: -32603, message: 'Remote tool error' } });
+  expect(remote.received).toHaveLength(1);
+  expect(remote.received[0]!.headers.authorization).toBe(`Bearer ${testCase.material}`);
+}
+it.each(credentialReplyCases)('refuses a credential echoed in $name',
+  hidesCredentialEchoInRemoteResult, 60_000);
+
 async function refusesScopeMismatchBeforePermit() {
   const { setup, remote, headers, saved } = await selectedPersonalFixture();
   saved.configuration.toolScopes.write.push('missing-scope');
