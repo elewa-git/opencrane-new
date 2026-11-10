@@ -368,12 +368,13 @@ async function overlappingRetries() {
   const append = fixture.nats.store.append.bind(fixture.nats.store);
   const both = Promise.withResolvers<void>();
   let arrivals = 0;
+  const requestedAt = new Date('2026-01-01T00:00:00.000Z').toISOString();
   async function together(command: AppendCommand) {
     arrivals++;
-    // Force different generated times without delaying either request.
+    // Keep both retries byte-for-byte identical so the saved append can answer both.
     const parsed = parseEventByType(command.event);
     if (!parsed.success) throw new Error('Expected a valid takeover event');
-    parsed.event.time = new Date(1_800_000_000_000 + arrivals).toISOString();
+    parsed.event.time = requestedAt;
     command.event = parsed.event;
     if (arrivals === 2) both.resolve();
     await both.promise;
