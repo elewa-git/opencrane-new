@@ -433,7 +433,8 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
-async function dispatch(options: Options = { enabled: true }, continuation = false) {
+async function dispatch(options: Options = { enabled: true }, continuation = false,
+  onHandoff?: () => void) {
   await runner.run(routines);
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
@@ -441,6 +442,7 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
   const production = createRoutineDelivery(nats.store, keys, identity, actor, wake,
     budgetOwner, companyPreflight);
   const receive: Handoff = async function receive(due, lease) {
+    onHandoff?.();
     expect(lease.signal).toBe(leaseSignal);
     if (options.enabled === true && options.replay !== true) {
       return production(due, lease);
@@ -529,6 +531,37 @@ async function reachesNativeThread() {
 }
 it('hands a checked due to its prepared thread once across duplicate delivery and restart',
   reachesNativeThread);
+
+async function resumesOneSavedDueAfterDeliveryWasDisabled() {
+  const observed = vi.fn();
+  const disabledWake = vi.fn(forbidden);
+  wake = disabledWake;
+  await expect(dispatch({}, false, observed)).rejects.toThrow('Routine leadership unavailable');
+  expect(observed).toHaveBeenCalledTimes(1);
+  expect(disabledWake).not.toHaveBeenCalled();
+  const saved = (await runState()).activeRun!;
+  expect(saved.occurrenceId).toMatch(/^[0-9a-f]{64}$/u);
+  expect(saved.startBy).toBe('2026-10-11T07:01:00.000Z');
+  expect(preparedComputer.frames).toEqual([]);
+
+  await waitForDuplicateWindow(nats);
+  await nats.stop();
+  await nats.restart();
+  await until(projectionReaderReady);
+  wake = preparedComputer.wake;
+  expect(await dispatch({ enabled: true }, false, observed)).toMatchObject({ examined: 1 });
+  await until(preparedComputer.executed);
+  expect(await assertSingleRun()).toEqual(saved);
+  expect(observed).toHaveBeenCalledTimes(2);
+  expect(preparedComputer.nativeStarts).toBe(1);
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+  await expect(dispatch({ enabled: true }, false, observed))
+    .rejects.toThrow('Routine leadership unavailable');
+  expect(await assertSingleRun()).toEqual(saved);
+  expect(preparedComputer.executedThreads).toEqual(['native-1']);
+}
+it('resumes the saved checked due once after disabled delivery and a broker restart',
+  resumesOneSavedDueAfterDeliveryWasDisabled);
 
 async function productionDeliveryUsesCheckedDue() {
   await runner.run(routines);
@@ -768,7 +801,9 @@ async function ignoresNonDue(kind: string) {
     await nats.seed([routine('routine.paused')]);
   }
   wake = vi.fn(forbidden);
-  expect(await dispatch()).toMatchObject({ examined: 1 });
+  const onHandoff = vi.fn();
+  expect(await dispatch({ enabled: true }, false, onHandoff)).toMatchObject({ examined: 1 });
+  expect(onHandoff).not.toHaveBeenCalled();
   expect(wake).not.toHaveBeenCalled();
   expect((await runState()).activeRun).toBeNull();
 }
