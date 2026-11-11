@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
 import type { AuditRecord } from '@opencrane/protocol';
+import { routineOccurrenceKey } from './audit-routines.ts';
 
 export const auditIdentifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 
@@ -40,6 +41,11 @@ export function dispatchStatus(outcome: unknown): AuditRecord['status'] {
 }
 
 export function auditLinks(event: EventEnvelope, data: Record<string, unknown>) {
+  if (event.type.startsWith('routine.')) {
+    return { request: routineOccurrenceKey(event, data), permit: undefined,
+      approval: undefined, conversationId: undefined, turnId: undefined,
+      requesterId: undefined };
+  }
   if (event.type === 'memory.maintenance_recorded') {
     // Keep a private night separate from any caller-supplied chat links.
     return { request: undefined, permit: undefined, approval: undefined,

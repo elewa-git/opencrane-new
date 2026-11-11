@@ -20,6 +20,9 @@ const rows = [
   { id: 'integration-review', source: 'integrations', priority: 'failure',
     eventAt: checkedAt, action: 'review_tools', href: '/org/integrations/odoo',
     affectedPeople: 'Sales team' },
+  { id: 'routine-attention', source: 'routines', priority: 'unknown',
+    eventAt: checkedAt, action: 'view_evidence',
+    href: `/api/org/history/${'a'.repeat(32)}` },
 ];
 const all = { people: { read: true }, providers: { read: true }, spending: { read: true },
   integrations: { read: true }, routines: { readOwn: true }, changeHistory: { read: true } };
@@ -41,6 +44,7 @@ function response(capabilities) {
       { name: 'people', status: 'current', checkedAt },
       { name: 'providers', status: 'current', checkedAt },
       { name: 'integrations', status: 'current', checkedAt },
+      { name: 'routines', status: 'current', checkedAt },
     ],
     viewer: { role: 'admin' }, capabilities };
   return JSON.stringify(body);
@@ -80,8 +84,12 @@ async function capture(browser, width, name, capabilities) {
     await page.locator('.sidebar nav a').filter({ hasText: 'People & groups' })
       .waitFor({ state: 'attached' });
     await page.locator('.overview-tasks .overview-row').first().waitFor({ state: 'visible' });
+    const routineLink = page.locator('.overview-row').filter({ hasText: 'Routines' })
+      .getByRole('link', { name: 'View evidence' });
+    assert.equal(await routineLink.getAttribute('href'),
+      `/org/history?reference=${'a'.repeat(32)}`);
     await page.evaluate(waitForFonts);
-    if (width === 390) {
+    if (width === 390 && name !== 'routine-row') {
       const opener = page.getByRole('button', { name: 'Open organisation navigation' });
       await opener.click();
       await page.getByRole('dialog').waitFor();
@@ -119,7 +127,7 @@ async function capture(browser, width, name, capabilities) {
     assert(await page.evaluate(pageHasNoOverflow), `${name} has no horizontal overflow`);
     assert(await page.evaluate(targetSizes), `${name} has 44 px targets`);
     await page.screenshot({ path: resolve(output, `${name}-${width}.png`), fullPage: true });
-    if (width === 390) {
+    if (width === 390 && name !== 'routine-row') {
       await page.keyboard.press('Escape');
       assert(await page.getByRole('button', { name: 'Open organisation navigation' })
         .evaluate((button) => document.activeElement === button), 'Escape returns focus');
@@ -134,13 +142,15 @@ const browser = await chromium.launch({ headless: true });
 try {
   for (const width of [1280, 390]) {
     await capture(browser, width, 'OVR-08', all);
+    await capture(browser, width, 'routine-row', all);
     await capture(browser, width, 'restricted-menu', restricted);
   }
 } finally {
   await browser.close();
 }
 await writeFile(resolve(output, 'receipt.md'),
-  '# Organisation navigation capture\n\nPASS — Four intercepted browser captures with a populated '
-  + 'task list at 1280 and 390 pixels. Checked reduced motion, overflow, 44 px targets, Tab order, '
+  '# Organisation navigation capture\n\nPASS — Six intercepted browser captures with a populated '
+  + 'task list at 1280 and 390 pixels. The routine attention row links to its saved history. '
+  + 'Checked reduced motion, overflow, 44 px targets, Tab order, '
   + 'long names and phone menu focus. '
   + 'No live installation was used.\n');

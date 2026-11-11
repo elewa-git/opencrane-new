@@ -42,6 +42,8 @@ It copies no task text, result or file reference.
 History searches can use the id shown on a task entry without revealing its private event id.
 Nightly memory history keeps only dates, safe outcomes and random references. It does not
 copy a fact's text. A root allowance is shown as a limit, never as a charge.
+Routine history joins saved receipts to one occurrence. It shows a result only
+when the finish records a confirmed settlement. Rebuilding starts no routine work.
 
 Saved spending resolutions keep the original person, date and chosen amount,
 plus a reference to the saved change. They do not prove an external action finished or that held money was released.

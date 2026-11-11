@@ -221,6 +221,13 @@ including the anchor. Neither read opens the event store. Decisions and observed
 outcomes stay separate. Private text, approval details, connection material,
 raw arguments, destinations and gateway timestamps never enter this table.
 
+Routine audit copies checked modern due, skipped, missed, admission, send,
+Stop and finish records. Runs join by a digest of silo, routine and occurrence,
+independent of envelope links. Bounded reads keep Stop over later uncertain
+sends. Success needs the finish's result reference and settled cents, which
+the writer checked against saved settlement. Private definitions stay out.
+Rebuilding only replays events.
+
 `conversation.child_result_published` starts one audit row, keyed by its saved event id.
 The projection checks the server source, parent stream and human publisher against
 the strict saved event before selecting the parent id, child id, publication kind and

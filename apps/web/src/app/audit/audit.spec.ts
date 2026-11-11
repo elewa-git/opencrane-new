@@ -80,6 +80,62 @@ it('shows only supplied child publication facts and a permitted parent link', as
   expect(root.textContent).not.toContain('private-report-canary');
 });
 
+it.each([
+  ['due', 'routine.due', 'Routine due', 'Routine became due'],
+  ['skipped', 'routine.occurrence_skipped', 'Routine skipped', 'Routine skipped'],
+  ['admitted', 'routine.run_activation_admitted', 'Routine run admitted',
+    'Routine run admitted'],
+  ['stop_requested', 'routine.run_stop_requested', 'Routine Stop requested',
+    'Routine Stop requested'],
+  ['send_uncertain', 'routine.run_send_release_authorised',
+    'Routine send outcome unknown', 'Routine send outcome unknown'],
+  ['finished', 'routine.run_finished', 'Routine finished', 'Routine finished'],
+])('names the %s routine row and saved detail without private text', async (
+  routineState, type, rowTitle, detailTitle,
+) => {
+  const reference = 'a'.repeat(32);
+  const routineRecord = {
+    eventId: 'private-routine-name', type, position: 1,
+    source: 'authoritative', status: 'recorded', routineState,
+  };
+  const routineRow = { id: reference, decision: 'not_recorded', outcome: 'unknown',
+    records: [routineRecord] };
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [routineRow] }))
+    .mockResolvedValueOnce(reply(200, { id: reference, records: [routineRecord] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('.row-button strong')?.textContent)
+    .toContain(rowTitle));
+  root.querySelector<HTMLButtonElement>('.row-button')!.click();
+  await vi.waitFor(() => expect(root.querySelector('.evidence h3')?.textContent)
+    .toBe(detailTitle));
+  expect(root.textContent).not.toContain('private-routine-name');
+  expect(root.textContent).not.toContain('Organisation change');
+  expect(root.textContent).not.toContain('Saved observation');
+});
+
+it('names a routine row from its latest state and a detail from its own event', async () => {
+  const reference = 'c'.repeat(32);
+  const dueRecord = { eventId: 'due-event', type: 'routine.due', position: 1,
+    source: 'authoritative', status: 'recorded', routineState: 'finished' };
+  const detailRecord = { ...dueRecord, routineState: 'due' };
+  const routineRow = { id: reference, decision: 'not_recorded', outcome: 'success',
+    records: [dueRecord] };
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [routineRow] }))
+    .mockResolvedValueOnce(reply(200, { id: reference, records: [detailRecord] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('.row-button strong')?.textContent)
+    .toContain('Routine finished'));
+  root.querySelector<HTMLButtonElement>('.row-button')!.click();
+  await vi.waitFor(() => expect(root.querySelector('.evidence h3')?.textContent)
+    .toBe('Routine became due'));
+});
+
 it('appends cursor pages once, keeps equal-time rows distinct and filters on the server', async () => {
   const first = { ...row, id: 'first', records: [{ ...row.records[0], eventId: 'first',
     recordedAt: '2026-10-04T09:30:00.000Z' }] };

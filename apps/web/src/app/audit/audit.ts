@@ -204,6 +204,9 @@ export class AuditScreen implements OnInit {
 
   protected title(row: AuditRow): string {
     const record = row.records[0];
+    if (record?.type.startsWith('routine.') && record.routineState) {
+      return this.routineStateTitle(record.routineState);
+    }
     if (record?.operation) return this.membershipTitle(record.operation);
     if (record?.publicationKind) {
       const kind = record.publicationKind === 'interim' ? 'Interim' : 'Final';
@@ -211,8 +214,12 @@ export class AuditScreen implements OnInit {
     }
     if (record?.delegationAccess) return 'Delegation outcome';
     if (record?.maintenanceAction) return 'Memory maintenance · content restricted';
+    return this.activityTitle(record, row.outcome);
+  }
+
+  private activityTitle(record: AuditRecord | undefined, outcome: AuditRow['outcome']): string {
     if (record?.type.startsWith('effect.')) {
-      if (row.outcome === 'unknown') return 'External effect · outcome unknown';
+      if (outcome === 'unknown') return 'External effect · outcome unknown';
       return 'External effect recorded';
     }
     if (record?.type.startsWith('decision.')) return 'Decision recorded';
@@ -227,6 +234,7 @@ export class AuditScreen implements OnInit {
     if (family === 'effect' || family === 'budget') return '€';
     if (family === 'memory') return '◈';
     if (family === 'agent') return '◷';
+    if (family === 'routine') return '◷';
     if (family === 'conversation' || family === 'delegation') return '↗';
     return '•';
   }
@@ -239,7 +247,34 @@ export class AuditScreen implements OnInit {
     return 'Membership changed';
   }
 
+  private routineStateTitle(state: NonNullable<AuditRecord['routineState']>): string {
+    if (state === 'due') return 'Routine due';
+    if (state === 'skipped') return 'Routine skipped';
+    if (state === 'missed') return 'Routine occurrences missed';
+    if (state === 'admitted') return 'Routine run admitted';
+    if (state === 'prepared') return 'Routine send prepared';
+    if (state === 'stop_requested') return 'Routine Stop requested';
+    if (state === 'send_uncertain') return 'Routine send outcome unknown';
+    return 'Routine finished';
+  }
+
+  private routineEventTitle(type: string): string | undefined {
+    if (type === 'routine.due') return 'Routine became due';
+    if (type === 'routine.occurrence_skipped') return 'Routine skipped';
+    if (type === 'routine.occurrences_missed') return 'Routine occurrences missed';
+    if (type === 'routine.run_activation_admitted') return 'Routine run admitted';
+    if (type === 'routine.run_send_authorised') return 'Routine send prepared';
+    if (type === 'routine.run_stop_requested') return 'Routine Stop requested';
+    if (type === 'routine.run_send_release_authorised') {
+      return 'Routine send outcome unknown';
+    }
+    if (type === 'routine.run_finished') return 'Routine finished';
+    return undefined;
+  }
+
   protected recordTitle(record: AuditRecord): string {
+    const routineTitle = this.routineEventTitle(record.type);
+    if (routineTitle) return routineTitle;
     if (record.operation === 'appointment') return 'Ownership appointment';
     if (record.publicationKind) return 'Child result published';
     if (record.delegationAccess) return 'Delegated work';

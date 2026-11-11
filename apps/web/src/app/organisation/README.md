@@ -29,6 +29,7 @@ flowchart LR
 - Keeps tasks visible after a failed refresh and clears them when access is refused.
 - Lists dated Ready evidence separately. A provider action opens that provider's row
   on Models & providers.
+- Opens a routine attention row at its saved change history reference.
 
 ## Main files
 

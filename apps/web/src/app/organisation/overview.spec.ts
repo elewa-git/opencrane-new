@@ -275,8 +275,24 @@ it('maps evidence to browser pages and refuses direct API or unsafe links', () =
     '/api/org/effects/permit-one'))).toBe('/org/spending?effect=permit-one');
   expect(overviewDestination(row('secret', 'unknown', 'memory',
     '/api/org/history/raw-event-id'))).toBeUndefined();
+  expect(overviewDestination(row('routine-secret', 'unknown', 'routines',
+    '/api/org/history/raw-event-id'))).toBeUndefined();
   expect(overviewDestination(row('unsafe', 'unknown', 'integrations',
     '/api/org/integrations/secret'))).toBeUndefined();
+});
+
+it('opens a routine attention row at its checked saved history reference', async () => {
+  const reference = 'b'.repeat(32);
+  const historyRow = row(reference, 'unknown', 'routines', `/api/org/history/${reference}`);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply([historyRow]));
+  const fixture = await mount();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.overview-row')).not.toBeNull();
+  });
+  const link = root(fixture).querySelector<HTMLAnchorElement>('.overview-row a');
+  expect(link?.getAttribute('href')).toBe(`/org/history?reference=${reference}`);
+  expect(link?.textContent).toContain('View evidence');
 });
 
 it('restarts at page one once when a saved cursor has changed', async () => {

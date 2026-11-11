@@ -28,3 +28,11 @@ replay append no events and start no maintenance.
 Existing installations must rebuild the audit read table once to include saved
 receipts with random references and remove earlier unsafe rows. The audit rebuild
 reads the event store without starting a run.
+
+Modern due, skipped and missed records begin history rows. Admission, send,
+Stop and finish join by a digest of the silo, routine and occurrence ids.
+The public reference comes from the first event. Routine and owner ids,
+instructions, scopes, connections and model output never enter the table.
+Stop still takes priority over a later uncertain send. Success needs the saved
+finish's result reference and settled cents, checked by the finish writer.
+Ask, Run now and retry remain unavailable here.

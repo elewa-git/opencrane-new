@@ -91,7 +91,8 @@ export function overviewDestination(row: OverviewRow): string | undefined {
     const reference = row.href.slice('/api/org/effects/'.length);
     if (safeReference(reference)) return `/org/spending?effect=${encodeURIComponent(reference)}`;
   }
-  if (row.source === 'memory' && row.href.startsWith('/api/org/history/')) {
+  if ((row.source === 'memory' || row.source === 'routines') &&
+      row.href.startsWith('/api/org/history/')) {
     const reference = row.href.slice('/api/org/history/'.length);
     if (/^[a-f0-9]{32}$/u.test(reference)) {
       return `/org/history?reference=${encodeURIComponent(reference)}`;
