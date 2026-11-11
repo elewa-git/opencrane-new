@@ -34,11 +34,12 @@ function searchTerms(query: string) {
 }
 
 type Snapshot = { position: number; generation: string };
-export async function memorySnapshot(options: MemoryOptions, scope: Scope): Promise<Snapshot> {
-  const position = await options.store.head(`scope-${scope.scopeId}`, performance.now() + 10_000);
+export async function memorySnapshot(options: MemoryOptions, scope: Scope,
+  deadline = performance.now() + 10_000): Promise<Snapshot> {
+  const position = await options.store.head(`scope-${scope.scopeId}`, deadline);
   const result = await options.db.query<{ sequence: string; generation: string }>(`
     SELECT sequence, generation FROM projection_checkpoints
-    JOIN projection_generations USING (name) WHERE name='memory'`);
+    JOIN projection_generations USING (name) WHERE name='memory'`, [], { deadline });
   const row = result.rows[0];
   if (!row || Number(row.sequence) < position) {
     throw new Error('Memory unavailable');
@@ -51,7 +52,7 @@ function cursorSignature(secret: string, encoded: string) {
   signature.update(`memory-page:${encoded}`);
   return signature.digest();
 }
-function pageCursor(secret: string, binding: string, offset: number, asOf: Date) {
+export function pageCursor(secret: string, binding: string, offset: number, asOf: Date) {
   const payload = JSON.stringify([binding, offset, asOf.toISOString()]);
   const bytes = Buffer.from(payload);
   const encoded = bytes.toString('base64url');
@@ -59,7 +60,7 @@ function pageCursor(secret: string, binding: string, offset: number, asOf: Date)
   const signature = signed.toString('base64url');
   return `${encoded}.${signature}`;
 }
-function readCursor(secret: string, binding: string, cursor?: string) {
+export function readCursor(secret: string, binding: string, cursor?: string) {
   if (cursor === undefined) {
     return { offset: 0, asOf: new Date() };
   }

@@ -22,9 +22,10 @@ export function scopeFor(silo: string, scopeKind: Scope['scopeKind'], ownerId: s
 
 const ownerIdentifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 
-async function requireScopeTables(options: MemoryOptions) {
+async function requireScopeTables(options: MemoryOptions, deadline: number) {
   const result = await options.db.query<{ name: string; sequence: string }>(`
-    SELECT name, sequence FROM projection_checkpoints WHERE name IN ('groups', 'computers')`);
+    SELECT name, sequence FROM projection_checkpoints WHERE name IN ('groups', 'computers')`,
+  [], { deadline });
   const checkpoints = new Map<string, number>();
   for (const row of result.rows) {
     checkpoints.set(row.name, Number(row.sequence));
@@ -39,7 +40,7 @@ async function requireScopeTables(options: MemoryOptions) {
       throw new Error('Scope tables unavailable');
     }
     for await (const row of options.store.readStream(target.subject, sequence + 1,
-      performance.now() + 10_000)) {
+      deadline)) {
       if (row.event.silo === options.silo && row.event.type === target.eventType) {
         throw new Error('Scope tables are still being updated');
       }
@@ -47,17 +48,18 @@ async function requireScopeTables(options: MemoryOptions) {
   }
 }
 
-export async function resolveScope(options: MemoryOptions, requester: string, scopeId: string) {
+export async function resolveScope(options: MemoryOptions, requester: string, scopeId: string,
+  deadline = performance.now() + 10_000) {
   const personal = scopeFor(options.silo, 'person', requester);
   if (personal.scopeId === scopeId) {
     return personal;
   }
   // Use the same setup rows for empty, unknown and forbidden scopes. Ignore old id formats.
-  await requireScopeTables(options);
+  await requireScopeTables(options, deadline);
   const candidates = await options.db.query<{ kind: Scope['scopeKind']; id: string }>(`
     SELECT 'group' AS kind, group_id AS id FROM groups WHERE silo=$1
     UNION ALL SELECT 'assistant_notes', assistant_id FROM computers WHERE silo=$1`,
-    [options.silo]);
+    [options.silo], { deadline });
   for (const candidate of candidates.rows) {
     if (!ownerIdentifier.safeParse(candidate.id).success) {
       continue;

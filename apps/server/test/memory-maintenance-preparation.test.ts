@@ -18,7 +18,7 @@ import { memoryKeys, memoryProjection, memoryScopeId, pgDb, ProjectionRunner,
   type Query }
   from '@opencrane/projections';
 import { prepareNightlyMaintenance } from '../src/memory/maintenance-preparation.ts';
-import { maintenanceStatus } from '../src/memory/maintenance.ts';
+import { maintenanceDetail, maintenanceStatus } from '../src/memory/maintenance.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -347,11 +347,11 @@ it('keeps one original night when managed admission is unavailable', async funct
   expect(outbound).not.toHaveBeenCalled();
   outbound.mockRestore();
   const scope = { scopeId, scopeKind: 'person' as const, ownerId: 'dreamer' };
-  const status = await maintenanceStatus(options, scope, 'dreamer');
+  const status = await maintenanceStatus(options, scope, 'dreamer', 'test-secret');
   expect(status).toMatchObject({ status: 'refused', dispatch: 'disabled' });
-  expect(status.history[0]).toMatchObject({ reason: 'provider_unavailable',
-    acceptedCapCents: 100 });
-  await expect(maintenanceStatus(options, scope, 'intruder')).rejects.toThrow();
+  expect(status.history[0]).toMatchObject({ reason: 'provider_unavailable' });
+  expect(JSON.stringify(status.history[0])).not.toContain('acceptedCapCents');
+  await expect(maintenanceStatus(options, scope, 'intruder', 'test-secret')).rejects.toThrow();
   const before = await options.db.query<{ data: unknown }>(
     'SELECT data FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2 ORDER BY position',
     ['acme', scopeId]);
@@ -513,10 +513,12 @@ it('admits one eligible night with one exact root and allowance', async function
   expect(restartedActor.state.reservations).toHaveLength(0);
   await runner.run(projection);
   const scope = { scopeId: eligibleScopeId, scopeKind: 'person' as const, ownerId };
-  const status = await maintenanceStatus(options, scope, ownerId);
+  const status = await maintenanceStatus(options, scope, ownerId, 'test-secret');
   expect(status).toMatchObject({ status: 'preparing', dispatch: 'disabled' });
-  expect(status.history[0]).toMatchObject({ action: 'prepared', rootId: roots[0]!.rootId,
-    acceptedCapCents: 100 });
+  expect(status.history[0]).toMatchObject({ action: 'prepared' });
+  const detail = await maintenanceDetail(options, scope, status.history[0]!.runId, 'test-secret');
+  expect(detail).toMatchObject({ rootId: roots[0]!.rootId, allowanceCents: 100,
+    money: { status: 'unavailable' } });
   const before = await options.db.query<{ data: unknown }>(
     'SELECT data FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2 ORDER BY position',
     ['acme', eligibleScopeId]);
