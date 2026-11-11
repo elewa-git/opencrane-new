@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { StoredEvent } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history, toolPolicyFromRows } from '@opencrane/models';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
@@ -69,6 +70,13 @@ async function admitted(expiryOffsetMs = 60_000, extra: Record<string, unknown> 
 async function policy() {
   const rows = await history(fixture.store, `mcp-${serverId}`, 'test');
   return toolPolicyFromRows(rows);
+}
+
+function eventOfType(rows: StoredEvent[], type: string) {
+  function matches(row: StoredEvent) {
+    return row.event.type === type;
+  }
+  return rows.find(matches);
 }
 
 beforeEach(async () => { fixture = await natsFixture(); });
@@ -229,10 +237,10 @@ it('keeps concurrent generation-one captures separate across servers and retries
 
   const firstRows = await history(fixture.store, `mcp-${serverId}`, 'test');
   const secondRows = await history(fixture.store, `mcp-${otherServerId}`, 'test');
-  const firstStart = firstRows.find(row => row.event.type === 'mcp.hosted_start_observed');
-  const secondStart = secondRows.find(row => row.event.type === 'mcp.hosted_start_observed');
-  const firstCatalogue = firstRows.find(row => row.event.type === 'mcp.server_discovered');
-  const secondCatalogue = secondRows.find(row => row.event.type === 'mcp.server_discovered');
+  const firstStart = eventOfType(firstRows, 'mcp.hosted_start_observed');
+  const secondStart = eventOfType(secondRows, 'mcp.hosted_start_observed');
+  const firstCatalogue = eventOfType(firstRows, 'mcp.server_discovered');
+  const secondCatalogue = eventOfType(secondRows, 'mcp.server_discovered');
   expect(firstStart?.event.id).toBeDefined();
   expect(secondStart?.event.id).not.toBe(firstStart?.event.id);
   expect(firstCatalogue?.event.id).toBeDefined();

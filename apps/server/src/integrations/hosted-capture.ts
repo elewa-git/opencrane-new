@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { hostedImageCheckedSchema, mcpHostedRunSchema, mcpHostedStartObservedSchema,
   mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -23,6 +24,14 @@ const registrationSchema = z.object({ serverId: z.string(), kind: z.literal('hos
 
 function sameRun(first: HostedRun, second: HostedRun) {
   return JSON.stringify(first) === JSON.stringify(second);
+}
+
+function hostedStartId(silo: string, serverId: string, run: HostedRun) {
+  // Include the Pod UID so a new workload attempt cannot reuse an earlier event ID.
+  // Keep the ID stable so a lost reply can be found after the worker restarts.
+  const identity = JSON.stringify([silo, serverId, run.podUid, run.runGeneration]);
+  const digest = createHash('sha256').update(identity).digest('hex');
+  return `hosted-start-${digest}`;
 }
 
 function savedStart(rows: StoredEvent[], startId: string) {
@@ -193,7 +202,7 @@ async function capture(store: EventStore, silo: string, serverId: string,
       run.runGeneration <= current.hostedRun.runGeneration) {
     throw new Error('Hosted run was replaced');
   }
-  const startId = `hosted-start-${run.runGeneration}`;
+  const startId = hostedStartId(silo, serverId, run);
   const captureId = `${startId}-catalogue`;
   const previous = capturedCatalogue(rows, captureId, run);
   if (previous) {
