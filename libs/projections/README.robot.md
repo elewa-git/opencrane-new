@@ -847,6 +847,11 @@ transaction with its checkpoint, including the saved event time. Older tables
 gain the save-time column on worker startup. Offline memory replay rebuilds these rows without
 a scheduler, model, tool, computer or spending port. Rebuild memory on upgrade
 with readers and workers stopped to create this new table.
+The `(silo, scope_id, position)` index lets the server load one page or one run.
+`memory_maintenance_reviews` keeps one latest review per fact version and one scope row
+for the highest reviewed position. This lets status calculate whether current
+facts need review without loading the full run history. Rebuild memory after
+upgrading existing installations to fill these review rows from saved events.
 The shared TypeScript selector compares these reviewed references with current fact
 metadata. It reads encrypted byte lengths without decrypting. SQL stores rows and
 does not decide which facts are dirty. A review covers expiry through its `intendedAt`

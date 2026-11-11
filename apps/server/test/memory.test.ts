@@ -3815,8 +3815,12 @@ async function pagedMaintenanceHistory() {
   expect(first.statusCode).toBe(200);
   expect(maintenanceSql).not.toHaveLength(0);
   for (const sql of maintenanceSql) {
-    expect(sql).toMatch(/LIMIT 2[01]/u);
+    expect(sql).toMatch(/LIMIT (1|21)/u);
   }
+  function pagesRun(sql: string) {
+    return sql.includes('LIMIT 21');
+  }
+  expect(maintenanceSql.some(pagesRun)).toBe(true);
   const page = first.json<{ history: { runId: string; action: string }[];
     nextCursor: string | null }>();
   expect(page.history).toHaveLength(20);
@@ -3857,6 +3861,9 @@ async function pagedMaintenanceHistory() {
   expect(detail.body).not.toContain('inputRefs');
   expect(detail.body).not.toContain('private-source');
   expect((await get(`${maintenancePath}/forged`, 'pager')).statusCode).toBe(404);
+  expect((await get(`${maintenancePath}/${'f'.repeat(64)}`, 'pager')).statusCode).toBe(404);
+  expect((await get(`${path('pager-sales', 'group')}/maintenance/${page.history[0]!.runId}`,
+    'pager')).statusCode).toBe(404);
   expect((await get(`${maintenancePath}/${page.history[0]!.runId}`, 'admin')).statusCode).toBe(404);
   expect((await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager',
     'other-org')).statusCode).toBe(404);

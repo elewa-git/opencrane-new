@@ -34,11 +34,12 @@ function searchTerms(query: string) {
 }
 
 type Snapshot = { position: number; generation: string };
-export async function memorySnapshot(options: MemoryOptions, scope: Scope): Promise<Snapshot> {
-  const position = await options.store.head(`scope-${scope.scopeId}`, performance.now() + 10_000);
+export async function memorySnapshot(options: MemoryOptions, scope: Scope,
+  deadline = performance.now() + 10_000): Promise<Snapshot> {
+  const position = await options.store.head(`scope-${scope.scopeId}`, deadline);
   const result = await options.db.query<{ sequence: string; generation: string }>(`
     SELECT sequence, generation FROM projection_checkpoints
-    JOIN projection_generations USING (name) WHERE name='memory'`);
+    JOIN projection_generations USING (name) WHERE name='memory'`, [], { deadline });
   const row = result.rows[0];
   if (!row || Number(row.sequence) < position) {
     throw new Error('Memory unavailable');

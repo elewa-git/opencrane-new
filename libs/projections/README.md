@@ -46,6 +46,8 @@ Routine history joins saved receipts to one occurrence. It shows a result only
 when the finish records a confirmed settlement. Rebuilding starts no routine work.
 The memory read table also keeps when each nightly choice was saved, so its
 authorised detail can show the observed time after a rebuild.
+It keeps the latest review for each fact, so a history page can read just its
+own saved choices.
 
 Saved spending resolutions keep the original person, date and chosen amount,
 plus a reference to the saved change. They do not prove an external action finished or that held money was released.
@@ -64,7 +66,7 @@ PostgreSQL, the database for the read tables.
 ```mermaid
 flowchart LR
   models["libs/models<br/>model choices and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send access checks, and checks saved changes| projections["libs/projections<br/>read tables, chat history and safe audit, routines, memory and nightly save times"]
+  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send access checks, and checks saved changes| projections["libs/projections<br/>read tables, chat history and safe audit, routines, memory and nightly reviews"]
   server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
   projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections

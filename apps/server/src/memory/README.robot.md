@@ -1,6 +1,10 @@
 # Memory contracts
 
 The maintenance GET returns at most 20 safe receipts and 16 KiB per page.
+It reads at most 21 saved runs for a page. Detail reads one run by its saved
+position and checks the keyed reference before returning it. Database reads
+share a two-second deadline. A bad query is reported only after the final
+scope access check, so it cannot reveal a private scope.
 Its signed cursor belongs to the requester, silo, scope, saved scope position
 and read-table generation. A later scope change or rebuild rejects the old
 cursor. Each receipt has a server-keyed run id; a deterministic night id never

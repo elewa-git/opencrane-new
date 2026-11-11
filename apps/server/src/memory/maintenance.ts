@@ -42,13 +42,31 @@ function maintenanceFact(row: FactRow): MaintenanceFact {
 }
 
 type MaintenanceRun = ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>;
-type SavedRun = { event_id: string; data: unknown; saved_at: string | null };
+type SavedRun = { event_id: string; data: unknown; saved_at: string | null;
+  position: string };
+
+function positionMask(secret: string): bigint {
+  const hash = createHmac('sha256', secret);
+  hash.update('memory-run-position');
+  return hash.digest().readBigUInt64BE();
+}
 
 function runReference(secret: string, row: SavedRun): string {
   // Keep older deterministic night ids out of URLs and responses.
+  const hiddenPosition = BigInt(row.position) ^ positionMask(secret);
+  const positionPart = hiddenPosition.toString(16).padStart(16, '0');
   const hash = createHmac('sha256', secret);
   hash.update(`memory-run:${row.event_id}`);
-  return hash.digest('hex');
+  return `${positionPart}${hash.digest('hex').slice(0, 48)}`;
+}
+
+function runPosition(secret: string, runId: string): string {
+  const hiddenPosition = BigInt(`0x${runId.slice(0, 16)}`);
+  const position = hiddenPosition ^ positionMask(secret);
+  if (position < 1n || position > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new MemoryRefused();
+  }
+  return position.toString();
 }
 
 function safeRun(secret: string, row: SavedRun) {
@@ -67,35 +85,38 @@ function cursorBinding(options: MemoryOptions, scope: Scope, requester: string,
 }
 
 async function confirmSnapshot(options: MemoryOptions, scope: Scope,
-  saved: Awaited<ReturnType<typeof memorySnapshot>>) {
-  const current = await memorySnapshot(options, scope);
+  saved: Awaited<ReturnType<typeof memorySnapshot>>, deadline: number) {
+  const current = await memorySnapshot(options, scope, deadline);
   if (current.position !== saved.position || current.generation !== saved.generation) {
     throw new Error('Memory maintenance read table changed');
   }
 }
 
-function historyPage(secret: string, binding: string, rows: SavedRun[], offset: number,
+function historyPage(secret: string, binding: string, rows: SavedRun[],
   status: object) {
   const history: ReturnType<typeof safeRun>[] = [];
-  for (let index = offset; index < rows.length; index++) {
+  let lastPosition = 0;
+  for (let index = 0; index < rows.length; index++) {
     if (history.length === 20) {
       break;
     }
     const row = rows[index]!;
     const next = safeRun(secret, row);
+    const position = Number(row.position);
     const trial = { ...status, history: [...history, next],
-      nextCursor: pageCursor(secret, binding, offset + history.length + 1, new Date(0)) };
+      nextCursor: pageCursor(secret, binding, position, new Date(0)) };
     if (Buffer.byteLength(JSON.stringify(trial)) > 16_384) {
       break;
     }
     history.push(next);
+    lastPosition = position;
   }
-  if (history.length === 0 && offset < rows.length) {
+  if (history.length === 0 && rows.length > 0) {
     throw new Error('Memory maintenance page unavailable');
   }
   let nextCursor: string | null = null;
-  if (offset + history.length < rows.length) {
-    nextCursor = pageCursor(secret, binding, offset + history.length, new Date(0));
+  if (history.length < rows.length) {
+    nextCursor = pageCursor(secret, binding, lastPosition, new Date(0));
   }
   return { ...status, history, nextCursor };
 }
@@ -112,15 +133,15 @@ function visibleMaintenanceStatus(run: MaintenanceRun | undefined,
 }
 
 async function factChangeStatus(options: MemoryOptions, scope: Scope, position: number,
-  runs: MaintenanceRun[], savedAt: string | null) {
+  runs: MaintenanceRun[], savedAt: string | null, deadline: number) {
   const facts = await options.db.query<FactRow>(`SELECT memory_id, revision, expires_at,
     pinned, position, content_status, ciphertext FROM memory_facts
     WHERE silo=$1 AND scope_id=$2 AND position<=$3`,
-  [options.silo, scope.scopeId, position]);
+  [options.silo, scope.scopeId, position], { deadline });
   const changes = await options.db.query<{ position: string; outcome: string }>(
     `SELECT position, outcome FROM memory_changes
      WHERE silo=$1 AND scope_id=$2 AND position<=$3`,
-    [options.silo, scope.scopeId, position]);
+    [options.silo, scope.scopeId, position], { deadline });
   let lastChangePosition = 0;
   let lastForgetPosition = 0;
   for (const change of changes.rows) {
@@ -140,14 +161,14 @@ async function factChangeStatus(options: MemoryOptions, scope: Scope, position: 
 }
 
 export async function maintenanceStatus(options: MemoryOptions, scope: Scope, requester: string,
-  secret: string, cursor?: string) {
-  const snapshot = await memorySnapshot(options, scope);
+  secret: string, deadline = performance.now() + 10_000, cursor?: string) {
+  const snapshot = await memorySnapshot(options, scope, deadline);
   const result = await options.db.query<{ data: unknown; saved_at: string | null }>(
     `SELECT binding.data, binding.saved_at
     FROM projection_checkpoints checkpoint JOIN projection_generations generation USING (name)
     LEFT JOIN memory_maintenance_bindings binding ON binding.silo=$1 AND binding.scope_id=$2
     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
-  [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
+  [options.silo, scope.scopeId, snapshot.position, snapshot.generation], { deadline });
   if (!result.rows[0]) {
     throw new Error('Memory maintenance status unavailable');
   }
@@ -160,53 +181,80 @@ export async function maintenanceStatus(options: MemoryOptions, scope: Scope, re
     }
     status = 'disabled';
   }
+  const bindingValue = cursorBinding(options, scope, requester, snapshot);
+  const { offset } = readCursor(secret, bindingValue, cursor);
+  const beforePosition = cursor ? offset : snapshot.position + 1;
   const runs = await options.db.query<SavedRun>(
-    `SELECT run.event_id, run.data, run.saved_at FROM projection_checkpoints checkpoint
+    `SELECT run.event_id, run.data, run.saved_at, run.position
+     FROM projection_checkpoints checkpoint
      JOIN projection_generations generation USING (name)
-     LEFT JOIN LATERAL (SELECT event_id, data, saved_at FROM memory_maintenance_runs
-       WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC) run ON true
-     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
-    [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
+     LEFT JOIN LATERAL (SELECT event_id, data, saved_at, position
+       FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2
+         AND position<=$3 AND position<$5 ORDER BY position DESC LIMIT 21) run ON true
+     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3
+       AND generation.generation=$4`,
+    [options.silo, scope.scopeId, snapshot.position, snapshot.generation, beforePosition],
+    { deadline });
   if (!runs.rows.length) {
     throw new Error('Memory maintenance history unavailable');
   }
-  const allRuns = [];
-  for (const row of runs.rows) {
-    if (row.data !== null) {
-      allRuns.push(memoryMaintenanceRecordedDataSchema.parse(row.data));
-    }
+  const reviews = await options.db.query<{ data: unknown }>(
+    `SELECT review.data FROM memory_facts fact
+     JOIN memory_maintenance_reviews review
+       ON review.silo=fact.silo AND review.scope_id=fact.scope_id
+       AND review.memory_id=fact.memory_id AND review.revision=fact.revision
+       AND review.fact_position=fact.position
+     WHERE fact.silo=$1 AND fact.scope_id=$2
+     UNION ALL
+     SELECT data FROM memory_maintenance_reviews
+     WHERE silo=$1 AND scope_id=$2 AND memory_id=''`,
+    [options.silo, scope.scopeId], { deadline });
+  const reviewedRuns: MaintenanceRun[] = [];
+  for (const row of reviews.rows) {
+    reviewedRuns.push(memoryMaintenanceRecordedDataSchema.parse(row.data));
   }
+  const latest = await options.db.query<{ data: unknown }>(
+    `SELECT data FROM memory_maintenance_runs
+     WHERE silo=$1 AND scope_id=$2 AND position<=$3
+     ORDER BY position DESC LIMIT 1`,
+    [options.silo, scope.scopeId, snapshot.position], { deadline });
+  const latestRun = latest.rows[0]
+    ? memoryMaintenanceRecordedDataSchema.parse(latest.rows[0].data) : undefined;
   let waitingCount = 0;
   let nextAt: string | null = null;
   if (binding?.enabled) {
     const state = await factChangeStatus(options, scope, snapshot.position,
-      allRuns, result.rows[0].saved_at);
+      reviewedRuns, result.rows[0].saved_at, deadline);
     status = state.status;
     nextAt = state.nextAt;
     waitingCount = state.waitingCount;
-    status = visibleMaintenanceStatus(allRuns[0], status);
+    status = visibleMaintenanceStatus(latestRun, status);
   }
-  const bindingValue = cursorBinding(options, scope, requester, snapshot);
-  const { offset } = readCursor(secret, bindingValue, cursor);
-  const savedRuns = runs.rows.filter(function saved(row) {
+  function saved(row: SavedRun) {
     return row.data !== null;
-  });
+  }
+  const savedRuns = runs.rows.filter(saved);
   const visible = { status, binding, dispatch: 'disabled', nextAt, waitingCount };
-  const page = historyPage(secret, bindingValue, savedRuns, offset, visible);
-  await confirmSnapshot(options, scope, snapshot);
+  const page = historyPage(secret, bindingValue, savedRuns, visible);
+  await confirmSnapshot(options, scope, snapshot, deadline);
   return page;
 }
 
 export async function maintenanceDetail(options: MemoryOptions, scope: Scope,
-  runId: string, secret: string) {
-  const snapshot = await memorySnapshot(options, scope);
+  runId: string, secret: string, deadline = performance.now() + 10_000) {
+  const snapshot = await memorySnapshot(options, scope, deadline);
+  const position = runPosition(secret, runId);
   const result = await options.db.query<SavedRun>(
-    `SELECT run.event_id, run.data, run.saved_at FROM projection_checkpoints checkpoint
+    `SELECT run.event_id, run.data, run.saved_at, run.position
+     FROM projection_checkpoints checkpoint
      JOIN projection_generations generation USING (name)
-     LEFT JOIN LATERAL (SELECT event_id, data, saved_at FROM memory_maintenance_runs
-       WHERE silo=$1 AND scope_id=$2 AND position<=$3 ORDER BY position DESC) run ON true
-     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3 AND generation.generation=$4`,
-    [options.silo, scope.scopeId, snapshot.position, snapshot.generation]);
+     LEFT JOIN LATERAL (SELECT event_id, data, saved_at, position
+       FROM memory_maintenance_runs WHERE silo=$1 AND scope_id=$2
+         AND position<=$3 AND position=$5 LIMIT 1) run ON true
+     WHERE checkpoint.name='memory' AND checkpoint.sequence >= $3
+       AND generation.generation=$4`,
+    [options.silo, scope.scopeId, snapshot.position, snapshot.generation, position],
+    { deadline });
   if (!result.rows.length) {
     throw new Error('Memory maintenance detail unavailable');
   }
@@ -214,19 +262,16 @@ export async function maintenanceDetail(options: MemoryOptions, scope: Scope,
     memberId: string; rootId: string | null; allowanceCents: number | null;
     startedAt: null } | undefined;
   for (const row of result.rows) {
-    if (row.data === null) {
+    if (row.data === null || runReference(secret, row) !== runId) {
       continue;
     }
     const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
-    if (runReference(secret, row) !== runId) {
-      continue;
-    }
     const allowanceCents = run.action === 'prepared' ? run.acceptedCapCents : null;
     detail = { ...safeRun(secret, row), bindingRevision: run.bindingRevision,
       memberId: run.memberId, rootId: run.rootId ?? null, allowanceCents,
       startedAt: null };
   }
-  await confirmSnapshot(options, scope, snapshot);
+  await confirmSnapshot(options, scope, snapshot, deadline);
   if (!detail) {
     throw new MemoryRefused();
   }

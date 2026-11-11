@@ -16,7 +16,8 @@ This folder lets people review, save, correct and forget information the assista
   If a root was saved but its reply was lost, preparation finds that same root
   before checking whether a new night could start.
 - Shows permitted readers a page of saved nightly choices and a safe detail for
-  one choice. Money stays unavailable until a saved spending record proves it.
+  one choice. A private scope does not reveal itself through a bad request.
+  Money stays unavailable until a saved spending record proves it.
 
 When a loaded fact changes, expires or loses access, the saved withdrawal stops the
 computer and asks the original browser to clear its completed reply. The reply identity
@@ -92,7 +93,7 @@ is never sent again automatically.
 
 ```mermaid
 flowchart LR
-  server["Server"] -->|handles memory requests| memory["Memory"]
+  server["Server"] -->|handles checked memory and maintenance requests| memory["Memory"]
   chat["Chat"] -->|supplies saved turn facts| memory
   gateway["AI gateway"] -->|passes checked recall, remember, correct and forget calls| memory
   memory -->|clears withdrawn or stopped private replies| chat

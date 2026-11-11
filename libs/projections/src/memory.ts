@@ -17,6 +17,12 @@ async function create(db: Query): Promise<void> {
     position BIGINT NOT NULL, saved_at TEXT,
     PRIMARY KEY (silo, scope_id, event_id))`);
   await db.query('ALTER TABLE memory_maintenance_runs ADD COLUMN IF NOT EXISTS saved_at TEXT');
+  await db.query(`CREATE INDEX IF NOT EXISTS memory_maintenance_runs_order
+    ON memory_maintenance_runs (silo, scope_id, position DESC)`);
+  await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_reviews (
+    silo TEXT NOT NULL, scope_id TEXT NOT NULL, memory_id TEXT NOT NULL,
+    revision BIGINT NOT NULL, fact_position BIGINT NOT NULL, data JSONB NOT NULL,
+    PRIMARY KEY (silo, scope_id, memory_id, revision, fact_position))`);
   await db.query(`CREATE TABLE IF NOT EXISTS memory_maintenance_bindings (
     silo TEXT NOT NULL, scope_id TEXT NOT NULL, data JSONB NOT NULL, position BIGINT NOT NULL,
     saved_at TEXT,
@@ -52,7 +58,8 @@ async function create(db: Query): Promise<void> {
 }
 
 async function drop(db: Query): Promise<void> {
-  await db.query(`DROP TABLE IF EXISTS memory_maintenance_runs, memory_maintenance_bindings,
+  await db.query(`DROP TABLE IF EXISTS memory_maintenance_reviews, memory_maintenance_runs,
+    memory_maintenance_bindings,
     memory_dependencies, memory_changes, memory_facts`);
 }
 
@@ -174,8 +181,9 @@ function prepareMaintenance(envelope: EventEnvelope) {
     throw new Error('Invalid saved maintenance event');
   }
   const binding = envelope.type === 'memory.maintenance_bound';
-  const schema = binding ? memoryMaintenanceBoundDataSchema : memoryMaintenanceRecordedDataSchema;
-  const data = schema.parse(envelope.data);
+  const data = binding
+    ? memoryMaintenanceBoundDataSchema.parse(envelope.data)
+    : memoryMaintenanceRecordedDataSchema.parse(envelope.data);
   async function applyMaintenance(db: Query, _event: EventEnvelope, position: number) {
     const values = [envelope.silo, data.scopeId, JSON.stringify(data), position, envelope.time];
     if (binding) {
@@ -188,9 +196,42 @@ function prepareMaintenance(envelope: EventEnvelope) {
       await db.query(`INSERT INTO memory_maintenance_runs
         (silo, scope_id, event_id, data, position, saved_at)
         VALUES ($1,$2,$3,$4,$5,$6)`, runValues);
+      const run = memoryMaintenanceRecordedDataSchema.parse(envelope.data);
+      if (run.action === 'no_changes') {
+        await saveMaintenanceReview(db, envelope.silo, run.scopeId, run);
+      }
     }
   }
   return applyMaintenance;
+}
+
+async function saveMaintenanceReview(db: Query, silo: string, scopeId: string,
+  run: ReturnType<typeof memoryMaintenanceRecordedDataSchema.parse>) {
+  // Keep one review for each fact version and one for the scope's highest reviewed position.
+  const references = [{ memoryId: '', position: 0, revision: 0,
+    expiresAt: null }, ...run.inputRefs];
+  for (const reference of references) {
+    const previous = await db.query<{ data: unknown }>(
+      `SELECT data FROM memory_maintenance_reviews
+       WHERE silo=$1 AND scope_id=$2 AND memory_id=$3
+         AND revision=$4 AND fact_position=$5`,
+      [silo, scopeId, reference.memoryId, reference.revision, reference.position]);
+    if (previous.rows[0]) {
+      const saved = memoryMaintenanceRecordedDataSchema.parse(previous.rows[0].data);
+      const replace = reference.memoryId === ''
+        ? (run.reviewedPosition ?? 0) > (saved.reviewedPosition ?? 0)
+        : run.intendedAt >= saved.intendedAt;
+      if (!replace) {
+        continue;
+      }
+    }
+    await db.query(`INSERT INTO memory_maintenance_reviews
+      (silo, scope_id, memory_id, revision, fact_position, data)
+      VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (silo, scope_id, memory_id, revision, fact_position) DO UPDATE SET data=$6`,
+      [silo, scopeId, reference.memoryId, reference.revision, reference.position,
+        JSON.stringify(run)]);
+  }
 }
 
 function checkedMemoryValue(envelope: EventEnvelope) {
