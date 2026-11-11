@@ -159,9 +159,10 @@ export function computerExecCommand(target: K3dComputer, args: string[]): string
   if (args.length === 0 || args.some(emptyArgument)) {
     throw new Error(unreadable);
   }
+  // Let the supervisor finish its 120-second run and cleanup before TERM.
   return ['--host', 'unix:///var/run/docker.sock', 'exec', '-i', target.nodeContainerId,
     'crictl', 'exec', '-i', target.containerId,
-    '/usr/bin/timeout', '-s', 'KILL', '120',
+    '/usr/bin/timeout', '-s', 'TERM', '-k', '15', '250',
     '/usr/bin/env', '-u', 'NODE_OPTIONS', '-u', 'NODE_PATH', '-u', 'LD_PRELOAD',
     '--', ...args];
 }

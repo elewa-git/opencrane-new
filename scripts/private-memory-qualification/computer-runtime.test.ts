@@ -1,17 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { computerExecCommand, verifyK3dComputer,
   type K3dComputer } from './computer-runtime.ts';
+import { k3dComputerFixture } from './computer-runtime-fixture.ts';
 
 const hex = (digit: string): string => digit.repeat(64);
-const expected: K3dComputer = {
-  kind: 'k3d', namespace: 'opencrane-dev-1', namespaceUid: 'namespace-uid',
-  podName: 'computer-test', podUid: 'pod-uid', nodeName: 'k3d-ocn-server-0',
-  nodeUid: 'node-uid', nodeContainerId: hex('a'), containerName: 'computer',
-  containerId: hex('b'), image: `registry/computer@sha256:${hex('c')}`,
-  runtime: 'io.containerd.runsc.v1',
-  startedAt: '2026-11-11T00:00:00Z',
-  criStartedAt: '2026-11-11T00:00:00.000000000Z',
-};
+const expected: K3dComputer = k3dComputerFixture();
 
 const observed = {
   namespace: { metadata: { uid: expected.namespaceUid } },
@@ -44,10 +37,10 @@ describe('checked k3d computer identity', () => {
     expect(command).toContain(expected.nodeContainerId);
     expect(command).toContain(expected.containerId);
     expect(command).not.toContain(expected.podName);
-    expect(command).toContain('/usr/bin/timeout');
-    expect(command).toEqual(expect.arrayContaining([
-      '/usr/bin/timeout', '-s', 'TERM', '-k', '15', '250',
-    ]));
+    const timeoutIndex = command.indexOf('/usr/bin/timeout');
+    expect(timeoutIndex).toBeGreaterThan(0);
+    expect(command.slice(timeoutIndex, timeoutIndex + 6))
+      .toEqual(['/usr/bin/timeout', '-s', 'TERM', '-k', '15', '250']);
   });
 
   it.each([

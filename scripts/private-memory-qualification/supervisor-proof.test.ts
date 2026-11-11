@@ -2,11 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runInContainer } from './container-process.ts';
-import type { K3dComputer } from './computer-runtime.ts';
+import { readK3dComputer, type K3dComputer } from './computer-runtime.ts';
+import { k3dComputerFixture } from './computer-runtime-fixture.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('./container-process.ts', { spy: true });
+vi.mock('./computer-runtime.ts', { spy: true });
 
 const containerId = 'a'.repeat(64);
 const installationId = `sha256:${'b'.repeat(64)}`;
@@ -69,6 +71,17 @@ async function refusesReplacementDuringInspection(): Promise<void> {
 }
 it('refuses a replaced owner-installed container after inspection',
   refusesReplacementDuringInspection);
+
+async function refusesChangedK3dComputerAfterProbe(): Promise<void> {
+  const computer = { ...k3dComputerFixture(), containerId, image };
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  vi.mocked(readK3dComputer).mockReturnValueOnce({ ...computer, podUid: 'other' });
+  expect(await proveComputerSupervisor(computer, installationId))
+    .toBe('private_process_identity_changed');
+  expect(runInContainer).toHaveBeenCalledOnce();
+  expect(readK3dComputer).toHaveBeenCalledTimes(2);
+}
+it('rechecks a k3d computer after the supervisor probe', refusesChangedK3dComputerAfterProbe);
 
 async function refusesLostInspector(): Promise<void> {
   vi.mocked(runInContainer).mockRejectedValue(new Error('private path and arguments'));

@@ -1,1 +1,1 @@
-Check a k3d computer's full Pod and container identity around bounded commands, while keeping protected deployment unavailable until gVisor memory controls can be measured.
+Check a k3d computer's full Pod and container identity around bounded commands, and let a timed-out probe stop its children and release its lock. Protected deployment remains unavailable until gVisor memory controls can be measured.

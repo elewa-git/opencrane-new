@@ -1,10 +1,15 @@
-import { ChildProcess, execFileSync, spawn, spawnSync } from 'node:child_process';
+import { ChildProcess, execFileSync, spawn, spawnSync,
+  type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { PassThrough } from 'node:stream';
 import { expect, it, vi } from 'vitest';
 import { startNativePersistenceClient } from './native-persistence-client.ts';
+import { readK3dComputer, spawnComputerExec,
+} from './computer-runtime.ts';
+import { k3dComputerFixture } from './computer-runtime-fixture.ts';
 
 vi.mock('node:child_process', { spy: true });
+vi.mock('./computer-runtime.ts', { spy: true });
 
 async function unconfirmedStopMustFail(): Promise<void> {
   const child = new ChildProcess();
@@ -113,6 +118,32 @@ async function confirmedStopSucceeds(): Promise<void> {
 
 it('accepts Stop only after remote cleanup proof and clean runner exit',
   confirmedStopSucceeds);
+
+async function rechecksK3dComputerBeforeSending(): Promise<void> {
+  const child = new ChildProcess();
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const stdio: ChildProcessWithoutNullStreams['stdio'] = [stdin, stdout, stderr, null, null];
+  const remote = Object.assign(child, { stdin, stdout, stderr, stdio });
+  const computer = k3dComputerFixture();
+  vi.mocked(spawnComputerExec).mockReturnValueOnce(remote);
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  vi.mocked(readK3dComputer).mockImplementationOnce(function changed(): never {
+    throw new Error('private_process_identity_changed');
+  });
+  queueMicrotask(function ready(): void {
+    stdout.write('{"ready":true}\n');
+  });
+  const client = await startNativePersistenceClient(computer, 'challenge');
+  await expect(client.assertHeld()).rejects.toThrow('private_process_identity_changed');
+  expect(spawnComputerExec).toHaveBeenCalledOnce();
+  expect(readK3dComputer).toHaveBeenCalledTimes(2);
+  expect(stdin.readableLength).toBe(0);
+  child.emit('close', 1, null);
+}
+it('rechecks a k3d computer before sending a native request',
+  rechecksK3dComputerBeforeSending);
 
 function nativeRunnerIsPackaged(): void {
   const dockerfile = readFileSync('apps/computer/Dockerfile', 'utf8');

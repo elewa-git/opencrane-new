@@ -1,8 +1,14 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { runInContainer } from './container-process.ts';
+import { computerExecCommand, readK3dComputer,
+  type K3dComputer,
+} from './computer-runtime.ts';
+import { k3dComputerFixture } from './computer-runtime-fixture.ts';
+
+vi.mock('./computer-runtime.ts', { spy: true });
 
 let containerId: string;
 const image = 'node:22.23.1-bookworm-slim';
@@ -29,6 +35,7 @@ function docker(args: string[]): string {
   return output.trim();
 }
 function startContainer(): void {
+  vi.clearAllMocks();
   containerId = docker(['run', '-d', '--init', '--network=none', '--read-only',
     '--tmpfs', '/run', '--workdir', '/app', '--cpus=0.5', image, 'sleep', 'infinity']);
 }
@@ -71,10 +78,11 @@ function assertNoRunningJourney(): void {
   expect(output).not.toContain('fixture-child');
   expect(output).not.toContain('fixture-grandchild');
 }
-async function cancelledJourney(source: string): Promise<void> {
+async function cancelledJourney(source: string, container: string | K3dComputer = containerId):
+  Promise<void> {
   let failed = false;
   try {
-    await runInContainer(containerId, ['/usr/local/bin/node', '--eval', source]);
+    await runInContainer(container, ['/usr/local/bin/node', '--eval', source]);
   } catch {
     failed = true;
   }
@@ -83,10 +91,20 @@ async function cancelledJourney(source: string): Promise<void> {
   docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
 }
 async function cancelsTimeout(): Promise<void> {
-  await cancelledJourney(journey);
+  const computer = k3dComputerFixture();
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  vi.mocked(computerExecCommand).mockImplementationOnce(function remoteCommand(
+    _target, args,
+  ): string[] {
+    return ['exec', '-i', containerId, '/usr/bin/timeout',
+      '-s', 'TERM', '-k', '15', '250', ...args];
+  });
+  await cancelledJourney(journey, computer);
+  expect(readK3dComputer).toHaveBeenCalledOnce();
   docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
 }
-it('kills the journey and its descendants before reporting timeout', cancelsTimeout, 140_000);
+it('stops a hung probe and its detached process group before releasing the lock',
+  cancelsTimeout, 140_000);
 
 async function cancelsOverflow(stream: string): Promise<void> {
   const flood = `${journey}\nsetTimeout(() => process.${stream}.write('x'.repeat(70_000)), 1000);`;
@@ -140,6 +158,27 @@ async function cleansUpSuccessfulJourney(): Promise<void> {
   docker(['exec', containerId, 'test', '-f', '/run/fixture-grandchild']);
 }
 it('returns complete output only after stopping leftover children', cleansUpSuccessfulJourney, 30_000);
+
+async function rechecksK3dComputerAfterSupervisedProbe(): Promise<void> {
+  const computer = k3dComputerFixture();
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  vi.mocked(readK3dComputer).mockImplementationOnce(function changed(): never {
+    throw new Error('private_process_identity_changed');
+  });
+  vi.mocked(computerExecCommand).mockImplementationOnce(function dockerCommand(
+    _target, args,
+  ): string[] {
+    return ['exec', '-i', containerId, ...args];
+  });
+  const source = 'process.stdout.write(JSON.stringify({ result: true }));';
+  await expect(runInContainer(computer, ['/usr/local/bin/node', '--eval', source]))
+    .rejects.toThrow('private_process_identity_changed');
+  expect(readK3dComputer).toHaveBeenCalledTimes(2);
+  assertNoRunningJourney();
+  docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
+}
+it('rechecks a k3d computer after the supervised probe',
+  rechecksK3dComputerAfterSupervisedProbe, 30_000);
 
 async function preservesHostRefusal(): Promise<void> {
   const refusal = `${journey}

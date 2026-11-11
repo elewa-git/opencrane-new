@@ -34,14 +34,20 @@ function attachedProcess(command: string[], input: string): Promise<string> {
     const child = spawn('/usr/bin/docker', command, options);
     const chunks: Buffer[] = [];
     let size = 0;
-    // Give the in-container deadline time to kill and reap the journey first.
-    const deadline = setTimeout(cancel, 130_000);
+    // Give the supervisor its 120 seconds to run and time to stop the whole group.
+    const deadline = setTimeout(cancel, 260_000);
+    let forced: ReturnType<typeof setTimeout> | undefined;
     function cancel(): void {
       child.stdin.destroy();
+      child.kill('SIGTERM');
+      forced ??= setTimeout(forceKill, 15_000);
+    }
+    function forceKill(): void {
       child.kill('SIGKILL');
     }
     function failed(): void {
       clearTimeout(deadline);
+      clearTimeout(forced);
       reject(new Error('container_process_failed'));
     }
     function stdout(buffer: Buffer): void {
@@ -60,6 +66,7 @@ function attachedProcess(command: string[], input: string): Promise<string> {
     }
     function closed(code: number | null): void {
       clearTimeout(deadline);
+      clearTimeout(forced);
       child.stdin.destroy();
       if (code !== 0 || size > 65_536) {
         failed();

@@ -130,7 +130,7 @@ async function checksGvisorIdentityAndExec(): Promise<void> {
     expect(badExit).toBe(1);
     const timeoutCommand = computerExecCommand(target, ['/bin/sh', '-c',
       'echo $$; exec sleep 30']);
-    const limitIndex = timeoutCommand.indexOf('120');
+    const limitIndex = timeoutCommand.indexOf('250');
     timeoutCommand[limitIndex] = '1';
     const timed = spawn('/usr/bin/docker', timeoutCommand, { stdio: 'pipe' });
     let timedOutput = '';

@@ -1,8 +1,15 @@
-import { expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { expect, it, vi } from 'vitest';
+import { computerExecCommand, readK3dComputer,
+} from './computer-runtime.ts';
+import { k3dComputerFixture } from './computer-runtime-fixture.ts';
 import {
   inventoryGroups, joinInventory as joinObservedInventory, readCurrentInventory,
   type InventoryContext, type ProtectionRecord, type TrustedLaunch,
 } from './joined-inventory.ts';
+
+vi.mock('node:child_process', { spy: true });
+vi.mock('./computer-runtime.ts', { spy: true });
 
 const image = `sha256:${'a'.repeat(64)}`;
 const otherImage = `sha256:${'b'.repeat(64)}`;
@@ -367,6 +374,25 @@ function realReaderRefuses(): void {
   expect(() => readCurrentInventory(context, invalid)).toThrow();
 }
 it('refuses an untrusted container before reading a live process', realReaderRefuses);
+
+function rechecksK3dComputerAfterInventoryProbe(): void {
+  const computer = k3dComputerFixture();
+  const process = { pid: 42, startTime: '100', pidNamespace: 'pid:[123]',
+    executable: '/usr/local/bin/node', uid: 1000, cgroup: '0::/test\n',
+    protected: true };
+  vi.mocked(execFileSync).mockReturnValue(Buffer.from(JSON.stringify(process)));
+  vi.mocked(computerExecCommand).mockReturnValue(['checked-command']);
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  vi.mocked(readK3dComputer).mockImplementationOnce(function changed(): never {
+    throw new Error('private_process_identity_changed');
+  });
+  const containers = { serverId: 'a'.repeat(64), computerId: computer };
+  expect(() => readCurrentInventory(context, containers))
+    .toThrow('private_process_identity_changed');
+  expect(readK3dComputer).toHaveBeenCalledTimes(2);
+}
+it('rechecks a k3d computer after each inventory probe',
+  rechecksK3dComputerAfterInventoryProbe);
 
 function refusesMalformedLaunch(change: Record<string, unknown>, group: string): void {
   const records = completeInventory();

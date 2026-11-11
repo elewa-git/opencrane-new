@@ -2,11 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runInContainer } from './container-process.ts';
-import type { K3dComputer } from './computer-runtime.ts';
-import { proveComputerBridge } from './bridge-proof.ts';
+import { readK3dComputer, type K3dComputer } from './computer-runtime.ts';
+import { k3dComputerFixture } from './computer-runtime-fixture.ts';
+import { proveComputerBridge, proveComputerService } from './bridge-proof.ts';
 
 vi.mock('node:child_process', { spy: true });
 vi.mock('./container-process.ts', { spy: true });
+vi.mock('./computer-runtime.ts', { spy: true });
 
 const containerId = 'a'.repeat(64);
 const otherContainerId = 'b'.repeat(64);
@@ -38,6 +40,7 @@ function answerProbe(_container: string | K3dComputer, _args: string[], input = 
 }
 
 function reset(): void {
+  vi.clearAllMocks();
   observedContainerId = containerId;
   observedStart = startedAt;
   observedImage = imageDigest;
@@ -101,6 +104,28 @@ async function refusesReplacementAfterProbe(): Promise<void> {
 }
 it('refuses a container changed between discovery and the final measurement',
   refusesReplacementAfterProbe);
+
+async function refusesChangedK3dComputerAfterProbe(): Promise<void> {
+  const computer = { ...k3dComputerFixture(), containerId, image: imageDigest };
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  vi.mocked(readK3dComputer).mockReturnValueOnce({ ...computer, podUid: 'other' });
+  expect(await proveComputerBridge(computer, installationId))
+    .toBe('private_process_identity_changed');
+  expect(runInContainer).toHaveBeenCalledOnce();
+  expect(readK3dComputer).toHaveBeenCalledTimes(2);
+}
+it('rechecks a k3d computer after the bridge probe', refusesChangedK3dComputerAfterProbe);
+
+async function refusesWrongK3dProxyImage(): Promise<void> {
+  const computer = { ...k3dComputerFixture(), image: imageDigest };
+  vi.mocked(readK3dComputer).mockReturnValueOnce(computer);
+  expect(await proveComputerService(computer, installationId, 'proxy',
+    `sha256:${'e'.repeat(64)}`)).toBe('private_process_identity_changed');
+  expect(runInContainer).not.toHaveBeenCalled();
+  expect(readK3dComputer).toHaveBeenCalledOnce();
+}
+it('refuses a k3d proxy whose image differs before the probe',
+  refusesWrongK3dProxyImage);
 
 async function refusesUntrustedResult(): Promise<void> {
   reply = { result: 'PASS', complete: true };

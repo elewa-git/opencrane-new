@@ -28,8 +28,10 @@ enclosing Docker node, CRI sandbox and full container identity. It requires the
 both Kubernetes and CRI start times because they have different precision.
 The bridge, supervisor, live inventory and native client can use this checked
 identity without changing the protected target file or starting a stack. Every
-computer exec uses the full CRI id through the measured node and a 120-second
-guest command limit. Callers recheck the identity after awaited work. A non-zero
+computer exec uses the full CRI id through the measured node. The supervisor
+limits its guest command to 120 seconds. The CRI wrapper sends TERM at 250 seconds
+and KILL 15 seconds later, giving the supervisor time to stop the process group
+and release its lock. Callers recheck the identity after awaited work. A non-zero
 remote exit is a refusal; `crictl` returns status 1 for a remote status 23.
 
 Run the owned integration fixture with
@@ -95,7 +97,7 @@ group members have stopped. A concurrent run refuses; it cannot remove another
 run's lock. The runner must keep its children in that group. The image needs a
 writable `/run` and Linux `/proc`. A failed cleanup keeps the lock and refuses
 retries; the deployment owner must resolve the failure before retrying. The host
-also bounds Docker attachment to 130 seconds, allowing ten seconds for cleanup.
+also sends TERM to the Docker attachment at 260 seconds, then KILL 15 seconds later.
 The collector measures identity and event-stream creation before and after every child.
 It checks the computer's root supervisor before and after the bridge check, and
 again after each awaited journey. Missing supervisor proof refuses the run.
