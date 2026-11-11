@@ -153,6 +153,32 @@ it('refuses a hosted registration requiring startup credentials', async () => {
   expect(checked.request).not.toHaveBeenCalled();
 });
 
+async function refusesChangedAdmissionIdentity(kind: 'registration' | 'image' | 'platform' | 'verdict') {
+  const registration = { serverId,
+    kind: 'hosted', locator, registeredBy: 'admin',
+    installation: { attemptId: 1,
+      platform: kind === 'registration' ? 'linux/arm64' : 'linux/amd64',
+      upstream: { host: 'api.example.com', port: 443 } } };
+  const registrationSequence = await save('mcp.server_registered', registration, 0);
+  const checkedAt = new Date(Date.now() - 1000).toISOString();
+  const receipt = { verdict: kind === 'verdict' ? 'fail' : 'pass', checkedAt,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(), engineVersion: 'fixture',
+    reportDigest: 'c'.repeat(64), ...(kind === 'verdict' ? { reasonCodes: ['signature_invalid'] } : {}) };
+  const database = { ...receipt, databaseDigest: 'd'.repeat(64), databaseUpdatedAt: checkedAt };
+  const checked = { serverId, attemptId: 1,
+    imageDigest: kind === 'image' ? 'e'.repeat(64) : imageDigest,
+    platform: kind === 'platform' ? 'linux/arm64' : 'linux/amd64',
+    checks: { signature: receipt, licence: receipt, vulnerability: database, malware: database } };
+  await save('mcp.image_checked', checked, registrationSequence);
+  const checkedTransport = transport();
+  await expect(captureHostedStart(fixture.store, 'test', serverId, run, checkedTransport))
+    .rejects.toThrow();
+  expect(checkedTransport.request).not.toHaveBeenCalled();
+}
+
+it.each(['registration', 'image', 'platform', 'verdict'] as const)(
+  'refuses hosted admission with a changed %s', refusesChangedAdmissionIdentity);
+
 it('requires a new capture after a changed generation and holds the old review', async () => {
   await admitted();
   await captureHostedStart(fixture.store, 'test', serverId, run, transport());
@@ -198,6 +224,21 @@ it('recovers a lost start reply and a worker restart without reusing another run
   expect((await policy()).hostedRun).toEqual(run);
 });
 
+it('gives each hosted history read a ten-second deadline', async () => {
+  await admitted();
+  const readStream = fixture.store.readStream.bind(fixture.store);
+  const deadlines: number[] = [];
+  const observed = vi.spyOn(fixture.store, 'readStream');
+  observed.mockImplementation((subject, fromSequence, deadline) => {
+    if (deadline !== undefined) deadlines.push(deadline);
+    return readStream(subject, fromSequence, deadline);
+  });
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  expect(deadlines.length).toBeGreaterThan(0);
+  expect(deadlines.every(Number.isFinite)).toBe(true);
+  expect(deadlines.every(deadline => deadline < performance.now() + 10_001)).toBe(true);
+});
+
 it('recovers a lost catalogue reply by reading the original saved snapshot', async () => {
   await admitted();
   const append = fixture.store.append.bind(fixture.store);
@@ -219,6 +260,37 @@ it('recovers a lost catalogue reply by reading the original saved snapshot', asy
   await captureHostedStart(fixture.store, 'test', serverId, run, restarted);
   expect(restarted.request).not.toHaveBeenCalled();
 });
+
+async function refusesRecoveredCatalogueGuard(guard: 'source' | 'principal' | 'run') {
+  await admitted();
+  const append = fixture.store.append.bind(fixture.store);
+  const lost = vi.spyOn(fixture.store, 'append');
+  lost.mockImplementation(async command => {
+    const attempted = command.event;
+    if (attempted && typeof attempted === 'object' && 'type' in attempted &&
+        attempted.type === 'mcp.server_discovered') {
+      if (guard === 'source') Object.assign(attempted, { source: 'untrusted' });
+      if (guard === 'principal') {
+        Object.assign(attempted, { principal: { kind: 'human', id: 'admin' } });
+      }
+      if (guard === 'run' && 'data' in attempted && attempted.data &&
+          typeof attempted.data === 'object' && 'hostedRun' in attempted.data) {
+        Object.assign(attempted.data, { hostedRun: {
+          ...run, runGeneration: run.runGeneration + 1,
+        } });
+      }
+      await append(command);
+      throw new Error('reply lost');
+    }
+    return append(command);
+  });
+  await expect(captureHostedStart(fixture.store, 'test', serverId, run, transport()))
+    .rejects.toThrow('Hosted catalogue capture unavailable');
+  lost.mockRestore();
+}
+
+it.each(['source', 'principal', 'run'] as const)(
+  'refuses a recovered catalogue with a changed %s', refusesRecoveredCatalogueGuard);
 
 it('keeps concurrent generation-one captures separate across servers and retries', async () => {
   const otherServerId = 'other-hosted-fixture';
@@ -255,6 +327,63 @@ it('keeps concurrent generation-one captures separate across servers and retries
   expect(retryResults).toEqual(results);
   expect(firstRetry.request).not.toHaveBeenCalled();
   expect(secondRetry.request).not.toHaveBeenCalled();
+});
+
+it('gives a later generation on the same Pod a different start id', async () => {
+  await admitted();
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  const next = { ...run, runGeneration: 2 };
+  await captureHostedStart(fixture.store, 'test', serverId, next, transport(next));
+  const rows = await history(fixture.store, `mcp-${serverId}`, 'test');
+  const starts = rows.filter(row => row.event.type === 'mcp.hosted_start_observed');
+  expect(starts).toHaveLength(2);
+  expect(starts[1]?.event.id).not.toBe(starts[0]?.event.id);
+});
+
+it('gives a replacement Pod in the same generation a different start id', async () => {
+  await admitted();
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  const replacement = { ...run, podUid: 'pod-two' };
+  const firstRows = await history(fixture.store, `mcp-${serverId}`, 'test');
+  const firstStart = eventOfType(firstRows, 'mcp.hosted_start_observed');
+  const firstFixture = fixture;
+  const secondFixture = await natsFixture();
+  fixture = secondFixture;
+  let replacementStart: StoredEvent | undefined;
+  try {
+    await admitted();
+    await captureHostedStart(fixture.store, 'test', serverId, replacement,
+      transport(replacement));
+    const replacementRows = await history(fixture.store, `mcp-${serverId}`, 'test');
+    replacementStart = eventOfType(replacementRows, 'mcp.hosted_start_observed');
+  } finally {
+    await secondFixture.close();
+    fixture = firstFixture;
+  }
+  expect(firstStart?.event.id).toBeDefined();
+  expect(replacementStart?.event.id).not.toBe(firstStart?.event.id);
+});
+
+it('gives the same hosted run in another silo a different start id', async () => {
+  await admitted();
+  await captureHostedStart(fixture.store, 'test', serverId, run, transport());
+  const firstRows = await history(fixture.store, `mcp-${serverId}`, 'test');
+  const firstStart = eventOfType(firstRows, 'mcp.hosted_start_observed');
+  const firstFixture = fixture;
+  const secondFixture = await natsFixture();
+  fixture = secondFixture;
+  let secondStart: StoredEvent | undefined;
+  try {
+    await admitted(60_000, {}, serverId, 'other-silo');
+    await captureHostedStart(fixture.store, 'other-silo', serverId, run, transport());
+    const secondRows = await history(fixture.store, `mcp-${serverId}`, 'other-silo');
+    secondStart = eventOfType(secondRows, 'mcp.hosted_start_observed');
+  } finally {
+    await secondFixture.close();
+    fixture = firstFixture;
+  }
+  expect(firstStart?.event.id).toBeDefined();
+  expect(secondStart?.event.id).not.toBe(firstStart?.event.id);
 });
 
 it('ends the review after a new Pod even when its definitions are unchanged', async () => {

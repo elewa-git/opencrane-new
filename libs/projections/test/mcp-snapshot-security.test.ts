@@ -78,6 +78,63 @@ function refusesLegacyRenewal() {
 }
 it('cannot renew a legacy list without complete saved definitions', refusesLegacyRenewal);
 
+function hostedState(runGeneration = 1) {
+  const run = { imageDigest: 'a'.repeat(64), platform: 'linux/amd64' as const, podUid: 'pod-one',
+    workloadSpecDigest: 'b'.repeat(64), runGeneration };
+  const start = record('mcp.hosted_start_observed', { serverId: 'fixture', ...run,
+    admissionExpiresAt: '2026-10-10T12:05:00.000Z' });
+  start.source = 'models';
+  start.principal = { kind: 'system', id: 'models' };
+  return { run, state: applyToolPolicy(emptyToolPolicy(), start, 1) };
+}
+
+function refusesHostedCatalogueGuard(guard: 'source' | 'principal' | 'run') {
+  const current = hostedState();
+  const savedRun = guard === 'run'
+    ? { ...current.run, runGeneration: current.run.runGeneration + 1 } : current.run;
+  const capture = record('mcp.server_discovered', { ...catalogue, hostedRun: savedRun });
+  capture.source = guard === 'source' ? 'untrusted' : 'models';
+  capture.principal = guard === 'principal'
+    ? { kind: 'human', id: 'admin' } : { kind: 'system', id: 'models' };
+  expect(() => applyToolPolicy(current.state, capture, 2)).toThrow();
+}
+it.each(['source', 'principal', 'run'] as const)(
+  'refuses hosted catalogue with a changed %s', refusesHostedCatalogueGuard);
+
+function refusesEarlierRunCheck() {
+  const first = hostedState();
+  const firstCapture = { ...catalogue, hostedRun: first.run };
+  const discovery = record('mcp.server_discovered', firstCapture);
+  discovery.source = 'models';
+  discovery.principal = { kind: 'system', id: 'models' };
+  const captured = applyToolPolicy(first.state, discovery, 2);
+  const newer = hostedState(2);
+  const current = { ...newer.state, catalogue: captured.catalogue,
+    hostedRun: newer.run, sequence: 3 };
+  const check = record('mcp.catalogue_checked', { serverId: 'fixture',
+    outcome: 'unchanged', schemaDigest, checkedAt, expiresAt });
+  expect(() => applyToolPolicy(current, check, 4)).toThrow(
+    'Catalogue check belongs to an earlier hosted run');
+}
+it('refuses a catalogue check from an earlier hosted run', refusesEarlierRunCheck);
+
+function keepsInstalledHostedServerClosedForReview() {
+  const registration = record('mcp.server_registered', { serverId: 'fixture', kind: 'hosted',
+    locator: `example.test/image@sha256:${'a'.repeat(64)}`, registeredBy: 'admin',
+    installation: { attemptId: 1, platform: 'linux/amd64',
+      upstream: { host: 'api.example.com', port: 443 } } });
+  const registered = applyToolPolicy(emptyToolPolicy(), registration, 1);
+  expect(registered.startupReviewRequired).toBe(true);
+  const discovery = record('mcp.server_discovered', catalogue);
+  const discovered = applyToolPolicy(registered, discovery, 2);
+  const publication = record('mcp.server_published', { serverId: 'fixture', publishedBy: 'admin' });
+  const published = applyToolPolicy(discovered, publication, 3);
+  expect(published.startupReviewRequired).toBe(true);
+  expect(published.published).toBe(false);
+}
+it('keeps a hosted installation closed until a person reviews it',
+  keepsInstalledHostedServerClosedForReview);
+
 function refusesWrongServer() {
   const check = record('mcp.catalogue_checked', { serverId: 'another-server',
     outcome: 'unchanged', schemaDigest, checkedAt, expiresAt });
