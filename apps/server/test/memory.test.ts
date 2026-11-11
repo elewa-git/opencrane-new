@@ -19,6 +19,7 @@ import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEv
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy, reviewToolPolicy } from '@opencrane/models';
+import { budgets } from '@opencrane/models';
 import type { MemoryOptions } from '../src/memory/access.ts';
 import { commandReference } from '../src/memory/command-history.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
@@ -3908,6 +3909,83 @@ async function pagedMaintenanceHistory() {
   expect((await get(`${maintenancePath}?cursor=${page.nextCursor}`, 'pager'))
     .statusCode).toBe(409);
 }
+
+async function savedMaintenanceSpending() {
+  const memberId = 'money-owner';
+  const payingGroupId = 'money-payer';
+  const assistantId = 'money-assistant';
+  const scopeId = memoryScopeId('acme', 'person', memberId);
+  const rootId = 'a'.repeat(64);
+  const nightId = 'b'.repeat(64);
+  const batchKey = 'c'.repeat(64);
+  const inputRevision = 'd'.repeat(64);
+  const url = `${path(memberId)}/maintenance`;
+  await append(`member-${memberId}`, 'member.joined', { memberId, role: 'member',
+    email: 'money@example.test', displayName: 'Money owner' });
+  await append(`team-${payingGroupId}`, 'team.created',
+    { teamId: payingGroupId, name: 'Money payer', createdBy: 'owner' });
+  await append(`team-${payingGroupId}`, 'team.member_added',
+    { teamId: payingGroupId, memberId, addedBy: 'owner' });
+  await append(`assistant-${assistantId}`, 'assistant.created',
+    { assistantId, kind: 'personal', ownerId: memberId });
+  await runner.run(groups);
+  await runner.run(computers);
+  const binding = { ...bindingInput, commandId: 'money-binding', assistantId,
+    payingGroupId };
+  expect((await bind(path(memberId), binding, memberId)).statusCode).toBe(200);
+  const prepared = { scopeId, nightId, batchKey, inputRevision,
+    date: '2026-10-22', bindingRevision: 1, memberId, acceptedCapCents: 100,
+    intendedAt: '2026-10-22T02:00:00.000Z',
+    selectedAt: '2026-10-22T02:01:00.000Z', action: 'prepared', reason: null,
+    inputRefs: [], rootId, model: 'gpt-6-luna', providerId: 'provider-1' };
+  await append(`scope-${scopeId}`, 'memory.maintenance_recorded', prepared);
+  await runner.run(projection);
+  const page = await get(url, memberId);
+  const runId = page.json<{ history: { runId: string }[] }>().history[0]!.runId;
+  const detailUrl = `${url}/${runId}`;
+  const before = await get(detailUrl, memberId);
+  expect(before.json()).toMatchObject({ allowanceCents: 100,
+    money: { status: 'unavailable' } });
+  const root = { rootId, requesterId: memberId, conversationId: 'money-session',
+    turnId: 'money-turn', threadId: 'money-thread', assistantId,
+    computerId: 'money-computer', generation: 1, payingGroupId,
+    allowanceCents: 100, maintenance: { scopeId, nightId, batchKey,
+      inputRevision, task: 'frequent_automation', model: 'gpt-6-luna',
+      providerId: 'provider-1', bindingSequence: 1, priceTableId: 'tariff-1' } };
+  await append('budget-acme', 'budget.root_allowance_set', root);
+  await runner.initialise(budgets);
+  await runner.run(budgets);
+  const reservationId = 'money-reservation';
+  const permitId = 'money-permit';
+  const modelCall = { model: 'gpt-6-luna', priceTableId: 'tariff-1',
+    computerId: root.computerId, assistantId, requesterId: memberId,
+    conversationId: root.conversationId, turnId: root.turnId,
+    threadId: root.threadId, payingGroupId, contextDigest: 'e'.repeat(64) };
+  const reservation = { reservationId, permitId, rootId, amountCents: 80,
+    payingGroupId, assistantId, modelCall };
+  await append('budget-acme', 'budget.reserved', reservation);
+  await runner.run(budgets);
+  const held = await get(detailUrl, memberId);
+  expect(held.json()).toMatchObject({ money: { status: 'current',
+    spentCents: 0, heldCents: 80 } });
+  expect((await get(url, 'admin')).statusCode).toBe(404);
+  expect((await get(`${detailUrl}?extra=1`, 'admin')).statusCode).toBe(404);
+  await append('budget-acme', 'budget.settled',
+    { reservationId, permitId, settledCents: 30 });
+  const lagged = await get(detailUrl, memberId);
+  expect(lagged.json()).toMatchObject({ money: { status: 'unavailable' } });
+  await runner.run(budgets);
+  const settled = await get(detailUrl, memberId);
+  expect(settled.json()).toMatchObject({ money: { status: 'current',
+    spentCents: 30, heldCents: 0 } });
+  expect(settled.json()).toMatchObject({ action: 'prepared',
+    observedAt: before.json<{ observedAt: string }>().observedAt });
+  await runner.rebuild(budgets);
+  expect((await get(detailUrl, memberId)).json()).toEqual(settled.json());
+}
+
+it('joins saved maintenance spending after budget catch-up without changing its receipt',
+  savedMaintenanceSpending, 90_000);
 
 async function maintenanceReadAccess() {
   const groupScopeId = memoryScopeId('acme', 'group', 'pager-sales');
