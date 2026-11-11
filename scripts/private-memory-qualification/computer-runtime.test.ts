@@ -45,17 +45,22 @@ describe('checked k3d computer identity', () => {
     expect(command).toContain(expected.containerId);
     expect(command).not.toContain(expected.podName);
     expect(command).toContain('/usr/bin/timeout');
-    expect(command).toContain('120');
+    expect(command).toEqual(expect.arrayContaining([
+      '/usr/bin/timeout', '-s', 'TERM', '-k', '15', '250',
+    ]));
   });
 
   it.each([
     ['namespace', { namespace: { metadata: { uid: 'other' } } }],
-    ['Pod', { pod: { ...observed.pod, metadata: { uid: 'other' } } }],
-    ['node', { node: { metadata: { uid: 'other' } } }],
+    ['Pod', { pod: { ...observed.pod,
+      metadata: { ...observed.pod.metadata, uid: 'other' } } }],
+    ['node', { node: { metadata: { ...observed.node.metadata, uid: 'other' } } }],
     ['node container', { dockerNode: { Id: hex('d'), State: { Running: true } } }],
-    ['container', { criContainer: { status: { ...observed.criContainer.status, id: hex('d') } } }],
-    ['image', { criContainer: { status: { ...observed.criContainer.status,
-      imageRef: `registry/computer@sha256:${hex('d')}` } } }],
+    ['container', { criContainer: { ...observed.criContainer,
+      status: { ...observed.criContainer.status, id: hex('d') } } }],
+    ['image', { criContainer: { ...observed.criContainer,
+      status: { ...observed.criContainer.status,
+        imageRef: `registry/computer@sha256:${hex('d')}` } } }],
     ['runtime', { criPod: { ...observed.criPod,
       status: { ...observed.criPod.status, runtimeHandler: 'runc' } } }],
     ['RuntimeClass', { pod: { ...observed.pod,

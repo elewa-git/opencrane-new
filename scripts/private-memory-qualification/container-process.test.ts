@@ -84,6 +84,7 @@ async function cancelledJourney(source: string): Promise<void> {
 }
 async function cancelsTimeout(): Promise<void> {
   await cancelledJourney(journey);
+  docker(['exec', containerId, 'test', '!', '-e', '/run/opencrane-memory-qualification.lock']);
 }
 it('kills the journey and its descendants before reporting timeout', cancelsTimeout, 140_000);
 
