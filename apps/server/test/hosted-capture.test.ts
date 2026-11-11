@@ -7,6 +7,7 @@ import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { discoverInventory } from '../src/integrations/inventory.ts';
 import { captureHostedStart, type HostedCaptureTransport }
   from '../src/integrations/hosted-capture.ts';
+import { captureHostedThroughGateway } from '../src/integrations/hosted-gateway-transport.ts';
 
 const serverId = 'hosted-fixture';
 const imageDigest = 'a'.repeat(64);
@@ -446,3 +447,55 @@ it('refuses a catalogue claiming a run that has not been saved; replay starts no
   expect(checked.observe).not.toHaveBeenCalled();
   expect(checked.request).not.toHaveBeenCalled();
 });
+
+it('captures only through a gateway request bound to the observed owned Pod', async () => {
+  await admitted();
+  const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+  const readWorkload = vi.fn().mockResolvedValue(observed);
+  const gatewayRequest = vi.fn().mockImplementation((request: { method: string }) => {
+    const result = request.method === 'server/discover' ? discovery :
+      { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private', tools: [tool] };
+    return Promise.resolve(JSON.stringify(result));
+  });
+  const result = await captureHostedThroughGateway(fixture.store,
+    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    { readWorkload, gatewayRequest });
+  expect(result.schemaDigest).toBe((await policy()).catalogue?.schemaDigest);
+  expect(gatewayRequest).toHaveBeenCalledTimes(2);
+  expect(gatewayRequest).toHaveBeenCalledWith(expect.objectContaining({
+    silo: 'test', serverId, podUid: run.podUid, runGeneration: 1,
+    imageDigest, platform: run.platform, workloadSpecDigest: run.workloadSpecDigest,
+    method: 'server/discover',
+  }));
+  expect(readWorkload).toHaveBeenCalledTimes(4);
+});
+
+it.each(['silo', 'serverId', 'ownerUid', 'podUid', 'runGeneration',
+  'imageDigest', 'platform', 'workloadSpecDigest', 'ready'] as const)(
+  'refuses a changed observed %s before the gateway sees a request', async field => {
+    await admitted();
+    const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+    const changed = { ...observed, [field]: field === 'ready' ? false : 'changed' };
+    const readWorkload = vi.fn().mockResolvedValue(changed);
+    const gatewayRequest = vi.fn();
+    await expect(captureHostedThroughGateway(fixture.store,
+      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      { readWorkload, gatewayRequest })).rejects.toThrow('Hosted catalogue capture unavailable');
+    expect(gatewayRequest).not.toHaveBeenCalled();
+    expect((await policy()).catalogue).toBeNull();
+  });
+
+it('keeps capture closed if the gateway reply is lost or the Pod changes during discovery',
+  async () => {
+    await admitted();
+    const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+    const changed = { ...observed, podUid: 'another-pod' };
+    const readWorkload = vi.fn().mockResolvedValueOnce(observed)
+      .mockResolvedValueOnce(observed).mockResolvedValueOnce(changed);
+    const gatewayRequest = vi.fn().mockResolvedValue(JSON.stringify(discovery));
+    await expect(captureHostedThroughGateway(fixture.store,
+      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      { readWorkload, gatewayRequest })).rejects.toThrow('Hosted catalogue capture unavailable');
+    expect(gatewayRequest).toHaveBeenCalledTimes(1);
+    expect((await policy()).published).toBe(false);
+  });
