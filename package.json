@@ -80,6 +80,7 @@
     "visual:p4-27-pr14": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-p4-27-pr14.mjs",
     "visual:p4-27-pr15": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-p4-27-pr15.mjs",
     "visual:screen-p4-27-history": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-screen-p4-27-history.mjs",
+    "visual:screen-p4-17-trail": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-screen-p4-17-trail.mjs",
     "visual:p4-21-screens": "npm run build -w apps/web && node scripts/check-p4-21-screens.mjs",
     "visual:screen-p4-6-list": "npm run build -w apps/web && node scripts/capture-screen-p4-6-list.mjs",
     "visual:screen-p4-19-survey": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p4-19-survey.mjs",

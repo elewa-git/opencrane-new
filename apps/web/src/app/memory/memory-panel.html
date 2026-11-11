@@ -23,6 +23,10 @@
         <p class="audience">{{ scopeAudience(scope) }}</p>
       }
     }
+    @if (showTrail() && selectedScope()) {
+      <oc-maintenance-trail [scopeId]="selectedScope()" [audience]="selectedScopeAudience()"
+        [requesterId]="requesterId()" [accessDenied]="accessDenied()" />
+    }
     <label class="search">Search memory
       <input type="search" [value]="query()" (input)="queryChanged($event)"
         maxlength="256" autocomplete="off" [attr.aria-invalid]="listState() === 'invalid'"

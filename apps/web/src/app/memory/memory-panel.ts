@@ -13,6 +13,7 @@ import { readStoreReply } from './memory-panel-store-reply';
 import { storeBytes, storeKindFromEvent, storePayload, storeSourceLabel, storeValidation } from
   './memory-panel-store-input';
 import { MemoryForget, type ForgetTarget } from './memory-forget';
+import { MaintenanceTrail } from './maintenance-trail';
 import { factIndex, focusAfterForget, withoutForgetTarget, withoutHiddenFactText } from
   './memory-panel-forget';
 type ScreenState = 'applying' | 'loading' | 'ready' | 'unavailable' | 'access';
@@ -22,7 +23,7 @@ type StoreCommand = { generation: number; scopeId: string; commandId: string;
 
 @Component({
   selector: 'oc-memory-panel',
-  imports: [Overlay, MemoryForget, MemoryEdit],
+  imports: [Overlay, MemoryForget, MemoryEdit, MaintenanceTrail],
   templateUrl: './memory-panel.html',
   styleUrl: './memory-panel.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -33,6 +34,7 @@ export class MemoryPanel implements OnInit, OnDestroy {
   readonly assistantId = input<string | undefined>();
   readonly requesterId = input<string | undefined>();
   readonly accessDenied = input(false);
+  readonly showTrail = input(false);
   protected readonly scopes = signal<Scope[]>([]);
   protected readonly facts = signal<PageFact[]>([]);
   protected readonly sources = signal<Source[]>([]);

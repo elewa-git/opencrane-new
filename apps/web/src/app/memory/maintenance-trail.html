@@ -1,0 +1,81 @@
+<section class="maintenance" aria-labelledby="maintenance-title">
+  <div class="maintenance-heading">
+    <h3 id="maintenance-title">Nightly maintenance</h3>
+    @if (status() !== 'access') {
+      <button type="button" (click)="refresh()" [disabled]="loading()">Refresh</button>
+    }
+  </div>
+  @if (status() === 'access') {
+    <p role="alert">Access changed. Private maintenance history is hidden.</p>
+  } @else {
+    @if (loading() && !rows().length) {
+      <p role="status">Loading nightly maintenance…</p>
+    }
+    @if (error()) {
+      <p role="status">Maintenance could not be loaded. Saved rows remain visible.</p>
+      <button type="button" (click)="refresh()">Try again</button>
+    }
+    @if ((!loading() || rows().length) && !error()) {
+      <p class="maintenance-status" role="status">{{ statusLabel(status()) }}</p>
+      @if (nextAt()) {
+        <p class="maintenance-next">Next nightly boundary: {{ timeLabel(nextAt()) }}</p>
+      }
+    }
+    @if (!rows().length && !nextCursor() && !loading() && !error()) {
+      <div class="maintenance-empty">
+        <span aria-hidden="true">◷</span>
+        <div><strong>No maintenance yet</strong><p>{{ audience() }}.</p></div>
+      </div>
+    }
+    @for (row of rows(); track row.runId) {
+      <button class="maintenance-row" type="button" (click)="open(row, $event)">
+        <span class="maintenance-glyph" aria-hidden="true">◷</span>
+        <span><strong>{{ label(row.action) }}</strong><small>{{ timeLabel(row.intendedAt) }}</small></span>
+      </button>
+    }
+    @if (nextCursor()) {
+      <button class="maintenance-more" type="button" (click)="loadMore()"
+        [disabled]="loading()">Load more</button>
+    }
+  }
+</section>
+
+@if (selected()) {
+  <dialog class="maintenance-detail" [ocOverlay]="!!selected()" #overlay="ocOverlay"
+    [returnFocusTo]="opener" [attr.aria-labelledby]="overlay.titleId"
+    (overlayClosed)="close()">
+    <button class="maintenance-back" type="button" (click)="close()">‹ Back</button>
+    <h2 [id]="overlay.titleId" tabindex="-1">Nightly maintenance</h2>
+    @if (detail(); as item) {
+      <p class="maintenance-summary">{{ label(item.action) }} · {{ timeLabel(item.intendedAt) }}</p>
+      <dl class="maintenance-details">
+        <div><dt>Scope</dt><dd>{{ audience() }}</dd></div>
+        <div><dt>Ran as</dt><dd>{{ item.memberId }}</dd></div>
+        <div><dt>Assistant</dt><dd>Unavailable for this saved run</dd></div>
+        <div><dt>Payer</dt><dd>Unavailable for this saved run</dd></div>
+        <div><dt>Intended</dt><dd>{{ timeLabel(item.intendedAt) }}</dd></div>
+        <div><dt>Selected</dt><dd>{{ timeLabel(item.selectedAt) }}</dd></div>
+        <div><dt>Recorded</dt><dd>{{ timeLabel(item.observedAt) }}</dd></div>
+        <div><dt>Started</dt><dd>{{ item.startedAt ? timeLabel(item.startedAt) :
+          'Actual start unavailable' }}</dd></div>
+      </dl>
+      <div class="maintenance-money">
+        <div><span>Settled</span><strong>{{ moneyLabel(item.money.status === 'available' ?
+          item.money.settledCents : undefined) }}</strong></div>
+        <div><span>Held</span><strong>{{ moneyLabel(item.money.status === 'available' ?
+          item.money.heldCents : undefined) }}</strong></div>
+        <div><span>Accepted allowance</span><strong>{{ moneyLabel(item.allowanceCents ?? undefined) }}</strong></div>
+      </div>
+      @if (item.money.status === 'unavailable') {
+        <p>Hold and settlement unavailable. An allowance is not a charge.</p>
+      }
+      <p>Source links unavailable for this saved run.</p>
+    } @else if (detailError()) {
+      <p role="status">This detail could not be loaded. Try checking its status.</p>
+    } @else {
+      <p role="status">Loading this saved run…</p>
+    }
+    <button class="maintenance-check" type="button" (click)="checkStatus()">
+      Check status</button>
+  </dialog>
+}

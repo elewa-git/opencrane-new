@@ -2,6 +2,11 @@
 
 For people, read [README.md](README.md) first.
 
+The Memory tab reads bounded nightly maintenance pages and the selected original run.
+See [the Memory browser contract](src/app/memory/README.robot.md) for access loss,
+cursor and detail limits. `npm run visual:screen-p4-17-trail` captures both widths
+with an intercepted API and reduced motion.
+
 `/account/tools?serverId=<id>` reads the signed-in person's bounded profiles for
 one integration, then the exact safe profile detail before a local revoke.
 Unknown revoke replies retain their original change reference in session storage

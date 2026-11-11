@@ -595,7 +595,8 @@
       <section class="panel-section memory-panel-section" role="tabpanel" aria-label="Memory">
         <oc-memory-panel [groupId]="chat.selectedPayingGroupId() || undefined"
           [assistantId]="chat.selectedAssistantId() || undefined"
-          [requesterId]="chat.memberId() || undefined" [accessDenied]="chat.denied()" />
+          [requesterId]="chat.memberId() || undefined" [accessDenied]="chat.denied()"
+          [showTrail]="true" />
       </section>
     }
   </ng-template>

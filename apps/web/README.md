@@ -77,6 +77,7 @@ For everyone, the website:
   Desktop file drops use the same uploads where Attach is available.
   Colleague chats have no file-drop controls. Phones keep the Attach button.
 - Shows permitted memory facts and supports saving, correcting and forgetting personal facts.
+  The Memory tab also shows dated nightly maintenance and opens the saved run's safe detail.
   While saved membership permissions are still being applied, Memory shows a setup
   message and retries its reads for up to 30 seconds. Refused reads show access loss straight away.
   After a correction, Edit and Forget stay visible but disabled until the saved revision appears.

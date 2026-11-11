@@ -1,37 +1,44 @@
 # Memory
 
-This folder shows the Memory panel inside a chat session. People can search saved facts
-they may read, inspect their sources, remember a fact, correct it and forget one of their
-own facts.
+## What this is
+
+This folder shows the Memory tab inside a chat session. People can read facts they may
+see, inspect their sources and view saved nightly maintenance for that scope. They can
+also remember, correct or forget their own facts.
+
+## Where it fits
+
+The chat workspace opens this tab. The server checks access and returns saved facts
+and maintenance history.
+
+```mermaid
+flowchart LR
+  chat["apps/web/chat<br/>session panel"] -->|opens tab| memory["apps/web/memory<br/>facts and trail"]
+  memory -->|reads and changes| server["apps/server/memory<br/>checked replies"]
+  memory -.-> ui["apps/web/ui<br/>shared dialogs"]
+```
 
 ## What it is responsible for
 
-Memory shows “Setting up your memory...” while saved membership permissions are
-still being applied. It retries reads for up to 30 seconds, then shows the usual
-unavailable message. Refused access and other errors appear straight away.
+- Show permitted memory scopes and facts, with search and more pages.
+- Show saved nightly maintenance in date order and open the chosen original run.
+- Show actual saved times and keep accepted allowance separate from spending.
+- Keep safe rows during a temporary read failure and clear them when access is lost.
+- Let people remember, correct and forget facts when the server allows it.
 
-- Lists permitted memory scopes, meaning whose saved facts are shown, with search and more pages.
-- Reads a fact and its source status separately, and links to a source conversation when permitted.
-- Checks text before saving, offers preferences only in personal memory and confirms a saved fact with the server's result.
-- Waits briefly for a saved correction to appear. Edit and Forget stay visible but disabled
-  during this wait. Temporary read failures offer another refresh without repeating the correction.
-- Reviews a forget request, hides the fact when confirmed and shows whether cleanup is pending, complete or unavailable.
-- Keeps unresolved requests available for status checks, including when another fact is opened.
-- Clears drafts and protected details when access, the selected scope or the person asking changes. Memory content is not kept in browser storage.
+## Processes it handles
 
-## Main files
+A person opens Memory and chooses a scope. The tab reads its facts and nightly trail.
+Opening a trail row reads that same saved run; Check status reads it again without
+starting work. A refused read hides the private rows.
 
-| File | What it does |
-| --- | --- |
-| `memory-panel.*` | Draw the scope list, fact details, search and remember form. |
-| `memory-panel-data.ts`, `memory-panel-reads.ts` | Check replies, read permitted facts and label sources. |
-| `memory-panel-store-input.ts`, `memory-panel-store-reply.ts` | Check save input and interpret saved or uncertain results. |
-| `memory-edit.*` | Save a correction and wait for its revision to become readable. |
-| `memory-forget.*`, `memory-panel-forget.ts` | Review forgetting, follow cleanup and move focus after a fact disappears. |
+## How to run or test it
 
-## How it connects
+`npm test -w apps/web -- --watch=false --include=src/app/memory/maintenance-trail.spec.ts`
+checks the trail. `npm run visual:screen-p4-17-trail` builds the website and captures
+both widths with an intercepted API.
 
-[Chat](../chat/README.md) supplies the current session context.
-[Shared dialogs](../ui/README.md) contain the forms.
-[The server](../../../../server/README.md) decides which facts may be read or changed.
-Undo and group or assistant-notes editing and forgetting have no controls here.
+## Where to read more
+
+[README.robot.md](README.robot.md) describes the reply rules and current limits.
+[apps/server/memory](../../../../server/src/memory/README.md) describes server access.
