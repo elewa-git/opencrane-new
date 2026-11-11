@@ -626,6 +626,13 @@ Replay rebuilds the same rows without opening a writer or running work.
 
 ## Dated MCP catalogue evidence
 
+`mcp.hosted_start_observed` immediately clears the current publication, review and
+expiry. It keeps the previous definition snapshot for comparison. A capture must
+name the saved run; changed definitions keep both snapshots for the next review.
+Replay only folds these facts and makes no transport request.
+Use-time availability also checks the saved image-admission expiry.
+Requesting or recording another image check closes that run until a new start and capture.
+
 The tool register keeps the before and after tool lists and their original expiry dates.
 A published server without a fresh check is shown as unavailable.
 

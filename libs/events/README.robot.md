@@ -102,6 +102,12 @@ is described in the [approval API](../../docs/api/approvals.md).
 
 ## Dated MCP catalogue evidence
 
+`mcp.hosted_start_observed` records the checked image digest, platform, Pod UID,
+workload specification digest, run generation and earliest image-check expiry on
+the server stream. A later
+`mcp.server_discovered` or `mcp.tools_changed` snapshot names that same run.
+No credential or tool argument is saved. A different run needs a new capture.
+
 Tool lists carry check and expiry dates; undated lists cannot authorise calls.
 Unchanged checks preserve the approval rule revision while advancing the write position.
 The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)

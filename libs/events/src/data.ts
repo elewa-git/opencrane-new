@@ -460,6 +460,14 @@ export const mcpCatalogueCheckedDataSchema = z.discriminatedUnion('outcome', [
     reason: reasonCodeSchema }).strict(),
 ]);
 
+export const mcpHostedRunSchema = z.strictObject({
+  imageDigest: digestSchema, platform: z.enum(['linux/amd64', 'linux/arm64']),
+  podUid: id, workloadSpecDigest: digestSchema, runGeneration: z.int().positive(),
+});
+export const mcpHostedStartObservedSchema = mcpHostedRunSchema.extend({
+  serverId: id, admissionExpiresAt: z.iso.datetime(),
+});
+
 export const mcpServerDiscoveredDataSchema = z
   .object({
     serverId: id,
@@ -473,6 +481,7 @@ export const mcpServerDiscoveredDataSchema = z
       revision: digestSchema, reason: reasonCodeSchema }).strict()).max(1000).optional(),
     connectionId: id.optional(),
     accountMode: z.enum(['none', 'personal', 'company']).optional(),
+    hostedRun: mcpHostedRunSchema.optional(),
     tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),
       readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional(), review: toolReviewSchema.optional(), definition: z.string().max(32768).optional() }).strict()).max(1000).optional(),
   })

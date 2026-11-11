@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { registerRemote, discoveryStatus } from '../src/integrations/registration.ts';
 import { installWorker } from '../src/integrations/install-worker.ts';
+import { discoverInventory } from '../src/integrations/inventory.ts';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 
 vi.setConfig({ testTimeout: 20_000 });
@@ -44,6 +45,30 @@ it('discovers paginated tools over pinned HTTPS with complete metadata and immut
   await worker.discover(change.serverId);
   expect(remote.calls).toHaveLength(3);
   expect(await discoveryStatus(nats.store, 'test', change.serverId)).toEqual(status);
+});
+
+it('refuses a final catalogue snapshot above the event size limit', async () => {
+  const discovery = { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private',
+    supportedVersions: ['2026-07-28'], capabilities: { tools: {} },
+    _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } } };
+  const definition = { name: 'read', inputSchema: { type: 'object' } };
+  const actualByteLength = Buffer.byteLength.bind(Buffer);
+  const measured = vi.spyOn(Buffer, 'byteLength');
+  measured.mockImplementation((value, encoding) => {
+    if (typeof value === 'string' && value.includes('"schemaDigest"')) {
+      return 900 * 1024 + 1;
+    }
+    return actualByteLength(value, encoding);
+  });
+  function request(method: 'server/discover' | 'tools/list') {
+    const result = method === 'server/discover' ? discovery : { ...discovery, tools: [definition] };
+    return Promise.resolve(JSON.stringify(result));
+  }
+  try {
+    await expect(discoverInventory(request)).rejects.toThrow('inventory_limit');
+  } finally {
+    measured.mockRestore();
+  }
 });
 
 it('persists valid output schemas and safe per-tool rejections across HTTPS pages and worker restart', async () => {
@@ -96,7 +121,7 @@ it.each([
   ['protected', 'connection_required'], ['forbidden', 'connection_required'], ['legacy', 'protocol_refused'], ['missing_metadata', 'protocol_refused'],
   ['duplicate_tools', 'duplicate_tools'], ['cursor_loop', 'pagination_limit'],
   ['too_many_tools', 'protocol_refused'], ['large_response', 'response_limit'], ['timeout', 'discovery_timeout'],
-  ['duplicate_keys', 'protocol_refused'], ['session', 'protocol_refused'], ['page_limit', 'pagination_limit'], ['inventory_limit', 'inventory_limit'], ['metadata_limit', 'inventory_limit'],
+  ['duplicate_keys', 'protocol_refused'], ['session', 'protocol_refused'], ['page_limit', 'pagination_limit'], ['tool_size_limit', 'inventory_limit'], ['inventory_limit', 'inventory_limit'], ['metadata_limit', 'inventory_limit'],
 ])('safely refuses %s through the quarantine discovery route', async (mode, reason) => {
   const remote = await remoteFixture(); cleanups.push(remote.close);
   if (mode === 'mixed_dns') remote.setAnswers(['93.184.216.34', '169.254.169.254']);
@@ -118,6 +143,9 @@ it.each([
   let pages = 0;
   if (mode === 'page_limit') remote.respond(method => method === 'server/discover' ? full : { ...full, tools: [], nextCursor: `page-${++pages}` });
   if (mode === 'inventory_limit') remote.respond(method => method === 'server/discover' ? full : { ...full, tools: Array.from({ length: 40 }, (_, i) => ({ ...tool, name: `tool${i}`, description: 'x'.repeat(16000) })) });
+  if (mode === 'tool_size_limit') remote.respond(method => method === 'server/discover' ? full : {
+    ...full, tools: [{ ...tool, inputSchema: { type: 'object', description: 'x'.repeat(33_000) } }],
+  });
   if (mode === 'metadata_limit') remote.respond(() => ({ ...full, instructions: 'x'.repeat(65536) }));
   if (mode === 'timeout') remote.respond(() => undefined);
   if (mode === 'duplicate_keys') remote.respond(() => '{"jsonrpc":"2.0","id":"REQUEST_ID","result":{},"result":{}}');

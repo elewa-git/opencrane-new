@@ -570,6 +570,8 @@ before the permissions service catches up.
 An owner or admin can register a hosted image and read the result using the original
 command id. The image stays Checking until a valid image check result is recorded.
 Registration does not fetch an image, discover tools or start a process.
+A checked running image can supply a fresh tool list for review. The saved start
+closes any earlier review before the new list is captured. Hosted calls remain closed.
 
 Internal child-chat commands review a person’s own group message, save their chosen
 people and assistant, and create the named child. A separate command waits for its

@@ -1,6 +1,7 @@
 import { validateMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
   mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, mcpConfigurationObservationSchema,
+  mcpHostedStartObservedSchema,
   type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -25,9 +26,12 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   const data = z.record(z.string(), z.unknown()).parse(parsed);
   checkPolicyIdentity(state, event, data);
   const identity = { silo: event.silo, serverId: String(data['serverId']) };
-  // Advance the write position without changing approvals or catalogue evidence.
-  if (sequenceOnlyEvents.has(event.type)) {
-    return { ...state, sequence };
+  const sequenceChange = applySequenceOnlyEvent(state, event, sequence);
+  if (sequenceChange) {
+    return sequenceChange;
+  }
+  if (event.type === 'mcp.hosted_start_observed') {
+    return applyHostedStart(state, event, sequence);
   }
   if (event.type === 'mcp.configuration_observed') {
     return applyConfigurationObservation(state, event, sequence);
@@ -35,6 +39,7 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   if (event.type === 'mcp.catalogue_checked') {
     return applyCheck(state, data, sequence);
   }
+  requireHostedCaptureSource(event, data);
   // Keep approval bindings stable when only the check date changes.
   let next: ToolPolicy = { ...state, ...identity, sequence, policyRevision: sequence,
     configurationObservation: undefined, publicationRevision: undefined };
@@ -71,6 +76,57 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
     next.published = keepsPublication(state, next.tools);
   }
   return toolPolicySchema.parse(next);
+}
+
+function applySequenceOnlyEvent(state: ToolPolicy, event: EventEnvelope, sequence: number) {
+  if (invalidatesHostedAdmission(state, event)) {
+    // A new image check cannot renew the review of a process that already started.
+    return { ...state, sequence, policyRevision: sequence, published: false,
+      driftHeld: true, admissionExpiresAt: undefined, reviewRevision: undefined,
+      configurationObservation: undefined, publicationRevision: undefined };
+  }
+  // Advance the write position without changing approvals or catalogue evidence.
+  if (sequenceOnlyEvents.has(event.type)) {
+    return { ...state, sequence };
+  }
+  return undefined;
+}
+
+function invalidatesHostedAdmission(state: ToolPolicy, event: EventEnvelope) {
+  return state.hostedRun !== undefined &&
+    (event.type === 'mcp.image_check_requested' || event.type === 'mcp.image_checked');
+}
+
+function requireHostedCaptureSource(event: EventEnvelope, data: Record<string, unknown>) {
+  if (event.type !== 'mcp.server_discovered' && event.type !== 'mcp.tools_changed') {
+    return;
+  }
+  const raw = event.type === 'mcp.tools_changed' ? data['catalogue'] : data;
+  if (!raw) {
+    return;
+  }
+  const catalogue = mcpServerDiscoveredDataSchema.parse(raw);
+  if (catalogue.hostedRun && (event.source !== 'models' ||
+      event.principal?.kind !== 'system' || event.principal.id !== 'models')) {
+    throw new Error('Hosted capture requires the models worker');
+  }
+}
+
+function applyHostedStart(state: ToolPolicy, event: EventEnvelope, sequence: number): ToolPolicy {
+  if (event.source !== 'models' || event.principal?.kind !== 'system' ||
+      event.principal.id !== 'models') {
+    throw new Error('Hosted start requires the models worker');
+  }
+  const start = mcpHostedStartObservedSchema.parse(event.data);
+  const { serverId: _serverId, admissionExpiresAt, ...hostedRun } = start;
+  if (state.hostedRun && hostedRun.runGeneration <= state.hostedRun.runGeneration) {
+    throw new Error('Hosted run generation must advance');
+  }
+  // Close old publication before the new process can answer discovery requests.
+  return { ...state, sequence, policyRevision: sequence, hostedRun, admissionExpiresAt,
+    published: false, driftHeld: true, expiresAt: null, reviewRevision: undefined,
+    publicationRevision: undefined, configurationObservation: undefined,
+    tools: state.tools.map(blockTool) };
 }
 
 function applyPublication(state: ToolPolicy, next: ToolPolicy, data: Record<string, unknown>) {
@@ -162,8 +218,8 @@ function blockedLegacyReview(state: ToolPolicy, review: Review, now: number) {
 
 function requiresStartupReview(data: Record<string, unknown>) {
   const contract = hostedCredentialContractSchema.safeParse(data['credentialContract']);
-  return data['kind'] === 'hosted' && contract.success &&
-    contract.data.credentialMode !== 'per_call';
+  return data['kind'] === 'hosted' && (data['installation'] !== undefined ||
+    (contract.success && contract.data.credentialMode !== 'per_call'));
 }
 
 function isStartupRefusal(data: Record<string, unknown>) {
@@ -172,6 +228,13 @@ function isStartupRefusal(data: Record<string, unknown>) {
 }
 
 function applyCapture(next: ToolPolicy, previous: Catalogue | null, catalogue: Catalogue) {
+  if (catalogue.hostedRun && !next.hostedRun) {
+    throw new Error('Hosted catalogue has no saved start');
+  }
+  if (next.hostedRun &&
+      JSON.stringify(catalogue.hostedRun) !== JSON.stringify(next.hostedRun)) {
+    throw new Error('Captured catalogue does not match the hosted run');
+  }
   if (catalogue.checkedAt !== undefined) {
     validateMcpCatalogue(catalogue);
   }
@@ -191,7 +254,8 @@ function applyCapture(next: ToolPolicy, previous: Catalogue | null, catalogue: C
   return { ...next, catalogue, previousCatalogue: previous,
     checkedAt: catalogue.checkedAt ?? null, expiresAt: catalogue.expiresAt ?? null,
     published: false, connectionId: catalogue.connectionId ?? null,
-    accountMode: catalogue.accountMode ?? null, tools };
+    accountMode: catalogue.accountMode ?? null, tools,
+    startupReviewRequired: catalogue.hostedRun ? false : next.startupReviewRequired };
 }
 
 function discoveredTool(tool: NonNullable<Catalogue['tools']>[number]): ToolPolicy['tools'][number] {
@@ -240,6 +304,10 @@ function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: 
   if (!state.catalogue || data['schemaDigest'] !== state.catalogue.schemaDigest) {
     throw new Error('Catalogue check does not match the saved snapshot');
   }
+  if (state.hostedRun &&
+      JSON.stringify(state.catalogue.hostedRun) !== JSON.stringify(state.hostedRun)) {
+    throw new Error('Catalogue check belongs to an earlier hosted run');
+  }
   validateMcpCatalogue(state.catalogue);
   return { ...state, sequence, checkedAt: String(data['checkedAt']),
     expiresAt: String(data['expiresAt']) };
@@ -287,6 +355,10 @@ function applyChange(next: ToolPolicy, state: ToolPolicy, data: Record<string, u
 export function isToolPolicyAvailable(policy: ToolPolicy, now = Date.now()) {
   if (policy.rejected === true || policy.startupReviewRequired === true ||
       policy.driftHeld === true) {
+    return false;
+  }
+  if (policy.hostedRun && (!policy.admissionExpiresAt ||
+      Date.parse(policy.admissionExpiresAt) <= now)) {
     return false;
   }
   return policy.published && policy.catalogue !== null && policy.checkedAt !== null &&

@@ -4,6 +4,8 @@
 
 Shared message shapes for the OpenCrane browser app and back end. Both sides use the same schemas, written rules for what each message must contain, to check messages before using them. The package also defines the shapes for chat, computers, integrations, budgets, held spend, approvals, model access and receipts for saved changes.
 
+The tool policy can name the exact hosted workload whose tools were captured.
+
 Chat replies can name the files attached to a saved message. Older replies still work.
 Conversation lists can also carry one completed welcome with its own kind and route.
 Command activity replies may carry a masked view for a current chat member.

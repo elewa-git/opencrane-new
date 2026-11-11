@@ -15,6 +15,8 @@ changes. It keeps only safe fields from provider, budget and routine events.
 Provider read tables keep a retired connection's safe details and apply its
 reviewed binding choices in one database transaction. Rebuilding them reads only
 saved events and does not contact a model provider.
+The tool register closes a hosted server's old review when a new workload starts.
+Rebuilding that register never starts a workload or contacts its tools.
 The member's welcome stays complete after later survey and assistant changes.
 Its archive choice and completion position rebuild from personal events. The
 welcome is not a conversation row.
