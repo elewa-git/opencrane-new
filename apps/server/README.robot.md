@@ -6,8 +6,12 @@
 Pod run from a trusted checked discovery transport. It records the start before
 requesting `server/discover` and every `tools/list` page. It rechecks the workload
 and admission before saving the bounded snapshot. A lost append reply is recovered
-only by the original event reference. No production hosted transport calls this
-function yet; hosted dispatch and fresh-install qualification remain NOT RUN.
+only by the original event reference. `integrations/hosted-gateway-transport.ts`
+joins the trusted workload reader and gateway request to this capture command. It
+requires the owner UID and all run fields before each gateway request. A reply is
+limited to 4 MiB and an ignored abort still ends the wait. The runtime gateway
+discovery route and production caller remain unconnected; hosted dispatch and
+fresh-install qualification remain NOT RUN.
 
 ## Command activity reports
 

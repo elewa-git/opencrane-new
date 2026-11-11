@@ -7,7 +7,8 @@ import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { discoverInventory } from '../src/integrations/inventory.ts';
 import { captureHostedStart, type HostedCaptureTransport }
   from '../src/integrations/hosted-capture.ts';
-import { captureHostedThroughGateway } from '../src/integrations/hosted-gateway-transport.ts';
+import { captureHostedThroughGateway, checkedHostedGatewayTransport }
+  from '../src/integrations/hosted-gateway-transport.ts';
 
 const serverId = 'hosted-fixture';
 const imageDigest = 'a'.repeat(64);
@@ -498,4 +499,62 @@ it('keeps capture closed if the gateway reply is lost or the Pod changes during 
       { readWorkload, gatewayRequest })).rejects.toThrow('Hosted catalogue capture unavailable');
     expect(gatewayRequest).toHaveBeenCalledTimes(1);
     expect((await policy()).published).toBe(false);
+  });
+
+it('ends a stalled gateway read when capture is cancelled', async () => {
+  const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+  const readWorkload = vi.fn().mockResolvedValue(observed);
+  const gatewayRequest = vi.fn().mockReturnValue(new Promise<string>(() => {}));
+  const checked = checkedHostedGatewayTransport(
+    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    { readWorkload, gatewayRequest });
+  const controller = new AbortController();
+  const pending = checked.request('server/discover', undefined, controller.signal);
+  await vi.waitFor(() => expect(gatewayRequest).toHaveBeenCalledOnce());
+  controller.abort();
+  await expect(pending).rejects.toThrow('Hosted discovery timed out');
+});
+
+it('refuses an oversized gateway reply before parsing a tool page', async () => {
+  const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+  const readWorkload = vi.fn().mockResolvedValue(observed);
+  const gatewayRequest = vi.fn().mockResolvedValue('x'.repeat(4 * 1024 * 1024 + 1));
+  const checked = checkedHostedGatewayTransport(
+    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    { readWorkload, gatewayRequest });
+  const controller = new AbortController();
+  await expect(checked.request('tools/list', undefined, controller.signal))
+    .rejects.toThrow('Hosted discovery reply unavailable');
+});
+
+it('keeps a partial gateway page closed and recovers the same saved start on retry',
+  async () => {
+    await admitted();
+    const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+    const readWorkload = vi.fn().mockResolvedValue(observed);
+    const firstGateway = vi.fn().mockImplementation((request: { method: string }) => {
+      if (request.method === 'server/discover') return Promise.resolve(JSON.stringify(discovery));
+      return Promise.resolve(JSON.stringify({ resultType: 'complete', ttlMs: 60_000,
+        cacheScope: 'private', tools: [], nextCursor: 'more' }));
+    });
+    await expect(captureHostedThroughGateway(fixture.store,
+      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      { readWorkload, gatewayRequest: firstGateway }))
+      .rejects.toThrow('Hosted catalogue capture unavailable');
+    expect((await policy()).catalogue).toBeNull();
+    const rows = await history(fixture.store, `mcp-${serverId}`, 'test');
+    expect(rows.filter(row => row.event.type === 'mcp.hosted_start_observed')).toHaveLength(1);
+
+    const recoveredGateway = vi.fn().mockImplementation((request: { method: string }) => {
+      const result = request.method === 'server/discover' ? discovery :
+        { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private', tools: [tool] };
+      return Promise.resolve(JSON.stringify(result));
+    });
+    await captureHostedThroughGateway(fixture.store,
+      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      { readWorkload, gatewayRequest: recoveredGateway });
+    const recoveredRows = await history(fixture.store, `mcp-${serverId}`, 'test');
+    expect(recoveredRows.filter(row => row.event.type === 'mcp.hosted_start_observed'))
+      .toHaveLength(1);
+    expect((await policy()).catalogue?.schemaDigest).toBeDefined();
   });
