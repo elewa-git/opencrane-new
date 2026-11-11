@@ -640,6 +640,10 @@ NOT RUN or infrastructure error stops promotion. Only the owner-approved host
 swap and host crash-dump exceptions are accepted. TERM and INT stop the build and
 its loopback registry listener. Open connections are destroyed; shutdown is bounded.
 
+The separate [local qualification builder](../../scripts/private-memory-qualification/README.robot.md#local-qualification-image-build)
+uses this Dockerfile and labels the runtime with the committed revision. It writes
+only to the claimed spare slot, without this script's publication steps.
+
 The image probe sends a turn id with each proxy grant and removal, and checks
 their replies before continuing. Its expiry and cross-thread checks use separate
 turn ids. A previous removal therefore cannot make those refusal checks pass

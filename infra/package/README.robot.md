@@ -192,6 +192,12 @@ the old reviewed image pin does not claim these new bytes.
 `nice -n 10 docker build --build-arg SOURCE_REVISION=<commit> -f infra/package/Dockerfile .`.
 The build runs npm at nice priority too. An absent or wrong label refuses promotion.
 
+The [local qualification builder](../../scripts/private-memory-qualification/README.robot.md#local-qualification-image-build)
+checks this Dockerfile's local image without changing its release pin or installing it.
+Its `--candidate-server` gate keeps reviewed non-npm parts exact, checks declared
+licences for binaries and Go modules, and checks npm
+licence declarations. It does not update or approve the release inventory.
+
 The final stage starts from `scratch` and copies the cleaned runtime filesystem.
 The Node base and application copy remain build stages only. Their deleted files
 are absent from every shipped layer. The final stage restores Node's entry point,

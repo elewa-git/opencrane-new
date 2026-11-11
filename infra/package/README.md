@@ -27,7 +27,7 @@ flowchart LR
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
-  package -->|includes image scan evidence code| scanner["infra/clamav<br/>image scanner"]
+  stack -->|keeps qualification image records in its spare slot| package
 ```
 
 The install runs a fake AI model for testing and creates its first owner through
@@ -190,6 +190,11 @@ layers. The candidate still lacks the whole npm tree, so this check cannot appro
 the image or say whether other copied code is present.
 
 ## How to run or test it
+
+A qualification image build uses this Dockerfile with the computer Dockerfile from
+the same committed source. It checks the local images and saves their identities in
+the claimed spare slot. Its licence checks use files from that committed source.
+The build does not install either image.
 
 The chart tests check that backup cancellation stops a real child process.
 A controlled clock also checks that earlier ownership checks reduce the time

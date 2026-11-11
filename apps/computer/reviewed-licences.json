@@ -1033,6 +1033,101 @@
     "HPND-UC-export-US"
   ],
   "applications": {
+    "npm:@secretlint/core@13.1.0": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/@secretlint/core/LICENSE": "sha256:e52f20f13c0107521b01a47e7b7adbee09ff72289299fbb500375cdd8311cc83",
+        "/app/node_modules/@secretlint/core/package.json": "sha256:9166aa4487f8d64be71298a4d0224b22bb0bdb4b5b9af65e36dcdae7b9e3c646"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/@secretlint/core/LICENSE",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
+    "npm:@secretlint/profiler@13.1.0": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/@secretlint/profiler/LICENSE": "sha256:e52f20f13c0107521b01a47e7b7adbee09ff72289299fbb500375cdd8311cc83",
+        "/app/node_modules/@secretlint/profiler/package.json": "sha256:dd6a2e06ec7c57ad4cfdec917ada66afb25acc355f7e1a22429034b07c2c1d7c"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/@secretlint/profiler/LICENSE",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
+    "npm:@secretlint/secretlint-rule-preset-recommend@13.1.0": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/@secretlint/secretlint-rule-preset-recommend/LICENSE": "sha256:e52f20f13c0107521b01a47e7b7adbee09ff72289299fbb500375cdd8311cc83",
+        "/app/node_modules/@secretlint/secretlint-rule-preset-recommend/package.json": "sha256:25196dc5a12e5ba7ca1f8697167a10e11eec7abc55a7ca7d0260aeb9f36ec21a"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/@secretlint/secretlint-rule-preset-recommend/LICENSE",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
+    "npm:@secretlint/types@13.1.0": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/@secretlint/types/LICENSE": "sha256:e52f20f13c0107521b01a47e7b7adbee09ff72289299fbb500375cdd8311cc83",
+        "/app/node_modules/@secretlint/types/package.json": "sha256:eef90700ba35756466f3c8e7c5b24ab046827687d745008f3b91bd6c72ca4d66"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/@secretlint/types/LICENSE",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
+    "npm:boundary@2.0.0": {
+      "detected": ["BSD-2-Clause"], "files": {
+        "/app/node_modules/boundary/LICENSE.BSD": "sha256:0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
+        "/app/node_modules/boundary/LICENSE.LIBCXX": "sha256:02f1756aae5637e3ef51bb9437d98fb826a50bf3dd1602b2c4595bdc1ea7bcd1",
+        "/app/node_modules/boundary/package.json": "sha256:c876f3739a70caf4d47b1bfd465c55b016f4ff2c03ddbe0b3def6de01413930d"
+      },
+      "primary": { "spdx": ["BSD-2-Clause"],
+        "source": "/app/node_modules/boundary/LICENSE.BSD",
+        "reason": "Installed metadata declares BSD-2-Clause; LICENSE.BSD has its conditions and disclaimer." },
+      "bundled": [{ "component": "libc++ notice",
+        "spdx": ["NCSA", "MIT"],
+        "source": "/app/node_modules/boundary/LICENSE.LIBCXX",
+        "reason": "The installed notice contains the full NCSA and MIT terms for libc++ code." }]
+    },
+    "npm:debug@4.4.3": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/debug/LICENSE": "sha256:3a61c6c96caf5c1d9b623fb9b04c822b783dfcb78aa7e49c76a3f643e6ed7f95",
+        "/app/node_modules/debug/package.json": "sha256:ea8e33d63fe5f3a4c36609b6c3df8e2ef1f8b8ba2fc3a2e1e53cb27291f384af"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/debug/LICENSE",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
+    "npm:ms@2.1.3": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/ms/license.md": "sha256:1662fae9b5314d11cf51284e2dcd1f006a354f7343f08712a730fcff9a359801",
+        "/app/node_modules/ms/package.json": "sha256:1a6b4d9739790c0b94ab96c8cc0507e281c164c311ff4fbf5e57fb8d26290b40"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/ms/license.md",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
+    "npm:structured-source@4.0.0": {
+      "detected": ["BSD-2-Clause"], "files": {
+        "/app/node_modules/structured-source/LICENSE.BSD": "sha256:0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
+        "/app/node_modules/structured-source/package.json": "sha256:a0804983032660a83313bc6c170946d9d4a86f4e3da6467fec308cfe8e12e2e4"
+      },
+      "primary": { "spdx": ["BSD-2-Clause"],
+        "source": "/app/node_modules/structured-source/LICENSE.BSD",
+        "reason": "Installed metadata declares BSD-2-Clause; LICENSE.BSD has its conditions and disclaimer." }
+    },
+    "npm:zod@4.6.6": {
+      "detected": ["MIT"], "files": {
+        "/app/node_modules/zod/LICENSE": "sha256:3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+        "/app/node_modules/zod/locales/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/mini/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/package.json": "sha256:cff7e142055a9dd9bc2947a71ca3fb5e3aacdfda966d7728993ff3656245b94a",
+        "/app/node_modules/zod/v3/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/v4/classic/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/v4/core/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/v4/locales/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/v4/mini/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/v4/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f",
+        "/app/node_modules/zod/v4-mini/package.json": "sha256:3e3125b5a537a24c3632c1c5c09640ce7bcb3935901b127ad8ae3c37a27f133f"
+      },
+      "primary": { "spdx": ["MIT"],
+        "source": "/app/node_modules/zod/LICENSE",
+        "reason": "Installed package metadata declares the licence; the saved notice has its full terms." }
+    },
     "python:cobble@0.1.4": {
       "detected": [],
       "files": {

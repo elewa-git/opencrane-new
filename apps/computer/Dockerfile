@@ -41,6 +41,8 @@ RUN timeout -v -k 10s 25m apt-get -o Acquire::Check-Valid-Until=false update -qq
     find /spike -maxdepth 1 -type f -delete
 COPY --from=launcher-build /tool-user /usr/local/bin/tool-user
 FROM ${COMPUTER_APT_BASE} AS runtime
+ARG SOURCE_REVISION
+LABEL org.opencontainers.image.revision="$SOURCE_REVISION"
 COPY --from=project scripts/private-memory-qualification/service-protection.ts \
   /scripts/private-memory-qualification/service-protection.ts
 COPY --from=project scripts/private-memory-qualification/runner-protection.ts \

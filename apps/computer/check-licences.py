@@ -153,6 +153,9 @@ def check(sbom, osi, evidence, reviewed):
             errors.extend('Unreviewed application notice: ' + path for path in texts
                           if path not in application['files'])
             classified = {application['primary']['source']} | set(application['primary'].get('sources', []))
+            # Keep exact hashes for package metadata, which can sit in nested package folders.
+            classified.update(path for path in texts if path.endswith('/package.json')
+                              and path in application['files'])
             classified.update(path for notice in application.get('bundled', [])
                               for path in [notice['source'], *notice.get('sources', [])])
             errors.extend('Unclassified application notice: ' + path for path in texts
