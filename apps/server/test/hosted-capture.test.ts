@@ -33,8 +33,9 @@ function transport(currentRun: Awaited<ReturnType<HostedCaptureTransport['observ
   return { observe, request };
 }
 
-async function save(type: string, data: unknown, sequence: number) {
-  const event = envelope('test', `mcp-${serverId}`, type, data);
+async function save(type: string, data: unknown, sequence: number,
+  targetServerId = serverId, silo = 'test') {
+  const event = envelope(silo, `mcp-${targetServerId}`, type, data);
   if (type === 'mcp.server_registered') event.principal = { kind: 'human', id: 'admin' };
   if (type === 'mcp.image_checked') {
     event.source = 'models';
@@ -42,21 +43,27 @@ async function save(type: string, data: unknown, sequence: number) {
   }
   const result = await fixture.store.append({ event, expectedSequence: sequence });
   expect(result.status).toBe('appended');
+  if (result.status === 'appended') {
+    return result.sequence;
+  }
+  throw new Error('Fixture event was not saved');
 }
 
-async function admitted(expiryOffsetMs = 60_000, extra: Record<string, unknown> = {}) {
-  const registration = { serverId, kind: 'hosted', locator, registeredBy: 'admin',
+async function admitted(expiryOffsetMs = 60_000, extra: Record<string, unknown> = {},
+  targetServerId = serverId, silo = 'test') {
+  const registration = { serverId: targetServerId, kind: 'hosted', locator, registeredBy: 'admin',
     installation: { attemptId: 1, platform: 'linux/amd64',
       upstream: { host: 'api.example.com', port: 443 } }, ...extra };
-  await save('mcp.server_registered', registration, 0);
+  const registrationSequence = await save('mcp.server_registered', registration, 0,
+    targetServerId, silo);
   const checkedAt = new Date(Date.now() - 1000).toISOString();
   const expiresAt = new Date(Date.now() + expiryOffsetMs).toISOString();
   const receipt = { verdict: 'pass', checkedAt, expiresAt, engineVersion: 'fixture',
     reportDigest: 'c'.repeat(64) };
   const database = { ...receipt, databaseDigest: 'd'.repeat(64), databaseUpdatedAt: checkedAt };
-  const checked = { serverId, attemptId: 1, imageDigest, platform: 'linux/amd64',
+  const checked = { serverId: targetServerId, attemptId: 1, imageDigest, platform: 'linux/amd64',
     checks: { signature: receipt, licence: receipt, vulnerability: database, malware: database } };
-  await save('mcp.image_checked', checked, 1);
+  await save('mcp.image_checked', checked, registrationSequence, targetServerId, silo);
 }
 
 async function policy() {
@@ -203,6 +210,43 @@ it('recovers a lost catalogue reply by reading the original saved snapshot', asy
   const restarted = transport();
   await captureHostedStart(fixture.store, 'test', serverId, run, restarted);
   expect(restarted.request).not.toHaveBeenCalled();
+});
+
+it('keeps concurrent generation-one captures separate across servers and retries', async () => {
+  const otherServerId = 'other-hosted-fixture';
+  const otherRun = run;
+  await admitted();
+  await admitted(60_000, {}, otherServerId);
+
+  const firstTransport = transport();
+  const secondTransport = transport(otherRun);
+  const firstCapture = captureHostedStart(fixture.store, 'test', serverId, run, firstTransport);
+  const secondCapture = captureHostedStart(fixture.store, 'test', otherServerId,
+    otherRun, secondTransport);
+  const results = await Promise.all([firstCapture, secondCapture]);
+  expect(results[0]?.schemaDigest).toBeDefined();
+  expect(results[1]?.schemaDigest).toBeDefined();
+
+  const firstRows = await history(fixture.store, `mcp-${serverId}`, 'test');
+  const secondRows = await history(fixture.store, `mcp-${otherServerId}`, 'test');
+  const firstStart = firstRows.find(row => row.event.type === 'mcp.hosted_start_observed');
+  const secondStart = secondRows.find(row => row.event.type === 'mcp.hosted_start_observed');
+  const firstCatalogue = firstRows.find(row => row.event.type === 'mcp.server_discovered');
+  const secondCatalogue = secondRows.find(row => row.event.type === 'mcp.server_discovered');
+  expect(firstStart?.event.id).toBeDefined();
+  expect(secondStart?.event.id).not.toBe(firstStart?.event.id);
+  expect(firstCatalogue?.event.id).toBeDefined();
+  expect(secondCatalogue?.event.id).not.toBe(firstCatalogue?.event.id);
+
+  const firstRetry = transport();
+  const secondRetry = transport(otherRun);
+  const firstRetryCapture = captureHostedStart(fixture.store, 'test', serverId, run, firstRetry);
+  const secondRetryCapture = captureHostedStart(fixture.store, 'test', otherServerId,
+    otherRun, secondRetry);
+  const retryResults = await Promise.all([firstRetryCapture, secondRetryCapture]);
+  expect(retryResults).toEqual(results);
+  expect(firstRetry.request).not.toHaveBeenCalled();
+  expect(secondRetry.request).not.toHaveBeenCalled();
 });
 
 it('ends the review after a new Pod even when its definitions are unchanged', async () => {
