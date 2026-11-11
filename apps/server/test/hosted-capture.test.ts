@@ -515,6 +515,21 @@ it('ends a stalled gateway read when capture is cancelled', async () => {
   await expect(pending).rejects.toThrow('Hosted discovery timed out');
 });
 
+it('does not send to the gateway after cancellation during the workload read', async () => {
+  const controller = new AbortController();
+  const readWorkload = vi.fn().mockImplementation(() => {
+    controller.abort();
+    return Promise.resolve({ ...run, silo: 'test', serverId,
+      ownerUid: 'owned-workload', ready: true });
+  });
+  const gatewayRequest = vi.fn();
+  const checked = checkedHostedGatewayTransport(
+    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    { readWorkload, gatewayRequest });
+  await expect(checked.request('server/discover', undefined, controller.signal)).rejects.toThrow();
+  expect(gatewayRequest).not.toHaveBeenCalled();
+});
+
 it('refuses an oversized gateway reply before parsing a tool page', async () => {
   const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
   const readWorkload = vi.fn().mockResolvedValue(observed);

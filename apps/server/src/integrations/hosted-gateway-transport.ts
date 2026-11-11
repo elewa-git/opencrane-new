@@ -87,12 +87,14 @@ function beforeAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 export function checkedHostedGatewayTransport(expected: HostedStartBinding,
   access: HostedGatewayAccess): HostedCaptureTransport {
   async function observe(signal: AbortSignal) {
+    signal.throwIfAborted();
     const observed = await beforeAbort(access.readWorkload(signal), signal);
     return requireWorkload(observed, expected);
   }
 
   async function request(method: Method, cursor: string | undefined, signal: AbortSignal) {
     await observe(signal);
+    signal.throwIfAborted();
     const gatewayRequest: GatewayDiscoveryRequest = {
       silo: expected.silo,
       serverId: expected.serverId,
