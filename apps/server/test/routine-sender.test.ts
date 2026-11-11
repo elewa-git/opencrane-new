@@ -24,9 +24,10 @@ import { routineBridge } from '../src/routine-bridge.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
-import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
+import { createStore, foldRoutineHistory, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { natsFixture, event } from '@opencrane/event-store/testing';
-import { foldRoutine, routineActivationSchema, type EventEnvelope } from '@opencrane/events';
+import { foldRoutine, routineActivationSchema, type EventEnvelope,
+  type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -1157,12 +1158,14 @@ async function startRunning() {
   return preparedComputer.wake();
 }
 
-async function savedCompanySuccess(responseBeforeDecision = false) {
+async function savedCompanySuccess(responseBeforeDecision = false,
+  failure?: 'unknown_response' | 'missing_settlement' | 'unmatched_permit') {
   const root = actor.state.roots[0]!;
   const routineRows = await history(nats.store, 'routine-orders', 'test');
-  let state;
+  let state: RoutineState | undefined;
   for (const row of routineRows) state = foldRoutine(state, row.event);
-  const run = state!.activeRun!;
+  const run = state?.activeRun;
+  if (!run) throw new Error('Fixture run missing');
   const requestId = '00000000-0000-4000-8000-000000000106';
   const permitId = 'company-permit';
   const call = { conversationId, turnId, callId: 'company-call',
@@ -1184,15 +1187,17 @@ async function savedCompanySuccess(responseBeforeDecision = false) {
     destinationDigest: '0'.repeat(64) };
   const decision = record('company-decision', `decision-${requestId}`, 'decision.recorded', {
     ...call, requestId, requesterId: root.requesterId, assistantId: root.assistantId,
-    permitId, route: 'mcp', outcome: 'allow', reason: 'approval_used',
+    permitId: failure === 'unmatched_permit' ? 'other-permit' : permitId,
+    route: 'mcp', outcome: 'allow', reason: 'approval_used',
     contextDigest: '1'.repeat(64), release });
   decision.source = 'models';
   decision.principal = { kind: 'system', id: 'models' };
   decision.correlation = { approval: release.approvalId };
   const response = record('company-response', `decision-${requestId}`,
     'tool.dispatch_recorded', { ...call, requestId, logicalRequestId: '2'.repeat(64),
-      startedAt: new Date().toISOString(), durationMs: 3, outcome: 'responded',
-      evidence: 'response_received' });
+      startedAt: new Date().toISOString(), durationMs: 3,
+      outcome: failure === 'unknown_response' ? 'outcome_unknown' : 'responded',
+      evidence: failure === 'unknown_response' ? 'transport_uncertain' : 'response_received' });
   response.source = 'models';
   response.principal = { kind: 'system', id: 'models' };
   const companyEvents = responseBeforeDecision ? [response, decision] : [decision, response];
@@ -1216,7 +1221,7 @@ async function savedCompanySuccess(responseBeforeDecision = false) {
     resolvedBy: 'alice', evidence: [{ kind: 'provider_receipt', reference: 'receipt',
       digest: '0'.repeat(64), amountCents: 260 }] });
   settlement.principal = { kind: 'human', id: 'alice' };
-  await actor.settle(settlement);
+  if (failure !== 'missing_settlement') await actor.settle(settlement);
   return { requestId, resultReference, reservationId, root };
 }
 
@@ -1259,14 +1264,29 @@ async function checkedCompanyResultToFinish() {
   expect(finished).toHaveLength(1);
   expect(finished[0]!.event.data).toMatchObject({ outcome: 'succeeded',
     resultReference: proof.resultReference, settledCents: 260, heldCents: 0 });
-  let replayed;
-  for (const row of rows) replayed = foldRoutine(replayed, row.event);
-  expect(replayed!.activeRun).toBeNull();
+  const decisionPosition = await nats.store.head(`decision-${proof.requestId}`);
+  const conversationPosition = await nats.store.head(`conversation-${conversationId}`);
+  const completedRuns = new Map<string, NonNullable<RoutineState['activeRun']>>();
+  let replayed: RoutineState | undefined;
+  for (const row of rows) {
+    replayed = foldRoutineHistory(replayed, row.event, completedRuns);
+  }
+  expect(replayed?.activeRun).toBeNull();
+  expect(replayed?.lastRun).toMatchObject({ outcome: 'succeeded',
+    resultReference: proof.resultReference, settledCents: 260 });
+  expect(await nats.store.head(`decision-${proof.requestId}`)).toBe(decisionPosition);
+  expect(await nats.store.head(`conversation-${conversationId}`)).toBe(conversationPosition);
   expect(preparedComputer.sends).toBe(1);
   expect(preparedComputer.starts).toBe(1);
   expect(actor.state.reservations).toHaveLength(1);
+  const budgetRows = await history(nats.store, 'budget-test', 'test');
+  expect(budgetRows.filter(row => row.event.type === 'budget.settled')).toHaveLength(1);
+  const conversationRows = await history(nats.store, `conversation-${conversationId}`, 'test');
+  expect(conversationRows.filter(row => row.event.type === 'agent.tool_call_finished'))
+    .toHaveLength(1);
+  await apply([joinedMember('bob')]);
   const auth = memberAuthorisation(binding, nats.store);
-  expect((await auth.conversation('admin', conversationId, 'read')).allowed).toBe(false);
+  expect((await auth.conversation('bob', conversationId, 'read')).allowed).toBe(false);
 }
 it('links one checked send to a private result and finished run only after native closure',
   checkedCompanyResultToFinish, 25_000);
@@ -1285,6 +1305,49 @@ async function responseBeforeCompanyDecision() {
 }
 it('refuses a response saved before its company Allow decision',
   responseBeforeCompanyDecision, 25_000);
+
+async function incompleteCompanyResult(failure: 'unknown_response' | 'missing_settlement' |
+  'unmatched_permit') {
+  await startRunning();
+  const proof = await savedCompanySuccess(false, failure);
+  const terminalEvidence = await completedNativeTurn();
+  const request = { routineId: 'orders', occurrenceId: 'occurrence', terminalEvidence,
+    successEvidence: { requestId: proof.requestId,
+      resultReference: proof.resultReference, reservationId: proof.reservationId } };
+  await expect(finishRoutine(nats.store, 'test', request, { enabled: true }))
+    .rejects.toThrow('Routine finish refused');
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_finished')).toBe(false);
+  expect(actor.state.reservations).toHaveLength(1);
+}
+it.each(['unknown_response', 'missing_settlement', 'unmatched_permit'] as const)(
+  'holds a checked run when its company proof has %s', incompleteCompanyResult, 25_000);
+
+async function ceilingChangeAtFinalRelease(scope: 'paying_group' | 'assistant') {
+  const fixtureTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixtureTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function saveLimitBeforeRelease(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      const scopeId = scope === 'paying_group' ? 'sales' : 'sales-assistant';
+      await actor.configure({ scope, scopeId, ceilingCents: 0, setBy: 'admin' });
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(saveLimitBeforeRelease);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(changed).toBe(true);
+  expect(preparedComputer.sends).toBe(0);
+  expect(preparedComputer.starts).toBe(0);
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_send_release_authorised')).toBe(false);
+}
+it.each(['paying_group', 'assistant'] as const)(
+  'refuses a %s ceiling change at the final release before native start',
+  ceilingChangeAtFinalRelease, 25_000);
 function interruptedOnce() {
   expect(preparedComputer.interruptedThreads).toEqual([selection.threadId]);
 }

@@ -6966,7 +6966,8 @@ The command reads exact decision and private conversation histories before the
 two-second write check. A models Allow decision with reason `approval_used` binds
 the frozen owner, company account, profile, root, turn and payer. Its approval
 correlation must match the credential release. A received upstream response and
-completed private tool record must name that call. The company tool permit has no
+completed private tool record must name that call. The response must be saved after
+the Allow decision in the same decision stream. The company tool permit has no
 spending hold. One rooted model reservation must match the frozen turn and payer,
 and its own permit must settle. The finish saves only a result reference, zero held
 cents and full settled cents. A correction to that reservation's settlement during
@@ -6975,6 +6976,11 @@ Uncertain work or money keeps the slot occupied.
 
 There is no production success caller or company sender. The public run list stays
 metadata-only. Replay never calls this command.
+`test/routine-sender.test.ts` joins the saved due, final release, scripted native
+start, company records, rooted settlement and native closure before calling finish.
+It checks repeated finish calls, private access for another member, missing proof
+and payer or assistant ceiling changes at the final release. The test switch remains
+off in production.
 
 ## Personal memory preparation membership (P4-15 PR 4i; Part of #97)
 

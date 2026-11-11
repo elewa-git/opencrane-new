@@ -1,0 +1,1 @@
+A checked routine run records one private result reference and its settled model cost only after the company response and native turn closure are confirmed. A response saved before its company Allow decision cannot finish the run. Automatic execution remains off.
