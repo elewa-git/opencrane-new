@@ -3801,9 +3801,15 @@ async function pagedMaintenanceHistory() {
   }
   await runner.run(projection);
   const maintenanceSql: string[] = [];
+  const maintenanceQueries: string[] = [];
+  const missingDeadlines: string[] = [];
   const originalQuery = memory.db.query.bind(memory.db);
   async function recordMaintenanceSql<Row extends Record<string, unknown>>(
     sql: string, values?: unknown[], options?: { deadline: number }) {
+    maintenanceQueries.push(sql);
+    if (options?.deadline === undefined) {
+      missingDeadlines.push(sql);
+    }
     if (sql.includes('memory_maintenance_runs')) {
       maintenanceSql.push(sql);
     }
@@ -3814,6 +3820,14 @@ async function pagedMaintenanceHistory() {
   querySpy.mockRestore();
   expect(first.statusCode).toBe(200);
   expect(maintenanceSql).not.toHaveLength(0);
+  expect(missingDeadlines).toEqual([]);
+  for (const table of ['projection_checkpoints', 'memory_maintenance_bindings',
+    'memory_maintenance_runs', 'memory_maintenance_reviews', 'memory_facts',
+    'memory_changes']) {
+    expect(maintenanceQueries.some(function queryUsesTable(sql) {
+      return sql.includes(table);
+    })).toBe(true);
+  }
   for (const sql of maintenanceSql) {
     expect(sql).toMatch(/LIMIT (1|21)/u);
   }
@@ -3849,6 +3863,7 @@ async function pagedMaintenanceHistory() {
   const detail = await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager');
   detailSpy.mockRestore();
   expect(detail.statusCode).toBe(200);
+  expect(missingDeadlines).toEqual([]);
   expect(maintenanceSql).toHaveLength(1);
   expect(maintenanceSql[0]).toMatch(/position\s*=\s*\$5/u);
   expect(maintenanceSql[0]).toMatch(/LIMIT 1/u);
@@ -3860,6 +3875,25 @@ async function pagedMaintenanceHistory() {
   expect(detail.body).not.toContain('nightId');
   expect(detail.body).not.toContain('inputRefs');
   expect(detail.body).not.toContain('private-source');
+  const query = memory.db.query.bind(memory.db);
+  async function blockedDetail<Row extends Record<string, unknown>>(
+    sql: string, values?: unknown[], options?: { deadline: number }) {
+    if (sql.includes('AND position=$5')) {
+      return query<Row>('SELECT pg_sleep(5)', [], options);
+    }
+    return query<Row>(sql, values, options);
+  }
+  const blockedDetailQuery = vi.spyOn(memory.db, 'query').mockImplementation(blockedDetail);
+  try {
+    const startedAt = performance.now();
+    const unavailable = await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager');
+    const elapsedMs = performance.now() - startedAt;
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain('pg_sleep');
+    expect(elapsedMs).toBeLessThan(3_000);
+  } finally {
+    blockedDetailQuery.mockRestore();
+  }
   expect((await get(`${maintenancePath}/forged`, 'pager')).statusCode).toBe(404);
   expect((await get(`${maintenancePath}/${'f'.repeat(64)}`, 'pager')).statusCode).toBe(404);
   expect((await get(`${path('pager-sales', 'group')}/maintenance/${page.history[0]!.runId}`,
@@ -3900,7 +3934,27 @@ async function maintenanceReadAccess() {
   await runner.run(projection);
   const groupPath = `${path('pager-sales', 'group')}/maintenance`;
   const notesPath = `${path('pager-shared', 'assistant_notes')}/maintenance`;
-  expect((await get(groupPath, 'pager')).statusCode).toBe(200);
+  const scopeQueries: string[] = [];
+  const unboundedScopeQueries: string[] = [];
+  const originalScopeQuery = memory.db.query.bind(memory.db);
+  async function recordScopeQuery<Row extends Record<string, unknown>>(
+    sql: string, values?: unknown[], options?: { deadline: number }) {
+    scopeQueries.push(sql);
+    if (options?.deadline === undefined) {
+      unboundedScopeQueries.push(sql);
+    }
+    return originalScopeQuery<Row>(sql, values, options);
+  }
+  const scopeQuerySpy = vi.spyOn(memory.db, 'query').mockImplementation(recordScopeQuery);
+  const groupStatus = await get(groupPath, 'pager');
+  scopeQuerySpy.mockRestore();
+  expect(groupStatus.statusCode).toBe(200);
+  expect(unboundedScopeQueries).toEqual([]);
+  for (const table of ['projection_checkpoints', 'groups', 'computers']) {
+    expect(scopeQueries.some(function queryUsesTable(sql) {
+      return sql.includes(table);
+    })).toBe(true);
+  }
   expect((await get(notesPath, 'pager')).statusCode).toBe(200);
   expect((await get(groupPath, 'admin')).statusCode).toBe(404);
   expect((await get(notesPath, 'admin')).statusCode).toBe(404);
