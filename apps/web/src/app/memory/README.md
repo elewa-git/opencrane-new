@@ -34,9 +34,8 @@ starting work. A refused read hides the private rows.
 
 ## How to run or test it
 
-`npm test -w apps/web -- --watch=false --include=src/app/memory/maintenance-trail.spec.ts`
-checks the trail. `npm run visual:screen-p4-17-trail` builds the website and captures
-both widths with an intercepted API.
+The browser tests check the trail. An intercepted screen capture checks both widths.
+The exact commands are in [README.robot.md](README.robot.md).
 
 ## Where to read more
 

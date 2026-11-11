@@ -7,6 +7,10 @@ bounded `/maintenance` pages and opens `/maintenance/:runId` only from a clicked
 Load more sends the saved cursor once and appends unique rows in page order.
 Check status rereads the selected original id. Neither action sends a command.
 
+Run `npm test -w apps/web -- --watch=false --include=src/app/memory/maintenance-trail.spec.ts`
+for focused browser behaviour. Run `npm run visual:screen-p4-17-trail` to build the
+website and capture six intercepted screens at both widths.
+
 The landed detail reply gives the saved action, intended/selected/recorded times,
 member and accepted allowance for a prepared row. It currently gives no actual
 start, source links or joined held/settled money. The browser labels these values
