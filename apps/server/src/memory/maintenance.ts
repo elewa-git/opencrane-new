@@ -48,16 +48,20 @@ type SavedRun = { event_id: string; data: unknown; saved_at: string | null;
 function positionMask(secret: string): bigint {
   const hash = createHmac('sha256', secret);
   hash.update('memory-run-position');
-  return hash.digest().readBigUInt64BE();
+  const digest = hash.digest();
+  return digest.readBigUInt64BE();
 }
 
 function runReference(secret: string, row: SavedRun): string {
   // Keep older deterministic night ids out of URLs and responses.
   const hiddenPosition = BigInt(row.position) ^ positionMask(secret);
-  const positionPart = hiddenPosition.toString(16).padStart(16, '0');
+  const positionHex = hiddenPosition.toString(16);
+  const positionPart = positionHex.padStart(16, '0');
   const hash = createHmac('sha256', secret);
   hash.update(`memory-run:${row.event_id}`);
-  return `${positionPart}${hash.digest('hex').slice(0, 48)}`;
+  const digest = hash.digest('hex');
+  const referenceDigest = digest.slice(0, 48);
+  return `${positionPart}${referenceDigest}`;
 }
 
 function runPosition(secret: string, runId: string): string {
