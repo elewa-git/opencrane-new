@@ -93,6 +93,7 @@ For owners and admins, it:
   tool change only when the saved catalogue shows a change.
 - Shows organisation change history with filters and one record's paged evidence.
   A temporary read failure keeps loaded records; access loss clears them.
+- Names saved routine stages in change history and opens routine attention at its saved history.
 - Shows a reviewed child publication's permitted parent link in change history.
 
 A shared assistant belongs to a group; members can start private sessions with it.

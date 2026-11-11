@@ -27,6 +27,7 @@ flowchart LR
 - Keeps focus in the open detail and returns it to the selected row when closed.
 - Shows membership, publication and delegation facts that the server permits.
 - Shows memory work as metadata without fact text.
+- Names each saved routine stage without showing instructions or output.
 - Keeps loaded records during a temporary failure and clears them when access ends.
 
 ## Main files

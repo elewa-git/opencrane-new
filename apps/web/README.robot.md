@@ -14,6 +14,10 @@ returned by those routes. A failed read keeps dated loaded rows; access refusal
 clears rows, detail and the organisation menu. The capture command is
 `npm run visual:screen-p4-27-history`. See `src/app/audit/README.robot.md`
 for the filters and reply rules.
+Routine rows use the saved state for their list title. Details name each saved
+routine event without showing routine instructions or output. Overview routine
+attention opens `/org/history?reference=` only for a checked 32-character public
+reference. The intercepted history and overview captures show both widths.
 
 Command activity rows accept optional `preview` only from a member chat reply.
 The transcript and Activity panel show the fixed label first. Expansion shows

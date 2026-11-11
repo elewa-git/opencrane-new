@@ -18,6 +18,9 @@ No fresh-install journey, live company effect or paid call was run.
 
 ## Own checks
 
-PASS: changed tests 39/39 twice; audit projection 17/17; access timing 3/3;
-security rules 482/482. PASS: scoped ESLint, typecheck, event catalogue,
-Knip, changelog lint and Markdown lint. Root suite and live journey: NOT RUN.
+PASS: focused changed web tests 42/42 twice after the fixes; web build;
+intercepted overview and history captures at 1280 and 390 pixels. PASS:
+scoped ESLint, typecheck, event catalogue, Knip, changelog lint, Markdown lint
+and public privacy scan. The earlier audit projection 17/17, access timing
+3/3 and security rules 482/482 remain from the first branch checks. Root suite
+and fresh-install live journey: NOT RUN.

@@ -1,1 +1,1 @@
-Saved routine due, skipped, missed, admission, Stop and send history now appears as safe, bounded occurrence rows in organisation history and overview.
+Saved routine due, skipped, missed, admission, Stop and send history appears as safe, bounded occurrence rows in organisation history and overview. Routine attention opens its saved history, where each stage has a plain label.

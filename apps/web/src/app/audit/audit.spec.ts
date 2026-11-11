@@ -116,6 +116,26 @@ it.each([
   expect(root.textContent).not.toContain('Saved observation');
 });
 
+it('names a routine row from its latest state and a detail from its own event', async () => {
+  const reference = 'c'.repeat(32);
+  const dueRecord = { eventId: 'due-event', type: 'routine.due', position: 1,
+    source: 'authoritative', status: 'recorded', routineState: 'finished' };
+  const detailRecord = { ...dueRecord, routineState: 'due' };
+  const routineRow = { id: reference, decision: 'not_recorded', outcome: 'success',
+    records: [dueRecord] };
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(reply(200, { rows: [routineRow] }))
+    .mockResolvedValueOnce(reply(200, { id: reference, records: [detailRecord] }));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  await vi.waitFor(() => expect(root.querySelector('.row-button strong')?.textContent)
+    .toContain('Routine finished'));
+  root.querySelector<HTMLButtonElement>('.row-button')!.click();
+  await vi.waitFor(() => expect(root.querySelector('.evidence h3')?.textContent)
+    .toBe('Routine became due'));
+});
+
 it('appends cursor pages once, keeps equal-time rows distinct and filters on the server', async () => {
   const first = { ...row, id: 'first', records: [{ ...row.records[0], eventId: 'first',
     recordedAt: '2026-10-04T09:30:00.000Z' }] };

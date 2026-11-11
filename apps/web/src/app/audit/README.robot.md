@@ -11,6 +11,9 @@ pages bounded evidence. A link is drawn only from `taskHref` returned by
 the server. The browser never builds a chat or child link from an event id.
 The server checks publication and delegation chat rights for each read.
 Memory details show only the allowed metadata.
+Routine list titles use the saved `routineState`. Detail headings use the saved
+routine event type, including due, skipped, admission, Stop, uncertain send and
+finish. These labels contain no routine instructions, scopes or model output.
 The screen shows a short change reference only when the server id is a safe
 `chg_` reference. Other internal ids stay out of the list and detail.
 The detail opens as a browser modal. At phone widths it covers the full
@@ -26,6 +29,6 @@ from an older filter, closed detail or lost session cannot put them back.
 Check status sends GET only.
 
 `npm run visual:screen-p4-27-history` builds the website and captures
-populated, empty and detail states at 1280 and 390 pixels with intercepted
+populated, empty, membership detail, routine detail and routine list states at 1280 and 390 pixels with intercepted
 API replies. It uses reduced motion and no development stack. Its receipt
 is in `docs/process/screen-p4-27-history/`.

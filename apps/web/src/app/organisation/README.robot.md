@@ -22,11 +22,14 @@ routines and history each need their own read flag. Overview needs a successful
 Owner/Admin overview read. A 503 keeps links from an earlier successful read.
 Other organisation pages keep their own access checks and content.
 Actions map API evidence paths to browser pages; no API path is a page link.
+Memory and routine history actions accept only a checked 32-character public
+reference and open the matching Change history search.
 Failed refreshes place the Refresh action in the stale notice and move keyboard
 focus there when the earlier Refresh action had focus.
 
 `npm run visual:p4-27-pr14` builds the website and captures twelve intercepted
 states at 1280 and 390 pixels. The images and result are in
 `docs/process/p4-27-pr14/`. They do not qualify a live installation.
-`npm run visual:p4-27-pr15` captures the full and restricted navigation at both
+`npm run visual:p4-27-pr15` captures the full and restricted navigation and a
+visible routine row at both
 widths in `docs/process/p4-27-pr15/`. It uses an intercepted overview read.
