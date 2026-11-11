@@ -22,6 +22,25 @@ The final record appears only after its complete contents have been written.
 
 ## Deployment collection
 
+`computer-runtime.ts` checks one k3d computer against its namespace, Pod, node,
+enclosing Docker node, CRI sandbox and full container identity. It requires the
+`gvisor` RuntimeClass, `runsc` handler and running containerd runtime. It binds
+both Kubernetes and CRI start times because they have different precision.
+The bridge, supervisor, live inventory and native client can use this checked
+identity without changing the protected target file or starting a stack. Every
+computer exec uses the full CRI id through the measured node and a 120-second
+guest command limit. Callers recheck the identity after awaited work. A non-zero
+remote exit is a refusal; `crictl` returns status 1 for a remote status 23.
+
+Run the owned integration fixture with
+`K3D_COMPUTER_FIXTURE=1 nice -n 10 npx vitest run --config scripts/private-memory-qualification/vitest.config.mjs scripts/private-memory-qualification/computer-runtime.integration.test.ts`.
+The fixture uses the checked-in ordinary computer image only to test transport.
+It is not a protected deployment or a qualified native turn. On the current
+gVisor guest, `/proc/self/cgroup` and `/proc/self/limits` are readable, but
+`memory.max`, `memory.swap.max` and `memory.swap.current` are absent under
+`/sys/fs/cgroup`. Protection must refuse until host and guest measurements
+are bound to the same sandbox. No startup path selects this runtime yet.
+
 P4-15 PR 5e adds `await collectDeployment()` and `run.mjs`. The older file
 parser below remains refusal-only. The disabled initial-load command reads only the
 collector-owned result described below. No admission switch is added.

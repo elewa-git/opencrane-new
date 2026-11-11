@@ -1,19 +1,30 @@
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { protectionMessages } from './protection-failure.ts';
+import { computerExecCommand, readK3dComputer, type K3dComputer } from './computer-runtime.ts';
 
 export async function runInContainer(
-  containerId: string, args: string[], input = '',
+  container: string | K3dComputer, args: string[], input = '',
 ): Promise<unknown> {
   const sourceUrl = new URL('./supervisor.mjs', import.meta.url);
   const source = await readFile(sourceUrl, 'utf8');
   const failures = Object.keys(protectionMessages);
   const settings = ['--workdir', '/app', '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=',
     '--env', 'LD_PRELOAD='];
-  const command = ['--host', 'unix:///var/run/docker.sock', 'exec', ...settings, '-i',
-    containerId, '/usr/local/bin/node', '--input-type=module', '--eval', source,
+  const supervisor = ['/usr/local/bin/node', '--input-type=module', '--eval', source,
     JSON.stringify(failures), JSON.stringify(args)];
+  let command: string[];
+  if (typeof container === 'string') {
+    command = ['--host', 'unix:///var/run/docker.sock', 'exec', ...settings, '-i',
+      container, ...supervisor];
+  } else {
+    readK3dComputer(container);
+    command = computerExecCommand(container, supervisor);
+  }
   const output = await attachedProcess(command, input);
+  if (typeof container !== 'string') {
+    readK3dComputer(container);
+  }
   return JSON.parse(output) as unknown;
 }
 

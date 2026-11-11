@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runInContainer } from './container-process.ts';
+import type { K3dComputer } from './computer-runtime.ts';
 import { proveComputerProxy } from './proxy-proof.ts';
 
 vi.mock('node:child_process', { spy: true });
@@ -21,7 +22,8 @@ function inspect(): string {
     HostConfig: { ReadonlyRootfs: true }, Mounts: [] }]);
 }
 
-function answer(_container: string, _args: string[], input = ''): Promise<unknown> {
+function answer(_container: string | K3dComputer, _args: string[], input = ''):
+  Promise<unknown> {
   const parsed: unknown = JSON.parse(input);
   const request = z.record(z.string(), z.string()).parse(parsed);
   if (reply['result'] === 'process_dumpable') {

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { runInContainer } from './container-process.ts';
+import { readK3dComputer, type K3dComputer } from './computer-runtime.ts';
 import { isProtectionFailure, type ProtectionFailure } from './protection-failure.ts';
 
 type ContainerIdentity = {
@@ -8,6 +9,8 @@ type ContainerIdentity = {
   Image: string;
   State: { Running: boolean; StartedAt: string; Pid: number };
 };
+type ComputerIdentity = ContainerIdentity | K3dComputer;
+type ComputerTarget = string | K3dComputer;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -25,7 +28,14 @@ function isDataMount(destination: string): boolean {
     destination === '/var' || destination.startsWith('/var/');
 }
 
-function containerIdentity(containerId: string): ContainerIdentity {
+function containerIdentity(container: string): ContainerIdentity;
+function containerIdentity(container: K3dComputer): K3dComputer;
+function containerIdentity(container: ComputerTarget): ComputerIdentity;
+function containerIdentity(container: ComputerTarget): ComputerIdentity {
+  if (typeof container !== 'string') {
+    return readK3dComputer(container);
+  }
+  const containerId = container;
   const args = ['--host', 'unix:///var/run/docker.sock', 'inspect', '--type', 'container',
     containerId];
   const options = { timeout: 10_000, maxBuffer: 65_536, stdio: 'pipe' as const };
@@ -57,14 +67,23 @@ function containerIdentity(containerId: string): ContainerIdentity {
     State: { Running: true, StartedAt: state['StartedAt'], Pid: state['Pid'] } };
 }
 
-function sameContainer(first: ContainerIdentity, second: ContainerIdentity): boolean {
+function sameContainer(first: ComputerIdentity, second: ComputerIdentity): boolean {
+  if ('kind' in first || 'kind' in second) {
+    return 'kind' in first && 'kind' in second &&
+      JSON.stringify(first) === JSON.stringify(second);
+  }
   return first.Id === second.Id && first.Image === second.Image &&
     first.State.StartedAt === second.State.StartedAt &&
     first.State.Pid === second.State.Pid;
 }
 
-function computerInstallation(identity: ContainerIdentity): string {
-  const fields = [identity.Id, identity.Image, identity.State.StartedAt, identity.State.Pid];
+function computerInstallation(identity: ComputerIdentity): string {
+  let fields: unknown;
+  if ('kind' in identity) {
+    fields = identity;
+  } else {
+    fields = [identity.Id, identity.Image, identity.State.StartedAt, identity.State.Pid];
+  }
   const hash = createHash('sha256');
   hash.update(JSON.stringify(fields));
   return `sha256:${hash.digest('hex')}`;
@@ -96,16 +115,18 @@ function validResponse(value: unknown, request: Record<string, string>):
 }
 
 // Use only the collector's measured container, never a caller's process observation.
-export async function proveComputerService(containerId: string,
+export async function proveComputerService(container: ComputerTarget,
   installationId: string, role: 'bridge' | 'proxy', expectedImage?: string):
   Promise<true | ProtectionFailure> {
+  const containerId = typeof container === 'string' ? container : container.containerId;
   if (!/^[a-f0-9]{64}$/u.test(containerId) ||
       !/^sha256:[a-f0-9]{64}$/u.test(installationId)) {
     return 'private_process_unreadable';
   }
   try {
-    const before = containerIdentity(containerId);
-    if (role === 'proxy' && before.Image !== expectedImage) {
+    const before = containerIdentity(container);
+    const image = 'kind' in before ? before.image : before.Image;
+    if (role === 'proxy' && image !== expectedImage) {
       return 'private_process_identity_changed';
     }
     const request = { containerId, installationId,
@@ -113,8 +134,8 @@ export async function proveComputerService(containerId: string,
     const inspector = `/scripts/private-memory-qualification/${role}-check.ts`;
     const args = ['/usr/bin/prlimit', '--core=0:0', '--', '/usr/local/bin/node',
       '--experimental-strip-types', inspector];
-    const response = await runInContainer(containerId, args, JSON.stringify(request));
-    const after = containerIdentity(containerId);
+    const response = await runInContainer(container, args, JSON.stringify(request));
+    const after = containerIdentity(container);
     if (!sameContainer(before, after)) {
       return 'private_process_identity_changed';
     }
@@ -127,7 +148,7 @@ export async function proveComputerService(containerId: string,
   }
 }
 
-export async function proveComputerBridge(containerId: string,
+export async function proveComputerBridge(containerId: ComputerTarget,
   installationId: string): Promise<true | ProtectionFailure> {
   return proveComputerService(containerId, installationId, 'bridge');
 }

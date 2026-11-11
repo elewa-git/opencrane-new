@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runInContainer } from './container-process.ts';
+import type { K3dComputer } from './computer-runtime.ts';
 import { proveComputerBridge } from './bridge-proof.ts';
 
 vi.mock('node:child_process', { spy: true });
@@ -26,7 +27,8 @@ function inspectContainer(_file: string, args?: readonly string[]): string {
   return JSON.stringify(observation);
 }
 
-function answerProbe(_container: string, _args: string[], input = ''): Promise<unknown> {
+function answerProbe(_container: string | K3dComputer, _args: string[], input = ''):
+  Promise<unknown> {
   const parsed: unknown = JSON.parse(input);
   const request = z.record(z.string(), z.unknown()).parse(parsed);
   if (reply['result'] === 'swap_not_disabled') {

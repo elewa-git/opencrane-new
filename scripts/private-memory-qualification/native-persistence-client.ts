@@ -1,7 +1,8 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { ToolClass } from './persistence-attempt.ts';
 import { z } from 'zod';
+import { readK3dComputer, spawnComputerExec, type K3dComputer } from './computer-runtime.ts';
 
 const replySchema = z.strictObject({ ready: z.boolean().optional(),
   held: z.boolean().optional(),
@@ -9,13 +10,20 @@ const replySchema = z.strictObject({ ready: z.boolean().optional(),
   result: z.enum(['blocked', 'wrote', 'unknown', 'not_run']).optional() });
 type Reply = z.infer<typeof replySchema>;
 
-export async function startNativePersistenceClient(containerId: string, challengeId: string) {
-  const command = ['--host', 'unix:///var/run/docker.sock', 'exec', '--workdir', '/app',
-    '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=', '-i',
-    containerId, '/usr/bin/prlimit', '--core=0:0', '--', '/usr/local/bin/node',
+export async function startNativePersistenceClient(container: string | K3dComputer,
+  challengeId: string) {
+  const nativeCommand = ['/usr/bin/prlimit', '--core=0:0', '--', '/usr/local/bin/node',
     '--experimental-strip-types',
     '/scripts/private-memory-qualification/native-persistence.ts', challengeId];
-  const child = spawn('/usr/bin/docker', command, { stdio: 'pipe' });
+  let child: ChildProcessWithoutNullStreams;
+  if (typeof container === 'string') {
+    const command = ['--host', 'unix:///var/run/docker.sock', 'exec', '--workdir', '/app',
+      '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=', '-i',
+      container, ...nativeCommand];
+    child = spawn('/usr/bin/docker', command, { stdio: 'pipe' });
+  } else {
+    child = spawnComputerExec(container, nativeCommand);
+  }
   const lines = createInterface({ input: child.stdout });
   let ended = false;
   let exitStatus: number | null | undefined;
@@ -88,14 +96,24 @@ export async function startNativePersistenceClient(containerId: string, challeng
     }
     return new Promise<Reply>(wait);
   }
-  function send(value: object): Promise<Reply> {
+  async function send(value: object): Promise<Reply> {
+    if (typeof container !== 'string') {
+      readK3dComputer(container);
+    }
     const pending = nextReply();
     child.stdin.write(`${JSON.stringify(value)}\n`);
-    return pending;
+    const reply = await pending;
+    if (typeof container !== 'string') {
+      readK3dComputer(container);
+    }
+    return reply;
   }
   let ready: Reply;
   try {
     ready = await nextReply();
+    if (typeof container !== 'string') {
+      readK3dComputer(container);
+    }
   } catch {
     await stopChild().catch(function ignoreCleanup(): void {
       // Keep the fixed launch refusal after bounded cleanup.
@@ -155,6 +173,9 @@ export async function startNativePersistenceClient(containerId: string, challeng
     }
     if (exitStatus !== 0) {
       throw new Error('native_persistence_stop_failed');
+    }
+    if (typeof container !== 'string') {
+      readK3dComputer(container);
     }
   }
   let stopping: Promise<void> | undefined;

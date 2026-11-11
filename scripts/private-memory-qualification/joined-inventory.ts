@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { execFileSync } from 'node:child_process';
+import { computerExecCommand, readK3dComputer, type K3dComputer } from './computer-runtime.ts';
 
 export const inventoryGroups = [
   'serverDelivery', 'bridge', 'supervisor', 'proxy', 'nativeWrapper',
@@ -227,7 +228,7 @@ export function joinInventory(contextInput: unknown, firstInput: unknown,
   return { ok: true };
 }
 
-type InventoryContainers = { serverId: string; computerId: string };
+type InventoryContainers = { serverId: string; computerId: string | K3dComputer };
 const containerId = z.string().regex(/^[a-f0-9]{64}$/u);
 const liveProcessSchema = z.strictObject({
   ...processIdentity,
@@ -238,7 +239,8 @@ const liveGroups: readonly LiveServiceGroup[] = [
   'canaryHelper',
 ];
 
-function liveProcess(container: string, group: LiveServiceGroup, context: InventoryContext,
+function liveProcess(container: string | K3dComputer, group: LiveServiceGroup,
+  context: InventoryContext,
   helperId?: string):
   z.output<typeof liveProcessSchema> {
   let probePath: string;
@@ -247,18 +249,27 @@ function liveProcess(container: string, group: LiveServiceGroup, context: Invent
   } else {
     probePath = '/scripts/private-memory-qualification/live-inventory-probe.ts';
   }
-  const command = ['--host', 'unix:///var/run/docker.sock', 'exec', '--workdir', '/app',
-    '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=',
-    container, '/usr/local/bin/node', '--experimental-strip-types',
-    probePath, group];
+  const probe = ['/usr/local/bin/node', '--experimental-strip-types', probePath, group];
   if (group === 'nativeWrapper' || group === 'nativeChild') {
-    command.push(context.challengeId);
+    probe.push(context.challengeId);
   }
   if (group === 'canaryHelper' && helperId) {
-    command.push(helperId, context.serverImageDigest, context.serverInstallationId);
+    probe.push(helperId, context.serverImageDigest, context.serverInstallationId);
+  }
+  let command: string[];
+  if (typeof container === 'string') {
+    command = ['--host', 'unix:///var/run/docker.sock', 'exec', '--workdir', '/app',
+      '--env', 'NODE_OPTIONS=', '--env', 'NODE_PATH=', '--env', 'LD_PRELOAD=',
+      container, ...probe];
+  } else {
+    readK3dComputer(container);
+    command = computerExecCommand(container, probe);
   }
   const options = { timeout: 10_000, maxBuffer: 4096, stdio: 'pipe' as const };
   const output = execFileSync('/usr/bin/docker', command, options);
+  if (typeof container !== 'string') {
+    readK3dComputer(container);
+  }
   const parsed: unknown = JSON.parse(output.toString('utf8'));
   return liveProcessSchema.parse(parsed);
 }
@@ -268,7 +279,9 @@ function liveProcess(container: string, group: LiveServiceGroup, context: Invent
 export function readCurrentInventory(context: InventoryContext,
   containers: InventoryContainers): InventorySnapshot {
   containerId.parse(containers.serverId);
-  containerId.parse(containers.computerId);
+  if (typeof containers.computerId === 'string') {
+    containerId.parse(containers.computerId);
+  }
   const records: ProtectionRecord[] = [];
   const launches: TrustedLaunch[] = [];
   for (const group of liveGroups) {

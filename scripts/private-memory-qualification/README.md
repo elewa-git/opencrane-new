@@ -15,7 +15,8 @@ journey helper checks its own live protection before and after work.
 ## Where it fits
 
 The collector belongs to the developer tools layer, beside the local qualification checker.
-It uses Docker on the deployment host and reads the deployment's event store.
+It uses Docker and a checked k3d computer on the deployment host.
+It also reads the deployment's event store.
 
 ```mermaid
 flowchart LR
@@ -24,7 +25,7 @@ flowchart LR
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
   config["/etc/opencrane<br/>permitted deployment"] -->|sets target| collector
-  collector -->|measures launches, joins process records and starts checks| docker["Docker<br/>running image and host"]
+  collector -->|checks the exact running container| docker["Docker or k3d<br/>running computer"]
   docker -->|checks services, Codex and canary helper| deployment["deployment<br/>services and journey runner"]
   collector -->|checks held native calls and storage outside the container| computer["computer container<br/>root and native launch records"]
 ```
@@ -39,6 +40,7 @@ flowchart LR
 - Refuse swap, crash dumps, unsafe process limits and unreadable host settings.
 - Refuse container journeys while any process that can hold private text lacks protection proof.
 - Check the live bridge and root supervisor inside the owner-selected computer container.
+- Check a k3d computer's Pod, node, image and runtime before and after a bounded command.
 - Check the proxy in that same process while a private tool reply is still open.
 - Require the expected computer image before accepting this separate proxy check.
 - Check the supervisor again after each awaited journey; refuse a replacement or lost check.
@@ -140,6 +142,9 @@ remains a failure. One clean attempt is still only partial evidence; the full
 fresh-install journeys remain separate.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
+An owned gVisor test Pod checks computer identity, command input, timeout and exit status.
+The guest does not expose the cgroup memory files needed for private memory protection.
+The protected deployment is still unavailable.
 
 The container alternative reads the runner's own Linux control group, which limits
 memory and swap. An image-owned helper disables dumps in that Node process and

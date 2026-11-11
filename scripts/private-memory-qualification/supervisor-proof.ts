@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { computerInstallation, containerIdentity, sameContainer } from './bridge-proof.ts';
 import { runInContainer } from './container-process.ts';
+import type { K3dComputer } from './computer-runtime.ts';
 import { isProtectionFailure, type ProtectionFailure } from './protection-failure.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,21 +33,22 @@ function validResponse(value: unknown, request: Record<string, string>):
 }
 
 // Resolve the root process only through the owner's installed computer container.
-export async function proveComputerSupervisor(containerId: string,
+export async function proveComputerSupervisor(container: string | K3dComputer,
   installationId: string): Promise<true | ProtectionFailure> {
+  const containerId = typeof container === 'string' ? container : container.containerId;
   if (!/^[a-f0-9]{64}$/u.test(containerId) ||
       !/^sha256:[a-f0-9]{64}$/u.test(installationId)) {
     return 'private_process_unreadable';
   }
   try {
-    const before = containerIdentity(containerId);
+    const before = containerIdentity(container);
     const request = { containerId, installationId,
       computerInstallationId: computerInstallation(before), challengeId: randomUUID() };
     const args = ['/usr/bin/prlimit', '--core=0:0', '--', '/usr/local/bin/node',
       '--experimental-strip-types',
       '/scripts/private-memory-qualification/supervisor-check.ts'];
-    const response = await runInContainer(containerId, args, JSON.stringify(request));
-    const after = containerIdentity(containerId);
+    const response = await runInContainer(container, args, JSON.stringify(request));
+    const after = containerIdentity(container);
     if (!sameContainer(before, after)) {
       return 'private_process_identity_changed';
     }

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runInContainer } from './container-process.ts';
+import type { K3dComputer } from './computer-runtime.ts';
 import { proveComputerSupervisor } from './supervisor-proof.ts';
 
 vi.mock('node:child_process', { spy: true });
@@ -19,7 +20,8 @@ function inspect(): string {
     State: { Running: true, StartedAt: '2026-11-08T00:00:00Z', Pid: pid },
     HostConfig: { ReadonlyRootfs: true }, Mounts: [] }]);
 }
-function answer(_container: string, _args: string[], input = ''): Promise<unknown> {
+function answer(_container: string | K3dComputer, _args: string[], input = ''):
+  Promise<unknown> {
   const parsed: unknown = JSON.parse(input);
   const request = z.record(z.string(), z.unknown()).parse(parsed);
   if (response['result'] === 'swap_not_disabled') {
