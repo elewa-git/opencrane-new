@@ -3800,8 +3800,23 @@ async function pagedMaintenanceHistory() {
     });
   }
   await runner.run(projection);
+  const maintenanceSql: string[] = [];
+  const originalQuery = memory.db.query.bind(memory.db);
+  async function recordMaintenanceSql<Row extends Record<string, unknown>>(
+    sql: string, values?: unknown[], options?: { deadline: number }) {
+    if (sql.includes('memory_maintenance_runs')) {
+      maintenanceSql.push(sql);
+    }
+    return originalQuery<Row>(sql, values, options);
+  }
+  const querySpy = vi.spyOn(memory.db, 'query').mockImplementation(recordMaintenanceSql);
   const first = await get(maintenancePath, 'pager');
+  querySpy.mockRestore();
   expect(first.statusCode).toBe(200);
+  expect(maintenanceSql).not.toHaveLength(0);
+  for (const sql of maintenanceSql) {
+    expect(sql).toMatch(/LIMIT 2[01]/u);
+  }
   const page = first.json<{ history: { runId: string; action: string }[];
     nextCursor: string | null }>();
   expect(page.history).toHaveLength(20);
@@ -3813,9 +3828,10 @@ async function pagedMaintenanceHistory() {
   expect(second.statusCode).toBe(200);
   const later = second.json<typeof page>();
   expect(later.history.length).toBeGreaterThan(0);
-  const references = [...page.history, ...later.history].map(function runId(run) {
+  function runReference(run: { runId: string }) {
     return run.runId;
-  });
+  }
+  const references = [...page.history, ...later.history].map(runReference);
   expect(references).toHaveLength(23);
   expect(new Set(references).size).toBe(references.length);
   expect(later.nextCursor).toBeNull();
@@ -3824,8 +3840,14 @@ async function pagedMaintenanceHistory() {
     'pager')).statusCode).toBe(409);
   expect((await get(`${maintenancePath}?cursor=${page.nextCursor}`, 'pager',
     'other-org')).statusCode).toBe(404);
+  maintenanceSql.length = 0;
+  const detailSpy = vi.spyOn(memory.db, 'query').mockImplementation(recordMaintenanceSql);
   const detail = await get(`${maintenancePath}/${page.history[0]!.runId}`, 'pager');
+  detailSpy.mockRestore();
   expect(detail.statusCode).toBe(200);
+  expect(maintenanceSql).toHaveLength(1);
+  expect(maintenanceSql[0]).toMatch(/position\s*=\s*\$5/u);
+  expect(maintenanceSql[0]).toMatch(/LIMIT 1/u);
   expect(detail.json()).toMatchObject({ runId: page.history[0]!.runId,
     action: 'missed', money: { status: 'unavailable' } });
   const times = z.object({ intendedAt: z.iso.datetime(), selectedAt: z.iso.datetime(),
@@ -3875,6 +3897,21 @@ async function maintenanceReadAccess() {
   expect((await get(notesPath, 'pager')).statusCode).toBe(200);
   expect((await get(groupPath, 'admin')).statusCode).toBe(404);
   expect((await get(notesPath, 'admin')).statusCode).toBe(404);
+  const unknownGroup = `${path('missing-group', 'group')}/maintenance`;
+  const unknownNotes = `${path('missing-notes', 'assistant_notes')}/maintenance`;
+  for (const [privatePath, unknownPath] of [
+    [groupPath, unknownGroup], [notesPath, unknownNotes],
+  ]) {
+    const privatePage = await get(`${privatePath}?extra=1`, 'admin');
+    const unknownPage = await get(`${unknownPath}?extra=1`, 'admin');
+    expect(privatePage.statusCode).toBe(404);
+    expect(privatePage.body).toBe(unknownPage.body);
+    const runId = 'a'.repeat(64);
+    const privateDetail = await get(`${privatePath}/${runId}?extra=1`, 'admin');
+    const unknownDetail = await get(`${unknownPath}/${runId}?extra=1`, 'admin');
+    expect(privateDetail.statusCode).toBe(404);
+    expect(privateDetail.body).toBe(unknownDetail.body);
+  }
   await append('conversation-pager-chat', 'conversation.created', {
     conversationId: 'pager-chat', createdBy: 'pager', mode: 'direct',
     participantIds: ['pager', 'owner'],
@@ -3934,6 +3971,24 @@ async function maintenanceReadAccess() {
     expect(unavailable.body).not.toContain('Private database timeout');
   } finally {
     outage.mockRestore();
+  }
+  async function blockedRead<Row extends Record<string, unknown>>(
+    sql: string, values?: unknown[], options?: { deadline: number }) {
+    if (sql.includes('memory_maintenance_runs')) {
+      return query<Row>('SELECT pg_sleep(5)', [], options);
+    }
+    return query<Row>(sql, values, options);
+  }
+  const blocked = vi.spyOn(memory.db, 'query').mockImplementation(blockedRead);
+  try {
+    const startedAt = performance.now();
+    const unavailable = await get(personal, 'pager');
+    const elapsedMs = performance.now() - startedAt;
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.body).not.toContain('pg_sleep');
+    expect(elapsedMs).toBeLessThan(3_000);
+  } finally {
+    blocked.mockRestore();
   }
 }
 
