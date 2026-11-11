@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { EventStore } from '@opencrane/event-store';
 import { mcpHostedRunSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -10,6 +11,8 @@ interface HostedWorkload {
   silo: string;
   serverId: string;
   ownerUid: string;
+  namespace: string;
+  podName: string;
   ready: boolean;
   imageDigest: string;
   platform: string;
@@ -22,22 +25,40 @@ export interface HostedStartBinding {
   silo: string;
   serverId: string;
   ownerUid: string;
+  namespace: string;
+  podName: string;
   run: HostedRun;
 }
 
 interface GatewayDiscoveryRequest extends HostedRun {
   silo: string;
   serverId: string;
+  ownerUid: string;
+  namespace: string;
+  podName: string;
+  requestId: string;
   method: Method;
   cursor?: string;
   signal: AbortSignal;
 }
 
+interface GatewayDiscoveryReply {
+  body: string;
+  requestId: string;
+  responder: {
+    namespace: string;
+    podName: string;
+    podUid: string;
+    ownerUid: string;
+  };
+}
+
 export interface HostedGatewayAccess {
   // Read the Pod and its owning workload from Kubernetes, including the controller UID.
   readWorkload(signal: AbortSignal): Promise<HostedWorkload>;
-  // Send only discovery methods through the checked gateway route for this Pod.
-  gatewayRequest(request: GatewayDiscoveryRequest): Promise<string>;
+  // Send only discovery methods through the checked route. Get the request ID from the
+  // responder's reply and the responder identity from the gateway connection, not the request.
+  gatewayRequest(request: GatewayDiscoveryRequest): Promise<GatewayDiscoveryReply>;
 }
 
 function requireWorkload(observed: HostedWorkload, expected: HostedStartBinding): HostedRun {
@@ -50,6 +71,8 @@ function requireWorkload(observed: HostedWorkload, expected: HostedStartBinding)
   });
   if (!observed.ready || observed.silo !== expected.silo ||
       observed.serverId !== expected.serverId || observed.ownerUid !== expected.ownerUid ||
+      !observed.namespace || observed.namespace !== expected.namespace ||
+      !observed.podName || observed.podName !== expected.podName ||
       run.imageDigest !== expected.run.imageDigest || run.platform !== expected.run.platform ||
       run.podUid !== expected.run.podUid ||
       run.workloadSpecDigest !== expected.run.workloadSpecDigest ||
@@ -57,6 +80,20 @@ function requireWorkload(observed: HostedWorkload, expected: HostedStartBinding)
     throw new Error('Hosted workload changed');
   }
   return run;
+}
+
+function requireReply(reply: GatewayDiscoveryReply, request: GatewayDiscoveryRequest,
+  observed: HostedWorkload): string {
+  if (!reply || typeof reply !== 'object' ||
+      reply.requestId !== request.requestId || !reply.responder ||
+      reply.responder.namespace !== observed.namespace ||
+      reply.responder.podName !== observed.podName ||
+      reply.responder.podUid !== observed.podUid ||
+      reply.responder.ownerUid !== observed.ownerUid ||
+      typeof reply.body !== 'string' || Buffer.byteLength(reply.body) > 4 * 1024 * 1024) {
+    throw new Error('Hosted discovery reply unavailable');
+  }
+  return reply.body;
 }
 
 function beforeAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -86,19 +123,33 @@ function beforeAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 
 export function checkedHostedGatewayTransport(expected: HostedStartBinding,
   access: HostedGatewayAccess): HostedCaptureTransport {
-  async function observe(signal: AbortSignal) {
+  async function readCurrentWorkload(signal: AbortSignal): Promise<{
+    run: HostedRun;
+    observed: HostedWorkload;
+  }> {
     signal.throwIfAborted();
     const observed = await beforeAbort(access.readWorkload(signal), signal);
-    return requireWorkload(observed, expected);
+    const run = requireWorkload(observed, expected);
+    return { run, observed };
+  }
+
+  async function observe(signal: AbortSignal) {
+    const current = await readCurrentWorkload(signal);
+    return current.run;
   }
 
   async function request(method: Method, cursor: string | undefined, signal: AbortSignal) {
-    await observe(signal);
+    const current = await readCurrentWorkload(signal);
+    const observed = current.observed;
     signal.throwIfAborted();
     const gatewayRequest: GatewayDiscoveryRequest = {
       silo: expected.silo,
       serverId: expected.serverId,
+      ownerUid: observed.ownerUid,
+      namespace: observed.namespace,
+      podName: observed.podName,
       ...expected.run,
+      requestId: randomUUID(),
       method,
       signal,
     };
@@ -106,10 +157,7 @@ export function checkedHostedGatewayTransport(expected: HostedStartBinding,
       gatewayRequest.cursor = cursor;
     }
     const reply = await beforeAbort(access.gatewayRequest(gatewayRequest), signal);
-    if (typeof reply !== 'string' || Buffer.byteLength(reply) > 4 * 1024 * 1024) {
-      throw new Error('Hosted discovery reply unavailable');
-    }
-    return reply;
+    return requireReply(reply, gatewayRequest, observed);
   }
 
   return { observe, request };

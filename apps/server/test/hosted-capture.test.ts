@@ -15,6 +15,11 @@ const imageDigest = 'a'.repeat(64);
 const locator = `ghcr.io/example/fixture@sha256:${imageDigest}`;
 const run = { imageDigest, platform: 'linux/amd64' as const, podUid: 'pod-one',
   workloadSpecDigest: 'b'.repeat(64), runGeneration: 1 };
+const hostedBinding = { silo: 'test', serverId, ownerUid: 'owned-workload',
+  namespace: 'hosted-test', podName: 'hosted-pod', run };
+const hostedObserved = { ...run, silo: hostedBinding.silo, serverId,
+  ownerUid: hostedBinding.ownerUid, namespace: hostedBinding.namespace,
+  podName: hostedBinding.podName, ready: true };
 const discovery = { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private',
   supportedVersions: ['2026-07-28'], capabilities: { tools: {} },
   _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } } };
@@ -24,6 +29,18 @@ const tool = { name: 'echo', description: 'Echo text', inputSchema: { type: 'obj
     'io.opencrane/review': { action: 'Echo', consequence: 'Return the input.',
       targetArgument: 'value', fields: ['value'], stepUp: false } } };
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
+
+interface GatewayFixtureRequest {
+  method: string;
+  requestId: string;
+}
+
+function gatewayReply(request: GatewayFixtureRequest, body: string,
+  responder = hostedObserved) {
+  return { body, requestId: request.requestId,
+    responder: { namespace: responder.namespace, podName: responder.podName,
+      podUid: responder.podUid, ownerUid: responder.ownerUid } };
+}
 
 function transport(currentRun: Awaited<ReturnType<HostedCaptureTransport['observe']>> = run,
   definition: unknown = tool) {
@@ -451,33 +468,37 @@ it('refuses a catalogue claiming a run that has not been saved; replay starts no
 
 it('captures only through a gateway request bound to the observed owned Pod', async () => {
   await admitted();
-  const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+  const observed = hostedObserved;
   const readWorkload = vi.fn().mockResolvedValue(observed);
-  const gatewayRequest = vi.fn().mockImplementation((request: { method: string }) => {
+  function respond(request: GatewayFixtureRequest) {
     const result = request.method === 'server/discover' ? discovery :
       { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private', tools: [tool] };
-    return Promise.resolve(JSON.stringify(result));
-  });
+    return Promise.resolve(gatewayReply(request, JSON.stringify(result)));
+  }
+  const gatewayRequest = vi.fn(respond);
   const result = await captureHostedThroughGateway(fixture.store,
-    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    hostedBinding,
     { readWorkload, gatewayRequest });
   expect(result.schemaDigest).toBe((await policy()).catalogue?.schemaDigest);
   expect(gatewayRequest).toHaveBeenCalledTimes(2);
   expect(gatewayRequest).toHaveBeenCalledWith(expect.objectContaining({
-    silo: 'test', serverId, podUid: run.podUid, runGeneration: 1,
+    silo: 'test', serverId, ownerUid: hostedObserved.ownerUid,
+    namespace: hostedObserved.namespace, podName: hostedObserved.podName,
+    podUid: run.podUid, runGeneration: 1,
     imageDigest, platform: run.platform, workloadSpecDigest: run.workloadSpecDigest,
     method: 'server/discover',
   }));
   expect(readWorkload).toHaveBeenCalledTimes(4);
 });
 
-it.each(['silo', 'serverId', 'ownerUid', 'podUid', 'runGeneration',
+it.each(['silo', 'serverId', 'ownerUid', 'namespace', 'podName', 'podUid', 'runGeneration',
   'imageDigest', 'platform', 'workloadSpecDigest', 'ready'] as const)(
   'refuses a changed observed %s before the gateway sees a request', async field => {
     await admitted();
-    const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+    const observed = hostedObserved;
     const alternatives = {
       silo: 'other-silo', serverId: 'other-server', ownerUid: 'other-owner',
+      namespace: 'other-namespace', podName: 'other-name',
       podUid: 'other-pod', runGeneration: 2, imageDigest: 'e'.repeat(64),
       platform: 'linux/arm64', workloadSpecDigest: 'f'.repeat(64), ready: false,
     };
@@ -485,19 +506,20 @@ it.each(['silo', 'serverId', 'ownerUid', 'podUid', 'runGeneration',
     const readWorkload = vi.fn().mockResolvedValue(changed);
     const gatewayRequest = vi.fn();
     await expect(captureHostedThroughGateway(fixture.store,
-      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      hostedBinding,
       { readWorkload, gatewayRequest })).rejects.toThrow('Hosted catalogue capture unavailable');
     expect(gatewayRequest).not.toHaveBeenCalled();
     expect((await policy()).catalogue).toBeNull();
   });
 
-it.each(['silo', 'serverId', 'ownerUid', 'podUid', 'runGeneration',
+it.each(['silo', 'serverId', 'ownerUid', 'namespace', 'podName', 'podUid', 'runGeneration',
   'imageDigest', 'platform', 'workloadSpecDigest', 'ready'] as const)(
   'checks a changed observed %s after the first observation', async field => {
     const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload',
       namespace: 'hosted-test', podName: 'hosted-pod', ready: true };
     const alternatives = {
       silo: 'other-silo', serverId: 'other-server', ownerUid: 'other-owner',
+      namespace: 'other-namespace', podName: 'other-name',
       podUid: 'other-pod', runGeneration: 2, imageDigest: 'e'.repeat(64),
       platform: 'linux/arm64', workloadSpecDigest: 'f'.repeat(64), ready: false,
     };
@@ -519,17 +541,16 @@ it('refuses a cached reply from an earlier discovery request', async () => {
   const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload',
     namespace: 'hosted-test', podName: 'hosted-pod', ready: true };
   const readWorkload = vi.fn().mockResolvedValue(observed);
-  let firstReply: unknown;
-  const gatewayRequest = vi.fn().mockImplementation((request: { requestId: string }) => {
-    const currentReply = { body: JSON.stringify(discovery), requestId: request.requestId,
-      responder: { namespace: observed.namespace, podName: observed.podName,
-        podUid: observed.podUid, ownerUid: observed.ownerUid } };
+  let firstReply: ReturnType<typeof gatewayReply> | undefined;
+  function respond(request: GatewayFixtureRequest) {
+    const currentReply = gatewayReply(request, JSON.stringify(discovery), observed);
     if (firstReply === undefined) {
       firstReply = currentReply;
       return Promise.resolve(currentReply);
     }
     return Promise.resolve(firstReply);
-  });
+  }
+  const gatewayRequest = vi.fn(respond);
   const checked = checkedHostedGatewayTransport(
     { silo: 'test', serverId, ownerUid: 'owned-workload',
       namespace: 'hosted-test', podName: 'hosted-pod', run },
@@ -541,6 +562,34 @@ it('refuses a cached reply from an earlier discovery request', async () => {
     .rejects.toThrow('Hosted discovery reply unavailable');
   expect(gatewayRequest).toHaveBeenCalledTimes(2);
 });
+
+it.each(['silo', 'podUid'] as const)(
+  'refuses a cached reply from another %s', async field => {
+    const changedValue = field === 'silo' ? 'other-silo' : 'other-pod';
+    const otherObserved = { ...hostedObserved, [field]: changedValue };
+    const otherRun = { ...run, podUid: otherObserved.podUid };
+    const otherBinding = { ...hostedBinding, silo: otherObserved.silo, run: otherRun };
+    const readOtherWorkload = vi.fn().mockResolvedValue(otherObserved);
+    let cachedReply: ReturnType<typeof gatewayReply> | undefined;
+    function firstGatewayRequest(request: GatewayFixtureRequest) {
+      cachedReply = gatewayReply(request, JSON.stringify(discovery), otherObserved);
+      return Promise.resolve(cachedReply);
+    }
+    const firstGateway = vi.fn(firstGatewayRequest);
+    const first = checkedHostedGatewayTransport(otherBinding,
+      { readWorkload: readOtherWorkload, gatewayRequest: firstGateway });
+    const controller = new AbortController();
+    await expect(first.request('server/discover', undefined, controller.signal))
+      .resolves.toBe(JSON.stringify(discovery));
+
+    const readCurrentWorkload = vi.fn().mockResolvedValue(hostedObserved);
+    const replayGateway = vi.fn().mockResolvedValue(cachedReply);
+    const current = checkedHostedGatewayTransport(hostedBinding,
+      { readWorkload: readCurrentWorkload, gatewayRequest: replayGateway });
+    await expect(current.request('server/discover', undefined, controller.signal))
+      .rejects.toThrow('Hosted discovery reply unavailable');
+    expect(replayGateway).toHaveBeenCalledOnce();
+  });
 
 it('refuses a discovery reply without a request and responder binding', async () => {
   const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload',
@@ -562,13 +611,14 @@ it.each(['namespace', 'podName', 'podUid', 'ownerUid'] as const)(
     const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload',
       namespace: 'hosted-test', podName: 'hosted-pod', ready: true };
     const readWorkload = vi.fn().mockResolvedValue(observed);
-    const gatewayRequest = vi.fn().mockImplementation((request: { requestId: string }) => {
+    function respondFromAnotherPod(request: { requestId: string }) {
       const responder = { namespace: observed.namespace, podName: observed.podName,
         podUid: observed.podUid, ownerUid: observed.ownerUid,
         [field]: 'another-workload' };
       return Promise.resolve({ body: JSON.stringify(discovery), requestId: request.requestId,
         responder });
-    });
+    }
+    const gatewayRequest = vi.fn(respondFromAnotherPod);
     const checked = checkedHostedGatewayTransport(
       { silo: 'test', serverId, ownerUid: 'owned-workload',
         namespace: 'hosted-test', podName: 'hosted-pod', run },
@@ -582,24 +632,27 @@ it.each(['namespace', 'podName', 'podUid', 'ownerUid'] as const)(
 it('keeps capture closed if the gateway reply is lost or the Pod changes during discovery',
   async () => {
     await admitted();
-    const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+    const observed = hostedObserved;
     const changed = { ...observed, podUid: 'another-pod' };
     const readWorkload = vi.fn().mockResolvedValueOnce(observed)
       .mockResolvedValueOnce(observed).mockResolvedValueOnce(changed);
-    const gatewayRequest = vi.fn().mockResolvedValue(JSON.stringify(discovery));
+    function respond(request: GatewayFixtureRequest) {
+      return Promise.resolve(gatewayReply(request, JSON.stringify(discovery)));
+    }
+    const gatewayRequest = vi.fn(respond);
     await expect(captureHostedThroughGateway(fixture.store,
-      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      hostedBinding,
       { readWorkload, gatewayRequest })).rejects.toThrow('Hosted catalogue capture unavailable');
     expect(gatewayRequest).toHaveBeenCalledTimes(1);
     expect((await policy()).published).toBe(false);
   });
 
 it('ends a stalled gateway read when capture is cancelled', async () => {
-  const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+  const observed = hostedObserved;
   const readWorkload = vi.fn().mockResolvedValue(observed);
   const gatewayRequest = vi.fn().mockReturnValue(new Promise<string>(() => {}));
   const checked = checkedHostedGatewayTransport(
-    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    hostedBinding,
     { readWorkload, gatewayRequest });
   const controller = new AbortController();
   const pending = checked.request('server/discover', undefined, controller.signal);
@@ -617,18 +670,21 @@ it('does not send to the gateway after cancellation during the workload read', a
   });
   const gatewayRequest = vi.fn();
   const checked = checkedHostedGatewayTransport(
-    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    hostedBinding,
     { readWorkload, gatewayRequest });
   await expect(checked.request('server/discover', undefined, controller.signal)).rejects.toThrow();
   expect(gatewayRequest).not.toHaveBeenCalled();
 });
 
 it('refuses an oversized gateway reply before parsing a tool page', async () => {
-  const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+  const observed = hostedObserved;
   const readWorkload = vi.fn().mockResolvedValue(observed);
-  const gatewayRequest = vi.fn().mockResolvedValue('x'.repeat(4 * 1024 * 1024 + 1));
+  function respondWithOversizedBody(request: GatewayFixtureRequest) {
+    return Promise.resolve(gatewayReply(request, 'x'.repeat(4 * 1024 * 1024 + 1)));
+  }
+  const gatewayRequest = vi.fn(respondWithOversizedBody);
   const checked = checkedHostedGatewayTransport(
-    { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+    hostedBinding,
     { readWorkload, gatewayRequest });
   const controller = new AbortController();
   await expect(checked.request('tools/list', undefined, controller.signal))
@@ -638,28 +694,33 @@ it('refuses an oversized gateway reply before parsing a tool page', async () => 
 it('keeps a partial gateway page closed and recovers the same saved start on retry',
   async () => {
     await admitted();
-    const observed = { ...run, silo: 'test', serverId, ownerUid: 'owned-workload', ready: true };
+    const observed = hostedObserved;
     const readWorkload = vi.fn().mockResolvedValue(observed);
-    const firstGateway = vi.fn().mockImplementation((request: { method: string }) => {
-      if (request.method === 'server/discover') return Promise.resolve(JSON.stringify(discovery));
-      return Promise.resolve(JSON.stringify({ resultType: 'complete', ttlMs: 60_000,
-        cacheScope: 'private', tools: [], nextCursor: 'more' }));
-    });
+    function respondWithPartialPage(request: GatewayFixtureRequest) {
+      if (request.method === 'server/discover') {
+        return Promise.resolve(gatewayReply(request, JSON.stringify(discovery)));
+      }
+      const page = { resultType: 'complete', ttlMs: 60_000,
+        cacheScope: 'private', tools: [], nextCursor: 'more' };
+      return Promise.resolve(gatewayReply(request, JSON.stringify(page)));
+    }
+    const firstGateway = vi.fn(respondWithPartialPage);
     await expect(captureHostedThroughGateway(fixture.store,
-      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      hostedBinding,
       { readWorkload, gatewayRequest: firstGateway }))
       .rejects.toThrow('Hosted catalogue capture unavailable');
     expect((await policy()).catalogue).toBeNull();
     const rows = await history(fixture.store, `mcp-${serverId}`, 'test');
     expect(rows.filter(row => row.event.type === 'mcp.hosted_start_observed')).toHaveLength(1);
 
-    const recoveredGateway = vi.fn().mockImplementation((request: { method: string }) => {
+    function respondWithCompletePage(request: GatewayFixtureRequest) {
       const result = request.method === 'server/discover' ? discovery :
         { resultType: 'complete', ttlMs: 60_000, cacheScope: 'private', tools: [tool] };
-      return Promise.resolve(JSON.stringify(result));
-    });
+      return Promise.resolve(gatewayReply(request, JSON.stringify(result)));
+    }
+    const recoveredGateway = vi.fn(respondWithCompletePage);
     await captureHostedThroughGateway(fixture.store,
-      { silo: 'test', serverId, ownerUid: 'owned-workload', run },
+      hostedBinding,
       { readWorkload, gatewayRequest: recoveredGateway });
     const recoveredRows = await history(fixture.store, `mcp-${serverId}`, 'test');
     expect(recoveredRows.filter(row => row.event.type === 'mcp.hosted_start_observed'))

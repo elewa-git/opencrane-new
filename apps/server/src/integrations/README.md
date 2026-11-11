@@ -45,7 +45,7 @@ the saved choice. Connecting never selects an account, and no company account re
 **Saved personal profiles.** Members can read their own bearer and OAuth profiles, including revoked and disabled ones. Current owners and admins can inspect one member’s personal profile metadata and its admin block revision. The reply says whether it was saved, its revision and generation, and whether an admin block or unavailable server prevents use. It never claims a verified identity or enables calls.
 The admin who disabled a profile can check the original change reference. The reply shows the saved disable and current block and profile status without repeating the change.
 
-**Hosted images and instances.** An admin can register a hosted image and recover the result by its original request id. It stays Checking until a valid image-check result is saved. All four image checks must pass before admission. Registration does not fetch an image, discover tools or start a process; admission grants no tool access. A checked capture can save the tools from one exact running image for review. It checks the owning workload and the exact Pod before each request through the gateway. Every new run closes the old review before it can be captured. A production worker still needs to supply the gateway route and workload reader. Hosted tool calls are unavailable. Existing memory calls keep their own access checks.
+**Hosted images and instances.** An admin can register a hosted image and recover the result by its original request id. It stays Checking until a valid image-check result is saved. All four image checks must pass before admission. Registration does not fetch an image, discover tools or start a process; admission grants no tool access. A checked capture can save the tools from one exact running image for review. It checks the owning workload and the exact Pod before each request through the gateway. It also checks that each reply came from that Pod for the current request. Every new run closes the old review before it can be captured. A production worker still needs to supply the gateway route and workload reader. Hosted tool calls are unavailable. Existing memory calls keep their own access checks.
 
 Members can read their private instance and request its stop. Owners and admins can stop another member's instance and recover only their own stop confirmations. Reads never start an instance or release credentials; missing results stay unknown. Worker reports name one exact run. Only a fixed-length digest of the worker pass is kept, and it is removed at expiry. Expiry or replacement ends observation retries. Instance startup and wake remain unavailable.
 
@@ -63,7 +63,7 @@ A lost spending-limit reply can be checked by its original request id. Current o
 | [remote.ts](remote.ts), [inventory.ts](inventory.ts), [install-worker.ts](install-worker.ts) | Check remote addresses and collect exact tool definitions. |
 | [remote-catalogue-watch.ts](remote-catalogue-watch.ts) | Keeps the models process's remote checks current. |
 | [hosted-capture.ts](hosted-capture.ts) | Checks an admitted workload and saves its actual tool definitions for review. |
-| [hosted-gateway-transport.ts](hosted-gateway-transport.ts) | Checks the owning workload before each gateway discovery request and passes its replies to capture. |
+| [hosted-gateway-transport.ts](hosted-gateway-transport.ts) | Checks the owning workload and the replying Pod for each gateway discovery request. |
 | [access-reads.ts](access-reads.ts), [access-changes.ts](access-changes.ts) | List tool grants and suitable recipients, and save access changes. |
 | [access-explanation.ts](access-explanation.ts), [explanation-routes.ts](explanation-routes.ts) | Explain saved tool rights without starting calls. |
 | [profile-routes.ts](profile-routes.ts) | Returns own profile metadata and checks admin access to another member’s profile metadata and original disable status. |
@@ -78,5 +78,5 @@ flowchart LR
   server[Server] --> integrations["integrations<br/>tool settings and account choices"]
   integrations -->|reads profile metadata and saves opt-in and tool rules| models[Tool rules and spending]
   integrations -->|reads signed-in identity| members[Current membership]
-  integrations -->|checks hosted discovery replies| gateway[AI gateway]
+  integrations -->|checks each reply's request and Pod| gateway[AI gateway]
 ```

@@ -1,1 +1,1 @@
-Checked hosted discovery now binds each gateway request to the observed owning workload and Pod before saving its tool catalogue.
+Checked hosted discovery now refuses replies from another request or Pod before saving its tool catalogue.
