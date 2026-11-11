@@ -487,6 +487,10 @@ authenticated bridge. A replacement or cancelled wake cannot prepare the turn.
 The models process now binds this path to the same budget actor that handles ordinary
 calls. A lost budget leader or a second actor refuses routine delivery. The routines
 worker still has no deployed delivery connection, so automatic runs remain unavailable.
+For a run that ends, the server checks the saved company decision, response, private
+result, model charge and native turn closure before recording success. The response
+must follow the decision. The saved result contains a reference to the private chat;
+another member cannot open that chat just because the routine has finished.
 
 1. **A person joins.** [Auth](src/auth/README.md) checks their sign-in.
    [Members](src/members/README.md) handles the first owner's claim or a later invitation.

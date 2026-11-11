@@ -24,10 +24,11 @@ import { routineBridge } from '../src/routine-bridge.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
-import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
+import { createStore, foldRoutineHistory, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { natsFixture, event } from '@opencrane/event-store/testing';
-import { foldRoutine, routineActivationSchema, type EventEnvelope } from '@opencrane/events';
-import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/models';
+import { foldRoutine, routineActivationSchema, type EventEnvelope,
+  type RoutineState } from '@opencrane/events';
+import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
 import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
@@ -1156,6 +1157,197 @@ async function startRunning() {
   await until(preparedComputer.executed);
   return preparedComputer.wake();
 }
+
+async function savedCompanySuccess(responseBeforeDecision = false,
+  failure?: 'unknown_response' | 'missing_settlement' | 'unmatched_permit') {
+  const root = actor.state.roots[0]!;
+  const routineRows = await history(nats.store, 'routine-orders', 'test');
+  let state: RoutineState | undefined;
+  for (const row of routineRows) state = foldRoutine(state, row.event);
+  const run = state?.activeRun;
+  if (!run) throw new Error('Fixture run missing');
+  const requestId = '00000000-0000-4000-8000-000000000106';
+  const permitId = 'company-permit';
+  const call = { conversationId, turnId, callId: 'company-call',
+    serverId: 'company-server', toolName: 'read' };
+  const definition = run.definition;
+  const release = { requestId, permitId, connectionId: definition.connectionId,
+    profileId: definition.profileId, leaseId: 'lease', generation: 1,
+    purpose: 'tool_call', userId: definition.ownerId, ownerId: definition.ownerId,
+    ownerKind: 'company', assistantId: root.assistantId, computerId: root.computerId,
+    computerGeneration: root.generation, conversationId, turnId,
+    threadId: root.threadId, serverId: call.serverId, toolName: call.toolName,
+    profileRevision: definition.profileRevision, selectionRevision: 1, policyRevision: 1,
+    argumentsDigest: 'a'.repeat(64), scopeDigest: 'b'.repeat(64),
+    accountDigest: 'c'.repeat(64), issuedAt: 1_800_000_000_000,
+    expiresAt: 1_800_000_030_000, routineId: 'orders', occurrenceId: 'occurrence',
+    companyAccountId: definition.companyAccountId, payingGroupId: root.payingGroupId,
+    connectionRevision: definition.connectionRevision, schemaDigest: 'd'.repeat(64),
+    toolRevision: 'e'.repeat(64), approvalId: 'f'.repeat(64), rootId: root.rootId,
+    destinationDigest: '0'.repeat(64) };
+  const decision = record('company-decision', `decision-${requestId}`, 'decision.recorded', {
+    ...call, requestId, requesterId: root.requesterId, assistantId: root.assistantId,
+    permitId: failure === 'unmatched_permit' ? 'other-permit' : permitId,
+    route: 'mcp', outcome: 'allow', reason: 'approval_used',
+    contextDigest: '1'.repeat(64), release });
+  decision.source = 'models';
+  decision.principal = { kind: 'system', id: 'models' };
+  decision.correlation = { approval: release.approvalId };
+  const response = record('company-response', `decision-${requestId}`,
+    'tool.dispatch_recorded', { ...call, requestId, logicalRequestId: '2'.repeat(64),
+      startedAt: new Date().toISOString(), durationMs: 3,
+      outcome: failure === 'unknown_response' ? 'outcome_unknown' : 'responded',
+      evidence: failure === 'unknown_response' ? 'transport_uncertain' : 'response_received' });
+  response.source = 'models';
+  response.principal = { kind: 'system', id: 'models' };
+  const companyEvents = responseBeforeDecision ? [response, decision] : [decision, response];
+  await nats.seed(companyEvents);
+  const privateResult = record('company-private-result', `conversation-${conversationId}`,
+    'agent.tool_call_finished', { ...call, status: 'completed' });
+  privateResult.source = 'computer-bridge';
+  privateResult.principal = { kind: 'agent', id: root.assistantId };
+  await nats.seed([privateResult]);
+  const resultReference = { eventId: privateResult.id,
+    position: await nats.store.head(privateResult.subject) };
+  const modelCall = { model: 'gpt-6-luna', priceTableId,
+    computerId: root.computerId, generation: root.generation,
+    requesterId: root.requesterId, assistantId: root.assistantId,
+    conversationId, turnId, threadId: root.threadId,
+    payingGroupId: root.payingGroupId, contextDigest: '1'.repeat(64) };
+  const reservationId = await actor.reserve(modelCall, 500, undefined, undefined,
+    root.rootId);
+  const settlement = envelope('test', `effect-${reservationId}`, 'effect.resolved', {
+    reservationId, permitId: reservationId, settledCents: 260, outcome: 'settled',
+    resolvedBy: 'alice', evidence: [{ kind: 'provider_receipt', reference: 'receipt',
+      digest: '0'.repeat(64), amountCents: 260 }] });
+  settlement.principal = { kind: 'human', id: 'alice' };
+  if (failure !== 'missing_settlement') await actor.settle(settlement);
+  return { requestId, resultReference, reservationId, root };
+}
+
+async function completedNativeTurn() {
+  preparedComputer.finish(selection.threadId);
+  let closure: Awaited<ReturnType<typeof history>>[number] | undefined;
+  async function savedClosure() {
+    const rows = await history(nats.store, 'computer-sales-assistant', 'test');
+    closure = rows.find(row => row.event.type === 'computer.turn_closed');
+    expect(closure).toBeDefined();
+  }
+  await vi.waitFor(savedClosure);
+  expect(closure!.event.data).toMatchObject({ conversationId, turnId,
+    task: 'chat_turn', assistantId: 'sales-assistant', computerId: 'computer',
+    requesterId: 'alice' });
+  const terminalEvidence = { eventId: closure!.event.id, position: closure!.sequence };
+  await actor.stopRoot(actor.state.roots[0]!.rootId, 'turn_ended',
+    'computer-sales-assistant', terminalEvidence.position);
+  return terminalEvidence;
+}
+
+async function checkedCompanyResultToFinish() {
+  const before = await history(nats.store, 'routine-orders', 'test');
+  expect(before.some(row => row.event.type === 'routine.run_send_release_authorised')).toBe(false);
+  await startRunning();
+  const released = await history(nats.store, 'routine-orders', 'test');
+  expect(released.some(row => row.event.type === 'routine.run_send_release_authorised')).toBe(true);
+  const proof = await savedCompanySuccess();
+  const request = { routineId: 'orders', occurrenceId: 'occurrence',
+    terminalEvidence: { eventId: 'missing', position: 1 },
+    successEvidence: { requestId: proof.requestId,
+      resultReference: proof.resultReference, reservationId: proof.reservationId } };
+  await expect(finishRoutine(nats.store, 'test', request, { enabled: true }))
+    .rejects.toThrow('Routine finish refused');
+  request.terminalEvidence = await completedNativeTurn();
+  const first = await finishRoutine(nats.store, 'test', request, { enabled: true });
+  expect(await finishRoutine(nats.store, 'test', request, { enabled: true })).toEqual(first);
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  const finished = rows.filter(row => row.event.type === 'routine.run_finished');
+  expect(finished).toHaveLength(1);
+  expect(finished[0]!.event.data).toMatchObject({ outcome: 'succeeded',
+    resultReference: proof.resultReference, settledCents: 260, heldCents: 0 });
+  const decisionPosition = await nats.store.head(`decision-${proof.requestId}`);
+  const conversationPosition = await nats.store.head(`conversation-${conversationId}`);
+  const completedRuns = new Map<string, NonNullable<RoutineState['activeRun']>>();
+  let replayed: RoutineState | undefined;
+  for (const row of rows) {
+    replayed = foldRoutineHistory(replayed, row.event, completedRuns);
+  }
+  expect(replayed?.activeRun).toBeNull();
+  expect(replayed?.lastRun).toMatchObject({ outcome: 'succeeded',
+    resultReference: proof.resultReference, settledCents: 260 });
+  expect(await nats.store.head(`decision-${proof.requestId}`)).toBe(decisionPosition);
+  expect(await nats.store.head(`conversation-${conversationId}`)).toBe(conversationPosition);
+  expect(preparedComputer.sends).toBe(1);
+  expect(preparedComputer.starts).toBe(1);
+  expect(actor.state.reservations).toHaveLength(1);
+  const budgetRows = await history(nats.store, 'budget-test', 'test');
+  expect(budgetRows.filter(row => row.event.type === 'budget.settled')).toHaveLength(1);
+  const conversationRows = await history(nats.store, `conversation-${conversationId}`, 'test');
+  expect(conversationRows.filter(row => row.event.type === 'agent.tool_call_finished'))
+    .toHaveLength(1);
+  await apply([joinedMember('bob')]);
+  const auth = memberAuthorisation(binding, nats.store);
+  expect((await auth.conversation('bob', conversationId, 'read')).allowed).toBe(false);
+}
+it('links one checked send to a private result and finished run only after native closure',
+  checkedCompanyResultToFinish, 25_000);
+
+async function responseBeforeCompanyDecision() {
+  await startRunning();
+  const proof = await savedCompanySuccess(true);
+  const terminalEvidence = await completedNativeTurn();
+  const request = { routineId: 'orders', occurrenceId: 'occurrence', terminalEvidence,
+    successEvidence: { requestId: proof.requestId,
+      resultReference: proof.resultReference, reservationId: proof.reservationId } };
+  await expect(finishRoutine(nats.store, 'test', request, { enabled: true }))
+    .rejects.toThrow('Routine finish refused');
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_finished')).toBe(false);
+}
+it('refuses a response saved before its company Allow decision',
+  responseBeforeCompanyDecision, 25_000);
+
+async function incompleteCompanyResult(failure: 'unknown_response' | 'missing_settlement' |
+  'unmatched_permit') {
+  await startRunning();
+  const proof = await savedCompanySuccess(false, failure);
+  const terminalEvidence = await completedNativeTurn();
+  const request = { routineId: 'orders', occurrenceId: 'occurrence', terminalEvidence,
+    successEvidence: { requestId: proof.requestId,
+      resultReference: proof.resultReference, reservationId: proof.reservationId } };
+  await expect(finishRoutine(nats.store, 'test', request, { enabled: true }))
+    .rejects.toThrow('Routine finish refused');
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_finished')).toBe(false);
+  expect(actor.state.reservations).toHaveLength(1);
+}
+it.each(['unknown_response', 'missing_settlement', 'unmatched_permit'] as const)(
+  'holds a checked run when its company proof has %s', incompleteCompanyResult, 25_000);
+
+async function ceilingChangeAtFinalRelease(scope: 'paying_group' | 'assistant') {
+  const fixtureTime = performance.now();
+  vi.spyOn(performance, 'now').mockImplementation(() => fixtureTime);
+  const append = nats.store.append.bind(nats.store);
+  let changed = false;
+  async function saveLimitBeforeRelease(...args: Parameters<typeof append>) {
+    const proposed = proposedEvent.parse(args[0].event);
+    if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
+      changed = true;
+      const scopeId = scope === 'paying_group' ? 'sales' : 'sales-assistant';
+      await actor.configure({ scope, scopeId, ceilingCents: 0, setBy: 'admin' });
+    }
+    return append(...args);
+  }
+  vi.spyOn(nats.store, 'append').mockImplementation(saveLimitBeforeRelease);
+  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(changed).toBe(true);
+  expect(preparedComputer.sends).toBe(0);
+  expect(preparedComputer.starts).toBe(0);
+  const rows = await history(nats.store, 'routine-orders', 'test');
+  expect(rows.some(row => row.event.type === 'routine.run_send_release_authorised')).toBe(false);
+}
+it.each(['paying_group', 'assistant'] as const)(
+  'refuses a %s ceiling change at the final release before native start',
+  ceilingChangeAtFinalRelease, 25_000);
 function interruptedOnce() {
   expect(preparedComputer.interruptedThreads).toEqual([selection.threadId]);
 }

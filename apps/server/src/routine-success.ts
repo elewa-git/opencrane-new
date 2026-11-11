@@ -90,17 +90,19 @@ function requireCompanyDecision(rows: StoredEvent[], evidence: Evidence, root: R
   requireDecisionIdentity(decision, release, evidence, root);
   requireReleaseRun(release, root, routineId, occurrenceId);
   requireReleaseAccount(release, definition, decision);
-  return { decision, release };
+  return { decision, release, decisionPosition: decisions[0]!.sequence };
 }
 function requireUpstreamResult(rows: StoredEvent[], decision: {
   callId?: string | undefined; serverId?: string | undefined; toolName?: string | undefined },
-  evidence: Evidence, root: Root) {
+  decisionPosition: number, evidence: Evidence, root: Root) {
   function isOutcome(row: StoredEvent) { return row.event.type === 'tool.dispatch_recorded'; }
   const outcomes = rows.filter(isOutcome);
   if (outcomes.length !== 1) throw new Error('Upstream outcome is not unique');
   requireSource(outcomes[0]!, 'models', 'system', 'models');
   const result = toolDispatchRecordedDataSchema.parse(outcomes[0]!.event.data);
-  if (result.requestId !== evidence.requestId || result.outcome !== 'responded' ||
+  // Require the saved Allow decision before a response can prove a governed call.
+  if (outcomes[0]!.sequence <= decisionPosition ||
+      result.requestId !== evidence.requestId || result.outcome !== 'responded' ||
       !['response_received', 'adapter_response_received'].includes(result.evidence) ||
       result.conversationId !== root.conversationId || result.turnId !== root.turnId ||
       result.callId !== decision.callId || result.serverId !== decision.serverId ||
@@ -184,9 +186,10 @@ export async function proveRoutineSuccess(store: EventStore, silo: string,
   occurrenceId: string, budgetRows: StoredEvent[], deadline: number) {
   const decisionRows = await read(store, `decision-${evidence.requestId}`, silo, deadline);
   const conversationRows = await read(store, `conversation-${root.conversationId}`, silo, deadline);
-  const { decision, release } = requireCompanyDecision(decisionRows, evidence, root,
+  const { decision, release, decisionPosition } = requireCompanyDecision(decisionRows, evidence, root,
     definition, routineId, occurrenceId);
-  const upstream = requireUpstreamResult(decisionRows, decision, evidence, root);
+  const upstream = requireUpstreamResult(decisionRows, decision, decisionPosition,
+    evidence, root);
   requirePrivateResult(conversationRows, evidence, upstream, root);
   const money = requireSettlement(budgetRows, root, evidence, release.permitId);
   return { ...money, resultReference: evidence.resultReference };
