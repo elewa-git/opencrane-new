@@ -4215,17 +4215,20 @@ read deadline by default; callers may supply their remaining deadline. Returned
 they do not promise an immutable snapshot across pages. Later settlements keep the
 original position. No read loads `model_budgets` or reads event history.
 
-`accounting.ts` owns the existing budgets projection and its new `model_budget_calls`
-table. It reuses `applyBudget` and `totals` for held and settled euro cents. Rows keep
-silo, reservation, permit, payer, assistant, original time and held/settled evidence.
+`accounting.ts` owns the existing budgets projection, `model_budget_calls` and
+`model_budget_roots` tables. It reuses `applyBudget` and `totals` for held and
+settled euro cents. Root rows keep the checked allowance and its original
+scope, night, member, payer and assistant. A `(silo, root_id)` index finds only
+that root's calls for an authorised maintenance detail. Call rows keep silo,
+reservation, permit, payer, assistant, original time and held/settled evidence.
 A null settlement means no recorded settlement; zero is a recorded amount. Unknown
 outcomes retain the safety hold alongside the maximum saved settlement. These are
 accounting states, not proof of dispatch or completion. No private call text is copied.
 
-Version 6 adds current effect rows beside saved effects, calls and budget totals.
-It replays installed data and replaces all four tables in one transaction,
+Version 7 adds root rows and call root links beside current effects and budget totals.
+It replays installed data and replaces all five tables in one transaction,
 retaining reader grants, event receipts and the checkpoint. Verification compares all
-four tables, reading call and effect rows in batches of 200. An incomplete legacy
+five tables, reading root, call and effect rows in batches of 200. An incomplete legacy
 call that the shared budget fold cannot read makes the upgrade and reader unavailable;
 it does not invent attribution or claim an empty result. Missing upgrades also refuse.
 The existing actor remains the only money writer. Replay receives only an event
@@ -4235,8 +4238,9 @@ reader, runs no reactions, and cannot dispatch, settle, release or schedule work
 and assistants, mixed paging, conflicting/duplicate settlement, UTC rollover,
 upgrades, locked-read deadlines and replay equality. Existing root tests still exercise the same projection.
 Callers must check current finance access once after loading. There is no authority
-fence on this read. Effect detail, impact previews, root/routine joins and screens
-remain later work. Fresh-install qualification: NOT RUN.
+fence on this read. The private maintenance detail reads its matching root and
+at most one call with its own access check. Effect detail, impact previews,
+other root/routine joins and screens remain later work. Fresh-install qualification: NOT RUN.
 
 ### Saved effect accounting records (P4-26 PR 8d; Part of #108)
 

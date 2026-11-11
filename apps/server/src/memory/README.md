@@ -17,7 +17,8 @@ This folder lets people review, save, correct and forget information the assista
   before checking whether a new night could start.
 - Shows permitted readers a page of saved nightly choices and a safe detail for
   one choice. A private scope does not reveal itself through a bad request.
-  Money stays unavailable until a saved spending record proves it.
+  A saved reservation shows held cents. A later settlement updates spent cents.
+  Missing or uncertain money stays unavailable or held, as the saved records show.
 
 When a loaded fact changes, expires or loses access, the saved withdrawal stops the
 computer and asks the original browser to clear its completed reply. The reply identity
@@ -97,7 +98,7 @@ flowchart LR
   chat["Chat"] -->|supplies saved turn facts| memory
   gateway["AI gateway"] -->|passes checked recall, remember, correct and forget calls| memory
   memory -->|clears withdrawn or stopped private replies| chat
-  memory -->|checks access, facts, nightly records and allowance| models["Models library"]
+  memory -->|checks access, nightly choices and spending| models["Models library"]
   memory -->|supplies initial input once| computer["Computer input renderer"]
 ```
 

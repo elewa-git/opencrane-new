@@ -12,7 +12,16 @@ leaves this route. The detail GET looks up one original saved receipt and gives
 its saved action, intended, selected and observed times, binding member and
 revision. It gives the root and accepted 100-cent allowance only for a saved
 prepared receipt. An absent start time and unjoined spending are unavailable;
-the allowance is never presented as a charge. Both GETs check current scope
+the allowance is never presented as a charge. For a prepared detail, the server
+reads one root and at most two calls through indexed budget tables. It checks
+the saved root's scope, night, input, member, model, provider, payer and
+assistant against the original detail and the call. It requires the budget
+root to predate the prepared receipt and the budget projection to have caught
+up to the latest budget event. A matching
+reservation supplies held cents; settlement supplies spent cents. Unknown
+work retains its hold. Missing, lagged,
+contradictory or timed-out evidence keeps money unavailable. The original
+receipt and its saved time do not change after settlement. Both GETs check current scope
 read rights after loading, including after a failed load. They return no fact
 text, input references, model output or source text. The organisation audit
 link still opens the same authorised status GET.

@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { budgetRootAllowanceSetDataSchema, parseEventByType,
+  type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 import { applyBudget, data, emptyBudget, stateSchema, totals, type BudgetState } from './state.ts';
 import { createCurrentEffects, currentEffectFields, currentEffectSchema,
   currentEffectBudget, updateCurrentEffectEvidence } from './current-effects.ts';
 
-export const budgetProjectionVersion = 6;
+export const budgetProjectionVersion = 7;
 type Reservation = BudgetState['reservations'][number];
 const pageSchema = z.object({
   after: z.int().nonnegative().default(0),
@@ -110,7 +111,9 @@ async function createBudgetCalls(db: Query, table: string) {
     silo TEXT NOT NULL, reservation_id TEXT NOT NULL, permit_id TEXT NOT NULL,
     position BIGINT NOT NULL, paying_group_id TEXT, assistant_id TEXT,
     reserved_at TEXT NOT NULL, held_cents BIGINT NOT NULL, settled_cents BIGINT,
-    evidence TEXT NOT NULL, PRIMARY KEY (silo, reservation_id))`);
+    evidence TEXT NOT NULL, root_id TEXT, PRIMARY KEY (silo, reservation_id))`);
+  await db.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS root_id TEXT`);
+  await db.query(`CREATE INDEX IF NOT EXISTS ${table}_root ON ${table} (silo, root_id)`);
   for (const [suffix, columns] of [
     ['position', 'silo, position'],
     ['payer', 'silo, paying_group_id, position'],
@@ -124,6 +127,18 @@ async function createBudgetCalls(db: Query, table: string) {
     await db.query(`CREATE INDEX IF NOT EXISTS ${table}_${suffix} ON ${table} (${columns})`);
   }
 }
+async function createBudgetRoots(db: Query, table: string) {
+  await db.query(`CREATE TABLE IF NOT EXISTS ${table} (
+    silo TEXT NOT NULL, root_id TEXT NOT NULL, position BIGINT NOT NULL,
+    data JSONB NOT NULL, PRIMARY KEY (silo, root_id))`);
+}
+
+async function saveBudgetRoot(db: Query, table: string, event: EventEnvelope, position: number) {
+  const root = budgetRootAllowanceSetDataSchema.parse(event.data);
+  await db.query(`INSERT INTO ${table} (silo, root_id, position, data)
+    VALUES ($1,$2,$3,$4) ON CONFLICT (silo, root_id) DO NOTHING`,
+  [event.silo, root.rootId, position, JSON.stringify(root)]);
+}
 function evidenceFor(reservation: Reservation): SpendingCall['evidence'] {
   if (reservation.outcomeUnknown) return 'unknown';
   if (reservation.outcome === 'not_dispatched') return 'not_dispatched';
@@ -134,12 +149,14 @@ async function saveBudgetCall(db: Query, table: string, silo: string, position: 
   permitId: string, reservation: Reservation, heldCents: number) {
   const evidence = evidenceFor(reservation);
   // Preserve the reservation's original position and attribution on later settlement.
-  await db.query(`INSERT INTO ${table} VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+  await db.query(`INSERT INTO ${table} (silo, reservation_id, permit_id, position,
+      paying_group_id, assistant_id, reserved_at, held_cents, settled_cents, evidence, root_id)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     ON CONFLICT (silo, reservation_id) DO UPDATE SET
-      held_cents = $8, settled_cents = $9, evidence = $10`,
+      held_cents = $8, settled_cents = $9, evidence = $10, root_id = $11`,
   [silo, reservation.id, permitId, position, reservation.call.payingGroupId ?? null,
     reservation.call.assistantId, reservation.time, heldCents,
-    reservation.settledCents ?? null, evidence]);
+    reservation.settledCents ?? null, evidence, reservation.rootId ?? null]);
 }
 function spendingCall(input: Record<string, unknown>): SpendingCall {
   const row = callSchema.parse(input);
@@ -206,6 +223,7 @@ async function saveBudgetState(db: Query, table: string, currentTable: string,
 
 // Keep call reads separate while retaining the existing budget summary fold.
 function budgetProjection(name: string, table: string): Projection {
+  const rootsTable = table.replace('model_budgets', 'model_budget_roots');
   const callsTable = table.replace('model_budgets', 'model_budget_calls');
   const effectsTable = table.replace('model_budgets', 'model_budget_effects');
   const currentTable = table.replace('model_budgets', 'model_current_effects');
@@ -213,11 +231,13 @@ function budgetProjection(name: string, table: string): Projection {
     await db.query(`CREATE TABLE IF NOT EXISTS ${table}
       (silo TEXT PRIMARY KEY, state JSONB NOT NULL)`);
     await createBudgetCalls(db, callsTable);
+    await createBudgetRoots(db, rootsTable);
     await createBudgetEffects(db, effectsTable);
     await createCurrentEffects(db, currentTable);
   }
   async function drop(db: Query) {
-    await db.query(`DROP TABLE IF EXISTS ${table}, ${callsTable}, ${effectsTable}, ${currentTable}`);
+    await db.query(`DROP TABLE IF EXISTS ${table}, ${callsTable}, ${rootsTable},
+      ${effectsTable}, ${currentTable}`);
   }
   async function apply(db: Query, event: EventEnvelope,
     position: number) {
@@ -229,6 +249,9 @@ function budgetProjection(name: string, table: string): Projection {
     }
     if (!event.type.startsWith('budget.')) return;
     if (!parseEventByType(event).success) throw new Error('Invalid budget event');
+    if (event.type === 'budget.root_allowance_set') {
+      await saveBudgetRoot(db, rootsTable, event, position);
+    }
     const payload = data(event);
     const rows = await db.query<{ state: unknown; current: unknown;
       budgetSilo: string | null; effectPermitId: string | null }>(

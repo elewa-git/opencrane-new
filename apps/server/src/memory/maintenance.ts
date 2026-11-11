@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { authorityFence, history, readActiveMember } from '@opencrane/models';
 import { memoryMaintenanceBoundDataSchema, memoryMaintenanceRecordedDataSchema,
-  parseEventByType } from '@opencrane/events';
+  budgetRootAllowanceSetDataSchema, parseEventByType } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { selectMaintenanceInputs, type MaintenanceFact } from '@opencrane/projections';
 import { memoryAccessChecks, scopeAccess, readAssistant, MemoryRefused,
@@ -78,6 +78,93 @@ function safeRun(secret: string, row: SavedRun) {
   return { runId: runReference(secret, row), action: run.action, reason: run.reason,
     intendedAt: run.intendedAt, selectedAt: run.selectedAt, observedAt: row.saved_at,
     money: { status: 'unavailable' } };
+}
+
+const moneyRow = z.object({
+  version: z.number().int(), sequence: z.coerce.number().int().nonnegative().safe(),
+  rootPosition: z.coerce.number().int().positive().safe().nullable(),
+  rootData: z.unknown().nullable(), reservationId: z.string().nullable(),
+  permitId: z.string().nullable(), callPosition: z.coerce.number().int().positive().safe().nullable(),
+  payingGroupId: z.string().nullable(), assistantId: z.string().nullable(),
+  heldCents: z.coerce.number().int().nonnegative().safe().nullable(),
+  settledCents: z.coerce.number().int().nonnegative().safe().nullable(),
+  evidence: z.enum(['held', 'settled', 'unknown', 'not_dispatched']).nullable(),
+});
+type MoneyRow = z.infer<typeof moneyRow>;
+
+function hasCurrentBudget(row: MoneyRow, budgetPosition: number, receiptPosition: number) {
+  return row.version >= 7 && row.sequence >= budgetPosition &&
+    row.rootPosition !== null && row.rootPosition <= receiptPosition &&
+    row.rootPosition <= row.sequence &&
+    row.callPosition !== null && row.callPosition >= row.rootPosition &&
+    row.callPosition <= row.sequence;
+}
+
+function matchesSavedRoot(row: MoneyRow, run: MaintenanceRun) {
+  const parsed = budgetRootAllowanceSetDataSchema.safeParse(row.rootData);
+  if (!parsed.success) return false;
+  const root = parsed.data;
+  const maintenance = root.maintenance;
+  if (!maintenance) return false;
+  const matchesRun = root.rootId === run.rootId && root.requesterId === run.memberId &&
+    root.allowanceCents === run.acceptedCapCents &&
+    maintenance.scopeId === run.scopeId && maintenance.nightId === run.nightId &&
+    maintenance.batchKey === run.batchKey &&
+    maintenance.inputRevision === run.inputRevision &&
+    maintenance.model === run.model && maintenance.providerId === run.providerId;
+  const matchesCall = row.payingGroupId === root.payingGroupId &&
+    row.assistantId === root.assistantId;
+  return matchesRun && matchesCall;
+}
+
+function hasConsistentCall(row: MoneyRow) {
+  if (row.reservationId === null || row.permitId === null ||
+      row.heldCents === null || row.evidence === null) return false;
+  if (row.evidence === 'held') return row.settledCents === null;
+  if (row.evidence === 'settled') {
+    return row.settledCents !== null && row.heldCents === 0;
+  }
+  if (row.evidence === 'not_dispatched') {
+    return row.settledCents === 0 && row.heldCents === 0;
+  }
+  return row.heldCents > 0;
+}
+
+async function maintenanceMoney(options: MemoryOptions, run: MaintenanceRun,
+  receiptPosition: number, deadline: number) {
+  const unavailable = { status: 'unavailable' as const };
+  if (run.action !== 'prepared' || !run.rootId) return unavailable;
+  const moneyDeadline = Math.min(deadline - 300, performance.now() + 750);
+  if (moneyDeadline <= performance.now()) return unavailable;
+  try {
+    const budgetPosition = await options.store.head(`budget-${options.silo}`, moneyDeadline);
+    const result = await options.db.query(`SELECT version.version, progress.sequence,
+        root.position AS "rootPosition", root.data AS "rootData",
+        call.reservation_id AS "reservationId", call.permit_id AS "permitId",
+        call.position AS "callPosition", call.paying_group_id AS "payingGroupId",
+        call.assistant_id AS "assistantId", call.held_cents AS "heldCents",
+        call.settled_cents AS "settledCents", call.evidence
+      FROM projection_versions version
+      JOIN projection_checkpoints progress ON progress.name = version.name
+      JOIN projection_generations generation ON generation.name = version.name
+      LEFT JOIN model_budget_roots root ON root.silo=$1 AND root.root_id=$2
+      LEFT JOIN LATERAL (SELECT reservation_id, permit_id, position, paying_group_id,
+        assistant_id, held_cents, settled_cents, evidence FROM model_budget_calls
+        WHERE silo=$1 AND root_id=$2 LIMIT 2) call ON true
+      WHERE version.name='model-budgets'`,
+    [options.silo, run.rootId], { deadline: moneyDeadline });
+    if (result.rows.length !== 1) return unavailable;
+    const parsed = moneyRow.safeParse(result.rows[0]);
+    if (!parsed.success) return unavailable;
+    const row = parsed.data;
+    if (!hasCurrentBudget(row, budgetPosition, receiptPosition) || !matchesSavedRoot(row, run) ||
+        !hasConsistentCall(row)) return unavailable;
+    const spentCents = row.settledCents ?? 0;
+    return { status: 'current' as const, spentCents,
+      heldCents: row.heldCents, evidence: row.evidence };
+  } catch {
+    return unavailable;
+  }
 }
 
 function cursorBinding(options: MemoryOptions, scope: Scope, requester: string,
@@ -271,7 +358,8 @@ export async function maintenanceDetail(options: MemoryOptions, scope: Scope,
     }
     const run = memoryMaintenanceRecordedDataSchema.parse(row.data);
     const allowanceCents = run.action === 'prepared' ? run.acceptedCapCents : null;
-    detail = { ...safeRun(secret, row), bindingRevision: run.bindingRevision,
+    const money = await maintenanceMoney(options, run, Number(row.position), deadline);
+    detail = { ...safeRun(secret, row), money, bindingRevision: run.bindingRevision,
       memberId: run.memberId, rootId: run.rootId ?? null, allowanceCents,
       startedAt: null };
   }

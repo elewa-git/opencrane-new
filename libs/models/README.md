@@ -864,6 +864,8 @@ const model = modelForTask('chat_turn');
 Call spending pages can select the UTC month when money was first held for a call.
 Later charges stay with that month. Older open holds still reduce today's capacity,
 even when a page leaves them out. Reading a page does not allow more spending.
+The budget read tables also link a saved maintenance root to its own calls.
+This lets an authorised memory detail show its real hold and later charge.
 
 ## Where to read more
 

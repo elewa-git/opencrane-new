@@ -19,7 +19,7 @@ import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEv
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy, reviewToolPolicy } from '@opencrane/models';
-import { budgets } from '@opencrane/models';
+import { budgets, initialiseBudgetProjection } from '@opencrane/models';
 import type { MemoryOptions } from '../src/memory/access.ts';
 import { commandReference } from '../src/memory/command-history.ts';
 import { reconcileCommands } from '../src/memory/commands.ts';
@@ -3933,6 +3933,15 @@ async function savedMaintenanceSpending() {
   const binding = { ...bindingInput, commandId: 'money-binding', assistantId,
     payingGroupId };
   expect((await bind(path(memberId), binding, memberId)).statusCode).toBe(200);
+  const root = { rootId, requesterId: memberId, conversationId: 'money-session',
+    turnId: 'money-turn', threadId: 'money-thread', assistantId,
+    computerId: 'money-computer', generation: 1, payingGroupId,
+    allowanceCents: 100, maintenance: { scopeId, nightId, batchKey,
+      inputRevision, task: 'frequent_automation', model: 'gpt-6-luna',
+      providerId: 'provider-1', bindingSequence: 1, priceTableId: 'tariff-1' } };
+  await append('budget-acme', 'budget.root_allowance_set', root);
+  await initialiseBudgetProjection(pgDb(storage.queue), nats.reader,
+    createLogger('maintenance-money'));
   const prepared = { scopeId, nightId, batchKey, inputRevision,
     date: '2026-10-22', bindingRevision: 1, memberId, acceptedCapCents: 100,
     intendedAt: '2026-10-22T02:00:00.000Z',
@@ -3946,15 +3955,6 @@ async function savedMaintenanceSpending() {
   const before = await get(detailUrl, memberId);
   expect(before.json()).toMatchObject({ allowanceCents: 100,
     money: { status: 'unavailable' } });
-  const root = { rootId, requesterId: memberId, conversationId: 'money-session',
-    turnId: 'money-turn', threadId: 'money-thread', assistantId,
-    computerId: 'money-computer', generation: 1, payingGroupId,
-    allowanceCents: 100, maintenance: { scopeId, nightId, batchKey,
-      inputRevision, task: 'frequent_automation', model: 'gpt-6-luna',
-      providerId: 'provider-1', bindingSequence: 1, priceTableId: 'tariff-1' } };
-  await append('budget-acme', 'budget.root_allowance_set', root);
-  await runner.initialise(budgets);
-  await runner.run(budgets);
   const reservationId = 'money-reservation';
   const permitId = 'money-permit';
   const modelCall = { model: 'gpt-6-luna', priceTableId: 'tariff-1',
@@ -3963,6 +3963,15 @@ async function savedMaintenanceSpending() {
     threadId: root.threadId, payingGroupId, contextDigest: 'e'.repeat(64) };
   const reservation = { reservationId, permitId, rootId, amountCents: 80,
     payingGroupId, assistantId, modelCall };
+  await append('budget-acme', 'budget.reserved', {
+    ...reservation, reservationId: 'other-root', permitId: 'other-root-permit',
+    rootId: 'f'.repeat(64), payingGroupId: 'another-payer' });
+  await append('budget-foreign', 'budget.reserved', {
+    ...reservation, reservationId: 'other-silo', permitId: 'other-silo-permit',
+    payingGroupId: 'foreign-payer' }, true, 'foreign');
+  await runner.run(budgets);
+  expect((await get(detailUrl, memberId)).json()).toMatchObject({
+    money: { status: 'unavailable' } });
   await append('budget-acme', 'budget.reserved', reservation);
   await runner.run(budgets);
   const held = await get(detailUrl, memberId);
@@ -3970,6 +3979,16 @@ async function savedMaintenanceSpending() {
     spentCents: 0, heldCents: 80 } });
   expect((await get(url, 'admin')).statusCode).toBe(404);
   expect((await get(`${detailUrl}?extra=1`, 'admin')).statusCode).toBe(404);
+  await append('budget-acme', 'budget.reservation_expired', { reservationId });
+  await runner.run(budgets);
+  expect((await get(detailUrl, memberId)).json()).toMatchObject({
+    money: { status: 'current', heldCents: 80 } });
+  await append('budget-acme', 'budget.settled',
+    { reservationId, permitId, settledCents: 30, outcome: 'unknown' });
+  await runner.run(budgets);
+  expect((await get(detailUrl, memberId)).json()).toMatchObject({
+    money: { status: 'current', spentCents: 30, heldCents: 80,
+      evidence: 'unknown' } });
   await append('budget-acme', 'budget.settled',
     { reservationId, permitId, settledCents: 30 });
   const lagged = await get(detailUrl, memberId);
@@ -3980,12 +3999,48 @@ async function savedMaintenanceSpending() {
     spentCents: 30, heldCents: 0 } });
   expect(settled.json()).toMatchObject({ action: 'prepared',
     observedAt: before.json<{ observedAt: string }>().observedAt });
+  const originalQuery = memory.db.query.bind(memory.db);
+  async function blockedMoney<Row extends Record<string, unknown>>(
+    sql: string, values?: unknown[], options?: { deadline: number }) {
+    if (sql.includes('LEFT JOIN model_budget_roots')) {
+      return originalQuery<Row>('SELECT pg_sleep(5)', [], options);
+    }
+    return originalQuery<Row>(sql, values, options);
+  }
+  const blocked = vi.spyOn(memory.db, 'query').mockImplementation(blockedMoney);
+  try {
+    const timedOut = await get(detailUrl, memberId);
+    expect(timedOut.statusCode).toBe(200);
+    expect(timedOut.json()).toMatchObject({ money: { status: 'unavailable' } });
+  } finally {
+    blocked.mockRestore();
+  }
+  await memory.db.query(`UPDATE model_budget_calls SET paying_group_id=$1
+    WHERE silo=$2 AND reservation_id=$3`, ['wrong-payer', 'acme', reservationId]);
+  expect((await get(detailUrl, memberId)).json()).toMatchObject({
+    money: { status: 'unavailable' } });
   await runner.rebuild(budgets);
   expect((await get(detailUrl, memberId)).json()).toEqual(settled.json());
+  await append(`member-${memberId}`, 'member.removed',
+    { memberId, removedBy: 'owner' });
+  expect((await get(detailUrl, memberId)).statusCode).toBe(404);
+}
+
+async function isolatedSavedMaintenanceSpending() {
+  const original = { nats, fga, storage, auth, app, runner, keys,
+    directory, memory, count };
+  await setup();
+  try {
+    await savedMaintenanceSpending();
+  } finally {
+    await cleanup();
+    ({ nats, fga, storage, auth, app, runner, keys, directory,
+      memory, count } = original);
+  }
 }
 
 it('joins saved maintenance spending after budget catch-up without changing its receipt',
-  savedMaintenanceSpending, 90_000);
+  isolatedSavedMaintenanceSpending, 90_000);
 
 async function maintenanceReadAccess() {
   const groupScopeId = memoryScopeId('acme', 'group', 'pager-sales');
