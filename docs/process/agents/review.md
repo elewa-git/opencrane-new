@@ -47,6 +47,32 @@ style in AGENTS.md (no overbuilding, atomic named functions, no chaining, no inl
 logic, no nested ternaries, why-comments at invariants and boundaries) and name the
 expected rewrite. Other naming preferences and optional wording stay non-blocking.
 
+Clean code is a fix finding too. Check new and changed code against the "Then make
+it right" table in the [standard](../standards.md#then-make-it-right):
+
+- a decision copied from elsewhere, or two functions with the same structure and
+  rule, that should be one shared function or import (name the shared home);
+- a new function over 80 counted lines or with more than five parameters, or an
+  existing one the change made longer or gave more parameters (name the split), or
+  a parameter object that bundles unrelated values to pass the limit;
+- a size limit raised or switched off inside a file;
+- an import from another app's source or from `scripts/`;
+- a caught error whose cause is neither kept nor logged, or a refusal with no `reason`;
+- a fix that hides a failure (a new guard, retry, longer timeout, sleep or catch) with
+  no test that reproduces the cause;
+- a test that checks internal calls where it could check the result, declares its own
+  helper instead of using the shared ones, sleeps instead of controlling time, or
+  still covers behaviour the change removed;
+- a README that gained a note about this change instead of an edited sentence.
+
+Raise clean-code findings in the first pass, all at once. The second pass checks they
+were fixed, and raises a new one only where a fix itself broke a rule in this list.
+After the second pass, two kinds hold the change for the owner: a size limit raised or
+switched off inside a file, and an import from another app's source or from `scripts/`.
+List any other open clean-code finding under "Not in this PR"; it does not hold the
+change. Do not ask for clean-up of a breach the change did not add or worsen; suggest
+an issue instead.
+
 Plain writing is part of readability. Check new and changed comments, and
 each changed README.md, against "Writing for people" in AGENTS.md. A
 README.md also needs the fixed headings of the README standard and a
@@ -58,5 +84,7 @@ that does not say why. Give the plain rewrite in the finding.
 
 At most two independent passes per change. The second checks fixes and introduced risk,
 including batched disputed findings. If blockers remain, hold for the owner; do not
-spawn a verifier per sentence or restart the counter. End with the verdict, evidence
+spawn a verifier per sentence or restart the counter. If a finding survives its fix at
+the second pass, or repeats one from an earlier PR for the same issue, do not ask for
+another fix: state the assumption the fixes rest on, in one sentence, for the owner. End with the verdict, evidence
 and remaining conditions; distinguish source readiness from live capability completion.

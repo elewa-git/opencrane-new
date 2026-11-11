@@ -89,6 +89,27 @@ Follow the [engineering standard](docs/process/standards.md).
   A capability is done only after its journey passes live on a fresh install.
   Report PASS/FAIL/PARTIAL/NOT RUN honestly; untested conditions never pass.
 
+## Make it work, then make it right
+
+Owner rule (10 November 2026): every change follows the three steps in the
+[engineering discipline](docs/process/standards.md#engineering-discipline-make-it-work-then-make-it-right),
+which fits Robert C. Martin's ub-mode to this repository.
+
+1. **First make it work.** Reuse before you write: one decision lives in one
+   place. Get the data shape right and write the failing test first. When you
+   fix a failure, fix its cause; never hide it behind a retry, a longer
+   timeout or a catch. Make one real path work from start to finish, access
+   checks included, before the rest. Remove what you replace.
+2. **Then make it right.** Before review, clean the code you added or changed
+   against the table in the standard and the Style list below. Old code you
+   touch must not get worse. Pin behaviour with tests before you change
+   structure.
+3. **Practice.** Small ordered commits. Report a short log of what you did.
+   Release a dev stack you claimed; leave your worktree for review.
+
+If two fixes that rest on the same assumption fail the same check, or a fix
+fails the second review pass, stop and take that assumption to the owner.
+
 ## Style
 
 Owner rule (4 October 2026): build only what is needed, and write it as
@@ -111,7 +132,18 @@ any agent skill that prefers short code.
 - Use descriptive names; no one-letter names except loop indexes.
 - Comment the why: invariants, security boundaries, ordering, retries and
   what a stored state means. Don't comment what the code already says.
-- Never compress code to fit on one line or to pass a lint limit.
+- Never compress code to fit on one line or to pass a lint limit. Never raise
+  or switch off a size limit inside a file; split the file by responsibility,
+  or ask the owner.
+- Give a function at most five parameters. If it needs more, split it first.
+  Pass one named object with a named, exported type only for values that
+  belong together.
+- Import a shared schema, digest, comparison or guard; never declare a second
+  copy. Compare values by their fields, not by comparing `JSON.stringify` text.
+- Keep the cause when you catch an error: log it through the structured
+  logger, then return the safe message.
+- One app never imports another app's source, and product source never imports
+  from `scripts/`. Move shared code to a library.
 - UK English throughout docs and comments.
 - TypeScript strict, ESM, Node 22. NodeNext module resolution.
 
@@ -135,10 +167,12 @@ for a newcomer to read.
 - **READMEs.** Every package has a README.md for people, with the fixed
   headings and the one small diagram set out in the
   [engineering standard](docs/process/standards.md). Put exact contracts,
-  settings, limits, test detail and history in a README.robot.md next to
-  it. Read a package's README.robot.md before changing the package. When
-  a change alters what a package does or who it talks to, update both
-  files and the diagram.
+  settings, limits and test detail in a README.robot.md next to it,
+  ordered by topic. Before changing a package, read the parts of its
+  README.robot.md that cover what you change. When a change alters what a
+  package does or who it talks to, edit the sentences that are now wrong
+  in both files, and the diagram. Never append a note per change: the pull
+  request and the release note record what changed.
 
 ## Secrets
 

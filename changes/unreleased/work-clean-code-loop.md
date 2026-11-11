@@ -1,0 +1,1 @@
+- Builders now clean the code they touched before review: one shared copy of each rule, functions within 80 lines, at most five parameters, errors that keep their cause, and READMEs that say what is true now. Reviewers check the same list in their first pass.
