@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { memberHeaderSchema } from './members.ts';
 import { chatIdSchema, conversationCreatedDataSchema, hasDirectParticipants,
   toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema,
   commandActivityLabelSchema } from '@opencrane/events';
@@ -205,9 +206,11 @@ export const chatChangeSchema = z.object({
 }).strict();
 export const chatContextSchema = z.object({
   memberId: z.string(), displayName: z.string().nullable().optional(),
+  role: memberHeaderSchema.shape.role.optional(),
   personalConnections: z.boolean().optional(),
   assistantId: z.string().nullable(), memoryAdmission: memoryAdmissionSchema.optional(),
 });
+export type ChatContext = z.infer<typeof chatContextSchema>;
 export type ChatRow = z.infer<typeof chatRowSchema>;
 
 /** A title is a display of the first message, never separately stored business state. */

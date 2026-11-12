@@ -783,7 +783,8 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   requests[1]!.dispatchEvent(new Event('load'));
   const composer = root.querySelector('textarea')!; composer.value = 'Read it'; composer.dispatchEvent(new Event('input'));
   await new Promise(resolve => setTimeout(resolve, 0)); await fixture.whenStable();
-  expect(root.querySelector<HTMLButtonElement>('[type="submit"]')!.disabled).toBe(true);
+  expect(root.querySelector<HTMLButtonElement>('oc-chat-composer [type="submit"]')!.disabled)
+    .toBe(true);
   expect(root.querySelector('.attachment-chip [role="status"]')?.textContent?.trim())
     .toBe('Preparing files…');
 

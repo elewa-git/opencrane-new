@@ -4,7 +4,13 @@
     <div class="brand"><oc-brand-mark /><strong>Open<span>Crane</span></strong><button type="button" aria-label="Find a session" (click)="searchDialog.showModal()"><kbd>⌘K</kbd></button></div>
     <span class="sr-only" role="status" aria-live="polite">{{ chat.railLoading() ? 'Loading sessions' : chat.railUnavailable() ? 'Sessions unavailable' : 'Sessions loaded' }}</span>
     <ng-container [ngTemplateOutlet]="sessionNavigation" />
-    <footer class="rail-footer"><a href="/org/integrations"><oc-icon name="settings" /> Settings</a><a class="current-user" href="/account"><span class="avatar user">{{ initials() }}</span><span><strong>{{ chat.displayName() }}</strong><small>{{ organisation }} · Personal</small></span></a></footer>
+    <footer class="rail-footer">
+      @if (isOwnerOrAdmin(chat.role())) {
+        <a href="/org/integrations"><oc-icon name="settings" /> Settings</a>
+      }
+      <a class="current-user" href="/account"><span class="avatar user">{{ initials() }}</span><span><strong>{{ chat.displayName() }}</strong><small>{{ organisation }} · Personal</small></span></a>
+      <oc-sign-out />
+    </footer>
   </nav>
   <main class="main" ocPaperSurface="main">
     <header class="workspace-header">
@@ -362,8 +368,11 @@
     @if (rail()) {
       <ng-container [ngTemplateOutlet]="sessionNavigation" />
       <footer class="rail-footer">
-        <a href="/org/integrations">Settings</a>
+        @if (isOwnerOrAdmin(chat.role())) {
+          <a href="/org/integrations">Settings</a>
+        }
         <a href="/account">{{ chat.displayName() }} · Account</a>
+        <oc-sign-out />
       </footer>
     }
   </oc-navigation-menu>
@@ -413,8 +422,6 @@
       </button>
       <a class="new-direct" href="/workspace/direct">New direct chat</a>
       <a class="new-direct" href="/workspace/conversations">Recent conversations</a>
-      <h2>Projects</h2>
-      <p class="empty-rail">No project sessions</p>
       @if (teamConversations().length) {
         <h2>Shared</h2>
         @for (conversation of teamConversations(); track conversation.conversationId;
@@ -477,7 +484,7 @@
       </div>
     } @else if (chat.railUnavailable()) {
       <div class="rail-card">
-        <strong><span class="offline-dot"></span> Can't reach your pod</strong>
+        <strong><span class="offline-dot"></span> Can't reach your computer</strong>
         <p>Your conversations are safe.</p>
         <p class="retry-countdown">Retrying in {{ chat.retryIn() }}s</p>
         <button type="button" (click)="chat.load()">Retry now</button>
@@ -486,7 +493,7 @@
       <div class="rail-card">
         <strong>No assistant assigned</strong>
         <p>Your account is in, but no agent is provisioned yet.</p>
-        <small>pod: … · waiting</small>
+        <small>computer: … · waiting</small>
       </div>
     } @else if (!chat.conversations().length && !chat.listHasMore() && !chat.denied()) {
       <div class="rail-card rail-empty">

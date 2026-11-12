@@ -5,7 +5,8 @@
 The website people use to chat with their assistant and manage an OpenCrane organisation.
 It runs in a browser and sends requests to the server. Passwords go to the company
 sign-in service. The website shows saved results from the server rather than deciding
-permissions or spending limits itself.
+permissions or spending limits itself. People can sign out from the workspace
+rail or phone menu. Owners and admins also see Settings there.
 
 ## Where it fits
 
