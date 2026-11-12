@@ -159,7 +159,7 @@ It checks the requested id, claimed id and worktree marker before reading settin
 It refuses real-provider mode. It keeps the existing server environment and the
 models Compose service, including its separate network and gateway process.
 Before stopping the server, it builds `Dockerfile.stage-b` from the same pinned
-Node image. The test image adds Debian main OpenSSL 3.0.22-1~deb12u1 for certificate
+Node image. The test image adds Debian main OpenSSL 3.0.22-1~deb12u2 for certificate
 generation. Its installed copyright file declares Apache-2.0. This image is only
 for the rehearsal; customer runtime images are unchanged.
 The PID and start time must still match before the server is stopped.
