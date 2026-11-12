@@ -20,6 +20,15 @@ checker = importlib.util.module_from_spec(specification)
 specification.loader.exec_module(checker)
 
 
+def unreviewed_package_fixture():
+    reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+    inventory = checker.read_json(source.with_name("licence-inventory.json"))
+    # Keep historical candidate checks independent of later image promotion.
+    reviewed.pop("packageImage", None)
+    reviewed.pop("natsCluster", None)
+    return reviewed, inventory
+
+
 class LicenceTests(unittest.TestCase):
     def test_cc0_is_allowed_only_as_a_named_part_bundled_inside_minio(self):
         notice = ["github.com/dchest/siphash@v1.2.3", ["CC0-1.0"],
@@ -51,8 +60,7 @@ class LicenceTests(unittest.TestCase):
         self.assertEqual(len(contents[corepack.BUNDLE]), 967004)
         regions = gzip.decompress(corepack.RECORD.with_name("regions.json.gz").read_bytes())
         self.assertEqual(len(json.loads(regions)), 175)
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -394,8 +402,7 @@ else:
         self.assertEqual(valgrind.check_review(earlier, terms), "V8 Valgrind client API")
         pcre, earlier, terms = self.pcre_fixture()
         self.assertEqual(pcre.check_review(earlier, terms), "V8 PCRE test suite")
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -716,8 +723,7 @@ else:
             checker.check_bundled_notice(
                 ["Other bundle", ["bzip2-1.0.6"], "other.h", "Unreviewed terms"],
                 valgrind.candidate.OSI)
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
         node, historical, notice = self.node_review_fixture()
@@ -964,8 +970,7 @@ else:
         node, historical, notice = self.node_review_fixture()
         self.assertEqual(node.check_review(historical, notice), 43)
         self.assertEqual(len(historical["blockedReferences"]), 10)
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -1108,8 +1113,7 @@ else:
         node_review, review, contents = self.node_review_fixture()
         self.assertEqual(node_review.check_review(review, contents), 43)
         self.assertEqual(review["status"], "PARTIAL")
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -1419,8 +1423,7 @@ else:
         self.assertIn('LABEL org.opencontainers.image.revision="$SOURCE_REVISION"', runtime)
 
     def promotion_fixture(self, directory):
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         revision = "a" * 40
         image_id = "sha256:" + "b" * 64
         pin = reviewed["images"]["server"]
@@ -1639,6 +1642,7 @@ else:
             for role in ("server", "web"):
                 inventory["images"][role]["pin"] = changed_pin
                 reviewed["images"][role] = changed_pin
+                reviewed["packageImage"][role] = changed_pin
             inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
             reviewed_path.write_text(json.dumps(reviewed), encoding="utf-8")
 
