@@ -85,7 +85,7 @@ kbd { font: 11px var(--oc-font-mono); background: #eef1f2; border: 1px solid #de
 .attachment-chip.refused { border-color: #e9bbb5; background: #fff5f3; }
 .attachment-name { font-weight: 600; overflow-wrap: anywhere; }
 .attachment-chip progress { width: 70px; }
-.attachment-chip button { padding: 2px 5px; border: 1px solid #c5d3d5; border-radius: 5px; background: white; }
+.attachment-chip button { min-width: 44px; min-height: 44px; padding: 2px 5px; border: 1px solid #c5d3d5; border-radius: 5px; background: white; }
 @media(max-width: 700px) {
   .attachment-chips { grid-column: 1 / -1; grid-row: 2; margin: 0 4px; }
   .toolbar .mode-choice, #attach-toggle, .send, .stop { grid-row: 3; }

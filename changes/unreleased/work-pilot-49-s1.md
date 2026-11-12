@@ -5,3 +5,5 @@ link to connect one. Catalogue checks and replay retain the admin's choice.
 
 The demo tool server has an optional credential-checked mode with two caller-supplied
 synthetic accounts and a read-only identity tool. Its default mode is unchanged.
+
+Attachment retry and removal buttons keep a 44 px touch target on phones.
