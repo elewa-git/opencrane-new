@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { expect, onTestFinished } from 'vitest';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
@@ -13,18 +12,21 @@ import { envelope, history, publishToolPolicy, readToolPolicy, reviewToolPolicy 
 import { prepareGatewayConfiguration, gatewayDelivery } from '@opencrane/models';
 import { remoteFixture } from '@opencrane/models/testing/remote-mcp';
 import { mcpCatalogue, pgDb } from '@opencrane/projections';
-import { createDemoServer } from '../../../demo-mcp/src/server.ts';
+import { credentialDemo } from './credential-demo.ts';
 import { installWorker } from '../../src/integrations/install-worker.ts';
 import { registerRemote } from '../../src/integrations/registration.ts';
 import { writeToolAccess } from '../../src/integrations/access-changes.ts';
 
-export async function personalKeyFixture() {
-  const nats = await natsFixture();
-  const fga = await openfga();
-  const storage = await databases();
-  const binding = await createStore(fga.apiUrl, 'test');
+import type { fixture } from '@opencrane/models/testing';
+type Runtime = Awaited<ReturnType<typeof fixture>>;
+
+export async function personalKeyFixture(runtime?: Runtime) {
+  const nats = runtime?.nats ?? await natsFixture();
+  const fga = runtime ? undefined : await openfga();
+  const storage = runtime ? undefined : await databases();
+  const binding = runtime?.binding ?? await createStore(fga!.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
-  const database = pgDb(storage.queue);
+  const database = runtime?.db ?? pgDb(storage!.queue);
   async function lock<Result>(name: string, work: (db: typeof database) => Promise<Result>) {
     return database.lock!(name, work);
   }
@@ -33,18 +35,7 @@ export async function personalKeyFixture() {
     { account: 'account-a', key: randomUUID(), permitted: true },
     { account: 'account-b', key: randomUUID(), permitted: false },
   ] as const;
-  const demo = createDemoServer(undefined, { accounts });
-  async function forward(request: IncomingMessage, reply: ServerResponse) {
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk as Uint8Array));
-    const response = await demo.inject({ method: 'POST', url: '/',
-      headers: request.headers, payload: Buffer.concat(chunks) });
-    reply.writeHead(response.statusCode, { 'content-type': 'application/json' });
-    reply.end(response.body);
-  }
-  function handle(request: IncomingMessage, reply: ServerResponse) {
-    void forward(request, reply);
-  }
+  const handle = await credentialDemo(accounts);
   const remote = await remoteFixture(false, handle);
   const app = Fastify();
   const options = { silo: 'test', store: nats.store, binding, db,
@@ -60,14 +51,14 @@ export async function personalKeyFixture() {
   const worker = installWorker(app, nats.store, 'test', remote.network);
   async function cleanup() {
     await app.close();
-    await demo.close();
     await remote.close();
-    await storage.close();
-    await fga.close();
-    await nats.close();
+    await storage?.close();
+    await fga?.close();
+    if (!runtime) await nats.close();
   }
   onTestFinished(cleanup);
   for (const userId of ['admin', 'alice', 'bob']) {
+    if (runtime && userId === 'alice') continue;
     const role = userId === 'admin' ? 'admin' : 'member';
     const joined = envelope('test', `member-${userId}`, 'member.joined', {
       memberId: userId, role, displayName: userId, email: `${userId}@example.test`,
@@ -104,7 +95,8 @@ export async function personalKeyFixture() {
       reviewRevision: policy.reviewRevision };
     expect((await publishToolPolicy(nats.store, binding, 'admin', serverId, command)).status)
       .toBe('appended');
-    const gateway = await gatewayFixture();
+    const gateway = runtime ? { options: runtime.options, child: runtime.gatewayChild()! }
+      : await gatewayFixture();
     const record = await prepareGatewayConfiguration(nats.store, 'test', serverId,
       'publish-personal');
     if (!record) throw new Error('Missing configuration');
@@ -114,27 +106,32 @@ export async function personalKeyFixture() {
       child: gateway.child, configFile: gateway.options.configFile,
       controlPort: await freePort(), settings });
     onTestFinished(delivery.close);
+    if (runtime) {
+      runtime.dispatchOptions.acknowledged = delivery.acknowledged;
+      runtime.dispatchOptions.routes.length = 0;
+      runtime.dispatchOptions.remoteNetwork = remote.network;
+    }
     await delivery.deliver(record);
     async function observed() {
       await delivery.observe();
       return delivery.acknowledged() !== null;
     }
     await expect.poll(observed, { timeout: 5000 }).toBe(true);
-    return readToolPolicy(nats.store, 'test', serverId);
+    return { ...await readToolPolicy(nats.store, 'test', serverId), record };
   }
   async function project() {
     const rows = await history(nats.store, `mcp-${serverId}`, 'test');
     for (const row of rows) await mcpCatalogue.apply(db, row.event, row.sequence);
   }
-  async function grant(userId: string) {
+  async function grant(userId: string, granteeKind = 'member', action = 'grant') {
     const subject = grantStream('mcp_server', serverId);
-    const body = { action: 'grant', granteeKind: 'member', granteeId: userId,
+    const body = { action, granteeKind, granteeId: userId,
       commandId: randomUUID(), expectedSequence: await nats.store.head(subject) };
     const response = await app.inject({ method: 'POST', url: `/grant/${serverId}`, payload: body });
     expect(response.json()).toMatchObject({ status: 'appended' });
     const rows = await history(nats.store, subject, 'test');
     for (const row of rows) await auth.handler.handle(row.event, db);
   }
-  return { nats, db, remote, demo, accounts, binding, auth, serverId, before,
+  return { nats, db, remote, accounts, binding, auth, serverId, before,
     review, publish, project, grant };
 }
