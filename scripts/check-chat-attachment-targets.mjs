@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { sendUploadedMessage } from '../infra/dev-stack/browser-upload-message.ts';
 import { waitForUpload } from '../infra/dev-stack/browser-upload-status.ts';
 import { mkdir } from 'node:fs/promises';
 
@@ -112,15 +113,7 @@ export async function checkUploadStatusFlow(page, fixture) {
   assert.equal(refusedRetries, 0);
   const delivery = { fileId: 'ready-file' };
   fixture.add('file.delivered', delivery);
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  await composer.fill('Read the attached file');
-  const send = page.getByRole('button', { name: 'Send message', exact: true });
-  await send.click();
-  const attachments = page.getByRole('list', { name: 'Attachments', exact: true });
-  await attachments.waitFor(detached);
-  const message = fixture.commands.at(-1);
-  assert.deepEqual(message.attachmentIds, ['ready-file']);
-  assert.equal(message.text, 'Read the attached file');
+  await checkSendCompletion(page, fixture);
   const unsupported = { name: 'program.exe', mimeType: 'application/octet-stream',
     buffer: Buffer.from('MZbinary') };
   await input.setInputFiles(unsupported);
@@ -134,4 +127,65 @@ async function checkTarget(control) {
   const page = control.page();
   const viewport = page.viewportSize();
   await assertTouchTarget(control, viewport.width);
+}
+
+async function checkSendCompletion(page, fixture) {
+  const acknowledgement = Promise.withResolvers();
+  const requested = Promise.withResolvers();
+  async function holdMessage(route) {
+    requested.resolve();
+    await acknowledgement.promise;
+    await route.fallback();
+  }
+  const messagesPattern = '**/api/conversations/chat/messages';
+  await page.route(messagesPattern, holdMessage);
+  const sending = sendUploadedMessage(page, 'Read the attached file', 'Hello from your computer.');
+  let sent = false;
+  let sendFailure;
+  function markSent() {
+    sent = true;
+  }
+  function markFailed(error) {
+    sendFailure = error;
+  }
+  const checkedSend = sending.then(markSent, markFailed);
+  try {
+    await requested.promise;
+    await page.waitForFunction(composerIsSending);
+    await page.evaluate(nextFrame);
+    await page.evaluate(nextFrame);
+    assert.equal(sent, false, 'Wait for the new reply, even while Send remains visible');
+  } finally {
+    acknowledgement.resolve();
+  }
+  const attachments = page.getByRole('list', { name: 'Attachments', exact: true });
+  await attachments.waitFor(detached);
+  const messages = page.getByRole('article', { name: 'Your message', exact: true });
+  const posted = messages.filter({ hasText: 'Read the attached file' });
+  await posted.waitFor();
+  const message = fixture.commands.at(-1);
+  assert.deepEqual(message.attachmentIds, ['ready-file']);
+  assert.equal(message.text, 'Read the attached file');
+  const turn = { turnId: message.id };
+  fixture.add('agent.turn_started', turn);
+  const stop = page.getByRole('button', { name: 'Stop', exact: true });
+  const trial = { trial: true };
+  await stop.click(trial);
+  assert.equal(sent, false, 'Wait for the new reply to finish before the next attachment');
+  const answer = { turnId: message.id, messageId: 'attachment-answer',
+    text: 'Hello from your computer.' };
+  fixture.add('agent.message_delta', answer);
+  fixture.add('agent.turn_completed', turn);
+  await checkedSend;
+  if (sendFailure !== undefined) throw sendFailure;
+  await page.unroute(messagesPattern, holdMessage);
+}
+
+function composerIsSending() {
+  const send = globalThis.document.querySelector('button.send');
+  return send?.disabled === true;
+}
+
+function nextFrame() {
+  return new Promise(globalThis.requestAnimationFrame);
 }

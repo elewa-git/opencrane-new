@@ -3,8 +3,8 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
   let stopConflict = false;
   let socketReady = false;
   let rows = [], socket, offline = ['queued', 'rail-offline'].includes(scenario);
-  const add = (type, data) => {
-    const row = { id: `event-${rows.length + 1}`, position: rows.length + 1, type, data, time: type === 'agent.turn_completed' ? '2026-10-02T10:42:48Z' : '2026-10-02T10:42:00Z' };
+  const add = (type, data, id) => {
+    const row = { id: id ?? `event-${rows.length + 1}`, position: rows.length + 1, type, data, time: type === 'agent.turn_completed' ? '2026-10-02T10:42:48Z' : '2026-10-02T10:42:00Z' };
     rows.push(row);
     socket?.send(JSON.stringify({ version: 1, type: 'event', topic: 'conversation', conversationId: 'chat', generation: 1, position: row.position, row }));
     return row;
@@ -142,7 +142,7 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
         return fulfil({ status: 'appended', sequence: rows.length });
       }
       if (!rows.some(row => row.id === command.id)) {
-        const row = add('message.posted', { text: command.text, authorId: 'me' }); row.id = command.id;
+        add('message.posted', { text: command.text, authorId: 'me' }, command.id);
       }
       return fulfil({ status: 'appended', sequence: rows.length });
     }
