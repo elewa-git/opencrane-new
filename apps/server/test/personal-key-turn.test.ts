@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { history, readConnectionSelection, changeConnectionSelection,
   savePersonalKey } from '@opencrane/models';
 import { personalKeyFixture } from './support/personal-key.ts';
@@ -68,22 +68,48 @@ async function refuseInvalidOrUngrantableKey() {
 it('refuses to check an ungranted key or save a key whose identity check fails',
   refuseInvalidOrUngrantableKey, 120_000);
 
-async function refuseGrantRevokedDuringStage() {
+async function refuseGrantRevokedSave(when: 'stage' | 'append') {
   const setup = await personalKeyFixture();
   const policy = await setup.publish();
   await setup.grant('alice');
   async function stage() {
-    await setup.grant('alice', 'member', 'revoke');
+    if (when === 'stage') await setup.grant('alice', 'member', 'revoke');
     return { status: 'staged' as const,
       identity: { reference: 'fixture', uid: 'fixture', resourceVersion: '1' } };
   }
   const input = { action: 'create', serverId: setup.serverId, connectionId: policy.connectionId,
     profileId: 'personal', changeRef: randomUUID(), expectedSequence: 0,
     expectedGeneration: 0, appendUntil: Date.now() + 60_000 };
+  let reachedAppend = false;
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  async function append(command: Parameters<typeof setup.nats.store.append>[0]) {
+    const event = command.event;
+    const saving = typeof event === 'object' && event !== null && 'type' in event &&
+      event.type === 'connection.created';
+    if (when === 'append' && saving) {
+      reachedAppend = true;
+      await setup.grant('alice', 'member', 'revoke');
+    }
+    return originalAppend(command);
+  }
+  const spy = vi.spyOn(setup.nats.store, 'append').mockImplementation(append);
   const dependencies = { custody: { stage }, db: setup.db, network: setup.remote.network };
-  await expect(savePersonalKey(setup.nats.store, setup.binding, 'alice', dependencies,
-    { command: input, material: setup.accounts[0].key })).rejects.toThrow();
-  expect(await setup.nats.store.head(`connection-alice-${setup.serverId}-personal`)).toBe(0);
+  try {
+    await expect(savePersonalKey(setup.nats.store, setup.binding, 'alice', dependencies,
+      { command: input, material: setup.accounts[0].key })).rejects.toThrow(
+        when === 'append' ? 'Connection append unconfirmed' : 'Selection access unavailable');
+    if (when === 'append') expect(reachedAppend).toBe(true);
+    expect(await setup.nats.store.head(`connection-alice-${setup.serverId}-personal`)).toBe(0);
+  } finally {
+    spy.mockRestore();
+  }
+}
+async function refuseGrantRevokedDuringStage() {
+  await refuseGrantRevokedSave('stage');
+}
+async function refuseGrantRevokedAtAppend() {
+  await refuseGrantRevokedSave('append');
 }
 it('refuses the save when its grant is revoked while custody stages the checked key',
   refuseGrantRevokedDuringStage, 120_000);
+it('binds its final grant check to the append', refuseGrantRevokedAtAppend, 120_000);
