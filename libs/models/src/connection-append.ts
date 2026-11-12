@@ -21,10 +21,10 @@ export async function appendConnection(store: EventStore, binding: Binding, memb
   // Finish remote calls and custody before starting the short access check.
   const controlSubject = `connection-control-${memberId}-${input.serverId}`;
   const subjects = [`member-${memberId}`, controlSubject];
-  let fresh;
+  let fresh: Awaited<ReturnType<typeof authorityFence>>;
   if (append.confirmAccess) fresh = await append.confirmAccess();
   else fresh = await authorityFence(store, performance.now(), subjects);
-  fresh.include(...subjects, `mcp-${input.serverId}`);
+  fresh.include(...subjects);
   const connectionSequence = await store.head('connection-*', fresh.deadline);
   const options = { requiredRole: 'member' as const, fresh };
   await activeMember(store, binding, memberId, options);
@@ -34,16 +34,24 @@ export async function appendConnection(store: EventStore, binding: Binding, memb
     return connectionReceipt(original);
   }
   const appendUntil = Math.min(input.appendUntil, server.expiresAt);
-  if (Date.now() >= appendUntil ||
-      await store.head(`mcp-${input.serverId}`, fresh.deadline) !== server.sequence) {
-    throw new Error('Connection conflict');
+  async function requireCurrentServer() {
+    if (Date.now() >= appendUntil ||
+        await store.head(`mcp-${input.serverId}`, fresh.deadline) !== server.sequence) {
+      throw new Error('Connection conflict');
+    }
   }
+  async function checkAccess() {
+    await fresh();
+    await requireCurrentServer();
+  }
+  await requireCurrentServer();
   if (await store.head(event.subject, fresh.deadline) !== input.expectedSequence) {
     throw new Error('Connection append unconfirmed');
   }
   await fresh();
   const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
-  const command = { event, expectedSequence: connectionSequence, checkAccess: fresh,
+  const command = { event, expectedSequence: connectionSequence,
+    ...(append.confirmAccess ? { checkAccess } : {}),
     expectedSubject: 'connection-*', historyChecked: true as const, deadline };
   const result = await store.append(command);
   if (result.status !== 'appended') throw new Error('Connection append unconfirmed');
