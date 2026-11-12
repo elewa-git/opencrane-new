@@ -1,4 +1,5 @@
 import './journey-entry.ts';
+import { requireFleetStandInProvider } from './journey-guard.ts';
 // Run after up with fresh or repeat. Replaces only this secondary HTTP process with
 // buildServer using the local HTTPS fixture transport; finish with down.sh --id.
 import assert from 'node:assert/strict';
@@ -21,7 +22,9 @@ const { remoteFixture } = await import('@opencrane/models/testing/remote-mcp');
 const run = process.argv[2];
 assert(run === 'fresh' || run === 'repeat', 'Choose fresh or repeat evidence');
 assert.equal(await readFile(`${directory}/stack-owner`, 'utf8'), root);
-const settings = await readEnv('settings'), binding = await readEnv('binding');
+const settings = await readEnv('settings');
+requireFleetStandInProvider(settings['DEV_REAL_PROVIDER'] === '1');
+const binding = await readEnv('binding');
 const server = await readEnv('server'), config = loadAuthConfig(await authEnv());
 assert.equal(config.expectedOrgId, '393311211338337681');
 const origin = settings['ORIGIN']!, silo = settings['SILO_ID']!;

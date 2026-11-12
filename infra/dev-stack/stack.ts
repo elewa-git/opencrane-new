@@ -491,17 +491,18 @@ async function removeComputers() {
   }
 }
 async function up(fresh: boolean) {
-  const firstStart = fresh || !await exists(`${directory}/settings.env`);
+  const settingsPresent = await exists(`${directory}/settings.env`);
+  const firstStart = fresh || !settingsPresent;
   const credentialFile = process.env['DEV_REAL_PROVIDER_FILE'];
   const real = credentialFile !== undefined;
   const ceilings = startupCeilings(real, process.env['DEMO_ALLOWANCE_CENTS']);
   if (real && (!credentialFile || process.env['DEV_OWNER_BOOTSTRAP'] === '0')) {
     throw new Error('Real provider setup requires a credential file and the dev Owner');
   }
-  if (!firstStart) {
+  if (settingsPresent) {
     const settings = await readEnv('settings');
     requireFleetStandInProvider(settings['DEV_REAL_PROVIDER'] === '1');
-    checkProviderMode(settings, real);
+    if (!fresh) checkProviderMode(settings, real);
   }
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;

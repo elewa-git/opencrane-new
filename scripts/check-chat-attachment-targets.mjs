@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { waitForUpload } from '../infra/dev-stack/browser-upload-status.ts';
 import { mkdir } from 'node:fs/promises';
 
+const emptyFiles = { contentType: 'application/json', body: '{"rows":[]}' };
+const detached = { state: 'detached' };
+
 async function assertTouchTarget(control, width) {
   await control.click({ trial: true });
   const box = await control.boundingBox();
@@ -17,23 +20,27 @@ export async function checkAttachmentTargets(page, width) {
       await route.abort('failed');
       return;
     }
-    await route.fulfill({ contentType: 'application/json', body: '{"rows":[]}' });
+    await route.fulfill(emptyFiles);
   }
   await page.route(filesPattern, refuseUpload);
-  await page.getByRole('button', { name: 'Attach', exact: true }).click();
+  const attach = page.getByRole('button', { name: 'Attach', exact: true });
+  await attach.click();
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Upload from computer', exact: true }).click();
+  const upload = page.getByRole('button', { name: 'Upload from computer', exact: true });
+  await upload.click();
   const file = { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Notes') };
-  await (await chooser).setFiles(file);
+  const fileChooser = await chooser;
+  await fileChooser.setFiles(file);
   const retry = page.getByRole('button', { name: 'Retry upload', exact: true });
   await retry.waitFor();
   await assertTouchTarget(retry, width);
   const remove = page.getByRole('button', { name: 'Remove notes.txt', exact: true });
   await assertTouchTarget(remove, width);
   await mkdir('docs/process/main-upload-retry-44', { recursive: true });
-  await page.screenshot({
+  const screenshot = {
     path: `docs/process/main-upload-retry-44/retry-${width}.png`, fullPage: true,
-  });
+  };
+  await page.screenshot(screenshot);
   await page.unroute(filesPattern, refuseUpload);
   const heldUpload = Promise.withResolvers();
   async function holdUpload(route) {
@@ -43,11 +50,13 @@ export async function checkAttachmentTargets(page, width) {
   await page.route(filesPattern, holdUpload);
   try {
     await retry.click();
-    await page.getByRole('progressbar', { name: 'notes.txt upload progress' }).waitFor();
+    const progress = page.getByRole('progressbar', { name: 'notes.txt upload progress' });
+    await progress.waitFor();
     // Remove is also the shipped cancellation control while an upload is in progress.
     await assertTouchTarget(remove, width);
     await remove.click();
-    await page.getByRole('list', { name: 'Attachments', exact: true }).waitFor({ state: 'detached' });
+    const attachments = page.getByRole('list', { name: 'Attachments', exact: true });
+    await attachments.waitFor(detached);
   } finally {
     heldUpload.resolve();
     await page.unroute(filesPattern, holdUpload);
@@ -61,11 +70,18 @@ export async function checkUploadStatusFlow(page, fixture) {
     const request = route.request();
     const headers = request.headers();
     if (request.method() !== 'POST') {
-      await route.fulfill({ contentType: 'application/json', body: '{"rows":[]}' });
+      await route.fulfill(emptyFiles);
+      return;
+    }
+    if (headers['x-file-name'] === 'program.exe') {
+      const reply = { status: 415, contentType: 'application/json',
+        body: '{"reason":"unsupported_type"}' };
+      await route.fulfill(reply);
       return;
     }
     if (headers['x-file-name'] === 'refused.txt') {
-      await route.fulfill({ status: 422, contentType: 'application/json', body: '{}' });
+      const reply = { status: 422, contentType: 'application/json', body: '{}' };
+      await route.fulfill(reply);
       return;
     }
     requestKeys.push(headers['idempotency-key']);
@@ -73,32 +89,49 @@ export async function checkUploadStatusFlow(page, fixture) {
       await route.abort('failed');
       return;
     }
-    await route.fulfill({ status: 201, contentType: 'application/json',
-      body: '{"fileId":"ready-file"}' });
+    const reply = { status: 201, contentType: 'application/json',
+      body: '{"fileId":"ready-file"}' };
+    await route.fulfill(reply);
   }
   await page.route(filesPattern, uploadReply);
   const input = page.locator('input[type=file]');
-  await input.setInputFiles({ name: 'refused.txt', mimeType: 'text/plain',
-    buffer: Buffer.from('Refusal fixture') });
-  await page.getByText('File refused: malware detected.', { exact: true }).waitFor();
-  await input.setInputFiles({ name: 'ready.txt', mimeType: 'text/plain',
-    buffer: Buffer.from('Ready fixture') });
+  const refused = { name: 'refused.txt', mimeType: 'text/plain',
+    buffer: Buffer.from('Refusal fixture') };
+  await input.setInputFiles(refused);
+  const malware = page.getByText('File refused: malware detected.', { exact: true });
+  await malware.waitFor();
+  const ready = { name: 'ready.txt', mimeType: 'text/plain',
+    buffer: Buffer.from('Ready fixture') };
+  await input.setInputFiles(ready);
   const retries = await waitForUpload(page, 'ready.txt', checkTarget);
   assert.equal(retries, 1);
   assert.equal(requestKeys.length, 2);
   assert.equal(requestKeys[0], requestKeys[1], 'Retry keeps the original request key');
-  assert.equal(await waitForUpload(page, 'refused.txt', checkTarget,
-    'File refused: malware detected.'), 0);
-  fixture.add('file.delivered', { fileId: 'ready-file' });
-  await page.getByRole('textbox', { name: 'Message your agent' }).fill('Read the attached file');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
-  await page.getByRole('list', { name: 'Attachments', exact: true }).waitFor({ state: 'detached' });
+  const refusedRetries = await waitForUpload(page, 'refused.txt', checkTarget,
+    'File refused: malware detected.');
+  assert.equal(refusedRetries, 0);
+  const delivery = { fileId: 'ready-file' };
+  fixture.add('file.delivered', delivery);
+  const composer = page.getByRole('textbox', { name: 'Message your agent' });
+  await composer.fill('Read the attached file');
+  const send = page.getByRole('button', { name: 'Send message', exact: true });
+  await send.click();
+  const attachments = page.getByRole('list', { name: 'Attachments', exact: true });
+  await attachments.waitFor(detached);
   const message = fixture.commands.at(-1);
   assert.deepEqual(message.attachmentIds, ['ready-file']);
   assert.equal(message.text, 'Read the attached file');
+  const unsupported = { name: 'program.exe', mimeType: 'application/octet-stream',
+    buffer: Buffer.from('MZbinary') };
+  await input.setInputFiles(unsupported);
+  const refusal = 'This file type is not supported. Try a supported document, image or text file.';
+  const unsupportedRetries = await waitForUpload(page, 'program.exe', checkTarget, refusal);
+  assert.equal(unsupportedRetries, 0);
   await page.unroute(filesPattern, uploadReply);
 }
 
 async function checkTarget(control) {
-  await assertTouchTarget(control, control.page().viewportSize().width);
+  const page = control.page();
+  const viewport = page.viewportSize();
+  await assertTouchTarget(control, viewport.width);
 }

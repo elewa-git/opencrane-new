@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import './journey-entry.ts';
+import { requireFleetStandInProvider } from './journey-guard.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -18,6 +19,8 @@ import { authEnv, directory, readEnv } from './config.ts';
 import { namespace, secondary, stackId } from './identity.ts';
 
 assert(secondary, 'Screenshot qualification requires a claimed secondary stack');
+const settings = await readEnv('settings');
+requireFleetStandInProvider(settings['DEV_REAL_PROVIDER'] === '1');
 const run = z.enum(['fresh', 'repeat']).parse(process.argv[2]);
 const output = 'docs/process/p3-18-live';
 await mkdir(output, { recursive: true });
@@ -31,7 +34,7 @@ function hasVisibleDesktopPixels(dialog: Element): boolean {
   }
   return false;
 }
-const settings = await readEnv('settings'), binding = await readEnv('binding');
+const binding = await readEnv('binding');
 const silo = settings['SILO_ID']!, origin = settings['ORIGIN']!;
 const events = await connectEventStore(await readEnv('command'));
 const authz = memberAuthorisation({ silo, apiUrl: binding['OPENFGA_API_URL']!, storeId: binding['OPENFGA_STORE_ID']!, authorizationModelId: binding['OPENFGA_MODEL_ID']! });
