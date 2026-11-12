@@ -25,7 +25,8 @@ The root `.dockerignore` excludes repository test folders and test files from th
 package build. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
 The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
-It keeps the three image scanner files used by the server's image evidence import.
+It keeps the image scanner files used by the server's image evidence import,
+plus the packaged scanner's HTTPS and approved-database checks.
 `scripts/private-memory-qualification/memory-image.test.ts` builds this Dockerfile,
 checks the packaged source folders for tests, and runs both memory checks against
 disposable NATS. It does not qualify live memory delivery or enable admission.
@@ -62,7 +63,7 @@ only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
 cannot prepare a package while that slot's Compose processes or containers run. The
 slot lock keeps these checks and the following operation together. An operator
-then runs `prepare.ts` with the private values file. That command creates five
+then runs `prepare.ts` with the private values file. That command creates eight
 named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
@@ -87,12 +88,12 @@ would make its keys unreadable; a fresh install gets a fresh volume and Secret.
 The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
-database setup credentials. The installer checks all six names and required
+database setup credentials. The installer checks all eight names and required
 fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
-six secret names and all three exposure flags set to `false`:
+eight secret names and all three exposure flags set to `false`:
 
 Preflight and Helm run from the values file's directory and receive only its
 filename. The private directory remains in the child process's working directory,
@@ -167,7 +168,61 @@ is claimed per assistant, including shared group assistants, and starts when nee
 The installer reads the server Service ClusterIP and puts that IP in the computer ConfigMap. The computer policy permits only TCP
 port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and
-the scanner are outside this chart.
+the scanner run inside this chart. The file worker still projects events; object
+storage is content, and the upload command remains the only business write.
+
+## Packaged upload services
+
+`files.yaml` runs one MinIO StatefulSet with a 5 GiB claim and one scanner Pod.
+The scanner Pod copies exactly three databases from its pinned engine image.
+Both production launch paths use the fixed settings in `chart/scanner.conf`.
+Both the engine and HTTPS wrapper mount that copy read-only. The engine listens
+only on Pod loopback, disables reloads and uses a 64 MiB memory-backed temporary
+folder. A network rule exposes only authenticated HTTPS on port 8443 to the server
+and dispatcher Pods. The Pod has no outbound network access or service-account token.
+
+`scanner.mjs` reuses the existing HTTPS service and release validation.
+`packaged.mjs` verifies the approved manifest hash, release/image binding, database
+file count and actual hashes before serving scans. It checks the complete upstream
+update time before and after scanning and stops serving after 24 hours.
+A copy, file date or restart cannot renew this time. Stale or uncertain scans keep
+the existing typed upload-unavailable response. Infected bytes keep the existing
+refusal; neither case stores a file or appends `file.uploaded`.
+
+The `scanner` value has one field, `approvedSha`. Preflight compares it with the
+reviewed release. Before running `prepare.ts`, supply the matching manifest and
+release through `PACKAGE_SCANNER_MANIFEST_FILE` and `PACKAGE_SCANNER_RELEASE_FILE`.
+The checked public records are `scanner-signatures.json` and `scanner-release.json`.
+Their database bytes belong to the pinned image. Once they expire, deploy a newly
+reviewed image, manifest and release together; preparation refuses stale evidence.
+The existing `infra/clamav/refresh.sh` and `release.mjs` produce and verify candidates.
+Build `Scanner.Dockerfile` with a `signatures` build context containing only the three
+reviewed CVD or CLD files. Refresh never changes a running scanner.
+
+Preparation creates separate `objects` and `scanner` Secrets. The scanner Secret
+contains its TLS key/certificate, public issuer trust, manifest and release.
+The server receives only the CA and approved manifest digest alongside its existing
+trusted ES256 issuer. It uses `https://scanner:8443/scan/upload`, with normal CA and
+hostname verification, request bindings and a fresh short-lived pass per scan.
+
+Only the storage credential sidecar mounts the object-store provisioning identity.
+It creates the private `files` bucket and issues a fresh 15-minute STS credential
+every five minutes. The policy permits object reads, writes, deletion and listing
+only in that bucket. The server reads an atomic, memory-backed lease file and
+expires it locally after 14 minutes. It receives no provisioning credential.
+The installer waits for the object store and scanner as well as the existing apps.
+
+`Objects.Dockerfile` copies only the static MinIO binary and reviewed source notices;
+no Alpine operating-system files enter the image. `object-notices.json` records each
+embedded Go component's source, notice hash and licence. Prepare the named `notices`
+build context with `python3 infra/package/prepare-object-notices.py NEW_DIRECTORY`.
+The collector checks archive and notice hashes before writing complete terms.
+The package inventory records the CC0 hashing part as a DFSG-free library bundled
+inside AGPL MinIO, separately from OSI application approval. The scanner's 112 OS
+packages match signed Debian main indexes in `scanner-debian-main.json`. Its engine
+and bundled parser review reuses `infra/clamav/LICENCES.md`; UnRAR is removed before
+flattening the final image.
+
 The licence inventory lists the components found by Syft in the pinned images.
 `osi-licences.json` contains the OSI-approved IDs from SPDX licence list 3.28.0
 (source JSON SHA-256

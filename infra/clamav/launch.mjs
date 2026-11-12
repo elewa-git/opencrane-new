@@ -1,13 +1,16 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { docker, dockerBeforeDeadline, inspectContainer, readApprovedManifest, readBoundedBytes,
+import { docker, dockerBeforeDeadline, inspectContainer, readApprovedRelease as approvedInputs,
   removeContainers, reserveContainer, validateManifest } from './release.mjs';
 import { createScanOperation, stateFormat } from './scan.mjs';
 
 const refusal = 'Scanner launch refused';
 const maximumAge = 86_400_000;
 const maximumStartup = 15 * 60_000;
+const scannerConfiguration = readFileSync(
+  new URL('../package/chart/scanner.conf', import.meta.url), 'utf8');
 
 function requireEvidence(condition) {
   if (!condition) {
@@ -27,30 +30,8 @@ function startScript(manifest) {
     lines.push(`printf '%s\n' '${database.sha256}  ${database.file}' | sha256sum -c - >/dev/null`);
   }
   lines.push("exec /usr/sbin/clamd --config-file=/dev/stdin <<'CONFIG'",
-    'Foreground yes', 'TCPSocket 3310', 'TCPAddr 127.0.0.1',
-    'DatabaseDirectory /var/lib/clamav', 'TemporaryDirectory /tmp',
-    'SelfCheck 0', 'ConcurrentDatabaseReload no',
-    'StreamMaxLength 21M', 'MaxFileSize 21M', 'MaxScanSize 80M', 'MaxRecursion 16',
-    'MaxFiles 2000', 'AlertExceedsMax yes', 'AlertEncrypted yes', 'ReadTimeout 60',
-    'CommandReadTimeout 10', 'CONFIG');
+    scannerConfiguration.trimEnd(), 'CONFIG');
   return lines.join('\n');
-}
-
-async function approvedInputs(options, now) {
-  const { image, manifestPath, approvedSha, releasePath } = options;
-  const pattern = /^(?:[a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
-  requireEvidence(pattern.test(image));
-  const manifest = await readApprovedManifest(manifestPath, approvedSha);
-  validateManifest(manifest, now);
-  const bytes = await readBoundedBytes(releasePath, 1024);
-  const record = JSON.parse(bytes.toString('utf8'));
-  const inspectedAt = Date.parse(record.inspectedAt);
-  requireEvidence(record.formatVersion === 1 &&
-    record.imageDigest === image.slice(image.indexOf('@') + 1) &&
-    record.manifestDigest === `sha256:${approvedSha}` &&
-    record.databaseUpdatedAt === manifest.databaseUpdatedAt &&
-    inspectedAt >= Date.parse(manifest.databaseUpdatedAt) && inspectedAt <= now);
-  return manifest;
 }
 
 function createScanner(image, scanner, manifest, runDocker) {

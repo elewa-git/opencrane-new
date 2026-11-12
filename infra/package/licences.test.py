@@ -1544,7 +1544,7 @@ else:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
                              "reviewed-images.json", "osi-licences.json", "Dockerfile",
-                             "pgdg-trixie-main.json"):
+                             "pgdg-trixie-main.json", "scanner-debian-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
 
             inventory_path = package / "licence-inventory.json"
@@ -1592,7 +1592,7 @@ else:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
                              "reviewed-images.json", "osi-licences.json", "Dockerfile",
-                             "pgdg-trixie-main.json"):
+                             "pgdg-trixie-main.json", "scanner-debian-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
             for index in source.parent.glob("debian-main-*.json"):
                 shutil.copy2(index, package / index.name)
@@ -1628,7 +1628,7 @@ else:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
                              "reviewed-images.json", "osi-licences.json", "Dockerfile",
-                             "pgdg-trixie-main.json"):
+                             "pgdg-trixie-main.json", "scanner-debian-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
 
             inventory_path = package / "licence-inventory.json"
