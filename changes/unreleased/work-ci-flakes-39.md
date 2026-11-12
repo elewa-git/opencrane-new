@@ -1,0 +1,1 @@
+Keep approval retry deadline checks reliable with fractional monotonic clocks by comparing absolute deadlines without rounding the remaining duration. Preserve the exact one-second evidence limit and all access checks.

@@ -750,7 +750,8 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
     for (const deadline of deadlines) {
       expect(Number.isFinite(deadline)).toBe(true);
       expect(deadline).toBe(deadlines[0]);
-      expect(deadline - (clockStart + elapsed)).toBeLessThanOrEqual(1000);
+      // Compare absolute times: subtracting fractional clocks can round above 1,000 ms.
+      expect(deadline).toBeLessThanOrEqual(currentTime() + 1000);
     }
     const timing: unknown = expect.any(Number);
     const diagnostic = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
