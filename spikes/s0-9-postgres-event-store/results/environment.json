@@ -1,0 +1,41 @@
+{
+  "startedAt": "2026-11-12T19:35:09.207Z",
+  "sourceCommit": "ae942c9b5f911ccda0902b62b8a4e0989412e6e6",
+  "baseCommit": "90a99afa75e508f32c505d82a4beacc45e236dfd",
+  "codeSha256": "819eaf501bfe0c78df9bfa3dc208341214bbfb8a8e70ea159230d7642dea8cc1",
+  "codeFiles": [
+    "spikes/s0-9-postgres-event-store/eslint.config.mjs",
+    "spikes/s0-9-postgres-event-store/pressure.config.ts",
+    "spikes/s0-9-postgres-event-store/run.sh",
+    "spikes/s0-9-postgres-event-store/src/inventory.ts",
+    "spikes/s0-9-postgres-event-store/src/postgres-event-store.ts",
+    "spikes/s0-9-postgres-event-store/src/postgres-fixture.ts",
+    "spikes/s0-9-postgres-event-store/src/record-contracts.ts",
+    "spikes/s0-9-postgres-event-store/src/record-environment.ts",
+    "spikes/s0-9-postgres-event-store/tests/append-outcomes.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/append.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/conversation-command.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/history-checked.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/postgres.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/pressure.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/read-event-at.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/testing.ts",
+    "spikes/s0-9-postgres-event-store/tests/volume.test.ts",
+    "spikes/s0-9-postgres-event-store/vitest.config.ts",
+    "spikes/s0-9-postgres-event-store/volume.config.ts"
+  ],
+  "platform": "linux",
+  "arch": "x64",
+  "cpus": 8,
+  "cpuModel": "DO-Regular",
+  "memoryBytes": 16768589824,
+  "node": "v22.23.3",
+  "pgClient": {
+    "version": "8.16.3",
+    "license": "MIT"
+  },
+  "nats": "nats-server: v2.15.0",
+  "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+  "priority": "Each test and inventory command runs under nice -n 10",
+  "limitations": "Shared development host; no dedicated-host load control or HA qualification"
+}

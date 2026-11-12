@@ -1,0 +1,328 @@
+{
+  "baseSha": "90a99afa75e508f32c505d82a4beacc45e236dfd",
+  "definition": "Gross physical source lines in selected NATS implementations; includes comments and blanks within ranges, excludes tests and configuration. Replacement and caller edits are still needed. This is not a net deletion estimate.",
+  "candidateLines": 1567,
+  "files": [
+    {
+      "file": "libs/event-store/src/jetstream.ts",
+      "names": [
+        "EventStore",
+        "createEventStore",
+        "connectEventStore",
+        "eventsConfig",
+        "verifyEventsConfig",
+        "defaults",
+        "otherChecks",
+        "readSubject",
+        "conversationReadSubject",
+        "retryRead"
+      ],
+      "treatment": "Replace the NATS adapter; keep its contract",
+      "physicalLines": 543,
+      "candidateLines": 460,
+      "sha256": "829875cf62a38c5782bccc8820731454948a87892ad597bc399a31445a2b4811",
+      "ranges": [
+        {
+          "name": "readSubject",
+          "first": 30,
+          "last": 33,
+          "lines": 4
+        },
+        {
+          "name": "conversationReadSubject",
+          "first": 35,
+          "last": 44,
+          "lines": 10
+        },
+        {
+          "name": "defaults",
+          "first": 51,
+          "last": 64,
+          "lines": 14
+        },
+        {
+          "name": "eventsConfig",
+          "first": 66,
+          "last": 85,
+          "lines": 20
+        },
+        {
+          "name": "otherChecks",
+          "first": 92,
+          "last": 108,
+          "lines": 17
+        },
+        {
+          "name": "verifyEventsConfig",
+          "first": 110,
+          "last": 123,
+          "lines": 14
+        },
+        {
+          "name": "retryRead",
+          "first": 126,
+          "last": 152,
+          "lines": 27
+        },
+        {
+          "name": "createEventStore",
+          "first": 187,
+          "last": 193,
+          "lines": 7
+        },
+        {
+          "name": "connectEventStore",
+          "first": 196,
+          "last": 205,
+          "lines": 10
+        },
+        {
+          "name": "EventStore",
+          "first": 207,
+          "last": 543,
+          "lines": 337
+        }
+      ]
+    },
+    {
+      "file": "libs/event-store/src/nats-connection.ts",
+      "treatment": "Retire NATS connections",
+      "physicalLines": 53,
+      "candidateLines": 53,
+      "sha256": "0ff184a82aa9b9a466e403a96248918f50476396f33c5f7b43effe15242c6285",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 53,
+          "lines": 53
+        }
+      ]
+    },
+    {
+      "file": "libs/event-store/src/certificates.ts",
+      "names": [
+        "certificates"
+      ],
+      "treatment": "Retire NKey/client identity creation; retain the generic TLS issuer",
+      "physicalLines": 43,
+      "candidateLines": 17,
+      "sha256": "37e354fd6315433d17a504ad3a80b5b3ec37688580094db145b657baf57e6b6a",
+      "ranges": [
+        {
+          "name": "certificates",
+          "first": 13,
+          "last": 29,
+          "lines": 17
+        }
+      ]
+    },
+    {
+      "file": "libs/handlers/src/dispatcher.ts",
+      "names": [
+        "configuration",
+        "provisionDispatcher",
+        "durableConsumer"
+      ],
+      "treatment": "Retire NATS consumer setup; retain pg-boss, enqueue and SQL checkpoint logic",
+      "physicalLines": 169,
+      "candidateLines": 29,
+      "sha256": "9a8bc5332face5c9b907dae2ba60a782eb55a2daee4320db90e462ba058bdbc2",
+      "ranges": [
+        {
+          "name": "configuration",
+          "first": 14,
+          "last": 22,
+          "lines": 9
+        },
+        {
+          "name": "provisionDispatcher",
+          "first": 25,
+          "last": 28,
+          "lines": 4
+        },
+        {
+          "name": "durableConsumer",
+          "first": 30,
+          "last": 45,
+          "lines": 16
+        }
+      ]
+    },
+    {
+      "file": "infra/package/event-backup-run.ts",
+      "treatment": "Retire the NATS archive CLI",
+      "physicalLines": 47,
+      "candidateLines": 47,
+      "sha256": "34e37602f57ce5ded11d911f2f058a41f62454fae26b7830196f0772b4621ecb",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 47,
+          "lines": 47
+        }
+      ]
+    },
+    {
+      "file": "infra/package/event-restore-run.ts",
+      "treatment": "Retire the NATS restore CLI",
+      "physicalLines": 56,
+      "candidateLines": 56,
+      "sha256": "bed5bcd17d1c255fd4a75963cc51cebc0704f3f70ff1fd56e31fb5255f7219c3",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 56,
+          "lines": 56
+        }
+      ]
+    },
+    {
+      "file": "infra/package/event-backup.ts",
+      "names": [
+        "configSchema",
+        "withoutServerMetadata",
+        "stateSchema",
+        "infoSchema",
+        "snapshotSchema",
+        "receiveSnapshot"
+      ],
+      "treatment": "Retire NATS snapshot protocol; retain archive integrity and ownership checks",
+      "physicalLines": 234,
+      "candidateLines": 65,
+      "sha256": "01e105469a4ed7f8e62f2f879a64d9007d31a9268e1d981a890d3442e5b65b9b",
+      "ranges": [
+        {
+          "name": "configSchema",
+          "first": 13,
+          "last": 21,
+          "lines": 9
+        },
+        {
+          "name": "withoutServerMetadata",
+          "first": 23,
+          "last": 27,
+          "lines": 5
+        },
+        {
+          "name": "stateSchema",
+          "first": 28,
+          "last": 28,
+          "lines": 1
+        },
+        {
+          "name": "infoSchema",
+          "first": 29,
+          "last": 32,
+          "lines": 4
+        },
+        {
+          "name": "snapshotSchema",
+          "first": 33,
+          "last": 35,
+          "lines": 3
+        },
+        {
+          "name": "receiveSnapshot",
+          "first": 133,
+          "last": 175,
+          "lines": 43
+        }
+      ]
+    },
+    {
+      "file": "infra/package/event-restore.ts",
+      "names": [
+        "checkInfo",
+        "transfer",
+        "checkConnections"
+      ],
+      "treatment": "Retire NATS restore protocol; retain file, object and key custody checks",
+      "physicalLines": 191,
+      "candidateLines": 38,
+      "sha256": "fc6f24302df7af4c5246887650816e5af583ddb7d50af03f27cf481b8f37db92",
+      "ranges": [
+        {
+          "name": "checkInfo",
+          "first": 45,
+          "last": 50,
+          "lines": 6
+        },
+        {
+          "name": "transfer",
+          "first": 66,
+          "last": 91,
+          "lines": 26
+        },
+        {
+          "name": "checkConnections",
+          "first": 93,
+          "last": 98,
+          "lines": 6
+        }
+      ]
+    },
+    {
+      "file": "infra/package/prepare-nats-routes.ts",
+      "treatment": "Retire NATS route preparation",
+      "physicalLines": 242,
+      "candidateLines": 242,
+      "sha256": "3da6d95b6210637fa5e072fba95cc0c37b0719b41f89e0f0da314e5766fe4837",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 242,
+          "lines": 242
+        }
+      ]
+    },
+    {
+      "file": "infra/package/check-nats-inputs.ts",
+      "treatment": "Retire NATS mounted-input checks",
+      "physicalLines": 132,
+      "candidateLines": 132,
+      "sha256": "bc38632bcad194db8c6d9ed508cac248f385625a92d8d57ade1d5f55c7a02d60",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 132,
+          "lines": 132
+        }
+      ]
+    },
+    {
+      "file": "infra/package/nats-placement.ts",
+      "treatment": "Retire NATS peer placement checks",
+      "physicalLines": 304,
+      "candidateLines": 304,
+      "sha256": "5b78f3329cdd7ef3d82251642008493cbd33126859a9e21f65834e6f4128c881",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 304,
+          "lines": 304
+        }
+      ]
+    },
+    {
+      "file": "infra/package/nats-placement-collect.ts",
+      "treatment": "Retire NATS placement collection",
+      "physicalLines": 124,
+      "candidateLines": 124,
+      "sha256": "a7d092efc4b9979b77777d103dd1c4ad6aa3b55223a1b1995d314a62452fecfe",
+      "ranges": [
+        {
+          "name": "whole file",
+          "first": 1,
+          "last": 124,
+          "lines": 124
+        }
+      ]
+    }
+  ]
+}

@@ -10,6 +10,7 @@ Each spike in [plan.md](../../plan.md)'s Phase 0 produces one ADR here.
 | [0003](0003-harness-codex.md) | Agent harness: Codex vs OpenCode vs Goose | S0.1 | Draft, from spike evidence — S0.1b's scoped proof passed; full S0.1 (paid model, approval pause/resume, sub-agents, session recovery) remains incomplete |
 | [0004](0004-handler-runtime.md) | Handler runtime: pg-boss vs Temporal vs Hatchet vs Restate (plan.md decision 7) | S0.8 | Proposed: pg-boss for reactions; qualification PARTIAL (visibility, production budget path and licence audit remain; Hatchet NOT_RUN, Restate excluded) |
 | [0006](0006-computer-disk-and-live-view.md) | Computer disk recovery and KasmVNC permissions | S0.3 / S0.5 | Proposed; warm PVC attachment unsupported, local evidence and limits in spike READMEs |
+| [0007](0007-postgres-event-store-comparison.md) | Event log in PostgreSQL with NATS retired; pg-boss stays | S0.9 | Proposed: defer a product switch; local comparison complete, coordinated recovery NOT RUN |
 
 ## Format
 
