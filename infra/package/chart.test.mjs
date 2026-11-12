@@ -18,7 +18,8 @@ const values = {
   chartVersion: reviewed.chartVersion,
   images: reviewed.images,
   secrets: { runtime: 'runtime', runtimeFiles: 'runtime-files', postgres: 'postgres',
-    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap' },
+    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap', objects: 'objects', scanner: 'scanner' },
+  scanner: reviewed.scanner,
   exposure: { ingress: false, loadBalancer: false, funnel: false },
 };
 
@@ -187,7 +188,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       'command.crt', 'command.key', 'command.seed',
       'projection.crt', 'projection.key', 'projection.seed', 'dispatcher.crt',
       'dispatcher.key', 'dispatcher.seed', 'token-signing-key.pem',
-      'zitadel-client-secret']) {
+      'zitadel-client-secret', 'scanner-ca.crt']) {
       writeFileSync(join(directory, name), `test-${name}`);
     }
   }
@@ -248,15 +249,26 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     },
     '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test',
       secondary: true },
+    '../dev-stack/scanner-settings.ts': { prepareScannerFiles: async () => {
+      for (const name of ['scanner-server.key', 'scanner-server.crt']) {
+        writeFileSync(join(directory, name), 'fixture-scanner-file');
+      }
+    } },
+    '../clamav/release.mjs': { readApprovedRelease: async () => undefined },
     '../dev-stack/packaged.ts': { verifyPackageOwner: recordedOwner,
       packageConnectionArgs: checkedConnection },
   };
   try {
     if (mainValuesSource) {
+      const manifestFile = join(directory, 'fixture-signatures.json');
+      const releaseFile = join(directory, 'fixture-release.json');
+      writeFileSync(manifestFile, '{}');
+      writeFileSync(releaseFile, '{}');
       const valuesFile = join(directory, 'values.json');
       writeFileSync(valuesFile, JSON.stringify(values), { mode: 0o600 });
       const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts'],
-        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined } };
+        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined,
+          PACKAGE_SCANNER_MANIFEST_FILE: manifestFile, PACKAGE_SCANNER_RELEASE_FILE: releaseFile } };
       if (mainValuesSource === 'environment') {
         fixtureProcess.env.PACKAGE_VALUES_FILE = valuesFile;
       } else {
@@ -266,15 +278,15 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
         fixtureProcess);
       await main();
       assert.deepEqual(commands.map(commandProgram), ['node', 'node',
-        'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
-      assert.equal(secrets.size, 6);
+        'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
+      assert.equal(secrets.size, 8);
       return { key, settings, secrets };
     }
     const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',
       'prepareSettings', replacements);
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
-    await prepareSettings(packageValues);
+    await prepareSettings({ ...packageValues, scanner: values.scanner });
     await provisionSecrets(values.secrets, owner);
     return { key, settings, secrets };
   } finally {
@@ -304,6 +316,10 @@ async function preparationMainWithEnvironmentValues() {
 }
 test('journey preparation runs real preflight without private directories in child arguments',
   preparationMainWithEnvironmentValues);
+
+function needsPrivateFiles(container) {
+  return container.name !== 'storage-credentials';
+}
 
 function assertPrivateFileDelivery(podSpec) {
   const source = podSpec.volumes.find(privateFileSourceVolume);
@@ -471,6 +487,11 @@ test('a binary key stays in a mounted Secret and outside every environment impor
   const server = namedResource('Deployment', 'server');
   const containers = server.spec.template.spec.containers;
   for (const container of containers) {
+    if (!needsPrivateFiles(container)) {
+      assert.equal(container.envFrom, undefined);
+      assert.equal(container.volumeMounts.some(privateFileMount), false);
+      continue;
+    }
     assert.deepEqual(container.envFrom, [{ secretRef: { name: 'runtime' } }]);
     assert.ok(container.volumeMounts.some(privateFileMount));
     assert.ok(!container.envFrom.some(privateFileImport));
@@ -523,7 +544,8 @@ test('a binary key stays in a mounted Secret and outside every environment impor
         assert.notEqual(setting.value, key.toString('base64'));
       }
     }
-    for (const container of pod.containers) {
+    const privateFileContainers = pod.containers.filter(needsPrivateFiles);
+    for (const container of privateFileContainers) {
       assert.ok(container.volumeMounts.some(privateFileMount));
     }
   }

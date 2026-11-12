@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { connect } from 'node:net';
+import { scanClamd } from '../clamav/instream.mjs';
 import { createScannerService } from '../clamav/service.mjs';
 
 const refusal = 'Development scanner unavailable';
@@ -11,57 +11,6 @@ const clamHost = process.env.CLAMD_HOST;
 const silo = process.env.SILO_ID;
 const issuer = process.env.TOKEN_ISSUER;
 const stopped = new AbortController();
-
-function frames(bytes) {
-  const parts = [Buffer.from('zINSTREAM\0')];
-  for (let offset = 0; offset < bytes.length; offset += 65536) {
-    const chunk = bytes.subarray(offset, offset + 65536);
-    const size = Buffer.alloc(4);
-    size.writeUInt32BE(chunk.length);
-    parts.push(size, chunk);
-  }
-  parts.push(Buffer.alloc(4));
-  return Buffer.concat(parts);
-}
-
-function scanWithClamd(bytes, signal) {
-  function exchange(resolve, reject) {
-    const socket = connect({ host: clamHost, port: clamPort });
-    const chunks = [];
-    let length = 0;
-    let settled = false;
-    function finish(error, value) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      signal.removeEventListener('abort', cancel);
-      socket.destroy();
-      if (error) reject(new Error(refusal));
-      else resolve(value);
-    }
-    function cancel() { finish(true); }
-    function send() { socket.end(frames(bytes)); }
-    function read(chunk) {
-      length += chunk.length;
-      if (length > 4096) finish(true);
-      else chunks.push(chunk);
-    }
-    function complete() {
-      const reply = Buffer.concat(chunks).toString('utf8');
-      if (reply === 'stream: OK\0') finish(false, 'clean');
-      else if (/^stream: [\x20-\x7e]+ FOUND\0$/u.test(reply)) finish(false, 'infected');
-      else finish(true);
-    }
-    const timer = setTimeout(cancel, 60_000);
-    socket.on('connect', send);
-    socket.on('data', read);
-    socket.on('end', complete);
-    socket.on('error', cancel);
-    signal.addEventListener('abort', cancel, { once: true });
-    if (signal.aborted) cancel();
-  }
-  return new Promise(exchange);
-}
 
 function databaseFacts(name) {
   return { file: `${name}.cvd`, sha256: '0'.repeat(64), version: 1,
@@ -88,7 +37,7 @@ async function main() {
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     if (sha256 !== input.sha256) throw new Error(refusal);
     const signal = AbortSignal.any([stopped.signal, input.signal]);
-    const verdict = await scanWithClamd(bytes, signal);
+    const verdict = await scanClamd(bytes, { host: clamHost, port: clamPort }, signal);
     const checked = Date.now();
     const checkedAt = new Date(checked).toISOString();
     const expiresAt = new Date(checked + 120_000).toISOString();

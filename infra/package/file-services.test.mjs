@@ -6,13 +6,13 @@ import { parseAllDocuments } from 'yaml';
 function packageFilesRunInsideInstallation() {
   const images = {};
   const secrets = {};
-  for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer']) {
+  for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
     images[role] = `example.invalid/${role}@sha256:${'a'.repeat(64)}`;
   }
-  for (const role of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap']) {
+  for (const role of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap', 'objects', 'scanner']) {
     secrets[role] = `test-${role.toLowerCase()}`;
   }
-  const values = { images, secrets };
+  const values = { images, secrets, scanner: { approvedSha: 'c'.repeat(64) } };
   const options = { encoding: 'utf8', input: JSON.stringify(values) };
   const result = spawnSync('helm', ['template', 'files', 'infra/package/chart', '-f', '-'],
     options);

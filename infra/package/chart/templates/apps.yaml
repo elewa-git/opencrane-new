@@ -113,6 +113,7 @@ spec:
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
             - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
+            - { name: storage-lease, mountPath: /run/storage, readOnly: true }
           ports: [{ containerPort: 8080 }]
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
@@ -120,6 +121,24 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
+        - name: storage-credentials
+          image: {{ .Values.images.server | quote }}
+          command: [node, infra/package/object-credentials.mjs]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: storage-lease, mountPath: /run/storage }
+            - { name: object-owner, mountPath: /run/object-owner, readOnly: true }
+          readinessProbe:
+            exec:
+              command: [test, -s, /run/storage/lease.json]
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { cpu: 100m, memory: 128Mi }
         - name: models
           image: {{ .Values.images.server | quote }}
           command: [node, --experimental-strip-types, infra/dev-stack/secondary-models.ts]
@@ -149,6 +168,10 @@ spec:
       volumes:
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
+        - name: storage-lease
+          emptyDir: { medium: Memory }
+        - name: object-owner
+          secret: { secretName: {{ .Values.secrets.objects | quote }} }
         - name: runtime-files
           emptyDir: { medium: Memory }
         - name: runtime-file-source

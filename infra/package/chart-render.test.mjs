@@ -12,14 +12,15 @@ function chartValues() {
   const digest = 'a'.repeat(64);
   const images = {};
   const secrets = {};
-  for (const name of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer']) {
+  for (const name of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
     images[name] = `example.invalid/${name}@sha256:${digest}`;
   }
-  for (const name of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap']) {
+  for (const name of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap', 'objects', 'scanner']) {
     secrets[name] = `chart-test-${name.toLowerCase()}`;
   }
   const exposure = { ingress: false, loadBalancer: false, funnel: false };
-  return { chartVersion: '0.1.0', images, secrets, exposure };
+  return { chartVersion: '0.1.0', images, secrets, exposure,
+    scanner: { approvedSha: 'c'.repeat(64) } };
 }
 
 function rendersOnlyManifests() {

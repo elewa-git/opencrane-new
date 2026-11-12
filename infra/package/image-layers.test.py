@@ -149,7 +149,8 @@ class ImageLayerTests(unittest.TestCase):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
                    "secondary-models.ts", "zitadel.json"}
-        package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs"}
+        package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
+                         "scanner.mjs", "object-credentials.mjs"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
             if path.startswith("app/infra/package/"):

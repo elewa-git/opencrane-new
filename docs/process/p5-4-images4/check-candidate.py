@@ -31,7 +31,7 @@ def checked_bytes(path, expected):
 
 
 def inventory(record):
-    path = ROOT / "infra/package/licence-inventory.json"
+    path = RECORD.with_name("licence-baseline.json")
     baseline = json.loads(checked_bytes(path, record["baselineSha256"]))
     entries = baseline["images"]["server"]["artifacts"]
     for removed in record["remove"]:

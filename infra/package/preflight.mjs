@@ -100,8 +100,20 @@ function checkNatsCluster(values, review) {
   }
 }
 
+function checkScanner(values, review) {
+  if (review.scanner === undefined && values.scanner === undefined) return;
+  const scanner = values.scanner;
+  if (!scanner || typeof scanner !== 'object' || Array.isArray(scanner) ||
+      Object.keys(scanner).length !== 1 ||
+      !/^[a-f0-9]{64}$/u.test(scanner.approvedSha) ||
+      scanner.approvedSha !== review.scanner?.approvedSha) {
+    throw new Error('Scanner manifest is absent from the reviewed release');
+  }
+}
+
 function check(values, review) {
-  const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres', 'natsCluster'];
+  const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres', 'natsCluster',
+    'scanner'];
   for (const key of Object.keys(values)) {
     if (!allowedKeys.includes(key)) throw new Error('Unsupported package setting');
   }
@@ -122,6 +134,7 @@ function check(values, review) {
   }
   checkPostgres(values, review);
   checkNatsCluster(values, review);
+  checkScanner(values, review);
   const exposure = values.exposure;
   if (!exposure || exposure.ingress !== false || exposure.loadBalancer !== false ||
       exposure.funnel !== false) {

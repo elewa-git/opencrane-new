@@ -69,6 +69,23 @@ export async function readApprovedManifest(path, approvedSha) {
   return JSON.parse(bytes.toString('utf8'));
 }
 
+export async function readApprovedRelease(options, now) {
+  const { image, manifestPath, approvedSha, releasePath } = options;
+  const pattern = /^(?:[a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
+  requireEvidence(pattern.test(image));
+  const manifest = await readApprovedManifest(manifestPath, approvedSha);
+  validateManifest(manifest, now);
+  const bytes = await readBoundedBytes(releasePath, 1024);
+  const record = JSON.parse(bytes.toString('utf8'));
+  const inspectedAt = Date.parse(record.inspectedAt);
+  requireEvidence(record.formatVersion === 1 &&
+    record.imageDigest === image.slice(image.indexOf('@') + 1) &&
+    record.manifestDigest === `sha256:${approvedSha}` &&
+    record.databaseUpdatedAt === manifest.databaseUpdatedAt &&
+    inspectedAt >= Date.parse(manifest.databaseUpdatedAt) && inspectedAt <= now);
+  return manifest;
+}
+
 export function docker(args, timeout = deadlineMs) {
   const options = { encoding: 'utf8', timeout, maxBuffer: 1024 * 1024,
     stdio: ['ignore', 'pipe', 'pipe'] };

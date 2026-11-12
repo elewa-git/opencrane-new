@@ -7,6 +7,15 @@ fixture. A synthetic `PROXY_PROOF` prompt makes the native agent call the offere
 recall tool. The stub leaves that tool response open until the fixture stops.
 It supplies no memory fact or paid model result. Normal stub runs omit this setting.
 
+For a fresh packaged upload journey, claim a secondary slot and use
+`run.sh package-prepare`, the package's private `prepare.ts`, `run.sh package-up`
+with its values file, then `run.sh package-check` and the package forwarder.
+Start with a new owned namespace and claims; an existing release is refused.
+Supply the current reviewed scanner manifest and release as described in the
+[package notes](../package/README.robot.md#packaged-upload-services).
+Do not run Compose in the same slot. Always run `run.sh package-down` and `down.sh`
+for that id afterwards, including when preparation, installation or the browser fails.
+
 The packaged installer runs preflight and Helm from the values file's directory.
 It passes only the filename as the values argument, so an absolute private
 directory does not enter child command arguments.

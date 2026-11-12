@@ -27,6 +27,8 @@ const secretKeys: Record<string, string[]> = {
     'CONVERSATION_KEYS_DIR', 'CONVERSATION_WRAP_KEY_FILE',
     'MODEL_UPSTREAM', 'MODEL_KEY_FILE',
     'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT', 'DEV_OWNER_EMAIL',
+    'MINIO_URL', 'MINIO_CREDENTIALS_FILE', 'SCANNER_URL', 'SCANNER_CA_FILE',
+    'SCANNER_MANIFEST_DIGEST',
   ],
   runtimeFiles: [
     'conversation-wrap-key',
@@ -34,7 +36,7 @@ const secretKeys: Record<string, string[]> = {
     'projection.crt', 'projection.key', 'projection.seed',
     'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed',
     'token-signing-key.pem', 'zitadel-client-secret',
-    'model-jwks.json', 'model-stub-key'],
+    'model-jwks.json', 'model-stub-key', 'scanner-ca.crt'],
   postgres: ['POSTGRES_PASSWORD'],
   nats: ['nats.conf', 'ca.crt', 'server.crt', 'server.key', 'NATS_LISTEN',
     'NATS_STORE_DIR', 'NATS_CA_FILE', 'NATS_CERT_FILE', 'NATS_KEY_FILE',
@@ -43,6 +45,8 @@ const secretKeys: Record<string, string[]> = {
   openfga: ['OPENFGA_DATASTORE_ENGINE', 'OPENFGA_DATASTORE_URI'],
   bootstrap: ['POSTGRES_ADMIN_URL', 'PROJECTION_PASSWORD', 'SERVER_PASSWORD',
     'DISPATCHER_PASSWORD', 'OPENFGA_PASSWORD'],
+  objects: ['MINIO_ROOT_USER', 'MINIO_ROOT_PASSWORD'],
+  scanner: ['signatures.json', 'release.json', 'server.key', 'server.crt', 'trust.json'],
 };
 const privateHosts: Record<string, string> = {
   NATS_URL: 'nats',
@@ -53,6 +57,8 @@ const privateHosts: Record<string, string> = {
   HANDLER_DATABASE_URL: 'postgres',
   POSTGRES_ADMIN_URL: 'postgres',
   MODEL_DECISION_URL: 'server',
+  MINIO_URL: 'objects',
+  SCANNER_URL: 'scanner',
 };
 
 type Namespace = {
@@ -500,8 +506,10 @@ export async function installPackage(valuesFile: string) {
   await saveOwner(owner);
   await configureComputerGateway(owner);
   await waitForBootstrap(owner);
+  await checkedKubectl(['-n', namespace, 'rollout', 'status', 'statefulset/objects',
+    '--timeout=120s'], 150_000);
   const deployments = [
-    'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
+    'scanner', 'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
     'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
     'worker-dispatcher',
   ];

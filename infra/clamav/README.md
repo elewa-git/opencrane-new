@@ -12,6 +12,9 @@ or repeated. It does not admit the image for use.
 ## Where it fits
 
 This is infrastructure beside the development stack and event log settings.
+The Helm package runs the authenticated service with an approved signature set.
+It verifies the actual database bytes and stops accepting uploads when the verified
+upstream check reaches 24 hours. The development adapter remains separate.
 [apps/server](../../apps/server/README.md), the back end, checks uploads with this
 scanner before saving them in [MinIO](../../GLOSSARY.md#minio-file-storage).
 
@@ -21,6 +24,7 @@ flowchart LR
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
+  package["infra/package<br/>packaged installation"] -->|checks approved bytes and starts the private service| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
   worker["apps/ops<br/>image worker"] -->|checks bounded files through HTTPS| launcher
   worker -->|claims the scan, then sends proof and checks| models["libs/models<br/>image result writer"]
