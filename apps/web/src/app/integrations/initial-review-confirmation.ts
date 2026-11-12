@@ -88,7 +88,7 @@ export class InitialReviewConfirmation implements OnInit, OnDestroy {
         throw new Error('Read unavailable');
       }
       if (kind === 'facts') {
-        this.factsMessage.set('Account mode and connection below come from the saved tool policy.');
+        this.factsMessage.set('Review this account mode and connection before publishing.');
         return;
       }
       await this.readAudience(response, serverId);
