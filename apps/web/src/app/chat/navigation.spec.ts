@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { BrowserSession } from '../core/browser-session';
 import { ChatSession } from './chat-session';
 import { Workspace } from './workspace';
 import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
@@ -20,6 +21,8 @@ function installDialogMethods(dialog: HTMLDialogElement): void {
   Object.defineProperties(dialog, methods);
 }
 
+let viewerRole: 'owner' | 'admin' | 'member' | undefined;
+
 const firstConversation = {
   conversationId: 'chat', assistantId: 'assistant', createdBy: 'me', mode: 'agent_session',
   createdAt: '2026-10-04T10:00:00Z', title: 'Original session', status: 'open',
@@ -34,7 +37,7 @@ function navigationReply(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (path === '/auth/me') {
     body = { authenticated: true, user: { name: 'Alex' } };
   } else if (path === '/api/chat') {
-    body = { memberId: 'me', assistantId: 'assistant' };
+    body = { memberId: 'me', assistantId: 'assistant', role: viewerRole };
   } else if (path === '/api/conversations') {
     body = { rows: [firstConversation] };
   } else {
@@ -85,6 +88,8 @@ function rootElement(fixture: ComponentFixture<Workspace>): HTMLElement {
 }
 
 function resetNavigation(): void {
+  viewerRole = undefined;
+  TestBed.resetTestingModule();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   history.replaceState({}, '', '/');
@@ -126,7 +131,7 @@ async function checkGuardedNavigation(condition: 'queued' | 'upload'): Promise<v
   await fixture.whenStable();
   const menu = root.querySelector('oc-navigation-menu');
   if (!(menu instanceof HTMLElement)) throw new Error('Missing menu');
-  expect(menu.querySelectorAll('a')).toHaveLength(5);
+  expect(menu.querySelectorAll('a')).toHaveLength(4);
   expect(menu.querySelector('a[href="/workspace/direct"]')?.textContent)
     .toContain('New direct chat');
   expect(menu.querySelector('a[href="/workspace/conversations"]')?.textContent)
@@ -134,7 +139,7 @@ async function checkGuardedNavigation(condition: 'queued' | 'upload'): Promise<v
   expect(menu.querySelector('a[href="/workspace/conversations?section=archived"]')?.textContent)
     .toContain('Archived');
   expect(menu.textContent).toContain('Failed');
-  expect(menu.textContent).toContain('Projects');
+  expect(menu.textContent).not.toContain('Projects');
   expect(menu.textContent).toContain('Archived');
   button(menu, '.session-row').click();
   await fixture.whenStable();
@@ -176,3 +181,43 @@ async function checkNewSession(): Promise<void> {
 }
 
 it('phone New session opens a draft instead of loading the first conversation', checkNewSession);
+
+async function checkSettings(role: typeof viewerRole): Promise<void> {
+  viewerRole = role;
+  const fixture = await phoneWorkspace();
+  const root = rootElement(fixture);
+  button(root, '#navigation-toggle').click();
+  await fixture.whenStable();
+  const expectedLinks = role === 'owner' || role === 'admin' ? 2 : 0;
+  expect(root.querySelectorAll('a[href="/org/integrations"]')).toHaveLength(expectedLinks);
+  fixture.destroy();
+}
+
+it.each(['owner', 'admin', 'member', undefined] as const)(
+  'shows Settings only to owners and admins: %s', checkSettings,
+);
+
+async function checkSignOut(selector: string): Promise<void> {
+  const fixture = await phoneWorkspace();
+  const root = rootElement(fixture);
+  button(root, '#navigation-toggle').click();
+  await fixture.whenStable();
+  const form = root.querySelector<HTMLFormElement>(`${selector} oc-sign-out form`);
+  expect(form).not.toBeNull();
+  expect(form?.getAttribute('method')).toBe('post');
+  expect(form?.getAttribute('action')).toBe('/auth/logout');
+  expect(form?.getAttribute('enctype')).toBe('text/plain');
+  expect(form?.querySelector('button[type="submit"]')?.textContent).toBe('Sign out');
+  const session = TestBed.inject(BrowserSession);
+  const signOut = vi.spyOn(session, 'signOut');
+  const submit = new Event('submit', { bubbles: true, cancelable: true });
+  form?.dispatchEvent(submit);
+  expect(submit.defaultPrevented).toBe(false);
+  expect(signOut).toHaveBeenCalledOnce();
+  expect(session.isActive()).toBe(false);
+  fixture.destroy();
+}
+
+it.each(['.rail-footer', 'oc-navigation-menu .rail-footer'])(
+  'ends the browser session through the native Sign out form in %s', checkSignOut,
+);

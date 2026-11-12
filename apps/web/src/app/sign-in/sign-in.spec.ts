@@ -136,7 +136,7 @@ describe('sign-in handoff', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally { fetchSpy.mockRestore(); }
   });
-  it('uses a native sign-out form without a JavaScript submit handler', async () => {
+  it('uses the shared native sign-out form', async () => {
     globalThis.history.replaceState({}, '', '/');
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"authenticated":true}'));
     try {
@@ -148,7 +148,7 @@ describe('sign-in handoff', () => {
         expect(evidence?.getAttribute('datetime')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         expect(evidence?.textContent).toContain('UTC');
       });
-      const form = element.querySelector('form');
+      const form = element.querySelector('oc-sign-out form');
       expect(form?.getAttribute('method')).toBe('post');
       expect(form?.getAttribute('action')).toBe('/auth/logout');
       expect(form?.querySelector('button[type=submit]')?.textContent).toBe('Sign out');
