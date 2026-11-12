@@ -240,3 +240,16 @@ async function refusesFleetRealStarts() {
 
 test('fleet starts refuse requested, credential-selected and saved real providers',
   refusesFleetRealStarts);
+
+async function refusesFleetSavedRealFreshStarts() {
+  for (const id of ['1', '2'] as const) {
+    for (const fleet of ['', 'task']) {
+      const startup: Startup = { id, fleet, savedMode: 'real', fresh: true };
+      const failure = await startupFailure(startup);
+      assert.match(failure, /Fleet tasks require the stand-in model/u);
+    }
+  }
+}
+
+void test('fleet tasks refuse saved real providers on fresh starts',
+  refusesFleetSavedRealFreshStarts);

@@ -344,3 +344,18 @@ async function retriesOnlyStartupFailures() {
 
 test('restarted server health retries connection failures and only 502, 503 and 504',
   retriesOnlyStartupFailures);
+
+for (const script of ['screenshot-journey.ts', 'mcp-journey.ts']) {
+  async function refuseFleetSavedRealJourney() {
+    const command: Invocation = { script, args: ['fresh'] };
+    for (const id of ['1', '2']) {
+      for (const fleet of ['', 'task']) {
+        const result = await invoke(command, fleet, id, true);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.reads, 'settings read\n', result.output);
+        assert.match(result.output, /Fleet tasks require the stand-in model/u);
+      }
+    }
+  }
+  void test(`${script}: fleet side journeys refuse saved real mode`, refuseFleetSavedRealJourney);
+}
