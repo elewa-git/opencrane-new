@@ -33,10 +33,10 @@ Owner decision (12 November 2026). The first goal is one small customer using Op
 
 1. The workspace is fit for a customer: people can sign out and only owners and admins see Settings (#1045), and the organisation's own name shows (#1046, once the owner answers the question on that issue).
 2. An admin can mark a tool server as "needs a personal credential", and two people use it in one live run, each with their own key (#49). Each person chooses which assistants may use their key; by default only their own (#1105).
-3. The package runs for real: file storage with the virus scanner (#15); the model provider that an admin connects; and a way for the customer's people to reach the installation and sign in with their own company's sign-in organisation. The last two need a new ticket each, which the owner readies after choosing the way in.
+3. The package runs for real: file storage with the virus scanner (#15); the model provider that an admin connects (#1110); and a way for the customer's people to reach the installation and sign in with their own company's sign-in organisation (#1113).
 4. One scheduled backup that covers the event log, the database and uploaded files together, and one full restore of all three into an empty installation (#15).
 5. The pilot host keeps private turn text off its disks before any customer uses it: swap is off or encrypted, and crash dumps are off (#366).
-6. A first hosted installation, time-boxed to one night, to find what a real cluster breaks (a new ticket; the owner first supplies the cluster, the address and a spending cap). Then the pilot journey passes twice from scratch on a hosted installation.
+6. A first hosted installation, time-boxed to one night, to find what a real cluster breaks (#1109; the owner first supplies the cloud project, a spending cap and a test sign-in organisation). Then the pilot journey passes twice from scratch on a hosted installation.
 
 **Parked until the pilot journey passes.** Each of these is parked as the delivery rules describe: it carries the `parked` label, loses `ready-for-agent`, gets no builder time, and its code stays switched off.
 
@@ -46,7 +46,7 @@ Owner decision (12 November 2026). The first goal is one small customer using Op
 - Taking control of the assistant's screen (#58). The live view stays watch-only.
 - Package, Git and web access from the assistant's computer (#61, #62). The pilot assistant works on uploaded files and the tool server only.
 - Tool servers that OpenCrane runs itself from an image (#47). The pilot uses a remote tool server.
-- The three-copy event log and the review of bundled image licences. These move out of #15 into their own issue, so that #15 holds pilot work only.
+- The three-copy event log and the review of bundled image licences (#1112). They moved out of #15, so that #15 holds pilot work only.
 - The welcome conversation, persona editing and further admin history (#101, #102, #109).
 
 Shared group assistants stay as they are today: members share one disk and uploads are refused there (#89).
