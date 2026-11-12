@@ -75,6 +75,24 @@ spec:
       automountServiceAccountToken: false
       securityContext: { fsGroup: 1000 }
       initContainers:
+        - name: copy-evidence
+          image: {{ .Values.images.server | quote }}
+          command: [sh, -ec]
+          args:
+            - >-
+              cp /run/scanner-source/* /run/scanner/ &&
+              chown 1000:1000 /run/scanner/* &&
+              chmod 0400 /run/scanner/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: evidence-source, mountPath: /run/scanner-source, readOnly: true }
+            - { name: evidence, mountPath: /run/scanner }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
         - name: copy-databases
           image: {{ .Values.images.scanner | quote }}
           command: [sh, -ec]
@@ -93,6 +111,7 @@ spec:
           image: {{ required "scanner pin" .Values.images.scanner | quote }}
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
@@ -133,6 +152,8 @@ spec:
         - name: config
           configMap: { name: scanner-config }
         - name: evidence
+          emptyDir: { medium: Memory }
+        - name: evidence-source
           secret: { secretName: {{ .Values.secrets.scanner | quote }} }
         - name: temporary
           emptyDir: { medium: Memory, sizeLimit: 64Mi }

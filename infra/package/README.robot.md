@@ -201,6 +201,8 @@ reviewed CVD or CLD files. Refresh never changes a running scanner.
 
 Preparation creates separate `objects` and `scanner` Secrets. The scanner Secret
 contains its TLS key/certificate, public issuer trust, manifest and release.
+An init container copies those projected Secret entries into regular files on a
+memory-backed volume. The wrapper keeps strict symlink rejection when it reads them.
 The server receives only the CA and approved manifest digest alongside its existing
 trusted ES256 issuer. It uses `https://scanner:8443/scan/upload`, with normal CA and
 hostname verification, request bindings and a fresh short-lived pass per scan.
