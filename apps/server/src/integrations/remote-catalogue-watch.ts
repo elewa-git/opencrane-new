@@ -26,7 +26,7 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
     const saved = rows.findLast(registered);
     const source = registration.parse(saved?.event.data);
     const policy = toolPolicyFromRows(rows);
-    if (source.serverId !== serverId || policy.accountMode !== 'none' || !policy.connectionId) {
+    if (source.serverId !== serverId || (policy.accountMode !== 'none' && policy.accountMode !== 'personal') || !policy.connectionId) {
       throw new Error('Remote catalogue unavailable');
     }
     async function call(method: 'server/discover' | 'tools/list', cursor?: string) {
@@ -35,7 +35,7 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
       return reply.resultJson;
     }
     const inventory = await discoverInventory(call);
-    return { ...inventory, serverId, connectionId: policy.connectionId, accountMode: 'none' as const };
+    return { ...inventory, serverId, connectionId: policy.connectionId, accountMode: policy.accountMode };
   }
   const options = { serverIds: [], capture, requireLeader };
   const watch = mcpCatalogueWatch(store, silo, options);

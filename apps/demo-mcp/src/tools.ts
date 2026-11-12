@@ -4,8 +4,8 @@ import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 
 const quoteId = z.literal('DEMO-001');
 const slot = z.enum(['morning', 'afternoon']);
-const readArguments = z.strictObject({ quoteId });
-const changeArguments = z.strictObject({ quoteId, slot });
+export const readArguments = z.strictObject({ quoteId });
+export const changeArguments = z.strictObject({ quoteId, slot });
 const output = z.strictObject({ quoteId, slot, amountCents: z.literal(12500),
   effectCount: z.int().nonnegative() });
 const readTool = {

@@ -194,8 +194,10 @@ function applyReview(next: ToolPolicy, state: ToolPolicy, event: EventEnvelope):
   if (!tools || !principalMatchesReviewer) {
     throw new Error('Tool review does not match the saved catalogue');
   }
-  return { ...next, tools, reviewRevision: next.sequence,
-    published: keepsPublication(state, tools) };
+  const sameAccount = state.accountMode === review.accountMode &&
+    state.identityTool === review.identityTool;
+  return { ...next, tools, accountMode: review.accountMode, identityTool: review.identityTool,
+    reviewRevision: next.sequence, published: sameAccount && keepsPublication(state, tools) };
 }
 
 function blockedLegacyReview(state: ToolPolicy, review: Review, now: number) {
@@ -427,8 +429,22 @@ function matchesReview(state: ToolPolicy, review: Review, now: number): boolean 
   return state.checkedAt !== null && state.expiresAt !== null &&
     Date.parse(state.checkedAt) <= now && Date.parse(state.expiresAt) > now &&
     review.catalogueDigest === state.catalogue?.schemaDigest &&
-    review.connectionId === state.connectionId && review.accountMode === state.accountMode &&
+    review.connectionId === state.connectionId && matchesAccountReview(state, review) &&
     review.policyRevision === state.policyRevision && review.tools.length === state.tools.length;
+}
+
+function matchesAccountReview(state: ToolPolicy, review: Review): boolean {
+  if (review.accountMode === 'company') return state.accountMode === 'company';
+  if (state.accountMode !== 'none' && state.accountMode !== 'personal') return false;
+  if (review.accountMode === 'none') return review.identityTool === undefined;
+  if (!review.identityTool) {
+    // Keep existing installations readable; only newly marked servers require an identity tool.
+    return state.accountMode === 'personal' && state.identityTool === undefined;
+  }
+  function isIdentityTool(tool: ToolPolicy['tools'][number]) {
+    return tool.name === review.identityTool && tool.readOnly && tool.costCents === 0;
+  }
+  return state.tools.some(isIdentityTool);
 }
 
 function matchesChoice(tool: ToolPolicy['tools'][number],
