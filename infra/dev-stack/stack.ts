@@ -1,4 +1,4 @@
-import { prepareConnectionCustody } from './connection-custody-setup.ts';
+import { prepareConnectionCustody, prepareConnectionCustodyFile } from './connection-custody-setup.ts';
 import './stack-entry.ts';
 import { fleetProviderRefusal, requireAutomatedJourney, requireFleetStandInProvider } from './journey-guard.ts';
 import { issueMinioLease } from './minio-tokens.ts';
@@ -56,7 +56,7 @@ function includedProcess(name: string) {
 
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
   'audit', 'routines', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server',
-  'web'].filter(includedProcess);
+  'web', 'connection-custody'].filter(includedProcess);
 if (secondary || ownerMemorySettings.MEMORY_KEY_DIRECTORY) {
   names.push('memory');
 }
@@ -527,6 +527,12 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
+  const custodyNamespace = `${namespace}-connections`;
+  const custodyFile = await prepareConnectionCustodyFile({ namespace: custodyNamespace, directory,
+    port: settings['CUSTODY_PROXY_PORT'] ?? defaultPorts['CUSTODY_PROXY_PORT']!, save });
+  const configuredDispatcher = { ...await readEnv('dispatcher'),
+    CONNECTION_CUSTODY_FILE: custodyFile };
+  await writeEnv('dispatcher', configuredDispatcher);
   const scanner = await scannerSettings(process.env, directory, settings['SCANNER_PORT']);
   if (!real) await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
@@ -659,7 +665,6 @@ async function up(fresh: boolean) {
     await copyFile(gatewayBinary, `${directory}/agentgateway`);
     gatewayBinary = `${directory}/agentgateway`;
   }
-  const custodyNamespace = `${namespace}-connections`;
   const custodyExists = await run('kubectl', ['get', 'namespace', custodyNamespace,
     '--ignore-not-found', '-o', 'name']);
   if (!custodyExists.trim()) ownerStartup?.namespaces.add(custodyNamespace);

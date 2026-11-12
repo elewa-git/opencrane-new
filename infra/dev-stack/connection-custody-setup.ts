@@ -10,7 +10,11 @@ export interface ConnectionCustodySetup {
   save: (name: string, value: string) => Promise<void>;
 }
 
-async function prepareKeyring(setup: ConnectionCustodySetup) {
+export type ConnectionCustodyFileSetup = Pick<ConnectionCustodySetup,
+  'directory' | 'namespace' | 'port' | 'save'>;
+
+export async function prepareConnectionCustodyFile(setup: ConnectionCustodyFileSetup) {
+  await mkdir(`${setup.directory}/models`, { recursive: true, mode: 0o700 });
   const configuration = 'models/connection-custody.json';
   try {
     await stat(`${setup.directory}/${configuration}`);
@@ -27,7 +31,6 @@ async function prepareKeyring(setup: ConnectionCustodySetup) {
 
 /** Give the existing secret-store adapter its own namespace and short-lived Kubernetes identity. */
 export async function prepareConnectionCustody(setup: ConnectionCustodySetup) {
-  await mkdir(`${setup.directory}/models`, { recursive: true, mode: 0o700 });
   await setup.run('kubectl', ['create', 'namespace', setup.namespace,
     '--dry-run=client', '-o', 'yaml']).then(saveNamespace);
   async function saveNamespace(manifest: string) {
@@ -48,7 +51,7 @@ export async function prepareConnectionCustody(setup: ConnectionCustodySetup) {
     contexts: [{ name: 'custody', context: { cluster: 'custody', user: 'custody',
       namespace: setup.namespace } }], 'current-context': 'custody' };
   await setup.save('connection-custody-kubeconfig.json', JSON.stringify(config));
-  const file = await prepareKeyring(setup);
+  const file = await prepareConnectionCustodyFile(setup);
   return { CONNECTION_CUSTODY_FILE: file,
     CONNECTION_CUSTODY_SOCKET: `${setup.directory}/models/connection-proxy.sock`,
     CONNECTION_CUSTODY_KUBECONFIG: `${setup.directory}/connection-custody-kubeconfig.json`,

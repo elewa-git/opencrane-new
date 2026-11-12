@@ -2210,7 +2210,10 @@ link existing commands and distinguish source checks from live qualification.
 ## Personal key custody
 
 The server, models and dispatcher share `CONNECTION_CUSTODY_FILE` and the existing
-staging journal under the private models directory. `connection-custody-setup.ts`
+staging journal under the private models directory. The private configuration is
+saved in dispatcher settings before handler preparation or upgrade reads the enabled
+subscriptions. Runtime preparation and the dispatcher therefore see the same list.
+`connection-custody-setup.ts`
 creates a separate `<stack namespace>-connections` namespace and a service account
 with only create/get/list/delete on its secrets. Its token lasts 24 hours.
 `connection-custody-proxy.ts` runs the existing kubectl proxy through a private Unix
