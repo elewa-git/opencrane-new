@@ -6316,3 +6316,16 @@ async function companyConsentFinalWait(kind: string) {
 }
 it.each(['deadline', 'admin', 'activity'])(
   'rechecks company OAuth after final position wait: %s', companyConsentFinalWait);
+
+async function readExactBearerGeneration() {
+  const test = await fixture();
+  const staged = await test.custody.stage(stage, material);
+  expect(staged.identity).toBeDefined();
+  expect(await test.custody.readAccessMaterial(stage, staged.identity!, 'bearer')).toBe(material);
+  const foreign = { ...stage, userId: 'different-member' };
+  expect(await test.custody.readAccessMaterial(foreign, staged.identity!, 'bearer')).toBeUndefined();
+  const changed = { ...staged.identity!, resourceVersion: 'different-version' };
+  expect(await test.custody.readAccessMaterial(stage, changed, 'bearer')).toBeUndefined();
+  expect(await test.custody.readAccessMaterial(stage, staged.identity!)).toBeUndefined();
+}
+it('reads a bearer only from its exact saved custody generation', readExactBearerGeneration);

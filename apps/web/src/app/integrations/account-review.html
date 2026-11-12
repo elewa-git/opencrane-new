@@ -1,0 +1,23 @@
+<fieldset [disabled]="disabled()">
+  <legend>Whose account does this tool server need?</legend>
+  <label><input type="radio" name="account-mode" value="none"
+    [checked]="policy().accountMode === 'none'" (change)="choose('none')" /> Needs no key</label>
+  <label><input type="radio" name="account-mode" value="personal"
+    [checked]="policy().accountMode === 'personal'" (change)="choose('personal')" />
+    Needs a personal key</label>
+  @if (policy().accountMode === 'personal') {
+    <p>Each member connects their own key in My tools. Check the account before using it.
+      A changed account blocks the key.</p>
+    <label for="identity-tool">Read-only tool that returns the account
+      <select id="identity-tool" [value]="policy().identityTool ?? ''"
+        (change)="identityChanged($event)" required>
+        <option value="">Choose an identity tool</option>
+        @for (tool of identityTools(); track tool.name) {
+          <option [value]="tool.name">{{ tool.name }}</option>
+        }
+      </select>
+    </label>
+    <p>The tool must accept an empty object and return the account's stable identifier as
+      <code>structuredContent.subject</code>. Only this reviewed server receives the key.</p>
+  }
+</fieldset>

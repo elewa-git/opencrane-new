@@ -1,3 +1,6 @@
+import { focusAccessHeading, focusHeaderRefresh, findIntegrationRow }
+  from './integration-detail-view';
+import { AccountReview, type AccountReviewChoice } from './account-review';
 import { canReviewUnpublished } from '../tool-policy/tool-policy-choices';
 import { isReadyPublication, isRecord, isOlderPublication, savedSequence }
   from './publication-ready';
@@ -29,7 +32,7 @@ type DetailState = 'loading' | 'ready' | 'failed' | 'not-found' | 'access';
 
 @Component({
   selector: 'oc-integration-detail',
-  imports: [SharedState, GrainLoader, IntegrationsAccessLost, IntegrationFacts,
+  imports: [AccountReview, SharedState, GrainLoader, IntegrationsAccessLost, IntegrationFacts,
     InitialReviewConfirmation, AddFlowSteps],
   templateUrl: './integration-detail.html',
   styleUrl: './integration-detail.css',
@@ -92,8 +95,15 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       this.changeState() === 'disabled' && !!policy &&
       (this.initialPolicy() ? canReviewUnpublished(policy) : policy.driftHeld === true) &&
       policy.connectionId !== null && policy.accountMode !== null &&
+      (policy.accountMode !== 'personal' || !!policy.identityTool) &&
       policy.catalogue?.tools !== undefined && this.comparison()?.reviewable === true &&
       !this.checkExpired();
+  }
+
+  protected accountSelected(choice: AccountReviewChoice): void {
+    const policy = this.policy();
+    if (!policy || this.changeState() !== 'disabled') return;
+    this.policy.set({ ...policy, ...choice, identityTool: choice.identityTool });
   }
 
   protected readonly changeMessage = publicationMessage;
@@ -525,22 +535,4 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (!this.refreshing()) return;
     requestAnimationFrame(focusHeaderRefresh);
   }
-}
-
-function focusAccessHeading(): void {
-  globalThis.document.getElementById('integration-access-heading')?.focus();
-}
-
-function focusHeaderRefresh(): void {
-  globalThis.document.getElementById('integration-refresh')?.focus();
-}
-
-function findIntegrationRow(
-  rows: readonly IntegrationRow[],
-  serverId: string,
-): IntegrationRow | undefined {
-  for (const row of rows) {
-    if (row.serverId === serverId) return row;
-  }
-  return undefined;
 }

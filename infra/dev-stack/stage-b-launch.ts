@@ -7,7 +7,10 @@ function replaceOnce(source: string, expected: string, replacement: string) {
 
 export function stageBLaunchSources(server: string, models: string) {
   // Refuse changed entrypoints instead of silently running any real outbound transport.
-  const serverSource = replaceOnce(server, 'discovery: {}', 'discovery: stageBNetwork');
+  const discoverySource = replaceOnce(server, 'discovery: {}', 'discovery: stageBNetwork');
+  const serverSource = replaceOnce(discoverySource,
+    'personalKeys: { custody: connectionCustody, db: modelDb.db }',
+    'personalKeys: { custody: connectionCustody, db: modelDb.db, network: stageBNetwork }');
   const watchSource = replaceOnce(models,
     'remoteCatalogueWatch(db.db, events.store, silo, requireDispatchLeader);',
     'remoteCatalogueWatch(db.db, events.store, silo, requireDispatchLeader, stageBNetwork);');

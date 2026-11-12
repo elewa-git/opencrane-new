@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
-  "description": "A credential-free tool server for synthetic demo quotes.",
+  "description": "A tool server for synthetic demo quotes with optional credential checks.",
   "scripts": {
     "start": "node --experimental-strip-types src/main.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"

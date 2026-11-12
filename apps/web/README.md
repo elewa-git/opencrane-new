@@ -17,7 +17,7 @@ shared rules for checking messages before the website shows them.
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
-  web -->|messages with file references, persona and settings requests| server["apps/server<br/>the back end"]
+  web -->|messages, settings and personal keys| server["apps/server<br/>the back end"]
   server -->|saved chats, command labels and masked views, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
@@ -82,6 +82,8 @@ For everyone, the website:
   message and retries its reads for up to 30 seconds. Refused reads show access loss straight away.
   After a correction, Edit and Forget stay visible but disabled until the saved revision appears.
   Temporary read failures offer another refresh.
+- Lets members verify and choose a personal key in My tools. Chat links to this
+  page when a granted tool server needs their key.
 - Supports phones, keyboard navigation and clear messages when access changes.
 
 For owners and admins, it:
@@ -91,7 +93,8 @@ For owners and admins, it:
 - Shows spending, edits budgets and reviews money held for unfinished calls.
 - Registers tool servers, reviews tools and publishes their settings, even when other
   changes are saved between review and publication. A paused check is labelled as a
-  tool change only when the saved catalogue shows a change.
+  tool change only when the saved catalogue shows a change. Admins can require a
+  personal key and name a read-only tool that checks the account.
 - Shows organisation change history with filters and one record's paged evidence.
   A temporary read failure keeps loaded records; access loss clears them.
 - Names saved routine stages in change history and opens routine attention at its saved history.

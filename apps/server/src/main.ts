@@ -1,4 +1,4 @@
-import { seedOwnership, providerSecrets, oauthConfigurationFromFile } from '@opencrane/models';
+import { seedOwnership, providerSecrets, oauthConfigurationFromFile, connectionCustodyFromFile } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
 import { storageClient } from './files/storage.ts';
@@ -91,6 +91,8 @@ if (chat && process.env['MINIO_CREDENTIALS_FILE']) {
 }
 const budgetDecisionUrl = process.env['MODEL_DECISION_URL'] ?? (process.env['NODE_ENV'] === 'development' ? 'http://127.0.0.1:43001' : undefined);
 const oauthFile = process.env['MCP_OAUTH_CONFIGURATION_FILE'];
+const custodyFile = process.env['CONNECTION_CUSTODY_FILE'];
+const connectionCustody = custodyFile ? await connectionCustodyFromFile(custodyFile) : undefined;
 const bridgeOptions = chat ? Object.assign(chat, {
   ...(files ? { objects: files.objects, files } : {}),
   ...(catalogue ? { catalogue } : {}),
@@ -126,6 +128,7 @@ const app = buildProductionServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
     ...(oauthFile ? { loadOAuthConfiguration: oauthConfigurationFromFile(oauthFile) } : {}),
+    ...(connectionCustody ? { personalKeys: { custody: connectionCustody, db: modelDb.db } } : {}),
   } } : {}),
   ...(realtime && events && modelDb ? { invitationEmail: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,

@@ -10,7 +10,10 @@ async function personalReviewSurvives() {
   async function leader() {}
   const watch = remoteCatalogueWatch(setup.db, setup.nats.store, 'test', leader, setup.remote.network);
   onTestFinished(watch.close);
-  onTestFinished(vi.useRealTimers);
+  function restoreClock() {
+    vi.useRealTimers();
+  }
+  onTestFinished(restoreClock);
   await watch.check();
   const after = await readToolPolicy(setup.nats.store, 'test', setup.serverId);
   expect(after).toMatchObject({ accountMode: 'personal', identityTool: 'who_am_i' });

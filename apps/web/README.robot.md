@@ -1096,7 +1096,10 @@ The [original screen receipt](../../docs/process/screen-p4-22-access/receipt.md)
 The tools page stages initial modes in memory and reuses the detail page for step 5.
 After a review is saved, mode Save controls and exact review stay available
 until publication.
-The fresh policy must match the staged sequence, catalogue, connection and account mode.
+The fresh policy must match the staged sequence, catalogue, connection and saved account mode.
+At review, `account-review.*` offers Needs no key or Needs a personal key. The latter
+requires an explicitly chosen read-only identity tool. `review-command.ts` includes
+that choice in the saved review. The publication confirmation names the chosen mode.
 Definitions and declarations are escaped text. Allow and Ask require declared zero cost
 and approval details. The audience GET must return a complete, current list before
 confirmation. Publishing changes no grants, accounts or approvals.
@@ -1457,6 +1460,15 @@ It clears the picture when permission expires or the session closes.
 Approval cards map `cancelReason: takeover` to “Cancelled: desktop takeover” with
 the existing dash glyph and saved end time. The approval component tests include
 this cause. This adds no desktop control screen or action.
+
+## Personal key notices
+
+`chatContextSchema.personalConnections` advertises the personal connection routes.
+`personal-connection-notice.ts` reads the current requester's missing connections for
+their personal assistant. Each notice links directly to My tools with the server id.
+The read uses the same server, access and verified selection readers as tool offers.
+A failed notice read clears notices but does not disturb conversation access or history.
+Window focus refreshes the read after a member returns from My tools.
 
 ## Tool reply wording
 

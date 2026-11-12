@@ -1,20 +1,14 @@
+import { PersonalKey } from './personal-key';
+import { personalProfileMetadataSchema,
+  type PersonalProfileMetadata } from '@opencrane/protocol';
 import {
   ChangeDetectionStrategy, Component, ElementRef, input, signal, ViewChild,
   type OnDestroy, type OnInit,
 } from '@angular/core';
 import { z } from 'zod';
 
+const profileSchema = personalProfileMetadataSchema.strip();
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
-const profileSchema = z.object({
-  serverId: identifier,
-  profileId: identifier,
-  profileRevision: z.number().int().positive(),
-  status: z.enum(['saved_unverified', 'unavailable']),
-  generation: z.number().int().positive().nullable(),
-  adminBlocked: z.boolean(),
-  serverAvailable: z.boolean(),
-  callsAvailable: z.literal(false),
-});
 const rowSchema = profileSchema.extend({
   ownerKind: z.literal('personal'),
   selected: z.boolean(),
@@ -45,6 +39,7 @@ type LoadState = 'loading' | 'ready' | 'failed' | 'access';
 
 @Component({
   selector: 'oc-my-tools',
+  imports: [PersonalKey],
   templateUrl: './my-tools.html',
   styleUrl: './my-tools.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -53,6 +48,7 @@ export class MyTools implements OnInit, OnDestroy {
   readonly serverId = input('');
   @ViewChild('review') private review?: ElementRef<HTMLDialogElement>;
   @ViewChild('reviewHeading') private reviewHeading?: ElementRef<HTMLHeadingElement>;
+  protected readonly showKeyForm = signal(false);
   protected readonly rows = signal<Row[]>([]);
   protected readonly next = signal<string | null>(null);
   protected readonly loadState = signal<LoadState>('loading');
@@ -316,6 +312,11 @@ export class MyTools implements OnInit, OnDestroy {
     }
   }
 
+  protected connectionSaved(profile: PersonalProfileMetadata): void {
+    this.detail.set(profile);
+    this.refresh();
+  }
+
   protected status(row: Row | Detail): string {
     if (row.adminBlocked && row.status === 'unavailable') {
       return 'Revoked or unavailable; disabled by an administrator';
@@ -323,6 +324,7 @@ export class MyTools implements OnInit, OnDestroy {
     if (row.adminBlocked) return 'Disabled by an administrator';
     if (row.status === 'unavailable') return 'Revoked or unavailable';
     if (!row.serverAvailable) return 'Server unavailable';
+    if (row.status === 'verified') return `Verified as ${row.accountLabel ?? 'your account'}`;
     return 'Saved, identity unverified';
   }
 }

@@ -1,3 +1,4 @@
+import { startConnectionCustodyBridge } from './connection-custody-bridge.ts';
 // The pinned gateway binds wildcard sockets. Keep them inside Compose; only
 // loopback Docker publications and the private k3d relay can reach this stack.
 import { networkInterfaces } from 'node:os';
@@ -27,5 +28,9 @@ for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
   for (const server of servers) server.close();
   for (const socket of sockets) socket.destroy();
 });
+const custodySocket = process.env['CONNECTION_CUSTODY_SOCKET'];
+if (custodySocket) {
+  await startConnectionCustodyBridge(custodySocket, Number(process.env['CUSTODY_PROXY_PORT']));
+}
 if (process.env['DEV_REAL_PROVIDER'] !== '1') await import('./model-stub.ts');
 await import('../../apps/server/src/models-main.ts');

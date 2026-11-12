@@ -2207,6 +2207,21 @@ package ownership and cleanup. Neither test requires a running development stack
 The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
 link existing commands and distinguish source checks from live qualification.
 
+## Personal key custody
+
+The server, models and dispatcher share `CONNECTION_CUSTODY_FILE` and the existing
+staging journal under the private models directory. `connection-custody-setup.ts`
+creates a separate `<stack namespace>-connections` namespace and a service account
+with only create/get/list/delete on its secrets. Its token lasts 24 hours.
+`connection-custody-proxy.ts` runs the existing kubectl proxy through a private Unix
+socket; accepted paths are limited to that namespace's secrets. The Node bridge
+provides loopback HTTP for the existing adapter on the host and in the models container.
+`CUSTODY_PROXY_PORT` is allocated with the slot's other ports. Shutdown removes the
+namespace, and failed startup records only newly created namespaces for rollback.
+The models container already mounts the private models directory; no extra image or
+runtime dependency is added. The demo's optional key checks remain independently
+configured through `DEMO_ACCOUNTS_FILE`.
+
 ## Mounted event-log credentials
 
 Before any Helm command, `packaged.ts` passes the collected Secrets to the

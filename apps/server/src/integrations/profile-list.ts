@@ -20,7 +20,7 @@ function candidate(record: Record<string, unknown>) {
 
 function matchesStatus(status: string, filter: Query['status']) {
   if (filter === 'all') return true;
-  if (filter === 'saved') return status === 'saved_unverified';
+  if (filter === 'saved') return status === 'saved_unverified' || status === 'verified';
   return status === 'unavailable';
 }
 

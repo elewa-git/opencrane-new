@@ -1,3 +1,4 @@
+import { turnToolReaders } from './turn-tool-readers.ts';
 /* eslint max-lines: ["error", { max: 520, skipBlankLines: true, skipComments: true }] */
 import type { ArtifactPublication } from '../files/artifacts.ts';
 import type { createRoutineWake } from './routine-wake.ts';
@@ -11,9 +12,6 @@ import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploaded
   from '@opencrane/events';
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
-import { memberAuthorisation } from '@opencrane/authz';
-import { history as modelHistory, readConnectionSelection } from '@opencrane/models';
-import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import { resumeComputer } from '../../../ops/src/lifecycle.ts';
@@ -348,7 +346,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn));
   async function buildTools() {
     if (requested.executionMode === 'memory_free') return [];
-    return toolsForTurn(options, conversation, turn, kind, mode, link.approvalWaiting === true);
+    return toolsForTurn(options, turn, kind, mode, link.approvalWaiting === true);
   }
   const tools = await toolsForMessageOrEmpty(link.sentTurns, conversation.conversationId,
     message.event.id, buildTools);
@@ -416,8 +414,7 @@ function emptyTools() {
   return Promise.resolve([]);
 }
 
-async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
-  turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode,
+async function toolsForTurn(options: WatchOptions, turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode,
   approvalWaiting: boolean) {
   const recall = kind === 'personal' && mode === 'restricted' && !('sharingClass' in turn);
   if (!options.binding || typeof turn.requesterId !== 'string') {
@@ -428,74 +425,20 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
   }
 
   const catalogueRows = recall ? [] : await options.catalogue!.rows(options.silo);
-  const auth = memberAuthorisation(options.binding);
+  const readers = turnToolReaders({ ...options, binding: options.binding });
   const serializedMessageBytes = Buffer.byteLength(JSON.stringify(turn), 'utf8');
   function serverReference(row: (typeof catalogueRows)[number]) {
     return { serverId: row.serverId };
-  }
-  async function readServer(serverId: string) {
-    const rows = await modelHistory(options.store, `mcp-${serverId}`, options.silo,
-      performance.now() + toolBuildLimitMs);
-    let policy = emptyToolPolicy();
-    for (const row of rows) {
-      policy = applyToolPolicy(policy, row.event, row.sequence);
-    }
-    const discovered = policy.catalogue;
-    if (!discovered || !isToolPolicyAvailable(policy)) return undefined;
-    type Catalogue = NonNullable<typeof discovered>;
-    function discoveryTool(tool: NonNullable<Catalogue['tools']>[number]) {
-      return {
-        name: tool.name,
-        revision: tool.revision,
-        ...(tool.definition ? { definition: tool.definition } : {}),
-        ...(tool.review ? { review: tool.review } : {}),
-      };
-    }
-    function policyTool(tool: (typeof policy.tools)[number]) {
-      return {
-        name: tool.name,
-        revision: tool.revision,
-        reviewed: tool.reviewed,
-        mode: tool.mode,
-        ...(tool.costCents === undefined ? {} : { costCents: tool.costCents }),
-      };
-    }
-    const discoveryTools = (discovered.tools ?? []).map(discoveryTool);
-    const policyTools = policy.tools.map(policyTool);
-    return {
-      serverId,
-      connectionId: policy.connectionId,
-      published: policy.published,
-      accountMode: policy.accountMode,
-      ...(discovered.serverInfo ? { serverInfo: discovered.serverInfo } : {}),
-      discoveryTools,
-      policyTools,
-    };
-  }
-  async function canUseServer(serverId: string, subjectKind: 'person' | 'assistant',
-    subjectId: string) {
-    const permission = await auth.use(subjectKind, subjectId, 'mcp_server', serverId);
-    return permission.allowed;
-  }
-  async function readSelection(requesterId: string, serverId: string) {
-    if (!options.binding || !options.loadOAuthConfiguration) return undefined;
-    const selection = await readConnectionSelection(options.store, options.binding,
-      requesterId, serverId, options.loadOAuthConfiguration);
-    if (selection.status !== 'verified') return undefined;
-    return { profileId: selection.profileId, profileRevision: selection.profileRevision,
-      selectionRevision: selection.sequence, generation: selection.generation };
   }
   const readyRows = catalogueRows.filter(isPublishedServer);
   const serverRows = readyRows.map(serverReference);
   const toolInput = {
     rows: serverRows,
     requesterId: turn.requesterId,
-    assistantId: conversation.assistantId,
+    assistantId: turn.assistantId,
     baseMessageBytes: serializedMessageBytes,
     approvalWaiting,
-    readServer,
-    canUse: canUseServer,
-    readSelection,
+    ...readers,
   };
   if (recall) {
     return buildRecallOffer(toolInput);

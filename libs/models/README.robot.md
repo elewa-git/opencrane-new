@@ -4162,6 +4162,19 @@ Each competitor succeeds with a distinct call id, but cannot replace the origina
 An older native hold without a saved expiry remains held and cannot be recovered.
 A decision-history read that crosses the expiry refuses before saving a missing decision.
 
+## Verified personal bearer keys
+
+The [personal-key API](../../docs/api/personal-keys.md) describes the product flow.
+`savePersonalKey` composes the existing bearer save with current member and server-grant
+checks and `verifyBearerIdentity`, which calls only the admin-chosen read-only tool. Its bounded HTTPS call precedes staging and the single append.
+`connection.created` or `connection.refreshed` holds safe verification metadata beside
+its existing activation references. The stored key stays in the existing custody adapter.
+`selectedPersonalAccount` shares bearer and OAuth eligibility between selection, turn
+admission and release. `connection-account.ts` owns profile binding and account identity
+comparison. A changed account cannot restore a selected profile. Legacy unverified keys
+remain unavailable to the broker. The custody reader selects its explicit bearer format
+only after the existing broker checks and release audit; its default remains OAuth.
+
 ## Explicit personal account selection (P3-8 PR 4a; Part of #49)
 
 Base dependency #523 landed as `e3f593bf6d41ae465e3c49cb43f7444c4120c968`.
@@ -4188,11 +4201,11 @@ No conversation history enters the two-second access check.
 `connection-selection-<user>-<server>`. `readConnectionSelection` checks current facts
 and access once. Replay keeps the highest observed position; older rows cannot restore
 a cleared choice. Missing, cleared, rotated, revoked, disabled, incomplete and replaced
-profiles choose nothing. Selection preserves saved_unverified and never grants access,
+profiles choose nothing. Selection preserves the saved identity status and never grants access,
 reads custody, calls a provider or falls back to another profile. Connecting never selects.
 Tests use bearer fixtures with real NATS, PostgreSQL and OpenFGA. Company opt-in is
-recorded separately below. Company profiles, UI, release, dispatch and fresh-install
-qualification remain later work.
+recorded separately below. Personal key entry, verified selection and per-call release
+use this same selection. Company-account live turns remain later work.
 
 The expired-catalogue fixture derives both dates from one timestamp. Its five-minute
 lifetime must remain valid even when the clock advances between reads. A regression
@@ -4419,10 +4432,13 @@ server/profile input. It loads exact profile, member/server control and server h
 under one ten-second history deadline, then calls `readActiveMember` once. Failed and
 missing loads still check membership. No write deadline or conversation stream is used.
 It reuses `foldConnection` and `connectionServer` and selects only safe output fields.
-The saved lifecycle stays `saved_unverified` even under an admin block. Revoked, invalid
+Unchecked bearer saves remain `saved_unverified`; identity-checked bearer metadata is
+`verified`, with the account label visible only to its owner. An admin block is reported
+separately and prevents use. Revoked, invalid
 and incomplete legacy records return unavailable with no generation. Server availability
 requires the saved installation and endpoint, a current reviewed catalogue and publication;
-it is not a tool permission or reachability claim. Calls remain unavailable in all cases.
+it is not a tool permission or reachability claim. Calls require a selected verified
+profile and the current per-call access and credential checks.
 Any control record blocks use, as in bearer saves and selection. Reads have no custody,
 provider, selection, append, wake or release dependency, and never choose another profile.
 
@@ -4464,7 +4480,8 @@ The existing event schemas and profile fold check the original position and gene
 Later changes do not replace the original receipt. Conflicting references, closures and
 malformed records return unknown; missing evidence never permits a resend.
 Receipts describe local changes only. Current metadata has its own reader, and upstream
-identity remains unverified. No custody, provider, append, selection or release is involved.
+identity status reflects the original saved verification. No custody, provider, append,
+selection or release is involved in reading the receipt.
 
 ## Original saved tool publications (P4-27 PR 7c; Part of #109)
 
@@ -4911,8 +4928,8 @@ not a complete authorisation service, and its receipt cannot authorise forwardin
 The saved decision must include the identical `release` binding. Existing decision
 writers do not populate it. Legacy decisions and release records cannot confirm.
 The helper checks exact selected personal profile, generation, owner, installation,
-profile/selection/policy positions, endpoint and account/scope fingerprints. Current
-bearer profiles remain saved_unverified. Their synthetic audit tests do not qualify
+profile/selection/policy positions, endpoint and account/scope fingerprints. Legacy
+bearer profiles without checked identity evidence remain saved_unverified. Their synthetic audit tests do not qualify
 account identity or make credentialed tools available. Production OAuth/company use stays closed.
 
 History loads before the live check. Invalid input, mismatched requester or owner, and
@@ -5013,9 +5030,10 @@ public API field; the separate company audit has its own strict release variant.
 context uses existing audited names and digests. Security rules and
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
 custody adapter against a synthetic HTTP transport. A recording HTTPS fixture now also
-checks the governed personal path. The models process needs both
-`CONNECTION_CUSTODY_FILE` and `MCP_OAUTH_CONFIGURATION_FILE` to enable it. The latter is
-a JSON object keyed by server id, reread on each use. The selected profile, current
+checks the governed personal path. The models process needs
+`CONNECTION_CUSTODY_FILE`. OAuth also needs `MCP_OAUTH_CONFIGURATION_FILE`, a JSON
+object keyed by server id, reread on each use. Bearer selection instead checks the
+saved identity-tool revision and account evidence against the current reviewed policy. The selected profile, current
 generation, scope, review and access bind the signed turn, approval and permit. A
 confirmed release
 append comes before the allowlisted outbound header. Caller cookies, alternate keys and

@@ -1,10 +1,11 @@
+import { turnToolReaders } from './turn-tool-readers.ts';
 import type { recallBridge } from './recall-bridge.ts';
 import type { WebSocket } from 'ws';
 import { prepareInitialMemory } from '../memory/initial-delivery.ts';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { approvalActivity, confirmDecisionAccess, decisionAuthorityFence,
   LoadedMemoryRefused, MemberAccessRefused, prepareLoadedMemory,
-  requireActiveConversationTurn, readConnectionSelection } from '@opencrane/models';
+  requireActiveConversationTurn } from '@opencrane/models';
 import type { connectMcpCatalogue } from '@opencrane/projections';
 import { modelForTask } from '@opencrane/models/routing';
 import { z } from 'zod';
@@ -84,18 +85,18 @@ export async function releaseTurnCredentials(options: BridgeOptions,
 
 async function selectedPersonalProfiles(options: BridgeOptions, requesterId: string) {
   const selected: { serverId: string; profileId: string; selectionRevision: number }[] = [];
-  if (!options.binding || !options.catalogue || !options.loadOAuthConfiguration) {
+  if (!options.binding || !options.catalogue) {
     return selected;
   }
+  const readers = turnToolReaders({ ...options, binding: options.binding });
   const servers = await options.catalogue.rows(options.silo);
   for (const server of servers) {
     if (selected.length === 20) break;
     try {
-      const choice = await readConnectionSelection(options.store, options.binding,
-        requesterId, server.serverId, options.loadOAuthConfiguration);
-      if (choice.status === 'verified') {
+      const choice = await readers.readSelection(requesterId, server.serverId);
+      if (choice) {
         selected.push({ serverId: server.serverId, profileId: choice.profileId,
-          selectionRevision: choice.sequence });
+          selectionRevision: choice.selectionRevision });
       }
     } catch {
       // Leave an unavailable account out of the signed turn.

@@ -19,6 +19,13 @@
     </form>
   } @else {
     <p class="server">Integration <code>{{ serverId() }}</code></p>
+    <button type="button" (click)="showKeyForm.set(!showKeyForm())">
+      {{ showKeyForm() ? 'Hide key form' : 'Connect or choose a key' }}
+    </button>
+    @if (showKeyForm()) {
+      <oc-personal-key [serverId]="serverId()" [profile]="detail()"
+        (profileSaved)="connectionSaved($event)" (changed)="refresh()" />
+    }
     @if (loadState() === 'loading' && rows().length === 0) {
       <p role="status">Loading your connections…</p>
     }
@@ -73,10 +80,10 @@
         <dl>
           <dt>Status</dt><dd>{{ status(profile) }}</dd>
           <dt>Saved version</dt><dd>{{ profile.profileRevision }}</dd>
-          <dt>Tool calls</dt><dd>Unavailable</dd>
+          <dt>Tool access</dt><dd>Requires a selected key and current grants</dd>
         </dl>
-        <p>Saved metadata does not confirm an upstream identity or permission to use a tool.</p>
-        @if (profile.status === 'saved_unverified' && !profile.adminBlocked &&
+        <p>A verified account still needs a selected key and current tool grants.</p>
+        @if (profile.status !== 'unavailable' && !profile.adminBlocked &&
              !pendingReference()) {
           <button type="button" class="danger-outline" (click)="reviewRevoke($event)">
             Revoke this connection

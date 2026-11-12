@@ -271,6 +271,9 @@
             Reconnected at {{ time(chat.reconnectedAt()!) }}. You're caught up.
           </div>
         }
+        @if (chat.personalConnections() && !chat.denied() && chat.assistantId(); as assistantId) {
+          <oc-personal-connection-notice [assistantId]="assistantId" />
+        }
         @if (chat.selected() && !chat.denied() && !isClosedConversation()) {
           <oc-approval-cards [conversationId]="chat.selected()" [viewerId]="chat.memberId()"
             [stoppedTurnIds]="stoppedTurnIds()"

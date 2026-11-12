@@ -19,7 +19,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|shares memory settings and dispatcher readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|shares memory, account custody and readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, nodes and backup leases| package["infra/package<br/>Helm install"]
   stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
@@ -30,6 +30,8 @@ tables and a separate jobs database, [NATS](../../GLOSSARY.md#nats) for the even
 [OpenFGA](../../GLOSSARY.md#openfga-permissions-service) for permissions and
 [MinIO](../../GLOSSARY.md#minio-file-storage) for files.
 Local setup uses the event store's certificate issuer to give NATS services private keys.
+Personal tool keys use the existing Kubernetes secret store through a separate,
+limited dev identity. The server and models process share its private connection.
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) provides test sign-in.
 
 The dispatcher uses the server's read-only content connection to coordinate gateway

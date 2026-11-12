@@ -1,27 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jente Rosseel
 // Adapt the OC1 Secret and HMAC checks. Keep their notice in connection-custody.NOTICE.
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { digest, equalDigest } from './connection-custody-digest.ts';
+import { personalKeyCommandSchema } from '@opencrane/protocol';
 import { z } from 'zod';
 import { readResponse, decodeToken, matchesMetadata } from './connection-custody-response.ts';
 import { connectionStageJournal } from './connection-stage-journal.ts';
 
-const identifier = z.string().min(1).max(200);
-const stageSchema = z.object({
-  siloId: identifier, userId: identifier, serverId: identifier, connectionId: identifier,
-  profileId: identifier, purpose: z.enum(['personal', 'validation']),
-  generation: z.int().positive(), endpointDigest: z.string().regex(/^[a-f0-9]{64}$/u),
-  operationId: identifier, expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
-  attemptId: identifier.optional(), attemptDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
-}).strict();
-export type ConnectionStage = z.infer<typeof stageSchema>;
-const companyStageSchema = stageSchema.omit({ userId: true }).extend({
-  ownerKind: z.literal('company'), purpose: z.literal('company'), custodianId: identifier,
-  registrationRevision: z.int().positive(), optInRevision: z.int().positive(),
-});
-export type CompanyConnectionStage = z.infer<typeof companyStageSchema>;
-export type CustodyStage = ConnectionStage | CompanyConnectionStage;
-const custodyStageSchema = z.union([stageSchema, companyStageSchema]);
+import { custodyStageSchema, connectionIdentifierSchema as identifier,
+  type ConnectionStage, type CompanyConnectionStage, type CustodyStage } from './connection-custody-stage.ts';
+export type { ConnectionStage, CompanyConnectionStage, CustodyStage }
+  from './connection-custody-stage.ts';
 interface ConnectionIdentity { reference: string; uid: string; resourceVersion: string }
 interface Result {
   status: 'staged' | 'recovered' | 'conflict' | 'unknown' | 'not_found' | 'deleted';
@@ -260,9 +250,17 @@ class ConnectionCustody {
     return this.readMaterial(input, expected, 'attempt');
   }
   /** Read access material only under the broker's profile lock. */
-  async readAccessMaterial(input: ConnectionStage, expected: ConnectionIdentity) {
+  async readAccessMaterial(input: ConnectionStage, expected: ConnectionIdentity,
+    format: 'oauth' | 'bearer' = 'oauth') {
     if (input.purpose !== 'personal') {
       return undefined;
+    }
+    if (format === 'bearer') {
+      const material = await this.readMaterial(input, expected, 'active');
+      if (!personalKeyCommandSchema.shape.material.safeParse(material).success) {
+        return undefined;
+      }
+      return material;
     }
     return this.readOAuthToken(input, expected, 'access_token');
   }
@@ -507,20 +505,6 @@ function metadataFor(input: CustodyStage) {
     }
   }
   return { labels, annotations };
-}
-function digest(key: Buffer, input: CustodyStage, material: string) {
-  const hmac = createHmac('sha256', key);
-  hmac.update('opencrane:mcp-connection-material:v1\0');
-  // Bind the private recovery record too, so edits cannot extend the append deadline.
-  hmac.update(JSON.stringify(input));
-  hmac.update('\0');
-  hmac.update(material, 'utf8');
-  return hmac.digest('hex');
-}
-function equalDigest(actual: string, expected: string) {
-  const actualBytes = Buffer.from(actual);
-  const expectedBytes = Buffer.from(expected);
-  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
 }
 
 function sameIdentity(actual: ConnectionIdentity, expected: ConnectionIdentity) {

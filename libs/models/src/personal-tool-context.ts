@@ -4,7 +4,9 @@ import type { EventStore } from '@opencrane/event-store';
 import { history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { readConnectionSelection } from './connection-selection.ts';
-import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
+import { selectedPersonalAccount } from './personal-account.ts';
+import { connectionAccount } from './connection-account.ts';
+import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
 
 function digest(value: unknown) {
@@ -33,7 +35,6 @@ export async function personalToolContext(store: EventStore, binding: Binding,
   const policy = toolPolicyFromRows(serverRows);
   const saved = profile.data;
   if (!saved || profile.sequence !== selected.profileRevision ||
-      saved.activation.reason !== 'oauth_confirmed' ||
       saved.activation.generation !== selected.generation ||
       policy.accountMode !== 'personal' || !policy.published) {
     throw new Error('Personal tool unavailable');
@@ -41,13 +42,14 @@ export async function personalToolContext(store: EventStore, binding: Binding,
   const choice = { action: 'select' as const, userId: requesterId, serverId,
     connectionId: saved.activation.connectionId, profileId: selected.profileId,
     profileRevision: selected.profileRevision, expectedSequence: selected.sequence };
-  const oauth = await selectedOAuth(profileRows, serverRows, choice,
+  const oauth = await selectedPersonalAccount(profileRows, serverRows, choice,
     loadConfiguration, toolName);
   if (!oauth || oauth.generation !== selected.generation ||
       Date.now() >= oauth.expiresAt) {
     throw new Error('Personal tool unavailable');
   }
-  const account = saved.activation.account;
+  const account = connectionAccount(saved.activation);
+  if (!account) throw new Error('Personal tool unavailable');
   return {
     requesterId, serverId, connectionId: saved.activation.connectionId,
     profileId: selected.profileId, profileRevision: selected.profileRevision,

@@ -128,3 +128,9 @@ export { startOAuthConfigurationChange,
   finishOAuthConfigurationChange } from './oauth-configuration-change.ts';
 
 export { readRoutineApproval } from './routine-approval-evidence.ts';
+
+export { requirePersonalConnectionAccess } from './connection-selection.ts';
+export { connectionCustody } from './connection-custody.ts';
+export { BearerIdentityRefused } from './bearer-identity.ts';
+export { savePersonalKey, type PersonalKeyDependencies, type PersonalKeySaveInput }
+  from './personal-key-save.ts';

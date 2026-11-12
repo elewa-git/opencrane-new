@@ -39,14 +39,17 @@ async function preserveProductionWiring() {
   const server = await readFile(new URL('apps/server/src/main.ts', root), 'utf8');
   const models = await readFile(new URL('apps/server/src/models-main.ts', root), 'utf8');
   const sources = stageBLaunchSources(server, models);
-  assert.equal(sources.server.replace('discovery: stageBNetwork', 'discovery: {}'), server);
+  const restoredDiscovery = sources.server.replace('discovery: stageBNetwork', 'discovery: {}');
+  const restoredKeys = restoredDiscovery.replace('db: modelDb.db, network: stageBNetwork',
+    'db: modelDb.db');
+  assert.equal(restoredKeys, server);
   const restoredWatch = sources.models.replace('requireDispatchLeader, stageBNetwork);',
     'requireDispatchLeader);');
   const restoredDispatch = restoredWatch.replace('remoteNetwork: stageBNetwork, acknowledged,',
     'acknowledged,');
   assert.equal(restoredDispatch, models);
 }
-test('only discovery, watch and dispatch change in the complete entrypoints',
+test('only discovery, identity, watch and dispatch transports change in the complete entrypoints',
   preserveProductionWiring);
 
 async function suppliesDispatchNetwork() {
@@ -146,6 +149,7 @@ async function refuseMissingInjection() {
     [server, models.replace('silo, requireDispatchLeader);', 'silo, unavailable);')],
     [server, models.replace('{ acknowledged, routes:', '{ routes:')],
     [server + '\ndiscovery: {}', models],
+    [server.replace('personalKeys: { custody:', 'personalKeys: { unavailable:'), models],
   ];
   for (const [serverSource, modelsSource] of cases) {
     function prepare() {

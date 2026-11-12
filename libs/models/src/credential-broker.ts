@@ -165,7 +165,8 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
       refuse();
     }
     // Save the release audit before reading any material, even if custody later fails.
-    material = await custody.readAccessMaterial(stage, identity);
+    const format = activation.reason === 'oauth_confirmed' ? 'oauth' : 'bearer';
+    material = await custody.readAccessMaterial(stage, identity, format);
     if (material === undefined || performance.now() >= until) {
       refuse();
     }

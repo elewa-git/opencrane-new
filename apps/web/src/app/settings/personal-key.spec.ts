@@ -53,7 +53,12 @@ describe('personal key entry', () => {
           revision = 8;
           return Promise.resolve(new Response('{}', { status: 409 }));
         }
-        const body = JSON.parse(String(init.body)) as { expectedSequence: number; changeRef: string };
+        if (typeof init.body !== 'string') throw new Error('Expected a JSON body');
+        const body: unknown = JSON.parse(init.body);
+        if (typeof body !== 'object' || body === null ||
+            !('expectedSequence' in body) || !('changeRef' in body)) {
+          throw new Error('Missing selection reference');
+        }
         expect(body.expectedSequence).toBe(8);
         return response({ status: 'selected', changeRef: body.changeRef });
       }

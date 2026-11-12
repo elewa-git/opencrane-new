@@ -186,6 +186,10 @@
     } @else if (policy()) {
       <p class="draft-notice">A complete comparison is unavailable. Review is paused.</p>
     }
+    @if (policy(); as currentPolicy) {
+      <oc-account-review [policy]="currentPolicy" [disabled]="changeState() !== 'disabled'"
+        (selected)="accountSelected($event)" />
+    }
     <p>Audience: the reviewed tool list for this connection. People and assistants still need
       their own grants. Old approvals stay ended and cannot be restored by publishing.</p>
     <p>There's no rollback. Calls stay paused until the current publication is confirmed.</p>

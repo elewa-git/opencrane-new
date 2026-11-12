@@ -1,3 +1,4 @@
+import { verifiedBearerAccount } from './connection-account.ts';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -58,8 +59,10 @@ export async function loadPersonalProfileMetadata(store: EventStore, silo: strin
   const server = connectionServer(serverRows, saved?.activation.connectionId ?? '');
   const serverAvailable = server.available && Date.now() < server.expiresAt &&
     saved?.activation.endpointDigest === server.endpointDigest;
+  const account = saved && verifiedBearerAccount(saved.activation);
+  const status = account ? 'verified' as const : profile.status;
   const metadata = { serverId, profileId, profileRevision: profile.sequence,
-    controlRevision: control.at(-1)?.sequence ?? 0, status: profile.status,
+    controlRevision: control.at(-1)?.sequence ?? 0, status,
     generation: saved?.activation.generation ?? null, adminBlocked: control.length > 0,
     serverAvailable, callsAvailable: false };
   return adminMetadataSchema.parse(metadata);

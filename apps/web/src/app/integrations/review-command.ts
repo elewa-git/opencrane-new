@@ -57,6 +57,7 @@ export async function reviewCommand(policy: ToolPolicy, commandId: string) {
   return { commandId, expectedSequence: policy.sequence,
     catalogueDigest: policy.catalogue.schemaDigest,
     connectionId: policy.connectionId, accountMode: policy.accountMode,
+    ...(policy.identityTool ? { identityTool: policy.identityTool } : {}),
     policyRevision: policy.policyRevision, tools };
 }
 

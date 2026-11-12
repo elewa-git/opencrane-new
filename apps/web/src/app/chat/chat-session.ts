@@ -14,7 +14,7 @@ import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
   from './chat-state';
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
-import { sessionWaitingReason, updateComputerStatus } from './chat-session-status';
+import { sessionWaitingReason, updateComputerStatus, applyComputerMessage } from './chat-session-status';
 import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { ReadMarker } from './read-marker';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
@@ -33,6 +33,7 @@ export class ChatSession implements OnDestroy {
   readonly selected = signal('');
   readonly memberId = signal('');
   readonly displayName = signal('You');
+  readonly personalConnections = signal(false);
   readonly assistantId = signal<string | null>(null);
   readonly computer = signal<ComputerState>('ready');
   readonly dispatcherReady = signal(true);
@@ -111,6 +112,12 @@ export class ChatSession implements OnDestroy {
   private readonly connectionCloseSubscription = this.socket.connectionClosed.subscribe(
     this.socketClosed.bind(this));
 
+  private readonly computerMessages = {
+    computer: this.computer, announcement: this.announcement,
+    dispatcherReady: this.dispatcherReady, computerRecovered: this.computerRecovered,
+    computerLostAt: this.computerLostAt,
+  };
+
   constructor() {
     effect(onCleanup => {
       if (!this.railUnavailable()) return;
@@ -145,6 +152,7 @@ export class ChatSession implements OnDestroy {
       this.memberId.set(context.memberId);
       this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You');
       this.assistantId.set(context.assistantId);
+      this.personalConnections.set(context.personalConnections === true);
       this.denied.set(false);
       if (context.memoryAdmission) this.memoryAdmission.set(context.memoryAdmission);
       await this.list(revision);
@@ -648,7 +656,7 @@ export class ChatSession implements OnDestroy {
     }
     this.conversationReady = message.type === 'ready' || this.conversationReady;
     this.generation = message.generation;
-    this.updateComputerState(message);
+    applyComputerMessage(this.computerMessages, message);
     if (message.row) this.acceptSocketRow(message.row);
     if (message.type === 'ready' && !this.historyLoading && !this.historyFailure()) {
       this.finishCatchUp();
@@ -687,19 +695,6 @@ export class ChatSession implements OnDestroy {
       this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
     }
   }
-  private updateComputerState(message: ServerMessage): void {
-    if (!('computerState' in message)) return;
-    if (message.dispatcherReady !== undefined) {
-      this.dispatcherReady.set(message.dispatcherReady);
-    }
-    if (message.computerState) {
-      updateComputerStatus(this.computer, this.announcement, message.computerState);
-    }
-    if (message.computerRecovered !== undefined) {
-      this.computerRecovered.set(message.computerRecovered);
-    }
-    if (message.computerLostAt !== undefined) this.computerLostAt.set(message.computerLostAt);
-  }
   queuedReference(): string {
     return this.pending?.id ?? '';
   }
@@ -733,6 +728,7 @@ export class ChatSession implements OnDestroy {
     this.computerRecovered.set(false);
     this.computerLostAt.set('');
     this.memoryAdmission.set({ state: 'disabled', failing: [] });
+    this.personalConnections.set(false);
     this.selected.set('');
     this.position = 0;
     this.generation = 0;

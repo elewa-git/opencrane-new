@@ -44,6 +44,7 @@ interface TurnToolInput {
   readServer: (serverId: string) => Promise<TurnToolServerState | undefined>;
   canUse: (serverId: string, kind: 'person' | 'assistant', subject: string) =>
     Promise<boolean>;
+  missingConnection?: (server: TurnToolServerState) => void;
   readSelection?: (requesterId: string, serverId: string) => Promise<{
     profileId: string; profileRevision: number; selectionRevision: number;
     generation: number;
@@ -268,14 +269,17 @@ async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][
   let state = await input.readServer(row.serverId);
   if (state && memoryTools) state = memoryToolsOnly(state, memoryTools);
   if (!state || !isAvailableServer(state)) return { omitted: false };
-  if (state.accountMode === 'personal') {
-    const selection = await input.readSelection?.(input.requesterId, state.serverId);
-    if (!selection) return { omitted: false };
-  }
   if (!hasComputerCompatibleFields(state)) return { omitted: true };
   const selected = reviewedDefinitions(state, input.approvalWaiting === true);
   if (!selected.definitions.length) return { omitted: false };
   if (!await canUseServer(input, state.serverId)) return { omitted: false };
+  if (state.accountMode === 'personal') {
+    const selection = await input.readSelection?.(input.requesterId, state.serverId);
+    if (!selection) {
+      input.missingConnection?.(state);
+      return { omitted: false };
+    }
+  }
   const entry = makeTurnToolServer(state, selected);
   if (!turnToolFits(entry, tools, keys, availableBytes)) return { omitted: true };
   return { entry, omitted: false };

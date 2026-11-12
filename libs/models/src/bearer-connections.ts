@@ -1,6 +1,10 @@
+import { appendConnection, requireSameConnectionEvent as requireSameEvent,
+  requireConnectionEnabled, type ConnectionAccessCheck } from './connection-append.ts';
+import { stageMaterial } from './connection-stage-material.ts';
+import type { verifyBearerIdentity } from './bearer-identity.ts';
+import { sameSavedAccount } from './connection-account.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { refreshedOAuth, connectionOperationId } from './oauth-refresh-fold.ts';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Db } from '@opencrane/projections';
 import { withConnectionStage } from './connection-stage-lock.ts';
@@ -30,7 +34,11 @@ const controlSchema = z.strictObject({
 });
 type Saved = z.infer<typeof savedSchema>;
 type Command = z.infer<typeof commandSchema>;
-type Custody = Pick<ReturnType<typeof connectionCustody>, 'stage'>;
+type Verification = Awaited<ReturnType<typeof verifyBearerIdentity>>;
+type Custody = Pick<ReturnType<typeof connectionCustody>, 'stage'> & {
+  verifyIdentity?: (rows: StoredEvent[], material: string) => Promise<Verification>;
+  confirmAccess?: ConnectionAccessCheck;
+};
 interface State {
   status: 'unavailable' | 'saved_unverified';
   sequence: number;
@@ -240,33 +248,14 @@ function replacesSaved(previous: State, row: StoredEvent, data: Saved, silo?: st
     data.activation.reason === 'bearer_rotation' &&
     data.activation.generation === previous.lastGeneration + 1 &&
     !previous.closedOperations.includes(data.activation.operationId) &&
-    sameBindings(previous.data, data) && row.event.silo === silo;
+    sameBindings(previous.data, data) && row.event.silo === silo &&
+    sameSavedAccount(previous.data.activation, data.activation);
 }
 function sameBindings(first: Saved, second: Saved) {
   return first.userId === second.userId && first.serverId === second.serverId &&
     first.profile === second.profile &&
     first.activation.connectionId === second.activation.connectionId &&
     first.activation.endpointDigest === second.activation.endpointDigest;
-}
-function digest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
-function receipt(row: StoredEvent) {
-  const data = savedSchema.parse(row.event.data);
-  return { status: 'saved_unverified' as const, sequence: row.sequence,
-    generation: data.activation.generation, changeRef: row.event.commandId };
-}
-function requireSameEvent(saved: StoredEvent, attempted: EventEnvelope) {
-  const event = saved.event;
-  if (event.id !== attempted.id || event.silo !== attempted.silo ||
-      event.subject !== attempted.subject || event.type !== attempted.type ||
-      event.commandId !== attempted.commandId || event.principal?.kind !== 'human' ||
-      event.principal.id !== attempted.principal?.id ||
-      digest(event.data) !== digest(attempted.data)) {
-    throw new Error('Connection conflict');
-  }
 }
 async function eligibleServer(store: EventStore, silo: string, input: Command) {
   const rows = await history(store, `mcp-${input.serverId}`, silo, performance.now() + 10_000);
@@ -275,7 +264,7 @@ async function eligibleServer(store: EventStore, silo: string, input: Command) {
     throw new Error('Connection server unavailable');
   }
   return { sequence: server.sequence, endpointDigest: server.endpointDigest,
-    expiresAt: server.expiresAt };
+    expiresAt: server.expiresAt, rows };
 }
 
 function requireCurrent(state: State, input: Command) {
@@ -290,18 +279,6 @@ function requireCurrent(state: State, input: Command) {
       input.expectedGeneration !== state.data?.activation.generation) {
     throw new Error('Connection conflict');
   }
-}
-async function stageMaterial(custody: Custody, stage: ConnectionStage, material: string) {
-  try {
-    const result = await custody.stage(stage, material);
-    if ((result.status === 'staged' || result.status === 'recovered') && result.identity) {
-      return result.identity;
-    }
-  } catch {
-    // Hide adapter errors because a transport error can contain the supplied material.
-    throw new Error('Connection custody unavailable');
-  }
-  throw new Error('Connection custody unavailable');
 }
 
 /** Stage outside the append-only command, then check current access before saving a reference. */
@@ -348,6 +325,10 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
     purpose: 'personal', generation: expectedState.lastGeneration + 1, operationId,
     expectedSequence: input.expectedSequence, appendUntil: input.appendUntil,
     endpointDigest: server.endpointDigest };
+  let verification;
+  if (custody.verifyIdentity) {
+    verification = await custody.verifyIdentity(server.rows, material);
+  }
   const identity = await stageMaterial(custody, stage, material);
   const reason = input.action === 'create' ? 'bearer_create' : 'bearer_rotation';
   const payload = { userId: memberId, serverId: input.serverId,
@@ -355,7 +336,8 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
     activation: { connectionId: input.connectionId, ownerKind: 'personal', purpose: 'personal',
       generation: stage.generation, uid: identity.uid, resourceVersion: identity.resourceVersion,
       endpointDigest: server.endpointDigest, operationId, changedBy: memberId,
-      expectedSequence: input.expectedSequence, appendUntil: input.appendUntil, reason } };
+      expectedSequence: input.expectedSequence, appendUntil: input.appendUntil, reason,
+      ...(verification ? { verification } : {}) } };
   const checkedData = savedSchema.safeParse(payload);
   if (!checkedData.success) {
     throw new Error('Connection custody unavailable');
@@ -368,58 +350,9 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
   const event = { ...envelope(binding.silo, subject, type, data, operationId),
     commandId: input.changeRef, source: 'opencrane-server',
     principal: { kind: 'human' as const, id: memberId } };
-  return appendConnection(store, binding, memberId, input, event, server, original);
+  const append = { input, event, server, original, confirmAccess: custody.confirmAccess };
+  return appendConnection(store, binding, memberId, append);
 }
-async function appendConnection(store: EventStore, binding: Binding, memberId: string,
-  input: Command, event: EventEnvelope,
-  server: Awaited<ReturnType<typeof eligibleServer>>, original?: StoredEvent) {
-  // Start the short membership check only after custody and profile history have finished.
-  const controlSubject = `connection-control-${memberId}-${input.serverId}`;
-  const subjects = [`member-${memberId}`, controlSubject];
-  const fresh = await authorityFence(store, performance.now(), subjects);
-  // Include profile writes and admin blocks in one native append condition.
-  const connectionSequence = await store.head('connection-*', fresh.deadline);
-  const options = { requiredRole: 'member' as const, fresh };
-  await activeMember(store, binding, memberId, options);
-  await requireConnectionEnabled(store, memberId, input.serverId, fresh.deadline);
-  if (original) {
-    requireSameEvent(original, event);
-    return receipt(original);
-  }
-  const appendUntil = Math.min(input.appendUntil, server.expiresAt);
-  if (Date.now() >= appendUntil ||
-      await store.head(`mcp-${input.serverId}`, fresh.deadline) !== server.sequence) {
-    throw new Error('Connection conflict');
-  }
-  // Check after capturing the category position so a later profile change also conflicts.
-  if (await store.head(event.subject, fresh.deadline) !== input.expectedSequence) {
-    throw new Error('Connection append unconfirmed');
-  }
-  await fresh();
-  const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
-  const command = { event, expectedSequence: connectionSequence,
-    expectedSubject: 'connection-*', historyChecked: true as const, deadline };
-  const result = await store.append(command);
-  if (result.status !== 'appended') {
-    throw new Error('Connection append unconfirmed');
-  }
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
-  if (!saved) {
-    throw new Error('Connection append unconfirmed');
-  }
-  requireSameEvent(saved, event);
-  return receipt(saved);
-}
-
-async function requireConnectionEnabled(store: EventStore, memberId: string,
-  serverId: string, deadline: number) {
-  // Keep the admin block across new profile ids. Only a future explicit admin enable can lift it.
-  const sequence = await store.head(`connection-control-${memberId}-${serverId}`, deadline);
-  if (sequence !== 0) {
-    throw new Error('Connection disabled');
-  }
-}
-
 /** Record invalidation only. Retain stored material until cleanup can prove deletion is safe. */
 export async function changePersonalConnection(store: EventStore, binding: Binding,
   actorId: string, raw: unknown) {

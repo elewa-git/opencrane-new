@@ -6026,7 +6026,8 @@ history deadline and one final access check without a write fence.
 `GET /api/my/tools/:serverId/profiles/:profileId/changes/:changeRef` uses the same
 session, strict input and no-store rules as the profile read. Confirmed output contains only
 `status`, `changeRef`, `eventId`, `eventType`, `recordedAt`, `sequence`, `action`,
-`generation` and `identityStatus: unverified`. All names pass substring-based RISKY_FIELD_NAME.
+`generation` and `identityStatus: unverified | verified`. Verified names successful
+bearer identity evidence in that original save; it does not claim current usability. All names pass substring-based RISKY_FIELD_NAME.
 Generation is null for owner revocation. The time and position belong to the original event.
 Unknown returns 404 with only `status: unknown`; history failure returns 503 unavailable.
 Neither proves non-application or permits resending. Current usability stays on the profile GET.
@@ -6196,6 +6197,14 @@ deduplication expiry, later profile changes, grant loss, exact ownership, invali
 slow loading, removal during loading, private canaries and no appended effects.
 Profile and instance recovery keep their existing contracts. Company/admin connection
 reads, writes, broker and screens remain later work. Fresh-install qualification: NOT RUN.
+
+## Personal key entry and review
+
+The [personal-key API](../../docs/api/personal-keys.md) owns the review, save, selection,
+recovery and notice contracts. `personal-key-routes.ts` composes identity checks with the existing bearer save;
+`personal-needs-route.ts` uses the same readers and builder as turn admission.
+The server process loads `CONNECTION_CUSTODY_FILE`, as models and dispatcher do.
+Bearer choices need no OAuth configuration. Keys never enter replies or request logs.
 
 ## Explicit personal account choice through HTTP (Part of #49)
 

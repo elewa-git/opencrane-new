@@ -1,3 +1,4 @@
+import { verifiedBearerAccount } from './connection-account.ts';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -18,7 +19,7 @@ const receiptSchema = z.strictObject({
   eventType: z.enum(['connection.created', 'connection.refreshed', 'connection.revoked']),
   recordedAt: z.iso.datetime(), sequence: z.int().positive(),
   action: z.enum(['create', 'rotate', 'revoke']), generation: z.int().positive().nullable(),
-  identityStatus: z.literal('unverified'),
+  identityStatus: z.enum(['unverified', 'verified']),
 });
 type Reference = z.infer<typeof referenceSchema>;
 
@@ -75,9 +76,10 @@ function originalReceipt(rows: StoredEvent[], silo: string, subject: string,
   if (!facts) {
     return null;
   }
+  const identityStatus = originalIdentityStatus(event.data);
   const receipt = receiptSchema.safeParse({ status: 'confirmed', changeRef: reference.changeRef,
     eventId: event.id, eventType: event.type, recordedAt: event.time,
-    sequence: original.sequence, ...facts, identityStatus: 'unverified' });
+    sequence: original.sequence, ...facts, identityStatus });
   return receipt.success ? receipt.data : null;
 }
 function matchesProfile(row: StoredEvent, silo: string, subject: string,
@@ -116,4 +118,10 @@ function operationFacts(row: StoredEvent, preceding: StoredEvent[], memberId: st
   }
   const action = row.event.type === 'connection.created' ? 'create' : 'rotate';
   return { action, generation: parsed.data.activation.generation };
+}
+
+function originalIdentityStatus(data: unknown) {
+  const saved = savedSchema.safeParse(data);
+  const verified = saved.success && verifiedBearerAccount(saved.data.activation) !== undefined;
+  return verified ? 'verified' : 'unverified';
 }

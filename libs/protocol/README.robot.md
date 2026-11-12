@@ -276,7 +276,11 @@ admin-only tool explanation shape.
 
 ## Publication preparation (P3-4 PR 2a; Part of #45)
 
-ToolPolicy optionally carries reviewRevision and the strict publication intent.
+ToolPolicy optionally carries reviewRevision, the admin-chosen `identityTool` and
+the strict publication intent. `personal-connections.ts` shares the key-save input,
+safe profile metadata, reviewed connection settings and missing-key notice shapes.
+The key-save input is a private HTTP command, never an event. Chat context optionally
+advertises `personalConnections` for the notice reader.
 These are saved facts, with no gateway readiness claim. Older policy replies still parse.
 
 ## Child invitation acknowledgement

@@ -1,3 +1,5 @@
+import { buildTurnTools } from '../src/chat/turn-tools.ts';
+import { turnToolReaders } from '../src/chat/turn-tool-readers.ts';
 import { expect, it, onTestFinished } from 'vitest';
 import { fixture } from '@opencrane/models/testing';
 import { personalKeyFixture } from './support/personal-key.ts';
@@ -15,6 +17,10 @@ async function missingKeyExplainsConnection() {
     binding: setup.binding };
   const needs = await personalConnectionNeeds(options, 'alice', 'assistant');
   expect(needs).toEqual([{ serverId: setup.serverId, name: 'OpenCrane demo' }]);
+  const readers = turnToolReaders(options);
+  const offered = await buildTurnTools({ rows: [{ serverId: setup.serverId }],
+    requesterId: 'alice', assistantId: 'assistant', baseMessageBytes: 0, ...readers });
+  expect(offered).toEqual([]);
 }
 it('tells a granted member without a key which server needs a connection',
   missingKeyExplainsConnection, 120_000);
