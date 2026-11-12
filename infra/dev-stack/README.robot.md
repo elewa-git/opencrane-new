@@ -922,7 +922,9 @@ The journey signs in as both real users in separate Playwright browser contexts
 at 390px and uses their actual encrypted cookies for HTTP and WebSocket requests.
 It refuses hostile/missing logout Origins and requests without a session. It checks
 an empty 303 body and probes manual/follow fetch, XHR, the DOM and page cookies for
-ID-token exposure. Native keyboard sign-out returns without a chooser, removes
+ID-token exposure. Fetch and XHR checks observe the outgoing POST and require cookie
+removal. A strict content policy can block the redirect before a browser response event.
+Native keyboard sign-out returns without a chooser, removes
 the OpenCrane cookie and is followed by a successful sign-in requiring credentials.
 The five process logs are checked for the current ID token without printing it. Dev-only bootstrap
 invitations bind these subjects to stable member IDs; they do not define the

@@ -787,11 +787,10 @@ async function up(fresh: boolean) {
     const buildEnvironment = { ...base, NG_BUILD_MAX_WORKERS: '2' };
     await run('nice', ['-n', '10', 'npm', 'run', 'build', '-w', 'apps/web'],
       buildEnvironment, 300_000);
+    const webEnvironment = { ORGANISATION_NAME: settings['ORGANISATION_NAME'] ?? '' };
     await start('web', [`${root}/infra/dev-stack/web-server.mjs`,
       `${root}/apps/web/dist/web/browser`, settings['WEB_PORT']!,
-      new URL(origin).hostname, `${directory}/proxy.json`], {
-      ORGANISATION_NAME: settings['ORGANISATION_NAME'] ?? '',
-    });
+      new URL(origin).hostname, `${directory}/proxy.json`], webEnvironment);
   }
   async function websiteReady() {
     if (!await processId('web')) {
