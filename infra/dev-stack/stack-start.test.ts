@@ -432,3 +432,13 @@ async function secondaryModelListeners() {
 
 test('secondary model gateway accepts loopback and refuses every wildcard form',
   secondaryModelListeners);
+
+async function custodySettingsMatchUpgradeAndDispatcher() {
+  const result = await ownerStart({ repeat: true });
+  assert.equal(result.status, 0, result.output + result.failure);
+  assert.match(result.operations, /dispatcher-custody true/u);
+  assert.match(result.operations, /upgrade-custody true/u);
+  assert.doesNotMatch(result.operations, /upgrade-custody false/u);
+}
+test('custody settings reach handler preparation before the dispatcher starts',
+  custodySettingsMatchUpgradeAndDispatcher);
