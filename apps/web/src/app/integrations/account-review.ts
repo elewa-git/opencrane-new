@@ -11,8 +11,8 @@ export interface AccountReviewChoice {
   templateUrl: './account-review.html',
   styles: `fieldset { border: 1px solid var(--border, #d8d8d8); padding: 1rem;
     border-radius: .75rem; margin-block: 1rem; }
-    label { display: block; margin-block: .75rem; }
-    select { display: block; max-width: 100%; margin-top: .5rem; padding: .5rem; }
+    label { display: block; min-height: 44px; margin-block: .75rem; }
+    select { display: block; min-height: 44px; max-width: 100%; margin-top: .5rem; padding: .5rem; }
     p { max-width: 65ch; }`,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

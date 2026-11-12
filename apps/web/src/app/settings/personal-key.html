@@ -11,14 +11,14 @@
         aria-describedby="personal-key-help" [disabled]="busy()" />
       <p id="personal-key-help">Paste your own key. It is cleared when you submit and is never
         shown again. A key whose account changes is blocked.</p>
-      <button type="submit" [disabled]="busy()">{{ busy() ? 'Saving…' : 'Save key' }}</button>
+      <button class="primary" type="submit" [disabled]="busy()">{{ busy() ? 'Saving…' : 'Save key' }}</button>
     </form>
     @if (profile()?.status === 'verified' && !profile()?.adminBlocked) {
-      <button type="button" (click)="use()" [disabled]="busy()">Use this key</button>
+      <button class="primary" type="button" (click)="use()" [disabled]="busy()">Use this key</button>
     }
   }
   @if (pending()) {
     <p>Original change: <code>{{ pending()?.changeRef }}</code></p>
-    <button type="button" (click)="checkStatus()" [disabled]="busy()">Check status</button>
+    <button class="secondary" type="button" (click)="checkStatus()" [disabled]="busy()">Check status</button>
   }
 </section>
