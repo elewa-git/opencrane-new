@@ -11,8 +11,8 @@
     "scanner"
   ],
   "images": {
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
     "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
@@ -22,5 +22,12 @@
   },
   "scanner": {
     "approvedSha": "6cbd70a9814fb2860aa30dccc32d9e97b8efc990f355637c0231d867f70108ee"
+  },
+  "packageImage": {
+    "sourceRevision": "ba0654ee70d618708299cdc0a03a81e4768d4494",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
+    "imageId": "sha256:17be2b0818a39944d76611365f930308985c541d2fd36ee45eb9fc4e809378b8",
+    "scanSha256": "3cf6159221d3208d31b6ee411f55027c45defcd7c3433bfd1175bfe48c454ac2"
   }
 }

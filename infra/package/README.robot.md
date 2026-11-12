@@ -248,9 +248,9 @@ their integrity-checked lockfile, the exact executable and launcher hashes, and
 four OpenCrane AGPL helpers. The package source is the existing pinned spike
 lockfile. The Dockerfile checks the executable hash, launcher hash and CLI version
 before copying only those files. It does not copy the computer filesystem or
-download anything when the native check runs. The image's licence inventory and
-immutable promotion pin still need a new scan and review before deployment approval;
-the old reviewed image pin does not claim these new bytes.
+download anything when the native check runs. The current 580-component inventory
+includes those packages. The image layer check verifies their exact executable,
+launcher and helper hashes against the existing native inventory.
 
 ## Package image promotion
 
@@ -302,14 +302,15 @@ requires the final owner-ready update; a settings refusal cannot pass. Failures
 withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
-The existing `natsCluster` review binds `replicas: 3`, both role pins and
+The `packageImage` review binds both role pins and
 `sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
 from the Syft JSON bytes. Docker inspection may identify that configuration or the
 image index; both reports must name the same reviewed repository digest.
 The server inventory records the same `sourceRevision`; the website
 shares that inventory. These fields are reviewed evidence, not an automatic claim
-that bootstrap or a live installation passed. Preflight requires the source revision
-alongside the existing R3 role bindings. Synthetic records prove source checks only.
+that bootstrap or a live installation passed. A separate `natsCluster` review still
+requires three replicas and the existing role bindings before that option can run.
+Synthetic records prove source checks only.
 
 After inspecting bootstrap in the actual image, scan it with Syft's `--scope all-layers`.
 Save `docker image inspect <immutable-pin>` as JSON. Run the existing checker with
@@ -328,8 +329,10 @@ before changing the inventory and index pin together. Never change only the expe
 The command writes nothing and withholds input paths and dependency errors on failure.
 The preflight test suite also runs the Python licence and promotion refusal tests.
 
-The shipped image and inventory remain unchanged. The private registry is unavailable;
-R3 approval and release qualification remain blocked. Unknown licences or open
+The current image has a source-bound all-layer scan. Its 88 Debian package versions
+were checked again against authenticated main indexes; `package-debian-main.json`
+records their signed index hashes. The private registry is unavailable, so packaged
+release qualification remains blocked. R3 approval is separate. Unknown licences or open
 Critical/High findings also block qualification. The
 [first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
 The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local
