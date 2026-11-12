@@ -69,12 +69,19 @@ type to one without the other.
 
 Follow the [engineering standard](docs/process/standards.md).
 
-- Build each whole feature on a development branch with a well-described PR:
+- Build each slice of a feature on a development branch with a well-described PR:
   Why / Functional outcome / Architecture / Evidence / Not in this PR. The
   orchestrator merges after gates, independent review and green CI. Small fixes
-  belong inside their feature PR.
-- Aim for at most about 1,500 non-generated added/deleted lines per change.
-  One PR per whole feature, stacks at most two, no consolidation PRs.
+  go inside the slice's PR, or into the ticket's next slice once it has merged.
+- Deliver a feature in at most five slices. After each slice merges, a person
+  can do one more thing from start to finish on a fresh dev stack; without
+  that PASS it does not merge. Aim for at most about 800 changed lines of
+  shipped code per slice; tests and documents are not counted. No more than
+  two open PRs stacked on each other, and no consolidation PRs.
+- A ticket has limits: its listed slices, and 8 agent-hours and two rounds of
+  rework for each. Past any limit, stop and wait for the owner; take no
+  default. At most six feature tickets are in progress at once. See the
+  [delivery rules](docs/process/standards.md#delivery-rules-finish-before-you-start).
 - At most two independent review passes: a different model reviews the diff,
   then verifies fixes and batched disputed findings. Remaining blockers go
   to the owner; the pass limit never turns failure into success.

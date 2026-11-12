@@ -6,12 +6,11 @@ Keep the four required checks, one independent adversarial review and fresh-inst
 
 ## Work and review
 
-Build each whole feature on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. The orchestrator merges after gates, independent review and green CI. Small fixes go inside the feature PR they belong to. A different model reviews; the owner reviews the result each morning.
+Build each slice of a feature on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. The orchestrator merges after gates, independent review and green CI. Small fixes go inside the slice's PR; once it has merged, they go into the ticket's next slice. A different model reviews; the owner reviews the result each morning.
 
 - Take ready issues with an outcome, acceptance criteria and decisions already made. Read the relevant plan section, not the whole historical record.
 - Parallel builders have separate worktrees, installed dependencies and assigned files. One integrator lands their changes serially and checks the combined result. Never borrow another worktree's generated dependencies.
-- Aim for at most about 1,500 non-generated added/deleted lines per coherent change. Explain an exception before starting; do not split one responsibility into dependent slivers to satisfy the number.
-- One PR per whole feature, with at most two PRs in a stack and no consolidation PRs. No global stack service.
+- Deliver a feature in slices and keep to the ticket's limits: see [Delivery rules](#delivery-rules-finish-before-you-start). At most two PRs in a stack and no consolidation PRs. No global stack service.
 - Use emoji plus a plain sentence for commits; no co-author or AI attribution. No per-package version ceremony before releases need it.
 
 The review loop has **at most two independent passes per change**:
@@ -19,11 +18,47 @@ The review loop has **at most two independent passes per change**:
 1. Builder runs relevant tests and the required checks, updates changed contracts/docs, then supplies the diff, acceptance criteria and evidence. Reviewer reads the actual code and tests, using a different model from the builder.
 2. Reviewer returns one report. Each blocking finding names a concrete trigger, consequence, `file:line`, violated contract and missing/failing proof. Builder fixes substantiated findings. The second pass checks those fixes and any risk they introduce. Batch disputed findings into this pass; do not spawn a verifier for every sentence.
 
-If blockers remain after pass two, hold the change and give the owner the evidence and decision needed in the morning. A round limit never converts a failure into a pass. Resume after that decision or a narrower scope; do not reset the counter by renaming the same change.
+If blockers remain after pass two, hold the change and give the owner the evidence and decision needed in the morning. A round limit never converts a failure into a pass. Resume after that decision, with a narrower scope if the owner chooses one; do not reset the counter by renaming the same change.
 
 Block on a required-check failure, demonstrated incorrect acceptance behaviour, data loss, unauthorised access, secret exposure, an event/architecture contract breach, an incompatible runtime licence, or a materially false/missing public contract. A reproduced high-impact defect blocks regardless of the label assigned by a reviewer. An uncertain security or data-integrity concern needs a focused test or owner decision before landing. Breaches of the code style in [AGENTS.md](../../AGENTS.md#style), or of the [Then make it right](#then-make-it-right) table, in new or changed code are fix findings: the builder fixes them before landing. Raise them in the first pass; the second pass raises a new one only where a fix itself broke a rule. After pass two, a size limit raised or switched off inside a file, or an import from another app's source or from `scripts/`, holds the change for the owner. Any other fix finding still open is listed under "Not in this PR" and does not hold the change. Other naming preferences and optional wording improvements are non-blocking. Do not demand a finding or an ASK to prove that a review happened.
 
 Review is read-only. It may run isolated tests. It does not deploy, grant permissions or contact users. Specialist knowledge about architecture, UI or gateway security is a section of the same review when the change needs it.
+
+## Delivery rules: finish before you start
+
+Owner decision (12 November 2026). The review of 10 November 2026 found 821 merged PRs in six weeks, yet no feature ticket had closed for eighteen days. One user story took 78 PRs and another 54, and neither worked. Each PR was small and green, so nothing looked wrong. These rules make a ticket's progress visible in what a person can do, not in how many PRs merged.
+
+### A feature lands in slices
+
+- **A slice is something a person can do.** After a slice merges, a person can do one more thing from start to finish in the running product, with the feature switched on, on a fresh dev stack (`infra/dev-stack/up.sh --fresh`). A refusal counts only where a person can trigger it and see it there. The PR's Evidence names that journey and shows PASS. With NOT RUN the PR does not merge.
+- **Every merged PR counts as a slice**, whatever it is called: part, row, groundwork, test harness, qualification, fix or rebase. A PR that only adds a part nobody can reach yet does not merge on its own. It waits inside the slice that makes it reachable.
+- **At most five slices per feature.** Most tickets need two or three; five is a ceiling, not a target. Before the first build, the orchestrator posts one comment on the issue that begins `**Slices:**` and lists them, one line each, saying what a person can do after that slice merges. A design that needs more than five is too big: the owner splits the ticket or cuts its scope first. Only the owner changes the list after the first build.
+- **Count the code that ships.** Aim for at most about 800 added plus deleted lines per slice, generated files not counted, in everything the feature needs in order to run: `apps/*/src`, `libs/*/src`, `infra/package`, and any code the slice adds under `scripts/`, `tools/` or `infra/`. Test files, documents, release notes and receipts are not counted. Explain a larger slice before starting it.
+- **Specs set no smaller limits.** A design or spec must not set its own limit on lines per PR, and must not divide a slice into several PRs to meet one. Limits of that kind in earlier specs no longer apply.
+- **Fix inside the slice.** A blocking finding from review is fixed in the same PR before it merges. A fix finding still open after pass two, and a fault found after the merge, are fixed in the ticket's next slice. If no slice remains, the fix is its own PR and counts towards the five.
+
+### A ticket has limits
+
+Each ticket has three limits: the slices listed on the issue, 8 agent-hours for each listed slice, and two rounds of rework for each listed slice. Agent-hours cover builder, reviewer, verifier and journey runs. A round of rework is each time a review, CI or a journey sends the work back to be fixed: on the board, each move into Fixing. The two-pass review limit still applies to each slice's PR; these limits add up across the ticket.
+
+The orchestrator checks the three numbers before it starts each task. Every progress comment on the issue states them, for example `slice 2 of 4 · agent: 11.5 h · rework rounds: 3`.
+
+When a ticket passes any limit:
+
+1. The orchestrator starts no new task for it and cancels tasks that are queued. Tasks already running may finish.
+2. It labels the issue `needs-owner` and posts one comment that says what a person can do today, what remains, which assumption turned out wrong, and two ways forward: a smaller scope that finishes, or the higher limits the full scope needs.
+3. Work resumes only after the owner picks one of the two. The orchestrator takes no default here: it never uses `owner-default-taken` for a ticket that has run over, and it never treats silence, a needed-by date or a comment it wrote itself as the owner's answer. It quotes the owner's answer on the issue, with the new limits in numbers.
+
+Only the owner opens, splits or renames a feature ticket. Never get round a limit, before or after reaching it, by renaming the ticket, splitting it, moving work to another ticket, or filing the work as a bug, security, clean-code or qualification issue.
+
+### Finish before you start
+
+- **At most six feature tickets are in progress at once**, two for each builder. A feature ticket is an open issue whose outcome is something a user or an operator can do: the phase tickets and every ticket on the pilot track. Debt tickets on the clean-code map (#1031) and tickets for flaky tests, CI or documents are not counted in the six, but the limits above apply to them too.
+- **What "in progress" means.** A feature ticket is in progress when it is open, work on it has started and it does not carry the `parked` label. Its board column does not matter: a ticket resting in Ready between slices, waiting in CI or a journey, in Awaiting feedback or labelled `needs-owner` still counts. It stops counting when its acceptance journey passes on a fresh dev stack with the feature switched on and the issue is closed, or when the owner parks it.
+- **Start a new ticket only below six.** Finishing a ticket, or parking it, makes room.
+- **Parked means stopped.** The orchestrator adds the `parked` label, removes `ready-for-agent` and posts one comment: `**Parked** (owner decision, <date>): no builder time until the owner removes this label.` A parked ticket gets no new task of any kind. An open PR merges only if its review has already passed and CI is green without another builder task; otherwise the orchestrator closes it unmerged, keeps the branch and names it in the comment. The ticket's code stays switched off. Only the owner removes `parked`.
+- **Order of work.** First repair a failing `main`. Then the pilot track in `plan.md`. Then at most one builder at a time on the debt tickets of the clean-code map (#1031); the map's product tickets are feature tickets under these rules. Then everything else.
+- **Starting these rules.** On the day they take effect, the orchestrator starts no new task except a repair of a failing `main`; tasks already running finish. It opens one issue titled "Delivery rules start: feature tickets in progress", labelled `needs-owner`, with one row for each feature ticket in progress: issue, board column, agent-hours, moves into Fixing, merged PRs, open PRs, what a person can do today, and whether `plan.md` puts it on the pilot track or the parked list. The owner answers there with the tickets that continue (at most six, the pilot track included) and new limits for each. The orchestrator then posts those limits and a `**Slices:**` list on each continuing ticket, parks the rest, and resumes.
 
 ## Engineering discipline: make it work, then make it right
 
@@ -38,7 +73,7 @@ The reason is the review of 10 November 2026. It found the same id check written
 - **Get the data shape right before the logic.** Name the types. Parse outside data once, where it comes in, and trust the parsed value inside. Keep each business rule in a pure function that takes values and returns a result.
 - **Write the failing test first** when you change behaviour. See it fail for the reason you expect, then make the smallest change that passes. If an honest test is impractical, say so and report NOT RUN. Never write a test that would still pass if the code did nothing.
 - **Fix the cause.** When you fix a failure, reproduce it first with a test that fails for that reason, then fix what caused it. A guard, retry, longer timeout, sleep or catch that only hides the failure is not a fix. This holds for a test that fails by chance as much as for product code.
-- **Build the thinnest working journey first.** Inside the feature's PR, first make one real path work from start to finish, with its access checks and refusals. Add stopping, cleaning up and recovery after that path runs.
+- **Build the thinnest working journey first.** In the feature's first slice, make one real path work from start to finish, with its access checks and refusals. Add stopping, cleaning up and recovery after that path runs.
 - **Subtract before you add.** Remove what the change replaces, in the same PR. Do not bolt a new requirement onto a design that no longer fits. Say what you would have built if the requirement had been there from the start, and deliver that in pieces.
 - **Attack the premise.** When two fixes that rest on the same assumption fail the same check, or a fix fails the second review pass, stop. Count earlier PRs for the same issue too. Write the shared assumption in one sentence and take it to the owner before trying again.
 

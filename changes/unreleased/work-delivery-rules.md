@@ -1,0 +1,1 @@
+- Features now land in at most five slices, each proven on a fresh dev stack before it merges. Each ticket has limits on agent-hours and rework, at most six feature tickets are in progress at once, and the plan has a pilot track with an explicit parked list.

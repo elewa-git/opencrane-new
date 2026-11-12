@@ -23,13 +23,25 @@ This is how OpenCrane 2 gets built day to day. The [standards](standards.md) say
 4. **Review.** A different model reviews the diff using [`agents/review.md`](agents/review.md). At most two passes; if blockers remain after the second, hold the change and ask the owner.
 5. **Gates.** `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run check:events`, plus the web build and tests.
 6. **Secret scan.** `tools/fleet/secret-scan.sh` on the staged diff; the push happens only if it exits 0.
-7. **Land.** Each whole feature stays on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. Small fixes go inside their feature PR. The orchestrator merges after gates, independent review and green CI. Commits use one emoji plus a plain sentence and a short bullet body; never a co-author or AI attribution in commits or PR descriptions. After the merge, the orchestrator removes the worktree; if it holds uncommitted work, ask the owner first.
-8. **Qualification ledger.** Every feature PR appends its qualification rows to [`ledger.md`](ledger.md) and quantitative measurements to [`benchmarks.jsonl`](benchmarks.jsonl). Reviewers copy measurements and verdicts into the PR's evidence receipt; they must not leave the only copy in `/tmp`.
+7. **Land.** Each slice of a feature stays on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. Small fixes go inside their feature PR. The orchestrator merges after gates, independent review and green CI. Commits use one emoji plus a plain sentence and a short bullet body; never a co-author or AI attribution in commits or PR descriptions. After the merge, the orchestrator removes the worktree; if it holds uncommitted work, ask the owner first.
+8. **Qualification ledger.** Every slice PR appends its qualification rows to [`ledger.md`](ledger.md) and quantitative measurements to [`benchmarks.jsonl`](benchmarks.jsonl). Reviewers copy measurements and verdicts into the PR's evidence receipt; they must not leave the only copy in `/tmp`.
 9. **Changelog.** Every PR adds one plain Markdown file named after its branch
    under `changes/unreleased/`. Write functional outcomes first. Do not edit the
    [Unreleased section](../../CHANGELOG.md#unreleased) directly. The gather script
    collects the files in stable name order and removes them before a release.
 10. **Report.** A few lines to the owner: what landed, what is running, what needs a decision.
+
+## Choosing what to start
+
+Follow the [delivery rules](standards.md#delivery-rules-finish-before-you-start): they set the order of work, the limit of six feature tickets in progress, and what parking a ticket means.
+
+- Before starting a ticket, count the feature tickets in progress. At six, start nothing new: help finish one instead.
+- Before the first build, post the `**Slices:**` comment on the issue. If the design has no slices, write them yourself; if they come to more than five, label the issue `needs-owner` and do not start.
+- State `slice n of m`, agent-hours and rework rounds in every progress comment.
+
+## When a ticket runs over
+
+Follow [A ticket has limits](standards.md#a-ticket-has-limits): start no new task, cancel queued ones, label the issue `needs-owner`, post the one comment it describes, and wait for the owner's own answer. Take no default.
 
 ## What needs the owner first
 

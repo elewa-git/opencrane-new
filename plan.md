@@ -12,16 +12,46 @@ Reach the MVP defined in the [product contract](docs/product/product-contract.md
 
 Follow the [engineering standard](docs/process/standards.md) for the full review and evidence contract.
 
-- **Night.** Take ready issues with acceptance criteria and decisions made. Up to three builders use separate worktrees and assigned files. Aim for at most about 1,500 non-generated added/deleted lines per coherent change. Each whole feature has a development branch and a well-described PR (Why / Functional outcome / Architecture / Evidence / Not in this PR). The orchestrator merges serially after gates, independent review by a different model and green CI. Small fixes belong inside their feature PR; never add co-author or AI attribution.
+- **Night.** Take ready issues with acceptance criteria and decisions made. Up to three builders use separate worktrees and assigned files. A feature lands in slices and each ticket has limits ([delivery rules](docs/process/standards.md#delivery-rules-finish-before-you-start)). Each slice has a development branch and a well-described PR (Why / Functional outcome / Architecture / Evidence / Not in this PR). The orchestrator merges serially after gates, independent review by a different model and green CI. Small fixes go inside the slice's PR; never add co-author or AI attribution.
 - **Review.** At most two passes: review the actual diff and evidence, then verify fixes and batched disputes. If blockers remain, hold the change for the owner's decision; never reset the count by renaming it.
 - **Morning (human, about 1–2 hours).** Review results, resolve held blockers and decisions, and ready new issues.
 - **Every day (agent).** Run `infra/dev-stack/up.sh --fresh` and its core journeys on the developer box (computers use the existing k3d cluster); the results go in the deploy ledger.
 - **Occasionally (human + agent).** Run a fresh production-like qualification install on a managed cluster. A capability is done only on a ledger PASS.
 - **Weekly (human + agent).** Run journeys on a fresh dev stack and record receipts; Phase 5 adds Helm-installed silos. Source is ready with green checks and an explicit remaining live-qualification issue; a capability is done only on a live journey PASS.
-- **Feature PRs.** One PR per whole feature, stacks at most two, no consolidation PRs.
+- **Feature PRs.** One PR per slice, at most five slices per feature, stacks at most two, no consolidation PRs. At most six feature tickets are in progress at once.
 - **Always.** Run `lint`, `typecheck`, `test` and `check:events` before landing and on `main`, plus the separate web build/tests. Repair or revert a failed combined result before landing more. Never turn an untested condition into PASS.
 - **Discipline.** Every change follows [make it work, then make it right](docs/process/standards.md#engineering-discipline-make-it-work-then-make-it-right): reuse before writing, test first, then clean the touched code before review.
 - **Commits.** One emoji plus a plain sentence; no co-author line or AI attribution. Decisions belong in issues with a needed-by date.
+
+## Pilot track
+
+Owner decision (12 November 2026). The first goal is one small customer using OpenCrane on an installation that Elewa hosts and runs. Work on this track comes before every other feature ticket ([delivery rules](docs/process/standards.md#delivery-rules-finish-before-you-start)).
+
+**The pilot journey: what the pilot customer can do.** Sign in with the company account. Chat with a personal assistant that has its own computer. Upload files and get answers about them. Watch the assistant's screen. An admin sets tool rules and monthly budgets. A person approves an Ask. People use one tool server, each with their own credential. Elewa takes a backup every night and has restored one.
+
+**On the track, in this order.**
+
+1. The workspace is fit for a customer: people can sign out and only owners and admins see Settings (#1045), and the organisation's own name shows (#1046, once the owner answers the question on that issue).
+2. An admin can mark a tool server as "needs a personal credential", and two people use it in one live run, each with their own key (#49). Each person chooses which assistants may use their key; by default only their own (#1105).
+3. The package runs for real: file storage with the virus scanner (#15); the model provider that an admin connects; and a way for the customer's people to reach the installation and sign in with their own company's sign-in organisation. The last two need a new ticket each, which the owner readies after choosing the way in.
+4. One scheduled backup that covers the event log, the database and uploaded files together, and one full restore of all three into an empty installation (#15).
+5. The pilot host keeps private turn text off its disks before any customer uses it: swap is off or encrypted, and crash dumps are off (#366).
+6. A first hosted installation, time-boxed to one night, to find what a real cluster breaks (a new ticket; the owner first supplies the cluster, the address and a spending cap). Then the pilot journey passes twice from scratch on a hosted installation.
+
+**Parked until the pilot journey passes.** Each of these is parked as the delivery rules describe: it carries the `parked` label, loses `ready-for-agent`, gets no builder time, and its code stays switched off.
+
+- Memory in assistant turns, memory settings and nightly tidy-up (#97, #98, #99).
+- Routines (#106, #107).
+- Child chats and delegation (#90, #91, #92, #93).
+- Taking control of the assistant's screen (#58). The live view stays watch-only.
+- Package, Git and web access from the assistant's computer (#61, #62). The pilot assistant works on uploaded files and the tool server only.
+- Tool servers that OpenCrane runs itself from an image (#47). The pilot uses a remote tool server.
+- The three-copy event log and the review of bundled image licences. These move out of #15 into their own issue, so that #15 holds pilot work only.
+- The welcome conversation, persona editing and further admin history (#101, #102, #109).
+
+Shared group assistants stay as they are today: members share one disk and uploads are refused there (#89).
+
+**Done when** the pilot journey passes twice on a fresh hosted installation, the restore in step 4 passes, and the disk check in step 5 passes on the pilot host. The hosted installation does not wait for the Phase 3 and Phase 4 qualification tickets (#63, #110); those still decide when the full MVP is done.
 
 ## MCP: version 2026-07-28 only
 
@@ -172,7 +202,7 @@ Hosted MCP servers never run inside the gateway.
 - **Events are facts, named in the past tense:** `message.posted`, `approval.decided`, `effect.observed`, `member.removed`, `routine.due`, `memory.written`, `mcp.tools_changed`. Each has a typed schema in TypeScript and a CloudEvents-style envelope (id, type, source, time, subject, silo, principal, correlation ids: conversation, turn, permit, reservation, approval). The catalogue is documented with AsyncAPI.
 - **Commands write one event, nothing else ("listen to yourself").** A command validates, then does **one atomic append** to the event log. State tables (conversations, budgets, approvals, memberships) are **projections** kept up to date by listeners. There are no multi-table business transactions and no "write state, then publish".
 - **The only synchronous atomic step is a conditional append,** where a rule needs one consistent answer: an expected stream version, or a unique key, on the budget stream (reserve), the approval (use once) and state-guarded commands (only a *pending* approval can be decided). One stream per rule serialises concurrent writers without locks across tables. Budgets use a **single-writer budget actor per silo**: one leader-elected process in the decision service handles reserve and settle requests **in order**, in memory, and appends each result. The expected stream version stays only as a fence, so a stale leader after failover can't write. There are no locks and, in normal operation, no conflicts. The budget stream holds every ceiling (global, paying group, optional assistant), so a single conditional append checks all of them and records the one charge; that is ample at silo scale. OpenFGA is a **projection** too: its tuples are rebuilt from membership and grant events, never edited directly.
-- **Consistency windows are explicit:** the UI may lag its own writes by milliseconds, and revocation takes effect within a documented bound (target under 2 seconds) as listeners update OpenFGA and the credential-release rules.
+- **Consistency windows are explicit:** the UI may lag its own writes by milliseconds, and revocation takes effect within a documented bound (one minute for the MVP, owner decision 14) as listeners update OpenFGA and the credential-release rules.
 - **Delivery:** JetStream **ordered consumers** feed projections (consumer sequence and row in one Postgres transaction) and a per-silo dispatcher. The dispatcher hands each event to the job queue (see decision 7), which fans it out to subscriber queues, **in order per stream** (per conversation, per budget), using pg-boss `key_strict_fifo` queues keyed by stream id. There is one writer per stream at a time, so **projections need no locks**, and different streams run in parallel. A failing event holds back only its own stream (strict FIFO) and raises an alert; it is never skipped. Delivery is at-least-once: handlers are idempotent (keyed by event id), retried with backoff, and failed events land in a monitored dead-letter queue that can be replayed. `LISTEN/NOTIFY` wakes the browser streams.
 - **Three event sources, one log:**
   1. server commands (decisions, approvals, admin changes);
@@ -218,7 +248,7 @@ Hosted MCP servers never run inside the gateway.
   - **projection lag:** checkpoint behind the `$all` head;
   - **dispatcher lag;**
   - **dead-letter size**, and **streams held** by a failing event;
-  - **revocation latency:** `member.removed` → OpenFGA updated (target under 2 seconds);
+  - **revocation latency:** `member.removed` → OpenFGA updated (within one minute for the MVP, owner decision 14);
   - **budget-actor latency;**
   - **gateway decision latency and fail-closed count;**
   - **effects without a permit**, which should always be zero.
@@ -275,7 +305,7 @@ Both are short-lived and signed by OpenCrane. The gateway verifies them and forw
 **Always current:**
 
 - Permissions are never granted from a stale cache. OpenFGA is queried per decision, with higher consistency after a recent revocation.
-- IAM projections are watched for lag, and a revocation takes effect within 2 seconds.
+- IAM projections are watched for lag, and a revocation takes effect within one minute for the MVP (owner decision 14).
 - Only immutable facts (tool schemas, price table) are cached.
 
 **Always recorded:** each decision appends an event with the decision, the requester and assistant, and a digest of the IAM context used. Audit can then show exactly which rights allowed or refused a call.
@@ -307,7 +337,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 
 ## Phases and acceptance
 
-| Phase | Scope | Done when | PRs (remaining estimate, 1 October) |
+| Phase | Scope | Done when | PRs (1 October estimate, no longer valid) |
 | --- | --- | --- | --- |
 | **1. Foundation** | Repository, CI and event core; local dev stack (#10); Zitadel sign-in (#11); typed catalogue, conditional append, checkpointed projections, dispatcher, replay, OpenFGA and WebSocket realtime | **Passes on a fresh dev stack:** sign in/out; `member.joined` reaches members, OpenFGA and a live subscriber; members and MCP catalogue replay verify; admin integrations return typed rows | 2–4 |
 | **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); bridge; warm-pool claim/bind; chat UI; upload; models through agentgateway with a simple cap | **Passes on a fresh dev stack:** a person chats with their assistant, it reads an uploaded PDF, and the answer survives reload and Pod replacement | 10–14 |
@@ -323,27 +353,14 @@ A dev-stack PASS does not claim OIDC, R3, failover or disaster-recovery qualific
 The [Phase 5 qualification spec](docs/specs/phase-5/spec.md) and its
 [PR rows](docs/specs/phase-5/tickets.md) separate local and hosted proof. The
 [16 October default](https://github.com/elewa-git/opencrane-new/issues/15#issuecomment-6209646545)
-lets local k3d packaging and drills start alongside Phase 4. Hosting still waits
-for the owner. P3-22 and P4-28 retain their product journeys and live completion
+lets local k3d packaging and drills start alongside Phase 4. Hosting waited for
+the owner until the [pilot track](#pilot-track) brought a first hosted installation
+forward. The owner still approves its cloud spend before any resource is created. P3-22 and P4-28 retain their product journeys and live completion
 gates; Phase 5 reruns them on fresh packaged installs.
 
 ## Estimate
 
-Measured rate: about **5 whole features per nightly cycle**. On 1 October,
-6 whole features, 2 spikes and 1 fix landed; on 2 October, 5 larger features
-landed (#34–#38).
-
-| Remaining phase | Nightly cycles |
-| --- | --- |
-| Phase 2 working prototype | 1–2 |
-| Phase 3 governed work | 3–4 |
-| Phase 4 company product | 4–5 |
-| Phase 5 qualification | 3–4 |
-| **Total** | **About 11–16** |
-
-The remaining estimate is **about 38–49 PRs**. The limits are one shared dev
-stack, two full suites per box, and owner gates: chat UI visuals, an Odoo test
-instance and managed-cluster spend. This is a forecast, not a delivery promise.
+The 1 October forecast (about five whole features a night, 38-49 PRs in all) did not hold: by 10 November 821 PRs had merged and Phases 3 and 4 had not passed live. There is no new forecast yet. After the first hosted installation on the [pilot track](#pilot-track), the owner sets one, counted in slices per ticket, not in PRs.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
 
@@ -406,6 +423,8 @@ Record the source commit in each copied file's header or README.
 
 13. **First-member bootstrap** (owner, 2026-10-02): installation prints a single-use token expiring after 24 hours; the first authenticated user in the configured Zitadel organisation to claim it becomes owner through one event. This is for a fresh silo: any membership history disables this path, with expected sequence zero across member streams checked in the same append. Ownership transfer is #24. The dev stack keeps its explicit owner bootstrap.
 
+14. **Removing access takes effect within one minute for the MVP** (owner, 2026-11-12). This covers removing a member, revoking a grant, taking an assistant off a person's key and closing a viewer. Today's code is stricter: each access-checked write must finish its checks within 2 seconds and is refused otherwise, which also refuses valid work when the system is busy. That check stays until the access-check redesign (#1100) replaces it; the redesign may now rely on access data that is up to one minute old. Nothing may take longer than one minute.
+
 ## Risks
 
 - **Licences:** only OSI-approved open-source components run in customer silos. KurrentDB (KLv1) is ruled out. SurrealDB and Redpanda (BSL), EventSourcingDB (closed source) and Axon Server (commercial) fall under the same rule, and Restate's server licence must be checked in S0.8.
@@ -415,7 +434,7 @@ Record the source commit in each copied file's header or README.
 - **Dreaming:** budget the nightly job, keep it within one scope, record changes as `memory.corrected`, and test correction, forgetting and replay.
 - **Recall quality:** qualify Postgres full-text search on real tasks before adding vector search or a later projection.
 - **Persistent volumes hold sensitive state:** use per-silo encrypted storage and short-lived tokens only; keep memory off the shared computer's disk and prevent a volume from being mounted by another computer identity.
-- **Scope creep:** a phase starts only when the previous phase's live PASS is in the ledger, except the owner-authorised local Phase 5 rows described above. This exception changes scheduling, not product completion or hosted acceptance.
+- **Scope creep:** at most six feature tickets are in progress at once, the pilot track comes first, and each ticket has limits ([delivery rules](docs/process/standards.md#delivery-rules-finish-before-you-start)). This replaces the earlier rule that a phase starts only after the previous phase passes live, which was not being followed.
 
 ## Model selection decision — 2 October 2026
 
