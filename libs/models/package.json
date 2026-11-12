@@ -9,6 +9,7 @@
     "./image-admission-writer": "./src/image-admission-writer.ts",
     "./private-callers": "./src/private-callers.ts",
     "./testing": "./test/fixture.ts",
+    "./testing/gateway": "./test/gateway-delivery-fixture.ts",
     "./testing/remote-mcp": "./test/support/remote-mcp.ts"
   },
   "scripts": {

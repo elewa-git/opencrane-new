@@ -3,6 +3,7 @@ import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 import type { MockInstance } from 'vitest';
 import { IntegrationDetail } from './integration-detail';
+import { reviewCommand } from './review-command';
 
 const commandSchema = z.object({
   commandId: z.string(), expectedSequence: z.number(),
@@ -425,3 +426,12 @@ describe('reviewed changed tools', () => {
     fixture.destroy();
   });
 });
+
+async function includePersonalIdentityChoice() {
+  const draft = policy();
+  draft.accountMode = 'personal';
+  draft.identityTool = 'update_note';
+  const command = await reviewCommand(draft, 'personal-review');
+  expect(command).toMatchObject({ accountMode: 'personal', identityTool: 'update_note' });
+}
+it('records the account and identity tool chosen at review', includePersonalIdentityChoice);
