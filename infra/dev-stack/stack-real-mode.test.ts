@@ -12,6 +12,7 @@ type Startup = {
   ownerRun?: boolean;
   terminal?: boolean;
   fleet?: string;
+  real?: boolean;
   shell?: boolean;
   fresh?: boolean;
   scanner?: boolean;
@@ -70,6 +71,9 @@ async function startupFailure(startup: Startup) {
     }
     if (startup.fleet !== undefined) {
       environment['OPENCRANE_FLEET_TASK'] = startup.fleet;
+    }
+    if (startup.real) {
+      environment['DEV_REAL_PROVIDER'] = '1';
     }
     let executablePath = process.execPath;
     let args = ['--experimental-strip-types', 'infra/dev-stack/stack.ts', 'up'];
@@ -203,3 +207,35 @@ async function refusesUnmarkedHeadlessOwner() {
 
 test('an unmarked headless start cannot default to the owner stand-in stack',
   refusesUnmarkedHeadlessOwner);
+
+async function acceptsFleetStandInStarts() {
+  for (const id of ['1', '2'] as const) {
+    for (const fleet of ['', 'task']) {
+      const failure = await startupFailure({ id, fleet, shell: true });
+      assert.equal(failure, 'Error: flock failed; see the private last-error.log');
+    }
+  }
+}
+
+test('fleet tasks may start either secondary stack with the stand-in provider',
+  acceptsFleetStandInStarts);
+
+async function refusesFleetRealStarts() {
+  for (const id of ['1', '2'] as const) {
+    for (const fleet of ['', 'task']) {
+      const cases: Startup[] = [
+        { id, fleet, real: true },
+        { id, fleet, credential: '/synthetic-key' },
+        { id, fleet, savedMode: 'real' },
+        { id, fleet, real: true, shell: true },
+      ];
+      for (const startup of cases) {
+        const failure = await startupFailure(startup);
+        assert.match(failure, /Fleet tasks require the stand-in model/u);
+      }
+    }
+  }
+}
+
+test('fleet starts refuse requested, credential-selected and saved real providers',
+  refusesFleetRealStarts);

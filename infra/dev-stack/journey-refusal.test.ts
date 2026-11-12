@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { ScriptTarget, transpileModule } from 'typescript';
 
-type Invocation = { script: string; args: string[]; shell?: boolean };
+type Invocation = { script: string; args: string[]; shell?: boolean; real?: boolean };
 const commands: Invocation[] = [
   { script: 'journey.sh', args: ['--id', 'owner'], shell: true },
   { script: 'stack.ts', args: ['journey'] },
@@ -52,6 +52,7 @@ async function invoke(
       NODE_OPTIONS: '--import=./infra/dev-stack/test/journey-refusal-preload.mjs',
     };
     if (realMode) env['JOURNEY_SAVED_MODE'] = '1';
+    if (command.real) env['DEV_REAL_PROVIDER'] = '1';
     if (fleet !== undefined) env['OPENCRANE_FLEET_TASK'] = fleet;
     let executablePath = process.execPath;
     let args = ['--experimental-strip-types', `infra/dev-stack/${command.script}`, ...command.args];
@@ -99,16 +100,43 @@ async function refuseRealStandInJourney() {
 test('direct journey without real opt-in refuses saved real mode before journey setup',
   refuseRealStandInJourney);
 
-async function refuseFleetJourneys() {
-  for (const fleet of ['', 'demo-kit-2']) {
-    const result = await invoke({ script: 'journey.ts', args: [] }, fleet, '1');
-    assert.notEqual(result.status, 0);
-    assert.equal(result.reads, '', result.output);
-    assert.match(result.output, /no fleet task/u);
+async function allowFleetSecondaryJourneys() {
+  for (const id of ['1', '2']) {
+    for (const fleet of ['', 'demo-kit-2']) {
+      const result = await invoke({ script: 'journey.ts', args: [] }, fleet, id);
+      assert.equal(result.reads, 'configuration read\n', result.output);
+      const command = { script: 'run.sh', shell: true, args: ['journey', '--id', id] };
+      const shell = await invoke(command, fleet, id, false, true);
+      assert.equal(shell.status, 0, shell.output);
+      assert.equal(shell.commandCalls, 'flock');
+    }
   }
 }
 
-test('a fleet marker cannot run a standalone automated journey', refuseFleetJourneys);
+test('fleet tasks reach automated stand-in journeys on either secondary stack',
+  allowFleetSecondaryJourneys);
+
+async function refuseFleetRealJourneys() {
+  for (const id of ['1', '2']) {
+    for (const fleet of ['', 'demo-kit-2']) {
+      const command = { script: 'journey.ts', args: [], real: true };
+      const requested = await invoke(command, fleet, id);
+      assert.equal(requested.reads, '', requested.output);
+      assert.match(requested.output, /Fleet tasks require the stand-in model/u);
+      const saved = await invoke({ script: 'journey.ts', args: [] }, fleet, id, true);
+      assert.equal(saved.reads, 'settings read\n', saved.output);
+      assert.match(saved.output, /Fleet tasks require the stand-in model/u);
+      const shellCommand = { script: 'run.sh', shell: true, args: ['journey'], real: true };
+      const shell = await invoke(shellCommand, fleet, id, false, true);
+      assert.equal(shell.status, 2, shell.output);
+      assert.equal(shell.commandCalls, '');
+      assert.match(shell.output, /Fleet tasks require the stand-in model/u);
+    }
+  }
+}
+
+test('fleet journeys refuse requested and saved real providers before setup',
+  refuseFleetRealJourneys);
 
 async function refuseNonStartConsent() {
   for (const action of ['down', 'status', 'journey', 'package-check']) {
@@ -127,7 +155,7 @@ async function refuseShellJourney() {
     const result = await invoke(command, fleet, 'owner', false, true);
     assert.equal(result.status, 2, result.output);
     assert.equal(result.commandCalls, '', `flock or Node ran: ${result.commandCalls}`);
-    assert.match(result.output, /Automated journeys require a secondary stack and no fleet task/u);
+    assert.match(result.output, /Automated journeys require a secondary stack/u);
   }
 }
 
