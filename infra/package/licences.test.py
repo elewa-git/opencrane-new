@@ -1443,6 +1443,15 @@ else:
             inspection[0]["Id"] = reviewed["images"]["server"].split("@")[1]
             checker.check_package_promotion(*fixture)
 
+    def test_one_server_promotion_requires_the_same_source_and_scan_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.promotion_fixture(directory)
+            reviewed, _, _, _, _ = fixture
+            proof = reviewed.pop("natsCluster")
+            del proof["replicas"]
+            reviewed["packageImage"] = proof
+            checker.check_package_promotion(*fixture)
+
     def test_promotion_refuses_a_package_deleted_only_from_the_final_filesystem(self):
         with tempfile.TemporaryDirectory() as directory:
             reviewed, inventory, inspection, path, revision = self.promotion_fixture(directory)
