@@ -687,7 +687,8 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
   let refused = false;
   let injected = false;
   let elapsed = 0;
-  const clockStart = performance.now();
+  // Reproduce rounding across the next binary exponent when saving refusal evidence.
+  const clockStart = 64000.00299999999;
   const deadlines: number[] = [];
   function currentTime() {
     return clockStart + elapsed;
