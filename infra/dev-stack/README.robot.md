@@ -1280,7 +1280,8 @@ and does not upload it again. `demo-prepare.test.ts` checks two applying replies
 a lost upload reply, followed by delivery, while keeping the exact write assertions.
 
 The browser starts a draft, attaches `project.pdf` through the native file picker,
-waits for delivery, previews the promoted original and asks for its project code.
+checks that file's Ready chip, waits for delivery and sends its project-code question
+with the attachment. It waits for the completed answer before previewing the promoted original.
 The question does not contain the answer. The stub uses the inline MarkItDown text
 when it contains the requested fact. Otherwise it requests a file read through `exec`
 and answers only after Codex returns the fact. A completed read takes priority over
@@ -1293,8 +1294,12 @@ checks that only one attachment exists. The size check selects a real sparse fil
 through the native picker rather than copying 20 MiB through Playwright.
 If a response is lost, the journey clicks the shipped Retry control at most twice
 with a one-second pause. Known type, size and malware refusals are never retried.
+Each later text or image attachment is sent with a short message. The journey waits
+for that new reply's Done state before continuing; Send can still be visible before
+a saved command starts its reply. Each refusal is checked on its named file chip.
 Full Chromium supplies its native PDF viewer; headless-shell cannot render PDFs.
-Screenshots are `docs/design/chat/live/upload-*.png` and `preview-*.png`.
+Secondary stacks save screenshots in their private claimed directory. The intercepted
+Retry captures are in `docs/process/main-upload-retry-44/`.
 The [upload receipt](../../docs/process/upload-evidence.md) records the results.
 The ordinary journey never uses a paid provider.
 Its login fixture retries Chromium `ERR_NETWORK_CHANGED` at most twice; recovery

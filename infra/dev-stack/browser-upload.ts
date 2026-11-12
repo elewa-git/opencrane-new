@@ -4,6 +4,7 @@ import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page, Locator } from 'playwright';
+import { sendUploadedMessage } from './browser-upload-message.ts';
 import { waitForUpload } from './browser-upload-status.ts';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 
@@ -62,11 +63,9 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   retries += await waitForUpload(page, 'project.pdf', target);
   await page.unroute(filesPattern);
   assert(!loseResponse && retries >= 1, 'The browser recovered from the lost successful upload response');
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  // The answer is absent from the question. The stub must receive the converted text in the turn.
-  await composer.fill('What is the project code in the attached PDF?');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
-  await page.getByRole('article', { name: 'Agent reply', exact: true }).filter({ hasText: 'The project code is Willow-47.' }).getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
+  // Keep the answer out of the question so the reply proves the converted file was read.
+  await sendUploadedMessage(page, 'What is the project code in the attached PDF?',
+    'The project code is Willow-47.');
   const conversation = new URL(page.url()).searchParams.get('conversation'); assert(conversation);
   const filesUrl = `${origin}/api/conversations/${conversation}/files`;
   const list = await (await page.request.get(filesUrl)).json() as { rows: Array<{ textPath: string }> };
@@ -132,8 +131,8 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   ]) {
     await choose(file);
     retries += await waitForUpload(page, file.name, target);
-    await page.getByRole('button', { name: 'Send message', exact: true }).click();
-    await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
+    await sendUploadedMessage(page, `Read the attached ${file.name}.`,
+      'Hello from your computer.');
     const fileCard = page.locator('.transcript .file-card').filter({ hasText: file.name });
     const openFile = fileCard.getByRole('button', {
       name: `Open ${file.name}`,
