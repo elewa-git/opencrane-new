@@ -1,4 +1,4 @@
-<!-- One PR per whole feature. Small fixes go into the feature they belong to. -->
+<!-- One PR per slice: after it merges, a person can do one more thing from start to finish. Fixes from review go into the same PR. -->
 
 Add one plain, functional-first changelog file named after your branch under
 `changes/unreleased/`. Do not edit the Unreleased section in `CHANGELOG.md`.

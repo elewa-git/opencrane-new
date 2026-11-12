@@ -4,7 +4,7 @@ Source: OpenCrane 1 `.claude/commands/execute-plan.md`, commit `468742b97`. The 
 steps follow Robert C. Martin's [ub-mode](https://github.com/unclebob/ub-mode) (MIT),
 as fitted in the [standard](../standards.md#engineering-discipline-make-it-work-then-make-it-right).
 
-Implement one ready outcome with explicit acceptance criteria and settled decisions.
+Implement one listed slice of a ready ticket, with explicit acceptance criteria and settled decisions.
 Read [AGENTS.md](../../../AGENTS.md), the [standard](../standards.md), the relevant
 plan section and changed contracts. Do not preload the whole architecture history.
 Resolve missing product decisions with the owner; do not hide them behind an interface.
@@ -56,8 +56,9 @@ Resolve missing product decisions with the owner; do not hide them behind an int
 When coordinating several builders, assign independent files in separate worktrees
 with their own installed dependencies. Share contract decisions before parallel work.
 One integrator lands changes serially and checks the combined result on `main`.
-Use one PR per outcome, with stacks at most two deep.
-Aim for about 1,500 non-generated added/deleted lines per change; explain an exception.
+Use one PR per slice, with stacks at most two deep. A slice lets a person do one more
+thing from start to finish on a fresh dev stack. Aim for about 800 changed lines of
+shipped code per slice; tests and documents are not counted. Explain a larger slice first.
 
 Report changed behaviour, tests, durations, risks and explicit remaining live work,
 with a short log of what you did and why.
