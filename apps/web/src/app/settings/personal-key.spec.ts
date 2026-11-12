@@ -23,7 +23,8 @@ describe('personal key entry', () => {
     const fixture = TestBed.createComponent(PersonalKey);
     fixture.componentRef.setInput('serverId', 'fixture');
     fixture.detectChanges();
-    const element: HTMLElement = fixture.nativeElement as HTMLElement;
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) throw new Error('Missing key form');
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(element.querySelector('input[type=password]')).not.toBeNull();
@@ -41,4 +42,49 @@ describe('personal key entry', () => {
     expect(element.textContent).toContain('Check status');
     fixture.destroy();
   });
+
+  it('clears a refused selection and reloads its revision after another tab changes it', async () => {
+    let revision = 0;
+    let posts = 0;
+    function request(_url: RequestInfo | URL, init?: RequestInit) {
+      if (init?.method === 'POST') {
+        posts += 1;
+        if (posts === 1) {
+          revision = 8;
+          return Promise.resolve(new Response('{}', { status: 409 }));
+        }
+        const body = JSON.parse(String(init.body)) as { expectedSequence: number; changeRef: string };
+        expect(body.expectedSequence).toBe(8);
+        return response({ status: 'selected', changeRef: body.changeRef });
+      }
+      return response({ serverId: 'fixture', connectionId: 'installed', identityTool: 'who_am_i',
+        selectionRevision: revision });
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(request);
+    const fixture = TestBed.createComponent(PersonalKey);
+    fixture.componentRef.setInput('serverId', 'fixture');
+    fixture.componentRef.setInput('profile', { serverId: 'fixture', profileId: 'mine',
+      status: 'verified', adminBlocked: false, profileRevision: 4, ownerKind: 'personal' });
+    fixture.detectChanges();
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) throw new Error('Missing key form');
+    const root = element;
+    function useButton() {
+      fixture.detectChanges();
+      const buttons = root.querySelectorAll<HTMLButtonElement>('button');
+      for (const button of buttons) if (button.textContent?.trim() === 'Use this key') return button;
+      throw new Error('Missing selection button');
+    }
+    await vi.waitFor(() => expect(useButton().disabled).toBe(false));
+    useButton().click();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(sessionStorage.getItem('personal-key:fixture')).toBeNull();
+      expect(element.textContent).toContain('Selection changed');
+    });
+    useButton().click();
+    await vi.waitFor(() => expect(posts).toBe(2));
+    fixture.destroy();
+  });
+
 });
