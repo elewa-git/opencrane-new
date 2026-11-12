@@ -32,6 +32,8 @@ async function inventory(method: 'server/discover' | 'tools/list') {
 }
 async function prepare() {
   const discovered = await discoverInventory(inventory);
+  expect(discovered.rejectedTools).toEqual([]);
+  expect(discovered.tools).toHaveLength(3);
   revision = discovered.schemaDigest;
 }
 async function close() {
