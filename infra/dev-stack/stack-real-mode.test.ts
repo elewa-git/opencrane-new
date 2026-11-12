@@ -98,7 +98,8 @@ async function startupFailure(startup: Startup) {
       result = spawnSync(executablePath, args, options);
     }
     assert.ifError(result.error);
-    assert.equal(result.status, 1, result.stderr);
+    const shellRefusesReal = startup.shell && startup.real && startup.fleet !== undefined;
+    assert.equal(result.status, shellRefusesReal ? 2 : 1, result.stderr);
     const output = `${result.stdout}${result.stderr}`.trim();
     if (output.includes('Owner commands require')) {
       await assert.rejects(readFile(`${directory}/stack-owner`, 'utf8'));

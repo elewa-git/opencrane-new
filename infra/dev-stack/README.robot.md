@@ -1936,8 +1936,11 @@ credential file only during setup and saves it through the same product API. Rea
 uses a separate check for streamed answers, Stop, a later member and a supplier PDF.
 Changing an existing stack between real and local providers requires a fresh start.
 Owner real starts require `--owner-run` and an interactive terminal. Fleet tasks are
-refused before owner data is read. Standalone automated journeys also refuse the owner
-id and any fleet marker before reading configuration. Stand-in journeys refuse a saved
+refused before owner data is read. Standalone automated journeys refuse the owner id before reading configuration.
+Fleet tasks may start and run automated journeys on claimed secondary stacks `1` and `2`
+with the stand-in model. Even an empty fleet marker refuses a requested real provider
+(`DEV_REAL_PROVIDER=1` or a startup credential file), and saved real-provider mode
+is refused before journey setup or startup services. Stand-in journeys refuse a saved
 real-mode stack. Owner starts check health, processes and listening addresses, then
 report readiness. The [demo guide](../../docs/process/demo/README.md)
 keeps the remaining live checks explicit.

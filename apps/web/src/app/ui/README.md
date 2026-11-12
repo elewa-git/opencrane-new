@@ -4,6 +4,7 @@ This folder supplies the menus, dialogs and visual details used across the websi
 
 ## What it is responsible for
 
+- Gives shared buttons a minimum 44 × 44 pixel touch target.
 - Opens dialogs, keeps keyboard focus inside them and returns focus when they close.
 - Provides side drawers, modal sheets and phone navigation menus.
 - Draws the brand mark, paper backgrounds, folded corners and completion effects.
@@ -13,6 +14,7 @@ This folder supplies the menus, dialogs and visual details used across the websi
 
 | File | What it does |
 | --- | --- |
+| `controls.css` | Sets the shared button touch target for dialogs and chat attachments. |
 | `overlay.ts`, `overlay.css`, `overlay-panel.html` | Manage shared dialog behaviour and layout. |
 | `hinge-drawer.*`, `modal-sheet.*`, `navigation-menu.*` | Provide review drawers, sheets and menus. |
 | `brand-mark.ts`, `paper.ts`, `shell.css` | Draw the brand and shared paper and page styles. |
@@ -25,3 +27,10 @@ This folder supplies the menus, dialogs and visual details used across the websi
 [personal settings](../settings/README.md) and admin pages reuse these controls.
 [Status messages](../shared-state/README.md) provide the words that explain progress.
 The shared controls do not read or save product data.
+
+```mermaid
+flowchart LR
+  controls[Shared button styles] --> composer[Chat attachments]
+  controls --> dialogs[Dialogs]
+  chat[Chat and settings] --> dialogs
+```

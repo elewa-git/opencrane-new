@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { waitForUpload } from '../infra/dev-stack/browser-upload-status.ts';
 import { mkdir } from 'node:fs/promises';
 
 async function assertTouchTarget(control, width) {
@@ -34,10 +35,9 @@ export async function checkAttachmentTargets(page, width) {
     path: `docs/process/main-upload-retry-44/retry-${width}.png`, fullPage: true,
   });
   await page.unroute(filesPattern, refuseUpload);
-  let releaseUpload;
-  const uploadHeld = new Promise(resolve => { releaseUpload = resolve; });
+  const heldUpload = Promise.withResolvers();
   async function holdUpload(route) {
-    await uploadHeld;
+    await heldUpload.promise;
     await route.abort('failed');
   }
   await page.route(filesPattern, holdUpload);
@@ -49,7 +49,56 @@ export async function checkAttachmentTargets(page, width) {
     await remove.click();
     await page.getByRole('list', { name: 'Attachments', exact: true }).waitFor({ state: 'detached' });
   } finally {
-    releaseUpload();
+    heldUpload.resolve();
     await page.unroute(filesPattern, holdUpload);
   }
+}
+
+export async function checkUploadStatusFlow(page, fixture) {
+  const filesPattern = '**/api/conversations/chat/files';
+  const requestKeys = [];
+  async function uploadReply(route) {
+    const request = route.request();
+    const headers = request.headers();
+    if (request.method() !== 'POST') {
+      await route.fulfill({ contentType: 'application/json', body: '{"rows":[]}' });
+      return;
+    }
+    if (headers['x-file-name'] === 'refused.txt') {
+      await route.fulfill({ status: 422, contentType: 'application/json', body: '{}' });
+      return;
+    }
+    requestKeys.push(headers['idempotency-key']);
+    if (requestKeys.length === 1) {
+      await route.abort('failed');
+      return;
+    }
+    await route.fulfill({ status: 201, contentType: 'application/json',
+      body: '{"fileId":"ready-file"}' });
+  }
+  await page.route(filesPattern, uploadReply);
+  const input = page.locator('input[type=file]');
+  await input.setInputFiles({ name: 'refused.txt', mimeType: 'text/plain',
+    buffer: Buffer.from('Refusal fixture') });
+  await page.getByText('File refused: malware detected.', { exact: true }).waitFor();
+  await input.setInputFiles({ name: 'ready.txt', mimeType: 'text/plain',
+    buffer: Buffer.from('Ready fixture') });
+  const retries = await waitForUpload(page, 'ready.txt', checkTarget);
+  assert.equal(retries, 1);
+  assert.equal(requestKeys.length, 2);
+  assert.equal(requestKeys[0], requestKeys[1], 'Retry keeps the original request key');
+  assert.equal(await waitForUpload(page, 'refused.txt', checkTarget,
+    'File refused: malware detected.'), 0);
+  fixture.add('file.delivered', { fileId: 'ready-file' });
+  await page.getByRole('textbox', { name: 'Message your agent' }).fill('Read the attached file');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await page.getByRole('list', { name: 'Attachments', exact: true }).waitFor({ state: 'detached' });
+  const message = fixture.commands.at(-1);
+  assert.deepEqual(message.attachmentIds, ['ready-file']);
+  assert.equal(message.text, 'Read the attached file');
+  await page.unroute(filesPattern, uploadReply);
+}
+
+async function checkTarget(control) {
+  await assertTouchTarget(control, control.page().viewportSize().width);
 }

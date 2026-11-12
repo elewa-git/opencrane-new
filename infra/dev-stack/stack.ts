@@ -1,5 +1,5 @@
 import './stack-entry.ts';
-import { requireAutomatedJourney } from './journey-guard.ts';
+import { fleetProviderRefusal, requireAutomatedJourney, requireFleetStandInProvider } from './journey-guard.ts';
 import { issueMinioLease } from './minio-tokens.ts';
 import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
@@ -498,7 +498,11 @@ async function up(fresh: boolean) {
   if (real && (!credentialFile || process.env['DEV_OWNER_BOOTSTRAP'] === '0')) {
     throw new Error('Real provider setup requires a credential file and the dev Owner');
   }
-  if (!firstStart) checkProviderMode(await readEnv('settings'), real);
+  if (!firstStart) {
+    const settings = await readEnv('settings');
+    requireFleetStandInProvider(settings['DEV_REAL_PROVIDER'] === '1');
+    checkProviderMode(settings, real);
+  }
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
@@ -846,10 +850,18 @@ async function up(fresh: boolean) {
 async function journey() {
   requireAutomatedJourney();
   const settings = await readEnv('settings');
-  const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory, DEV_REAL_PROVIDER: settings['DEV_REAL_PROVIDER'] ?? '0',
-      ...(process.env['P4_JOURNEY_ATTEMPT']
-        ? { P4_JOURNEY_ATTEMPT: process.env['P4_JOURNEY_ATTEMPT'] } : {}) }, 1_200_000);
+  requireFleetStandInProvider(settings['DEV_REAL_PROVIDER'] === '1');
+  const environment: Record<string, string> = {
+    ...base,
+    DEV_STACK_DIR: directory,
+    DEV_REAL_PROVIDER: settings['DEV_REAL_PROVIDER'] ?? '0',
+  };
+  for (const name of ['OPENCRANE_FLEET_TASK', 'P4_JOURNEY_ATTEMPT']) {
+    const value = process.env[name];
+    if (value !== undefined) environment[name] = value;
+  }
+  const args = ['--experimental-strip-types', 'infra/dev-stack/journey.ts'];
+  const output = await run(process.execPath, args, environment, 1_200_000);
   console.log(output.trim());
 }
 async function status() {
@@ -892,6 +904,10 @@ try {
   const flags = process.argv.slice(3);
   const ownerRun = flags.includes('--owner-run');
   if (action === 'up') {
+    if (secondary) {
+      requireFleetStandInProvider(process.env['DEV_REAL_PROVIDER'] === '1'
+        || process.env['DEV_REAL_PROVIDER_FILE'] !== undefined);
+    }
     for (const option of flags) {
       if (option !== '--fresh' && option !== '--owner-run') {
         throw new Error('Unknown startup option');
@@ -1034,7 +1050,8 @@ try {
     }
     console.error(message);
   } else if (error instanceof Error &&
-      (providerSetupFailure || error.message === ownerRunRefusal)) {
+      (providerSetupFailure || error.message === ownerRunRefusal
+        || error.message === fleetProviderRefusal)) {
     console.error(error.message);
   } else if (error instanceof Error && publicUpgradeMessages.has(error.message)) {
     console.error(error.message);

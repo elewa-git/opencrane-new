@@ -117,7 +117,8 @@ available for diagnosis.
 - Runs preflight and Helm from the private values file's folder so its path stays out
   of child command arguments.
 - Provides demo preparation and screen measurements, while refusing automated coding
-  jobs that try to run the owner's commands.
+  jobs that try to run the owner's commands. Coding jobs can run fresh journeys on
+  claimed spare stacks with the free stand-in model; real providers are refused.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and
   linked approval and dispatch records in event-log order.
   A disposable computer also checks that the free model can call a published read

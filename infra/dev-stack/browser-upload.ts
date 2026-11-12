@@ -4,6 +4,7 @@ import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page, Locator } from 'playwright';
+import { waitForUpload } from './browser-upload-status.ts';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 
 export async function browserUploadJourney(page: Page, origin: string, screenshots = 'docs/design/chat/live') {
@@ -40,18 +41,6 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
       await delay(1000);
     }
   };
-  const uploaded = async (expected = 'Ready') => {
-    const status = page.locator('.upload-status');
-    // The transport has its own 120-second timeout; retry through the UI at most twice.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await status.filter({ hasText: expected }).or(status.filter({ hasText: 'Upload unavailable' })).waitFor({ timeout: 130_000 });
-      if ((await status.innerText()).includes(expected)) return;
-      assert(attempt < 2, 'Upload stayed unavailable after two retries');
-      await delay(1000);
-      const retry = page.getByRole('button', { name: 'Retry upload', exact: true });
-      await target(retry); await retry.click(); retries++;
-    }
-  };
   // Lose the first response after the real server handles it, then retry through the shipped UI.
   const filesPattern = /\/api\/conversations\/[^/]+\/files$/u;
   page.on('requestfailed', request => {
@@ -70,9 +59,14 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     loseResponse = false; await route.abort('failed');
   });
   await choose({ name: 'project.pdf', mimeType: 'application/pdf', buffer: uploadPdf() });
-  await uploaded();
+  retries += await waitForUpload(page, 'project.pdf', target);
   await page.unroute(filesPattern);
   assert(!loseResponse && retries >= 1, 'The browser recovered from the lost successful upload response');
+  const composer = page.getByRole('textbox', { name: 'Message your agent' });
+  // The answer is absent from the question. The stub must receive the converted text in the turn.
+  await composer.fill('What is the project code in the attached PDF?');
+  await page.getByRole('button', { name: 'Send message', exact: true }).click();
+  await page.getByRole('article', { name: 'Agent reply', exact: true }).filter({ hasText: 'The project code is Willow-47.' }).getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
   const conversation = new URL(page.url()).searchParams.get('conversation'); assert(conversation);
   const filesUrl = `${origin}/api/conversations/${conversation}/files`;
   const list = await (await page.request.get(filesUrl)).json() as { rows: Array<{ textPath: string }> };
@@ -113,18 +107,16 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   }
   await page.screenshot({ path: `${screenshots}/preview-${width}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  // The answer is absent from the question. The stub must receive the converted text in the turn.
-  await composer.fill('What is the project code in the attached PDF?');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
-  await page.getByRole('article', { name: 'Agent reply', exact: true }).filter({ hasText: 'The project code is Willow-47.' }).getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
   await page.reload();
   await page.locator('.transcript .file-card').filter({ hasText: 'project.pdf' }).waitFor();
   await choose({ name: 'eicar.txt', mimeType: 'text/plain', buffer: Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*') });
-  await uploaded('File refused: malware detected.');
+  await waitForUpload(page, 'eicar.txt', target, 'File refused: malware detected.');
   await target(page.getByRole('button', { name: 'Retry upload', exact: true }));
+  await page.getByRole('button', { name: 'Remove eicar.txt', exact: true }).click();
   await choose({ name: 'program.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZbinary') });
-  await uploaded('File type is unsupported');
+  await waitForUpload(page, 'program.exe', target,
+    'This file type is not supported. Try a supported document, image or text file.');
+  await page.getByRole('button', { name: 'Remove program.exe', exact: true }).click();
   const directory = await mkdtemp(`${tmpdir()}/oc-upload-size-`);
   try {
     const path = `${directory}/huge.txt`, file = await open(path, 'wx');
@@ -132,13 +124,16 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     // Native selection checks the real file size without copying 20 MiB through the browser driver.
     await choose(path);
     await page.getByText('File too large', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'Remove huge.txt', exact: true }).click();
   } finally { await rm(directory, { recursive: true, force: true }); }
   for (const file of [
     { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Preview text from the promoted object.') },
     { name: 'pixel.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGPg3XqGJMQwqmFUw/DVAADXsI4Q6+7dzAAAAABJRU5ErkJggg==', 'base64') },
   ]) {
     await choose(file);
-    await uploaded();
+    retries += await waitForUpload(page, file.name, target);
+    await page.getByRole('button', { name: 'Send message', exact: true }).click();
+    await page.getByRole('button', { name: 'Send message', exact: true }).waitFor();
     const fileCard = page.locator('.transcript .file-card').filter({ hasText: file.name });
     const openFile = fileCard.getByRole('button', {
       name: `Open ${file.name}`,
