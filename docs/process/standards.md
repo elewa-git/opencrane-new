@@ -21,9 +21,56 @@ The review loop has **at most two independent passes per change**:
 
 If blockers remain after pass two, hold the change and give the owner the evidence and decision needed in the morning. A round limit never converts a failure into a pass. Resume after that decision or a narrower scope; do not reset the counter by renaming the same change.
 
-Block on a required-check failure, demonstrated incorrect acceptance behaviour, data loss, unauthorised access, secret exposure, an event/architecture contract breach, an incompatible runtime licence, or a materially false/missing public contract. A reproduced high-impact defect blocks regardless of the label assigned by a reviewer. An uncertain security or data-integrity concern needs a focused test or owner decision before landing. Breaches of the code style in [AGENTS.md](../../AGENTS.md#style) in new or changed code are fix findings: the builder fixes them before landing. Other naming preferences and optional wording improvements are non-blocking. Do not demand a finding or an ASK to prove that a review happened.
+Block on a required-check failure, demonstrated incorrect acceptance behaviour, data loss, unauthorised access, secret exposure, an event/architecture contract breach, an incompatible runtime licence, or a materially false/missing public contract. A reproduced high-impact defect blocks regardless of the label assigned by a reviewer. An uncertain security or data-integrity concern needs a focused test or owner decision before landing. Breaches of the code style in [AGENTS.md](../../AGENTS.md#style), or of the [Then make it right](#then-make-it-right) table, in new or changed code are fix findings: the builder fixes them before landing. Raise them in the first pass; the second pass raises a new one only where a fix itself broke a rule. After pass two, a size limit raised or switched off inside a file, or an import from another app's source or from `scripts/`, holds the change for the owner. Any other fix finding still open is listed under "Not in this PR" and does not hold the change. Other naming preferences and optional wording improvements are non-blocking. Do not demand a finding or an ASK to prove that a review happened.
 
 Review is read-only. It may run isolated tests. It does not deploy, grant permissions or contact users. Specialist knowledge about architecture, UI or gateway security is a section of the same review when the change needs it.
+
+## Engineering discipline: make it work, then make it right
+
+Owner decision (10 November 2026): every change follows three steps, taken from Robert C. Martin's [ub-mode](https://github.com/unclebob/ub-mode) (MIT licence) and fitted to this repository. Where ub-mode and this standard differ, this standard wins. In particular, changes land through a reviewed PR, never by pushing to `main`.
+
+The reason is the review of 10 November 2026. It found the same id check written 136 times, the same command steps copied into dozens of files, file-size limits raised file by file, 287 functions with six or more parameters, and tests that only grow. No rule asked a builder to tidy up after making a change work. This section adds that step.
+
+### First make it work
+
+- **One decision lives in one place.** Search for an existing schema, digest, comparison, event envelope, guard, test builder, server call or style rule before writing one, and import it. If you need the same decision a second time (the same rule, format, check or sequence of steps), move it to a shared home first and use it in the code you write and in the copy you took it from. Leave the other old copies to their issue. Code that only looks alike but follows different rules stays separate, and code that is clear and used in one place stays where it is.
+- **Shared homes.** `libs/events` holds contract-level schemas and digests. `libs/protocol` holds shapes the website shares (the website may not import `libs/events`). Other shared code goes to the library that owns the subject. Test helpers go to the owning library's `testing` entry point (`libs/auth`, `libs/authz`, `libs/event-store`, `libs/models` and `libs/projections` have one), or to an app's `test/support/` folder when only that app's tests use them. Shared website components and styles go to `apps/web/src/app/ui`.
+- **Get the data shape right before the logic.** Name the types. Parse outside data once, where it comes in, and trust the parsed value inside. Keep each business rule in a pure function that takes values and returns a result.
+- **Write the failing test first** when you change behaviour. See it fail for the reason you expect, then make the smallest change that passes. If an honest test is impractical, say so and report NOT RUN. Never write a test that would still pass if the code did nothing.
+- **Fix the cause.** When you fix a failure, reproduce it first with a test that fails for that reason, then fix what caused it. A guard, retry, longer timeout, sleep or catch that only hides the failure is not a fix. This holds for a test that fails by chance as much as for product code.
+- **Build the thinnest working journey first.** Inside the feature's PR, first make one real path work from start to finish, with its access checks and refusals. Add stopping, cleaning up and recovery after that path runs.
+- **Subtract before you add.** Remove what the change replaces, in the same PR. Do not bolt a new requirement onto a design that no longer fits. Say what you would have built if the requirement had been there from the start, and deliver that in pieces.
+- **Attack the premise.** When two fixes that rest on the same assumption fail the same check, or a fix fails the second review pass, stop. Count earlier PRs for the same issue too. Write the shared assumption in one sentence and take it to the owner before trying again.
+
+### Then make it right
+
+Do this before review. Code you add must meet every row below. For code that already existed, "touched" means a function you edited and a file you added lines to. A touched function or file that already breaks a row must not get worse: no longer, no more parameters, no higher limit, no new copy. Fix the old breach in the same PR only when the fix is small and stays inside the ticket's files. Otherwise leave it to its issue in the clean-code map, #1031. Do not widen the change to unrelated code.
+
+To restructure code safely, first pin what it does with tests, then change the structure, then show the behaviour did not change.
+
+"Counted lines" leave out blank lines and comment lines. The size rows apply to hand-written production code in `apps/*/src` and `libs/*/src`.
+
+| Concern | Rule | How it is checked |
+| --- | --- | --- |
+| Duplication | No new copy of a decision that already exists. Two functions with the same structure and the same rule become one. | Review today. Once #1034 lands: `dryer` reports no duplicate at a similarity of 0.8 or above in changed files. |
+| Function size | At most 80 counted lines. Split by responsibility, so that each part does a job a reader can name. Do not split a function that is within the limit and reads from top to bottom, and do not declare a named function inside another one to pass the limit. | ESLint warning today: fix every warning in a function you added or changed. An error once #120 lands. |
+| Parameters | At most five. A function that needs more is usually doing two jobs: split it first. Pass one named object with a named, exported type only for values that belong together; do not bundle unrelated values to pass the limit. | Review today; ESLint `max-params` once #120 lands. |
+| Complexity against tests | Every changed function scores under 10 on CRAP: complexity² × (1 − coverage)³ + complexity. A flat `switch` with one short branch per event type or state may stay whole when every branch is tested. ESLint `complexity` 15 stays the hard limit. | Not checked today. `crapper` on changed files once #1034 lands. |
+| File size | At most 500 counted lines. Never raise or switch off the limit inside a file. A file that needs more is doing two jobs: split it, or ask the owner. | ESLint error today. Review refuses a new or raised per-file override; a check does so once #120 lands. |
+| Module direction | One app never imports another app's source. Product source never imports from `scripts/`. Shared code moves to a library. | Review today; dependency-cruiser once #1032 lands. |
+| Errors | Follow the Errors row under [Code](#code-strict-where-behaviour-depends-on-it). Keep the cause (`new Error(message, { cause })`) and log it through the structured logger, which hides credentials and private content, before returning the safe message. A refusal carries a `reason` from a named union type, as existing routes do, not only a sentence. | Review. |
+| Tests | Follow [Tests and evidence](#tests-and-evidence): check what the user of the code would see, use the shared test helpers, control time (pass it in, or use Vitest fake timers) instead of sleeping, and delete tests the change makes redundant. | Review today; a size limit for test files once #120 lands. |
+| Test strength | Tests of access checks, approvals and money must fail when the rule they protect is broken. | Today: when you add or change such a test, break the rule by hand once, see the test fail, restore the code and say so in your report. `mutator` on those packages, on a schedule, once #1034 lands. |
+| READMEs | Describe the package as it is now. Edit the sentence that changed; never append a note per change. | Review today; the README check once #1035 lands. |
+
+A check marked "once … lands" is not enabled yet, and nobody estimates a tool's score by eye. `dryer`, `crapper` and `mutator` are not installed: do not install or run them until this table says they are enabled.
+
+### Practice
+
+- Commit in small ordered steps: one emoji and a plain sentence, with a short body when the reason or the proof is not obvious.
+- Keep a short log of what you did and why, and put it in your final report, not in the repository.
+- Keep your working context small. Read the files the change needs and the parts of README.robot.md that cover them, not the whole history.
+- Release a dev stack you claimed as soon as your journeys finish. A builder never removes the worktree it runs in: review, the gates and the secret scan still use it. The orchestrator removes it after the change lands or is dropped. Uncommitted work waits for the owner's decision; never delete it.
 
 ## Code: strict where behaviour depends on it
 
@@ -34,8 +81,8 @@ Review is read-only. It may run isolated tests. It does not deploy, grant permis
 | Typed lint | Keep type-aware recommended ESLint rules; explicitly enforce `no-floating-promises`, `no-misused-promises`, the `no-unsafe-*` rules, `no-explicit-any`, `only-throw-error` and `switch-exhaustiveness-check`. Unknown external data starts as `unknown` and is validated once at entry. |
 | Errors | Distinguish rejected input, conflict, unavailable dependency and unexpected failure. Preserve the underlying cause internally; return a stable, sanitised error. No empty catches, silent fallback success or unbounded retries. Each background promise has an error path; retries declare deadline and idempotency behaviour. |
 | Readability | Follow the owner's code style in [AGENTS.md](../../AGENTS.md#style): build only what is needed, as verbose, clear code; small atomic named functions; no chaining, inline definitions with logic or nested ternaries; why-comments at invariants and boundaries. Use Prettier output, braces and descriptive names. No underscore taxonomy, one-line import requirement, blanket arrow ban, enum mandate or mandatory paired `.types.ts` file. Keep types with the behaviour unless separating a public contract helps. Formatter enforcement is a separate rollout, not a prerequisite hidden in the first change. |
-| Size | ESLint `complexity` maximum 15 and `max-depth` maximum 4; `max-lines` maximum 500 excluding blank/comment lines for hand-written production modules. Start `max-lines-per-function` at a warning of 80. These are proposed limits, not measured optimums. Split by responsibility; do not compress statements to pass. |
-| Exceptions | A narrow lint disable explains the actual constraint beside the code; temporary debt links an issue. Reject unused disables. No global date-expiring exception that breaks unrelated work. Generated/vendor code has an explicit tool exclusion and is still checked at its integration boundary. |
+| Size | ESLint `complexity` maximum 15 and `max-depth` maximum 4; `max-lines` maximum 500 excluding blank/comment lines for hand-written production modules. `max-lines-per-function` warns at 80 until #120 makes it an error; reviewers already hold new and changed functions to 80. Split by responsibility; do not compress statements to pass. |
+| Exceptions | Size limits (`max-lines`, `max-lines-per-function`, `max-params`) are never raised or disabled inside a file. For other rules, a narrow lint disable explains the actual constraint beside the code; temporary debt links an issue. Reject unused disables. No global date-expiring exception that breaks unrelated work. Generated/vendor code has an explicit tool exclusion and is still checked at its integration boundary. |
 | Dependency direction | Dependency-cruiser rejects cycles, imports from libraries into apps, private cross-package imports and service SDK imports outside their adapter. `libs/events` imports no apps or product-domain packages; its schema dependency, Zod, is permitted. Commands depend on event contracts and the append port; projection adapters own projection writes. Encode paths for the packages that actually exist. |
 | Unused code | Knip checks unused files, exports and dependencies after configuring genuine runtime/test entrypoints. Delete replaced routes and reachable legacy behaviour during review too: an unused-code tool cannot find everything obsolete. |
 | Logging | ESLint `no-console` in services; structured logs with operation, trace and safe entity identifiers. Test redaction of credentials, personal content and upstream error bodies. CLI output and test diagnostics have scoped exceptions. |
@@ -56,7 +103,7 @@ Security basics are behaviour, not keyword gates: authenticate the caller; autho
 
 Run `lint`, `typecheck`, `test` and `check:events` before landing, then on `main`. Retain the separate Angular `apps/web` build/test steps while the root commands do not cover them. No red baseline exemptions. If combined-main checks fail, repair or revert that change before landing more work. The four commands must cover their promised workspace scope; a skipped package is not a passing package.
 
-Tests prove the claim: a bug fix includes the failure case; a security change includes a refused operation; persistence includes restart/replay; concurrent writes include a race. Assert durable outcomes, not mock call counts alone. Inject clocks instead of depending on sleeps. Do not add tests that merely repeat an implementation, or test cosmetic changes for ceremony.
+Tests prove the claim: a bug fix includes the failure case; a security change includes a refused operation; persistence includes restart/replay; concurrent writes include a race. Assert durable outcomes, not mock call counts alone. Inject clocks instead of depending on sleeps. Do not add tests that merely repeat an implementation, or test cosmetic changes for ceremony. Build test data with shared helpers: the owning library's `testing` entry point, or the app's `test/support/` folder for helpers only that app's tests use. Add a missing helper there instead of declaring one in the test file. When a change replaces behaviour, delete the tests of the old behaviour in the same PR.
 
 Use real, disposable dependencies for service guarantees. Mocks prove local decisions; they cannot prove provider isolation, database rollback, routing, image contents or Kubernetes behaviour. When touching those boundaries, run their integration test before landing. Missing test infrastructure is `NOT RUN`, not success.
 
@@ -100,6 +147,7 @@ Writing rules:
 - Use short sentences and everyday words. Explain a technical word in a few words the first time, or link it to GLOSSARY.md.
 - Name other parts by their folder (`apps/server`) and say what they are the first time.
 - Describe today's code. Mark anything planned as planned.
+- Keep it current, not chronological. When a change alters a fact, edit the sentence that states it. Never add a paragraph per change: the PR and the release note record what changed.
 - Use UK English and the active voice.
 - Aim for about 50 to 120 lines. More than 150 lines means some detail belongs in README.robot.md.
 
@@ -157,6 +205,7 @@ npm test -w @opencrane/example
   - licence audit notes and implementation detail.
 - **Moved, not deleted.** For each package, start with `git mv README.md README.robot.md`, then write a fresh README.md. Git and GitHub show this as a rewritten README.md and a new README.robot.md. To prove nothing was lost, run `git diff -B -M --stat main...HEAD`: each move must show as `…/README.md => …/README.robot.md` with only a few changed lines. Old history is found with `git log -B -M --follow -- <folder>/README.robot.md`. Old section links keep working once the link points at the new file name.
 - **First line.** Keep the existing title as the first line. Put one line straight under it that points back: `For people, read [README.md](README.md) first.` (The Markdown check needs a title on the first line.) Fix statements that are plainly wrong, and otherwise keep the content as it is. Tidying the robot file is optional.
+- **Ordered by topic, edited in place.** Group the file by subject (contracts, settings, limits, tests, recovery), not by the order changes arrived. A change replaces the lines it makes out of date; it does not add a dated paragraph. Git holds the history.
 - **Only when needed.** If a package has nothing for agents beyond its README.md, it has no robot file.
 
 #### What the standard covers

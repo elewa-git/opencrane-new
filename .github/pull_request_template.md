@@ -29,6 +29,7 @@ sequenceDiagram
 
 - Tests and what each proves
 - Gates: lint, typecheck, check:events, test (counts), web build and tests; CI
+- Made right: what was shared, split or deleted in the code this PR touched; output of any enabled clean-code tool for the changed files
 - Independent review: model, passes, verdict
 
 ## Not in this PR

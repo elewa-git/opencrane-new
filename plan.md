@@ -20,6 +20,7 @@ Follow the [engineering standard](docs/process/standards.md) for the full review
 - **Weekly (human + agent).** Run journeys on a fresh dev stack and record receipts; Phase 5 adds Helm-installed silos. Source is ready with green checks and an explicit remaining live-qualification issue; a capability is done only on a live journey PASS.
 - **Feature PRs.** One PR per whole feature, stacks at most two, no consolidation PRs.
 - **Always.** Run `lint`, `typecheck`, `test` and `check:events` before landing and on `main`, plus the separate web build/tests. Repair or revert a failed combined result before landing more. Never turn an untested condition into PASS.
+- **Discipline.** Every change follows [make it work, then make it right](docs/process/standards.md#engineering-discipline-make-it-work-then-make-it-right): reuse before writing, test first, then clean the touched code before review.
 - **Commits.** One emoji plus a plain sentence; no co-author line or AI attribution. Decisions belong in issues with a needed-by date.
 
 ## MCP: version 2026-07-28 only
