@@ -1,4 +1,4 @@
-Journey on a fresh dev stack: FAIL (core journey)
+# Journey on a fresh dev stack: FAIL (core journey)
 
 12 November 2026. The final run used source `e7819000a`, a newly claimed secondary
 stack and the stand-in provider. The fleet marker stayed set. Startup used
