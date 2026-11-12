@@ -62,7 +62,6 @@ input {
 }
 .email-field p { margin: 0; color: var(--oc-ink-secondary); font-size: 12px; }
 .email-field p::before { content: 'ⓘ'; margin-right: 5px; color: var(--oc-accent-dark); }
-form { margin: 0; }
 @media (max-width: 600px) {
   .sign-in-page { align-items: start; padding-top: 32px; }
   .sign-in-card { padding: 24px 20px; }
