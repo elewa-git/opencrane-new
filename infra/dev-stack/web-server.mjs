@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { basename, extname, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { createGzip } from 'node:zlib';
+import { organisationPage } from '../package/web-page.mjs';
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -134,7 +135,8 @@ async function serveFile(request, response, pathname, buildDirectory) {
   let source;
   if (isIndex) {
     const index = await readFile(filename, 'utf8');
-    const body = index.replace('<app-root', `<app-root ngCspNonce="${nonce}"`);
+    const page = organisationPage(index, process.env['ORGANISATION_NAME']);
+    const body = page.replace('<app-root', `<app-root ngCspNonce="${nonce}"`);
     source = Readable.from([body]);
   } else {
     source = createReadStream(filename);

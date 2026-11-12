@@ -178,6 +178,9 @@ spec:
         - name: web
           image: {{ required "web pin" .Values.images.web | quote }}
           command: [node, infra/package/web.mjs]
+          env:
+            - name: ORGANISATION_NAME
+              value: {{ .Values.organisation.name | quote }}
           ports: [{ containerPort: 8080 }]
           readinessProbe:
             httpGet: { path: /, port: 8080 }

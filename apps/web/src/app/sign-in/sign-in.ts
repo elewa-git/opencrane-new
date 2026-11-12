@@ -3,6 +3,7 @@ import {
   type AfterViewInit, type OnDestroy,
 } from '@angular/core';
 import { NAVIGATE } from '../core/navigate';
+import { organisationName } from '../core/organisation-name';
 import { BrowserSession } from '../core/browser-session';
 import { DogEar, PaperSurface } from '../ui/paper';
 import { SharedState } from '../shared-state/shared-state';
@@ -33,9 +34,7 @@ export class SignIn implements AfterViewInit, OnDestroy {
   private readonly ssoButton = viewChild<ElementRef<HTMLButtonElement>>('ssoButton');
   private readonly heading = viewChild<ElementRef<HTMLHeadingElement>>('heading');
 
-  protected readonly organisation = document.querySelector<HTMLMetaElement>(
-    'meta[name=opencrane-org]',
-  )?.content.trim() || 'this organisation';
+  protected readonly organisation = organisationName() || 'this organisation';
   protected readonly invited = Boolean(new URLSearchParams(globalThis.location.search).get('invitation'));
   protected readonly handoff = globalThis.location.pathname === '/signin/handoff';
   protected readonly rejected = globalThis.location.pathname === '/signin/rejected';

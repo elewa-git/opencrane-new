@@ -7,7 +7,7 @@ const page = '<html><head><meta name="opencrane-org" content=""></head><body></b
 function escapesOrganisationName() {
   const rendered = organisationPage(page, '<Acme "&" Sons> $&');
   assert.equal(rendered, '<html><head><meta name="opencrane-org" '
-    + 'content="&lt;Acme &quot;&amp;&quot; Sons&gt; $&"></head><body></body></html>');
+    + 'content="&lt;Acme &quot;&amp;&quot; Sons&gt; $&amp;"></head><body></body></html>');
 }
 
 function leavesAnEmptyName() {

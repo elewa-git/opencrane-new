@@ -33,6 +33,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
 import { SurveyScreen } from './welcome/survey';
 import { PersonaReview } from './welcome/persona-review';
 import { WelcomeChat } from './welcome/welcome-chat';
+import { organisationName } from './core/organisation-name';
 
 @Component({
   selector: 'app-root',
@@ -86,8 +87,7 @@ export class App {
     : /^\/org\/integrations\/([\w-]+)$/u.exec(this.pathname)?.[1];
   protected readonly auditConversation = /^\/history\/([\w-]+)$/u.exec(this.pathname)?.[1];
   protected readonly statesPage = this.pathname === '/org/states';
-  protected readonly organisation = document
-    .querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
+  protected readonly organisation = organisationName() || 'Your organisation';
   protected readonly personalSettingsPageLabel = personalSettingsPageLabel;
 
   protected unavailableTitle(): string {

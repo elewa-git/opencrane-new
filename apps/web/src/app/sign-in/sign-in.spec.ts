@@ -47,11 +47,7 @@ describe('sign-in handoff', () => {
     vi.advanceTimersByTime(10_000);
     expect(navigate).not.toHaveBeenCalled();
   });
-  it.each([
-    ['  Acme & Sons  ', 'Acme & Sons'],
-    ['', 'this organisation'],
-    ['   ', 'this organisation'],
-  ])('shows the installation name %j on sign-in', (name, expected) => {
+  function showsInstallationName(name: string, expected: string): void {
     globalThis.history.replaceState({}, '', '/signin/rejected?reason=organisation');
     const meta = document.createElement('meta');
     meta.name = 'opencrane-org';
@@ -63,7 +59,13 @@ describe('sign-in handoff', () => {
     } finally {
       meta.remove();
     }
-  });
+  }
+
+  it.each([
+    ['  Acme & Sons  ', 'Acme & Sons'],
+    ['', 'this organisation'],
+    ['   ', 'this organisation'],
+  ])('shows the installation name %j on sign-in', showsInstallationName);
 
   it('uses the public organisation name for invitation copy', () => {
     globalThis.history.replaceState({}, '', '/?invitation=example');

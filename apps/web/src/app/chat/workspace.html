@@ -363,7 +363,10 @@
       <ng-container [ngTemplateOutlet]="sessionNavigation" />
       <footer class="rail-footer">
         <a href="/org/integrations">Settings</a>
-        <a href="/account">{{ chat.displayName() }} · Account</a>
+        <a class="current-user" href="/account"><span>
+          <strong>{{ chat.displayName() }} · Account</strong>
+          <small>{{ organisation }} · Personal</small>
+        </span></a>
       </footer>
     }
   </oc-navigation-menu>

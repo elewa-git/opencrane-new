@@ -457,9 +457,13 @@ Run at most three stacks per host: the stable owner and secondary ids `1` and `2
 Operations use a separate `flock` per id; different stacks run concurrently.
 Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
 Website readiness has its own five-minute deadline, measured with a monotonic clock.
-It still requires a successful HTTP response from `/org/integrations`. Secondary stacks
-use Angular's development server. The owner builds the production bundle before starting
-`web-server.mjs`, which reads the generated proxy configuration. If the recorded website process
+It still requires a successful HTTP response from `/org/integrations`. All stacks
+build the production bundle before starting `web-server.mjs`, which reads the
+generated proxy configuration. Set `ORGANISATION_NAME` before a fresh start to
+save the installation's public name in `settings.env`. Startup passes that saved
+setting to the web server. It fills the public meta tag through the same
+`infra/package/web-page.mjs` function used by the package. An absent name keeps
+the sign-in and workspace fallback words. If the recorded website process
 stops, startup fails promptly and points to the private `web.log`, without printing
 its contents. A successful check prints
 `PASS website readiness: <milliseconds>ms`, measured from the request to start or reuse

@@ -725,6 +725,10 @@ function preservesOtherExactRecoveryValues() {
 test('CNPG recovery preserves other recorded names and target values',
   preservesOtherExactRecoveryValues);
 
+function organisationSetting(variable) {
+  return variable.name === 'ORGANISATION_NAME';
+}
+
 function rendersOrganisationName() {
   for (const name of ['', 'Acme & Sons']) {
     const values = { ...chartValues(), organisation: { name } };
@@ -741,9 +745,7 @@ function rendersOrganisationName() {
       }
     }
     assert.ok(web, 'The web deployment must exist');
-    const setting = web.env?.find(function organisationSetting(variable) {
-      return variable.name === 'ORGANISATION_NAME';
-    });
+    const setting = web.env?.find(organisationSetting);
     assert.deepEqual(setting, { name: 'ORGANISATION_NAME', value: name });
   }
 }

@@ -3159,11 +3159,7 @@ it.each([null, 'different-personal-assistant'])(
   'uses the selected shared assistant for the key notice with personal default %s',
   missingKeyNoticeUsesSelectedAssistant);
 
-it.each([
-  ['  Acme & Sons  ', 'Acme & Sons'],
-  ['', 'Your organisation'],
-  ['   ', 'Your organisation'],
-])('shows the installation name %j in the workspace', async (name, expected) => {
+async function showsInstallationName(name: string, expected: string): Promise<void> {
   const meta = document.createElement('meta');
   meta.name = 'opencrane-org';
   meta.content = name;
@@ -3175,9 +3171,15 @@ it.each([
   } finally {
     meta.remove();
   }
-});
+}
 
-it('shows the installation name when a phone user opens session navigation', async () => {
+it.each([
+  ['  Acme & Sons  ', 'Acme & Sons'],
+  ['', 'Your organisation'],
+  ['   ', 'Your organisation'],
+])('shows the installation name %j in the workspace', showsInstallationName);
+
+async function showsPhoneOrganisation(): Promise<void> {
   Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 390 });
   const meta = document.createElement('meta');
   meta.name = 'opencrane-org';
@@ -3192,4 +3194,7 @@ it('shows the installation name when a phone user opens session navigation', asy
   } finally {
     meta.remove();
   }
-});
+}
+
+it('shows the installation name when a phone user opens session navigation',
+  showsPhoneOrganisation);
