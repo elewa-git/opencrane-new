@@ -56,9 +56,11 @@ async function refuseInvalidOrUngrantableKey() {
   const input = { action: 'create', serverId: setup.serverId, connectionId: policy.connectionId,
     profileId: 'personal', changeRef: randomUUID(), expectedSequence: 0,
     expectedGeneration: 0, appendUntil: Date.now() + 60_000 };
+  const connectionsBeforeCheck = setup.remote.connections();
   await expect(savePersonalKey(setup.nats.store, setup.binding, 'alice',
     { custody, db: setup.db, network: setup.remote.network },
     { command: input, material: setup.accounts[0].key })).rejects.toThrow();
+  expect(setup.remote.connections()).toBe(connectionsBeforeCheck);
   await setup.grant('alice');
   await expect(savePersonalKey(setup.nats.store, setup.binding, 'alice',
     { custody, db: setup.db, network: setup.remote.network },
