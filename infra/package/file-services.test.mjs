@@ -32,13 +32,29 @@ function packageFilesRunInsideInstallation() {
   for (const container of pod.containers) {
     assert.equal(container.securityContext.readOnlyRootFilesystem, true);
     assert.equal(container.securityContext.allowPrivilegeEscalation, false);
+    assert.equal(container.securityContext.runAsUser, 1000,
+      'Kubernetes must verify the engine user without resolving an image user name');
   }
+  const evidence = pod.volumes.find(isEvidenceVolume);
+  assert.deepEqual(evidence.emptyDir, { medium: 'Memory' },
+    'Copy projected Secret symlinks into regular files before strict release validation');
+  const evidenceCopy = pod.initContainers.find(isEvidenceCopy);
+  assert.ok(evidenceCopy, 'The scanner must copy its release evidence before starting');
+  assert.match(evidenceCopy.args[0], /cp \/run\/scanner-source\/\* \/run\/scanner\//);
   const service = resources.get('Service/scanner');
   assert.equal(service.spec.type, 'ClusterIP');
   assert.deepEqual(service.spec.ports, [{ port: 8443, targetPort: 8443 }]);
   const policy = resources.get('NetworkPolicy/scanner');
   assert.ok(policy, 'Only the authenticated wrapper may be reached outside its Pod');
   assert.deepEqual(policy.spec.ingress[0].ports, [{ protocol: 'TCP', port: 8443 }]);
+}
+
+function isEvidenceVolume(volume) {
+  return volume.name === 'evidence';
+}
+
+function isEvidenceCopy(container) {
+  return container.name === 'copy-evidence';
 }
 
 test('packaged uploads have persistent storage and a private authenticated scanner',
