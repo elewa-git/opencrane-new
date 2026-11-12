@@ -68,7 +68,7 @@ export async function requireConnectionEnabled(store: EventStore, memberId: stri
   if (sequence !== 0) throw new Error('Connection disabled');
 }
 
-export function connectionReceipt(row: StoredEvent) {
+function connectionReceipt(row: StoredEvent) {
   const schema = connectionCreatedDataSchema.required({ activation: true });
   const data = schema.parse(row.event.data);
   const status = connectionAccount(data.activation) ? 'verified' as const : 'saved_unverified' as const;
