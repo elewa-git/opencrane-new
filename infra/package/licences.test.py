@@ -21,6 +21,19 @@ specification.loader.exec_module(checker)
 
 
 class LicenceTests(unittest.TestCase):
+    def test_cc0_is_allowed_only_as_a_named_part_bundled_inside_minio(self):
+        notice = ["github.com/dchest/siphash@v1.2.3", ["CC0-1.0"],
+                  "Reviewed source notice SHA-256", "Static hashing code bundled in AGPL MinIO"]
+        entry = ["go-module", "github.com/dchest/siphash", "v1.2.3", "CC0-1.0", "Source notice"]
+        checker.check_bundled_notice(notice, {"AGPL-3.0-only"})
+        checker.check_entry(entry, {"AGPL-3.0-only"}, set(), None, [notice])
+        with self.assertRaises(ValueError):
+            checker.check_entry(entry, {"AGPL-3.0-only"}, set())
+        changed = list(entry)
+        changed[2] = "v1.2.4"
+        with self.assertRaises(ValueError):
+            checker.check_entry(changed, {"AGPL-3.0-only"}, set(), None, [notice])
+
     def corepack_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
         module_spec = importlib.util.spec_from_file_location("corepack", path)
