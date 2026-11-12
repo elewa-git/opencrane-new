@@ -226,3 +226,28 @@ async function checksDiagramTime() {
 
 test('a diagram renders through the production server within 15 seconds',
   checksDiagramTime, { timeout: 45_000 });
+
+async function servesOrganisationName() {
+  const previousName = process.env['ORGANISATION_NAME'];
+  process.env['ORGANISATION_NAME'] = 'Acme <"&"> Sons';
+  async function inspect(port) {
+    for (const path of ['/index.html', '/signin/rejected', '/workspace']) {
+      const response = await responseAt(port, path);
+      assert.equal(response.status, 200);
+      assert.match(response.body.toString(),
+        /<meta name="opencrane-org" content="Acme &lt;&quot;&amp;&quot;&gt; Sons"/u);
+      assert.match(response.headers['content-security-policy'], /nonce-/u);
+    }
+    const asset = await responseAt(port, '/mermaid-renderer.html');
+    assert.doesNotMatch(asset.body.toString(), /Acme/u);
+  }
+  try {
+    await withWebServer(inspect);
+  } finally {
+    if (previousName === undefined) delete process.env['ORGANISATION_NAME'];
+    else process.env['ORGANISATION_NAME'] = previousName;
+  }
+}
+
+test('the dev web server supplies the escaped installation name on direct and app routes',
+  servesOrganisationName);

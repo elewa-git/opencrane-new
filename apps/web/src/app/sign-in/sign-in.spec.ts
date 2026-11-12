@@ -47,6 +47,24 @@ describe('sign-in handoff', () => {
     vi.advanceTimersByTime(10_000);
     expect(navigate).not.toHaveBeenCalled();
   });
+  it.each([
+    ['  Acme & Sons  ', 'Acme & Sons'],
+    ['', 'this organisation'],
+    ['   ', 'this organisation'],
+  ])('shows the installation name %j on sign-in', (name, expected) => {
+    globalThis.history.replaceState({}, '', '/signin/rejected?reason=organisation');
+    const meta = document.createElement('meta');
+    meta.name = 'opencrane-org';
+    meta.content = name;
+    document.head.append(meta);
+    try {
+      const { element } = create();
+      expect(element.textContent).toContain(`Your account isn't part of ${expected}`);
+    } finally {
+      meta.remove();
+    }
+  });
+
   it('uses the public organisation name for invitation copy', () => {
     globalThis.history.replaceState({}, '', '/?invitation=example');
     const meta = document.createElement('meta');

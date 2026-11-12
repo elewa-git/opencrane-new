@@ -170,7 +170,7 @@ jobs:
           infra/package/company-qualification.test.ts
           infra/package/nats-placement.test.ts
           infra/package/nats-placement-collect.test.ts
-          infra/package/chart-render.test.mjs
+          infra/package/chart-render.test.mjs infra/package/web-page.test.mjs
           infra/package/prepare-nats-routes.test.mjs infra/package/cnpg-install.test.mjs
           infra/dev-stack/cnpg-backup.test.ts
           infra/dev-stack/cnpg-backup-identity.test.ts
