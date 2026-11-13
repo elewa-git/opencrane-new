@@ -68,3 +68,34 @@ async function actWithOwnRights() {
   expect(override.error?.message).toBe('invalid_request');
 }
 it('checks identity and applies only the rights of the supplied key', actWithOwnRights);
+
+async function concurrentPermittedAccounts() {
+  const permittedAccounts = [
+    { ...accounts[0], permitted: true },
+    { ...accounts[1], permitted: true },
+  ] as const;
+  const concurrent = createDemoServer(undefined, { accounts: permittedAccounts });
+  try {
+    await prepare();
+    function readAs(account: typeof permittedAccounts[number]) {
+      const headers = {
+        authorization: `Bearer ${account.key}`,
+        'mcp-protocol-version': version, 'mcp-method': 'tools/call',
+        'mcp-name': 'read_fixture_quote', 'x-opencrane-mcp-revision': revision,
+      };
+      const params = { name: 'read_fixture_quote', arguments: { quoteId: 'DEMO-001' },
+        _meta: { 'io.modelcontextprotocol/protocolVersion': version } };
+      return concurrent.inject({ method: 'POST', url: '/', headers,
+        payload: { jsonrpc: '2.0', id: account.account, method: 'tools/call', params } });
+    }
+    const reads = permittedAccounts.map(readAs);
+    const replies = await Promise.all(reads);
+    expect(replies[0]!.json()).toMatchObject({ result: { isError: false,
+      structuredContent: { actedAs: 'Account A', effectCount: 0 } } });
+    expect(replies[1]!.json()).toMatchObject({ result: { isError: false,
+      structuredContent: { actedAs: 'Account B', effectCount: 0 } } });
+  } finally {
+    await concurrent.close();
+  }
+}
+it('lets two permitted accounts read concurrently with their own keys', concurrentPermittedAccounts);
