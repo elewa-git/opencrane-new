@@ -13,10 +13,8 @@ export function isOrdinaryToolCatalogue(catalogue: Catalogue | undefined): boole
   if (catalogue.declared) return false;
   // Require complete-list evidence when older discovery discarded any tools.
   if (catalogue.rejectedTools?.length && catalogue.declared !== false) return false;
-  for (const tool of catalogue.tools) {
-    if (tool.costCents !== undefined || tool.review !== undefined) return false;
-  }
   try {
+    if (catalogue.tools.some(hasDeclaredTool)) return false;
     const discovery = discoverySchema.parse(JSON.parse(catalogue.discoverResult));
     const experimental = discovery.capabilities.experimental ?? {};
     return !Object.hasOwn(experimental, 'io.opencrane/expectedRevision');
@@ -40,4 +38,11 @@ export function hasOpenCraneToolDeclarations(definition: unknown): boolean {
     if (key.startsWith('io.opencrane/')) return true;
   }
   return false;
+}
+
+function hasDeclaredTool(tool: Tool): boolean {
+  if (tool.costCents !== undefined || tool.review !== undefined) return true;
+  if (!tool.definition) return false;
+  const definition: unknown = JSON.parse(tool.definition);
+  return hasOpenCraneToolDeclarations(definition);
 }
