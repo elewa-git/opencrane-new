@@ -15,7 +15,10 @@ async function unusedPort() {
   reservation.listen(0, '127.0.0.1');
   await once(reservation, 'listening');
   const port = reservation.address().port;
-  await new Promise(function close(done) { reservation.close(done); });
+  function close(done) {
+    reservation.close(done);
+  }
+  await new Promise(close);
   return port;
 }
 
@@ -34,6 +37,25 @@ async function waitForWebsite(origin, child, output) {
   assert.fail(`Development website did not start: ${output()}`);
 }
 
+function openPdf(bytes) {
+  function previewResult(done) {
+    function blocked(event) {
+      done({ blocked: true, directive: event.violatedDirective,
+        policy: event.originalPolicy, uri: event.blockedURI });
+    }
+    document.addEventListener('securitypolicyviolation', blocked, { once: true });
+    const pdf = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
+    const frame = document.createElement('iframe');
+    frame.src = URL.createObjectURL(pdf);
+    function loaded() {
+      done({ blocked: false });
+    }
+    frame.addEventListener('load', loaded, { once: true });
+    document.body.append(frame);
+  }
+  return new Promise(previewResult);
+}
+
 async function checksDevelopmentPreview() {
   const directory = await mkdtemp(`${tmpdir()}/development-preview-`);
   const port = await unusedPort();
@@ -48,8 +70,12 @@ async function checksDevelopmentPreview() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let logs = '';
-  function record(chunk) { logs += chunk.toString(); }
-  function output() { return logs; }
+  function record(chunk) {
+    logs += chunk.toString();
+  }
+  function output() {
+    return logs;
+  }
   child.stdout.on('data', record);
   child.stderr.on('data', record);
   let browser;
@@ -59,21 +85,7 @@ async function checksDevelopmentPreview() {
     const page = await browser.newPage();
     await page.goto(origin);
     const policy = response.headers.get('content-security-policy');
-    const preview = await page.evaluate(function openPdf(bytes) {
-      return new Promise(function previewResult(done) {
-        function blocked(event) {
-          done({ blocked: true, directive: event.violatedDirective,
-            policy: event.originalPolicy, uri: event.blockedURI });
-        }
-        document.addEventListener('securitypolicyviolation', blocked, { once: true });
-        const pdf = new Blob([new Uint8Array(bytes)], { type: 'application/pdf' });
-        const frame = document.createElement('iframe');
-        frame.src = URL.createObjectURL(pdf);
-        function loaded() { done({ blocked: false }); }
-        frame.addEventListener('load', loaded, { once: true });
-        document.body.append(frame);
-      });
-    }, [...uploadPdf()]);
+    const preview = await page.evaluate(openPdf, [...uploadPdf()]);
     assert.equal(preview.blocked, false, `PDF preview blocked: ${JSON.stringify(preview)}; ${policy}`);
     const name = await page.locator('meta[name="opencrane-org"]').getAttribute('content');
     assert.equal(name, 'Acme <"&"> Sons');
