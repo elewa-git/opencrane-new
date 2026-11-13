@@ -9,6 +9,7 @@ import { groupConversationSchema, sharedChildConversationSchema,
 import { isToolCallText } from './tool-call.ts';
 import { toolCallFields } from './tool-dispatch.ts';
 export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
+export { approvalExpiredDataSchema, approvalUsedDataSchema } from './tool-dispatch.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 import { routineApprovalBindingSchema } from './routine-approval.ts';
 // Data schemas for every event type in the registry except the four
@@ -402,10 +403,6 @@ const toolReviewSchema = z.object({
   fields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).min(1).max(20),
   stepUp: z.boolean().default(false),
 }).strict();
-
-export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
-
-export const approvalUsedDataSchema = z.object({ approvalId: id, permitId: id }).strict();
 
 export const effectUncertainDataSchema = z
   .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost', 'unknown_tariff', 'missing_usage', 'transport_failure']) })

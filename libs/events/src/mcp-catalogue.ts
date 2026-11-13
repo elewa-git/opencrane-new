@@ -49,7 +49,7 @@ export function validateMcpCatalogue(catalogue: Catalogue): void {
     const revision = checkedToolRevision(tool);
     revisions.push({ name: tool.name, revision });
   }
-  // Keep the digest rule saved with the event; older lists hashed accepted tools only.
+  // Derive the digest from saved definitions before keeping any previous review.
   const rejectedTools = catalogue.digestVersion === 2 ? catalogue.rejectedTools : [];
   if (catalogueDigest(revisions, rejectedTools) !== catalogue.schemaDigest) {
     throw new Error('Tool catalogue digest mismatch');
