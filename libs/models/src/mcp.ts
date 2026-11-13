@@ -251,6 +251,8 @@ function ordinaryToolReview(catalogue: ReturnType<typeof mcpServerDiscoveredData
   const raw: unknown = JSON.parse(tool?.definition ?? '{}');
   const definition = ordinaryDefinitionSchema.parse(raw);
   const fields = args.value instanceof Map ? [...args.value.keys()] : [];
-  return { action: name, consequence: definition.description ?? 'Run the reviewed tool.',
+  const description = definition.description;
+  const consequence = description ? description.slice(0, 8000) : 'Run the reviewed tool.';
+  return { action: name, consequence,
     targetArgument: '', fields, stepUp: false };
 }
