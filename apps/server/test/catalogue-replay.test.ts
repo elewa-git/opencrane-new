@@ -31,7 +31,10 @@ async function replaysSavedDigestRules() {
   try {
     await append('mcp.server_registered', { serverId: 'fixture', kind: 'remote',
       locator: 'https://fixture.example.test/mcp', registeredBy: 'admin' });
-    await append('mcp.server_discovered', legacy);
+    const stored = { ...event('legacy-discovery', 'mcp-fixture', 'mcp.server_discovered'),
+      time: '2026-11-12T12:00:00.000Z', data: legacy };
+    await nats.seed([stored]);
+    const savedLegacy = await Array.fromAsync(nats.store.readStream('mcp-fixture'));
     const oldPolicy = await readToolPolicy(nats.store, 'test', 'fixture');
     expect(oldPolicy.catalogue).toEqual(legacy);
     expect(oldPolicy.tools).toMatchObject([{ name: 'write', reviewed: false, mode: 'block' }]);
@@ -51,6 +54,10 @@ async function replaysSavedDigestRules() {
     expect(currentProjection.catalogue).toEqual(snapshot);
     await runner.rebuild(mcpCatalogue);
     expect(await catalogueRow()).toEqual(before);
+    const savedCurrent = await Array.fromAsync(nats.store.readStream('mcp-fixture'));
+    expect(savedCurrent).toHaveLength(3);
+    expect(savedCurrent.slice(0, 2)).toEqual(savedLegacy);
+    expect(savedCurrent[2]?.event.data).toEqual(snapshot);
   } finally {
     await storage.close();
     await nats.close();

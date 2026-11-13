@@ -2,8 +2,10 @@ import { expect, it } from 'vitest';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { event } from '@opencrane/event-store/testing';
 import { readToolPolicy } from '@opencrane/models';
-import { ordinaryRemoteFixture, permit, send, body }
+import { ordinaryRemoteFixture, permit, send, body,
+  reviewRestoration, publishRestoration, restorationDelivery, generationHeaders }
   from '@opencrane/models/testing/mcp-dispatch';
 import { captureCatalogue, ordinaryWrite, rejectedSibling, revision } from './support/ordinary-catalogue.ts';
 
@@ -61,3 +63,40 @@ async function checksCompleteCatalogue(change: 'unchanged' | 'added' | 'removed'
 
 it.each(['unchanged', 'added', 'removed', 'schema', 'annotation'] as const)(
   'checks the complete discovered catalogue before dispatch: %s', checksCompleteCatalogue);
+
+async function refusesDowngradeThenSiblingRemoval() {
+  const inventory = await captureCatalogue([ordinaryWrite, rejectedSibling]);
+  const { setup, headers, remote } = await ordinaryRemoteFixture('allow', undefined, inventory);
+  const downgraded = { ...inventory, schemaDigest: catalogueDigest(inventory.tools!) };
+  Reflect.deleteProperty(downgraded, 'digestVersion');
+  const record = { ...event('downgrade-discovery', 'mcp-fixture', 'mcp.server_discovered'),
+    time: new Date().toISOString(), data: downgraded };
+  const expectedSequence = await setup.nats.store.head('mcp-fixture');
+  const appended = await setup.nats.store.append({ event: record, expectedSequence });
+  // Review the latest saved list, then remove the rejected sibling before dispatch.
+  await reviewRestoration(setup, 'review-after-downgrade');
+  const publication = await publishRestoration(setup, 'publish-after-downgrade');
+  const delivery = await restorationDelivery(setup);
+  await delivery.deliver(publication);
+  await delivery.waitForWitness(publication);
+  expect(await delivery.observe()).not.toBeNull();
+  const currentHeaders = { ...headers, ...generationHeaders(publication) };
+  function respond(method: string) {
+    if (method === 'tools/list') return { tools: [ordinaryWrite] };
+    return { content: [] };
+  }
+  remote.respond(respond);
+  const value = await permit(setup, currentHeaders);
+  const response = await send(setup, value);
+  expect(response.status, await response.clone().text()).toBe(200);
+  function method(call: { method: string }) { return call.method; }
+  expect(remote.calls.map(method)).toEqual(['tools/list']);
+  expect(await response.json()).toMatchObject({ result: { isError: true,
+    content: [{ text: 'The tool list changed. An admin must review it before another call.' }] } });
+  expect(appended).toMatchObject({ status: 'rejected', reason: 'invalid_event' });
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(policy.driftHeld).toBe(true);
+  expect(policy.catalogue).toEqual(inventory);
+}
+it('never calls a tool after a new downgrade attempt and rejected sibling removal',
+  refusesDowngradeThenSiblingRemoval);
