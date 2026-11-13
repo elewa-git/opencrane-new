@@ -245,28 +245,20 @@ and durable probe histories matching each reported write outcome.
 | Fresh-machine database provisioning | NOT RUN | The shared disposable server already existed; it was kept intact |
 | Lost-COMMIT/broken-rollback regression | PASS | Failed before the fix; both parameter rows now pass |
 | Product source diff | PASS | `git diff --stat origin/main -- apps libs infra` is empty |
-| Core journey on a fresh secondary dev stack | FAIL | 390 px upload-retry target failed the 44 px bounding-box assertion |
+| Core journey on a fresh secondary dev stack | PASS | 13 November 2026; rebased head `583707da17fc52d81ef5ace1da8dc6fc80758d84`; all core journey steps passed on fresh secondary slot 2 |
 
-The initial fresh start reached website readiness, but the inherited
-`OPENCRANE_FLEET_TASK` flag prevents `requireAutomatedJourney` from starting the core
-journey. That start supplied no passing core assertions; its secondary stack was taken
-down and confirmed free. For the explicitly authorised core run, the launch clears
-only that inherited flag with `env -u OPENCRANE_FLEET_TASK` and claims a fresh secondary
-stack through the same script. Product code and stack ownership checks are unchanged.
-
-The actual core journey ran once on a fresh secondary stack 2, from source
-`ae942c9b5f911ccda0902b62b8a4e0989412e6e6`. Development-owner bootstrap, managed-provider
-setup and website readiness completed; website readiness took 67,953 ms. The journey
-then failed the `Touch target is at least 44px` assertion in
-`infra/dev-stack/browser-upload.ts` line 15. The saved safe stack locations show the
-390 px upload-retry path (lines 52 and 73), called through `browser-chat.ts` line 61
-and `journey.ts` line 557. The assertion checks both a present box and minimum width
-and height; the record does not establish which condition failed. Later core conditions
-are NOT RUN. No product fix or second core run is included. This is a failed live
-qualification of the unchanged product, not a passing PostgreSQL product journey.
-
-The core journey rerun is NOT RUN in this rework, pending main repair #1119. The failed
-receipt above and the PR Evidence line remain unchanged. No secondary stack was claimed.
+The core journey passed on a fresh secondary slot 2 after rebasing onto
+`1e85888428e91cec9a39bfada3b7f99649b61766`. It ran on 13 November 2026 at head
+`583707da17fc52d81ef5ace1da8dc6fc80758d84`. Owner bootstrap, managed-provider setup and
+website readiness passed. The full journey passed sign-in and access refusals, member and
+assistant setup, upload and chat at 390 px and 1280 px, live view and revocation, audit,
+budget limits, replay checks, token boundaries, sign-out and listener checks. Two upload
+transport attempts reported `net::ERR_FAILED`; the retry flows passed with no duplicate
+files or preview retries. Approval journey remains skipped because its required #45 rows
+are not ready. Screenshots from the run are recorded here:
+[390 px chat](results/core-journey-390.png) and
+[1280 px chat](results/core-journey-1280.png). The secondary stack was taken down after
+the journey completed. No product behaviour changed.
 
 Full root tests are deliberately NOT RUN; only this experiment's focused suites run.
 Live disaster recovery, replicas/failover, production NATS retirement and migration remain
