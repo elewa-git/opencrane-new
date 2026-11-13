@@ -607,6 +607,11 @@ function requireRemoteRevision(saved: string | undefined, standard: boolean) {
 }
 
 
+interface CheckedRemoteReply {
+  data: Buffer;
+  cost: ReturnType<typeof observedToolCost>;
+}
+
 interface RemoteToolCall {
   target: Awaited<ReturnType<typeof prepareRemote>>;
   raw: string;
@@ -632,18 +637,17 @@ async function forwardRemote(call: RemoteToolCall) {
     'mcp-name': call.toolName,
     ...(call.revision ? { 'x-opencrane-mcp-revision': call.revision } : {}),
     ...(material === undefined ? {} : { authorization: `Bearer ${material}` }) };
-  let reply: Awaited<ReturnType<typeof exchangeRemote>> | undefined;
+  let reply: CheckedRemoteReply | undefined;
   try {
     const received = await exchangeRemote(target, raw, headers, network,
       controller.signal, 1024 * 1024);
-    const safeData = requireRemoteReply(received.data, received.contentType, raw, material);
-    reply = { ...received, data: safeData };
+    reply = requireRemoteReply(received.data, received.contentType, raw, material);
   } catch (error) {
     remoteLogger.warn({ err: error }, 'Remote tool exchange failed');
     // Keep every failed exchange unknown, including refusal before confirmed receipt.
   } finally { clearTimeout(timer); }
   try {
-    const cost = !call.revision && reply ? observedToolCost(reply.data) : undefined;
+    const cost = !call.revision && reply ? reply.cost : undefined;
     await observe(reply ? 'responded' : 'outcome_unknown', undefined, cost);
   } catch (error) {
     remoteLogger.warn({ err: error }, 'Remote tool observation could not be saved');
@@ -660,8 +664,8 @@ async function forwardRemote(call: RemoteToolCall) {
   res.end();
 }
 
-function observedToolCost(data: Buffer) {
-  const root = losslessJson(data.toString('utf8')).value;
+function observedToolCost(reply: JsonValue) {
+  const root = reply.value;
   const result = root instanceof Map ? root.get('result')?.value : undefined;
   const metadata = result instanceof Map ? result.get('_meta')?.value : undefined;
   const value = metadata instanceof Map ? metadata.get('io.opencrane/costCents') : undefined;
@@ -672,7 +676,8 @@ function observedToolCost(data: Buffer) {
   return { costStatus: 'reported' as const, costCents: cost };
 }
 
-function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefined): Buffer {
+function safeRemoteError(sent: Map<string, JsonValue>,
+  material: string | undefined): CheckedRemoteReply {
   const originalId = sent.get('id')!;
   const patterns = credentialPatterns(material);
   let requestId: unknown = null;
@@ -682,11 +687,12 @@ function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefi
   }
   const safeReply = { jsonrpc: '2.0', id: requestId,
     error: { code: -32603, message: 'Remote tool error' } };
-  return Buffer.from(JSON.stringify(safeReply));
+  const data = Buffer.from(JSON.stringify(safeReply));
+  return { data, cost: { costStatus: 'not_reported' } };
 }
 
 function requireRemoteReply(data: Buffer, contentType: string, raw: string,
-  material?: string): Buffer {
+  material?: string): CheckedRemoteReply {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
   const parsedReply = losslessJson(text);
   const reply = parsedReply.value;
@@ -712,5 +718,5 @@ function requireRemoteReply(data: Buffer, contentType: string, raw: string,
     // Return fixed error fields because the remote server may copy our bearer into them.
     return safeRemoteError(sent, material);
   }
-  return data;
+  return { data, cost: observedToolCost(parsedReply) };
 }
