@@ -1,8 +1,6 @@
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue, readPublication,
@@ -33,6 +31,7 @@ import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'jso
 import { oauthSelectionFixture, selectPersonalFixture, refreshPersonalFixture }
   from './support/oauth-selection.ts';
 import { personalRequester } from './support/personal-requester.ts';
+import { projectionReplay } from './support/projection-replay.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -1460,26 +1459,25 @@ async function verifyRestorationReplay(setup: Fixture, received = 1) {
   await setup.runner.run(mcpCatalogue);
   const before = await setup.db.query('SELECT policy FROM mcp_catalogue');
   const position = await setup.nats.store.head();
-  const execute = promisify(execFile);
   const env = { ...process.env, ...setup.nats.env('projection'),
     DATABASE_URL: setup.databaseUrl };
-  const result = await execute('npm', ['run', 'replay', '--', 'mcp-catalogue', '--verify'],
-    { env, timeout: 10_000 });
+  const verifyCatalogue = ['mcp-catalogue', '--verify'];
+  const result = await projectionReplay(env, verifyCatalogue);
   expect(result.stdout).toContain('rebuilt state matched the live projection');
   const after = await setup.db.query('SELECT policy FROM mcp_catalogue');
   expect(after.rows).toEqual(before.rows);
   await setup.runner.initialise(conversations);
   await setup.runner.run(conversations);
-  const unsupported = execute('npm', ['run', 'replay', '--', 'conversations', '--verify'],
-    { env, timeout: 10_000 });
+  const verifyConversations = ['conversations', '--verify'];
+  const unsupported = projectionReplay(env, verifyConversations);
   await expect(unsupported).rejects.toMatchObject({ code: 1 });
-  const rebuilt = await execute('npm', ['run', 'replay', '--', 'conversations',
-    '--confirm-conversations-stopped'], { env, timeout: 10_000 });
+  const rebuildConversations = ['conversations', '--confirm-conversations-stopped'];
+  const rebuilt = await projectionReplay(env, rebuildConversations);
   expect(rebuilt.stdout).toContain('PASS: conversations rebuilt');
   await setup.runner.initialise(auditTrail);
   await setup.runner.run(auditTrail);
-  const audit = await execute('npm', ['run', 'replay', '--', 'audit', '--verify'],
-    { env, timeout: 10_000 });
+  const verifyAudit = ['audit', '--verify'];
+  const audit = await projectionReplay(env, verifyAudit);
   expect(audit.stdout).toContain('rebuilt state matched the live projection');
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(received);
@@ -2520,6 +2518,19 @@ const remoteGuards = ['gateway', 'bytes', 'private', 'metadata', 'mixed', 'empty
   'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'mime', 'reply_fields',
   'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
   'deadline', 'watch_admission', 'watch_final'] as const;
+function restoreTlsIdentityClock() {
+  vi.restoreAllMocks();
+}
+
+function holdTlsIdentityClock() {
+  // Reach certificate verification without making this case a test of dispatch expiry.
+  const elapsed = performance.now();
+  const wall = Date.now();
+  vi.spyOn(performance, 'now').mockReturnValue(elapsed);
+  vi.spyOn(Date, 'now').mockReturnValue(wall);
+  onTestFinished(restoreTlsIdentityClock);
+}
+
 async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
   const context = await publishedFixture('allow', true, mode !== 'undeclared');
@@ -2601,6 +2612,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       'x-opencrane-mcp-permit': value };
     const request = { method: 'POST', headers: canaries, body: raw };
     const beforeSend = performance.now();
+    if (mode === 'wrong_name') holdTlsIdentityClock();
     const sending = fetch(`${setup.options.decisionUrl}/dispatch/mcp/fixture/installed`, request);
     try {
       if (mode === 'held_start') {
