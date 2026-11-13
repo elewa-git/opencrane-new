@@ -6,6 +6,7 @@ A tool server for synthetic demo quotes with optional credential checks.
 It uses [MCP](../../GLOSSARY.md#mcp-server-tool-server), the tool protocol.
 It offers a made-up quote and lets a caller change its delivery slot. Its default mode
 needs no credentials. An optional mode checks caller-supplied test keys and account rights.
+Each of its two accounts can be allowed or refused independently.
 
 ## Where it fits
 

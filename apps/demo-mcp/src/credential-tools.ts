@@ -3,12 +3,10 @@ import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogue, changeArguments, createFixture, readArguments } from './tools.ts';
 
-export const demoAccountsSchema = z.tuple([
-  z.strictObject({ account: z.string().min(1).max(100), key: z.string().min(1),
-    permitted: z.literal(true) }),
-  z.strictObject({ account: z.string().min(1).max(100), key: z.string().min(1),
-    permitted: z.literal(false) }),
-]);
+const demoAccountSchema = z.strictObject({
+  account: z.string().min(1).max(100), key: z.string().min(1), permitted: z.boolean(),
+});
+export const demoAccountsSchema = z.tuple([demoAccountSchema, demoAccountSchema]);
 export interface DemoCredentials {
   accounts: Readonly<z.infer<typeof demoAccountsSchema>>;
 }

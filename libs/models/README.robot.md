@@ -5003,7 +5003,9 @@ Fresh-install and production Kubernetes qualification: NOT RUN.
 ## Private single-request credential broker (Part of #49)
 
 `credential-broker.ts` has no public export or route. It takes authenticated request
-context and reads the exact saved allowed decision. Ownership, selected profile,
+context and reads the exact saved allowed decision. Concurrent requests on one server
+keep separate personal selections, custody reads and release audits, including when
+their dispatch admissions overlap. Ownership, selected profile,
 verified account, generation and scopes come from saved records. The existing
 selection check validates current configuration and tool scopes. The personal broker
 still refuses company releases. The separate company audit check verifies its frozen
