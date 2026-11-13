@@ -23,3 +23,14 @@ Workspace slice runner: NOT RUN after all three failed fresh starts.
 All six workspace acceptance steps: NOT RUN at 1280px and 390px.
 No budget-editor status record or failure screenshot was produced on the final run.
 Private paths and credentials are excluded from this public diagnostic.
+
+Startup diagnosis, 13 November 2026: fresh start and full core journey PASS on
+both origin/main and PR head 2a479ed0ac84f37c3d9d7ffefcf54a7ef1c7ef13 at low
+load. See diagnosis.md for timings and core evidence.
+
+Fresh slice attempt on PR head 2a479ed0ac84f37c3d9d7ffefcf54a7ef1c7ef13:
+one-minute load 9.31 before claim; claim succeeded. `up.sh --fresh` returned
+exit 1 during `zitadel-setup.ts`, which reported failure without a provider
+response. Private launcher logs were retained before cleanup. `down.sh` returned
+exit 0. The core and workspace journeys did not run on this attempt. The failure
+was not the Spending budget-editor failure. No product code changed.
