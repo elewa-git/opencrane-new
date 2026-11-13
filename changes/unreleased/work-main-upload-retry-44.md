@@ -6,3 +6,5 @@ Fleet tasks can start and check claimed secondary stacks with the stand-in model
 owner automation and fleet use of real providers remain refused.
 The core audit journey checks Change history category selection and safe-reference
 search with keyboard support, retaining private-content and permission refusals.
+Upload touch-target checks wait for the menu opening animation to finish before
+measuring its full size.

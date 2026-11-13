@@ -67,7 +67,8 @@ available for diagnosis.
   A disposable computer test can keep one synthetic private tool reply open while
   the process checker measures the proxy.
 - Runs browser checks for chat, files, people, groups, shared assistants and spending.
-  Checks money in admin Change history and keeps it out of member action history.
+  Checks category selection and reference search in admin Change history.
+  Checks money there and keeps it out of member action history.
   Scrolls waiting approvals into view before saving desktop and phone pictures.
   Saves a private picture if the spending editor fails to load.
 - Checks ownership handover and refuses a last owner’s departure in manual named journeys.

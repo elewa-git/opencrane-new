@@ -1178,6 +1178,10 @@ restores usable group and assistant ceilings before the next plain startup.
 It also sets the daily safety cap to 5,000 cents through the owner UI, retaining
 unconfirmed Stop reservations while leaving enough headroom for the repeat run.
 
+Upload target measurements wait for finite animations on a control and its ancestors
+to finish. Playwright actionability can accept subpixel movement before a menu
+transform has ended. The 44 px assertion still rejects permanently smaller controls.
+
 Secondary journeys also read each member's completed stub turn in Action history,
 with the permission decision and observed outcome shown separately. The owner reads
 safe organisation changes; another joined member is refused private history, and

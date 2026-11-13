@@ -1,18 +1,11 @@
 import assert from 'node:assert/strict';
 import { sendUploadedMessage } from '../infra/dev-stack/browser-upload-message.ts';
+import { assertTouchTarget } from '../infra/dev-stack/browser-target.ts';
 import { waitForUpload } from '../infra/dev-stack/browser-upload-status.ts';
 import { mkdir } from 'node:fs/promises';
 
 const emptyFiles = { contentType: 'application/json', body: '{"rows":[]}' };
 const detached = { state: 'detached' };
-
-async function assertTouchTarget(control, width) {
-  await control.click({ trial: true });
-  const box = await control.boundingBox();
-  const name = await control.innerText();
-  assert(box && box.width >= 44 && box.height >= 44,
-    `${name} at ${width}px must be at least 44 × 44px; got ${box?.width} × ${box?.height}`);
-}
 
 export async function checkAttachmentTargets(page, width) {
   const filesPattern = '**/api/conversations/chat/files';
@@ -34,9 +27,9 @@ export async function checkAttachmentTargets(page, width) {
   await fileChooser.setFiles(file);
   const retry = page.getByRole('button', { name: 'Retry upload', exact: true });
   await retry.waitFor();
-  await assertTouchTarget(retry, width);
+  await assertTouchTarget(retry);
   const remove = page.getByRole('button', { name: 'Remove notes.txt', exact: true });
-  await assertTouchTarget(remove, width);
+  await assertTouchTarget(remove);
   await mkdir('docs/process/main-upload-retry-44', { recursive: true });
   const screenshot = {
     path: `docs/process/main-upload-retry-44/retry-${width}.png`, fullPage: true,
@@ -54,7 +47,7 @@ export async function checkAttachmentTargets(page, width) {
     const progress = page.getByRole('progressbar', { name: 'notes.txt upload progress' });
     await progress.waitFor();
     // Remove is also the shipped cancellation control while an upload is in progress.
-    await assertTouchTarget(remove, width);
+    await assertTouchTarget(remove);
     await remove.click();
     const attachments = page.getByRole('list', { name: 'Attachments', exact: true });
     await attachments.waitFor(detached);
@@ -104,11 +97,11 @@ export async function checkUploadStatusFlow(page, fixture) {
   const ready = { name: 'ready.txt', mimeType: 'text/plain',
     buffer: Buffer.from('Ready fixture') };
   await input.setInputFiles(ready);
-  const retries = await waitForUpload(page, 'ready.txt', checkTarget);
+  const retries = await waitForUpload(page, 'ready.txt', assertTouchTarget);
   assert.equal(retries, 1);
   assert.equal(requestKeys.length, 2);
   assert.equal(requestKeys[0], requestKeys[1], 'Retry keeps the original request key');
-  const refusedRetries = await waitForUpload(page, 'refused.txt', checkTarget,
+  const refusedRetries = await waitForUpload(page, 'refused.txt', assertTouchTarget,
     'File refused: malware detected.');
   assert.equal(refusedRetries, 0);
   const delivery = { fileId: 'ready-file' };
@@ -118,15 +111,9 @@ export async function checkUploadStatusFlow(page, fixture) {
     buffer: Buffer.from('MZbinary') };
   await input.setInputFiles(unsupported);
   const refusal = 'This file type is not supported. Try a supported document, image or text file.';
-  const unsupportedRetries = await waitForUpload(page, 'program.exe', checkTarget, refusal);
+  const unsupportedRetries = await waitForUpload(page, 'program.exe', assertTouchTarget, refusal);
   assert.equal(unsupportedRetries, 0);
   await page.unroute(filesPattern, uploadReply);
-}
-
-async function checkTarget(control) {
-  const page = control.page();
-  const viewport = page.viewportSize();
-  await assertTouchTarget(control, viewport.width);
 }
 
 async function checkSendCompletion(page, fixture) {

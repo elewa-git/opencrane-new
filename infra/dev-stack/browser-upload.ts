@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page, Locator } from 'playwright';
 import { sendUploadedMessage } from './browser-upload-message.ts';
+import { assertTouchTarget } from './browser-target.ts';
 import { waitForUpload } from './browser-upload-status.ts';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 
@@ -12,9 +13,7 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   const width = page.viewportSize()!.width;
   const target = async (locator: Locator) => {
     if (width !== 390) return;
-    // Wait for the menu's opening animation before measuring its usable size.
-    await locator.click({ trial: true });
-    const box = await locator.boundingBox(); assert(box && box.width >= 44 && box.height >= 44, 'Touch target is at least 44px');
+    await assertTouchTarget(locator);
   };
   await page.keyboard.press('Control+n');
   await page.getByText('Draft', { exact: true }).waitFor();
@@ -68,8 +67,12 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     'The project code is Willow-47.');
   const conversation = new URL(page.url()).searchParams.get('conversation'); assert(conversation);
   const filesUrl = `${origin}/api/conversations/${conversation}/files`;
-  const list = await (await page.request.get(filesUrl)).json() as { rows: Array<{ textPath: string }> };
-  assert.equal(list.rows.length, 1);
+  const files = await readFileRows(page, filesUrl);
+  assert.equal(files.length, 1);
+  const pdf = files[0];
+  assert(pdf && typeof pdf === 'object' && 'textPath' in pdf);
+  assert.equal(typeof pdf.textPath, 'string');
+  const textPath = String(pdf.textPath);
   await page.locator('.transcript .file-card').filter({ hasText: 'project.pdf' }).waitFor();
   if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
   const panel = width === 390
@@ -96,7 +99,7 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     assert(Date.now() < renderedBy, 'Native PDF viewer did not render its first page'); await delay(100);
   }
 
-  const original = await page.request.get(`${filesUrl}/view?path=${encodeURIComponent(list.rows[0]!.textPath.slice(0, -3))}`);
+  const original = await page.request.get(`${filesUrl}/view?path=${encodeURIComponent(textPath.slice(0, -3))}`);
   assert.equal(original.headers()['content-type'], 'application/pdf');
   assert((await original.body()).equals(uploadPdf()), 'Preview/download are the promoted original');
   if (width === 390) {
@@ -141,9 +144,25 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     await openPreview(openFile);
     preview = page.getByRole('dialog', { name: file.name, exact: true });
     if (file.name.endsWith('.txt')) assert.equal(await preview.locator('pre').innerText(), file.buffer.toString());
-    else assert(await preview.locator('img').evaluate(async img => { await (img as HTMLImageElement).decode(); return (img as HTMLImageElement).naturalWidth > 0; }));
+    else assert(await preview.locator('img').evaluate(imageDecoded));
     await preview.getByRole('button', { name: 'Close preview', exact: true }).click();
   }
-  assert.equal(((await (await page.request.get(filesUrl)).json()) as { rows: unknown[] }).rows.length, 3, 'Refused files never appear');
+  const savedFiles = await readFileRows(page, filesUrl);
+  assert.equal(savedFiles.length, 3, 'Refused files never appear');
   console.log(`PASS browser upload ${width}px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; ${retries} upload retries, ${previewRetries} preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots`);
+}
+
+async function readFileRows(page: Page, url: string): Promise<unknown[]> {
+  const response = await page.request.get(url);
+  assert.equal(response.status(), 200);
+  const body: unknown = await response.json();
+  assert(body && typeof body === 'object' && 'rows' in body && Array.isArray(body.rows));
+  const rows: unknown[] = body.rows;
+  return rows;
+}
+
+async function imageDecoded(image: Element) {
+  if (!(image instanceof HTMLImageElement)) throw new Error('Expected an image preview');
+  await image.decode();
+  return image.naturalWidth > 0;
 }
