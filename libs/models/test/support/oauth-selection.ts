@@ -20,6 +20,23 @@ function choice(tool: ReturnType<typeof declaration>) {
     reviewDigest: toolReviewDigest(tool), mode: 'allow' };
 }
 
+export async function selectPersonalFixture(nats: Awaited<ReturnType<typeof natsFixture>>,
+  saved: Awaited<ReturnType<typeof oauthSelectionFixture>>) {
+  const { userId, serverId, profile: profileId } = saved.fields;
+  const subject = `connection-selection-${userId}-${serverId}`;
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', subject, 'choice']));
+  const selected = envelope('test', subject, 'connection.selected', {
+    action: 'select', userId, serverId, connectionId: 'installed', profileId,
+    profileRevision: saved.revision, expectedSequence: 0,
+  }, hash.digest('hex'));
+  selected.source = 'opencrane-server';
+  selected.principal = { kind: 'human', id: userId };
+  selected.commandId = 'choice';
+  await nats.seed([selected]);
+  return nats.store.head(subject);
+}
+
 export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof natsFixture>>,
   userId: string, serverId: string, profileId = 'oauth',
   stageMaterial?: (stage: ConnectionStage) => ReturnType<ReturnType<typeof connectionCustody>['stage']>,

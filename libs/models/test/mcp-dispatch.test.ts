@@ -30,8 +30,8 @@ import { decideApproval, history, ingestUsage, priceTableId, readApproval, readT
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
-import { oauthSelectionFixture } from './support/oauth-selection.ts';
-import { createHash } from 'node:crypto';
+import { oauthSelectionFixture, selectPersonalFixture } from './support/oauth-selection.ts';
+import { personalRequester } from './support/personal-requester.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 const review = { action: 'Write note', consequence: 'The order note changes.',
@@ -2702,18 +2702,7 @@ async function selectedPersonalFixture(mode: 'allow' | 'ask' | 'block' = 'allow'
   const saved = await oauthSelectionFixture(setup.nats, 'alice', 'fixture',
     'alice-profile', stageMaterial, { locator: 'https://mcp.example.test/mcp',
       grantedScopes: ['openid', 'write'] });
-  const subject = 'connection-selection-alice-fixture';
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(['test', subject, 'choice']));
-  const selected = envelope('test', subject, 'connection.selected', {
-    action: 'select', userId: 'alice', serverId: 'fixture',
-    connectionId: 'installed', profileId: 'alice-profile',
-    profileRevision: saved.revision, expectedSequence: 0,
-  }, hash.digest('hex'));
-  selected.source = 'opencrane-server';
-  selected.principal = { kind: 'human', id: 'alice' };
-  selected.commandId = 'choice';
-  await setup.nats.seed([selected]);
+  const selectionRevision = await selectPersonalFixture(setup.nats, saved);
   let materialReads = 0;
   function readAccessMaterial() {
     materialReads += 1;
@@ -2726,7 +2715,6 @@ async function selectedPersonalFixture(mode: 'allow' | 'ask' | 'block' = 'allow'
     db: setup.db, custody: { readAccessMaterial },
     loadConfiguration: saved.loadConfiguration,
   };
-  const selectionRevision = await setup.nats.store.head(subject);
   const claims = { ...setup.t, thread: context.headers['session-id'], turn: 'dispatch',
     personalSelections: [{ serverId: 'fixture', profileId: 'alice-profile',
       selectionRevision }] };
@@ -2840,7 +2828,7 @@ async function refusesForgottenLoadedMemoryAfterPermit() {
 it('refuses a personal permit after loaded memory is forgotten',
   refusesForgottenLoadedMemoryAfterPermit, 60_000);
 
-const personalChanges = ['cleared choice', 'revoked profile', 'admin block',
+const personalChanges = ['cleared choice', 'revoked profile', 'rotated profile', 'admin block',
   'changed review', 'expired permit', 'lost release audit', 'closed turn',
   'computer rotation', 'turn takeover', 'new Ask message'] as const;
 async function refusesChangedPersonalCall(change: typeof personalChanges[number]) {
@@ -2864,6 +2852,16 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
       userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
       revokedBy: 'alice', expectedSequence: saved.revision, reason: 'owner_requested',
     });
+  } else if (change === 'rotated profile') {
+    const { activation } = saved.saved;
+    const replacement = { ...saved.saved, secretRef: 'secret:replacement', activation: {
+      connectionId: activation.connectionId, ownerKind: activation.ownerKind,
+      purpose: activation.purpose, generation: 2, uid: 'replacement', resourceVersion: '2',
+      endpointDigest: activation.endpointDigest, operationId: 'replacement',
+      changedBy: 'alice', expectedSequence: saved.revision,
+      appendUntil: activation.appendUntil, reason: 'bearer_rotation',
+    } };
+    await setup.append(saved.subject, 'connection.refreshed', replacement);
   } else if (change === 'admin block') {
     await setup.append('connection-control-alice-fixture', 'connection.disabled', {
       userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
@@ -2875,8 +2873,11 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
       toolRevision: tool.revision, mode: 'block', setBy: 'alice',
     });
   } else if (change === 'expired permit') {
-    const current = Date.now();
-    vi.spyOn(Date, 'now').mockReturnValue(current + 31_000);
+    const encoded = value.split('.')[0]!;
+    const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+    const lease = z.object({ expiresAt: z.number() }).parse(decoded);
+    expect(lease.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
+    vi.spyOn(Date, 'now').mockReturnValue(lease.expiresAt);
   } else if (change === 'closed turn') {
     await setup.append('computer-assistant', 'computer.turn_closed', {
       assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
@@ -3120,6 +3121,139 @@ async function ignoresForgedProfileArgument() {
 }
 it('treats a profile-shaped tool argument as data and keeps Alice’s selection',
   ignoresForgedProfileArgument, 60_000);
+
+async function personalPair() {
+  const context = await selectedPersonalFixture();
+  const { setup } = context;
+  const bob = await personalRequester(setup, body, context.headers);
+  const dispatch = setup.dispatchOptions.credentialDispatch!;
+  const readOriginal = dispatch.custody.readAccessMaterial;
+  const reads: string[] = [];
+  const readAccessMaterial: typeof readOriginal = async function readAccessMaterial(stage) {
+    reads.push(stage.userId);
+    if (stage.userId === 'bob') return 'bob-access';
+    return readOriginal(stage, { reference: 'alice-secret', uid: 'alice-uid',
+      resourceVersion: '1' });
+  };
+  dispatch.custody = { readAccessMaterial };
+  return { ...context, bob, reads };
+}
+
+async function concurrentPersonalTurns() {
+  const { setup, remote, headers, bob, reads } = await personalPair();
+  const alicePermit = await permit(setup, headers);
+  const bobPermit = await permit(setup, bob.headers, bob.body);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let attempts = 0;
+  async function overlapAdmissions(command: AppendCommand) {
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'mcp.dispatch_admitted') {
+      attempts += 1;
+      if (attempts === 2) bothReady.resolve();
+      await bothReady.promise;
+    }
+    return append(command);
+  }
+  const delayed = vi.spyOn(setup.nats.store, 'append').mockImplementation(overlapAdmissions);
+  try {
+    const responses = await Promise.all([
+      send(setup, alicePermit), send(setup, bobPermit, bob.body),
+    ]);
+    for (const response of responses) expect(response.status, await response.text()).toBe(200);
+    expect(reads.toSorted()).toEqual(['alice', 'bob']);
+    expect(remote.received).toHaveLength(2);
+    for (const received of remote.received) {
+      const raw = received.raw.toString();
+      const expected = raw === bob.body ? 'Bearer bob-access' : 'Bearer alice-access';
+      expect(received.headers.authorization).toBe(expected);
+    }
+    for (const [value, userId, assistantId] of [
+      [alicePermit, 'alice', 'assistant'], [bobPermit, 'bob', 'bob-assistant'],
+    ]) {
+      const requestId = requestFromPermit(value!);
+      const rows = await history(setup.nats.store, `credential-${requestId}`, 'test');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.event.data).toMatchObject({ userId, ownerId: userId, assistantId });
+    }
+    expect((await send(setup, alicePermit)).status).toBe(403);
+    expect((await send(setup, bobPermit, bob.body)).status).toBe(403);
+    expect(remote.received).toHaveLength(2);
+  } finally {
+    bothReady.resolve();
+    delayed.mockRestore();
+  }
+}
+it('races two personal assistants on one server without mixing credentials',
+  concurrentPersonalTurns, 60_000);
+
+async function foreignPersonalLease() {
+  const { setup, remote, headers, bob, reads } = await personalPair();
+  const alicePermit = await permit(setup, headers);
+  expect((await send(setup, alicePermit, bob.body)).status).toBe(403);
+  expect((await send(setup, alicePermit)).status).toBe(403);
+  expect(reads).toEqual([]);
+  expect(remote.received).toHaveLength(0);
+}
+it('burns a personal lease used with another person’s request', foreignPersonalLease, 60_000);
+
+async function revokedDuringMaterialRead() {
+  const { setup, remote, headers, bob, saved } = await personalPair();
+  const alicePermit = await permit(setup, headers);
+  const bobPermit = await permit(setup, bob.headers, bob.body);
+  const custody = setup.dispatchOptions.credentialDispatch!.custody;
+  const read = custody.readAccessMaterial;
+  const readAccessMaterial: typeof read = async function readAccessMaterial(stage, identity, format) {
+    if (stage.userId === 'alice') {
+      await setup.append(saved.subject, 'connection.revoked', {
+        userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
+        revokedBy: 'alice', expectedSequence: saved.revision, reason: 'owner_requested',
+      });
+    }
+    return read(stage, identity, format);
+  };
+  custody.readAccessMaterial = readAccessMaterial;
+  expect((await send(setup, alicePermit)).status).toBe(403);
+  expect((await send(setup, bobPermit, bob.body)).status).toBe(200);
+  expect(remote.received).toHaveLength(1);
+  expect(remote.received[0]!.headers.authorization).toBe('Bearer bob-access');
+}
+it('refuses a key revoked during release while the other person can still call',
+  revokedDuringMaterialRead, 60_000);
+
+async function anotherAccountArgument() {
+  const { setup, remote, headers } = await personalPair();
+  const raw = body.replace('"arguments":{',
+    '"arguments":{"account":"bob","userId":"bob","profileId":"bob-profile",');
+  const value = await permit(setup, headers, raw);
+  expect((await send(setup, value, raw)).status).toBe(200);
+  expect(remote.received).toHaveLength(1);
+  expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
+}
+it('cannot select Bob’s existing key through Alice’s tool arguments',
+  anotherAccountArgument, 60_000);
+
+async function noPersonalFallback() {
+  const { setup, remote, headers, bob } = await personalPair();
+  const subject = 'connection-selection-bob-fixture';
+  const expectedSequence = await setup.nats.store.head(subject);
+  await setup.append(subject, 'connection.selected', {
+    action: 'clear', userId: 'bob', serverId: 'fixture', connectionId: 'installed',
+    expectedSequence,
+  });
+  const raw = bob.body.replace('"arguments":{',
+    '"arguments":{"account":"alice","profileId":"alice-profile",');
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    { method: 'POST', headers: bob.headers, body: raw });
+  expect(response.status).toBe(403);
+  expect(remote.received).toHaveLength(0);
+  const value = await permit(setup, headers);
+  expect((await send(setup, value)).status).toBe(200);
+  expect(remote.received).toHaveLength(1);
+  expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
+}
+it('refuses a missing selection instead of falling back to another saved account',
+  noPersonalFallback, 60_000);
 
 async function remoteOutcomeFixture() {
   const context = await publishedFixture('allow', true);

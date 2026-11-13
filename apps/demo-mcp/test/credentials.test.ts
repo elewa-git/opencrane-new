@@ -11,7 +11,8 @@ const server = createDemoServer(undefined, { accounts });
 const version = '2026-07-28';
 let revision = '';
 
-async function request(method: string, name?: string, args?: unknown, key?: string) {
+async function request(method: string, name?: string, args?: unknown, key?: string,
+  target = server) {
   const headers: Record<string, string> = {
     'mcp-protocol-version': version, 'mcp-method': method,
     'mcp-name': name ?? '', 'x-opencrane-mcp-revision': revision,
@@ -19,19 +20,22 @@ async function request(method: string, name?: string, args?: unknown, key?: stri
   if (key) headers['authorization'] = `Bearer ${key}`;
   const params = { _meta: { 'io.modelcontextprotocol/protocolVersion': version },
     name, arguments: args };
-  const response = await server.inject({ method: 'POST', url: '/', headers,
+  const response = await target.inject({ method: 'POST', url: '/', headers,
     payload: { jsonrpc: '2.0', id: 'request', method, params } });
   return response.json<{
     result?: { isError: boolean; structuredContent: Record<string, unknown> };
     error?: { message: string };
   }>();
 }
-async function inventory(method: 'server/discover' | 'tools/list') {
-  const response = await request(method);
+async function inventory(method: 'server/discover' | 'tools/list', target = server) {
+  const response = await request(method, undefined, undefined, undefined, target);
   return JSON.stringify(response.result);
 }
-async function prepare() {
-  const discovered = await discoverInventory(inventory);
+async function prepare(target = server) {
+  function discover(method: 'server/discover' | 'tools/list') {
+    return inventory(method, target);
+  }
+  const discovered = await discoverInventory(discover);
   expect(discovered.rejectedTools).toEqual([]);
   expect(discovered.tools).toHaveLength(3);
   revision = discovered.schemaDigest;
@@ -76,7 +80,7 @@ async function concurrentPermittedAccounts() {
   ] as const;
   const concurrent = createDemoServer(undefined, { accounts: permittedAccounts });
   try {
-    await prepare();
+    await prepare(concurrent);
     function readAs(account: typeof permittedAccounts[number]) {
       const headers = {
         authorization: `Bearer ${account.key}`,

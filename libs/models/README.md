@@ -139,7 +139,9 @@ For a personal API key, an admin names a reviewed read-only tool that checks the
 account. It refuses account replies that copy the key, including encoded text.
 The member can then verify and explicitly select their key in My tools.
 A changed account blocks the replacement. Every tool call still checks current access
-and records its credential release before forwarding.
+and records its credential release before forwarding. Concurrent personal assistants
+use their requesters' selected keys. Tool arguments cannot choose another account,
+and a revoked key is refused before the next release.
 The result stays unconfirmed until an explicit internal confirmation saves the first account
 generation. That save grants no tool access.
 Public routes remain unavailable.
