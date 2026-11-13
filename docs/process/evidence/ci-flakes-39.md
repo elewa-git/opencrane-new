@@ -1,6 +1,6 @@
 # Approval evidence deadline arithmetic
 
-Journey on a fresh dev stack: NOT RUN (core journey)
+Journey on a fresh dev stack: PASS (2026-11-13; head `33a5cdd11dd32c474d1b5a3249fd71ad54f7b6cb`; secondary stack 1; [390px chat](ci-flakes-39/workspace-390.png), [1280px chat](ci-flakes-39/workspace-1280.png), [390px upload](ci-flakes-39/upload-390.png), [1280px upload](ci-flakes-39/upload-1280.png))
 
 ## Source and environment
 
@@ -80,23 +80,29 @@ The test loop stops on the first failure. Per-run logs are
 
 ## Fresh stack
 
-FAIL: one secondary `up.sh --fresh` attempt exited 1 after the development
-bootstrap, provider setup and website readiness checks. The website became ready
-in 42,005 ms. The runner returned its generic startup failure message.
+2026-11-13, rebased head `33a5cdd11dd32c474d1b5a3249fd71ad54f7b6cb`, Linux x86-64.
+Claimed secondary stack 1 with `infra/dev-stack/claim.sh`; left
+`OPENCRANE_FLEET_TASK` intact and used the stand-in model. Set
+`ZITADEL_KEY_FILE` to the existing credential path.
 
-NOT RUN: the core journey. This task has `OPENCRANE_FLEET_TASK` set, and
-`requireAutomatedJourney` refuses that environment even on a claimed secondary.
-A direct guard check with a secondary id returned
-`Automated journeys require a secondary stack and no fleet task`. The startup
-path invokes that guard after website readiness. No journey PASS is claimed.
+PASS: `infra/dev-stack/up.sh --fresh` completed on the fresh stack and ran the
+full core journey. Sign-in, access refusals, member and assistant grants, browser
+upload/chat/live view at 390px and 1280px, audit, budgets, replay and token boundary
+checks passed. Browser upload used its expected single transport retry and did not
+duplicate files. The complete startup and core journey log is
+`/tmp/ci-flakes-39-up-rebased.log` on the builder host.
 
-PASS: the exit handler ran `down.sh` successfully (exit 0), releasing the claimed
-secondary slot. No owner-stack command was used. Teardown removed the private
-stack directory, so its detailed failure files are unavailable. Retained wrapper
-logs are `/tmp/ci-flakes-39-journey.log` and `/tmp/ci-flakes-39-down.log` on the
-builder host. No second fresh-start attempt or guard bypass was made.
+PASS: `infra/dev-stack/journey.sh` completed the standalone core journey on that
+fresh stack, including the repeat checks. It exited 0. Teardown with
+`infra/dev-stack/down.sh` exited 0 and released the slot. Its log is
+`/tmp/ci-flakes-39-journey-rebased.log`; the teardown log is
+`/tmp/ci-flakes-39-down-rebased.log` on the builder host.
+
+Screenshots retained with this receipt: [390px chat](ci-flakes-39/workspace-390.png),
+[1280px chat](ci-flakes-39/workspace-1280.png), [390px upload](ci-flakes-39/upload-390.png),
+and [1280px upload](ci-flakes-39/upload-1280.png). No product behaviour changed.
 
 ## Remaining checks
 
-NOT RUN: full root suite, separate web build/tests and hosted CI. This repair changes
-only test arithmetic. The draft PR does not claim that main has become green.
+NOT RUN: full root suite and separate web build/tests. This repair changes only test
+arithmetic. Hosted CI is awaited on the rebased head.
