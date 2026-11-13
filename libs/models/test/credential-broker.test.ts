@@ -12,7 +12,7 @@ import { authorityFence } from '../src/authority.ts';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
 import { credentialBroker } from '../src/credential-broker.ts';
 import { MemberAccessRefused } from '../src/member-authority.ts';
-import { oauthSelectionFixture } from './support/oauth-selection.ts';
+import { oauthSelectionFixture, selectPersonalFixture } from './support/oauth-selection.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;
@@ -77,15 +77,8 @@ async function fixture(settings: { serverId?: string; secrets?: Map<string, stri
     return custody.stage(input, contents);
   }
   const saved = await oauthSelectionFixture(nats, userId, serverId, profileId, stageMaterial);
-  const selected = { action: 'select', userId, serverId, connectionId: 'installed',
-    profileId, profileRevision: saved.revision, expectedSequence: 0 };
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
-  const selection = envelope('test', selectionSubject, 'connection.selected', selected,
-    digest(['test', selectionSubject, 'choice']));
-  selection.source = 'opencrane-server';
-  selection.principal = { kind: 'human', id: userId };
-  selection.commandId = 'choice';
-  await nats.seed([selection]);
+  const selectionRevision = await selectPersonalFixture(nats, saved);
   const issuedAt = Date.now();
   const release = { userId, ownerId: userId, serverId, ownerKind: 'personal' as const,
     purpose: 'tool_call' as const, assistantId: 'assistant', computerId: 'computer',
@@ -93,7 +86,7 @@ async function fixture(settings: { serverId?: string; secrets?: Map<string, stri
     toolName: 'read', generation: 1, argumentsDigest: 'a'.repeat(64),
     requestId: userId, permitId: userId, leaseId: userId, profileId,
     connectionId: 'installed', profileRevision: saved.revision,
-    selectionRevision: await nats.store.head(selectionSubject),
+    selectionRevision,
     policyRevision: saved.configuration.policyRevision,
     accountDigest: digest(saved.saved.activation.account),
     scopeDigest: digest(saved.saved.activation.account.scopes), issuedAt, expiresAt: issuedAt + 30_000 };

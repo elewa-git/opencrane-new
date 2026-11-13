@@ -2828,6 +2828,19 @@ async function refusesForgottenLoadedMemoryAfterPermit() {
 it('refuses a personal permit after loaded memory is forgotten',
   refusesForgottenLoadedMemoryAfterPermit, 60_000);
 
+async function rotatePersonalFixture(setup: Fixture,
+  saved: Awaited<ReturnType<typeof oauthSelectionFixture>>) {
+  const { activation } = saved.saved;
+  const replacement = { ...saved.saved, secretRef: 'secret:replacement', activation: {
+    connectionId: activation.connectionId, ownerKind: activation.ownerKind,
+    purpose: activation.purpose, generation: 2, uid: 'replacement', resourceVersion: '2',
+    endpointDigest: activation.endpointDigest, operationId: 'replacement',
+    changedBy: 'alice', expectedSequence: saved.revision,
+    appendUntil: activation.appendUntil, reason: 'bearer_rotation',
+  } };
+  await setup.append(saved.subject, 'connection.refreshed', replacement);
+}
+
 const personalChanges = ['cleared choice', 'revoked profile', 'rotated profile', 'admin block',
   'changed review', 'expired permit', 'lost release audit', 'closed turn',
   'computer rotation', 'turn takeover', 'new Ask message'] as const;
@@ -2853,15 +2866,7 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
       revokedBy: 'alice', expectedSequence: saved.revision, reason: 'owner_requested',
     });
   } else if (change === 'rotated profile') {
-    const { activation } = saved.saved;
-    const replacement = { ...saved.saved, secretRef: 'secret:replacement', activation: {
-      connectionId: activation.connectionId, ownerKind: activation.ownerKind,
-      purpose: activation.purpose, generation: 2, uid: 'replacement', resourceVersion: '2',
-      endpointDigest: activation.endpointDigest, operationId: 'replacement',
-      changedBy: 'alice', expectedSequence: saved.revision,
-      appendUntil: activation.appendUntil, reason: 'bearer_rotation',
-    } };
-    await setup.append(saved.subject, 'connection.refreshed', replacement);
+    await rotatePersonalFixture(setup, saved);
   } else if (change === 'admin block') {
     await setup.append('connection-control-alice-fixture', 'connection.disabled', {
       userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
@@ -3155,7 +3160,8 @@ async function concurrentPersonalTurns() {
     }
     return append(command);
   }
-  const delayed = vi.spyOn(setup.nats.store, 'append').mockImplementation(overlapAdmissions);
+  const delayed = vi.spyOn(setup.nats.store, 'append');
+  delayed.mockImplementation(overlapAdmissions);
   try {
     const responses = await Promise.all([
       send(setup, alicePermit), send(setup, bobPermit, bob.body),
