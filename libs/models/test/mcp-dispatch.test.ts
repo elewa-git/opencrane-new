@@ -3209,22 +3209,16 @@ async function concurrentReceiptWork() {
   const bobPermit = await permit(setup, bob.headers, bob.body);
   const auth = memberAuthorisation(setup.binding);
   const checkApplied = auth.checkApplied.bind(auth);
-  const now = performance.now.bind(performance);
-  let receiptWorkMs = 0;
   async function readApplied(eventId: string) {
     const result = await checkApplied(eventId);
-    receiptWorkMs += 70;
+    await pause(400);
     return result;
-  }
-  function currentTime() {
-    return now() + receiptWorkMs;
   }
   function restoreChecks() {
     vi.restoreAllMocks();
   }
   onTestFinished(restoreChecks);
   vi.spyOn(auth, 'checkApplied').mockImplementation(readApplied);
-  vi.spyOn(performance, 'now').mockImplementation(currentTime);
   const responses = await Promise.all([
     send(setup, alicePermit), send(setup, bobPermit, bob.body),
   ]);
@@ -3288,7 +3282,8 @@ async function unavailablePermissionDuringRelease() {
     return material;
   };
   const checkUse: typeof auth.use = async function checkUse(...args) {
-    if (unavailable) return { allowed: false, status: 'unavailable' };
+    if (unavailable) return { allowed: false, status: 'unavailable',
+      error: new Error('Permission service unavailable') };
     return use(...args);
   };
   function restoreChecks() {
