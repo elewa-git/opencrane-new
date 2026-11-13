@@ -14,7 +14,7 @@ async function measuresFinishedTarget() {
         0%, 99% { transform: scale(.999); }
         100% { transform: none; }
       }
-      nav { animation: opening 380ms linear; transform-origin: top left; }
+      nav { animation: opening 380ms linear paused; transform-origin: top left; }
       button { box-sizing: border-box; width: 100px; height: 44px; }
     </style><nav><button>Upload from computer</button></nav>`);
     const upload = page.getByRole('button', { name: 'Upload from computer', exact: true });

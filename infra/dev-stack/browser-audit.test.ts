@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { test } from 'node:test';
-import { request, type Page } from 'playwright';
+import { request } from 'playwright';
 import { assertAuditMoney, assertPublishedAudit } from './browser-audit.ts';
 import type { AuditRow } from '@opencrane/protocol';
 
@@ -20,23 +20,33 @@ async function checksAdminMoney() {
     { row: { ...adminRow, permitId: 'another-permit' }, passes: false },
     { row: { ...adminRow, requesterId: 'another-member' }, passes: false },
   ];
-  for (const example of cases) {
-    async function get(url: string) {
-      assert.equal(url, 'https://audit.test/api/org/history?requestId=request');
-      return {
-        status: () => 200,
-        json: async () => ({ rows: [example.row] }),
-      };
+  let current = cases[0]!;
+  function handle(incoming: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse) {
+    incoming.resume();
+    assert.equal(incoming.url, '/api/org/history?requestId=request');
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ rows: [current.row] }));
+  }
+  const server = createServer(handle);
+  const origin = await listen(server);
+  const client = await request.newContext();
+  const owner = { request: client };
+  try {
+    for (const example of cases) {
+      current = example;
+      async function check() {
+        await assertAuditMoney(owner, origin, memberRow);
+      }
+      if (example.passes) await check();
+      else await assert.rejects(check);
     }
-    const owner = { request: { get } } as unknown as Page;
-    async function check() {
-      await assertAuditMoney(owner, 'https://audit.test', memberRow);
-    }
-    if (example.passes) await check();
-    else await assert.rejects(check);
+  } finally {
+    await client.dispose();
+    await closeServer(server);
   }
 }
-test('checks the same call’s integer money amounts only in admin Change history', checksAdminMoney);
+void test('checks the same call’s integer money amounts only in admin Change history', checksAdminMoney);
 
 async function readsOlderPublication() {
   for (const published of [true, false]) {
@@ -56,13 +66,9 @@ async function readsOlderPublication() {
       response.end(JSON.stringify(body));
     }
     const server = createServer(handle);
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const address = server.address();
-    assert(address && typeof address !== 'string');
-    const origin = `http://127.0.0.1:${address.port}`;
+    const origin = await listen(server);
     const client = await request.newContext();
-    const owner = { request: client } as Page;
+    const owner = { request: client };
     async function check() {
       await assertPublishedAudit(owner, origin);
     }
@@ -72,12 +78,24 @@ async function readsOlderPublication() {
       assert.deepEqual(paths, ['/api/org/history', '/api/org/history?before=311']);
     } finally {
       await client.dispose();
-      server.closeAllConnections();
-      const closed = once(server, 'close');
-      server.close();
-      await closed;
+      await closeServer(server);
     }
   }
 }
-test('finds a publication behind newer grants and still refuses a missing publication',
+void test('finds a publication behind newer grants and still refuses a missing publication',
   readsOlderPublication);
+
+async function listen(server: Server) {
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function closeServer(server: Server) {
+  server.closeAllConnections();
+  const closed = once(server, 'close');
+  server.close();
+  await closed;
+}

@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { copyFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { APIResponse, Page, Response } from 'playwright';
+import type { APIResponse, Page, Request, Response } from 'playwright';
 import { auditResponseSchema, chatFeedSchema, type AuditRow } from '@opencrane/protocol';
 import { directory, root } from './config.ts';
 import { project } from './identity.ts';
@@ -56,12 +56,7 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
       'Another joined member cannot read this private action history');
     assert.equal((await owner.request.get(`${origin}${path}`)).status(), 403,
       'The owner role does not grant access to private action history');
-    await page.goto(`${origin}/history/${conversation}`);
-    try {
-      await page.getByText(/Decision: allow\s*· Observation: Confirmed/u).first().waitFor();
-    } catch (error) {
-      await captureHistoryFailure(page, error);
-    }
+    await checkActionHistory(page, `${origin}/history/${conversation}`);
     await capture(page, `${output}/${run}-action-${page.viewportSize()!.width}.png`);
     console.log(`PASS ${run} audit ${page.viewportSize()!.width}px: own stub turn, allow and success shown separately; other member and owner refused private history`);
   }
@@ -99,7 +94,7 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
   }
 }
 
-export async function assertAuditMoney(owner: Page, origin: string, memberRow: AuditRow) {
+export async function assertAuditMoney(owner: Pick<Page, 'request'>, origin: string, memberRow: AuditRow) {
   assert(memberRow.requestId && memberRow.permitId);
   const query = new URLSearchParams({ requestId: memberRow.requestId });
   const response = await owner.request.get(`${origin}/api/org/history?${query}`);
@@ -118,7 +113,7 @@ export async function assertAuditMoney(owner: Page, origin: string, memberRow: A
   assert(!JSON.stringify(changes).includes('canary'));
 }
 
-export async function assertPublishedAudit(owner: Page, origin: string) {
+export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin: string) {
   const deadline = Date.now() + 60_000;
   let before: number | undefined;
   function isPublication(record: { type: string }) {
@@ -197,14 +192,14 @@ function isFocused(element: Element) {
   return element === document.activeElement;
 }
 
-async function captureHistoryFailure(page: Page, error: unknown): Promise<never> {
+async function captureHistoryFailure(page: Page, error: unknown, reads: HistoryRead[]): Promise<never> {
   const width = page.viewportSize()?.width ?? 0;
   const results = page.locator('oc-audit .history-list');
   const accessibleResults = await results.ariaSnapshot();
   await page.screenshot({ path: `${directory}/history-failure.png`, fullPage: true });
   const message = error instanceof Error ? error.message : String(error);
   throw new Error(
-    `${message}\nHistory page width: ${width}px\nAccessible history results:\n${accessibleResults}`,
+    `${message}\nHistory page width: ${width}px\nAccessible history results:\n${accessibleResults}\nHistory reads: ${JSON.stringify(reads)}`,
   );
 }
 
@@ -214,4 +209,32 @@ async function capture(page: Page, path: string) {
   const controls = page.locator('oc-audit button, oc-audit input, oc-audit select');
   for (const control of await controls.all()) assert((await control.boundingBox())!.height >= 44);
   await page.screenshot({ path, fullPage: true });
+}
+
+type HistoryRead = { status?: number; error?: string };
+
+async function checkActionHistory(page: Page, url: string) {
+  const reads: HistoryRead[] = [];
+  function recordResponse(response: Response) {
+    if (new URL(response.url()).pathname.endsWith('/history')) {
+      reads.push({ status: response.status() });
+    }
+  }
+  function recordFailure(request: Request) {
+    if (!new URL(request.url()).pathname.endsWith('/history')) return;
+    const error = request.failure()?.errorText ?? '';
+    const code = /^net::[A-Z_]+$/u.test(error) ? error : 'transport_failed';
+    reads.push({ error: code });
+  }
+  page.on('response', recordResponse);
+  page.on('requestfailed', recordFailure);
+  try {
+    await page.goto(url);
+    await page.getByText(/Decision: allow\s*· Observation: Confirmed/u).first().waitFor();
+  } catch (error) {
+    await captureHistoryFailure(page, error, reads);
+  } finally {
+    page.off('response', recordResponse);
+    page.off('requestfailed', recordFailure);
+  }
 }
