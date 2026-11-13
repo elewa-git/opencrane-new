@@ -46,6 +46,9 @@ async function checkOlderHistory(page: Page, base: string): Promise<void> {
     await page.keyboard.press('Enter');
     const publicationEntry = page.getByRole('button', { name: /Organisation change/u });
     await publicationEntry.waitFor();
+    expect(await publicationEntry.getByText('Organisation change', { exact: true }).count()).toBe(1);
+    expect(await publicationEntry.getByText('Decision: Not recorded · Observation: Change recorded',
+      { exact: true }).count()).toBe(1);
     await page.keyboard.press('Shift+Tab');
     expect(await publicationEntry.evaluate(isFocused)).toBe(true);
     await page.keyboard.press('Enter');
