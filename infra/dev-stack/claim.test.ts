@@ -10,10 +10,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const exec = promisify(execFile);
 
-function claimEnvironment(home: string, busyPort = 0) {
+function claimEnvironment(home: string, busyPort = 0, busyStackPort = 25110) {
   const preload = new URL('./test/claim-ports.mjs', import.meta.url).href;
   return { PATH: `${home}/bin:${process.env['PATH']}`, HOME: home,
-    NODE_OPTIONS: `--import=${preload}`, CLAIM_TEST_BUSY_PORT: String(busyPort) };
+    NODE_OPTIONS: `--import=${preload}`, CLAIM_TEST_BUSY_PORT: String(busyPort),
+    CLAIM_TEST_BUSY_STACK_PORT: String(busyStackPort) };
 }
 
 async function mockKubectl(bin: string) {
@@ -28,7 +29,7 @@ esac
   await writeFile(`${bin}/kubectl`, script);
   await chmod(`${bin}/kubectl`, 0o755);
 }
-test('claim skips a slot with a held port and leaves it unclaimed', async () => {
+async function claimSkipsHeldPort(stackPort: number) {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
   const bin = `${home}/bin`;
   await mkdir(bin);
@@ -42,7 +43,7 @@ test('claim skips a slot with a held port and leaves it unclaimed', async () => 
     const address = held.address();
     assert(address && typeof address !== 'string');
     const { stdout } = await exec('infra/dev-stack/claim.sh', {
-      env: claimEnvironment(home, address.port),
+      env: claimEnvironment(home, address.port, stackPort),
     });
     assert.equal(stdout.trim(), '2');
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
@@ -51,7 +52,11 @@ test('claim skips a slot with a held port and leaves it unclaimed', async () => 
     await new Promise<void>(resolve => held.close(() => resolve()));
     await rm(home, { recursive: true, force: true });
   }
-});
+}
+async function skipsModelPort() { await claimSkipsHeldPort(25110); }
+async function skipsCustodyPort() { await claimSkipsHeldPort(25114); }
+test('claim skips a slot with a held port and leaves it unclaimed', skipsModelPort);
+test('claim checks the custody proxy port before reserving a slot', skipsCustodyPort);
 
 test('status leaves a free slot alone and claim reuses this worktree slot', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-repeat-`);
