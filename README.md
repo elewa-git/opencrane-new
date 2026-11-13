@@ -39,7 +39,6 @@ MCP, a shared standard for describing and calling tools.
 | Browser app | [apps/web](apps/web/README.md) | Sign in, chat, watch the assistant's screen and manage organisation settings. |
 | Back end | [apps/server](apps/server/README.md) | Check access, record changes and send work to computers. It also runs the [models process](GLOSSARY.md#models-process), a separate program that checks AI spending and starts [agentgateway](GLOSSARY.md#agentgateway-ai-gateway), the AI gateway. |
 | Tool servers | [apps/demo-mcp](apps/demo-mcp/README.md) | Offer a synthetic quote and delivery slot for credential-free tool demos. |
-| Tool servers | [apps/odoo-mcp](apps/odoo-mcp/README.md) | Read Odoo draft sales orders for standalone tests; no product application calls it yet. |
 | Background workers | [apps/ops](apps/ops/README.md) | Keep the read tables and permissions up to date, start and pause computers, and rebuild data from the event log. |
 | Assistant computers | [apps/computer](apps/computer/README.md) | Build each assistant's isolated computer, where [Codex](GLOSSARY.md#codex), the AI agent, does the work. |
 | Event core | [libs/events](libs/events/README.md) | Define each kind of event and the data it carries. |
@@ -55,7 +54,7 @@ MCP, a shared standard for describing and calling tools.
 | Infrastructure | [infra/dev-stack](infra/dev-stack/README.md) | Start a developer copy of OpenCrane and check it from start to finish. |
 | Infrastructure | [infra/nats](infra/nats/README.md) | Configure [NATS JetStream](GLOSSARY.md#nats), the service that keeps and carries events. |
 | Infrastructure | [infra/clamav](infra/clamav/README.md) | Run the virus scanner for uploads. |
-| Infrastructure | [infra/odoo](infra/odoo/README.md) | Run a test copy of Odoo, a business system, for a planned link between assistants and Odoo. |
+| Infrastructure | [infra/odoo](infra/odoo/README.md) | Run a test copy of Odoo, a business system, for optional connector tests. |
 | Infrastructure | [infra/package](infra/package/README.md) | Try an OpenCrane install with Helm on a spare dev stack, ahead of the customer installer. |
 | Developer tools | [tools/fleet](tools/fleet/README.md) | Help the AI coding agents run tasks, and check that no passwords or keys are committed. |
 | Developer tools | [scripts](scripts) | Run repository checks, capture screenshots and download tools. |
@@ -127,7 +126,7 @@ Not built yet:
 
 - A customer installer using [Helm](GLOSSARY.md#helm); the local package is an installation trial.
 - Memory during assistant turns, including team chats, until private work is proven isolated; correcting facts through the assistant also remains planned.
-- Letting assistants use Odoo with only the rights of the person who asked.
+- Letting assistants use a business system with only the rights of the person who asked.
 - Completing scheduled assistant work and handing a conversation to another assistant. Parts exist, but the full product journeys still need to be connected and proven.
 
 ## Processes it handles

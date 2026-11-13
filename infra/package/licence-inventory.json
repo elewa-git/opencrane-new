@@ -228,7 +228,6 @@
         ["npm", "@opencrane/handlers", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
         ["npm", "@opencrane/models", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
         ["npm", "@opencrane/observability", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/odoo-mcp", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
         ["npm", "@opencrane/ops", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
         ["npm", "@opencrane/projections", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
         ["npm", "@opencrane/protocol", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],

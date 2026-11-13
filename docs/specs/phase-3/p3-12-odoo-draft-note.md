@@ -1,5 +1,7 @@
 # Read and approve an Odoo draft-note change
 
+13 November 2026: the read and approved-write journey now uses a generic tool server.
+
 Design for [#53](https://github.com/elewa-git/opencrane-new/issues/53), 10 October 2026. Read-only checkout:
 `<worktree>`, branch `work/p3-12-design`. HEAD, local `origin/main` and GitHub main all checked at
 `dd3880237b87f98bab1793a5e1ceec1addfdfbbc`. This note is a proposal. Implementation, tests and live qualification: **NOT RUN**. Only this
