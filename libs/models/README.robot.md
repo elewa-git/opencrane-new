@@ -5032,7 +5032,10 @@ public API field; the separate company audit has its own strict release variant.
 context uses existing audited names and digests. Security rules and
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
 custody adapter against a synthetic HTTP transport. A recording HTTPS fixture now also
-checks the governed personal path. The models process needs
+checks the governed personal path. Replay checks invoke the operator's Node entrypoint
+directly and retain their ten-second deadline. The hostname case holds the dispatch
+clock so that it reaches certificate verification; separate expiry cases check the limit.
+The models process needs
 `CONNECTION_CUSTODY_FILE`. OAuth also needs `MCP_OAUTH_CONFIGURATION_FILE`, a JSON
 object keyed by server id, reread on each use. Bearer selection instead checks the
 saved identity-tool revision and account evidence against the current reviewed policy.
