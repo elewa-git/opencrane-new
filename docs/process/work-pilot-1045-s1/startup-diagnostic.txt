@@ -1,21 +1,25 @@
 Fresh secondary stack 2, 13 November 2026
-Tested head: 0e5466e3ae0340292de65094490a5d6b7253f413
+Tested source head: bf981001ef6498c22a10e4679e2e6c8d9e44b2e9
 
-Attempt 1: FAIL after 368 seconds.
-PASS owner bootstrap, provider setup and website readiness (121559ms).
-Generic startup failure; private diagnostics were removed by teardown.
-Exact failing assertion: unknown.
-Cleanup: PASS, exit 0; stack status free.
+Attempt 1 on source head 0e5466e3ae0340292de65094490a5d6b7253f413: FAIL after
+368 seconds.
+Startup checks passed; the generic startup failure's exact assertion is unknown.
+Cleanup: PASS; the slot reported free.
 
-Attempt 2: FAIL after 1091 seconds.
-PASS owner bootstrap, provider setup and website readiness (100673ms).
-Command failed: node --experimental-strip-types infra/dev-stack/journey.ts
-Error: Spending budget editor did not load; inspect private evidence
-    at loadBudgetEditor (infra/dev-stack/browser-budgets.ts:192)
-    at save (infra/dev-stack/browser-budgets.ts:48)
-    at browserBudgetJourney (infra/dev-stack/browser-budgets.ts:83)
-    at infra/dev-stack/journey.ts:654
-Cleanup: PASS, exit 0; stack status free.
+Attempt 2 on source head 0e5466e3ae0340292de65094490a5d6b7253f413: FAIL after
+1,091 seconds.
+The core Spending journey failed while waiting for the Budget scope control at
+infra/dev-stack/browser-budgets.ts:192. Cleanup: PASS; the slot reported free.
 
-Workspace slice runner: NOT RUN after both startup failures.
+Final attempt on this tested head: FAIL.
+The host's one-minute load before claim was 2.65. `claim.sh` claimed secondary
+stack 2. `up.sh --fresh` returned exit 1 with the generic startup failure message.
+The private launcher error records were copied before cleanup. They do not identify
+the previous Spending editor failure or a different failed stage, so the core
+journey result beyond the failed `up.sh` command is unknown. Cleanup: PASS; exit 0
+and the slot reported free.
+
+Workspace slice runner: NOT RUN after all three failed fresh starts.
+All six workspace acceptance steps: NOT RUN at 1280px and 390px.
+No budget-editor status record or failure screenshot was produced on the final run.
 Private paths and credentials are excluded from this public diagnostic.

@@ -1,9 +1,9 @@
 # Workspace sign-out and Settings journey
 
-Journey on a fresh dev stack: FAIL — 13 November 2026, rebased tested head
-`0e5466e3ae0340292de65094490a5d6b7253f413`. Fresh startup failed before the
-workspace slice runner could start. Every slice acceptance step is NOT RUN on
-this head. The previous PASS must not qualify the rebased source.
+Journey on a fresh dev stack: FAIL — 13 November 2026, tested source head
+`bf981001ef6498c22a10e4679e2e6c8d9e44b2e9`. The latest fresh `up.sh --fresh`
+failed, so the workspace slice runner did not start. Every slice acceptance
+step is NOT RUN on this head. The previous PASS does not qualify this source.
 
 ## Integration
 
@@ -61,6 +61,35 @@ or further retry was made. The failed core journey needs a separate decision bef
 fresh qualification can finish. Unrelated core pictures were restored to their
 original tracked versions; newly generated category pictures were kept privately.
 The worktree is retained and both claimed installations were released.
+
+## Final fresh attempt on the rebased source
+
+On 13 November 2026, the one-minute host load was 2.65 before claiming secondary
+stack 2. `claim.sh` succeeded and `nice -n 10 infra/dev-stack/up.sh --fresh`
+returned exit 1. The command printed only its generic failure message. The
+launcher runs the shared core journey as part of `up`; the private error records
+did not match the earlier Spending editor failure, and the failing stage is not
+established. I copied `failure.log` and `last-error.log` to a private local
+capture before `down.sh`. Cleanup returned exit 0 and the slot reported `free`.
+The owner stack was not used. The workspace runner was NOT RUN because the fresh
+start failed. No product code changed.
+
+The Spending editor failure did not recur as an identified failure. The launcher
+did not produce its budget-editor status record or screenshot, so there is no
+budget-page browser console output, request-failure list or screenshot to copy.
+This PR changes the chat context role and workspace navigation/sign-out; it does
+not change the Spending editor, its requests or the budget journey. No direct path
+from those changes to the failed Spending editor was identified. This does not
+explain the generic failure from this final start.
+
+| Step | 1280 px | 390 px |
+| --- | --- | --- |
+| Member has no Settings link | NOT RUN | NOT RUN |
+| Member types `/org/integrations` and sees refusal | NOT RUN | NOT RUN |
+| Member uses Sign out and reaches sign-in | NOT RUN | NOT RUN |
+| Admin sees Settings and opens it | NOT RUN | NOT RUN |
+| Owner sees Settings and opens it | NOT RUN | NOT RUN |
+| Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
 
 ## Slice steps on the rebased head: NOT RUN
 
