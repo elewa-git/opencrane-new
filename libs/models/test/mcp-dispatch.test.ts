@@ -3234,6 +3234,23 @@ async function concurrentReceiptWork() {
 it('keeps concurrent credential releases within the access window with receipt service work',
   concurrentReceiptWork, 60_000);
 
+async function receiptUnavailableOnNextRequest() {
+  const { setup, remote, headers } = await personalPair();
+  const first = await permit(setup, headers);
+  const second = await permit(setup, headers);
+  expect((await send(setup, first)).status).toBe(200);
+  const auth = memberAuthorisation(setup.binding);
+  function restoreChecks() {
+    vi.restoreAllMocks();
+  }
+  onTestFinished(restoreChecks);
+  vi.spyOn(auth, 'checkApplied').mockResolvedValue({ allowed: false, status: 'ok' });
+  expect((await send(setup, second)).status).toBe(403);
+  expect(remote.received).toHaveLength(1);
+}
+it('does not reuse an earlier request’s receipt when the next request cannot confirm it',
+  receiptUnavailableOnNextRequest, 60_000);
+
 async function foreignPersonalLease() {
   const { setup, remote, headers, bob, reads } = await personalPair();
   const alicePermit = await permit(setup, headers);

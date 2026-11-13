@@ -20,7 +20,8 @@ import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { readBody } from './decision-request-body.ts';
-import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader }
+import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority,
+  authorityHistoryReader, withAuthorityReceipts }
   from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
@@ -476,7 +477,10 @@ async function dispatchRequest(req: IncomingMessage, res: ServerResponse,
   dispatch: ReturnType<typeof mcpDispatch>) {
   try {
     const body = await readBody(req);
-    await dispatch.handle(req, res, body);
+    async function dispatchCurrent() {
+      await dispatch.handle(req, res, body);
+    }
+    await withAuthorityReceipts(dispatchCurrent);
   } catch (error) {
     res.setHeader('x-opencrane-decision', 'refused');
     res.writeHead(403);

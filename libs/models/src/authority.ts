@@ -1,5 +1,6 @@
 import type { EventEnvelope } from '@opencrane/events';
 import { createHash } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
@@ -122,13 +123,37 @@ function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed
   if (permissions.some(unavailable)) throw new Error('Current authority unavailable');
 }
 
+type Authorisation = ReturnType<typeof memberAuthorisation>;
+const receiptScopes = new AsyncLocalStorage<Map<Authorisation, Set<string>>>();
+
+/** Reuse immutable projection receipts during one MCP dispatch. Keep permissions and positions live. */
+export function withAuthorityReceipts<Result>(work: () => Promise<Result>): Promise<Result> {
+  return receiptScopes.run(new Map(), work);
+}
+
+function scopedReceipts(auth: Authorisation) {
+  const scope = receiptScopes.getStore();
+  if (!scope) return undefined;
+  let receipts = scope.get(auth);
+  if (!receipts) {
+    receipts = new Set();
+    scope.set(auth, receipts);
+  }
+  return receipts;
+}
+
 function receiptReader(auth: ReturnType<typeof memberAuthorisation>,
   applied: ((eventId: string) => Promise<boolean>) | undefined) {
   if (applied) return applied;
+  const receipts = scopedReceipts(auth);
   async function readReceipt(eventId: string) {
+    if (receipts?.has(eventId)) return true;
     const result = await auth.checkApplied(eventId);
     // Keep a failed service check separate from a confirmed missing receipt.
-    if (result.status === 'unavailable') throw new Error('Current authority unavailable');
+    if (result.status === 'unavailable') {
+      throw new Error('Current authority unavailable', { cause: result.error });
+    }
+    if (result.allowed) receipts?.add(eventId);
     return result.allowed;
   }
   return readReceipt;

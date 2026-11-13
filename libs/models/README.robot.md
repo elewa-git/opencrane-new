@@ -140,6 +140,14 @@ or finishes in another batch. Inactive assistants are refused before receipt che
 Confirmed membership or resource denials remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
 after recovery only by passing the normal access and spending checks again.
 
+An MCP tool dispatch keeps a request-local set of confirmed projection-event
+receipts, keyed by the bound authorisation client. These receipts record immutable
+applied events. Only positive results are reused, and only during that dispatch. Current
+permissions, access deadlines and stream positions are checked again after private
+credential reads. A permission outage still refuses the send. The concurrent dispatch
+test delays real receipt replies and requires both members'
+requests to finish inside the unchanged two-second access limit.
+
 `decision-refusal.test.ts` injects failures at event-store reads and budget writes,
 and forwards real OpenFGA traffic through a local proxy that can return errors or
 delay selected permission checks. It checks 503, absent permits, unchanged spending,
