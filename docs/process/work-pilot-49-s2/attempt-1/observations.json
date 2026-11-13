@@ -1,0 +1,15 @@
+[
+  {
+    "width": 1280,
+    "submittedAt": "2026-11-13T17:53:14.983Z",
+    "aliceProfile": "71d00931-8872-4d8b-a9e4-74af0f0a4b52",
+    "bobProfile": "ed433298-22df-45e1-a6a8-9af22736a871",
+    "refusalMs": 8328,
+    "refusalStatus": "Done",
+    "bobRefusedConversation": "65ca3a8d-20a1-49f6-a27a-ba02a20a5e63",
+    "revokeStartedAt": "2026-11-13T17:53:35.188Z",
+    "finishedAt": "2026-11-13T17:53:56.289Z",
+    "aliceConversation": "44b32c7e-f77f-474a-952b-7b43ef29bd69",
+    "bobConversation": "3d5d8d2c-d954-404c-85df-6e320e10de08"
+  }
+]
