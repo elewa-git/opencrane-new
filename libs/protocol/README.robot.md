@@ -508,6 +508,8 @@ notification changes a saved catch-up position. Client messages remain unchanged
 
 `isOrdinaryToolCatalogue` recognises a saved remote catalogue without hosted-run,
 OpenCrane cost, review or expected-revision declarations. Unavailable or malformed
-discovery is not ordinary. `canReviewTool` permits review of standard definitions;
+discovery is not ordinary. The complete list retains its declaration status, including rejected tools. Any OpenCrane
+metadata keeps the whole server under the strict contract. Older catalogues with rejected
+tools but no status require discovery again. `canReviewTool` permits review of standard definitions;
 OpenCrane-declared tools still need explicit zero cost and approval details.
 Commands, replay, publication, turn offers and website choices share this decision.

@@ -1093,3 +1093,12 @@ with issuer, subject, actual scopes, expiry and configuration digest. Its existi
 company owner, installation, generation and custody reference fields remain required.
 The reader checks the exact saved credential in custody before using this record.
 No production company confirmation writer is registered in this part.
+
+## Complete tool catalogue evidence
+
+`mcp.server_discovered.declared` says whether any definition in the complete list
+contains `io.opencrane/` metadata, including definitions that discovery rejects.
+Rejected definitions keep their revision and reason, without raw descriptions or
+other data. Older catalogues with rejected tools and no declaration status need
+fresh discovery before ordinary-tool review. The shared catalogue digest includes
+accepted and rejected tools. Discovery and classification share the declaration check.

@@ -3779,7 +3779,10 @@ refusal of a mismatched `x-opencrane-mcp-revision` before running a tool.
 Ordinary servers declare none of these details. `isOrdinaryToolCatalogue` makes
 that separate decision for review, publication, turn offers and dispatch. Immediately
 before admission, dispatch reads their complete standard `tools/list` and compares
-its lossless digest with the reviewed catalogue. A mismatch saves `mcp.tools_changed`,
+its lossless digest with the reviewed catalogue, including rejected tools. Discovery saves
+rejected tool revisions and whether the complete list declares OpenCrane metadata. Any such declaration
+keeps the server under the strict contract. Older rejected records without that evidence
+require discovery again. A mismatch saves `mcp.tools_changed`,
 holds further calls and returns a visible review-required tool error without execution.
 The check cannot make a third-party list and execution atomic; only servers offering
 the strict revision contract provide that guarantee.
@@ -3818,7 +3821,9 @@ opening a connection. It allows the requester to record `approval.retry_requeste
 once; the next successful call cannot reuse that proof. No estimated tool charge is
 reserved. The recorder checks
 the silo, decision id, start id, connection, generation, record digest and review revision
-against saved history. It uses the existing outcome id and conditional append, then reads
+against saved history. Repeated callbacks must match the saved cost status and amount,
+as well as their binding and outcome. Conflicting callbacks change no history.
+It uses the existing outcome id and conditional append, then reads
 back a lost save reply. It never repeats the remote call. No public observation route exists.
 Generic gateway evidence cannot settle a marked remote start, even when it arrives first.
 Operator and memory observations keep their existing behaviour.
@@ -4123,8 +4128,9 @@ orchestrator after the draft pull request is opened.
 
 `setToolPolicy` and `reviewedToolChoices` share `canReviewTool`; replay checks it again.
 Ordinary server tools can be reviewed as Allow, Ask or Block from their saved standard
-definitions. They need no declared cost. Ask shows the tool description and the exact
-arguments. Servers declaring OpenCrane details still require explicit zero cost and
+definitions. They need no declared cost. Ask shows the tool description, bounded to
+8,000 characters, and the exact arguments. Empty or missing descriptions use
+“Run the reviewed tool.” Servers declaring OpenCrane details still require explicit zero cost and
 saved approval details for Allow and Ask; missing declarations remain refused.
 For ordinary calls, `tool.dispatch_recorded` records reported integer euro cents after
 the reply, or `not_reported` without an amount. Invalid reported costs are labelled
