@@ -8,8 +8,6 @@ import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 import { toolCallFields } from './tool-dispatch.ts';
-export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
-export { approvalExpiredDataSchema, approvalUsedDataSchema } from './tool-dispatch.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 import { routineApprovalBindingSchema } from './routine-approval.ts';
 // Data schemas for every event type in the registry except the four
