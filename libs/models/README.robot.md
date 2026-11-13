@@ -3782,7 +3782,9 @@ before admission, dispatch reads their complete standard `tools/list` and compar
 its lossless digest with the reviewed catalogue, including rejected tools. Discovery saves
 rejected tool revisions and whether the complete list declares OpenCrane metadata. Any such declaration
 keeps the server under the strict contract. Older rejected records without that evidence
-require discovery again. A mismatch saves `mcp.tools_changed`,
+still replay with their original accepted-tools-only digest but require discovery again
+before ordinary calls. New snapshots record `digestVersion: 2` and validate the full list.
+A mismatch saves `mcp.tools_changed`,
 holds further calls and returns a visible review-required tool error without execution.
 The check cannot make a third-party list and execution atomic; only servers offering
 the strict revision contract provide that guarantee.

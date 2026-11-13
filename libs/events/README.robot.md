@@ -121,6 +121,9 @@ append validation and policy replay. They use Node's built-in SHA-256 implementa
 They are separate from browser event schemas, so browser builds do not load Node crypto.
 `validateMcpCatalogue` checks the complete accepted tool count, distinct names, definition
 names, schemas, annotation flags, tool revisions and the catalogue digest.
+New snapshots record `digestVersion: 2` and hash accepted and rejected tool revisions.
+Snapshots without that field keep the original accepted-tools-only rule during reads
+and rebuilds. Replay never rewrites an older snapshot or guesses its rule from a hash.
 The event parser binds every MCP event's server id to its exact subject.
 
 ## Final dispatch admission

@@ -8,3 +8,5 @@ application is removed, and product examples describe generic business systems.
 Rejected tools remain part of the reviewed list, and their OpenCrane declarations
 keep the whole server under strict checks. Ask cards support empty and long tool
 descriptions. Repeated result callbacks refuse conflicting cost reports.
+Older saved catalogues keep their original digest rule during policy reads and rebuilds;
+new discoveries record the full-list rule explicitly.

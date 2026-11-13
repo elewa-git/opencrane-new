@@ -7,6 +7,7 @@ Saved hosted image attempts now queue a private image check through the worker l
 Reading or replaying these events does not call the scanner.
 Each hosted workload start records its image, Pod and run generation before a new
 tool list can be saved. The list names that same run.
+Each saved tool list keeps its original fingerprint rule, so older lists still replay.
 Private persona revisions carry encrypted bytes and a checked digest, never plain text.
 An approval records the exact saved version a member chose, without copying its text.
 A completed welcome's archive choice is a separate personal event. It leaves its
