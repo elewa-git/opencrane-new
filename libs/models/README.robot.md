@@ -140,13 +140,17 @@ or finishes in another batch. Inactive assistants are refused before receipt che
 Confirmed membership or resource denials remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
 after recovery only by passing the normal access and spending checks again.
 
-An MCP tool dispatch keeps a request-local set of confirmed projection-event
-receipts, keyed by the bound authorisation client. These receipts record immutable
-applied events. Only positive results are reused, and only during that dispatch. Current
-permissions, access deadlines and stream positions are checked again after private
-credential reads. A permission outage still refuses the send. The concurrent dispatch
-test delays real receipt replies and requires both members'
-requests to finish inside the unchanged two-second access limit.
+A personal MCP dispatch prepares saved authority history, immutable projection
+receipts and credential evidence before joining the shared budget writer queue.
+The preparation is private to that single-use permit. Queue waiting is bounded by
+the unused permit lifetime; the writer starts its two-second deadline after admission.
+The live checks keep the prepared access-stream positions, current IAM permissions,
+turn activity, memory, revocation, admin disable and conditional appends. Another
+person's admission can advance the server stream without changing those rights.
+The credential broker checks prepared positions again after private material reads.
+A permission outage or changed grant still refuses the send. No receipt or authority
+result is reused across requests. The concurrent dispatch test retains real 400 ms
+receipt work; a separate test revokes a grant during the budget queue wait.
 
 `decision-refusal.test.ts` injects failures at event-store reads and budget writes,
 and forwards real OpenFGA traffic through a local proxy that can return errors or

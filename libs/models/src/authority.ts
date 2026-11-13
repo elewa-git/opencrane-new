@@ -1,6 +1,5 @@
 import type { EventEnvelope } from '@opencrane/events';
 import { createHash } from 'node:crypto';
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
@@ -30,6 +29,38 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   readHistory?: ReturnType<typeof authorityHistoryReader>, permissions?: AuthorityPermissions) {
   fresh ??= await authorityFence(store, performance.now());
   const auth = await permissionReader(binding, permissions);
+  const request = { requester, assistant, conversation, resourceType, resourceId,
+    fresh, conversationRows, grants, applied, readHistory, permissions };
+  const facts = await prepareAuthorityFacts(store, binding, request);
+  const decisions = await checkAuthorityPermissions(auth, request);
+  requirePermissions(decisions);
+  await permissions?.confirm();
+  await fresh();
+  const input = { facts: facts.facts, permissions: decisions, memoryScopes: [], credential: null };
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(input));
+  return hash.digest('hex');
+}
+
+export interface AuthorityFactsRequest {
+  requester: string;
+  assistant: string;
+  conversation: string;
+  resourceType: string;
+  resourceId: string;
+  fresh: Pick<Awaited<ReturnType<typeof authorityFence>>, 'include' | 'head' | 'deadline'>;
+  conversationRows?: StoredEvent[] | undefined;
+  grants?: DecisionGrants | undefined;
+  applied?: ((eventId: string) => Promise<boolean>) | undefined;
+  readHistory?: ReturnType<typeof authorityHistoryReader> | undefined;
+  permissions?: AuthorityPermissions | undefined;
+}
+
+/** Read immutable history and its projection receipts before starting live authority work. */
+export async function prepareAuthorityFacts(store: EventStore, binding: Binding,
+  request: AuthorityFactsRequest) {
+  const { requester, assistant, conversation, resourceType, resourceId, fresh,
+    conversationRows, grants, applied, readHistory, permissions } = request;
   const checkApplied = receiptReader(memberAuthorisation(binding), applied);
   const facts = [], receipts: string[] = [];
   let active = true;
@@ -71,16 +102,9 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   }
   if (!active) throw new AuthorityRefused('Assistant inactive');
   await requireReceipts(receipts, checkApplied);
-  const decisions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
-    auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
-    auth.use('assistant', assistant, resourceType, resourceId)]);
-  requirePermissions(decisions);
-  await permissions?.confirm();
-  await fresh();
-  const input = { facts, permissions: decisions, memoryScopes: [], credential: null };
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(input));
-  return hash.digest('hex');
+  const watched = [...subjects, ...teams];
+  if (resourceType === 'mcp_server') watched.push(`mcp-${resourceId}`);
+  return { facts, subjects: watched };
 }
 
 async function permissionReader(binding: Binding, permissions?: AuthorityPermissions) {
@@ -111,7 +135,19 @@ async function requireReceipts(receipts: string[], checkApplied: (id: string) =>
   }
 }
 
-function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed: boolean }[]) {
+export function checkAuthorityPermissions(auth: Pick<AuthorityPermissions,
+  'check' | 'actsFor' | 'conversation' | 'use'>,
+  request: Pick<AuthorityFactsRequest,
+    'requester' | 'assistant' | 'conversation' | 'resourceType' | 'resourceId'>) {
+  const { requester, assistant, conversation, resourceType, resourceId } = request;
+  const checks = [auth.check(requester, 'member'), auth.actsFor(requester, assistant),
+    auth.conversation(requester, conversation, 'post'),
+    auth.use('person', requester, resourceType, resourceId),
+    auth.use('assistant', assistant, resourceType, resourceId)];
+  return Promise.all(checks);
+}
+
+export function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed: boolean }[]) {
   function unavailable(permission: (typeof permissions)[number]) {
     return permission.status === 'unavailable';
   }
@@ -123,37 +159,15 @@ function requirePermissions(permissions: { status: 'ok' | 'unavailable'; allowed
   if (permissions.some(unavailable)) throw new Error('Current authority unavailable');
 }
 
-type Authorisation = ReturnType<typeof memberAuthorisation>;
-const receiptScopes = new AsyncLocalStorage<Map<Authorisation, Set<string>>>();
-
-/** Reuse immutable projection receipts during one MCP dispatch. Keep permissions and positions live. */
-export function withAuthorityReceipts<Result>(work: () => Promise<Result>): Promise<Result> {
-  return receiptScopes.run(new Map(), work);
-}
-
-function scopedReceipts(auth: Authorisation) {
-  const scope = receiptScopes.getStore();
-  if (!scope) return undefined;
-  let receipts = scope.get(auth);
-  if (!receipts) {
-    receipts = new Set();
-    scope.set(auth, receipts);
-  }
-  return receipts;
-}
-
 function receiptReader(auth: ReturnType<typeof memberAuthorisation>,
   applied: ((eventId: string) => Promise<boolean>) | undefined) {
   if (applied) return applied;
-  const receipts = scopedReceipts(auth);
   async function readReceipt(eventId: string) {
-    if (receipts?.has(eventId)) return true;
     const result = await auth.checkApplied(eventId);
     // Keep a failed service check separate from a confirmed missing receipt.
     if (result.status === 'unavailable') {
       throw new Error('Current authority unavailable', { cause: result.error });
     }
-    if (result.allowed) receipts?.add(eventId);
     return result.allowed;
   }
   return readReceipt;
@@ -381,12 +395,19 @@ function changesChatAccess(subject: string, type: string) {
   return true;
 }
 
+export interface DecisionAuthoritySnapshot {
+  deadline: number;
+  positions: ReadonlyMap<string, number>;
+}
+
 /** Keep other callers strict; only decisions can ignore unrelated access events. */
 export async function decisionAuthorityFence(store: EventStore, started: number,
   subjects: string[], requesterId: string, assistantId: string,
-  grantHistory?: DecisionGrants, callerDeadline = Infinity) {
+  grantHistory?: DecisionGrants, callerDeadline: number | DecisionAuthoritySnapshot = Infinity) {
   const grantees = new Set([`member-${requesterId}`, `assistant-${assistantId}`]);
-  const earlierPositions = new Map<string, number>();
+  const preparedSnapshot = typeof callerDeadline === 'object' ? callerDeadline : undefined;
+  const deadline = typeof callerDeadline === 'number' ? callerDeadline : callerDeadline.deadline;
+  const earlierPositions = new Map<string, number>(preparedSnapshot?.positions);
   if (grantHistory) {
     subjects = [...subjects, grantHistory.subject];
     earlierPositions.set(grantHistory.subject, grantHistory.sequence);
@@ -402,7 +423,7 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
     }
   }
   const authority = await createAuthorityFence(
-    store, started, subjects, callerDeadline, checkDecisionChanges, earlierPositions);
+    store, started, subjects, deadline, checkDecisionChanges, earlierPositions);
   const includeSubjects = authority.fresh.include;
   function include(...subjects: string[]) {
     includeSubjects(...subjects);
@@ -411,6 +432,7 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
       if (subject.startsWith('team-')) grantees.add(subject);
     }
   }
+  include(...subjects);
   const snapshot = { include, head: authority.fresh.head, deadline: authority.fresh.deadline };
   return Object.assign(authority.confirm, snapshot);
 }
