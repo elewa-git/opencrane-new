@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { copyFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { APIResponse, Page, Request, Response } from 'playwright';
+import type { APIResponse, Locator, Page, Request, Response } from 'playwright';
 import { auditResponseSchema, chatFeedSchema, type AuditRow } from '@opencrane/protocol';
 import { directory, root } from './config.ts';
 import { project } from './identity.ts';
@@ -64,8 +64,7 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
   assert.equal((await members[0]!.request.get(`${origin}/api/org/history`)).status(), 403);
   for (const width of [1280, 390]) {
     await owner.setViewportSize({ width, height: 900 });
-    await owner.goto(`${origin}/org/history`);
-    await owner.getByRole('heading', { name: 'Change history', exact: true }).waitFor();
+    await openChangeHistory(owner, `${origin}/org/history`);
     await checkChangeHistory(owner, publication, `${output}/${run}-category-${width}.png`);
     await capture(owner, `${output}/${run}-change-${width}.png`);
     await members[0]!.setViewportSize({ width, height: 900 });
@@ -139,7 +138,6 @@ export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin:
 }
 
 async function checkChangeHistory(page: Page, publication: AuditRow, screenshot: string) {
-  await page.getByText('History loaded', { exact: true }).waitFor();
   while (await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count() === 0) {
     const older = page.getByRole('button', { name: 'Older history', exact: true });
     assert(await older.count(), 'An older page shows a member change');
@@ -223,6 +221,7 @@ async function captureHistoryFailure(page: Page, error: unknown, reads: HistoryR
   const message = error instanceof Error ? error.message : String(error);
   throw new Error(
     `${message}\nHistory page width: ${width}px\nAccessible history results:\n${accessibleResults}\nHistory reads: ${JSON.stringify(reads)}`,
+    { cause: error },
   );
 }
 
@@ -236,15 +235,26 @@ async function capture(page: Page, path: string) {
 
 type HistoryRead = { status?: number; error?: string };
 
+async function openChangeHistory(page: Page, url: string) {
+  const loaded = page.getByText('History loaded', { exact: true });
+  await openHistory(page, url, loaded);
+  await page.getByRole('heading', { name: 'Change history', exact: true }).waitFor();
+}
+
 async function checkActionHistory(page: Page, url: string) {
+  const loaded = page.getByText(/Decision: allow\s*· Observation: Confirmed/u).first();
+  await openHistory(page, url, loaded);
+}
+
+async function openHistory(page: Page, url: string, loaded: Locator) {
   const reads: HistoryRead[] = [];
   function recordResponse(response: Response) {
-    if (new URL(response.url()).pathname.endsWith('/history')) {
+    if (isHistoryRead(response.url())) {
       reads.push({ status: response.status() });
     }
   }
   function recordFailure(request: Request) {
-    if (!new URL(request.url()).pathname.endsWith('/history')) return;
+    if (!isHistoryRead(request.url())) return;
     const error = request.failure()?.errorText ?? '';
     const code = /^net::[A-Z_]+$/u.test(error) ? error : 'transport_failed';
     reads.push({ error: code });
@@ -253,11 +263,16 @@ async function checkActionHistory(page: Page, url: string) {
   page.on('requestfailed', recordFailure);
   try {
     await page.goto(url);
-    await page.getByText(/Decision: allow\s*· Observation: Confirmed/u).first().waitFor();
+    await loaded.waitFor();
   } catch (error) {
     await captureHistoryFailure(page, error, reads);
   } finally {
     page.off('response', recordResponse);
     page.off('requestfailed', recordFailure);
   }
+}
+
+function isHistoryRead(address: string): boolean {
+  const path = new URL(address).pathname;
+  return path.startsWith('/api/') && path.endsWith('/history');
 }
