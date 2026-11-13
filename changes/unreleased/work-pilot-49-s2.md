@@ -1,11 +1,8 @@
-Concurrent personal-key qualification remains blocked. The diagnostic report records
-budget-queue expiry, the separate one-second tool-list timeout and fresh live timing
-evidence for the owner. No further product fix is included.
+Two people can prepare personal-key tool calls together without spending their
+short access window waiting for the shared budget writer. Saved facts and immutable
+projection receipts load before queueing. Each write keeps the two-second limit,
+current permissions and final revocation checks, with a fresh preparation for each request.
 
-The demo server permits both synthetic accounts. Concurrent dispatch checks cover
-account isolation, one-use leases, expiry, revocation during release, rotation and
-admin disable. Attachment buttons reuse the shared minimum touch size.
-
-Personal credential releases reuse confirmed projection receipts within one tool
-dispatch while retaining current access and revocation checks. Measurements show
-that this does not guarantee concurrent admission within the existing access window.
+Tool offers read independent member, assistant and selected-account checks together,
+keeping the one-second build deadline. The demo server permits both synthetic
+accounts, and attachment buttons reuse the shared minimum touch size.

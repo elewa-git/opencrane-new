@@ -1968,6 +1968,17 @@ DNS rebinding and browser fixtures use no external MCP endpoints. Run
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/inventory.test.ts apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts --maxWorkers=2`.
 See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).
 
+## Personal tool offer preparation
+
+`chat/turn-tools.ts` reads the requester grant, assistant grant and verified account
+selection concurrently once the saved server review is available. All results are
+required before exposing a tool. The selection reader retains its own saved-history,
+current membership, grant, profile, configuration and expiry checks. No permission
+result is reused across requests. The bridge retains its 1,000 ms build limit and
+safe empty offer on dependency failure. `bridge-turn-tools.test.ts` holds each
+independent grant check for 600 ms and requires the first frame to contain the
+reviewed definition. Denials and unavailable services still omit the tool.
+
 ## Conversation uploads
 
 GET checks for `file.uploaded` events not yet covered by the `files` checkpoint.
