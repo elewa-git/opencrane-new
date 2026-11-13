@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-13T20:24:58.730Z",
+  "width": 390,
+  "source": "99e7857791479ac3e03c6aeee18f55e8cad60648",
+  "verdict": "PASS",
+  "observations": [
+    {
+      "step": "admin installs an ordinary HTTPS server",
+      "verdict": "PASS",
+      "message": "Standard HTTPS definitions discovered with two tools and zero initially allowed"
+    },
+    {
+      "step": "admin reviews Allow and Ask and grants person and assistant access",
+      "verdict": "PASS",
+      "message": "Allow and Ask selected without cost declarations; both audience grants saved"
+    },
+    {
+      "step": "admin publishes the reviewed ordinary tools",
+      "verdict": "PASS",
+      "message": "Publication and matching gateway acknowledgement confirmed"
+    },
+    {
+      "step": "member calls the reviewed ordinary read tool in a live turn",
+      "verdict": "PASS",
+      "message": "Live assistant read returned the fixture quote and zero effects"
+    },
+    {
+      "step": "member approves an ordinary Ask write in the same live turn",
+      "verdict": "PASS",
+      "message": "Ask approval allowed exactly one write and the same-turn result"
+    },
+    {
+      "step": "changed tool list refuses the next live call and names the review requirement",
+      "verdict": "PASS",
+      "message": "Next live call refused with visible admin-review reason; no third execution reached the server"
+    },
+    {
+      "step": "check saved reply costs after the live calls",
+      "verdict": "PASS",
+      "message": "Exactly two remote replies recorded missing costs; the separate gateway refusal receipt claims no tool cost"
+    }
+  ],
+  "calls": [
+    {
+      "method": "tools/call",
+      "name": "read_fixture_quote",
+      "stripped": true,
+      "protocolVersion": "2026-07-28",
+      "session": false,
+      "revision": false
+    },
+    {
+      "method": "tools/call",
+      "name": "change_delivery_slot",
+      "stripped": true,
+      "protocolVersion": "2026-07-28",
+      "session": false,
+      "revision": false
+    }
+  ],
+  "costRecords": [
+    {
+      "toolName": "read_fixture_quote",
+      "outcome": "responded",
+      "costStatus": "not_reported",
+      "evidence": "adapter_response_received",
+      "remote": true
+    },
+    {
+      "toolName": "change_delivery_slot",
+      "outcome": "responded",
+      "costStatus": "not_reported",
+      "evidence": "adapter_response_received",
+      "remote": true
+    },
+    {
+      "toolName": "read_fixture_quote",
+      "outcome": "responded",
+      "evidence": "response_received",
+      "remote": false
+    }
+  ]
+}
