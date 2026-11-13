@@ -1,6 +1,7 @@
 import type { StoredEvent } from '@opencrane/event-store';
 import type { connectionSelectedDataSchema } from '@opencrane/events';
 import type { z } from 'zod';
+import { sameAccountIdentity, selectedProfileMatches } from './connection-account.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { oauthConfigurationDigest, oauthConfigurationSchema } from './oauth-attempt.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
@@ -56,11 +57,8 @@ function matchingAccount(current: ReturnType<typeof foldConnection>,
   if (chosen?.reason !== 'oauth_confirmed') {
     return null;
   }
-  if (original.sequence !== selection.profileRevision || saved.userId !== selection.userId ||
-      saved.serverId !== selection.serverId || saved.profile !== selection.profileId ||
-      account.connectionId !== selection.connectionId ||
-      account.account.issuer !== chosen.account.issuer ||
-      account.account.subject !== chosen.account.subject ||
+  if (original.sequence !== selection.profileRevision || !selectedProfileMatches(saved, selection) ||
+      !sameAccountIdentity(account.account, chosen.account) ||
       account.configurationDigest !== chosen.configurationDigest) {
     return null;
   }

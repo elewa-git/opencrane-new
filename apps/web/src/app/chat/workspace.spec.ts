@@ -3127,3 +3127,34 @@ async function keepsOrdinaryPartialReply(): Promise<void> {
   expect(root.textContent).not.toContain('Reply unavailable');
 }
 it('keeps the saved partial-reply outcome for ordinary lost output', keepsOrdinaryPartialReply);
+
+async function missingKeyNoticeUsesSelectedAssistant(personalAssistantId: string | null) {
+  const context = await createCaptureWorkspace([], [], 'team');
+  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation();
+  const requested: string[] = [];
+  function readFixture(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = input instanceof Request ? input.url : String(input);
+    const url = new URL(path, location.origin);
+    if (url.pathname === '/api/my/tools/needs') {
+      requested.push(url.searchParams.get('assistantId') ?? '');
+      const body = { rows: [{ serverId: 'fixture', name: 'Fixture' }] };
+      return Promise.resolve(new Response(JSON.stringify(body)));
+    }
+    if (!originalFetch) throw new Error('Missing workspace fixture');
+    return originalFetch(input, init);
+  }
+  vi.mocked(globalThis.fetch).mockImplementation(readFixture);
+  const chat = context.fixture.componentInstance['chat'];
+  chat.assistantId.set(personalAssistantId);
+  chat.personalConnections.set(true);
+  function noticeIsVisible() {
+    context.fixture.detectChanges();
+    expect(context.root.textContent).toContain('Connect your key in My tools');
+  }
+  await vi.waitFor(noticeIsVisible);
+  expect(requested).toEqual(['assistant']);
+  context.fixture.destroy();
+}
+it.each([null, 'different-personal-assistant'])(
+  'uses the selected shared assistant for the key notice with personal default %s',
+  missingKeyNoticeUsesSelectedAssistant);

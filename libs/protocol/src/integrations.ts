@@ -46,6 +46,7 @@ export type IntegrationsResponse = z.infer<typeof integrationsResponseSchema>;
 export const toolPolicySchema = z.object({
   silo: z.string().nullable().default(null), serverId: z.string().nullable().default(null),
   connectionId: z.string().nullable(), accountMode: z.enum(['none', 'personal', 'company']).nullable(),
+  identityTool: z.string().min(1).max(128).optional(),
   startupReviewRequired: z.boolean().optional(), rejected: z.boolean().optional(),
   published: z.boolean(),
   driftHeld: z.boolean().optional(), reviewRevision: z.int().positive().optional(),

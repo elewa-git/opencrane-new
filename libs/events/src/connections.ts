@@ -18,17 +18,20 @@ const activationFields = z.strictObject({
   endpointDigest: digestSchema, operationId: connectionId, changedBy: connectionId,
   expectedSequence: z.int().nonnegative(), appendUntil: z.int().positive(),
 });
+const connectionAccountSchema = z.strictObject({
+    issuer: z.url().max(2048), subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u),
+    scopes: z.array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u)).max(64),
+    expiresAt: z.int().positive(),
+});
 const bearerActivationSchema = activationFields.extend({
   reason: z.enum(['bearer_create', 'bearer_rotation']),
+  verification: z.strictObject({ toolName: z.string().min(1).max(128),
+    toolRevision: digestSchema, account: connectionAccountSchema }).optional(),
 });
 const connectionActivationSchema = z.discriminatedUnion('reason', [
   bearerActivationSchema,
   activationFields.extend({ reason: z.literal('oauth_confirmed'),
-    configurationDigest: digestSchema.optional(), account: z.strictObject({
-    issuer: z.url().max(2048), subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u),
-    scopes: z.array(z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u)).max(64),
-    expiresAt: z.int().positive(),
-  }) }),
+    configurationDigest: digestSchema.optional(), account: connectionAccountSchema }),
 ]);
 export const connectionCreatedDataSchema = z
   .object({ userId: id, serverId: id, profile: id, secretRef: secretRefSchema,

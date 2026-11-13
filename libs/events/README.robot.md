@@ -7,7 +7,9 @@ before running the private scanner. Replay creates only missing queue jobs.
 For people, read [README.md](README.md) first.
 
 This package is the typed event catalogue used by server validation and the event
-core. It defines envelopes, per-type data schemas and examples; it does not
+core. Personal bearer activations may carry strict `verification` evidence: the
+reviewed identity tool name and revision, and safe account metadata. The review event
+may name `identityTool`; older records without these fields remain readable. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
 `onboarding.welcome_archive_set` requires the member's personal subject and

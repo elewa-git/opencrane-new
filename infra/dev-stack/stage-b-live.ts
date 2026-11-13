@@ -18,7 +18,14 @@ const { readEnv } = await import('./config.ts');
 const settings = await readEnv('settings');
 assert.notEqual(settings['DEV_REAL_PROVIDER'], '1', 'Only the free model may run');
 const { createDemoServer } = await import('../../apps/demo-mcp/src/server.ts');
-const demo = createDemoServer();
+const accountsFile = process.env['DEMO_ACCOUNTS_FILE'];
+let credentials;
+if (accountsFile) {
+  const { demoAccountsSchema } = await import('../../apps/demo-mcp/src/credential-tools.ts');
+  const raw: unknown = JSON.parse(await readFile(accountsFile, 'utf8'));
+  credentials = { accounts: demoAccountsSchema.parse(raw) };
+}
+const demo = createDemoServer(undefined, credentials);
 await demo.listen({ path: `${directory}/stage-b-demo.sock` });
 const execute = promisify(execFile);
 const composeFile = `${directory}/stage-b-compose.json`;

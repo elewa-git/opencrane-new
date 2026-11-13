@@ -9,11 +9,10 @@ import { readActiveMember } from './member-authority.ts';
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const referenceSchema = z.strictObject({ serverId: id, profileId: id });
 const identitySchema = z.object({ userId: id, serverId: id, profile: id });
-export const metadataSchema = z.strictObject({
-  serverId: id, profileId: id, profileRevision: z.int().positive(),
-  status: z.enum(['saved_unverified', 'unavailable']), generation: z.int().positive().nullable(),
-  adminBlocked: z.boolean(), serverAvailable: z.boolean(), callsAvailable: z.literal(false),
-});
+export { personalProfileMetadataSchema as metadataSchema } from '@opencrane/protocol';
+import { personalProfileMetadataSchema as metadataSchema } from '@opencrane/protocol';
+import { verifiedBearerAccount } from './connection-account.ts';
+
 
 /** Read the caller's exact profile. Saved material never proves an upstream identity. */
 export async function readOwnConnectionProfile(store: EventStore, binding: Binding,
@@ -46,22 +45,30 @@ async function loadMetadata(store: EventStore, silo: string, memberId: string,
   if (rows.length === 0) {
     return null;
   }
-  for (const row of rows) {
-    const identity = identitySchema.safeParse(row.event.data);
-    if (row.event.subject !== subject || !identity.success ||
-        identity.data.userId !== memberId || identity.data.serverId !== serverId ||
-        identity.data.profile !== profileId) {
-      return null;
-    }
-  }
+  if (!matchesOwnRows(rows, subject, memberId, reference)) return null;
   const profile = foldConnection(rows);
   const saved = profile.data;
   const server = connectionServer(serverRows, saved?.activation.connectionId ?? '');
   const serverAvailable = server.available && Date.now() < server.expiresAt &&
     saved?.activation.endpointDigest === server.endpointDigest;
+  const account = saved && verifiedBearerAccount(saved.activation);
+  const status = account ? 'verified' as const : profile.status;
   // Treat every control record as a block, matching bearer saves and explicit selection.
   const metadata = { serverId, profileId, profileRevision: profile.sequence,
-    status: profile.status, generation: saved?.activation.generation ?? null,
+    status, ...(account ? { accountLabel: account.subject } : {}), generation: saved?.activation.generation ?? null,
     adminBlocked: control.length > 0, serverAvailable, callsAvailable: false };
   return metadataSchema.parse(metadata);
+}
+
+function matchesOwnRows(rows: Awaited<ReturnType<typeof history>>, subject: string,
+  memberId: string, reference: z.infer<typeof referenceSchema>) {
+  for (const row of rows) {
+    const identity = identitySchema.safeParse(row.event.data);
+    if (row.event.subject !== subject || !identity.success ||
+        identity.data.userId !== memberId || identity.data.serverId !== reference.serverId ||
+        identity.data.profile !== reference.profileId) {
+      return false;
+    }
+  }
+  return true;
 }

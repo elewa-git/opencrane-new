@@ -22,7 +22,14 @@ before POST, under `my-tools-revoke:<serverId>`. A return visit restores them.
 A lost reply keeps that reference and only checks its original status. A 404
 stays unknown and does not unlock another revoke. A refused read
 clears rows, detail, review and pending reference before late replies can render.
-No token field or token readback exists in this list and revoke slice.
+The Connect or choose a key action opens `personal-key.*` on the same page.
+It loads the reviewed connection settings, accepts a password input and clears it
+before waiting for POST. A successful own-profile read shows the verified account.
+Use this key calls the existing explicit selection command. Lost save or selection
+replies retain only a profile id, change reference and operation kind under
+`personal-key:<serverId>`; Check status never resends. Input is also cleared on access
+loss, server change and destruction. No key is read back or stored in the browser.
+The [personal-key API](../../../../../docs/api/personal-keys.md) defines the contract.
 `npm run visual:screen-p3-8-bearer` uses intercepted replies at both widths.
 
 The Assistant page links to `/welcome/persona`. That screen checks four saved

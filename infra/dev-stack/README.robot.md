@@ -159,7 +159,7 @@ It checks the requested id, claimed id and worktree marker before reading settin
 It refuses real-provider mode. It keeps the existing server environment and the
 models Compose service, including its separate network and gateway process.
 Before stopping the server, it builds `Dockerfile.stage-b` from the same pinned
-Node image. The test image adds Debian main OpenSSL 3.0.22-1~deb12u1 for certificate
+Node image. The test image adds Debian main OpenSSL 3.0.22-1~deb12u2 for certificate
 generation. Its installed copyright file declares Apache-2.0. This image is only
 for the rehearsal; customer runtime images are unchanged.
 The PID and start time must still match before the server is stopped.
@@ -2206,6 +2206,24 @@ package ownership and cleanup. Neither test requires a running development stack
 
 The [local operator guide and index](../../docs/process/p5-14-pr1/operator.md)
 link existing commands and distinguish source checks from live qualification.
+
+## Personal key custody
+
+The server, models and dispatcher share `CONNECTION_CUSTODY_FILE` and the existing
+staging journal under the private models directory. The private configuration is
+saved in dispatcher settings before handler preparation or upgrade reads the enabled
+subscriptions. Runtime preparation and the dispatcher therefore see the same list.
+`connection-custody-setup.ts`
+creates a separate `<stack namespace>-connections` namespace and a service account
+with only create/get/list/delete on its secrets. Its token lasts 24 hours.
+`connection-custody-proxy.ts` runs the existing kubectl proxy through a private Unix
+socket; accepted paths are limited to that namespace's secrets. The Node bridge
+provides loopback HTTP for the existing adapter on the host and in the models container.
+`CUSTODY_PROXY_PORT` is allocated with the slot's other ports. Shutdown removes the
+namespace, and failed startup records only newly created namespaces for rollback.
+The models container already mounts the private models directory; no extra image or
+runtime dependency is added. The demo's optional key checks remain independently
+configured through `DEMO_ACCOUNTS_FILE`.
 
 ## Mounted event-log credentials
 

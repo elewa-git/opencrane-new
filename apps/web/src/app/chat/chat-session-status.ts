@@ -1,5 +1,5 @@
 import type { WritableSignal } from '@angular/core';
-import type { ComputerState } from '@opencrane/protocol';
+import type { ComputerState, ServerMessage } from '@opencrane/protocol';
 
 export function sessionWaitingReason(
   queued: boolean,
@@ -29,4 +29,22 @@ export function updateComputerStatus(
   } else if (previous === 'recovering' && state === 'ready') {
     announcement.set('Your computer is ready again. You can send.');
   }
+}
+
+export interface ComputerMessageState {
+  computer: WritableSignal<ComputerState>;
+  announcement: WritableSignal<string>;
+  dispatcherReady: WritableSignal<boolean>;
+  computerRecovered: WritableSignal<boolean>;
+  computerLostAt: WritableSignal<string>;
+}
+
+export function applyComputerMessage(state: ComputerMessageState, message: ServerMessage): void {
+  if (!('computerState' in message)) return;
+  if (message.dispatcherReady !== undefined) state.dispatcherReady.set(message.dispatcherReady);
+  if (message.computerState) {
+    updateComputerStatus(state.computer, state.announcement, message.computerState);
+  }
+  if (message.computerRecovered !== undefined) state.computerRecovered.set(message.computerRecovered);
+  if (message.computerLostAt !== undefined) state.computerLostAt.set(message.computerLostAt);
 }

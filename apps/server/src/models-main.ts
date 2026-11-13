@@ -46,7 +46,7 @@ function trackEventStoreOutage(error: unknown, unavailableSince: number | undefi
 async function personalDispatchOptions(database: ReturnType<typeof connectProjectionDb>['db']) {
   const custodyFile = process.env['CONNECTION_CUSTODY_FILE'];
   const oauthFile = process.env['MCP_OAUTH_CONFIGURATION_FILE'];
-  if (!custodyFile || !oauthFile) return {};
+  if (!custodyFile) return {};
   const custody = await connectionCustodyFromFile(custodyFile);
   if (!custody) return {};
   const credentialDispatch = { db: database, custody,

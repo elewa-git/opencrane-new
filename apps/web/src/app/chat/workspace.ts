@@ -1,3 +1,4 @@
+import { PersonalConnectionNotice } from './personal-connection-notice';
 // Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
 // The bridge supplies all state; the screen follows the owner's Workspace Live design.
 /* eslint max-lines: ["error", { max: 600, skipBlankLines: true, skipComments: true }] */
@@ -59,7 +60,7 @@ import {
 @Component({
   selector: 'oc-workspace',
   imports: [
-    HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
+    PersonalConnectionNotice, HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
     ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel, AssistantMarkdown,
     FoldLoader, ChatComposer, FileDrop, FilePreview, LiveView, CloseReviewDialog,

@@ -73,10 +73,13 @@ flowchart LR
   projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg
   store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
   server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
-  projections -.-> events["libs/events<br/>event definitions, startup requirements and safe refusal records"]
+  projections -.-> events["libs/events<br/>events and personal account checks"]
   projections -->|checks memory key identities; stores wrapped chat keys; repairs correction keys| keys["Server files<br/>private key store and package Secret"]
   store -->|OAuth settings change positions| projections
 ```
+
+Reviewed tool policy keeps the admin's personal-key requirement and identity tool
+when a catalogue is checked again or events are replayed.
 
 ## What it is responsible for
 

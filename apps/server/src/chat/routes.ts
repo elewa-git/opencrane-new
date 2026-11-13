@@ -367,7 +367,7 @@ async function personalContext(options: ChatOptions, memberId: string) {
     if (!permission.allowed) assistantId = null;
   }
   return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId,
-    memoryAdmission };
+    memoryAdmission, personalConnections: true };
 }
 
 async function write(

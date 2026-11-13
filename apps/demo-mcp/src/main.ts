@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { createDemoServer } from './server.ts';
+import { demoAccountsSchema, type DemoCredentials } from './credential-tools.ts';
 
 try {
   const port = z.coerce.number().int().min(1024).max(65535).parse(process.env['PORT'] ?? 18445);
@@ -13,7 +14,13 @@ try {
     }
     https = { cert: readFileSync(certPath), key: readFileSync(keyPath) };
   }
-  const server = createDemoServer(https);
+  const accountsPath = process.env['DEMO_ACCOUNTS_FILE'];
+  let credentials: DemoCredentials | undefined;
+  if (accountsPath) {
+    const contents: unknown = JSON.parse(readFileSync(accountsPath, 'utf8'));
+    credentials = { accounts: demoAccountsSchema.parse(contents) };
+  }
+  const server = createDemoServer(https, credentials);
   const host = https ? '0.0.0.0' : '127.0.0.1';
   await server.listen({ host, port });
   function stop() {

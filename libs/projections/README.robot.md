@@ -710,6 +710,9 @@ Rebuild uses the event time and needs no key or model call.
 Discovery always sets `reviewed: false`. Only `mcp.server_reviewed` can mark review.
 Its choices must match saved definition and review digests. Replay applies Block immediately;
 widening a mode clears publication. Unchanged catalogue checks keep `policyRevision` stable.
+A review can change none to personal and name `identityTool`. The named tool must be
+read-only and zero-cost in the saved catalogue. Changing account requirements clears
+publication. The mode and identity tool survive catalogue checks and replay.
 
 A changed connection or account mode clears every tool review and sets Block, even
 when the tool definitions, costs and approval details stay the same. A later legacy

@@ -1,3 +1,4 @@
+import { prepareConnectionCustody, prepareConnectionCustodyFile } from './connection-custody-setup.ts';
 import './stack-entry.ts';
 import { fleetProviderRefusal, requireAutomatedJourney, requireFleetStandInProvider } from './journey-guard.ts';
 import { issueMinioLease } from './minio-tokens.ts';
@@ -55,7 +56,7 @@ function includedProcess(name: string) {
 
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets',
   'audit', 'routines', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server',
-  'web'].filter(includedProcess);
+  'web', 'connection-custody'].filter(includedProcess);
 if (secondary || ownerMemorySettings.MEMORY_KEY_DIRECTORY) {
   names.push('memory');
 }
@@ -485,7 +486,7 @@ async function provisionComputers(settings: Record<string, string>) {
   return { namespace, kubeconfig: `${directory}/computer-kubeconfig.json` };
 }
 async function removeComputers() {
-  await run('kubectl', ['delete', 'namespace', namespace, `${namespace}-gateway`, '--ignore-not-found', '--wait=true', '--timeout=180s']);
+  await run('kubectl', ['delete', 'namespace', namespace, `${namespace}-gateway`, `${namespace}-connections`, '--ignore-not-found', '--wait=true', '--timeout=180s']);
   if (secondary) for (const kind of ['validatingadmissionpolicybindings', 'validatingadmissionpolicies']) {
     await run('kubectl', ['delete', kind, ...['sandbox', 'pod', 'claim'].map(suffix => `${namespace}-computer-${suffix}`), '--ignore-not-found']);
   }
@@ -526,6 +527,12 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
+  const custodyNamespace = `${namespace}-connections`;
+  const custodyFile = await prepareConnectionCustodyFile({ namespace: custodyNamespace, directory,
+    port: settings['CUSTODY_PROXY_PORT'] ?? defaultPorts['CUSTODY_PROXY_PORT']!, save });
+  const configuredDispatcher = { ...await readEnv('dispatcher'),
+    CONNECTION_CUSTODY_FILE: custodyFile };
+  await writeEnv('dispatcher', configuredDispatcher);
   const scanner = await scannerSettings(process.env, directory, settings['SCANNER_PORT']);
   if (!real) await writeEnv('settings', settings);
   // Create custody before Docker can create this mount as root.
@@ -658,7 +665,21 @@ async function up(fresh: boolean) {
     await copyFile(gatewayBinary, `${directory}/agentgateway`);
     gatewayBinary = `${directory}/agentgateway`;
   }
+  const custodyExists = await run('kubectl', ['get', 'namespace', custodyNamespace,
+    '--ignore-not-found', '-o', 'name']);
+  if (!custodyExists.trim()) ownerStartup?.namespaces.add(custodyNamespace);
+  const custody = await prepareConnectionCustody({ namespace: custodyNamespace, directory,
+    port: settings['CUSTODY_PROXY_PORT'] ?? defaultPorts['CUSTODY_PROXY_PORT']!, run, save });
+  await start('connection-custody', ['--experimental-strip-types',
+    'infra/dev-stack/connection-custody-proxy.ts'], custody);
+  async function custodyReady() {
+    const url = `http://127.0.0.1:${custody.CUSTODY_PROXY_PORT}` +
+      `/api/v1/namespaces/${custodyNamespace}/secrets?limit=1`;
+    return healthy(url);
+  }
+  await wait(custodyReady, 'connection custody');
   const modelSettings = {
+    ...custody,
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
@@ -694,7 +715,7 @@ async function up(fresh: boolean) {
   await startModels();
   await rm(`${directory}/dispatcher-ready`, { force: true });
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...ownerMemorySettings, ...binding,
+    { ...await readEnv('dispatcher'), ...ownerMemorySettings, ...binding, ...custody,
       DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
@@ -743,7 +764,7 @@ async function up(fresh: boolean) {
       ...ownerMemorySettings,
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
       DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
-      PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
+      PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`, ...custody,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');

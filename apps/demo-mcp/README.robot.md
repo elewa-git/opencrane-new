@@ -11,7 +11,8 @@ The `mcp-method` and `mcp-name` headers agree exactly with the request. Replies 
 The byte parser and method/name checks follow `apps/odoo-mcp/src/server.ts`.
 Bounded Codex metadata follows `libs/models/src/mcp.ts`; discovery needs only protocol metadata.
 Bodies are limited to 16 KiB. Duplicate JSON fields, malformed UTF-8, batches, notifications,
-initialisation, cursors, sessions, credentials, unknown fields and methods are refused.
+initialisation, cursors, sessions, unknown fields and methods are refused.
+The default mode also refuses credentials.
 Errors use fixed codes and never return request values apart from a valid JSON-RPC id.
 Logging is disabled. The process makes no outbound requests and performs no retries.
 
@@ -34,10 +35,26 @@ are new calls: an uncertain result must not be retried. There is no durable dedu
 Only synthetic memory changes; nothing is written to the event store, database or supplier.
 The quote starts at 12500 euro cents, morning, zero effects; every process start resets it.
 
+## Credential-checked mode
+
+`createDemoServer(https, { accounts })` accepts exactly two caller-supplied synthetic
+accounts: `{ account, key, permitted: true }` and `{ account, key, permitted: false }`.
+Account names and keys must differ. No test key is written in source.
+Discovery remains public. Calls require the requester's key in `Authorization: Bearer`.
+Missing and unknown keys return `invalid_request`. The first account can read and
+change `DEMO-001`; the second receives `isError: true`, `reason: not_permitted`.
+Arguments cannot select an account. Successful quote results and refused tool results
+name `actedAs`. `who_am_i` accepts `{}` and returns `subject` and `actedAs` without
+changing anything. Its optional `check` argument defaults to `account`.
+This mode has separate tool definitions and a separate catalogue digest.
+The default catalogue digest stays
+`51d3cf7b1be76c944cef472f37073c06abd87d0f22c47e509023df8019e1cb7d`.
+
 ## Settings and checks
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
+| `DEMO_ACCOUNTS_FILE` | Unset | Private JSON file containing the two accounts; enables credential checks. |
 | `PORT` | `18445` | Separate TCP port, integer 1024–65535; startup refuses an occupied port. |
 | `TLS_CERT_PATH` | Unset | Path to the trusted hostname certificate chain in PEM format. |
 | `TLS_KEY_PATH` | Unset | Path to its private key; never pass or print its value. |

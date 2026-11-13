@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { watch } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
@@ -10,10 +11,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const exec = promisify(execFile);
 
-function claimEnvironment(home: string, busyPort = 0) {
+function claimEnvironment(home: string, busyPort = 0, busyStackPort = 25110) {
   const preload = new URL('./test/claim-ports.mjs', import.meta.url).href;
   return { PATH: `${home}/bin:${process.env['PATH']}`, HOME: home,
-    NODE_OPTIONS: `--import=${preload}`, CLAIM_TEST_BUSY_PORT: String(busyPort) };
+    NODE_OPTIONS: `--import=${preload}`, CLAIM_TEST_BUSY_PORT: String(busyPort),
+    CLAIM_TEST_BUSY_STACK_PORT: String(busyStackPort) };
 }
 
 async function mockKubectl(bin: string) {
@@ -28,36 +30,61 @@ esac
   await writeFile(`${bin}/kubectl`, script);
   await chmod(`${bin}/kubectl`, 0o755);
 }
-test('claim skips a slot with a held port and leaves it unclaimed', async () => {
+async function mockFlock(bin: string) {
+  const script = `#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+const args = process.argv.slice(2);
+function lockFile(value) { return /^\\/tmp\\/opencrane-dev-stack-\\d+-(1|2)\\.lock$/u.test(value); }
+const lockIndex = args.findIndex(lockFile);
+assert(lockIndex >= 0, 'Claim fixtures may lock only secondary stacks');
+const slot = args[lockIndex].match(/-(1|2)\\.lock$/u)[1];
+args[lockIndex] = process.env.HOME + '/stack-' + slot + '.lock';
+const result = spawnSync('/usr/bin/flock', args, { stdio: 'inherit' });
+assert.ifError(result.error);
+process.exit(result.status ?? 1);
+`;
+  await writeFile(`${bin}/flock`, script, { mode: 0o755 });
+}
+
+async function claimSkipsHeldPort(stackPort: number) {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
   const bin = `${home}/bin`;
   await mkdir(bin);
   await mockKubectl(bin);
+  await mockFlock(bin);
   await writeFile(`${bin}/docker`, '#!/bin/sh\nexit 0\n');
   await chmod(`${bin}/docker`, 0o755);
-  // Model-stub port: checking just the browser or database is insufficient.
+  // Probe the chosen service port; checking just the browser or database is insufficient.
   const held = createServer().listen(0, '127.0.0.1');
   try {
     await once(held, 'listening');
     const address = held.address();
     assert(address && typeof address !== 'string');
     const { stdout } = await exec('infra/dev-stack/claim.sh', {
-      env: claimEnvironment(home, address.port),
+      env: claimEnvironment(home, address.port, stackPort),
     });
     assert.equal(stdout.trim(), '2');
+    assert.ok((await stat(`${home}/stack-2.lock`)).isFile());
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
     assert.ok((await stat(`${home}/.config/opencrane/dev-stack-2/stack-owner`)).isFile());
   } finally {
-    await new Promise<void>(resolve => held.close(() => resolve()));
+    function closeHeld(resolve: () => void) { held.close(resolve); }
+    await new Promise<void>(closeHeld);
     await rm(home, { recursive: true, force: true });
   }
-});
+}
+async function skipsModelPort() { await claimSkipsHeldPort(25110); }
+async function skipsCustodyPort() { await claimSkipsHeldPort(25114); }
+test('claim skips a slot with a held port and leaves it unclaimed', skipsModelPort);
+test('claim checks the custody proxy port before reserving a slot', skipsCustodyPort);
 
 test('status leaves a free slot alone and claim reuses this worktree slot', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-repeat-`);
   const bin = `${home}/bin`;
   await mkdir(bin);
   await mockKubectl(bin);
+  await mockFlock(bin);
   await writeFile(`${bin}/docker`, '#!/bin/sh\nexit 0\n');
   await chmod(`${bin}/docker`, 0o755);
   const env = claimEnvironment(home);
@@ -89,6 +116,7 @@ async function createClaimFixture(runningContainer = false) {
   const slotDirectory = `${home}/.config/opencrane/dev-stack-1`;
   await mkdir(bin);
   await mockKubectl(bin);
+  await mockFlock(bin);
   await mkdir(slotDirectory, { recursive: true });
   let dockerScript = '#!/bin/sh\nexit 0\n';
   if (runningContainer) {
@@ -589,7 +617,6 @@ if (program === 'k3d' && args[1] === 'create') {
 }
 if (program === 'k3d' && args[0] === 'kubeconfig') process.stdout.write('PRIVATE-KUBECONFIG');
 if (program === 'kubectl' && args.includes('port-forward') && state.holdForward) {
-  fs.writeFileSync(home + '/forward-started', String(process.pid));
   function stayRunning() {}
   function stopped() {
     fs.writeFileSync(home + '/forward-stopped', 'stopped');
@@ -597,6 +624,7 @@ if (program === 'kubectl' && args.includes('port-forward') && state.holdForward)
   }
   setInterval(stayRunning, 1000);
   process.on('SIGTERM', stopped);
+  fs.writeFileSync(home + '/forward-started', String(process.pid));
 }
 if (program === 'helm' && args.includes('list')) {
   output([]);
@@ -846,11 +874,18 @@ async function packageConnectionLifecycle(isolated: boolean) {
     const env = { ...fixture.env, DEV_STACK_ID: '1' };
     fixture.state.holdForward = true;
     await fixture.saveState();
+    const started = forwardStarted(fixture.home);
     const forward = spawn('infra/package/forward.sh', [], { env, stdio: 'ignore' });
     const closed = once(forward, 'close');
     try {
-      await waitForFixtureFile(`${fixture.home}/forward-started`);
+      function exitedBeforeReady(): never {
+        throw new Error('Fixture forward exited before signalling readiness');
+      }
+      const earlyExit = closed.then(exitedBeforeReady);
+      await Promise.race([started.ready, earlyExit]);
+      assert.ok((await stat(`${fixture.home}/forward-started`)).isFile());
     } finally {
+      started.close();
       forward.kill('SIGTERM');
       await closed;
     }
@@ -878,20 +913,16 @@ async function packageConnectionLifecycle(isolated: boolean) {
     await fixture.close();
   }
 }
-async function waitForFixtureFile(path: string) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    try {
-      await stat(path);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
-      }
-    }
-    await delay(25);
+function forwardStarted(home: string) {
+  let ready!: () => void;
+  function awaitingReady(resolve: () => void) { ready = resolve; }
+  const promise = new Promise<void>(awaitingReady);
+  function changed(_event: string, filename: string | Buffer | null) {
+    if (filename?.toString() === 'forward-started') ready();
   }
-  throw new Error('Fixture forward did not start');
+  // Subscribe before spawning. Wait for the fixture's signal rather than CPU scheduling time.
+  const watcher = watch(home, changed);
+  return { ready: promise, close: watcher.close.bind(watcher) };
 }
 async function packageUsesCheckedTarget() {
   await packageConnectionLifecycle(true);

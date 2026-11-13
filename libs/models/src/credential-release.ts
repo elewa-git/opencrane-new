@@ -9,7 +9,9 @@ import { foldConnection } from './bearer-connections.ts';
 import { foldConnectionSelection } from './connection-selection.ts';
 import { connectionServer } from './connection-server.ts';
 import { MemberAccessRefused } from './member-authority.ts';
-import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
+import { selectedPersonalAccount } from './personal-account.ts';
+import { connectionAccount } from './connection-account.ts';
+import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { routineCompanyAskFacts, routineCompanyReleaseFacts }
   from './routine-company-release.ts';
 import type { CompanyProfileReader } from './company-selection.ts';
@@ -110,11 +112,11 @@ export async function credentialReleaseEvidence(store: EventStore, silo: string,
   positions.set(control, controlPosition);
   const serverRows = await read(`mcp-${release.serverId}`);
   const server = connectionServer(serverRows, release.connectionId);
-  let oauth: Awaited<ReturnType<typeof selectedOAuth>> = null;
-  if (loadConfiguration && selection.selected?.action === 'select') {
-    oauth = await selectedOAuth(profileRows, serverRows, selection.selected,
+  let oauth: Awaited<ReturnType<typeof selectedPersonalAccount>> = null;
+  if (selection.selected?.action === 'select') {
+    oauth = await selectedPersonalAccount(profileRows, serverRows, selection.selected,
       loadConfiguration, release.toolName);
-    if (!oauth || Date.now() >= oauth.expiresAt) {
+    if ((loadConfiguration && !oauth) || (oauth && Date.now() >= oauth.expiresAt)) {
       refuse();
     }
   }
@@ -153,7 +155,7 @@ function requireProfile(profile: ReturnType<typeof foldConnection>,
   requireSavedAccount(saved.activation, release);
 }
 function requireSavedAccount(activation: Activation, release: Release) {
-  const account = 'account' in activation ? activation.account : null;
+  const account = connectionAccount(activation) ?? null;
   const scopes = account?.scopes ?? [];
   if (release.accountDigest !== digest(account) || release.scopeDigest !== digest(scopes)) {
     refuse();

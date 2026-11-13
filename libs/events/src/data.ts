@@ -490,6 +490,7 @@ export const mcpServerDiscoveredDataSchema = z
 export const mcpServerReviewedDataSchema = z.object({
   serverId: id, catalogueDigest: digestSchema, connectionId: id,
   accountMode: z.enum(['none', 'personal', 'company']),
+  identityTool: z.string().min(1).max(128).optional(),
   policyRevision: z.int().nonnegative(), reviewedBy: id,
   tools: z.array(z.object({ name: id, revision: digestSchema, reviewDigest: digestSchema,
     mode: z.enum(['allow', 'ask', 'block']) }).strict()).max(1000),

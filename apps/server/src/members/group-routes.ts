@@ -1,3 +1,4 @@
+import type { PersonalKeyDependencies } from '@opencrane/models';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -14,6 +15,7 @@ export interface GroupOptions {
   db: Query;
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
+  personalKeys?: PersonalKeyDependencies;
   loadOAuthConfiguration?: (serverId: string) => Promise<unknown>;
 }
 export function registerGroupRoutes(

@@ -8,7 +8,7 @@ const bodySchema = z.object({ input: z.array(itemSchema).default([]),
 const namespaceSchema = z.object({ type: z.literal('namespace'), name: z.string(),
   tools: z.array(z.object({ name: z.string(), type: z.string().optional() })) });
 const quoteSchema = z.object({ quoteId: z.literal('DEMO-001'), amountCents: z.int(),
-  slot: z.enum(['morning', 'afternoon']), effectCount: z.int().nonnegative() });
+  slot: z.enum(['morning', 'afternoon']), effectCount: z.int().nonnegative(), actedAs: z.string().max(100).optional() });
 
 function lastPrompt(body: z.infer<typeof bodySchema>) {
   function user(item: z.infer<typeof itemSchema>) {
@@ -84,8 +84,10 @@ export function stageBModelAnswer(raw: unknown) {
         !['function_call_output', 'custom_tool_call_output'].includes(item.type)) continue;
     const quote = findQuote(item.output);
     if (!quote) return 'The demo tool did not return a quote.';
-    return `Quote ${quote.quoteId}: ${quote.amountCents} euro cents, ${quote.slot} delivery. ` +
+    let answer = `Quote ${quote.quoteId}: ${quote.amountCents} euro cents, ${quote.slot} delivery. ` +
       `Recorded effects: ${quote.effectCount}.`;
+    if (quote.actedAs) answer += ` Acted as ${quote.actedAs}.`;
+    return answer;
   }
   return undefined;
 }

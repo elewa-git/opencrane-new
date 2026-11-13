@@ -92,3 +92,13 @@ function ordinaryAndWrite() {
 }
 test('ordinary prompts stay unchanged and the write uses the same deferred interface',
   ordinaryAndWrite);
+
+function namesCheckedDemoAccount() {
+  const result = { type: 'function_call_output', call_id: 'call_read_fixture_quote',
+    output: { ...quote, actedAs: 'account-a' } };
+  const answer = stageBModelAnswer({ input: [user, result] });
+  assert.equal(answer, 'Quote DEMO-001: 12500 euro cents, morning delivery. ' +
+    'Recorded effects: 0. Acted as account-a.');
+}
+test('the credential-checked quote answer names the account returned by the actual tool',
+  namesCheckedDemoAccount);

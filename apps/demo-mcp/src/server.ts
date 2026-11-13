@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { isToolCallText } from '@opencrane/events/tool-call';
 import { catalogue, createFixture, discovery } from './tools.ts';
+import { credentialFixture, type DemoCredentials } from './credential-tools.ts';
 
 const version = '2026-07-28';
 const boundedText = z.string().max(200);
@@ -45,11 +46,13 @@ const requestSchema = z.strictObject({
   }),
 });
 
-export function createDemoServer(https?: { cert: Buffer; key: Buffer }) {
+export function createDemoServer(https?: { cert: Buffer; key: Buffer },
+  credentials?: DemoCredentials) {
   const transport = https === undefined ? {} : { https };
   const server = Fastify({ ...transport, bodyLimit: 16384,
     requestTimeout: 15000, logger: false });
   const callTool = createFixture();
+  const checked = credentials ? credentialFixture(credentials) : undefined;
   // Reuse the Odoo adapter's strict byte parser and method/name checks.
   server.removeContentTypeParser('application/json');
   server.addContentTypeParser('application/json', { parseAs: 'buffer' }, parseJson);
@@ -63,8 +66,8 @@ export function createDemoServer(https?: { cert: Buffer; key: Buffer }) {
     const id = parsedId.success ? parsedId.data.id : null;
     try {
       const call = requestSchema.parse(request.body);
-      checkHeaders(request, call);
-      const result = execute(call, request.headers['x-opencrane-mcp-revision']);
+      checkHeaders(request, call, checked !== undefined);
+      const result = execute(call, request.headers);
       return reply.send({ jsonrpc: '2.0', id, result });
     } catch (cause) {
       let message = 'invalid_request';
@@ -74,8 +77,12 @@ export function createDemoServer(https?: { cert: Buffer; key: Buffer }) {
       return reply.send({ jsonrpc: '2.0', id, error: { code: -32602, message } });
     }
   }
-  function execute(call: z.infer<typeof requestSchema>, revision: unknown) {
+  function execute(call: z.infer<typeof requestSchema>, headers: FastifyRequest['headers']) {
+    const revision = headers['x-opencrane-mcp-revision'];
     if (call.method === 'tools/call' && call.params.name) {
+      if (checked) {
+        return checked.call(call.params.name, call.params.arguments, revision, headers.authorization);
+      }
       return callTool(call.params.name, call.params.arguments, revision);
     }
     if (call.params.name !== undefined || call.params.arguments !== undefined) {
@@ -85,16 +92,17 @@ export function createDemoServer(https?: { cert: Buffer; key: Buffer }) {
       return discovery;
     }
     if (call.method === 'tools/list') {
-      return catalogue;
+      return checked?.catalogue ?? catalogue;
     }
     throw new Error('invalid_request');
   }
 }
-function checkHeaders(request: FastifyRequest, call: z.infer<typeof requestSchema>) {
+function checkHeaders(request: FastifyRequest, call: z.infer<typeof requestSchema>,
+  credentialled: boolean) {
   const headers = request.headers;
   if (headers['mcp-protocol-version'] !== version || headers['mcp-method'] !== call.method
     || (headers['mcp-name'] ?? '') !== (call.params.name ?? '')
-    || headers['mcp-session-id'] !== undefined || headers.authorization !== undefined
+    || headers['mcp-session-id'] !== undefined || (!credentialled && headers.authorization !== undefined)
     || headers.cookie !== undefined || headers['proxy-authorization'] !== undefined) {
     throw new Error('invalid_request');
   }

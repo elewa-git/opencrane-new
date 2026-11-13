@@ -239,7 +239,7 @@ event log remains the permanent record of what happened.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|sign-out, messages with file references, Office uploads, survey, persona and scripted welcome reads, Memory setup reads, own and admin routine lists, approval replies and original call status, metadata and run pages, spending and effect pages, receipts, public chat updates, file cards and tool choices| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|messages, settings, personal keys and checked changes| server["apps/server<br/>the back end"]
   server -.->|checks saved membership, records and rechecks the company custody record version, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send and final access checks with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
@@ -351,7 +351,10 @@ assistant can call. These reads check current admin rights after loading the fac
 
 Members can inspect their own saved bearer profile even when an admin has disabled it.
 The reply separates the saved revision, admin block and server availability. Saving
-credentials does not verify an upstream identity or enable calls.
+credentials alone does not enable calls. For a server marked as needing a personal
+key, the server checks the admin-chosen read-only identity tool before saving verified
+account evidence. It refuses account identifiers that copy the key, including encoded
+text. My tools lets the member explicitly choose that key for use.
 The list shows the same safe facts for each saved personal profile, including a revoked
 or blocked one. It marks the person's explicit choice. A changed list asks the screen
 to start paging again.
@@ -420,7 +423,8 @@ The server checks current admin access after preparing the review, even if prepa
 
 Members can explicitly save or clear their own personal account choice through the server.
 The reply confirms the saved choice without claiming the account can be used.
-Verified OAuth choices require current operator settings supplied by the server.
+Verified bearer choices require the reviewed account check. Verified OAuth choices
+require current operator settings supplied by the server.
 For a chat turn, the server offers a personal tool only when the requester still has
 a verified choice for that server. The signed turn pass holds the chosen profile and
 choice revision. The computer sees the usual tool fields, and the models process checks

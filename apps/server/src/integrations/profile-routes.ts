@@ -1,3 +1,5 @@
+import { registerPersonalConnectionNeeds } from './personal-needs-route.ts';
+import { registerPersonalKeyRoutes } from './personal-key-routes.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { MemberAccessRefused, readOwnConnectionProfile, readOwnConnectionChange,
@@ -26,6 +28,8 @@ function hasGetBody(request: FastifyRequest) {
 
 export function registerConnectionProfileRead(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
+  registerPersonalKeyRoutes(app, config, options);
+  registerPersonalConnectionNeeds(app, config, options);
   registerConnectionSelection(app, config, options);
   registerConnectionProfileRevoke(app, config, options);
   registerConnectionProfileList(app, config, options);

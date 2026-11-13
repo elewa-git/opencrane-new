@@ -19,6 +19,9 @@ An OAuth settings change records when editing starts and the digest of the finis
 settings. It contains no OAuth client secret or token.
 A verified company connection record can hold an account name, actual scopes and expiry.
 The credential stays in private custody; reading the record alone grants no call.
+A personal key activation can also record its checked account and the exact read-only
+tool used to verify it. A tool review names that identity tool. Neither record holds
+the key itself.
 A system routine pause names the exact saved removal of its recorded owner.
 The reference carries only the event id and position; readers verify the history.
 An Ask for a company routine can name its run, account and tool details with digests
@@ -76,7 +79,7 @@ Allow, Ask or Block choice for a tool.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>event definitions, including persona and scripted welcome records"]
+  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>events and checked account references"]
   server["apps/server<br/>back end"] -.->|checks message file ids, assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send and final access records with OAuth digests, retries and writer closure| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables and retired choices"] -.-> events

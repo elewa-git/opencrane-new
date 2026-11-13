@@ -11,7 +11,8 @@ import { connectionServer } from './connection-server.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
 import { companySelectionFacts, type CompanyProfileReader } from './company-selection.ts';
 import { data } from './state.ts';
-import { selectedOAuth, type OAuthConfigurationLoader } from './oauth-selection.ts';
+import { selectedPersonalAccount } from './personal-account.ts';
+import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 
 export class SelectionInputInvalid extends Error {}
 export class SelectionConflict extends Error {}
@@ -81,13 +82,13 @@ async function facts(store: EventStore, silo: string, selection: Selection,
   const controlSequence = await store.head(control, deadline);
   const positions = new Map([[serverSubject, server.sequence], [control, controlSequence]]);
   let available = false;
-  let oauth: Awaited<ReturnType<typeof selectedOAuth>> = null;
+  let oauth: Awaited<ReturnType<typeof selectedPersonalAccount>> = null;
   let expiresAt = server.expiresAt;
   if (selection.action === 'select' && selection.ownerKind !== 'company') {
     const subject = `connection-${selection.userId}-${selection.serverId}-${selection.profileId}`;
     const profileRows = await history(store, subject, silo, deadline);
     const profile = foldConnection(profileRows);
-    oauth = await selectedOAuth(profileRows, rows, selection, loadConfiguration, toolName);
+    oauth = await selectedPersonalAccount(profileRows, rows, selection, loadConfiguration, toolName);
     if (oauth) {
       expiresAt = Math.min(expiresAt, oauth.expiresAt);
     }
@@ -462,4 +463,10 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
   }
   return { status: 'saved_unverified' as const, sequence: state.sequence,
     profileId: state.selected.profileId, profileRevision: state.selected.profileRevision };
+}
+
+/** Reuse the same member and grant checks before sending a key for its identity check. */
+export async function requirePersonalConnectionAccess(store: EventStore, binding: Binding,
+  userId: string, serverId: string, writing = false) {
+  return access(store, binding, userId, serverId, writing);
 }

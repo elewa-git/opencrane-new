@@ -56,12 +56,13 @@ function failureAt(stage) {
   }
 }
 
-async function execute(command, args) {
+async function execute(command, args, options) {
   record(`exec ${command} ${args.join(' ')}`);
   if (args.includes('infra/dev-stack/journey.ts')) {
     throw new Error('Automated journey reached');
   }
   if (args.includes('upgrade-handlers')) {
+    record(`upgrade-custody ${Boolean(options?.env?.CONNECTION_CUSTODY_FILE)}`);
     if (process.env.START_UPGRADE_FAILURE === '1' && args.includes('--dry-run')) {
       throw new Error('private database URL: postgres://secret@fixture.invalid');
     }
@@ -119,6 +120,7 @@ function spawnFixture(_command, args, options) {
     record(`memory-setting ${role} ${memorySetting}`);
   }
   if (args.includes('dispatcher')) {
+    record(`dispatcher-custody ${Boolean(options.env.CONNECTION_CUSTODY_FILE)}`);
     assert.equal(options.env.CONTENT_DATABASE_URL, 'postgres://fixture.invalid/server');
     assert.equal(options.env.DATABASE_URL, 'postgres://fixture.invalid/dispatcher');
   }

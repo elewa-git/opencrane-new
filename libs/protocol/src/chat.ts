@@ -205,6 +205,7 @@ export const chatChangeSchema = z.object({
 }).strict();
 export const chatContextSchema = z.object({
   memberId: z.string(), displayName: z.string().nullable().optional(),
+  personalConnections: z.boolean().optional(),
   assistantId: z.string().nullable(), memoryAdmission: memoryAdmissionSchema.optional(),
 });
 export type ChatRow = z.infer<typeof chatRowSchema>;
