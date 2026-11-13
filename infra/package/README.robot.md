@@ -211,7 +211,14 @@ Only the storage credential sidecar mounts the object-store provisioning identit
 It creates the private `files` bucket and issues a fresh 15-minute STS credential
 every five minutes. The policy permits object reads, writes, deletion and listing
 only in that bucket. The server reads an atomic, memory-backed lease file and
-expires it locally after 14 minutes. It receives no provisioning credential.
+expires it locally after at most 14 minutes from issuance start, or one minute
+before the upstream expiry if earlier. STS issuance has a ten-second deadline;
+shutdown cancels its socket and response body. A failed renewal leaves the previous
+file intact. Readiness reads and validates that lease with the same rule as the
+server, and refuses after expiry. Restarting the sidecar can issue a new lease.
+Failures keep only a fixed message and structured cause classification; upstream
+messages, response bodies and cancellation reasons are discarded.
+The server receives no provisioning credential.
 The installer waits for the object store and scanner as well as the existing apps.
 
 `Objects.Dockerfile` copies only the static MinIO binary and reviewed source notices;

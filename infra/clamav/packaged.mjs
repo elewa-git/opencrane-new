@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { lstat, readdir } from 'node:fs/promises';
+import { hashDatabase } from './database.mjs';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { readApprovedRelease, validateManifest } from './release.mjs';
 import { scanClamd } from './instream.mjs';
@@ -11,12 +11,8 @@ function requireScanner(condition) {
 
 async function verifyDatabase(directory, database) {
   const path = join(directory, database.file);
-  const status = await lstat(path);
-  requireScanner(status.isFile() && status.size >= 512 && status.size <= 512 * 1024 * 1024);
-  const hash = createHash('sha256');
-  const bytes = createReadStream(path);
-  for await (const chunk of bytes) hash.update(chunk);
-  requireScanner(hash.digest('hex') === database.sha256);
+  const { sha256 } = await hashDatabase(path);
+  requireScanner(sha256 === database.sha256);
 }
 
 // The chart copies the approved image's files once, then mounts the set read-only

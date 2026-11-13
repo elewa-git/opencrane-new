@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { hashDatabase } from './database.mjs';
 import { lstat, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -144,21 +144,6 @@ function parseUpdaterEvidence(output) {
   return { tool: 'FreshClam', exitCode: 0, databases };
 }
 
-async function hashDatabase(path) {
-  const status = await lstat(path);
-  requireEvidence(status.isFile() && status.size >= 512 && status.size <= 512 * 1024 * 1024);
-  const hash = createHash('sha256');
-  const stream = createReadStream(path);
-  let header;
-  for await (const chunk of stream) {
-    if (header === undefined) {
-      requireEvidence(chunk.length >= 512);
-      header = chunk.toString('ascii', 0, 512);
-    }
-    hash.update(chunk);
-  }
-  return { sha256: hash.digest('hex'), header };
-}
 
 function verifiedBuildTime(header, version, displayedTime, checkedAt) {
   const fields = header.split(':');
@@ -184,7 +169,7 @@ async function readDatabase(candidate, block, evidence, checkedAt) {
   const dateField = onlyMatch(block, /^Build time: (.+)$/gm);
   const displayedTime = parseBuildTime(dateField[1], checkedAt);
   onlyMatch(block, /^Verification OK\.$/gm);
-  const hashes = [...block.matchAll(/^([a-f0-9]{64})  (main|daily|bytecode)\.(cvd|cld)$/gm)];
+  const hashes = [...block.matchAll(/^([a-f0-9]{64}) {2}(main|daily|bytecode)\.(cvd|cld)$/gm)];
   requireEvidence(hashes.length === 2);
   const { sha256, header } = await hashDatabase(join(candidate, file));
   const builtAt = verifiedBuildTime(header, version, displayedTime, checkedAt);

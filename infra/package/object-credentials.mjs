@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { createLogger } from '@opencrane/observability';
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
@@ -10,7 +12,7 @@ const logger = createLogger('package-storage-credentials');
 const endpoint = 'http://objects:9000';
 const leaseFile = '/run/storage/lease.json';
 
-export async function issueObjectLease(identity, leaseFile, endpoint) {
+function leaseProvider(identity, endpoint) {
   const statement = {
     Effect: 'Allow',
     Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
@@ -23,13 +25,62 @@ export async function issueObjectLease(identity, leaseFile, endpoint) {
     durationSeconds: 900,
     policy: JSON.stringify(policy),
   };
-  const provider = new AssumeRoleProvider(options);
+  return new AssumeRoleProvider(options);
+}
+
+function leaseFailure(reason) {
+  const cause = { kind: 'storage_lease', reason };
+  return new Error('Storage lease unavailable', { cause });
+}
+
+async function boundedCredentials(provider, signal) {
+  let nativeRequest = httpRequest;
+  if (provider.stsEndpoint.protocol === 'https:') nativeRequest = httpsRequest;
+  function request(options, callback) {
+    return nativeRequest({ ...options, signal }, callback);
+  }
+  // Keep the SDK's signing and parsing, but abort its socket and response body too.
+  provider.transport = { request };
+  signal.throwIfAborted();
   const credentials = await provider.getCredentials();
-  // Expire locally before the server's 15-minute lease. The application can
-  // read only this file; the provisioning identity stays in its separate mount.
-  const lease = { ...credentials, expiresAt: Date.now() + 840000 };
-  await writeFile(`${leaseFile}.tmp`, JSON.stringify(lease), { mode: 0o600 });
-  await rename(`${leaseFile}.tmp`, leaseFile);
+  signal.throwIfAborted();
+  return credentials;
+}
+
+export async function issueObjectLease(identity, leaseFile, endpoint, signal) {
+  const started = Date.now();
+  const deadline = new AbortController();
+  function expired() {
+    deadline.abort();
+  }
+  const timer = setTimeout(expired, 10000);
+  const signals = [deadline.signal];
+  if (signal) signals.push(signal);
+  const cancelled = AbortSignal.any(signals);
+  let reason = 'upstream_failure';
+  try {
+    const provider = leaseProvider(identity, endpoint);
+    const credentials = await boundedCredentials(provider, cancelled);
+    // Count from request start, and stop before either the requested or actual STS expiry.
+    const upstreamExpiry = Date.parse(provider.accessExpiresAt);
+    const expiresAt = Math.min(started + 840000, upstreamExpiry - 60000);
+    if (!Number.isSafeInteger(expiresAt) || expiresAt <= Date.now()) {
+      throw leaseFailure('invalid_expiry');
+    }
+    reason = 'publication_failure';
+    const lease = { ...credentials, expiresAt };
+    await writeFile(`${leaseFile}.tmp`, JSON.stringify(lease), { mode: 0o600 });
+    cancelled.throwIfAborted();
+    await rename(`${leaseFile}.tmp`, leaseFile);
+  } catch {
+    // Upstream errors can embed credentials in messages, stacks and nested causes.
+    // Keep only a classification chosen here; never retain the upstream error.
+    if (deadline.signal.aborted) reason = 'deadline';
+    if (signal?.aborted) reason = 'cancelled';
+    throw leaseFailure(reason);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function main() {
@@ -46,16 +97,21 @@ async function main() {
   process.once('SIGINT', shutdown);
   try {
     while (!stop.signal.aborted) {
-      await issueObjectLease(identity, leaseFile, endpoint);
+      await issueObjectLease(identity, leaseFile, endpoint, stop.signal);
       await delay(300000, undefined, { signal: stop.signal });
     }
   } catch (cause) {
-    if (!stop.signal.aborted) throw new Error('Storage lease unavailable', { cause });
+    if (!stop.signal.aborted) throw cause;
   }
 }
 
 function failed(cause) {
-  const err = new Error('Storage lease unavailable', { cause });
+  const reasons = ['upstream_failure', 'publication_failure', 'deadline', 'cancelled'];
+  let reason = 'upstream_failure';
+  if (cause?.cause?.kind === 'storage_lease' && reasons.includes(cause.cause.reason)) {
+    reason = cause.cause.reason;
+  }
+  const err = leaseFailure(reason);
   logger.error({ err, reason: 'storage_unavailable' }, 'Storage lease unavailable');
   process.exitCode = 1;
 }

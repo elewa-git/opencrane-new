@@ -71,7 +71,7 @@ function input() {
     signal: new AbortController().signal };
 }
 
-test('reports the loaded approved database and exact bytes from the private transport', async () => {
+async function reportsApprovedBytes() {
   const approvedSha = settings.approvedSha;
   const scanner = await packagedScanner(settings);
   settings.approvedSha = 'b'.repeat(64);
@@ -89,40 +89,49 @@ test('reports the loaded approved database and exact bytes from the private tran
   expect(next.databases[0].version).toBe(1);
   scanner.stop();
   await expect(scanner.scan(input())).rejects.toThrow('Packaged scanner refused');
-});
+}
+test('reports the loaded approved database and exact bytes from the private transport', reportsApprovedBytes);
 
-test.each(['altered', 'missing', 'extra', 'symlink'])('refuses %s database bytes', async (mode) => {
+async function refusesChangedDatabase(mode) {
   const file = join(settings.databaseDirectory, 'daily.cvd');
   if (mode === 'altered') await writeFile(file, Buffer.alloc(512, 'changed'));
   if (mode === 'missing' || mode === 'symlink') await rm(file);
   if (mode === 'extra') await writeFile(join(settings.databaseDirectory, 'extra'), 'unknown');
   if (mode === 'symlink') {
     // Keep the target's size and digest valid so only the link check can refuse it.
-    const target = join(directory, 'daily.cvd');
+    // Make the link path 512 bytes long, matching the content length and size bounds.
+    const targetDirectory = join(directory, 'a'.repeat(200), 'b'.repeat(200));
+    await mkdir(targetDirectory, { recursive: true });
+    const targetNameLength = 512 - Buffer.byteLength(targetDirectory) - 1;
+    const target = join(targetDirectory, 'd'.repeat(targetNameLength));
     await writeFile(target, Buffer.alloc(512, 'daily'));
     await symlink(target, file);
   }
   await expect(packagedScanner(settings)).rejects.toThrow();
   expect(scanClamd).not.toHaveBeenCalled();
-});
+}
+const databaseFaults = ['altered', 'missing', 'extra', 'symlink'];
+test.each(databaseFaults)('refuses %s database bytes', refusesChangedDatabase);
 
-test('refuses a release for another engine or an unapproved manifest', async () => {
+async function refusesOtherRelease() {
   settings.image = `example.invalid/scanner@sha256:${'b'.repeat(64)}`;
   await expect(packagedScanner(settings)).rejects.toThrow();
   settings.image = image;
   settings.approvedSha = 'b'.repeat(64);
   await expect(packagedScanner(settings)).rejects.toThrow();
-});
+}
+test('refuses a release for another engine or an unapproved manifest', refusesOtherRelease);
 
-test('refuses stale and future upstream checks at startup', async () => {
+async function refusesStaleStartup() {
   for (const offset of [-86400000, 1]) {
     manifest.databaseUpdatedAt = new Date(checked + offset).toISOString();
     await approve();
     await expect(packagedScanner(settings)).rejects.toThrow();
   }
-});
+}
+test('refuses stale and future upstream checks at startup', refusesStaleStartup);
 
-test('refuses expired database evidence and changed bytes before transfer', async () => {
+async function refusesExpiredOrChangedBytes() {
   const scanner = await packagedScanner(settings);
   const request = input();
   request.bytes[0] = 0;
@@ -130,9 +139,10 @@ test('refuses expired database evidence and changed bytes before transfer', asyn
   vi.mocked(Date.now).mockReturnValue(checked + 86400000);
   await expect(scanner.scan(input())).rejects.toThrow();
   expect(scanClamd).not.toHaveBeenCalled();
-});
+}
+test('refuses expired database evidence and changed bytes before transfer', refusesExpiredOrChangedBytes);
 
-test('refuses a result if the database expires during transfer', async () => {
+async function refusesExpiryDuringTransfer() {
   const scanner = await packagedScanner(settings);
   function expire() {
     vi.mocked(Date.now).mockReturnValue(checked + 86400000);
@@ -140,7 +150,8 @@ test('refuses a result if the database expires during transfer', async () => {
   }
   vi.mocked(scanClamd).mockImplementation(expire);
   await expect(scanner.scan(input())).rejects.toThrow();
-});
+}
+test('refuses a result if the database expires during transfer', refusesExpiryDuringTransfer);
 
 async function refusesDatabaseSize(size) {
   const file = join(settings.databaseDirectory, 'daily.cvd');

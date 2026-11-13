@@ -34,7 +34,8 @@ The install runs a fake AI model for testing and creates its first owner through
 saved [events](../../GLOSSARY.md#event). Workers start a computer when the owner
 first chats. Computers belong to assistants, including shared group assistants,
 and remain the same across chats. The installation includes persistent MinIO file storage
-and a private ClamAV scanner. The server checks attachments before saving them,
+and a private ClamAV scanner. Storage credentials rotate, and readiness checks
+their expiry. The server checks attachments before saving them,
 then uses the existing chat path to answer questions about clean files.
 Infected files are refused. Uploads stay unavailable when scanning cannot be proved
 or its last verified update check is more than 24 hours old.

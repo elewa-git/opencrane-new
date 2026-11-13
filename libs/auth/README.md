@@ -7,7 +7,8 @@ and [computers](../../GLOSSARY.md#computer). This library checks sign-in with
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) and keeps the person's session
 in a protected browser cookie. It also makes passes for each assistant's computer
 and for each reply in a chat, so those requests can be checked.
-It can also make scanner passes tied to a trusted service and its silo.
+It can also make scanner passes tied to a trusted service and its silo, and check
+short-lived storage credentials shared by the package and upload server.
 
 ## Where it fits
 
@@ -19,7 +20,7 @@ may do. It reads saved computer records to check computer and chat passes.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> auth["libs/auth<br/>sign-in and service passes"]
+  package["infra/package<br/>packaged installation"] -->|checks storage credentials| auth["libs/auth<br/>sign-in and service passes"]
   server["apps/server<br/>back end"] -.->|checks sign-in and passes| auth
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
@@ -45,6 +46,7 @@ flowchart LR
   Keep an unproved end's requested reason separate from a proved end reason.
 - Make one-minute passes for a computer to reach an approved outside service.
   Delivery of these passes to computers is not switched on yet.
+- Check the shape and expiry of short-lived storage credentials before use.
 - Make scanner passes for a configured server or image worker, and check the
   service, silo, purpose and request. Scanner connections do not use them yet.
 
