@@ -206,9 +206,6 @@ async function logoutCsrfChecks(page: Page, origin: string) {
   console.log('PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me');
 }
 async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin: string, user: User, stage: (step: string) => void) {
-  function isLogoutRequest(request: BrowserRequest): boolean {
-    return request.url() === origin + '/auth/logout';
-  }
   for (const transport of ['response body', 'manual fetch', 'fetch', 'XHR'] as const) {
     // A followed fetch can change provider sessions even when CORS hides its response.
     const context = await browser.newContext();
@@ -228,8 +225,7 @@ async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin:
         assert.equal(reply.headers()['cache-control'], 'no-store');
       } else {
         // Return only booleans. Never inject the real token into the page or record response data.
-        // CSP can block the redirect before a response event. Check the POST and cookie removal.
-        const request = page.waitForRequest(isLogoutRequest);
+        const response = page.waitForResponse((reply) => reply.url() === origin + '/auth/logout');
         const exposed = await page.evaluate(async (transport) => {
           const containsToken = (value: string) => /eyJ[\w-]+\.[\w-]+\.[\w-]+/u.test(value) || value.includes('id_token_hint');
           if (transport === 'XHR') return await new Promise<boolean>((resolve) => {
@@ -243,7 +239,7 @@ async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin:
             return containsToken(await reply.text()) || containsToken(reply.url + JSON.stringify([...reply.headers]));
           } catch { return false; } // A cross-origin redirect is not readable without CORS permission.
         }, transport);
-        assert.equal((await request).method(), 'POST');
+        assert.equal((await response).status(), 303);
         assert.equal(exposed, false, `${transport} must not expose the ID token`);
       }
       assert(!(await context.cookies(origin)).some((item) => item.name === config.cookieName));

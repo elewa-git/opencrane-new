@@ -35,7 +35,6 @@ import { dispatcherReady } from './dispatcher-ready.ts';
 const exec = promisify(execFile);
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
-const secondaryWebHeapMb = 768;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
 const ownerMemorySettings = !secondary && memoryKeyDirectory
   ? { MEMORY_KEY_DIRECTORY: memoryKeyDirectory }
@@ -324,7 +323,7 @@ async function start(name: string, args: string[], env: Record<string, string>) 
   if (await processId(name)) return;
   const log = await open(`${directory}/${name}.log`, 'a', 0o600);
   try {
-    const child = spawn(process.execPath, args, { cwd: name === 'web' ? `${root}/apps/web` : root, env: { ...base, ...(secondary ? { NODE_OPTIONS: `--max-old-space-size=${name === 'web' ? secondaryWebHeapMb : 256}` } : {}), ...env }, detached: true,
+    const child = spawn(process.execPath, args, { cwd: name === 'web' ? `${root}/apps/web` : root, env: { ...base, ...(secondary ? { NODE_OPTIONS: `--max-old-space-size=${name === 'web' ? 768 : 256}` } : {}), ...env }, detached: true,
       stdio: ['ignore', log.fd, log.fd] });
     if (child.pid) ownerStartup?.processes.set(child.pid, undefined);
     await once(child, 'spawn');
@@ -784,15 +783,15 @@ async function up(fresh: boolean) {
     await writeEnv('settings', settings);
   }
   const websiteStartedAt = performance.now();
-  if (!await processId('web')) {
-    const buildEnvironment = {
-      ...base,
-      NG_BUILD_MAX_WORKERS: '2',
-      NODE_OPTIONS: secondary ? `--max-old-space-size=${secondaryWebHeapMb}` : '',
-    };
-    await run('nice', ['-n', '10', 'npm', 'run', 'build', '-w', 'apps/web'],
-      buildEnvironment, 300_000);
-    const webEnvironment = { ORGANISATION_NAME: settings['ORGANISATION_NAME'] ?? '' };
+  const webEnvironment = { ORGANISATION_NAME: settings['ORGANISATION_NAME'] ?? '' };
+  if (secondary) {
+    await start('web', [`${root}/infra/dev-stack/web-server.mjs`,
+      `${root}/apps/web/dist/web/browser`, settings['WEB_PORT']!,
+      new URL(origin).hostname, `${directory}/proxy.json`, '--development'], {
+      ...webEnvironment, NG_BUILD_MAX_WORKERS: '2',
+    });
+  } else if (!await processId('web')) {
+    await run('nice', ['-n', '10', 'npm', 'run', 'build', '-w', 'apps/web'], base, 300_000);
     await start('web', [`${root}/infra/dev-stack/web-server.mjs`,
       `${root}/apps/web/dist/web/browser`, settings['WEB_PORT']!,
       new URL(origin).hostname, `${directory}/proxy.json`], webEnvironment);

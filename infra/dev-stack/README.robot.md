@@ -457,9 +457,11 @@ Run at most three stacks per host: the stable owner and secondary ids `1` and `2
 Operations use a separate `flock` per id; different stacks run concurrently.
 Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
 Website readiness has its own five-minute deadline, measured with a monotonic clock.
-It still requires a successful HTTP response from `/org/integrations`. All stacks
-build the production bundle before starting `web-server.mjs`, which reads the
-generated proxy configuration. Set `ORGANISATION_NAME` before a fresh start to
+It still requires a successful HTTP response from `/org/integrations`. Secondary stacks
+run Angular's development server through `web-server.mjs --development`. Its HTML
+transform fills the installation name without changing Angular's response policy,
+proxying or live updates. The owner builds the production bundle and uses the
+static-file mode of `web-server.mjs`, which reads the generated proxy configuration. Set `ORGANISATION_NAME` before a fresh start to
 save the installation's public name in `settings.env`. Startup passes that saved
 setting to the web server. It fills the public meta tag through the same
 `infra/package/web-page.mjs` function used by the package. An absent name keeps
@@ -491,6 +493,11 @@ or changes the live owner stack.
 `nice -n 10 node --test infra/dev-stack/web-server.test.mjs` builds the production
 website and checks compression, caching, proxy routes, security headers and a Mermaid
 diagram in Chromium. It starts only temporary HTTP servers.
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/web-development.test.mjs`
+starts Angular's development server and checks the escaped installation name,
+development client and blob PDF preview. The development entry uses the installed
+Angular builder's HTML transform extension; this integration test checks that
+extension against the pinned Angular version.
 
 Repeated startup stops the secondary model container before migration and starts
 it again afterwards, alongside the restarted server and dispatcher. Fresh secondary
@@ -922,8 +929,8 @@ The journey signs in as both real users in separate Playwright browser contexts
 at 390px and uses their actual encrypted cookies for HTTP and WebSocket requests.
 It refuses hostile/missing logout Origins and requests without a session. It checks
 an empty 303 body and probes manual/follow fetch, XHR, the DOM and page cookies for
-ID-token exposure. Fetch and XHR checks observe the outgoing POST and require cookie
-removal. A strict content policy can block the redirect before a browser response event.
+ID-token exposure. Fetch and XHR checks require the logout response to be HTTP 303
+and require cookie removal.
 Native keyboard sign-out returns without a chooser, removes
 the OpenCrane cookie and is followed by a successful sign-in requiring credentials.
 The five process logs are checked for the current ID token without printing it. Dev-only bootstrap
