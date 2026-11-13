@@ -9,4 +9,5 @@ Rejected tools remain part of the reviewed list, and their OpenCrane declaration
 keep the whole server under strict checks. Ask cards support empty and long tool
 descriptions. Repeated result callbacks refuse conflicting cost reports.
 Older saved catalogues keep their original digest rule during policy reads and rebuilds;
-new discoveries record the full-list rule explicitly.
+new discoveries must carry digest version 2 and pass full-list validation before append.
+Omitting the version or dates cannot select the older read rule.
