@@ -123,4 +123,4 @@ export { currentEffectsQuerySchema, currentEffectsResponseSchema,
 
 export { personalProfileMetadataSchema, personalConnectionSettingsSchema,
   personalKeyCommandSchema, personalConnectionNeedsSchema, type PersonalProfileMetadata } from './personal-connections.ts';
-export { isOrdinaryToolCatalogue, canReviewTool } from './ordinary-tools.ts';
+export { isOrdinaryToolCatalogue, canReviewTool, hasOpenCraneToolDeclarations } from './ordinary-tools.ts';

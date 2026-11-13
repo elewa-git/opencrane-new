@@ -1,9 +1,11 @@
 import { z } from 'zod';
-import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { Ajv } from 'ajv';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest,
+  mcpToolNameSchema, catalogueToolRevision } from '@opencrane/events/mcp-catalogue';
+import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
+import { hasOpenCraneToolDeclarations } from '@opencrane/protocol';
 import { version } from './remote.ts';
 
 const discoveredTool = mcpServerDiscoveredDataSchema.shape.tools.unwrap().element;
@@ -18,7 +20,7 @@ const discovery = z.object({ ...cache, supportedVersions: z.array(text).min(1).m
   capabilities: z.object({ tools: z.record(z.string(), z.unknown()) }).passthrough(), _meta: z.object({ 'io.modelcontextprotocol/serverInfo': z.object({ name: text, version: text }).passthrough() }).passthrough(),
 }).passthrough();
 const schema = z.record(z.string(), z.unknown());
-const toolName = z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/u).refine(n => !['constructor', '__proto__'].includes(n));
+const toolName = mcpToolNameSchema;
 const metaKey = z.string().regex(/^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\/)?(?:[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?)?$/u);
 const tool = z.object({ name: toolName,
   title: z.string().optional(),
@@ -45,6 +47,7 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
   const names = new Set<string>(), cursors = new Set<string>();
   let cursor: string | undefined;
   let bytes = 0;
+  let declared = false;
   for (let pages = 0; pages < 10; pages++) {
     const raw = await call('tools/list', cursor);
     const parsed = losslessJson(raw);
@@ -58,14 +61,14 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
       bytes += Buffer.byteLength(json.canonical);
       // Leave room in the event store's 1 MiB envelope for metadata and digests.
       if (bytes > 512 * 1024 || Buffer.byteLength(json.canonical) > 32 * 1024) throw new Error('inventory_limit');
+      if (hasOpenCraneToolDeclarations(rawTool)) declared = true;
+      catalogueToolRevision(json, names);
       const checked = validateTool(rawTool, json);
       if (!checked.success) {
         rejectedTools.push({ ...checked.rejection, revision: json.digest });
         continue;
       }
       const definition = checked.definition;
-      if (names.has(definition.name)) throw new Error('duplicate_tools');
-      names.add(definition.name);
       const { readOnlyHint, destructiveHint } = definition.annotations ?? {};
       tools.push({ name: definition.name, revision: json.digest, reviewed: false,
         readOnly: readOnlyHint === true, destructive: destructiveHint === true,
@@ -76,10 +79,10 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
       const identity = discoverResult._meta['io.modelcontextprotocol/serverInfo'];
       const serverInfo = { name: identity.name, version: identity.version };
       const snapshot = { checkedAt, expiresAt: new Date(expiresAt).toISOString(),
-        toolCount: tools.length, tools, rejectedTools,
+        toolCount: tools.length, tools, rejectedTools, declared,
         discoverResult: losslessJson(discoveryJson).canonical,
         serverInfo,
-        schemaDigest: catalogueDigest(tools) };
+        schemaDigest: catalogueDigest(tools, rejectedTools) };
       return boundedInventory(snapshot);
     }
     if (cursors.has(cursor)) throw new Error('pagination_limit');
