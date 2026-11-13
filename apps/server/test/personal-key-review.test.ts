@@ -1,3 +1,5 @@
+import { reviewedToolChoices } from '@opencrane/projections';
+import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { history, readToolPolicy, toolPolicyFromRows } from '@opencrane/models';
 import { remoteCatalogueWatch } from '../src/integrations/remote-catalogue-watch.ts';
@@ -26,3 +28,25 @@ async function personalReviewSurvives() {
 }
 it('marks a server through product commands and keeps the choice through recheck and replay',
   personalReviewSurvives, 120_000);
+
+async function refusesUnsafeIdentityChoice(guard: 'write' | 'charged') {
+  const setup = await personalKeyFixture();
+  const rows = await history(setup.nats.store, `mcp-${setup.serverId}`, 'test');
+  const policy = toolPolicyFromRows(rows);
+  function identity(tool: { name: string }) { return tool.name === 'who_am_i'; }
+  const chosen = policy.tools.find(identity)!;
+  if (guard === 'write') chosen.readOnly = false;
+  else delete chosen.costCents;
+  const tools = [];
+  for (const declaration of policy.catalogue!.tools!) {
+    tools.push({ name: declaration.name, revision: declaration.revision,
+      reviewDigest: toolReviewDigest(declaration), mode: 'block' as const });
+  }
+  const review = { serverId: setup.serverId, connectionId: policy.connectionId!,
+    catalogueDigest: policy.catalogue!.schemaDigest, accountMode: 'personal' as const,
+    identityTool: 'who_am_i', policyRevision: policy.policyRevision, reviewedBy: 'admin', tools };
+  // Keep every choice blocked so the separate Allow cost guard cannot mask this check.
+  expect(reviewedToolChoices(policy, review, Date.now())).toBeNull();
+}
+it.each(['write', 'charged'] as const)(
+  'refuses a %s tool as the reviewed identity tool', refusesUnsafeIdentityChoice, 120_000);
