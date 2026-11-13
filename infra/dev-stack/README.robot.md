@@ -2412,3 +2412,16 @@ saved-result and cancellation paths. The deployed reader supplies no complete
 joined set yet and refuses before a journey. A synthetic PASS is not a live receipt. This build starts
 no slot and makes no model calls. Live collection remains NOT RUN for 5i4 on its
 own new installation; the shared runner and admission remain unchanged.
+
+## Workspace sign-out and Settings journey
+
+After a fresh secondary start, run
+`nice -n 10 node --experimental-strip-types infra/dev-stack/workspace-journey.ts`
+with the claimed `DEV_STACK_ID`. The runner refuses the owner stack, foreign claims
+and real-provider mode. It uses the existing real sign-in and ownership fixtures.
+It checks member refusals, owner/admin Settings and native Sign out at 1280 and
+390 px. It checks the separate owner browser after each member logout.
+The disposable ownership fixture lasts until stack teardown. Always run
+`infra/dev-stack/down.sh` after the journey, including on failure.
+Screenshots mask email text and credential inputs. The
+[receipt](../../docs/process/work-pilot-1045-s1/journey.md) records the run and pictures.
