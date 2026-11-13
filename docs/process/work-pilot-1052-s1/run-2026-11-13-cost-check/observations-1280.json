@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-13T19:22:17.695Z",
+  "width": 1280,
+  "source": "14039774f0a7035d7a695696dc0d5fb4db2bd233",
+  "verdict": "FAIL",
+  "observations": [
+    {
+      "step": "admin installs an ordinary HTTPS server",
+      "verdict": "PASS",
+      "message": "Standard HTTPS definitions discovered with two tools and zero initially allowed"
+    },
+    {
+      "step": "admin reviews Allow and Ask and grants person and assistant access",
+      "verdict": "PASS",
+      "message": "Allow and Ask selected without cost declarations; both audience grants saved"
+    },
+    {
+      "step": "admin publishes the reviewed ordinary tools",
+      "verdict": "PASS",
+      "message": "Publication and matching gateway acknowledgement confirmed"
+    },
+    {
+      "step": "member calls the reviewed ordinary read tool in a live turn",
+      "verdict": "PASS",
+      "message": "Live assistant read returned the fixture quote and zero effects"
+    },
+    {
+      "step": "member approves an ordinary Ask write in the same live turn",
+      "verdict": "PASS",
+      "message": "Ask approval allowed exactly one write and the same-turn result"
+    },
+    {
+      "step": "changed tool list refuses the next live call and names the review requirement",
+      "verdict": "PASS",
+      "message": "Next live call refused with visible admin-review reason; no third execution reached the server"
+    },
+    {
+      "step": "check saved reply costs after the live calls",
+      "verdict": "FAIL",
+      "cause": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n3 !== 2\n"
+    }
+  ]
+}
