@@ -23,7 +23,8 @@ async function replaysSavedDigestRules() {
     expect(result.status).toBe('appended');
   }
   async function catalogueRow() {
-    const result = await storage.queue.query('SELECT policy FROM mcp_catalogue');
+    const result = await storage.queue.query<{ policy: unknown }>(
+      'SELECT policy FROM mcp_catalogue');
     return result.rows[0];
   }
   try {

@@ -66,4 +66,3 @@ export function replyContainsCredential(reply: JsonValue, contentType: string,
     containsCredentialText(reply.canonical, patterns) ||
     containsCredentialText(contentType, patterns);
 }
-

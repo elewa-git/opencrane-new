@@ -8,6 +8,8 @@ export const toolCallFields = {
   serverId: z.string().regex(/^[\w-]{1,200}$/u),
   toolName: z.string().refine(isToolCallText),
 };
+export const approvalExpiredDataSchema = z.object({ approvalId: z.string().min(1) }).strict();
+export const approvalUsedDataSchema = approvalExpiredDataSchema.extend({ permitId: z.string().min(1) });
 export const toolDispatchRecordedDataSchema = z.object({
   ...toolCallFields, requestId: z.uuid(), logicalRequestId: z.string().regex(/^[a-f0-9]{64}$/u),
   approvalId: z.string().min(1).optional(), startedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
