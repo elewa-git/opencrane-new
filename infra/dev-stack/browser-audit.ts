@@ -195,10 +195,13 @@ async function checkChangeHistory(page: Page, publication: AuditRow, screenshot:
   }
   const publicationIndex = visibleRows.findIndex(row => row.id === publication.id);
   const entry = page.locator('oc-audit article .row-button').nth(publicationIndex);
-  assert.equal(await entry.getByText('Organisation change', { exact: true }).count(), 1,
+  const visibleTitle = await entry.locator('strong').innerText();
+  assert.equal(visibleTitle.replace(/\s+/gu, ' ').trim(), '• Organisation change',
     'The publication has the title shown on the shipped screen');
-  assert.equal(await entry.getByText('Decision: Not recorded · Observation: Change recorded',
-    { exact: true }).count(), 1, 'The publication has its visible decision and observation');
+  const visibleSummary = await entry.locator('small').innerText();
+  assert.equal(visibleSummary.replace(/\s+/gu, ' ').trim(),
+    'Decision: Not recorded · Observation: Change recorded',
+    'The publication has its visible decision and observation');
   await entry.focus();
   await entry.press('Enter');
   const detail = page.getByRole('dialog');
