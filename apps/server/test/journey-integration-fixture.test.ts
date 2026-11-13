@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type { Page } from 'playwright';
 import { it, onTestFinished } from 'vitest';
 import { databases } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -10,7 +11,7 @@ import { mapMcpCatalogueRows, type McpCatalogueRow }
 import { remoteCatalogueWatch } from '../src/integrations/remote-catalogue-watch.ts';
 import { startupContractRejection } from '../src/integrations/startup-credentials.ts';
 import { journeyIntegrationRegistration } from '../../../infra/dev-stack/journey-integration-fixture.ts';
-import { journeyTool } from '../../../infra/dev-stack/journey-tool-policy.ts';
+import { journeyTool, reviewJourneyTools } from '../../../infra/dev-stack/journey-tool-policy.ts';
 
 async function fixture(originalRemote = false) {
   const nats = await natsFixture();
@@ -141,3 +142,26 @@ async function stableJourneyRows() {
   assert.equal(setup.attemptCount(), 0);
 }
 it('the typed-row journey fixture remains Ready when remote monitoring runs', stableJourneyRows);
+
+async function writesCurrentJourneyCatalogue() {
+  const nats = await natsFixture();
+  const stopped = new Error('Catalogue append checked');
+  const ownerPage = {} as Page;
+  async function append(type: string, subject: string, data: Record<string, unknown>) {
+    const event = envelope('test', subject, type, data);
+    const result = await nats.store.append({ event, expectedSequence: 0 });
+    assert.equal(result.status, 'appended');
+    assert.equal(data['digestVersion'], 2);
+    // Stop at the append boundary before any browser is used.
+    throw stopped;
+  }
+  try {
+    const tools = [journeyTool('read', true)];
+    const writing = reviewJourneyTools(ownerPage, nats.store, 'test',
+      'https://fixture.example.test', append, 'current', tools, ['allow']);
+    await assert.rejects(writing, stopped);
+  } finally {
+    await nats.close();
+  }
+}
+it('the journey catalogue builder appends a version two discovery', writesCurrentJourneyCatalogue);
