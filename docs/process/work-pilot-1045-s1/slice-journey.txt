@@ -1,12 +1,17 @@
-Fresh slice attempt on source head 2a479ed0ac84f37c3d9d7ffefcf54a7ef1c7ef13: FAIL.
-The one-minute host load before claim was 9.31. `claim.sh` succeeded.
-`up.sh --fresh` returned exit 1 during Zitadel setup before the core journey.
-Private launcher logs were retained before cleanup. `down.sh` returned exit 0.
+Final fresh slice attempt on source head 314a574c624aaed5f991941b1239d285cd7d5c6f: FAIL.
+The one-minute load before claim was 1.22. claim.sh claimed secondary stack 1.
+up.sh --fresh returned exit 1 during Zitadel setup. The exact failed setup command
+was /usr/bin/node --experimental-strip-types infra/dev-stack/zitadel-setup.ts,
+launched under its Zitadel lock. Setup reported failure; no provider response was
+logged. Private launcher diagnostics were retained
+before cleanup. down.sh returned exit 0 and released the slot.
 
 Startup diagnosis: PASS on origin/main and this PR head at low load; see diagnosis.md.
-This final stack attempt: FAIL during Zitadel setup, with no provider response logged.
-Core journey in this attempt: NOT RUN.
-Workspace slice runner: NOT RUN.
+Fresh startup on this attempt: FAIL at Zitadel setup.
+Core journey: NOT RUN.
+Workspace slice journey: NOT RUN.
+Budget editor diagnostics: NOT RUN; startup stopped before Spending.
+Product code changed: NO.
 
 | Step | 1280 px | 390 px |
 | --- | --- | --- |
@@ -17,6 +22,6 @@ Workspace slice runner: NOT RUN.
 | Owner sees Settings and opens it | NOT RUN | NOT RUN |
 | Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
 
-The earlier Spending Budget scope failure did not recur. No budget-editor browser
-console, network-failure list or screenshot was produced in this attempt because
-startup stopped before the core journey. No product code changed.
+No browser console, budget-editor network-failure list or budget-editor screenshot
+was produced because the core journey did not start. The earlier Spending failure
+did not recur. This PR does not change Zitadel setup or Spending editor paths.
