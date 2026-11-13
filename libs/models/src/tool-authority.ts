@@ -56,13 +56,13 @@ export function personalToolAccess(store: EventStore, binding: Binding,
     async function checkCurrent() {
       await current();
     }
-    const fresh = Object.assign(checkCurrent, {
-      include: current.include, head: current.head, deadline: current.deadline,
-    });
+    const authority = { include: current.include, head: current.head, deadline: current.deadline };
+    const fresh = Object.assign(checkCurrent, authority);
     await confirmDecisionAccess(request.activity, current, request.needsApproval, true);
     await prepared.confirm(current);
     await request.memory.confirm(fresh, true);
     await confirmDecisionAccess(request.activity, current, request.needsApproval, true);
   }
-  return Object.assign(confirm, { prepare });
+  const preparation = { prepare };
+  return Object.assign(confirm, preparation);
 }
