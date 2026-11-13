@@ -1,9 +1,15 @@
-NOT RUN: workspace slice journey at 1280px and 390px.
-Tested head: 0e5466e3ae0340292de65094490a5d6b7253f413
-Date: 13 November 2026
-First fresh secondary startup: FAIL after 368 seconds; exact assertion unavailable.
-Second fresh secondary startup: FAIL after 1091 seconds in core Spending editor load.
-Error: Spending budget editor did not load; inspect private evidence
-All six workspace acceptance steps: NOT RUN at both widths.
-Both secondary stack 2 claims: released; down exited 0 and status reported free.
-No new workspace screenshots. Existing screenshots belong to the previous head.
+Final fresh secondary startup on source head bf981001ef6498c22a10e4679e2e6c8d9e44b2e9: FAIL.
+`up.sh --fresh` returned exit 1. The public output was generic; the failed stage
+is unknown. The private launcher error records were retained before cleanup.
+`down.sh` returned exit 0 and the slot reported free.
+
+Workspace slice runner: NOT RUN because the fresh start failed.
+
+| Step | 1280 px | 390 px |
+| --- | --- | --- |
+| Member has no Settings link | NOT RUN | NOT RUN |
+| Member types `/org/integrations` and sees refusal | NOT RUN | NOT RUN |
+| Member uses Sign out and reaches sign-in | NOT RUN | NOT RUN |
+| Admin sees Settings and opens it | NOT RUN | NOT RUN |
+| Owner sees Settings and opens it | NOT RUN | NOT RUN |
+| Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
