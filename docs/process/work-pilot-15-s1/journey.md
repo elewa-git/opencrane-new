@@ -1,11 +1,31 @@
 # Packaged file uploads
 
-Journey on a fresh dev stack: NOT RUN
+Journey on a fresh dev stack: FAIL — the Compose fresh-stack journey passed, but the
+packaged journey stopped before package preparation when `target-up --id 2` exited
+non-zero with: “DEV_STACK_DIR must be an empty dedicated directory outside the
+repository, or owned by this worktree”. The stack cleanup completed.
 
-Recorded on 12 November 2026 for issue #15, slice 1 of 3.
+Recorded on 13 November 2026 for issue #15, slice 1 of 3. Rebased head:
+`4c07a6120b590f21c85a07fc88821cd30937bc0b`.
 The browser journey is a merge condition. Component checks do not satisfy it.
 
-## Observed steps
+The automatic Compose journey on the fresh secondary stack passed the upload,
+answer and EICAR refusal checks at 1280 px and 390 px. It wrote screenshots named
+`upload-1280.png`, `upload-390.png`, `preview-1280.png`, `preview-390.png`,
+`workspace-1280.png` and `workspace-390.png` in the claimed slot's private
+directory. Slot cleanup removed that directory, so those files are unavailable to
+attach to this receipt. They would be Compose screenshots, not evidence for the
+packaged installation.
+
+The packaged journey did not start. After the Compose journey passed, I stopped it
+as required before preparing the separate package namespace. `target-up --id 2`
+then failed with the guarded error above. The launcher hid its underlying cause;
+the likely failure is target or slot directory ownership validation, but the exact
+cause is unknown. No package namespace or installation was created, and no
+packaged browser steps or screenshots were captured. `package-down --id 2` and
+`down.sh --id 2` completed; the slot reported free.
+
+## Earlier attempt (12 November 2026)
 
 1. Checked `origin/main` and open pull requests before starting. This slice was
    neither merged nor open. Read the issue's owner decisions and Slices comment.
@@ -29,16 +49,19 @@ with **connection reset by peer** while Docker attempted HTTPS to
 changes no registry publication implementation. The reviewed images exist locally; their presence
 in the registry and their installation on Kubernetes have not been proved.
 
-## Browser acceptance still required
+## Packaged browser acceptance
 
-| Width | Signed-in clean upload and answer | EICAR refusal | Screenshot |
+| Width | Packaged clean upload and answer | Packaged EICAR refusal | Screenshot |
 | --- | --- | --- | --- |
-| 1280 px | NOT RUN | NOT RUN | Not taken |
-| 390 px | NOT RUN | NOT RUN | Not taken |
+| 1280 px | NOT RUN | NOT RUN | Not captured |
+| 390 px | NOT RUN | NOT RUN | Not captured |
 
-Finding 1 waits for the main repair in #1119. No journey was run during these review fixes.
-After the guard and registry permit qualification, use a newly claimed secondary
-slot and a fresh packaged installation in the order documented in
+Compose clean upload, answer and EICAR refusal passed at both widths as recorded
+above. Packaged clean upload, answer, refusal and screenshots were NOT RUN because
+target setup failed before package preparation.
+
+The next attempt needs a fresh secondary slot and packaged installation in the
+order documented in
 [the dev-stack contract](../../../infra/dev-stack/README.robot.md).
 Use a newly reviewed scanner release if the recorded database check has expired.
 At each width, sign in, start a chat, choose a small text or PDF file through Attach,
