@@ -1,3 +1,6 @@
+import { invalidBody } from './instance-routes.ts';
+import { personalConnectionRefusal, logPersonalConnectionFailure }
+  from './personal-connection-failure.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { personalKeyCommandSchema } from '@opencrane/protocol';
@@ -7,7 +10,6 @@ import { z } from 'zod';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { sameOrigin } from '../members/guard.ts';
-import { invalidBody } from './instance-routes.ts';
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const parameters = z.object({ serverId: identifier, profileId: identifier.optional() }).strict();
@@ -16,18 +18,24 @@ const emptyQuery = z.object({}).strict();
 export function registerPersonalKeyRoutes(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   app.get('/api/my/tools/:serverId/connection', handler);
-  const postOptions = { bodyLimit: 8192, errorHandler: invalidBody };
+  const postOptions = { bodyLimit: 8192, errorHandler: invalidKeyBody };
   app.post('/api/my/tools/:serverId/profiles/:profileId/key', postOptions, handler);
 
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
-    if (!session) return reply.code(401).send({ status: 'refused' });
-    if (!isOrganisationSession(config, session) || !sameOriginForWrite(request, config)) {
-      return reply.code(403).send({ status: 'refused' });
+    if (!session) return reply.code(401).send(personalConnectionRefusal('no_session'));
+    if (!isOrganisationSession(config, session)) {
+      return reply.code(403).send(personalConnectionRefusal('wrong_organisation'));
     }
-    if (!options || options.silo !== options.binding.silo) {
-      return reply.code(503).send({ status: 'unavailable' });
+    if (!sameOriginForWrite(request, config)) {
+      return reply.code(403).send(personalConnectionRefusal('wrong_origin'));
+    }
+    if (!options) {
+      return reply.code(503).send(personalConnectionRefusal('unavailable', 'unavailable'));
+    }
+    if (options.silo !== options.binding.silo) {
+      return reply.code(503).send(personalConnectionRefusal('wrong_silo', 'unavailable'));
     }
     try {
       const reference = parameters.parse(request.params);
@@ -41,7 +49,7 @@ export function registerPersonalKeyRoutes(app: FastifyInstance, config: AuthConf
       const body = personalKeyCommandSchema.parse(request.body);
       const dependencies = options.personalKeys;
       if (!dependencies || !reference.profileId) {
-        return reply.code(503).send({ status: 'unavailable' });
+        return reply.code(503).send(personalConnectionRefusal('unavailable', 'unavailable'));
       }
       const { material, ...command } = body;
       const input = { ...command, ...reference, appendUntil: Date.now() + 60_000 };
@@ -50,14 +58,18 @@ export function registerPersonalKeyRoutes(app: FastifyInstance, config: AuthConf
       return reply.send(saved);
     } catch (error) {
       if (error instanceof MemberAccessRefused) {
-        return reply.code(403).send({ status: 'refused' });
+        return reply.code(403).send(personalConnectionRefusal('access_required'));
       }
       if (error instanceof BearerIdentityRefused) {
-        return reply.code(422).send({ status: 'identity_unverified' });
+        logPersonalConnectionFailure(request, error, 'connection.save');
+        return reply.code(422).send(
+          personalConnectionRefusal('identity_unverified', 'identity_unverified'));
       }
-      if (error instanceof z.ZodError) return reply.code(400).send({ status: 'refused' });
-      logSaveFailure(request, error);
-      return reply.code(503).send({ status: 'unavailable' });
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send(personalConnectionRefusal('invalid_input'));
+      }
+      logPersonalConnectionFailure(request, error, 'connection.save');
+      return reply.code(503).send(personalConnectionRefusal('unavailable', 'unavailable'));
     }
   }
 }
@@ -78,13 +90,7 @@ async function readSettings(options: GroupOptions, memberId: string, serverId: s
     selectionRevision: selected.sequence };
 }
 
-function logSaveFailure(request: FastifyRequest, error: unknown) {
-  // Keep diagnostic types without logging transport messages that can contain key material.
-  const errorType = error instanceof Error ? error.constructor.name : typeof error;
-  let causeType: string | undefined;
-  if (error instanceof Error && error.cause instanceof Error) {
-    causeType = error.cause.constructor.name;
-  }
-  request.log.warn({ errorType, causeType, operation: 'connection.save', reason: 'unavailable' },
-    'Personal connection unavailable');
+function invalidKeyBody(error: Error & { statusCode?: number }, _request: FastifyRequest,
+  reply: FastifyReply) {
+  return invalidBody(error, _request, reply, 'invalid_input');
 }

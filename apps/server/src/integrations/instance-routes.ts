@@ -1,3 +1,4 @@
+import type { PersonalConnectionReason } from './personal-connection-failure.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
 import { z } from 'zod';
@@ -85,10 +86,10 @@ export function registerMcpInstanceRoutes(app: FastifyInstance, config: AuthConf
 }
 
 export function invalidBody(error: Error & { statusCode?: number }, _request: FastifyRequest,
-  reply: FastifyReply) {
+  reply: FastifyReply, reason?: PersonalConnectionReason) {
   reply.header('cache-control', 'no-store');
   const statusCode = error.statusCode === 413 ? 413 : 400;
-  return reply.code(statusCode).send({ status: 'refused' });
+  return reply.code(statusCode).send({ status: 'refused', ...(reason ? { reason } : {}) });
 }
 
 export function instanceError(reply: FastifyReply, error: unknown) {

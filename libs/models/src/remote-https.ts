@@ -34,7 +34,7 @@ export function exchangeRemote(target: Awaited<ReturnType<typeof prepareRemote>>
     lookup: pinned, headers };
   function exchange(resolve: (reply: { data: Buffer; contentType: string }) => void,
     reject: (error: Error) => void) {
-    function failed() { reject(new Error('network_refused')); }
+    function failed(error: Error) { reject(new Error('network_refused', { cause: error })); }
     function receive(res: IncomingMessage) {
       function refuse(code: string) { res.destroy(); reject(new Error(code)); }
       if (res.statusCode === 401 || res.statusCode === 403) return refuse('connection_required');
