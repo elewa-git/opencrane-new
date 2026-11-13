@@ -1,4 +1,5 @@
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
+import type { ChatRow } from '@opencrane/protocol';
 import type { sendUpload } from './upload';
 
 export interface PendingUpload {
@@ -16,7 +17,7 @@ export interface UploadChip {
   name: string;
   fileId?: string;
   progress: number;
-  state: 'queued' | 'uploading' | 'scanning' | 'ready' | 'failed';
+  state: 'queued' | 'uploading' | 'scanning' | 'preparing' | 'ready' | 'failed';
   error?: string;
 }
 
@@ -29,7 +30,9 @@ export class UploadBatch {
   readonly pendingDelivery = signal('');
   transfer: ReturnType<typeof sendUpload> | undefined;
   readonly failures = signal<UploadFailure[]>([]);
-  readonly chips = signal<UploadChip[]>([]);
+  private readonly selectedChips = signal<UploadChip[]>([]);
+  readonly chips = computed(this.deliveryChips.bind(this));
+  private readonly rows: () => ChatRow[];
   readonly hiddenIds = signal<string[]>([]);
   pending: PendingUpload | undefined;
   private readonly upload: (file?: File, key?: string) => Promise<void>;
@@ -38,9 +41,11 @@ export class UploadBatch {
   constructor(
     upload: (file?: File, key?: string) => Promise<void>,
     revision: () => number,
+    rows: () => ChatRow[],
   ) {
     this.upload = upload;
     this.revision = revision;
+    this.rows = rows;
   }
 
   async send(files: File[]): Promise<void> {
@@ -106,7 +111,7 @@ export class UploadBatch {
   confirmed(fileId: string): void {
     const pending = this.pending;
     if (pending) this.updateChip(pending.key, { key: pending.key,
-      name: pending.file.name, fileId, progress: 100, state: 'ready' });
+      name: pending.file.name, fileId, progress: 100, state: 'preparing' });
     this.pendingDelivery.set(fileId);
     this.progress.set(100);
     this.pending = undefined;
@@ -119,6 +124,37 @@ export class UploadBatch {
     const state = percent === 100 ? 'scanning' : 'uploading';
     this.updateChip(pending.key, { key: pending.key, name: pending.file.name,
       progress: percent, state });
+  }
+
+  private deliveryChips(): UploadChip[] {
+    const deliveredIds = new Set<string>();
+    for (const row of this.rows()) {
+      if (row.type === 'file.delivered' && typeof row.data['fileId'] === 'string') {
+        deliveredIds.add(row.data['fileId']);
+      }
+    }
+    function applyDelivery(chip: UploadChip): UploadChip {
+      if (chip.state === 'preparing' && chip.fileId && deliveredIds.has(chip.fileId)) {
+        return { ...chip, state: 'ready' };
+      }
+      return chip;
+    }
+    return this.selectedChips().map(applyDelivery);
+  }
+
+  confirmedIds(): string[] {
+    const ids: string[] = [];
+    for (const chip of this.chips()) {
+      if (chip.fileId) ids.push(chip.fileId);
+    }
+    return ids;
+  }
+
+  awaitingDelivery(): boolean {
+    function isPreparing(chip: UploadChip): boolean {
+      return chip.state === 'preparing';
+    }
+    return this.chips().some(isPreparing);
   }
 
   readyIds(): string[] {
@@ -137,7 +173,7 @@ export class UploadBatch {
     const removed = this.chips().find(chip => chip.key === key);
     const fileId = removed?.fileId;
     if (fileId) this.hiddenIds.update(ids => [...ids, fileId]);
-    this.chips.update(chips => chips.filter(chip => chip.key !== key));
+    this.selectedChips.update(chips => chips.filter(chip => chip.key !== key));
     this.failures.update(failures => failures.filter(failure => failure.key !== key));
     if (this.pending?.key === key) {
       this.transfer?.abort();
@@ -146,7 +182,7 @@ export class UploadBatch {
   }
 
   sent(): void {
-    this.chips.set([]);
+    this.selectedChips.set([]);
     this.failures.set([]);
     this.pendingDelivery.set('');
     this.name.set('');
@@ -154,12 +190,12 @@ export class UploadBatch {
   }
 
   private updateChip(key: string, next: UploadChip): void {
-    const current = this.chips();
+    const current = this.selectedChips();
     if (current.some(chip => chip.key === key)) {
-      this.chips.set(current.map(chip => chip.key === key ? next : chip));
+      this.selectedChips.set(current.map(chip => chip.key === key ? next : chip));
       return;
     }
-    this.chips.set([...current, next]);
+    this.selectedChips.set([...current, next]);
   }
 
   hasChip(key: string): boolean {
@@ -171,7 +207,7 @@ export class UploadBatch {
     this.transfer = undefined;
     this.pending = undefined;
     this.failures.set([]);
-    this.chips.set([]);
+    this.selectedChips.set([]);
     this.hiddenIds.set([]);
     this.pendingDelivery.set('');
     this.name.set('');

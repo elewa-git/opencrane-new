@@ -1,7 +1,7 @@
 # CI test contracts
 
 `fixture-tests.mjs` owns the file list and the arguments passed to Vitest.
-It assigns nine files to `fixtures-image` and eight to `fixtures-browser`.
+It assigns files to `fixtures-image` and `fixtures-browser`.
 The image group includes screenshot-browser, which also needs Chromium, and the
 offline demo read test, which uses packaged Codex and local services.
 It also runs `codex-config.test.ts` with pinned native Codex, the generated private
@@ -11,6 +11,11 @@ It checks one native recall reply and refusal cases using a local scripted model
 Its preparation evidence is test-only; it does not qualify backend or gateway access.
 Approvals, live-view-k3d and screenshot-browser keep their existing opt-in flags.
 Chat-browser launches three scripts that use Chromium. No test retries are added.
+
+Ordinary shards pass `--maxWorkers=2`. Each test file may also start NATS,
+PostgreSQL and OpenFGA fixture processes. Leave CPU time for those services while
+keeping their existing read and authority deadlines. Browser fixtures keep one
+worker; image fixtures keep their usual CPU-based worker count.
 
 `run-tests.mjs` calls `npm test`, preserving its pretest tool downloads.
 Before fixture tests, it builds apps/web in development mode to warm Angular's

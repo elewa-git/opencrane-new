@@ -413,7 +413,7 @@ history, joining authoritative events with gateway observations. Budget:
 - [ ] Unmatched effects raise `security.alert_raised`; missing expected observations remain uncertain. Gateway JWT failures before ext_authz retain safe correlation without asserting unverified requester identity. Event-store outage denies dispatch and never appears as an audited success.
 - [ ] Drop/rebuild audit projections and replay gateway observations without duplicate decisions, charges, secret releases or effects. Handle the gateway timestamp defect without inventing order; event/correlation ids own joins.
 - [ ] Admin metadata access does not reveal private conversation text, approval details, bearer material or raw arguments. Cross-user/silo reads and secret canaries in every log/event/UI path are tested.
-- [ ] Desktop and 390px action history/change-history views show Loading/Empty/Unavailable/Outcome unknown, filters and readable reasons with keyboard support. No SIEM/export/retention subsystem.
+- [ ] Desktop and 390px action history/change-history views show Loading/Empty/Unavailable/Outcome unknown and readable reasons with keyboard support. Owner decision (13 November 2026, recorded on #1119): Change history keeps the category filters and the safe reference search; there is no filter by conversation turn. No SIEM/export/retention subsystem.
 
 ### Blocked by
 

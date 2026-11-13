@@ -1,7 +1,7 @@
 /* eslint max-lines: ["error", { max: 750, skipBlankLines: true, skipComments: true }] */
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
-import { canStartUpload, filesAwaitingDelivery, uploadWaitReason } from './chat-session-upload';
+import { canStartUpload, uploadWaitReason } from './chat-session-upload';
 import { UploadBatch } from './upload-batch';
 import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
@@ -72,7 +72,7 @@ export class ChatSession implements OnDestroy {
   private readonly stopState: ChatSessionStop = new ChatSessionStop(this.stopScreen());
   readonly turns = computed(() =>
     transcript(this.rows(), this.memberId(), this.stopState.stoppingTurnId(),
-      [...this.uploadBatch.readyIds(), ...this.uploadBatch.hiddenIds()]));
+      [...this.uploadBatch.confirmedIds(), ...this.uploadBatch.hiddenIds()]));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(() => isTeamConversation(this.selectedConversation()));
@@ -81,13 +81,12 @@ export class ChatSession implements OnDestroy {
   readonly lastConfirmedTurnAt = computed(() => lastConfirmedTurnAt(this.turns()));
   readonly active = computed(() => this.turns().filter(isActiveTurn).at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
-  readonly uploadBatch = new UploadBatch(this.upload.bind(this), this.currentRevision.bind(this));
-  readonly uploadPending = computed(() =>
-    filesAwaitingDelivery(this.rows(), this.uploadBatch.readyIds()));
+  readonly uploadBatch = new UploadBatch(
+    this.upload.bind(this), this.currentRevision.bind(this), this.rows);
   readonly uploadWaitReason = computed(() =>
     uploadWaitReason(this.uploadBatch.batchRunning() || this.uploadBatch.uploading()
       || this.uploadBatch.hasQueued(),
-      this.uploadPending()));
+      this.uploadBatch.awaitingDelivery()));
   private creationId = '';
   /** Change this when the feed changes; old event positions and transcript then become invalid. */
   private generation = 0;

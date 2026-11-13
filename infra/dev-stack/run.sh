@@ -18,8 +18,14 @@ while [ "$#" -gt 0 ]; do
 done
 case "$stack_id" in owner) suffix= ;; 1|2) suffix=-$stack_id ;; *) echo 'Stack id must be owner, 1 or 2' >&2; exit 2 ;; esac
 if [ "$action" = journey ]; then
-  if [ "$stack_id" = owner ] || [ "${OPENCRANE_FLEET_TASK+x}" = x ]; then
-    echo 'Automated journeys require a secondary stack and no fleet task' >&2
+  if [ "$stack_id" = owner ]; then
+    echo 'Automated journeys require a secondary stack' >&2
+    exit 2
+  fi
+fi
+if [ "$action" = up ] || [ "$action" = journey ]; then
+  if [ "${OPENCRANE_FLEET_TASK+x}" = x ] && [ "${DEV_REAL_PROVIDER:-0}" = 1 ]; then
+    echo 'Fleet tasks require the stand-in model' >&2
     exit 2
   fi
 fi

@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { chatFixture } from './chat-fixture.mjs';
+import { checkAttachmentTargets, checkUploadStatusFlow } from './check-chat-attachment-targets.mjs';
 
 const capture = process.argv.includes('--capture');
 const output = resolve('docs/design/chat/comparison');
@@ -55,6 +56,12 @@ async function open(scenario, width = 390) {
   else await stable(page); return { page, fixture };
 }
 try {
+  for (const width of [390, 1280]) {
+    const { page, fixture } = await open('empty-selected', width);
+    await checkAttachmentTargets(page, width);
+    await checkUploadStatusFlow(page, fixture);
+    await page.close();
+  }
   // A conversation's desktop entry is keyboard reachable in both session panels.
   for (const width of [1280, 390]) {
     const { page } = await open('live', width);

@@ -1,3 +1,5 @@
+import { signal } from '@angular/core';
+import type { ChatRow } from '@opencrane/protocol';
 import { expect, it, vi } from 'vitest';
 import { UploadBatch, type UploadFailure } from './upload-batch';
 
@@ -14,7 +16,7 @@ async function skipsAFileRemovedWhileEarlierFileUploads() {
     started.push(file.name);
     if (file.name === 'first.txt') await firstUpload;
   }
-  const batch = new UploadBatch(upload, () => 0);
+  const batch = new UploadBatch(upload, () => 0, () => []);
   const sending = batch.send([makeFile('first.txt'), makeFile('removed.txt')]);
   const removed = batch.chips()[1];
   if (!removed) throw new Error('Missing queued file');
@@ -32,7 +34,7 @@ function makeFailure(): UploadFailure {
 }
 
 function ignoresFailureAfterFileWasRemoved() {
-  const batch = new UploadBatch(async () => {}, () => 0);
+  const batch = new UploadBatch(async () => {}, () => 0, () => []);
   const pending = { file: makeFile('removed.txt'), key: 'removed-key', conversation: 'chat' };
   batch.start(pending.file, pending.conversation, pending.key);
   batch.remove(pending.key);
@@ -55,7 +57,7 @@ async function doesNotRetryWhileBatchIsRunning() {
     }
     started.push('retry');
   }
-  const batch = new UploadBatch(upload, () => 0);
+  const batch = new UploadBatch(upload, () => 0, () => []);
   const originalFailure = makeFailure();
   batch.start(originalFailure.file, originalFailure.conversation, originalFailure.key);
   batch.failed(originalFailure, originalFailure.error);
@@ -72,7 +74,7 @@ it('does not start a failed-file retry while a batch is running',
   doesNotRetryWhileBatchIsRunning);
 
 function abortsAnActiveRemovedFile() {
-  const batch = new UploadBatch(async () => {}, () => 0);
+  const batch = new UploadBatch(async () => {}, () => 0, () => []);
   const pending = batch.start(makeFile('active.txt'), 'chat', 'active-key');
   if (!pending) throw new Error('Missing active upload');
   const abort = vi.fn();
@@ -82,3 +84,27 @@ function abortsAnActiveRemovedFile() {
   expect(batch.pending).toBeUndefined();
 }
 it('aborts an active transfer when its file is removed', abortsAnActiveRemovedFile);
+
+function waitsForDeliveryInEitherOrder() {
+  for (const deliveryFirst of [false, true]) {
+    const rows = signal<ChatRow[]>([]);
+    const batch = new UploadBatch(async () => {}, () => 0, rows);
+    batch.start(makeFile('ready.txt'), 'chat', 'request-key');
+    const delivery: ChatRow = { id: 'delivered', position: 1,
+      type: 'file.delivered', time: '2026-11-13T09:00:00Z', data: { fileId: 'file' } };
+    if (deliveryFirst) rows.set([delivery]);
+    batch.confirmed('file');
+    expect(batch.confirmedIds()).toEqual(['file']);
+    if (!deliveryFirst) {
+      expect(batch.chips()[0]?.state).toBe('preparing');
+      expect(batch.readyIds()).toEqual([]);
+      expect(batch.awaitingDelivery()).toBe(true);
+      rows.set([delivery]);
+    }
+    expect(batch.chips()[0]?.state).toBe('ready');
+    expect(batch.readyIds()).toEqual(['file']);
+    expect(batch.awaitingDelivery()).toBe(false);
+  }
+}
+it('uses delivery for both the visible chip and sendable ids in either event order',
+  waitsForDeliveryInEitherOrder);

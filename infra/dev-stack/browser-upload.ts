@@ -4,15 +4,18 @@ import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page, Locator } from 'playwright';
+import { sendUploadedMessage } from './browser-upload-message.ts';
+import { assertTouchTarget } from './browser-target.ts';
+import { holdUploadDelivery } from './browser-upload-delivery.ts';
+import { waitForUpload } from './browser-upload-status.ts';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 
 export async function browserUploadJourney(page: Page, origin: string, screenshots = 'docs/design/chat/live') {
+  const releaseDelivery = await holdUploadDelivery(page);
   const width = page.viewportSize()!.width;
   const target = async (locator: Locator) => {
     if (width !== 390) return;
-    // Wait for the menu's opening animation before measuring its usable size.
-    await locator.click({ trial: true });
-    const box = await locator.boundingBox(); assert(box && box.width >= 44 && box.height >= 44, 'Touch target is at least 44px');
+    await assertTouchTarget(locator);
   };
   await page.keyboard.press('Control+n');
   await page.getByText('Draft', { exact: true }).waitFor();
@@ -40,18 +43,6 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
       await delay(1000);
     }
   };
-  const uploaded = async (expected = 'Ready') => {
-    const status = page.locator('.upload-status');
-    // The transport has its own 120-second timeout; retry through the UI at most twice.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await status.filter({ hasText: expected }).or(status.filter({ hasText: 'Upload unavailable' })).waitFor({ timeout: 130_000 });
-      if ((await status.innerText()).includes(expected)) return;
-      assert(attempt < 2, 'Upload stayed unavailable after two retries');
-      await delay(1000);
-      const retry = page.getByRole('button', { name: 'Retry upload', exact: true });
-      await target(retry); await retry.click(); retries++;
-    }
-  };
   // Lose the first response after the real server handles it, then retry through the shipped UI.
   const filesPattern = /\/api\/conversations\/[^/]+\/files$/u;
   page.on('requestfailed', request => {
@@ -70,13 +61,30 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     loseResponse = false; await route.abort('failed');
   });
   await choose({ name: 'project.pdf', mimeType: 'application/pdf', buffer: uploadPdf() });
-  await uploaded();
+  retries += await waitForUpload(page, 'project.pdf', target, 'Preparing files…');
+  const preparing = page.getByRole('button', { name: 'Preparing files…', exact: true });
+  assert.equal(await preparing.isDisabled(), true, 'Held delivery keeps Send disabled');
+  const ready = page.getByRole('status').getByText('Ready', { exact: true });
+  assert.equal(await ready.count(), 0, 'Held delivery cannot show Ready');
+  await page.screenshot({ path: `${screenshots}/upload-preparing-${width}.png`, fullPage: true });
+  await releaseDelivery();
+  assert.equal(await waitForUpload(page, 'project.pdf', target), 0);
+  const send = page.getByRole('button', { name: 'Send message', exact: true });
+  assert.equal(await send.isEnabled(), true, 'Ready makes the attachment sendable');
+  await page.screenshot({ path: `${screenshots}/upload-ready-${width}.png`, fullPage: true });
   await page.unroute(filesPattern);
   assert(!loseResponse && retries >= 1, 'The browser recovered from the lost successful upload response');
+  // Keep the answer out of the question so the reply proves the converted file was read.
+  await sendUploadedMessage(page, 'What is the project code in the attached PDF?',
+    'The project code is Willow-47.');
   const conversation = new URL(page.url()).searchParams.get('conversation'); assert(conversation);
   const filesUrl = `${origin}/api/conversations/${conversation}/files`;
-  const list = await (await page.request.get(filesUrl)).json() as { rows: Array<{ textPath: string }> };
-  assert.equal(list.rows.length, 1);
+  const files = await readFileRows(page, filesUrl);
+  assert.equal(files.length, 1);
+  const pdf = files[0];
+  assert(pdf && typeof pdf === 'object' && 'textPath' in pdf);
+  assert.equal(typeof pdf.textPath, 'string');
+  const textPath = String(pdf.textPath);
   await page.locator('.transcript .file-card').filter({ hasText: 'project.pdf' }).waitFor();
   if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
   const panel = width === 390
@@ -103,7 +111,7 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     assert(Date.now() < renderedBy, 'Native PDF viewer did not render its first page'); await delay(100);
   }
 
-  const original = await page.request.get(`${filesUrl}/view?path=${encodeURIComponent(list.rows[0]!.textPath.slice(0, -3))}`);
+  const original = await page.request.get(`${filesUrl}/view?path=${encodeURIComponent(textPath.slice(0, -3))}`);
   assert.equal(original.headers()['content-type'], 'application/pdf');
   assert((await original.body()).equals(uploadPdf()), 'Preview/download are the promoted original');
   if (width === 390) {
@@ -113,18 +121,16 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   }
   await page.screenshot({ path: `${screenshots}/preview-${width}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  // The answer is absent from the question. The stub must receive the converted text in the turn.
-  await composer.fill('What is the project code in the attached PDF?');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click();
-  await page.getByRole('article', { name: 'Agent reply', exact: true }).filter({ hasText: 'The project code is Willow-47.' }).getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
   await page.reload();
   await page.locator('.transcript .file-card').filter({ hasText: 'project.pdf' }).waitFor();
   await choose({ name: 'eicar.txt', mimeType: 'text/plain', buffer: Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*') });
-  await uploaded('File refused: malware detected.');
+  await waitForUpload(page, 'eicar.txt', target, 'File refused: malware detected.');
   await target(page.getByRole('button', { name: 'Retry upload', exact: true }));
+  await page.getByRole('button', { name: 'Remove eicar.txt', exact: true }).click();
   await choose({ name: 'program.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZbinary') });
-  await uploaded('File type is unsupported');
+  await waitForUpload(page, 'program.exe', target,
+    'This file type is not supported. Try a supported document, image or text file.');
+  await page.getByRole('button', { name: 'Remove program.exe', exact: true }).click();
   const directory = await mkdtemp(`${tmpdir()}/oc-upload-size-`);
   try {
     const path = `${directory}/huge.txt`, file = await open(path, 'wx');
@@ -132,13 +138,16 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     // Native selection checks the real file size without copying 20 MiB through the browser driver.
     await choose(path);
     await page.getByText('File too large', { exact: false }).waitFor();
+    await page.getByRole('button', { name: 'Remove huge.txt', exact: true }).click();
   } finally { await rm(directory, { recursive: true, force: true }); }
   for (const file of [
     { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Preview text from the promoted object.') },
     { name: 'pixel.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGPg3XqGJMQwqmFUw/DVAADXsI4Q6+7dzAAAAABJRU5ErkJggg==', 'base64') },
   ]) {
     await choose(file);
-    await uploaded();
+    retries += await waitForUpload(page, file.name, target);
+    await sendUploadedMessage(page, `Read the attached ${file.name}.`,
+      'Hello from your computer.');
     const fileCard = page.locator('.transcript .file-card').filter({ hasText: file.name });
     const openFile = fileCard.getByRole('button', {
       name: `Open ${file.name}`,
@@ -147,9 +156,25 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     await openPreview(openFile);
     preview = page.getByRole('dialog', { name: file.name, exact: true });
     if (file.name.endsWith('.txt')) assert.equal(await preview.locator('pre').innerText(), file.buffer.toString());
-    else assert(await preview.locator('img').evaluate(async img => { await (img as HTMLImageElement).decode(); return (img as HTMLImageElement).naturalWidth > 0; }));
+    else assert(await preview.locator('img').evaluate(imageDecoded));
     await preview.getByRole('button', { name: 'Close preview', exact: true }).click();
   }
-  assert.equal(((await (await page.request.get(filesUrl)).json()) as { rows: unknown[] }).rows.length, 3, 'Refused files never appear');
+  const savedFiles = await readFileRows(page, filesUrl);
+  assert.equal(savedFiles.length, 3, 'Refused files never appear');
   console.log(`PASS browser upload ${width}px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; ${retries} upload retries, ${previewRetries} preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots`);
+}
+
+async function readFileRows(page: Page, url: string): Promise<unknown[]> {
+  const response = await page.request.get(url);
+  assert.equal(response.status(), 200);
+  const body: unknown = await response.json();
+  assert(body && typeof body === 'object' && 'rows' in body && Array.isArray(body.rows));
+  const rows: unknown[] = body.rows;
+  return rows;
+}
+
+async function imageDecoded(image: Element) {
+  if (!(image instanceof HTMLImageElement)) throw new Error('Expected an image preview');
+  await image.decode();
+  return image.naturalWidth > 0;
 }

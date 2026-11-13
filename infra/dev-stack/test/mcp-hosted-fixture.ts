@@ -175,7 +175,7 @@ export function hostedFixture(environment = { MCP_HOSTED_K3D: '1', DEV_STACK_ID:
   const withoutImports = original.replace(/^import[\s\S]*?;\n/gmu, '');
   const guardPath = new URL('../journey-guard.ts', import.meta.url);
   const guard = readFileSync(guardPath, 'utf8');
-  const guardSource = guard.replaceAll('export function', 'function');
+  const guardSource = guard.replace(/^export /gmu, '');
   const source = stripTypeScriptTypes(`${guardSource}\n${withoutImports}`);
   function randomUUID() {
     return 'fixture-id';

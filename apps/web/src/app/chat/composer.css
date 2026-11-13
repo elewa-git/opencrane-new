@@ -1,3 +1,5 @@
+@import '../ui/controls.css';
+
 /* Copied from OpenCrane 1; commit 10abd0ef6. */
 :host { display: block; min-width: 0; }
 .composer { position: relative; background: #fff; border: 1px solid #d9dfe0; border-radius: 12px; box-shadow: 0 3px 14px #16191a08; padding: 12px 14px 8px; }
@@ -83,7 +85,7 @@ kbd { font: 11px var(--oc-font-mono); background: #eef1f2; border: 1px solid #de
 .attachment-chip.refused { border-color: #e9bbb5; background: #fff5f3; }
 .attachment-name { font-weight: 600; overflow-wrap: anywhere; }
 .attachment-chip progress { width: 70px; }
-.attachment-chip button { min-height: 28px; padding: 2px 5px; border: 1px solid #c5d3d5; border-radius: 5px; background: white; }
+.attachment-chip button { padding: 2px 5px; border: 1px solid #c5d3d5; border-radius: 5px; background: white; }
 @media(max-width: 700px) {
   .attachment-chips { grid-column: 1 / -1; grid-row: 2; margin: 0 4px; }
   .toolbar .mode-choice, #attach-toggle, .send, .stop { grid-row: 3; }

@@ -14,7 +14,7 @@ GitHub Actions calls these scripts to choose jobs and share tests. Vitest runs t
 flowchart LR
   actions["GitHub Actions<br/>repository checks"] -->|chooses jobs and tests| ci["scripts/ci<br/>test jobs"]
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
-  ci -->|runs files| vitest["Vitest<br/>root tests"]
+  ci -->|sets worker limits and runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
   registry["GitHub registry<br/>saved base image"] -->|supplies packages| computer
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
@@ -24,7 +24,7 @@ flowchart LR
 ## What it is responsible for
 
 - Run image and browser tests in parallel jobs.
-- Balance four test jobs, called shards, using saved test durations.
+- Balance four test jobs, called shards, using saved test durations and two workers each.
 - Download pinned test images before tests, retrying temporary registry failures.
 - Build the computer test image from saved Debian packages when a digest is recorded.
 - Skip expensive jobs for documentation changes only when the base commit permits it.
@@ -34,8 +34,9 @@ flowchart LR
 
 ## Processes it handles
 
-The longest files go to the shard with the least work assigned so far. Image
-fixture files use Vitest's usual worker count, based on the runner's CPUs. Browser
+The longest files go to the shard with the least work assigned so far. Each shard
+runs two workers so its database, NATS and OpenFGA fixture processes also have CPU
+time. Image fixture files use Vitest's usual worker count, based on the runner's CPUs. Browser
 files run one at a time because concurrent Angular servers miss their startup
 deadlines. A development build prepares Angular before tests start their own servers.
 

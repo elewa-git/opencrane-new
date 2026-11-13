@@ -1178,14 +1178,22 @@ restores usable group and assistant ceilings before the next plain startup.
 It also sets the daily safety cap to 5,000 cents through the owner UI, retaining
 unconfirmed Stop reservations while leaving enough headroom for the repeat run.
 
+Upload target measurements wait for finite animations on a control and its ancestors
+to finish. Playwright actionability can accept subpixel movement before a menu
+transform has ended. The 44 px assertion still rejects permanently smaller controls.
+
 Secondary journeys also read each member's completed stub turn in Action history,
 with the permission decision and observed outcome shown separately. The owner reads
 safe organisation changes; another joined member is refused private history, and
-members are refused organisation history. The organisation-history check follows older pages to find the saved MCP
-publication, checking each page for private canaries. Newer membership grants can
-fill the first page before this check starts.
-The browser waits for **History loaded** on each page before checking for the
-publication or an **Older history** button.
+members are refused organisation history. The organisation-history API check follows
+older pages to find the saved MCP publication and checks each page for private canaries.
+The browser selects Tools & models with the keyboard, checks that every listed entry
+belongs to that category, then checks the publication’s full visible title and summary. It opens
+the safe detail and checks that Escape restores focus. Conversation action history
+has no turn filter; it shows the recorded permission and confirmed observation.
+Both history checks retain safe API response status or transport codes. A failure
+saves the screen and accessible results before closing the browser. HTML page
+responses are excluded from API diagnostics; no automatic read retry is added.
 Owner/member sessions use real Zitadel
 sign-in; the extra member uses a dev-only signed session to test resource authority.
 Both views and the refusal screen are checked at 1280px and 390px. Private chat,
@@ -1279,8 +1287,13 @@ existing two-minute delivery limit. It waits for the saved PDF to appear as deli
 and does not upload it again. `demo-prepare.test.ts` checks two applying replies after
 a lost upload reply, followed by delivery, while keeping the exact write assertions.
 
+The delivery hold reloads the page and waits for Attach before opening a new draft,
+so the personal assistant has finished loading.
 The browser starts a draft, attaches `project.pdf` through the native file picker,
-waits for delivery, previews the promoted original and asks for its project code.
+holds the real delivery event and later socket frames, checks that the chip and Send
+both say Preparing files…, releases the frames in order, then checks Ready and an
+enabled Send before sending its project-code question
+with the attachment. It waits for the completed answer before previewing the promoted original.
 The question does not contain the answer. The stub uses the inline MarkItDown text
 when it contains the requested fact. Otherwise it requests a file read through `exec`
 and answers only after Codex returns the fact. A completed read takes priority over
@@ -1292,9 +1305,14 @@ It drops the first upload response after the server handles it, clicks Retry and
 checks that only one attachment exists. The size check selects a real sparse file
 through the native picker rather than copying 20 MiB through Playwright.
 If a response is lost, the journey clicks the shipped Retry control at most twice
-with a one-second pause. Known type, size and malware refusals are never retried.
+with a one-second pause. After clicking Retry it waits for that refusal control to
+leave before reading the next result. Known type, size and malware refusals are never retried.
+Each later text or image attachment is sent with a short message. The journey waits
+for that new reply's Done state before continuing; Send can still be visible before
+a saved command starts its reply. Each refusal is checked on its named file chip.
 Full Chromium supplies its native PDF viewer; headless-shell cannot render PDFs.
-Screenshots are `docs/design/chat/live/upload-*.png` and `preview-*.png`.
+Secondary stacks save screenshots in their private claimed directory. The intercepted
+Retry captures are in `docs/process/main-upload-retry-44/`.
 The [upload receipt](../../docs/process/upload-evidence.md) records the results.
 The ordinary journey never uses a paid provider.
 Its login fixture retries Chromium `ERR_NETWORK_CHANGED` at most twice; recovery
@@ -1583,7 +1601,8 @@ An authorised owner start uses service health, process and listener checks to re
 readiness. It does not invoke `journey.ts`. Automated owner journeys are always refused.
 The shell launcher, direct stack journey action, main journey, bootstrap journey,
 MCP journey, screenshot journey, repeated live-view journey and package chat scripts refuse the owner id
-and any `OPENCRANE_FLEET_TASK` marker before configuration is evaluated.
+before configuration is evaluated, including when a fleet marker is present. Claimed secondary
+stacks accept fleet stand-in journeys and reject requested or saved real-provider mode.
 The main journey checks `DEV_REAL_PROVIDER` against the saved mode before setup;
 bootstrap and repeated live-view journeys require the saved stand-in mode.
 
@@ -1936,8 +1955,11 @@ credential file only during setup and saves it through the same product API. Rea
 uses a separate check for streamed answers, Stop, a later member and a supplier PDF.
 Changing an existing stack between real and local providers requires a fresh start.
 Owner real starts require `--owner-run` and an interactive terminal. Fleet tasks are
-refused before owner data is read. Standalone automated journeys also refuse the owner
-id and any fleet marker before reading configuration. Stand-in journeys refuse a saved
+refused before owner data is read. Standalone automated journeys refuse the owner id before reading configuration.
+Fleet tasks may start and run automated journeys on claimed secondary stacks `1` and `2`
+with the stand-in model. Even an empty fleet marker refuses a requested real provider
+(`DEV_REAL_PROVIDER=1` or a startup credential file), and saved real-provider mode
+is refused before journey setup or startup services. Stand-in journeys refuse a saved
 real-mode stack. Owner starts check health, processes and listening addresses, then
 report readiness. The [demo guide](../../docs/process/demo/README.md)
 keeps the remaining live checks explicit.

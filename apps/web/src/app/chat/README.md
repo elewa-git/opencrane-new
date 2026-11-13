@@ -122,10 +122,12 @@ drag, with a polite screen reader announcement. Files upload in order. A failed 
 keeps its plain reason and Retry upload on a removable chip while later files continue.
 The message box stays open for typing. Send and Enter wait for clean uploads and
 workspace delivery. One saved message holds its text and files together. It can
-contain files without text. Sending clears the chips. Phones keep Attach.
+contain files without text. Sending clears the chips. Retry and Remove keep a minimum 44 × 44 pixel touch target
+on phones and desktop screens. Remove also cancels an upload in progress. Phones keep Attach.
 
-Uploads stay pending while the server prepares the saved file list. The page checks
-again briefly before showing Ready. Leaving the page cancels those checks.
+Uploads stay pending while the server prepares the saved file list and delivers the
+file to the workspace. A chip shows Preparing files… until delivery, then Ready
+and Send become available together. Leaving the page cancels the file-list checks.
 If a screenshot save reply is lost, the website checks Files before offering another
 action. The viewer and chat show the same save status and keep keyboard focus while
 Files are checked. A saved screenshot appears in the transcript and Files with its

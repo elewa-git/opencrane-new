@@ -12,6 +12,7 @@ type Startup = {
   ownerRun?: boolean;
   terminal?: boolean;
   fleet?: string;
+  real?: boolean;
   shell?: boolean;
   fresh?: boolean;
   scanner?: boolean;
@@ -71,6 +72,9 @@ async function startupFailure(startup: Startup) {
     if (startup.fleet !== undefined) {
       environment['OPENCRANE_FLEET_TASK'] = startup.fleet;
     }
+    if (startup.real) {
+      environment['DEV_REAL_PROVIDER'] = '1';
+    }
     let executablePath = process.execPath;
     let args = ['--experimental-strip-types', 'infra/dev-stack/stack.ts', 'up'];
     if (startup.shell) {
@@ -94,7 +98,8 @@ async function startupFailure(startup: Startup) {
       result = spawnSync(executablePath, args, options);
     }
     assert.ifError(result.error);
-    assert.equal(result.status, 1, result.stderr);
+    const shellRefusesReal = startup.shell && startup.real && startup.fleet !== undefined;
+    assert.equal(result.status, shellRefusesReal ? 2 : 1, result.stderr);
     const output = `${result.stdout}${result.stderr}`.trim();
     if (output.includes('Owner commands require')) {
       await assert.rejects(readFile(`${directory}/stack-owner`, 'utf8'));
@@ -203,3 +208,48 @@ async function refusesUnmarkedHeadlessOwner() {
 
 test('an unmarked headless start cannot default to the owner stand-in stack',
   refusesUnmarkedHeadlessOwner);
+
+async function acceptsFleetStandInStarts() {
+  for (const id of ['1', '2'] as const) {
+    for (const fleet of ['', 'task']) {
+      const failure = await startupFailure({ id, fleet, shell: true });
+      assert.equal(failure, 'Error: flock failed; see the private last-error.log');
+    }
+  }
+}
+
+test('fleet tasks may start either secondary stack with the stand-in provider',
+  acceptsFleetStandInStarts);
+
+async function refusesFleetRealStarts() {
+  for (const id of ['1', '2'] as const) {
+    for (const fleet of ['', 'task']) {
+      const cases: Startup[] = [
+        { id, fleet, real: true },
+        { id, fleet, credential: '/synthetic-key' },
+        { id, fleet, savedMode: 'real' },
+        { id, fleet, real: true, shell: true },
+      ];
+      for (const startup of cases) {
+        const failure = await startupFailure(startup);
+        assert.match(failure, /Fleet tasks require the stand-in model/u);
+      }
+    }
+  }
+}
+
+test('fleet starts refuse requested, credential-selected and saved real providers',
+  refusesFleetRealStarts);
+
+async function refusesFleetSavedRealFreshStarts() {
+  for (const id of ['1', '2'] as const) {
+    for (const fleet of ['', 'task']) {
+      const startup: Startup = { id, fleet, savedMode: 'real', fresh: true };
+      const failure = await startupFailure(startup);
+      assert.match(failure, /Fleet tasks require the stand-in model/u);
+    }
+  }
+}
+
+void test('fleet tasks refuse saved real providers on fresh starts',
+  refusesFleetSavedRealFreshStarts);

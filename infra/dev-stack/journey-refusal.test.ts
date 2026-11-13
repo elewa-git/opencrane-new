@@ -6,7 +6,65 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { ScriptTarget, transpileModule } from 'typescript';
 
-type Invocation = { script: string; args: string[]; shell?: boolean };
+type LauncherRun = { environment: Record<string, string> };
+
+async function launcherJourneyFixture(savedReal: boolean, fleet?: string, attempt?: string) {
+  const source = await readFile('infra/dev-stack/stack.ts', 'utf8');
+  const start = source.indexOf('async function journey()');
+  const end = source.indexOf('async function status()', start);
+  assert(start >= 0 && end > start, 'The launcher journey is available to the fixture');
+  const compiled = transpileModule(source.slice(start, end), {
+    compilerOptions: { target: ScriptTarget.ES2022 },
+  }).outputText;
+  const calls: LauncherRun[] = [];
+  const environment: Record<string, string> = {};
+  if (fleet !== undefined) environment['OPENCRANE_FLEET_TASK'] = fleet;
+  if (attempt !== undefined) environment['P4_JOURNEY_ATTEMPT'] = attempt;
+  function readSettings() {
+    return Promise.resolve({ DEV_REAL_PROVIDER: savedReal ? '1' : '0' });
+  }
+  function requireAutomatedJourney() {}
+  function requireFleetStandInProvider(real: boolean) {
+    if (real && fleet !== undefined) throw new Error('Fleet tasks require the stand-in model');
+  }
+  function run(_node: string, _args: string[], passed: Record<string, string>) {
+    calls.push({ environment: passed });
+    return Promise.resolve('');
+  }
+  const context = {
+    base: {}, directory: '/fixture', process: { env: environment, execPath: '/fixture/node' },
+    readEnv: readSettings, requireAutomatedJourney, requireFleetStandInProvider,
+    run, console: { log() {} },
+  };
+  const candidate: unknown = runInNewContext(compiled + '\njourney', context);
+  assert.equal(typeof candidate, 'function');
+  const journey = candidate as () => Promise<void>;
+  return { journey, calls };
+}
+
+async function launcherRefusesSavedRealProvider() {
+  const fixture = await launcherJourneyFixture(true, 'fleet-task');
+  await assert.rejects(fixture.journey, /Fleet tasks require the stand-in model/u);
+  assert.equal(fixture.calls.length, 0, 'A saved real provider cannot launch the journey');
+}
+
+void test('stack launcher refuses a saved real provider before invoking the journey',
+  launcherRefusesSavedRealProvider);
+
+async function launcherForwardsFleetMarkers() {
+  for (const marker of ['', 'fleet-task']) {
+    const fixture = await launcherJourneyFixture(false, marker, 'attempt-one');
+    await fixture.journey();
+    assert.equal(fixture.calls.length, 1);
+    assert.equal(fixture.calls[0]?.environment['OPENCRANE_FLEET_TASK'], marker);
+    assert.equal(fixture.calls[0]?.environment['P4_JOURNEY_ATTEMPT'], 'attempt-one');
+  }
+}
+
+void test('stack launcher forwards even an empty fleet marker and the journey attempt',
+  launcherForwardsFleetMarkers);
+
+type Invocation = { script: string; args: string[]; shell?: boolean; real?: boolean };
 const commands: Invocation[] = [
   { script: 'journey.sh', args: ['--id', 'owner'], shell: true },
   { script: 'stack.ts', args: ['journey'] },
@@ -52,6 +110,7 @@ async function invoke(
       NODE_OPTIONS: '--import=./infra/dev-stack/test/journey-refusal-preload.mjs',
     };
     if (realMode) env['JOURNEY_SAVED_MODE'] = '1';
+    if (command.real) env['DEV_REAL_PROVIDER'] = '1';
     if (fleet !== undefined) env['OPENCRANE_FLEET_TASK'] = fleet;
     let executablePath = process.execPath;
     let args = ['--experimental-strip-types', `infra/dev-stack/${command.script}`, ...command.args];
@@ -99,16 +158,43 @@ async function refuseRealStandInJourney() {
 test('direct journey without real opt-in refuses saved real mode before journey setup',
   refuseRealStandInJourney);
 
-async function refuseFleetJourneys() {
-  for (const fleet of ['', 'demo-kit-2']) {
-    const result = await invoke({ script: 'journey.ts', args: [] }, fleet, '1');
-    assert.notEqual(result.status, 0);
-    assert.equal(result.reads, '', result.output);
-    assert.match(result.output, /no fleet task/u);
+async function allowFleetSecondaryJourneys() {
+  for (const id of ['1', '2']) {
+    for (const fleet of ['', 'demo-kit-2']) {
+      const result = await invoke({ script: 'journey.ts', args: [] }, fleet, id);
+      assert.equal(result.reads, 'configuration read\n', result.output);
+      const command = { script: 'run.sh', shell: true, args: ['journey', '--id', id] };
+      const shell = await invoke(command, fleet, id, false, true);
+      assert.equal(shell.status, 0, shell.output);
+      assert.equal(shell.commandCalls, 'flock');
+    }
   }
 }
 
-test('a fleet marker cannot run a standalone automated journey', refuseFleetJourneys);
+test('fleet tasks reach automated stand-in journeys on either secondary stack',
+  allowFleetSecondaryJourneys);
+
+async function refuseFleetRealJourneys() {
+  for (const id of ['1', '2']) {
+    for (const fleet of ['', 'demo-kit-2']) {
+      const command = { script: 'journey.ts', args: [], real: true };
+      const requested = await invoke(command, fleet, id);
+      assert.equal(requested.reads, '', requested.output);
+      assert.match(requested.output, /Fleet tasks require the stand-in model/u);
+      const saved = await invoke({ script: 'journey.ts', args: [] }, fleet, id, true);
+      assert.equal(saved.reads, 'settings read\n', saved.output);
+      assert.match(saved.output, /Fleet tasks require the stand-in model/u);
+      const shellCommand = { script: 'run.sh', shell: true, args: ['journey'], real: true };
+      const shell = await invoke(shellCommand, fleet, id, false, true);
+      assert.equal(shell.status, 2, shell.output);
+      assert.equal(shell.commandCalls, '');
+      assert.match(shell.output, /Fleet tasks require the stand-in model/u);
+    }
+  }
+}
+
+test('fleet journeys refuse requested and saved real providers before setup',
+  refuseFleetRealJourneys);
 
 async function refuseNonStartConsent() {
   for (const action of ['down', 'status', 'journey', 'package-check']) {
@@ -127,7 +213,7 @@ async function refuseShellJourney() {
     const result = await invoke(command, fleet, 'owner', false, true);
     assert.equal(result.status, 2, result.output);
     assert.equal(result.commandCalls, '', `flock or Node ran: ${result.commandCalls}`);
-    assert.match(result.output, /Automated journeys require a secondary stack and no fleet task/u);
+    assert.match(result.output, /Automated journeys require a secondary stack/u);
   }
 }
 
@@ -316,3 +402,18 @@ async function retriesOnlyStartupFailures() {
 
 test('restarted server health retries connection failures and only 502, 503 and 504',
   retriesOnlyStartupFailures);
+
+for (const script of ['screenshot-journey.ts', 'mcp-journey.ts']) {
+  async function refuseFleetSavedRealJourney() {
+    const command: Invocation = { script, args: ['fresh'] };
+    for (const id of ['1', '2']) {
+      for (const fleet of ['', 'task']) {
+        const result = await invoke(command, fleet, id, true);
+        assert.notEqual(result.status, 0);
+        assert.equal(result.reads, 'settings read\n', result.output);
+        assert.match(result.output, /Fleet tasks require the stand-in model/u);
+      }
+    }
+  }
+  void test(`${script}: fleet side journeys refuse saved real mode`, refuseFleetSavedRealJourney);
+}

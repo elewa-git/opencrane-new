@@ -26,6 +26,7 @@
             @if (chip.state === 'queued') { Waiting to upload… }
             @else if (chip.state === 'uploading') { {{ chip.progress }}% · Uploading… }
             @else if (chip.state === 'scanning') { Scanning… }
+            @else if (chip.state === 'preparing') { Preparing files… }
             @else if (chip.state === 'ready') { Ready }
             @else { {{ chip.error }} }
           </span>

@@ -1154,12 +1154,21 @@ A failed file keeps its request key for Retry upload while later files continue.
 Leaving the session discards files held for retry.
 The composer shows an upload chip for each selected file. Typing stays available.
 Send and Enter wait for the upload and workspace delivery; a refused chip does not
-hold other files. The saved message command keeps the ready file ids with its text.
+hold other files. `UploadBatch` derives chip readiness and sendable file ids from
+`file.delivered`, in either order relative to the HTTP acknowledgement. Before delivery,
+the chip and Send both say Preparing files…. The saved message command keeps the
+ready file ids with its text.
 An uncertain message reply checks the same command id before resending. A confirmed
 send removes every chip and the earlier upload status line no longer appears.
+Retry and Remove reuse `ui/controls.css` for a minimum 44 × 44 pixel touch target at
+both widths. Remove also cancels the active upload. `npm run visual:chat` measures
+both controls, including cancellation, and checks named-file status, Retry and Send
+with multiple chips against an intercepted API.
 Composer and sent states were captured at 1280 and 390 px with intercepted
 replies in `docs/process/chat-attachments/`. Fresh-install qualification remains NOT RUN.
 `file-drop.spec.ts` checks workspace drag events at the upload request boundary.
+The batch cases use Angular signals and run in `chat/upload-batch.spec.ts` with the
+other Angular tests.
 `composer.spec.ts` checks that chats without Attach have no drop controls.
 `workspace.spec.ts` supplies the dialog methods missing from the test browser and
 restores them after each test. Access-loss checks open the preview before clearing it.
@@ -1170,7 +1179,7 @@ Images are in `docs/process/chat-drag-drop/`.
 GET succeeds. It reuses `fetchConversationRead`: HTTP 425 or 409 retries every
 100 ms for at most 50 attempts, within a ten-second request limit. Other failures
 return immediately. The upload's abort function cancels both the POST and these
-reads. The existing chat delivery check still controls workspace readiness.
+reads. `UploadBatch` then keeps the chip preparing until workspace delivery.
 The tests in `chat/upload.spec.ts` hold the file-list reply to check that accepting
 the POST alone does not mark the upload ready.
 
