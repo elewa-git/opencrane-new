@@ -1,54 +1,47 @@
 # Workspace sign-out and Settings journey
 
-Journey on a fresh dev stack: NOT RUN
+Journey on a fresh dev stack: FAIL — 13 November 2026, head
+`51f68936de603b10ff1ab9f8f3f5a8720da245c6`. Fresh secondary stack 2.
+See [member workspace at 1280 px](screenshots/member-workspace-1280.png) and
+[visible refusal at 1280 px](screenshots/member-refusal-1280.png).
 
-Date: 12 November 2026. Product source:
-`5b423fc5335f17d8dd1dbdfb509dd46dde3a37c1`, based on
-`90a99afa75e508f32c505d82a4beacc45e236dfd`.
-Environment: Linux, Node 22.23.3, Playwright Chromium, fresh secondary dev stacks.
-The feature is enabled by the changed workspace code without a feature flag.
+Date: 13 November 2026. Product source: `51f68936de603b10ff1ab9f8f3f5a8720da245c6`,
+rebased on `cb369e593` (#1119). Environment: Linux, Node 22.23.3, Playwright Chromium,
+fresh secondary stack 2. The feature is enabled by the changed workspace code without
+a feature flag.
 
-## Fresh startup: FAIL
+## Fresh startup: PASS
 
-Claimed secondary stacks through `infra/dev-stack/claim.sh`, then ran
-`infra/dev-stack/up.sh --fresh`. Each attempt ran `infra/dev-stack/down.sh`
-through an exit trap.
+Claimed stack 2 with `infra/dev-stack/claim.sh`, exported `DEV_STACK_ID=2` and the
+configured Zitadel key-file path, then ran `infra/dev-stack/up.sh --fresh`. The
+inherited `OPENCRANE_FLEET_TASK` marker stayed set. The built-in core journey passed: real owner and member sign-in, refusals, uploads,
+chat and sign-out at 390 px and 1280 px, replay checks and the remaining core checks.
+Its approval subjourney was skipped because it waits for #45 rows 4, 5 and 14.
+`infra/dev-stack/down.sh` ran at the end and `infra/dev-stack/status.sh --id 2`
+reported `free`.
 
-1. Secondary 2 reached website readiness. The inherited fleet marker refused the
-   runner's automated journey. Teardown released the claim.
-2. Started secondary 1 fresh with that marker unset for the explicitly requested
-   journey. Startup stopped after website readiness, before the slice script.
-   Teardown removed its private diagnostic before it could be retained.
-3. Ran one final fresh attempt on secondary 1 with sanitised diagnostic capture
-   before teardown. The built-in browser upload check timed out after 130 seconds
-   waiting for `.upload-status` to show Ready or Upload unavailable. The runner
-   stopped before returning from startup. Teardown released the claim.
+## Slice steps: FAIL
 
-The retained [sanitised diagnostic](startup-diagnostic.txt) names the timeout.
-The failing helper is `uploaded()` in
-[browser-upload.ts](../../../infra/dev-stack/browser-upload.ts).
-It uses named Attach and Upload controls. Its failure has not been established
-as a consequence of the new sign-out forms. No upload code, retry count or timeout
-was changed. No further fresh attempt was made.
+The member journey at 1280 px passed: Settings was absent, and typing
+`/org/integrations` displayed the visible refusal. The runner saved both screenshots
+linked above.
 
-## Slice steps: NOT RUN
-
-The slice-specific Playwright script was scheduled after successful fresh startup
-and `infra/dev-stack/status.sh`. Startup never reached that point. No live slice
-screenshots were captured. These conditions remain unqualified:
+The runner stopped while preparing the 390 px member view, before it checked Settings
+or opened `/org/integrations`. It timed out after 30 seconds waiting for
+`getByRole('link', { name: 'Sign out', exact: true })` in `openPhoneNavigation()`.
+The Sign out control is a submit button inside a form, so the likely cause is an
+incorrect selector in the temporary journey runner. This result does not qualify the
+390 px steps. Following the instruction to stop after a failure, no further slice steps
+or attempts were run. No product code changed.
 
 | Person and width | Expected result | Result |
 | --- | --- | --- |
-| Seeded member, 1280 px | No Settings link; typed `/org/integrations` visibly refused | NOT RUN |
+| Seeded member, 1280 px | No Settings link; typed `/org/integrations` visibly refused | PASS |
 | Seeded member, 1280 px | Rail Sign out posts natively and reaches sign-in | NOT RUN |
-| Seeded member, 390 px | No Settings link; typed `/org/integrations` visibly refused | NOT RUN |
+| Seeded member, 390 px | No Settings link; typed `/org/integrations` visibly refused | NOT RUN; runner stopped before assertion |
 | Seeded member, 390 px | Phone-menu Sign out reaches sign-in | NOT RUN |
 | Admin and Owner test account, both widths | Settings is visible and opens | NOT RUN |
 | Separate owner browser | Remains signed in after the member signs out | NOT RUN |
-
-The planned account preparation reused the documented seeded member and the existing
-ownership fixture to check the test Owner account as both Admin and Owner.
-The upload startup blocker must be resolved or qualified before this slice can merge.
 
 ## Builder checks: PASS
 
