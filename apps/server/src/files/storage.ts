@@ -1,12 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { readFile } from 'node:fs/promises';
 import { request as httpRequest, IncomingMessage, type RequestOptions } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { urlToHttpOptions } from 'node:url';
 import { Client } from 'minio/dist/esm/minio.mjs';
 import { CredentialProvider } from 'minio/dist/esm/CredentialProvider.mjs';
 import { Credentials } from 'minio/dist/esm/Credentials.mjs';
-import { z } from 'zod';
+import { readStorageLease } from '@opencrane/auth';
 import { FileUnavailable } from './refusals.ts';
 
 type ResponseCallback = (response: IncomingMessage) => void;
@@ -114,13 +113,6 @@ async function boundedResponse(response: IncomingMessage, callback?: ResponseCal
   }
 }
 
-const storageLease = z.object({
-  accessKey: z.string().min(1),
-  secretKey: z.string().min(1),
-  sessionToken: z.string().min(1),
-  expiresAt: z.int(),
-});
-
 /** Only a short-lived, bucket-scoped lease reaches the server; each request reads its rotation. */
 export function storageClient(url: string, leaseFile: string) {
   const endpoint = new URL(url);
@@ -131,13 +123,7 @@ export function storageClient(url: string, leaseFile: string) {
   const emptyCredentials = { accessKey: '', secretKey: '' };
   const credentialsProvider = new CredentialProvider(emptyCredentials);
   async function readCredentials() {
-    const content = await readFile(leaseFile, 'utf8');
-    const value: unknown = JSON.parse(content);
-    const lease = storageLease.parse(value);
-    const now = Date.now();
-    if (lease.expiresAt <= now || lease.expiresAt > now + 900_000) {
-      throw new Error('Storage lease expired or overlong');
-    }
+    const lease = await readStorageLease(leaseFile);
     return new Credentials(lease);
   }
   credentialsProvider.getCredentials = readCredentials;

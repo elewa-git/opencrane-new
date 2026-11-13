@@ -8,7 +8,7 @@ import { expect, test } from 'vitest';
 
 const execute = promisify(execFile);
 
-test('the scanner image gives its separate wrapper exactly three readable databases', async () => {
+async function readableDatabases() {
   const directory = await mkdtemp(join(tmpdir(), 'package-scanner-image-'));
   const image = `package-scanner-image-${randomUUID()}:test`;
   try {
@@ -27,4 +27,6 @@ test('the scanner image gives its separate wrapper exactly three readable databa
     await execute('docker', ['image', 'rm', image], { timeout: 30000 });
     await rm(directory, { recursive: true, force: true });
   }
-}, 240000);
+}
+test('the scanner image gives its separate wrapper exactly three readable databases',
+  readableDatabases, 240000);

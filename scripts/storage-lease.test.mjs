@@ -68,7 +68,8 @@ async function rereadsRetiredLease() {
   await expect(retired.putObject('files', 'retired.txt', Buffer.from('retired')))
     .rejects.toThrow();
   await writeFile(leaseFile, JSON.stringify(lease(acceptedKey)));
-  await client.putObject('files', 'rotated.txt', Buffer.from('rotated'));
+  await expect(client.putObject('files', 'rotated.txt', Buffer.from('rotated')))
+    .resolves.toBeDefined();
 }
 test('rereads credentials for each request after the service refuses the previous lease',
   rereadsRetiredLease);

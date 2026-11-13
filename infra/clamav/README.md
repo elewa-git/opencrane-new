@@ -22,7 +22,6 @@ scanner before saving them in [MinIO](../../GLOSSARY.md#minio-file-storage).
 flowchart LR
   infra["infra<br/>infrastructure"] --> clamav["infra/clamav<br/>virus scanner"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
-  infra --> nats["infra/nats<br/>event log settings"]
   stack -->|builds and starts the Linux amd64 image| clamav
   package["infra/package<br/>packaged installation"] -->|checks approved bytes and starts the private service| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher

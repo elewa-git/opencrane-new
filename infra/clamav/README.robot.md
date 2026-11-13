@@ -424,6 +424,14 @@ closed and image promotion remains
 closed. Fresh-install two-silo, deployed custody, signed-release and rotation
 qualification are NOT RUN.
 
+## Database files
+
+`database.mjs` owns the regular-file, 512-byte minimum, 512-MiB maximum and
+streamed SHA-256 checks shared by refresh and the packaged adapter. Refresh checks
+the returned hash against both tool observations and checks the verified header.
+The packaged adapter compares it with the approved manifest before serving scans.
+Neither caller follows database symlinks.
+
 ## Real upload consumer fixture
 
 `scripts/real-upload-scanner.test.mjs` uses this package's `launchScanner` and

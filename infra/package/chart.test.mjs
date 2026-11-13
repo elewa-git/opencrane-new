@@ -236,6 +236,11 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     secrets.set(name, secretFromDirectory(source));
     callback(null, { stdout: '', stderr: '' });
   }
+  async function prepareScannerFixture() {
+    for (const name of ['scanner-server.key', 'scanner-server.crt']) {
+      writeFileSync(join(directory, name), 'fixture-scanner-file');
+    }
+  }
   const replacements = {
     'node:child_process': { execFile: executeFixture },
     'node:crypto': { ...crypto, randomBytes: () => key },
@@ -249,11 +254,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     },
     '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test',
       secondary: true },
-    '../dev-stack/scanner-settings.ts': { prepareScannerFiles: async () => {
-      for (const name of ['scanner-server.key', 'scanner-server.crt']) {
-        writeFileSync(join(directory, name), 'fixture-scanner-file');
-      }
-    } },
+    '../dev-stack/scanner-settings.ts': { prepareScannerFiles: prepareScannerFixture },
     '../clamav/release.mjs': { readApprovedRelease: async () => undefined },
     '../dev-stack/packaged.ts': { verifyPackageOwner: recordedOwner,
       packageConnectionArgs: checkedConnection },
@@ -856,6 +857,7 @@ function credentialReadinessChecksLease() {
   }
   const container = server.spec.template.spec.containers.find(isCredentialContainer);
   assert.deepEqual(container.readinessProbe.exec.command,
-    ['node', 'infra/package/object-credentials.mjs', '--ready']);
+    ['node', 'infra/package/object-lease-ready.mjs']);
+  assert.equal(container.readinessProbe.timeoutSeconds, 5);
 }
 test('storage credential readiness checks the lease validity', credentialReadinessChecksLease);

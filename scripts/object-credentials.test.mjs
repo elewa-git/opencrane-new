@@ -7,6 +7,7 @@ import { inspect } from 'node:util';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createLogger } from '@opencrane/observability';
 import * as leases from '../infra/package/object-credentials.mjs';
+import { objectLeaseReady } from '../infra/package/object-lease-ready.mjs';
 
 const identity = { accessKey: 'disposable-owner', secretKey: 'disposable-owner-secret' };
 const checked = Date.parse('2026-11-13T00:00:00Z');
@@ -18,11 +19,17 @@ let mode;
 let received;
 let requestReceived;
 let pending;
+let responseClosed;
 
 function receiveRequest(request, response) {
   request.resume();
+  responseClosed = once(response, 'close');
   received();
   if (mode === 'stall') return;
+  if (mode === 'body-stall') {
+    response.write('<AssumeRoleResponse>');
+    return;
+  }
   if (mode === 'error') {
     response.end('<ErrorResponse><Error><Code>AccessDenied</Code>' +
       '<Message>STS-CREDENTIAL-CANARY STS-RESPONSE-BODY-CANARY</Message></Error></ErrorResponse>');
@@ -108,27 +115,29 @@ function issueObserved(signal) {
   return result;
 }
 
-async function boundsStalledRenewal() {
+async function boundsStalledRenewal(stallMode) {
   controlTime();
   await leases.issueObjectLease(identity, leaseFile, endpoint);
   const original = await readFile(leaseFile, 'utf8');
   vi.setSystemTime(checked + 300000);
-  mode = 'stall';
+  mode = stallMode;
   resetRequest();
   const result = issueObserved();
   await requestReceived;
   await vi.advanceTimersByTimeAsync(10000);
   expect(result.settled).toBe(true);
+  await responseClosed;
   expect(result.failure?.cause).toEqual({ kind: 'storage_lease', reason: 'deadline' });
   expect(await readFile(leaseFile, 'utf8')).toBe(original);
-  expect(await leases.objectLeaseReady(leaseFile)).toBe(true);
+  expect(await objectLeaseReady(leaseFile)).toBe(true);
   vi.setSystemTime(checked + 840000);
-  expect(await leases.objectLeaseReady(leaseFile)).toBe(false);
+  expect(await objectLeaseReady(leaseFile)).toBe(false);
   mode = 'success';
   await leases.issueObjectLease(identity, leaseFile, endpoint);
-  expect(await leases.objectLeaseReady(leaseFile)).toBe(true);
+  expect(await objectLeaseReady(leaseFile)).toBe(true);
 }
-test('bounds a stalled renewal, refuses expired readiness and recovers with a fresh lease',
+test.each(['stall', 'body-stall'])(
+  'bounds %s renewal, refuses expired readiness and recovers with a fresh lease',
   boundsStalledRenewal);
 
 async function cancelsIssuance() {
@@ -140,6 +149,7 @@ async function cancelsIssuance() {
   stop.abort(new Error('PRIVATE-CANCELLATION-CANARY'));
   await vi.advanceTimersByTimeAsync(0);
   expect(result.settled).toBe(true);
+  await responseClosed;
   expect(result.failure?.cause).toEqual({ kind: 'storage_lease', reason: 'cancelled' });
   expect(inspect(result.failure, { depth: 10 })).not.toContain('PRIVATE-CANCELLATION-CANARY');
   await expect(readFile(leaseFile)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -148,15 +158,15 @@ test('cancels the connected STS request without publishing a lease', cancelsIssu
 
 async function checksLeaseValidity() {
   controlTime();
-  expect(await leases.objectLeaseReady(leaseFile)).toBe(false);
+  expect(await objectLeaseReady(leaseFile)).toBe(false);
   await leases.issueObjectLease(identity, leaseFile, endpoint);
-  expect(await leases.objectLeaseReady(leaseFile)).toBe(true);
+  expect(await objectLeaseReady(leaseFile)).toBe(true);
   const lease = JSON.parse(await readFile(leaseFile, 'utf8'));
   for (const expiresAt of [checked, checked - 1, checked + 900001]) {
     await writeFile(leaseFile, JSON.stringify({ ...lease, expiresAt }));
-    expect(await leases.objectLeaseReady(leaseFile)).toBe(false);
+    expect(await objectLeaseReady(leaseFile)).toBe(false);
   }
   await writeFile(leaseFile, '{}');
-  expect(await leases.objectLeaseReady(leaseFile)).toBe(false);
+  expect(await objectLeaseReady(leaseFile)).toBe(false);
 }
 test('readiness refuses missing, malformed, expired and overlong leases', checksLeaseValidity);

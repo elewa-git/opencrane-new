@@ -135,7 +135,8 @@ spec:
             - { name: object-owner, mountPath: /run/object-owner, readOnly: true }
           readinessProbe:
             exec:
-              command: [test, -s, /run/storage/lease.json]
+              command: [node, infra/package/object-lease-ready.mjs]
+            timeoutSeconds: 5
           resources:
             requests: { cpu: 10m, memory: 64Mi }
             limits: { cpu: 100m, memory: 128Mi }
