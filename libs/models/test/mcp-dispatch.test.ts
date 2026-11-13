@@ -30,8 +30,10 @@ import { decideApproval, history, ingestUsage, priceTableId, readApproval, readT
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
-import { oauthSelectionFixture, selectPersonalFixture } from './support/oauth-selection.ts';
+import { oauthSelectionFixture, selectPersonalFixture, refreshPersonalFixture }
+  from './support/oauth-selection.ts';
 import { personalRequester } from './support/personal-requester.ts';
+import { foldConnection } from '../src/bearer-connections.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 const review = { action: 'Write note', consequence: 'The order note changes.',
@@ -2830,15 +2832,11 @@ it('refuses a personal permit after loaded memory is forgotten',
 
 async function rotatePersonalFixture(setup: Fixture,
   saved: Awaited<ReturnType<typeof oauthSelectionFixture>>) {
-  const { activation } = saved.saved;
-  const replacement = { ...saved.saved, secretRef: 'secret:replacement', activation: {
-    connectionId: activation.connectionId, ownerKind: activation.ownerKind,
-    purpose: activation.purpose, generation: 2, uid: 'replacement', resourceVersion: '2',
-    endpointDigest: activation.endpointDigest, operationId: 'replacement',
-    changedBy: 'alice', expectedSequence: saved.revision,
-    appendUntil: activation.appendUntil, reason: 'bearer_rotation',
-  } };
-  await setup.append(saved.subject, 'connection.refreshed', replacement);
+  const revision = await refreshPersonalFixture(saved);
+  const rows = await history(setup.nats.store, saved.subject, 'test');
+  const current = foldConnection(rows);
+  expect(current).toMatchObject({ sequence: revision, lastGeneration: 2,
+    data: { activation: { generation: 2 } } });
 }
 
 const personalChanges = ['cleared choice', 'revoked profile', 'rotated profile', 'admin block',

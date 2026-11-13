@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { vi } from 'vitest';
 import type { connectionCustody, ConnectionStage } from '../../src/connection-custody.ts';
 import type { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -128,4 +129,30 @@ export async function oauthSelectionFixture(nats: Awaited<ReturnType<typeof nats
   const command = { action: 'select', serverId, connectionId: 'installed', profileId,
     profileRevision: revision, expectedSequence: 0, changeRef: 'choice' };
   return { subject, revision, configuration, loadConfiguration, command, saved, seed, fields };
+}
+
+export async function refreshPersonalFixture(
+  test: Awaited<ReturnType<typeof oauthSelectionFixture>>) {
+  const before = test.saved.activation;
+  const attemptId = connectionOperationId('test', test.subject, 'renew-refresh');
+  const attempt = { ...test.fields, attemptId, configurationDigest: before.configurationDigest,
+    generation: 1, expectedSequence: test.revision, scopes: before.account.scopes };
+  const started = await test.seed('connection.refresh_started', attempt, attemptId, 'renew');
+  const claimId = connectionOperationId('test', test.subject, `${attemptId}-exchange`);
+  const appendUntil = Date.now() + 60_000;
+  const claim = { ...test.fields, attemptId, workerId: 'worker', purpose: 'refresh',
+    secretRef: test.saved.secretRef, uid: before.uid, resourceVersion: before.resourceVersion,
+    expectedSequence: started, appendUntil };
+  // Match the worker's fixed claim lifetime exactly.
+  const now = Date.now();
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+  const claimed = await test.seed('connection.oauth_exchange_claimed',
+    { ...claim, appendUntil: now + 60_000 }, claimId);
+  clock.mockRestore();
+  const resultId = connectionOperationId('test', test.subject, `${claimId}-result`);
+  const operationId = connectionOperationId('test', test.subject, `${resultId}-confirm`);
+  const activation = { ...before, generation: 2, expectedSequence: claimed,
+    appendUntil: now + 60_000, operationId,
+    account: { ...before.account, expiresAt: before.account.expiresAt + 60_000 } };
+  return test.seed('connection.refreshed', { ...test.saved, activation }, operationId, 'renew');
 }
