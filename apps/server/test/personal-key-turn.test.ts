@@ -115,3 +115,41 @@ async function refuseGrantRevokedAtAppend() {
 it('refuses the save when its grant is revoked while custody stages the checked key',
   refuseGrantRevokedDuringStage, 120_000);
 it('binds its final grant check to the append', refuseGrantRevokedAtAppend, 120_000);
+
+function percentEncode(value: string) {
+  let encoded = '';
+  for (const character of value) encoded += `%${character.charCodeAt(0).toString(16)}`;
+  return encoded;
+}
+function directEcho(key: string) { return key; }
+function percentEcho(key: string) { return percentEncode(key); }
+function nestedEcho(key: string) { return percentEncode(key).replaceAll('%', '%25'); }
+function substringEcho(key: string) { return `account-${percentEncode(key.slice(4, 12))}`; }
+
+async function refuseCredentialSubject(subject: (key: string) => string) {
+  const setup = await personalKeyFixture(undefined, subject);
+  const policy = await setup.publish();
+  await setup.grant('alice');
+  function staged() {
+    return Promise.resolve({ status: 'staged' as const,
+      identity: { reference: 'fixture', uid: 'fixture', resourceVersion: '1' } });
+  }
+  const stage = vi.fn(staged);
+  const append = vi.spyOn(setup.nats.store, 'append');
+  const command = { action: 'create', serverId: setup.serverId, connectionId: policy.connectionId,
+    profileId: 'personal', changeRef: randomUUID(), expectedSequence: 0,
+    expectedGeneration: 0, appendUntil: Date.now() + 60_000 };
+  try {
+    await expect(savePersonalKey(setup.nats.store, setup.binding, 'alice',
+      { custody: { stage }, db: setup.db, network: setup.remote.network },
+      { command, material: setup.accounts[0].key })).rejects.toThrow('Identity not verified');
+    expect(stage).not.toHaveBeenCalled();
+    expect(append).not.toHaveBeenCalled();
+    expect(await setup.nats.store.head(`connection-alice-${setup.serverId}-personal`)).toBe(0);
+  } finally {
+    append.mockRestore();
+  }
+}
+it.each([directEcho, percentEcho, nestedEcho, substringEcho])(
+  'refuses credential-bearing identity subject %s before staging or append',
+  refuseCredentialSubject, 120_000);

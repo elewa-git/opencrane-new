@@ -1,3 +1,4 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { expect, onTestFinished } from 'vitest';
@@ -20,7 +21,7 @@ import { writeToolAccess } from '../../src/integrations/access-changes.ts';
 import type { fixture } from '@opencrane/models/testing';
 type Runtime = Awaited<ReturnType<typeof fixture>>;
 
-export async function personalKeyFixture(runtime?: Runtime) {
+export async function personalKeyFixture(runtime?: Runtime, accountSubject?: (key: string) => string) {
   const nats = runtime?.nats ?? await natsFixture();
   const fga = runtime ? undefined : await openfga();
   const storage = runtime ? undefined : await databases();
@@ -31,12 +32,29 @@ export async function personalKeyFixture(runtime?: Runtime) {
     return database.lock!(name, work);
   }
   const db = { ...database, lock };
+  const key = randomUUID();
   const accounts = [
-    { account: 'account-a', key: randomUUID(), permitted: true },
+    { account: 'account-a', key, permitted: true },
     { account: 'account-b', key: randomUUID(), permitted: false },
   ] as const;
   const handle = await credentialDemo(accounts);
-  const remote = await remoteFixture(false, handle);
+  function identityReply(request: IncomingMessage, reply: ServerResponse) {
+    if (!accountSubject || request.headers['mcp-name'] !== 'who_am_i') {
+      handle(request, reply);
+      return;
+    }
+    const chunks: Buffer[] = [];
+    function collect(chunk: Buffer) { chunks.push(chunk); }
+    function respond() {
+      const body = JSON.parse(Buffer.concat(chunks).toString()) as { id: string };
+      reply.writeHead(200, { 'content-type': 'application/json' });
+      reply.end(JSON.stringify({ jsonrpc: '2.0', id: body.id,
+        result: { isError: false, structuredContent: { subject: accountSubject!(key) } } }));
+    }
+    request.on('data', collect);
+    request.on('end', respond);
+  }
+  const remote = await remoteFixture(false, identityReply);
   const app = Fastify();
   const options = { silo: 'test', store: nats.store, binding, db,
     feed: { memberId } };
