@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chromium } from 'playwright';
+import { holdUploadDelivery } from './browser-upload-delivery.ts';
 import { waitForUpload } from './browser-upload-status.ts';
 import { assertTouchTarget } from './browser-target.ts';
 
@@ -120,3 +121,38 @@ function installRetryRender() {
 
 void test('waits for a clicked upload retry to render before reading its next result',
   waitsForRetryToLeaveTheFailedState);
+
+async function waitsForComposerAfterReload() {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    async function serveStartup(route: import('playwright').Route) {
+      const body = `<button onclick="document.querySelector('#composer').hidden=false">
+        Complete startup</button><div id="composer" hidden><button>Attach</button></div>`;
+      await route.fulfill({ contentType: 'text/html', body });
+    }
+    await page.route('http://upload.test/**', serveStartup);
+    await page.goto('http://upload.test/');
+    let available = false;
+    function markAvailable() {
+      available = true;
+    }
+    const reloaded = page.waitForEvent('load');
+    const preparing = holdUploadDelivery(page).then(markAvailable);
+    await reloaded;
+    await page.evaluate(nextFrame);
+    await page.evaluate(nextFrame);
+    try {
+      assert.equal(available, false, 'Reload must finish loading the assistant before a new draft');
+    } finally {
+      await page.getByRole('button', { name: 'Complete startup', exact: true }).click();
+      await preparing;
+    }
+    assert.equal(available, true);
+  } finally {
+    await browser.close();
+  }
+}
+
+void test('waits for Attach after reload before opening a new upload draft',
+  waitsForComposerAfterReload);
