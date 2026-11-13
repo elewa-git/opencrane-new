@@ -79,6 +79,22 @@ function bindsOutputToThisCall() {
 test('only this turn and call result can answer, and a failed tool is not repeated',
   bindsOutputToThisCall);
 
+function quotesActualReviewRefusal() {
+  const message = 'The tool list changed. An admin must review it before another call.';
+  const refusal = { isError: true, content: [{ type: 'text', text: message }] };
+  const output = [{ type: 'text', text: JSON.stringify({ result: refusal }) }];
+  const result = { type: 'custom_tool_call_output', call_id: 'call_read_fixture_quote', output };
+  const followUp = { input: [deferred, user, result] };
+  assert.equal(stageBModelCall(followUp), undefined);
+  assert.equal(stageBModelAnswer(followUp), message);
+  const unrelated = { ...result, call_id: 'other' };
+  assert.equal(stageBModelAnswer({ input: [deferred, user, unrelated] }), undefined);
+  const oldResult = { input: [deferred, result, user] };
+  assert.equal(stageBModelAnswer(oldResult), undefined);
+}
+test('the stand-in quotes this call’s real review refusal without repeating the call',
+  quotesActualReviewRefusal);
+
 function ordinaryAndWrite() {
   assert.equal(stageBModelCall({ input: [] }), undefined);
   assert.equal(stageBModelAnswer({ input: [] }), undefined);
