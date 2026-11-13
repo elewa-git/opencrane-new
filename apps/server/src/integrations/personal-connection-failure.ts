@@ -56,5 +56,6 @@ export function logPersonalConnectionFailure(request: FastifyRequest, error: unk
     causes.push(classifyCause(current));
     current = current.cause;
   }
-  request.log.warn({ operation, causes }, 'Personal connection unavailable');
+  const diagnostic = { operation, causes };
+  request.log.warn(diagnostic, 'Personal connection unavailable');
 }

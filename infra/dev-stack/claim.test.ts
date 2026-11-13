@@ -29,7 +29,25 @@ esac
 `;
   await writeFile(`${bin}/kubectl`, script);
   await chmod(`${bin}/kubectl`, 0o755);
+  await mockFlock(bin);
 }
+async function mockFlock(bin: string) {
+  const script = `#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+const args = process.argv.slice(2);
+function lockFile(value) { return /^\\/tmp\\/opencrane-dev-stack-\\d+-(1|2)\\.lock$/u.test(value); }
+const lockIndex = args.findIndex(lockFile);
+assert(lockIndex >= 0, 'Claim fixtures may lock only secondary stacks');
+const slot = args[lockIndex].match(/-(1|2)\\.lock$/u)[1];
+args[lockIndex] = process.env.HOME + '/stack-' + slot + '.lock';
+const result = spawnSync('/usr/bin/flock', args, { stdio: 'inherit' });
+assert.ifError(result.error);
+process.exit(result.status ?? 1);
+`;
+  await writeFile(`${bin}/flock`, script, { mode: 0o755 });
+}
+
 async function claimSkipsHeldPort(stackPort: number) {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
   const bin = `${home}/bin`;
