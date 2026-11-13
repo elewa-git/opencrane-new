@@ -1,0 +1,59 @@
+Rebase qualification, 13 November 2026
+Tested head: 0e5466e3ae0340292de65094490a5d6b7253f413
+Base: 7ec65e982f543f93b5829db39486cc8ca8eecfaa
+
+All lint, typecheck, build and test commands ran under nice -n 10.
+Database fixtures used PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres.
+No full root suite was run. No dependency or package-lock change was needed.
+
+PASS: focused Angular tests, six files and 169 tests, with maxWorkers: 2.
+Files: chat/workspace.spec.ts, chat/navigation.spec.ts, sign-in/sign-in.spec.ts,
+integrations/review-changes.spec.ts, settings/personal-key.spec.ts and
+chat/upload-batch.spec.ts, all under apps/web/src/app/.
+The first CLI invocation rejected --max-workers before running tests. The actual
+run used ng test --watch=false with a temporary --runner-config containing
+maxWorkers: 2. No test or product setting was changed.
+
+PARTIAL: first server/model run, 12 files, 674 passed and one failed in 1233.92s.
+Command: npx vitest run <the following files> --maxWorkers=2
+apps/demo-mcp/test/credentials.test.ts
+apps/demo-mcp/test/default-catalogue.test.ts
+apps/server/test/personal-key-dispatch.test.ts
+apps/server/test/personal-key-notice.test.ts
+apps/server/test/personal-key-review.test.ts
+apps/server/test/personal-key-routes.test.ts
+apps/server/test/personal-key-turn.test.ts
+apps/server/test/integration-access-gateway.test.ts
+apps/server/test/chat-http.test.ts
+libs/models/test/bearer-identity.test.ts
+libs/models/test/connection-custody.test.ts
+libs/models/test/personal-account.test.ts
+
+FAIL in that first run: preserves access after an unchanged refresh and during
+conversation output. Its initial allowed call received 403, with saved
+adapter_dispatch_refused evidence, before the refresh or output assertions.
+PASS in isolation: that exact test, one passed and 22 skipped, in 39.18s.
+The other 22 cases passed in the first run. No code, timeout or retry changed.
+The initial run was concurrent with other source checks; load is a possible cause,
+not a proved diagnosis.
+
+FAIL: initial audit-browser test waited 60 seconds for Angular while its output
+still said Building. The hosted MCP file was NOT RUN: all 37 opt-in cases skipped.
+PASS: development web build, then audit-browser alone, one test in 85.88s,
+with its original startup deadline and no test or product changes.
+
+PASS: 111 Node tests in 875.91s from claim.test.ts, stack-start.test.ts,
+stage-b-launch.test.ts and stage-b-model.test.ts under infra/dev-stack/.
+PASS: 59 Node tests in 463.37s from browser-audit.test.ts,
+browser-target.test.ts, journey-refusal.test.ts, mcp-hosted-fixture.test.ts,
+stack-real-mode.test.ts under infra/dev-stack/, and scripts/ci/fixture-tests.test.mjs.
+PASS: libs/events/test/security-rules.test.ts, 482 tests in 12.02s.
+RISKY_FIELD_NAME and its approved list are unchanged.
+
+PASS: full npm run typecheck, including package and dev-stack code.
+PASS: changed-code ESLint, zero errors. The existing untouched
+registerChatRoutes function retains its 101-line warning. No warning was added.
+PASS: npm run check:events, 174 event types agree.
+PASS: npx knip, with the two existing configuration hints.
+PASS: npm run lint:changelog.
+PASS: npx markdownlint-cli2, with no file arguments.
