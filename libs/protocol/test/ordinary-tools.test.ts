@@ -29,3 +29,12 @@ it.each(['cost', 'review', 'revision', 'invalid', 'missing'])(
   expect(isOrdinaryToolCatalogue(catalogue)).toBe(false);
   expect(canReviewTool(catalogue, tool)).toBe(false);
 });
+
+function refusesHostedCatalogue() {
+  const catalogue = standardCatalogue();
+  catalogue.hostedRun = { imageDigest: 'a'.repeat(64), platform: 'linux/amd64',
+    podUid: 'pod', workloadSpecDigest: 'b'.repeat(64), runGeneration: 1 };
+  expect(isOrdinaryToolCatalogue(catalogue)).toBe(false);
+  expect(canReviewTool(catalogue, catalogue.tools![0])).toBe(false);
+}
+it('keeps a hosted run outside ordinary catalogue review', refusesHostedCatalogue);
