@@ -5060,7 +5060,8 @@ profile headers do not reach the tool server. A missing audit or changed access 
 nothing. Dispatch checks later turn and computer activity before reading the credential.
 It rechecks loaded memory references and current memory grants during the renewed
 two-second access check. A fact forgotten after permit issue refuses release.
-The gateway's reply scan is best effort. It checks decoded JSON keys and values,
+The gateway's reply scan uses `mcp-credential-echo.ts` and is best effort.
+It checks decoded JSON keys and values,
 their joined text, text blocks, serialised JSON and the remote content type. It checks
 the full released access token and long continuous parts, including in base64 and
 URL-encoded text. A match returns a fixed JSON-RPC error with no upstream data. Other

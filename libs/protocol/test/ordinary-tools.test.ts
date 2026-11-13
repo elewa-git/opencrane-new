@@ -5,7 +5,7 @@ function standardCatalogue() {
   const data = { serverId: 'standard', toolCount: 1, schemaDigest: 'a'.repeat(64),
     discoverResult: JSON.stringify({ capabilities: { tools: {} } }),
     tools: [{ name: 'read', revision: 'b'.repeat(64), reviewed: false }] };
-  return toolPolicySchema.shape.catalogue.unwrap().parse(data);
+  return toolPolicySchema.shape.catalogue.unwrap().unwrap().parse(data);
 }
 
 it('recognises standard definitions without inventing a zero cost', () => {

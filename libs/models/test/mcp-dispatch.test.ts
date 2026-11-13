@@ -3121,7 +3121,12 @@ async function ignoresForgedProfileArgument() {
   const response = await send(setup, value, raw);
   expect(response.status, await response.text()).toBe(200);
   expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
-  expect(remote.received[0]!.raw.toString()).toBe(raw);
+  const sent: unknown = JSON.parse(remote.received[0]!.raw.toString());
+  expect(sent).toHaveProperty('params.arguments', {
+    profileId: 'bob-profile', ...capture.body.params.arguments });
+  expect(sent).toHaveProperty('params._meta', {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {} });
 }
 it('treats a profile-shaped tool argument as data and keeps Alice’s selection',
   ignoresForgedProfileArgument, 60_000);
@@ -3784,9 +3789,9 @@ it('runs an ordinary reviewed remote tool and records that no cost was reported'
   expect(response.status, await response.text()).toBe(200);
   expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
   const sentCall: unknown = JSON.parse(remote.received[1]!.raw.toString());
-  expect(sentCall).toMatchObject({ params: {
-    _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-      'io.modelcontextprotocol/clientCapabilities': {} } } });
+  expect(sentCall).toHaveProperty('params._meta', {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {} });
   expect(remote.received[1]!.headers).not.toHaveProperty('x-opencrane-mcp-revision');
   expect(JSON.stringify(sentCall)).not.toMatch(/threadId|sessionId|sandbox|clientInfo/u);
   const decisions: StoredEvent[] = [];
@@ -3826,6 +3831,10 @@ it('removes agent details on the wire while preserving exact argument numbers', 
   expect(response.status, await response.text()).toBe(200);
   const sent = remote.received[0]!.raw.toString();
   expect(sent).toContain('"number":1.0e3');
+  const sentCall: unknown = JSON.parse(sent);
+  expect(sentCall).toHaveProperty('params._meta', {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {} });
   expect(sent).not.toMatch(/threadId|thread_id|sessionId|session_id|probe-model|sandbox|0\.159\.2|clientInfo/u);
 });
 
@@ -3863,4 +3872,21 @@ it.each([0, 7, -1, 0.5])('records an ordinary tool reported cost after execution
   } else {
     expect(dispatch.event.data).toMatchObject({ costStatus: 'reported', costCents: cost });
   }
+});
+
+it('compares every page of an ordinary server list before executing', async () => {
+  const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
+  remote.respond(function result(method: string, cursor?: string) {
+    if (method === 'tools/list' && cursor === undefined) {
+      return { tools: [], nextCursor: 'remaining-tools' };
+    }
+    if (method === 'tools/list') {
+      return { tools: [JSON.parse(ordinaryTool.definition!) as unknown] };
+    }
+    return { content: [], isError: false };
+  });
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/list', 'tools/call']);
 });
