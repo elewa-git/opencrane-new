@@ -1,3 +1,4 @@
+import { canReviewTool } from '@opencrane/protocol';
 import { publicationEntry, publicationDigest } from './publication.ts';
 import { authorityFence } from './authority.ts';
 import { currentMembership } from './ownership.ts';
@@ -104,8 +105,7 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
   }
   const tool = state.tools.find(matchesName);
   const declaration = state.catalogue?.tools?.find(matchesName);
-  const safeChoice = command.mode === 'block' || (tool?.costCents === 0 &&
-    declaration?.review !== undefined);
+  const safeChoice = command.mode === 'block' || canReviewTool(state.catalogue, declaration);
   const valid = state.sequence === command.expectedSequence &&
     state.connectionId === command.connectionId && tool?.reviewed === true &&
     tool.revision === command.toolRevision && safeChoice;

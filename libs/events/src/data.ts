@@ -8,7 +8,6 @@ import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 import { toolCallFields } from './tool-dispatch.ts';
-export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 import { routineApprovalBindingSchema } from './routine-approval.ts';
 // Data schemas for every event type in the registry except the four
@@ -403,10 +402,6 @@ const toolReviewSchema = z.object({
   stepUp: z.boolean().default(false),
 }).strict();
 
-export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
-
-export const approvalUsedDataSchema = z.object({ approvalId: id, permitId: id }).strict();
-
 export const effectUncertainDataSchema = z
   .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost', 'unknown_tariff', 'missing_usage', 'transport_failure']) })
   .strict();
@@ -473,10 +468,12 @@ export const mcpServerDiscoveredDataSchema = z
     serverId: id,
     toolCount: z.int().nonnegative(),
     schemaDigest: digestSchema,
+    digestVersion: z.literal(2).optional(),
     serverInfo: z.object({ name: id, version: id }).strict().optional(),
     checkedAt: catalogueDates.checkedAt.optional(),
     expiresAt: catalogueDates.expiresAt.optional(),
     discoverResult: z.string().max(65536).optional(),
+    declared: z.boolean().optional(),
     rejectedTools: z.array(z.object({ name: z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/u).optional(),
       revision: digestSchema, reason: reasonCodeSchema }).strict()).max(1000).optional(),
     connectionId: id.optional(),

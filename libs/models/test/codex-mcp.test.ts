@@ -105,7 +105,11 @@ async function forwardsCapturedCall() {
     const response = await fetch(`http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`,
       request);
     expect(response.status, await response.text()).toBe(200);
-    expect(setup.upstreamBody()).toBe(request.body);
+    const expectedBody = '{"jsonrpc":"2.0","id":2,"method":"tools/call",' +
+      '"params":{"name":"write","arguments":{"note":"Deliver 1.0 pallets","order":"SO-1042"},' +
+      '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",' +
+      '"io.modelcontextprotocol/clientCapabilities":{}}}}';
+    expect(setup.upstreamBody()).toBe(expectedBody);
     expect(setup.providerHeaders()).toContain('mcp-name');
     expect(setup.providerRequests()[0]?.mcpName).toBe('write');
     for (const privateHeader of ['authorization', 'x-turn-token', 'session-id', 'mcp-tool-name',
@@ -117,7 +121,7 @@ async function forwardsCapturedCall() {
     await setup.close();
   }
 }
-it('forwards captured Codex bytes through the real gateway with only public MCP headers',
+it('forwards captured Codex arguments through the gateway with only public MCP metadata and headers',
   forwardsCapturedCall);
 
 async function recordsCallId() {

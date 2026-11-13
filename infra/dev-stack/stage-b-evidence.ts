@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isToolPolicyAvailable } from '@opencrane/projections';
-import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { validateStoredMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { gatewayObservationSchema, eventEnvelopeSchema, toolApprovalRequestedDataSchema,
   approvalDecidedDataSchema, approvalUsedDataSchema, decisionRecordedDataSchema,
   toolDispatchRecordedDataSchema } from '@opencrane/events';
@@ -77,7 +77,7 @@ function checkReviewedTools(policy: Evidence['policy'], rehearsedAt: number) {
   const catalogue = policy.catalogue;
   requireEvidence(catalogue && catalogue.serverId === policy.serverId);
   try {
-    validateMcpCatalogue(catalogue);
+    validateStoredMcpCatalogue(catalogue);
   } catch {
     throw new Error('Approval evidence refused');
   }

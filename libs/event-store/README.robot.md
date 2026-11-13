@@ -176,11 +176,14 @@ own those managers' timeouts.
 
 ## Dated MCP catalogue evidence
 
-Dated MCP snapshots are checked with `validateMcpCatalogue` before append. The saved
+Every new MCP discovery or nested changed catalogue is checked with
+`validateNewMcpCatalogue` before append. It must carry `digestVersion: 2` and a valid
+digest of accepted and rejected tool revisions, even if check dates are absent. The saved
 accepted tool count must match the complete tool list. Each definition supplies its own
 name, annotations and SHA-256 revision. The catalogue digest is calculated from these
 checked names and revisions. A nested changed catalogue must also match its event's
-server id and new digest. Old undated records still parse; policy reads keep them blocked.
+server id and new digest. Older stored records still parse; policy reads keep undated
+records blocked.
 The event parser requires the exact `mcp-<serverId>` subject for all MCP records.
 
 ## Stream summaries

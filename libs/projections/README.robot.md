@@ -673,7 +673,9 @@ cancel approvals on configuration reload, or qualify worker replacement. Those n
 the remaining watch/dispatch coordination work. Configuration acknowledgement and
 restoration must reuse #45 when available. Fresh-install journeys are NOT RUN.
 
-Policy replay recalculates hashes from saved tool definitions before keeping any review
+Policy replay uses `validateStoredMcpCatalogue`: unversioned stored snapshots keep their
+accepted-only digest rule, while stored v2 snapshots include rejected tools. This rule is
+not used for new appends. Replay recalculates hashes from saved definitions before keeping any review
 choice or renewing a check. It checks the tool count, distinct names, names inside definitions
 and copied annotation flags too. `silo` and `serverId` are taken from saved event identity;
 each following event must match both and its exact subject. `policyRevision` comes from
@@ -708,7 +710,11 @@ Rebuild uses the event time and needs no key or model call.
 ## Exact tool review
 
 Discovery always sets `reviewed: false`. Only `mcp.server_reviewed` can mark review.
-Its choices must match saved definition and review digests. Replay applies Block immediately;
+Its choices must match saved definition and review digests. Ordinary remote servers
+need no OpenCrane cost or review declaration: Allow, Ask and Block apply to the exact
+standard definition. `canReviewTool` shares this decision with commands and the website.
+Servers declaring OpenCrane details retain the explicit zero-cost and review requirements.
+Replay applies Block immediately;
 widening a mode clears publication. Unchanged catalogue checks keep `policyRevision` stable.
 A review can change none to personal and name `identityTool`. The named tool must be
 read-only and zero-cost in the saved catalogue. Changing account requirements clears
@@ -1010,15 +1016,17 @@ The volume regression projects the refusal before seeding its large message batc
 
 ## Declared tool costs and approval details
 
-Both Allow and Ask require `costCents: 0` and saved `review` details in exact review
-and later mode changes. Block remains available when either is missing. Discovery
+For OpenCrane-declared servers, both Allow and Ask require `costCents: 0` and saved
+`review` details in exact review and later mode changes. Ordinary servers use their
+standard definitions without a cost estimate. Block remains available for every tool. Discovery
 never marks review. Existing definition and review digests detect metadata changes;
 `mcp.tools_changed` holds the whole server, including unchanged siblings. Unchanged
 catalogue checks preserve the review and policy revision. Replay uses the same checks.
-Older exact Allow reviews without approval details remain readable during replay,
+Older exact Allow reviews for OpenCrane-declared tools without approval details remain
+readable during replay,
 but all their tools become unreviewed Block and publication is cleared. The fold still
 checks their original digests, connection, account, reviewer and dates. New review
-commands refuse the incomplete choice before appending it.
+commands refuse an incomplete declared-server choice before appending it.
 
 ## Request deadlines for database reads
 

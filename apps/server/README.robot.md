@@ -1651,8 +1651,8 @@ private turns and turns without a binding get no list.
 
 The bridge joins the saved discovery definitions to the current tool policy by name
 and revision. It sends each tool's `allow` mode alongside its definition. It sends only reviewed
-tools in Allow mode with `costCents: 0` and a
-stored definition. Ask and Block tools, missing definitions and server discovery
+tools in Allow mode with a stored definition. Ordinary remote servers need no
+pre-call cost declaration; servers declaring OpenCrane details still need `costCents: 0`. Ask and Block tools, missing definitions and server discovery
 results are left out. In particular, `discoverResult` is never sent because it may
 contain instructions that nobody reviewed.
 
@@ -2706,7 +2706,8 @@ missing databases, expired append deadlines and rejected join identity projectio
 
 ## Waiting tool calls
 
-Turn lists now include reviewed, zero-cost Ask tools only when discovery carries a review.
+Turn lists include reviewed ordinary Ask tools without OpenCrane cost or review details.
+OpenCrane-declared Ask tools still need zero cost and a saved review descriptor.
 Allow tools still fail if policy changes to Ask mid-turn.
 
 Human group events are now valid stored records. Chat reads, lists and

@@ -65,7 +65,7 @@ export async function routineUsedAsk(store: EventStore, kind: string) {
     const dispatch = toolDispatchRecordedDataSchema.parse(example);
     const details = { ...dispatch, approvalId, requestId: permitId,
       conversationId: 'routine-session-occurrence', turnId: 'routine-turn-occurrence',
-      serverId: 'mcp_1', toolName: 'odoo.write' };
+      serverId: 'mcp_1', toolName: 'crm.write' };
     if (kind === 'foreign proof') {
       details.approvalId = 'another';
     }

@@ -10,9 +10,9 @@ developers check each account's rights without touching real company data.
 
 This is a fixture, a ready-made test setup with fake data, in the infrastructure
 layer. It has its own database and runs separately from the development stack.
-The [Odoo tool server](../../apps/odoo-mcp/README.md), a small program that lets an
-AI assistant look things up through [MCP](../../GLOSSARY.md#mcp-server-tool-server),
-can read draft orders here. OpenCrane's chat does not connect to Odoo yet.
+An admin may install a third-party tool server to connect a business system.
+The product contains no Odoo adapter. This fixture remains available for optional
+connector tests.
 
 ```mermaid
 flowchart LR
@@ -20,8 +20,8 @@ flowchart LR
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   fixture -->|runs| odoo["Odoo Community<br/>business software"]
   fixture -->|runs| database["PostgreSQL<br/>separate database"]
-  adapter["apps/odoo-mcp<br/>tool server"] -->|reads orders| odoo
-  server["apps/server<br/>not connected yet"] -.-> adapter
+  adapter["Third-party<br/>tool server"] -->|reads orders| odoo
+  server["apps/server<br/>product back end"] -.->|installed by an admin| adapter
 ```
 
 ## What it is responsible for
@@ -57,4 +57,4 @@ infra/odoo/stop.sh
 
 - [README.robot.md](README.robot.md): accounts, private files, network rules and image versions.
 - [Reviewed runtime licences](licences.md): licences for Odoo and this test setup.
-- [Planned Odoo access using each person's rights](../../plan.md#per-user-mcp-credentials-eg-per-user-odoo).
+- [Planned access using each person's rights](../../plan.md#per-user-mcp-credentials).

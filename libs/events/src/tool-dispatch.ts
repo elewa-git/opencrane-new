@@ -8,6 +8,8 @@ export const toolCallFields = {
   serverId: z.string().regex(/^[\w-]{1,200}$/u),
   toolName: z.string().refine(isToolCallText),
 };
+export const approvalExpiredDataSchema = z.object({ approvalId: z.string().min(1) }).strict();
+export const approvalUsedDataSchema = approvalExpiredDataSchema.extend({ permitId: z.string().min(1) });
 export const toolDispatchRecordedDataSchema = z.object({
   ...toolCallFields, requestId: z.uuid(), logicalRequestId: z.string().regex(/^[a-f0-9]{64}$/u),
   approvalId: z.string().min(1).optional(), startedAt: z.iso.datetime(), durationMs: z.int().nonnegative(),
@@ -16,6 +18,8 @@ export const toolDispatchRecordedDataSchema = z.object({
     'connection_refused', 'dispatch_refused', 'response_received', 'transport_uncertain',
     'adapter_response_received', 'adapter_transport_uncertain', 'adapter_dispatch_refused',
   ]),
+  costStatus: z.enum(['reported', 'not_reported', 'invalid']).optional(),
+  costCents: z.int().nonnegative().optional(),
   adapter: z.strictObject({
     decisionId: z.uuid(),
     startId: z.string().regex(/^[a-f0-9-]{36}:tool-dispatch-started$/u),
@@ -23,7 +27,13 @@ export const toolDispatchRecordedDataSchema = z.object({
     generation: z.int().positive(), recordDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     reviewRevision: z.int().positive(),
   }).optional(),
-}).strict().refine(validAdapterEvidence);
+}).strict().refine(validAdapterEvidence).refine(validCostObservation);
+
+function validCostObservation(data: { costStatus?: string | undefined;
+  costCents?: number | undefined }) {
+  if (data.costStatus === 'reported') return data.costCents !== undefined;
+  return data.costCents === undefined;
+}
 
 function validAdapterEvidence(data: {
   requestId: string; evidence: string; outcome: string; adapter?: { startId: string } | undefined;

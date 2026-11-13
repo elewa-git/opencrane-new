@@ -8,7 +8,7 @@ Part of #45, P3-4 PR 7. Owner hosting decision: this VPS, 178.62.34.187, separat
 POST `/` accepts `server/discover`, `tools/list` and `tools/call`, with a JSON-RPC id.
 Protocol header and `params._meta.io.modelcontextprotocol/protocolVersion` are `2026-07-28`.
 The `mcp-method` and `mcp-name` headers agree exactly with the request. Replies are JSON.
-The byte parser and method/name checks follow `apps/odoo-mcp/src/server.ts`.
+The byte parser rejects ambiguous JSON before method and name checks.
 Bounded Codex metadata follows `libs/models/src/mcp.ts`; discovery needs only protocol metadata.
 Bodies are limited to 16 KiB. Duplicate JSON fields, malformed UTF-8, batches, notifications,
 initialisation, cursors, sessions, unknown fields and methods are refused.
@@ -17,6 +17,10 @@ Errors use fixed codes and never return request values apart from a valid JSON-R
 Logging is disabled. The process makes no outbound requests and performs no retries.
 
 Both catalogue responses are complete, public, and have `ttlMs: 300000`.
+`DEMO_MCP_MODE=standard` selects ordinary definitions without OpenCrane cost, review
+or revision declarations. It accepts calls without agent metadata or revision headers.
+`DEMO_MCP_DESCRIPTION` changes the read description in that mode, for drift checks.
+The default mode and its exported catalogue remain unchanged.
 Discovery includes serverInfo, capabilities.tools and experimental `io.opencrane/expectedRevision`.
 Each tool declares integer `io.opencrane/costCents: 0` and `io.opencrane/review` in `_meta`.
 The server declares; the admin review locks the exact definitions; changes remain held.
@@ -58,6 +62,8 @@ The default catalogue digest stays
 | `PORT` | `18445` | Separate TCP port, integer 1024–65535; startup refuses an occupied port. |
 | `TLS_CERT_PATH` | Unset | Path to the trusted hostname certificate chain in PEM format. |
 | `TLS_KEY_PATH` | Unset | Path to its private key; never pass or print its value. |
+| `DEMO_MCP_MODE` | Unset | `standard` omits OpenCrane declarations and revision checks. |
+| `DEMO_MCP_DESCRIPTION` | Unset | Replace the read description in standard mode to check drift. |
 
 Both TLS paths must be supplied together. With TLS, the listener binds 0.0.0.0; otherwise
 it binds 127.0.0.1 for local checks only. SIGTERM/SIGINT close the listener.

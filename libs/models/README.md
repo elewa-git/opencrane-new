@@ -54,6 +54,11 @@ computer turn. It reports retry eligibility only while a matching short-lived
 bridge signal says the original call is still waiting.
 The signal must match the saved tool, turn, computer and generation.
 
+Ordinary third-party tools run after admin review without a cost estimate. Their current
+tool list must match the review, and any reported cost is recorded after the reply.
+Tool calls keep the agent's thread, model, sandbox and version details private.
+Servers offering OpenCrane's stricter declarations keep those checks.
+
 A remote tool start is saved before its budget check. If the call is refused before
 connecting, matching saved proof can let the requester choose one retry. Missing
 proof keeps the approval used. A retry checks current access and cannot reuse the old pass.
@@ -158,7 +163,7 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks owner Ask and release bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices after wake, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   server -->|private image worker claims once and sends an image check| models
-  models -->|checks personal key identity, private sign-in, refresh, revocation and selected calls with current turn and loaded memory checks; refuses encoded key echoes in account identity and scans replies for full or long continuous credential echoes; checks remote HTTPS addresses, certificates, current revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
+  models -->|checks personal key identity, private sign-in, refresh, revocation and selected calls with current turn and loaded memory checks; refuses encoded key echoes in account identity and scans replies for full or long continuous credential echoes; checks remote HTTPS addresses, certificates, reviewed tool lists, strict revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models, checks private callers and reports live Ask holds| models
   models -.->|checks receipts, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|checks the saved company custody record version; prepares separate company sign-in attempts; stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, reads one exact personal access token for a private callback, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
@@ -293,8 +298,9 @@ Pending closure records retry after storage recovers, without restarting. Restar
 recovers saved closure records without reopening connections. Outside networking
 remains switched off. Crash recovery and live qualification are still pending.
 
-Tool mode changes require the server’s declared zero cost and approval details
-for both Allow and Ask. Admin review locks those values before a tool can be enabled.
+Admin review locks the tool definition before Allow or Ask can be enabled.
+Servers declaring OpenCrane details must also declare zero cost and approval details.
+Ordinary tools need no estimate; any reported cost is recorded after the reply.
 
 Background workers copy saved events into spending read tables. The server can
 page through effect records for owners and admins without loading the whole history.

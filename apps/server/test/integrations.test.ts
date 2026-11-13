@@ -82,6 +82,16 @@ async function member(memberId: string, role: 'owner' | 'admin' | 'member') {
   await authorisation.handler.handle(joined, pgDb(dbs.queue));
 }
 
+async function seedStoredCatalogue(serverId: string, data: Record<string, unknown>) {
+  const stored = fixture('mcp.server_discovered', `mcp-${serverId}`, { serverId, ...data });
+  // Keep old incomplete snapshots in the read and rebuild tests, outside the new-write path.
+  await nats.seed([stored]);
+  const rows = await history(nats.store, stored.subject, stored.silo);
+  expect(rows.at(-1)?.event).toEqual(stored);
+  const sequence = await nats.store.head(stored.subject);
+  streamSequences.set(stored.subject, sequence);
+}
+
 async function mcp(serverId: string, type: string, data: Record<string, unknown>, silo = 'test') {
   await append(fixture(type, `mcp-${serverId}`, { serverId, ...data }, silo));
 }
@@ -113,7 +123,7 @@ beforeEach(async () => {
 
   await mcp('odoo', 'mcp.server_registered', { kind: 'remote', locator: 'https://odoo.example.test/mcp',
     catalogueRef: 'catalogue:odoo' });
-  await mcp('odoo', 'mcp.server_discovered', { toolCount: 14, schemaDigest: 'a'.repeat(64),
+  await seedStoredCatalogue('odoo', { toolCount: 14, schemaDigest: 'a'.repeat(64),
     serverInfo: { name: 'Odoo Accounting', version: '1.4.2' }, connectionId: 'installed-odoo', accountMode: 'none',
     tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
       { name: 'write', revision: 'b'.repeat(64), reviewed: true, costCents: 0 }, { name: 'new', revision: 'c'.repeat(64), reviewed: false }] });
@@ -126,10 +136,10 @@ beforeEach(async () => {
   await mcp('broken', 'mcp.server_registered', { kind: 'remote', locator: 'https://broken.example.test/mcp' });
   await mcp('broken', 'mcp.server_rejected', { reason: 'ssrf_guard_failed' });
   await mcp('pricing', 'mcp.server_registered', { kind: 'remote', locator: 'https://pricing.example.test/mcp' });
-  await mcp('pricing', 'mcp.server_discovered', { toolCount: 3, schemaDigest: 'c'.repeat(64) });
+  await seedStoredCatalogue('pricing', { toolCount: 3, schemaDigest: 'c'.repeat(64) });
   await mcp('pricing', 'mcp.tools_changed', { previousSchemaDigest: 'c'.repeat(64), newSchemaDigest: 'd'.repeat(64) });
   await mcp('review', 'mcp.server_registered', { kind: 'remote', locator: 'https://review.example.test/mcp' });
-  await mcp('review', 'mcp.server_discovered', { toolCount: 4, schemaDigest: 'e'.repeat(64) });
+  await seedStoredCatalogue('review', { toolCount: 4, schemaDigest: 'e'.repeat(64) });
   await mcp('retired', 'mcp.server_registered', { kind: 'remote', locator: 'https://retired.example.test/mcp' });
   await mcp('retired', 'mcp.server_published', { publishedBy: 'alice' });
   await mcp('retired', 'mcp.server_unpublished', { unpublishedBy: 'alice' });
@@ -547,6 +557,7 @@ async function prepareReviewedOdooCatalogue(reviewed = true) {
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: catalogueDigest(tools),
+    digestVersion: 2,
     checkedAt, expiresAt, connectionId: 'installed-odoo', accountMode: 'none', tools });
   await runner.run(mcpCatalogue);
   if (reviewed) {

@@ -19,7 +19,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|shares installation settings, memory, account custody and readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|shares installation settings and private services; checks tool calls| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, nodes and backup leases| package["infra/package<br/>Helm install"]
   stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox
@@ -125,6 +125,8 @@ available for diagnosis.
   claimed spare stacks with the free stand-in model; real providers are refused.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and
   linked approval and dispatch records in event-log order.
+  Its ordinary mode records protocol facts and can change a definition so the next
+  call requires an admin review.
   A disposable computer also checks that the free model can call a published read
   tool and answer with its result in the same chat turn.
   A guarded test launch keeps the full server and models processes and connects both

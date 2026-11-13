@@ -7,6 +7,8 @@ Saved hosted image attempts now queue a private image check through the worker l
 Reading or replaying these events does not call the scanner.
 Each hosted workload start records its image, Pod and run generation before a new
 tool list can be saved. The list names that same run.
+New tool lists must name the full-list fingerprint rule before they can be saved.
+Each stored tool list keeps its original rule, so older lists still replay.
 Private persona revisions carry encrypted bytes and a checked digest, never plain text.
 An approval records the exact saved version a member chose, without copying its text.
 A completed welcome's archive choice is a separate personal event. It leaves its
@@ -81,12 +83,12 @@ Allow, Ask or Block choice for a tool.
 flowchart LR
   parent["libs/<br/>shared libraries"] --> events["libs/events<br/>events and checked account references"]
   server["apps/server<br/>back end"] -.->|checks message file ids, assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send and final access records with OAuth digests, retries and writer closure| events
-  store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
+  store["libs/event-store<br/>saved event log"] -.->|checks new full-list fingerprints, instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables and retired choices"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event and command label shapes| events
-  models -.->|checks OAuth settings change records| events
+  models -.->|checks OAuth settings changes and reported tool costs| events
 ```
 
 ## What it is responsible for
@@ -168,6 +170,8 @@ Before sending a published tool call, the models process saves a start record wi
 the request, server, connection, reviewed revision and acknowledged gateway configuration.
 It contains no request bytes or credentials. It records that the pass was spent;
 it does not prove that the call reached the tool. Replaying it never sends a call.
+An ordinary server's reply records its reported cost in euro cents, or says that no
+valid cost was reported. That observation never invents a charge or settles spending.
 If a later check refuses the call before sending, the models process saves a not-sent
 outcome on the same stream.
 

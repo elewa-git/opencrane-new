@@ -1,3 +1,5 @@
+import type { ToolPolicy } from '@opencrane/protocol';
+import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
 import { createHash } from 'node:crypto';
 import type { TurnSummary } from '@opencrane/auth';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
@@ -15,6 +17,7 @@ const maximumServers = 20;
 const rootFieldBytes = Buffer.byteLength(',"tools":[]', 'utf8');
 
 export interface TurnToolServerState {
+  catalogue?: ToolPolicy['catalogue'];
   serverId: string;
   connectionId: string | null;
   published: boolean;
@@ -23,14 +26,14 @@ export interface TurnToolServerState {
   discoveryTools: {
     name: string;
     revision: string;
-    definition?: string;
+    definition?: string | undefined;
     review?: unknown;
   }[];
   policyTools: {
     name: string;
     revision: string;
     reviewed: boolean;
-    costCents?: number;
+    costCents?: number | undefined;
     mode: 'allow' | 'ask' | 'block';
   }[];
 }
@@ -378,10 +381,12 @@ async function canUseServer(input: TurnToolInput, serverId: string) {
 }
 
 function reviewedDefinitions(state: TurnToolServerState, approvalWaiting: boolean) {
+  const ordinary = isOrdinaryToolCatalogue(state.catalogue);
   const definitions: string[] = [];
   const modes: Record<string, 'allow' | 'ask'> = {};
   for (const policyTool of state.policyTools) {
-    if (!policyTool.reviewed || policyTool.costCents !== 0 || policyTool.mode === 'block') {
+    if (!policyTool.reviewed || policyTool.mode === 'block' ||
+        (!ordinary && policyTool.costCents !== 0)) {
       continue;
     }
     function matchesPolicy(tool: TurnToolServerState['discoveryTools'][number]) {
@@ -389,7 +394,8 @@ function reviewedDefinitions(state: TurnToolServerState, approvalWaiting: boolea
     }
     const discovered = state.discoveryTools.find(matchesPolicy);
     if (!discovered?.definition || !isValidDefinition(discovered.definition)) continue;
-    if (policyTool.mode === 'ask' && (!approvalWaiting || !discovered.review)) continue;
+    const canAsk = approvalWaiting && (ordinary || discovered.review);
+    if (policyTool.mode === 'ask' && !canAsk) continue;
     definitions.push(discovered.definition);
     modes[policyTool.name] = policyTool.mode;
   }

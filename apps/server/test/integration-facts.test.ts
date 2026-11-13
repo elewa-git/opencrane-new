@@ -115,7 +115,7 @@ async function reviewedPublication() {
   const schemaDigest = catalogueDigest(tools);
   const captured = Date.now();
   const publicationSetup = { serverId: 'fixture', toolCount: 1,
-    connectionId: 'installed-fixture', accountMode: 'none', tools, schemaDigest,
+    connectionId: 'installed-fixture', accountMode: 'none', tools, schemaDigest, digestVersion: 2,
     checkedAt: new Date(captured).toISOString(), expiresAt: new Date(captured + 300_000).toISOString() };
   await append('mcp-fixture', 'mcp.server_discovered', publicationSetup);
   const policy = await readToolPolicy(nats.store, 'acme', 'fixture');

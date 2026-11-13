@@ -1,3 +1,4 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { afterEach, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { getEventDefinition } from '@opencrane/events';
@@ -116,7 +117,8 @@ async function keepsHostedClosed(credentialContract?: unknown) {
   const fixture = await setup(credentialContract);
   await fixture.worker.discover('startup');
   const registrationPosition = await fixture.store.head('mcp-startup');
-  const discovered = { serverId: 'startup', toolCount: 0, schemaDigest: imageDigest,
+  const discovered = { serverId: 'startup', toolCount: 0, schemaDigest: catalogueDigest([]),
+    digestVersion: 2,
     connectionId: 'forged-connection', accountMode: 'none', tools: [] };
   const discovery = envelope('test', 'mcp-startup', 'mcp.server_discovered', discovered, 'discover');
   const discoveredResult = await fixture.store.append({ event: discovery,

@@ -404,7 +404,7 @@ it('admits one eligible night with one exact root and allowance', async function
   const expiresAt = new Date(checkedAtDate.getTime() + 300_000).toISOString();
   await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory',
     connectionId: 'server', accountMode: 'none', tools: [tool], toolCount: 1,
-    schemaDigest: catalogueDigest([tool]), checkedAt, expiresAt });
+    schemaDigest: catalogueDigest([tool]), digestVersion: 2, checkedAt, expiresAt });
   const policy = await readToolPolicy(nats.store, 'acme', 'memory');
   await append('mcp-memory', 'mcp.server_reviewed', { serverId: 'memory',
     catalogueDigest: catalogueDigest([tool]), connectionId: 'server',

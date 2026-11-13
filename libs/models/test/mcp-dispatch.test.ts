@@ -1,10 +1,12 @@
+import { prepare, reviewRestoration, publishRestoration, restorationDelivery,
+  generationHeaders, ordinaryRemoteFixture, permit, send, remoteMethod, review, tool, catalogue, body }
+  from './support/mcp-dispatch.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue, readPublication,
   rebuildMcpCatalogueProjection, memoryScopeId } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
@@ -14,10 +16,9 @@ import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
 import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
-import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
-import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
+import { approvalDecision } from '../src/approvals.ts';
+import { mcpPolicy, parseMcpCall } from '../src/mcp.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import { freePort } from './gateway-delivery-fixture.ts';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
@@ -26,7 +27,7 @@ import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { auditTrail, conversations } from '@opencrane/projections';
 import { budgetStopHandler } from '../src/index.ts';
 import { grantStream } from '@opencrane/authz';
-import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
+import { approvalCards, decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
@@ -34,63 +35,8 @@ import { oauthSelectionFixture } from './support/oauth-selection.ts';
 import { createHash } from 'node:crypto';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-const review = { action: 'Write note', consequence: 'The order note changes.',
-  targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
-const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review });
-const catalogue = catalogueEvidence([tool]);
-const body = JSON.stringify(capture.body);
 
-async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote', remote = false,
-  declared = true, accountMode: 'none' | 'personal' = 'none') {
-  let locator = remote ? 'https://mcp.example.test/mcp' : 'https://fixture.example.test/mcp';
-  if (kind === 'hosted') locator = `registry.example.test/fixture@sha256:${'a'.repeat(64)}`;
-  const registration = { serverId: 'fixture', kind, locator, registeredBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
-  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode,
-    ...catalogue, ...(remote && declared ? { discoverResult: JSON.stringify({ capabilities:
-      { experimental: { 'io.opencrane/expectedRevision': {} } } }) } : {}) };
-  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
-  await reviewCatalogue(setup);
-  const publication = { serverId: 'fixture', publishedBy: 'alice' };
-  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
-    toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
-  await setup.append('mcp-fixture', 'mcp.server_published', publication);
-  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
-    const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
-      granteeId, granteeKind, grantedBy: 'alice' };
-    const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
-    await setup.auth.handler.handle(event, setup.db);
-  }
-  const thread = capture.body.params._meta.threadId;
-  const claims = { ...setup.t, thread };
-  const turn = { assistantId: 'assistant', computerId: 'computer',
-    conversationId: 'conversation', turnId: 'turn', threadId: thread,
-    requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
-  // Replace the fixture turn so its signed thread matches these captured bytes.
-  await setup.append('computer-assistant', 'computer.turn_started', { ...turn, turnId: 'dispatch' });
-  await setup.append('conversation-conversation', 'agent.turn_started',
-    { conversationId: 'conversation', assistantId: 'assistant', turnId: 'dispatch' });
-  const token = await setup.sign({ ...claims, turn: 'dispatch' }, 'decision-service');
-  return { ...setup.headers, ...capture.headers, 'session-id': thread, 'x-turn-token': token };
-}
 
-async function permit(setup: Fixture, headers: Record<string, string>, raw = body) {
-  const request = { method: 'POST', headers, body: raw };
-  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-    request);
-  expect(response.status, await response.text()).toBe(200);
-  const value = response.headers.get('x-opencrane-mcp-permit');
-  expect(value).toBeTruthy();
-  return value!;
-}
-
-async function send(setup: Fixture, value: string, changedBody = body,
-  path = '/dispatch/mcp/fixture/installed') {
-  const headers = { 'x-opencrane-mcp-permit': value, 'content-type': 'application/json' };
-  const request = { method: 'POST', headers, body: changedBody };
-  return fetch(`${setup.options.decisionUrl}${path}`, request);
-}
 
 const changes = ['catalogue', 'generation', 'expiry', 'backend', 'body', 'route', 'silo', 'permit expiry'] as const;
 async function refusesChangedCall(change: typeof changes[number]) {
@@ -150,7 +96,9 @@ async function refusesReuse() {
     const second = await send(setup, value);
     expect(second.status).toBe(403);
     expect(setup.received()).toBe(1);
-    expect(setup.upstreamBody()).toBe(body);
+    expect(JSON.parse(setup.upstreamBody())).toMatchObject({
+      params: { name: 'write', arguments: capture.body.params.arguments } });
+    expect(setup.upstreamBody()).not.toContain('x-codex-turn-metadata');
     expect(setup.providerHeaders()).toContain('x-opencrane-mcp-revision');
     expect(setup.providerHeaders()).not.toContain('x-opencrane-mcp-permit');
   } finally {
@@ -1145,33 +1093,6 @@ async function budgetHandlerEndsApproval() {
 }
 it('ends a waiting approval through the saved budget turn stop', budgetHandlerEndsApproval);
 
-async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allow',
-  serverId = 'fixture') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
-  const catalogue = policy.catalogue!;
-  function choice(declaration: NonNullable<typeof catalogue.tools>[number]) {
-    return { name: declaration.name, revision: declaration.revision,
-      reviewDigest: toolReviewDigest(declaration), mode };
-  }
-  const command = { commandId, expectedSequence: policy.sequence,
-    policyRevision: policy.policyRevision, catalogueDigest: catalogue.schemaDigest,
-    connectionId: policy.connectionId, accountMode: policy.accountMode,
-    tools: catalogue.tools!.map(choice) };
-  const result = await reviewToolPolicy(setup.nats.store, setup.binding, 'alice',
-    serverId, command);
-  expect(result.status).toBe('appended');
-}
-
-async function publishRestoration(setup: Fixture, commandId: string, serverId = 'fixture') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
-  const command = { commandId, expectedSequence: policy.sequence,
-    reviewRevision: policy.reviewRevision };
-  const result = await publishToolPolicy(setup.nats.store, setup.binding, 'alice',
-    serverId, command);
-  expect(result.status).toBe('appended');
-  return prepareGatewayConfiguration(setup.nats.store, 'test', serverId, commandId);
-}
-
 const restorationCases = ['exact', 'legacy', 'review only', 'intent only', 'new intent',
   'unpublish', 'second drift', 'expired', 'failed check', 'older generation',
   'restart before', 'restart after', 'restart recovery', 'duplicate after drift',
@@ -1215,34 +1136,6 @@ async function restorationFixture(expireApproval = false) {
   }
   expect(requireCurrent).toThrow();
   return Object.assign(context, { approvalId, changed });
-}
-
-async function restorationDelivery(setup: Fixture, preserveMemory = true) {
-  let settings: typeof setup.options & { memoryRoute?: typeof setup.options.mcpRoutes[number] } =
-    setup.options;
-  if (preserveMemory) {
-    settings = { ...settings,
-      memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
-  }
-  const options = { db: setup.db, mode: 'live' as const, store: setup.nats.store, silo: 'test',
-    child: setup.gatewayChild()!, configFile: setup.options.configFile,
-    controlPort: await freePort(), settings };
-  const delivery = gatewayDelivery(options);
-  setup.dispatchOptions.acknowledged = delivery.acknowledged;
-  async function waitForWitness(record: Awaited<ReturnType<typeof publishRestoration>>) {
-    const bytes = await readFile(options.configFile, 'utf8');
-    const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(bytes)![0];
-    const url = `http://127.0.0.1:${options.controlPort}${path}`;
-    async function servesWitness() {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
-      expect(response.status).toBe(200);
-      const identity: unknown = await response.json();
-      expect(identity).toMatchObject({ generation: record.generation,
-        recordDigest: record.recordDigest });
-    }
-    await expect.poll(servesWitness, { timeout: 5000 }).toBeUndefined();
-  }
-  return { ...delivery, waitForWitness, options };
 }
 
 async function restartRestoration(context: RestorationFixture) {
@@ -1571,15 +1464,6 @@ async function stopsRootPermit(reason: 'requester_stop' | 'allowance_exhausted')
 }
 it.each(['requester_stop', 'allowance_exhausted'] as const)(
   'refuses an old MCP permit and a new grant after its root stops: %s', stopsRootPermit);
-
-function generationHeaders(record: { generation: number; recordDigest: string;
-  members: { entry: { serverId: string; connectionId: string; reviewRevision: number } }[] }) {
-  const entry = record.members[0]!.entry;
-  return { 'x-opencrane-gateway-generation': String(record.generation),
-    'x-opencrane-record-digest': record.recordDigest, 'x-opencrane-server-id': entry.serverId,
-    'x-opencrane-connection-id': entry.connectionId,
-    'x-opencrane-review-revision': String(entry.reviewRevision) };
-}
 
 async function publishedFixture(mode = 'allow', remote = false, declared = true,
   accountMode: 'none' | 'personal' = 'none') {
@@ -2518,6 +2402,22 @@ const remoteGuards = ['gateway', 'bytes', 'private', 'metadata', 'mixed', 'empty
   'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'mime', 'reply_fields',
   'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
   'deadline', 'watch_admission', 'watch_final'] as const;
+function restoreTlsAdmissionClock() {
+  vi.restoreAllMocks();
+}
+
+function freezeTlsAdmissionClock() {
+  // Reach the certificate check even when the test process is paused by other work.
+  // Keep the network timers real; separate cases prove permit and access expiry.
+  const wallTime = Date.now();
+  const monotonicTime = performance.now();
+  const wallClock = vi.spyOn(Date, 'now');
+  wallClock.mockReturnValue(wallTime);
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockReturnValue(monotonicTime);
+  onTestFinished(restoreTlsAdmissionClock);
+}
+
 async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
   const context = await publishedFixture('allow', true, mode !== 'undeclared');
@@ -2552,12 +2452,14 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     remote.network.resolve = heldDns;
   }
   const rowsBefore = await setup.nats.store.head();
+  if (mode === 'wrong_name' || mode === 'untrusted') freezeTlsAdmissionClock();
   if (mode === 'undeclared' || mode === 'watch_admission') {
     expect(await gatewayCall(context)).toBe(403);
     expect(remote.dnsCalls()).toBe(0);
   } else if (mode === 'gateway') {
     expect(await gatewayCall(context, {}, raw)).toBe(200);
-    expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
+    expect(remote.received[0]!.raw.toString()).toContain('"number":1.0e3');
+    expect(remote.received[0]!.raw.toString()).not.toContain('x-codex-turn-metadata');
   } else {
     const headers = { ...context.headers, ...context.constants };
     const value = await permit(setup, headers, raw);
@@ -2632,11 +2534,13 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       if (mode === 'permit_timeout') expect(performance.now() - beforeSend).toBeLessThan(700);
       if (success || ['redirect', 'oversize', 'session', 'mime', 'revision', 'deadline'].includes(mode)) {
         expect(remote.received).toHaveLength(1);
-        expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
+        expect(remote.received[0]!.raw.toString()).toContain('"number":1.0e3');
+        expect(remote.received[0]!.raw.toString()).not.toContain('x-codex-turn-metadata');
         expect(remote.received[0]!.hostname).toBe('mcp.example.test');
         expect(remote.received[0]!.headers).toEqual({ host: 'mcp.example.test',
           'content-type': 'application/json', accept: 'application/json',
-          'content-length': String(Buffer.byteLength(raw)), 'mcp-protocol-version': '2026-07-28',
+          'content-length': String(remote.received[0]!.raw.length),
+          'mcp-protocol-version': '2026-07-28',
           'mcp-method': 'tools/call', 'mcp-name': 'write',
           'x-opencrane-mcp-revision': catalogue.schemaDigest });
         expect(remote.dnsCalls()).toBe(1);
@@ -3116,7 +3020,12 @@ async function ignoresForgedProfileArgument() {
   const response = await send(setup, value, raw);
   expect(response.status, await response.text()).toBe(200);
   expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
-  expect(remote.received[0]!.raw.toString()).toBe(raw);
+  const sent: unknown = JSON.parse(remote.received[0]!.raw.toString());
+  expect(sent).toHaveProperty('params.arguments', {
+    profileId: 'bob-profile', ...capture.body.params.arguments });
+  expect(sent).toHaveProperty('params._meta', {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {} });
 }
 it('treats a profile-shaped tool argument as data and keeps Alice’s selection',
   ignoresForgedProfileArgument, 60_000);
@@ -3192,6 +3101,32 @@ async function repeatsIdenticalAdapterCallback() {
   }
 }
 it('adds nothing for an identical direct adapter callback', repeatsIdenticalAdapterCallback);
+
+async function checksRepeatedAdapterCost(change: 'identical' | 'amount' | 'status') {
+  const { setup, subject, binding, observation } = await adapterRecorderFixture();
+  const reported = { ...observation, costStatus: 'reported' as const, costCents: 7 };
+  await recordAdapterObservation(setup.actor, binding, reported);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  expect(rows[2]!.event.data).toMatchObject({ costStatus: 'reported', costCents: 7 });
+  let repeated = reported;
+  if (change === 'amount') repeated = { ...reported, costCents: 99 };
+  const invalid = { ...observation, costStatus: 'invalid' as const };
+  const callback = change === 'status' ? invalid : repeated;
+  const repeatedBinding = { reviewRevision: binding.reviewRevision,
+    recordDigest: binding.recordDigest, generation: binding.generation,
+    connectionId: binding.connectionId, startId: binding.startId,
+    decisionId: binding.decisionId, silo: binding.silo };
+  const recording = recordAdapterObservation(setup.actor, repeatedBinding, callback);
+  if (change === 'identical') {
+    await recording;
+  } else {
+    await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+  }
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+}
+it.each(['identical', 'amount', 'status'] as const)(
+  'checks repeated adapter cost by fields: %s', checksRepeatedAdapterCost);
 
 async function refusesForeignAdapterCallback() {
   const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
@@ -3739,3 +3674,203 @@ async function withholdsPermitDuringAccessOutage() {
 }
 it('withholds the MCP permit when current access cannot be checked',
   withholdsPermitDuringAccessOutage, 40_000);
+
+async function runsOrdinaryRemoteTool() {
+  const { setup, headers, remote } = await ordinaryRemoteFixture();
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list', 'tools/call']);
+  const sentCall: unknown = JSON.parse(remote.received[1]!.raw.toString());
+  expect(sentCall).toHaveProperty('params._meta', {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {} });
+  expect(remote.received[1]!.headers).not.toHaveProperty('x-opencrane-mcp-revision');
+  expect(JSON.stringify(sentCall)).not.toMatch(/threadId|sessionId|sandbox|clientInfo/u);
+  const decisions: StoredEvent[] = [];
+  const last = await setup.nats.store.head();
+  for (let position = 1; position <= last; position++) {
+    decisions.push(await setup.nats.store.readEvent(position));
+  }
+  const dispatch = decisions.find(row => row.event.type === 'tool.dispatch_recorded');
+  expect(dispatch?.event.data).toMatchObject({ costStatus: 'not_reported' });
+}
+it('runs an ordinary reviewed remote tool and records that no cost was reported', runsOrdinaryRemoteTool);
+
+async function refusesOrdinaryCatalogueDrift() {
+  const { setup, headers, remote } = await ordinaryRemoteFixture();
+  function changed() { return { tools: [] }; }
+  remote.respond(changed);
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ result: { isError: true,
+    content: [{ text: 'The tool list changed. An admin must review it before another call.' }] } });
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(policy.driftHeld).toBe(true);
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list']);
+}
+it('blocks an ordinary remote tool when its current list differs from the review', refusesOrdinaryCatalogueDrift);
+
+async function preservesNumbersWithoutAgentDetails() {
+  const context = await publishedFixture('allow', true);
+  const { setup } = context;
+  const remote = await remoteFixture();
+  onTestFinished(remote.close);
+  setup.dispatchOptions.routes.length = 0;
+  setup.dispatchOptions.remoteNetwork = remote.network;
+  setup.dispatchOptions.requireCatalogue = function requireCatalogue() {};
+  remote.revision(catalogue.schemaDigest);
+  const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
+  const value = await permit(setup, { ...context.headers, ...context.constants }, raw);
+  const response = await send(setup, value, raw);
+  expect(response.status, await response.text()).toBe(200);
+  const sent = remote.received[0]!.raw.toString();
+  expect(sent).toContain('"number":1.0e3');
+  const sentCall: unknown = JSON.parse(sent);
+  expect(sentCall).toHaveProperty('params._meta', {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {} });
+  expect(sent).not.toMatch(/threadId|thread_id|sessionId|session_id|probe-model|sandbox|0\.159\.2|clientInfo/u);
+}
+it('removes agent details on the wire while preserving exact argument numbers', preservesNumbersWithoutAgentDetails);
+
+async function approvesOrdinaryDescription(_name: string, description: string | undefined,
+  consequence: string) {
+  const { setup, headers, remote } = await ordinaryRemoteFixture('ask', description);
+  const approvalId = await approvalForReviewedTool(setup, headers, false);
+  expect(remote.calls).toHaveLength(0);
+  const waiting = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(waiting.state).toBe('requested');
+  const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
+  expect(cards).toHaveLength(1);
+  expect(cards[0]!.review).toMatchObject({ tool: 'write', target: 'write', consequence,
+    data: losslessJson(JSON.stringify(capture.body.params.arguments)).canonical });
+  async function fresh() {}
+  const approved = await decideApproval(setup.nats.store, 'test', approvalId,
+    'alice', 'approved', true, fresh, waiting);
+  expect(approved.status).toBe('appended');
+  const value = await permit(setup, { ...headers, 'x-opencrane-approval-id': approvalId });
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list', 'tools/call']);
+}
+const ordinaryDescriptions = [
+  ['missing', undefined, 'Run the reviewed tool.'],
+  ['empty', '', 'Run the reviewed tool.'],
+  ['long', 'x'.repeat(8001), 'x'.repeat(8000)],
+] as const;
+it.each(ordinaryDescriptions)(
+  'shows an ordinary approval card and runs the approved call for a %s description',
+  approvesOrdinaryDescription);
+
+async function recordsReportedOrdinaryCost(cost: number) {
+  const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
+  function result(method: string) {
+    if (method === 'tools/list') return { tools: [JSON.parse(ordinaryTool.definition) as unknown] };
+    return { content: [], _meta: { 'io.opencrane/costCents': cost } };
+  }
+  remote.respond(result);
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  const last = await setup.nats.store.head();
+  const dispatch = await setup.nats.store.readEvent(last);
+  expect(dispatch.event.type).toBe('tool.dispatch_recorded');
+  if (cost < 0 || cost === 0.5 || cost === 9007199254740992) {
+    expect(dispatch.event.data).toMatchObject({ costStatus: 'invalid' });
+    expect(dispatch.event.data).not.toHaveProperty('costCents');
+  } else {
+    expect(dispatch.event.data).toMatchObject({ costStatus: 'reported', costCents: cost });
+  }
+}
+it.each([0, 7, -1, 0.5, 9007199254740992])('records an ordinary tool reported cost after execution: %s', recordsReportedOrdinaryCost);
+
+async function checksEveryOrdinaryCataloguePage() {
+  const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
+  function result(method: string, cursor?: string) {
+    if (method === 'tools/list' && cursor === undefined) {
+      return { tools: [], nextCursor: 'remaining-tools' };
+    }
+    if (method === 'tools/list') {
+      return { tools: [JSON.parse(ordinaryTool.definition) as unknown] };
+    }
+    return { content: [], isError: false };
+  }
+  remote.respond(result);
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list', 'tools/list', 'tools/call']);
+}
+it('compares every page of an ordinary server list before executing', checksEveryOrdinaryCataloguePage);
+
+async function refusesUnreviewedDeclaredArguments(kind: 'target' | 'object' | 'array') {
+  const setup = await fixture();
+  onTestFinished(setup.close.bind(setup));
+  const headers = await prepare(setup);
+  const descriptor = { ...review };
+  if (kind === 'target') descriptor.targetArgument = 'unlisted';
+  const declaration = { ...tool, review: descriptor };
+  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    ...catalogueEvidence([declaration]) };
+  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
+  await reviewRestoration(setup, 'argument-review', 'ask');
+  const record = await publishRestoration(setup, 'argument-publication');
+  const delivery = await restorationDelivery(setup);
+  await delivery.deliver(record);
+  await delivery.waitForWitness(record);
+  expect(await delivery.observe()).not.toBeNull();
+  Object.assign(headers, generationHeaders(record));
+  const argumentsValue: Record<string, unknown> = { ...capture.body.params.arguments };
+  if (kind === 'object') argumentsValue['note'] = { text: 'ordinary text' };
+  if (kind === 'array') argumentsValue['note'] = ['ordinary text'];
+  const call = { ...capture.body, params: { ...capture.body.params, arguments: argumentsValue } };
+  const parsed = parseMcpCall(JSON.stringify(call));
+  const policy = await mcpPolicy(setup.nats.store, 'test', 'fixture', 'installed', parsed,
+    headers, Infinity, setup.dispatchOptions.acknowledged);
+  expect(policy.outcome).toBe('ask');
+  const bound = { requesterId: 'alice', assistantId: 'assistant', conversationId: 'conversation',
+    turnId: 'dispatch', serverId: 'fixture', connectionId: 'installed' };
+  async function fresh() {}
+  const before = await setup.nats.store.head();
+  const decision = approvalDecision(setup.nats.store, 'test', bound, policy, setup.keys,
+    setup.actor.now, fresh, 'unreviewed-arguments');
+  await expect(decision).rejects.toThrow('Unreviewed arguments');
+  expect(await setup.nats.store.head()).toBe(before);
+  const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
+  expect(cards).toEqual([]);
+  expect(setup.received()).toBe(0);
+}
+it.each(['target', 'object', 'array'] as const)(
+  'refuses unreviewed declared approval arguments: %s', refusesUnreviewedDeclaredArguments);
+
+async function approvesStructuredOrdinaryArguments(kind: 'object' | 'array') {
+  const { setup, headers, remote } = await ordinaryRemoteFixture('ask');
+  const note = kind === 'object' ? { text: 'ordinary text' } : ['ordinary text'];
+  const argumentsValue = { ...capture.body.params.arguments, note };
+  const call = { ...capture.body, params: { ...capture.body.params, arguments: argumentsValue } };
+  const raw = JSON.stringify(call);
+  const request = { method: 'POST', headers, body: raw };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  expect(response.status).toBe(403);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
+  expect(cards).toHaveLength(1);
+  expect(cards[0]!.review.data).toBe(losslessJson(JSON.stringify(argumentsValue)).canonical);
+  const waiting = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  async function fresh() {}
+  const approved = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+    'alice', 'approved', true, fresh, waiting);
+  expect(approved.status).toBe('appended');
+  const approvedHeaders = { ...headers, 'x-opencrane-approval-id': answer.approvalId };
+  const value = await permit(setup, approvedHeaders, raw);
+  const sent = await send(setup, value, raw);
+  expect(sent.status, await sent.text()).toBe(200);
+  expect(remote.calls).toHaveLength(2);
+  const sentCall: unknown = JSON.parse(remote.received[1]!.raw.toString());
+  expect(sentCall).toMatchObject({ params: { arguments: argumentsValue } });
+}
+it.each(['object', 'array'] as const)(
+  'shows and approves exact ordinary structured arguments: %s', approvesStructuredOrdinaryArguments);

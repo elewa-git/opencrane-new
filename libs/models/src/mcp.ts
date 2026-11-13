@@ -1,3 +1,4 @@
+import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
 import { isToolPolicyAvailable } from '@opencrane/projections';
 import { gatewayAdmission } from './gateway-admission.ts';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
@@ -73,19 +74,22 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
     return tool.name === call.params.name;
   }
   const tool = policy.tools.find(hasRequestedName);
-  let decision = toolDecision(tool);
+  const ordinary = isOrdinaryToolCatalogue(policy.catalogue);
+  const classification: { ordinary?: boolean } = { ordinary };
+  let decision = toolDecision(tool, ordinary);
   const offeredMode = headers['x-opencrane-tool-mode'];
   requireOfferedMode(offeredMode);
   // Refuse changed Allow tools before creating an approval nobody can answer yet.
   if (offeredMode === 'allow' && decision.outcome === 'ask') {
     decision = { outcome: 'deny', reason: 'policy_block' };
   }
-  const review = reviewMetadata(rows, call.params.name, policy.catalogue);
+  const review = reviewMetadata(rows, call.params.name, policy.catalogue, args);
   const expectedApproval = expectedApprovalId(headers);
   return { ...decision, ...(gatewayBinding ? { gatewayBinding } : {}),
     ...(personalAvailable ? { personal } : {}),
     waitLimited: offeredMode === 'ask', expectedApproval,
-    policy, revision: tool?.revision, name: call.params.name, args, ...review };
+    policy, ...classification,
+    revision: tool?.revision, name: call.params.name, args, ...review };
 }
 
 function matchesPersonalPolicy(policy: ReturnType<typeof toolPolicyFromRows>,
@@ -96,18 +100,24 @@ function matchesPersonalPolicy(policy: ReturnType<typeof toolPolicyFromRows>,
 }
 export function toolDecision(
   tool: ReturnType<typeof toolPolicyFromRows>['tools'][number] | undefined,
+  ordinary = false,
 ) {
   const mode = tool?.reviewed ? tool.mode : 'block';
-  if (mode !== 'block' && tool?.costCents !== 0) return { outcome: 'deny', reason: 'unknown_cost' } as const;
+  if (mode !== 'block' && !ordinary && tool?.costCents !== 0) {
+    return { outcome: 'deny', reason: 'unknown_cost' } as const;
+  }
   const outcome = mode === 'block' ? 'deny' : mode;
   const reason = mode === 'ask' ? 'approval_required' : mode === 'allow' ? 'policy_allow' : 'policy_block';
   return { outcome, reason } as const;
 }
 function reviewMetadata(rows: StoredEvent[], name: string,
-  catalogue: ReturnType<typeof mcpServerDiscoveredDataSchema.parse> | null) {
+  catalogue: ReturnType<typeof mcpServerDiscoveredDataSchema.parse> | null, args: JsonValue) {
   const discovery = mcpServerDiscoveredDataSchema.parse(catalogue);
-  const review = discovery.tools?.find(t => t.name === name)?.review;
-  const registered = rows.find(r => r.event.type === 'mcp.server_registered');
+  function matchesName(tool: { name: string }) { return tool.name === name; }
+  let review = discovery.tools?.find(matchesName)?.review;
+  if (isOrdinaryToolCatalogue(catalogue)) review = ordinaryToolReview(catalogue, name, args);
+  function isRegistration(row: StoredEvent) { return row.event.type === 'mcp.server_registered'; }
+  const registered = rows.find(isRegistration);
   const { kind, locator } = z.object({ kind: z.enum(['remote', 'hosted']), locator: z.string() }).parse(registered?.event.data);
   let destination = `Hosted: ${locator}`;
   if (kind === 'remote') {
@@ -230,4 +240,19 @@ export function requireMcpThread(call: ReturnType<typeof parseMcpCall>['call'], 
   if (metadataThread !== undefined && metadataThread !== thread) {
     throw new Error('MCP metadata thread refused');
   }
+}
+
+const ordinaryDefinitionSchema = z.object({ description: z.string().optional() });
+
+function ordinaryToolReview(catalogue: ReturnType<typeof mcpServerDiscoveredDataSchema.parse> | null,
+  name: string, args: JsonValue) {
+  function matchesName(tool: { name: string }) { return tool.name === name; }
+  const tool = catalogue?.tools?.find(matchesName);
+  const raw: unknown = JSON.parse(tool?.definition ?? '{}');
+  const definition = ordinaryDefinitionSchema.parse(raw);
+  const fields = args.value instanceof Map ? [...args.value.keys()] : [];
+  const description = definition.description;
+  const consequence = description ? description.slice(0, 8000) : 'Run the reviewed tool.';
+  return { action: name, consequence,
+    targetArgument: '', fields, stepUp: false };
 }

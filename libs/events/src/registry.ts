@@ -1,3 +1,5 @@
+import { toolDispatchRecordedDataSchema, approvalExpiredDataSchema, approvalUsedDataSchema }
+  from './tool-dispatch.ts';
 import { agentNativeRequestRefusedDataSchema } from './native-request.ts';
 import { agentCommandRanDataSchema } from './command-activity.ts';
 import { approvalCancelledDataSchema } from './approval-cancellation.ts';
@@ -316,14 +318,14 @@ export const eventRegistry: readonly EventDefinition[] = [
 
   // Tools, approvals and effects
   event('tool.dispatch_recorded', 'decision', 'The gateway or models process recorded a tool outcome, with permit-bound remote evidence.',
-    data.toolDispatchRecordedDataSchema, {
+    toolDispatchRecordedDataSchema, {
       conversationId: 'conv_1', turnId: 'turn_1', callId: 'call_1',
       serverId: 'mcp_1', toolName: 'write', requestId: '00000000-0000-4000-8000-000000000001',
       logicalRequestId: DIGEST_EXAMPLE, startedAt: '2026-10-09T00:00:00.000Z',
       durationMs: 75, outcome: 'not_dispatched', evidence: 'connection_refused',
     }),
   event('approval.retry_requested', 'approval', 'The requester authorised the unchanged request again.',
-    data.approvalExpiredDataSchema, { approvalId: 'appr_1' }),
+    approvalExpiredDataSchema, { approvalId: 'appr_1' }),
   event(
     'tool.approval_requested',
     'approval',
@@ -334,7 +336,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       conversationId: 'conv_1',
       turnId: 'turn_1',
       assistantId: 'asst_1',
-      tool: 'odoo.write',
+      tool: 'crm.write',
       argumentsDigest: DIGEST_EXAMPLE,
       requesterId: 'mem_1', serverId: 'mcp_1', toolRevision: DIGEST_EXAMPLE, schemaDigest: DIGEST_EXAMPLE,
       connectionId: 'installed', profile: 'none', policySequence: 1, digestVersion: 'lossless-json-v1',
@@ -352,7 +354,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'approval.expired',
     'approval',
     'An approval timed out before anyone decided it.',
-    data.approvalExpiredDataSchema,
+    approvalExpiredDataSchema,
     { approvalId: 'appr_1' },
   ),
   event('approval.cancelled', 'approval', 'The logical turn or reviewed binding closed, or takeover cancelled unused consent.',
@@ -361,7 +363,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'approval.used',
     'approval',
     'A single-use approval was consumed by its matching retry.',
-    data.approvalUsedDataSchema,
+    approvalUsedDataSchema,
     { approvalId: 'appr_1', permitId: 'permit_1' },
   ),
   event(
@@ -372,8 +374,8 @@ export const eventRegistry: readonly EventDefinition[] = [
     {
       permitId: 'permit_1',
       computerId: 'computer_1',
-      tool: 'odoo.read',
-      destination: 'odoo-mcp',
+      tool: 'crm.read',
+      destination: 'crm-mcp',
       costCents: 2,
       outcome: 'success',
     },

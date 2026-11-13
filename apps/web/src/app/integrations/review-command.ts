@@ -1,3 +1,4 @@
+import { canReviewTool } from '@opencrane/protocol';
 import type { ToolPolicy } from '@opencrane/protocol';
 import { compareToolCatalogues } from './tool-changes';
 
@@ -31,8 +32,7 @@ function choiceMode(policy: ToolPolicy, declaration: Declaration): Choice['mode'
     if (tool.name === declaration.name) existedBefore = true;
   }
   if (!existedBefore || !saved ||
-      saved.revision !== declaration.revision || declaration.costCents !== 0 ||
-      !declaration.review) return 'block';
+      saved.revision !== declaration.revision || !canReviewTool(policy.catalogue, declaration)) return 'block';
   if (saved.mode === 'ask') return 'ask';
   if (saved.mode === 'allow') return 'allow';
   return 'block';

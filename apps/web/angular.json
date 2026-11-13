@@ -84,7 +84,6 @@
                 "@opencrane/handlers",
                 "@opencrane/models",
                 "@opencrane/observability",
-                "@opencrane/odoo-mcp",
                 "@opencrane/ops",
                 "@opencrane/projections",
                 "@opencrane/protocol",

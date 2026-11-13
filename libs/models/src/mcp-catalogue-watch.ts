@@ -1,6 +1,6 @@
 import type { EventStore } from '@opencrane/event-store';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
-import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { validateNewMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { envelope } from './actor.ts';
 import { readToolPolicy } from './tool-policy.ts';
@@ -264,7 +264,7 @@ function checkedCapture(captured: Catalogue, serverId: string,
       catalogue.accountMode !== policy.accountMode || !catalogue.checkedAt || !catalogue.expiresAt) {
     throw new Error('Captured catalogue identity mismatch');
   }
-  validateMcpCatalogue(catalogue);
+  validateNewMcpCatalogue(catalogue);
   return catalogue;
 }
 

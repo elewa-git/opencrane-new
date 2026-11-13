@@ -1275,8 +1275,9 @@ at desktop and 390px. Phase 4 group administration remains separate.
 Model multiplicity stays one, with a positive bounded output limit and the
 existing conservative prompt bound. Unknown tariffs, overflowing/fractional
 money and provider tools with unreviewed cost are refused before dispatch.
-Reviewed non-metered MCP tools, including Odoo fixture calls, must explicitly
-carry `costCents: 0` in discovery. A hold that may have been sent is never refunded
+Reviewed MCP tools from OpenCrane-declared servers must explicitly carry `costCents: 0`
+in discovery. Ordinary tools need no estimate; their reply supplies any recorded cost.
+A hold that may have been sent is never refunded
 by time. A hold that was never allowed or sent is released at zero cents.
 P3-14/P3-15 own hard-stop cascades and evidence-based uncertainty resolution.
 
@@ -2738,8 +2739,9 @@ complete row 3 or #49.
 ## Free tool calls and stopped renewals (P3-14 PR 3; Part of #55)
 
 Every MCP send, including memory discovery, recall and remember, obtains
-`budget.call_dispatch_admitted` through the existing actor queue. Only reviewed
-zero-cost tools qualify for `model: mcp-zero-cost`; no reservation is created.
+`budget.call_dispatch_admitted` through the existing actor queue. Reviewed zero-cost
+tools and ordinary tools admitted without an estimate use `model: mcp-zero-cost`.
+This budget class creates no reservation; it does not state the external server's fee.
 The one-use pass holds the decision id, body hash and recorded turn's payer,
 requester, assistant and generation. The existing conditional tool-rule admission
 still follows budget admission. Both must succeed before the sender writes upstream.
@@ -3770,10 +3772,23 @@ adapter. Replay continues to fold saved metadata only; it never invokes Grype.
 `remote-https.ts` owns DNS checks and the pinned HTTPS exchange shared with discovery.
 Explicit operator and memory routes retain their existing contract. With no operator
 route, a published remote server in account mode `none` uses only its saved locator.
-Its reviewed `discoverResult` must declare
-`capabilities.experimental["io.opencrane/expectedRevision"]`; otherwise it refuses
-before DNS. This declaration promises atomic refusal of a mismatched
-`x-opencrane-mcp-revision` before running a tool. Unsupported servers stay unavailable.
+Servers that declare OpenCrane cost, review or revision details retain the strict
+contract. Their reviewed `discoverResult` must declare
+`capabilities.experimental["io.opencrane/expectedRevision"]`. This promises atomic
+refusal of a mismatched `x-opencrane-mcp-revision` before running a tool.
+Ordinary servers declare none of these details. `isOrdinaryToolCatalogue` makes
+that separate decision for review, publication, turn offers and dispatch. Immediately
+before admission, dispatch reads their complete standard `tools/list` and compares
+its lossless digest with the reviewed catalogue, including rejected tools. Discovery saves
+rejected tool revisions and whether the complete list declares OpenCrane metadata. Any such declaration
+keeps the server under the strict contract. Older rejected records without that evidence
+still replay with their original accepted-tools-only digest but require discovery again
+before ordinary calls. Fresh captures use `validateNewMcpCatalogue`, require
+`digestVersion: 2` and validate the full list. They cannot select the stored-history rule.
+A mismatch saves `mcp.tools_changed`,
+holds further calls and returns a visible review-required tool error without execution.
+The check cannot make a third-party list and execution atomic; only servers offering
+the strict revision contract provide that guarantee.
 Remote calls require both dated saved evidence and the running catalogue watch at
 admission and immediately before sending. A hold raised after a permit or saved start
 refuses the send without opening an upstream connection. Authenticated adapter outcomes
@@ -3794,19 +3809,24 @@ Short positive TTLs are checked after one quarter of their lifetime. Longer TTLs
 DNS takes at most one second and no longer than the remaining permit/access lifetime,
 before admission or start saving. Every answer must be public. TLS uses the checked
 address, saved hostname, certificate verification and no shared agent. The existing
-last gateway-position read still determines send ordering. Bytes are unchanged.
-Only Host, Content-Type, Accept, Content-Length, MCP version/method/name and the reviewed
-schema digest leave the process. Replies must be HTTP 200 JSON, at most 1 MiB and without
+last gateway-position read still determines send ordering. Tool arguments retain their
+exact number text. Outgoing calls contain only the tool name, arguments, JSON-RPC id
+and standard protocol metadata. Thread, model, sandbox and client version details
+stay inside OpenCrane. Built-in memory retains its private context contract.
+Only Host, Content-Type, Accept, Content-Length and MCP version/method/name leave the
+process for ordinary servers. Strict servers also receive the reviewed schema digest. Replies must be HTTP 200 JSON, at most 1 MiB and without
 an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 responses.
 The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
 Remote starts carry `adapter: remote_https`. Only the consumed permit's private callback
 can save `adapter_response_received`, `adapter_transport_uncertain` or
 `adapter_dispatch_refused`. The last requires a confirmed start and a refusal before
 opening a connection. It allows the requester to record `approval.retry_requested`
-once; the next successful call cannot reuse that proof. No money is held for these
-zero-cost calls. The recorder checks
+once; the next successful call cannot reuse that proof. No estimated tool charge is
+reserved. The recorder checks
 the silo, decision id, start id, connection, generation, record digest and review revision
-against saved history. It uses the existing outcome id and conditional append, then reads
+against saved history. Repeated callbacks must match the saved cost status and amount,
+as well as their binding and outcome. Conflicting callbacks change no history.
+It uses the existing outcome id and conditional append, then reads
 back a lost save reply. It never repeats the remote call. No public observation route exists.
 Generic gateway evidence cannot settle a marked remote start, even when it arrives first.
 Operator and memory observations keep their existing behaviour.
@@ -4109,9 +4129,15 @@ orchestrator after the draft pull request is opened.
 
 ## Declared tool evidence for mode changes
 
-`setToolPolicy` requires both explicit zero cost and saved approval details for Allow
-and Ask. It cannot fill missing declarations. Exact review uses the same requirement
-in `reviewedToolChoices`; the projection checks it again when applying mode events.
+`setToolPolicy` and `reviewedToolChoices` share `canReviewTool`; replay checks it again.
+Ordinary server tools can be reviewed as Allow, Ask or Block from their saved standard
+definitions. They need no declared cost. Ask shows the tool description, bounded to
+8,000 characters, and the exact arguments. Empty or missing descriptions use
+“Run the reviewed tool.” Servers declaring OpenCrane details still require explicit zero cost and
+saved approval details for Allow and Ask; missing declarations remain refused.
+For ordinary calls, `tool.dispatch_recorded` records reported integer euro cents after
+the reply, or `not_reported` without an amount. Invalid reported costs are labelled
+`invalid` without an amount. No estimate, invented zero or spending settlement is made.
 History still loads before the two-second authority check. No access streams changed.
 
 ## Tool permissions immediately before sending
@@ -5045,7 +5071,8 @@ profile headers do not reach the tool server. A missing audit or changed access 
 nothing. Dispatch checks later turn and computer activity before reading the credential.
 It rechecks loaded memory references and current memory grants during the renewed
 two-second access check. A fact forgotten after permit issue refuses release.
-The gateway's reply scan is best effort. It checks decoded JSON keys and values,
+The gateway's reply scan uses `mcp-credential-echo.ts` and is best effort.
+It checks decoded JSON keys and values,
 their joined text, text blocks, serialised JSON and the remote content type. It checks
 the full released access token and long continuous parts, including in base64 and
 URL-encoded text. A match returns a fixed JSON-RPC error with no upstream data. Other

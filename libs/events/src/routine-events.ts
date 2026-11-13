@@ -4,7 +4,7 @@ import * as schemas from './routines.ts';
 const definition = {
   name: 'Daily orders', ownerId: 'alice', ownerAdmissionId: 'joined-alice',
   assistantId: 'sales-assistant', assistantKind: 'team' as const, payingGroupId: 'sales',
-  assistantPayingGroupId: 'sales', serverId: 'odoo', connectionId: 'odoo',
+  assistantPayingGroupId: 'sales', serverId: 'crm', connectionId: 'crm',
   connectionKind: 'company' as const,
   profileId: 'orders-bot',
   profileRevision: 1, connectionRevision: 1, companyAccountId: 'verified-bot', scopes: ['orders:read'],

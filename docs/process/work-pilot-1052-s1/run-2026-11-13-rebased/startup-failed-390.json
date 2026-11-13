@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-13",
+  "source": "ec790fbe9625a5cfdc548931b929976b0c17bd53",
+  "scheduledWidth": 390,
+  "actualFailureWidth": 1280,
+  "verdict": "FAIL",
+  "phase": "fresh startup built-in journey",
+  "reason": "Spending budget editor did not load",
+  "diagnostic": {
+    "budgetReadStatuses": [],
+    "effectReadStatuses": [],
+    "editorState": {
+      "budgetScopeVisible": false,
+      "budgetServiceUnavailable": true,
+      "accessChanged": false,
+      "spendingLoaded": false
+    }
+  },
+  "sliceActions": "NOT RUN",
+  "teardown": "PASS",
+  "claimReleased": true
+}

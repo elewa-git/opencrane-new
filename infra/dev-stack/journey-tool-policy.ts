@@ -43,7 +43,7 @@ export async function reviewJourneyTools(ownerPage: Page, store: EventStore, sil
   const checkedAt = new Date();
   const expiresAt = new Date(checkedAt.getTime() + 300_000);
   const catalogue: Catalogue = { serverId, connectionId: 'installed', accountMode: 'none',
-    tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools),
+    tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools), digestVersion: 2,
     checkedAt: checkedAt.toISOString(), expiresAt: expiresAt.toISOString() };
   if (serverInfo) {
     catalogue.serverInfo = serverInfo;

@@ -186,9 +186,24 @@ and the shared fixture state. A missing socket refuses before services start.
 The transport test writes through one adapter and reads the actual effect through
 another. Those direct calls are test coverage, not approval qualification.
 
+`DEMO_MCP_MODE=standard` selects the ordinary demo through `test/ordinary-demo.mjs`.
+It omits OpenCrane declarations and revision checks. The collector appends one JSON
+line to `ordinary-wire.jsonl` for each call, recording the tool name and protocol
+facts without arguments or credentials. Creating `ordinary-drift` in the claimed
+stack directory changes the next listed definition. It does not execute a tool.
+`scripts/ordinary-dispatch.test.mjs` uses real member-turn authorisation, publication,
+HTTPS dispatch and this collector. It checks the quote, recorded metadata and refusal
+before execution after drift. The separate personal-key dispatch tests retain the
+verified-identity release coverage.
+`test/ordinary-evidence.mjs` checks exactly two remote reply records with missing
+costs and one separate gateway receipt for the local drift refusal. The latter
+does not claim a remote start or a tool cost. Extra records, amounts and changed
+evidence are refused.
+
 The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
 It calls only the matching tool offered by Codex and refuses a missing tool. It
 answers with the returned quote after receiving a tool result, without repeating the call.
+For an error result from the current call, it quotes the returned refusal text.
 The model loads the tools helper only for those rehearsal messages. Ordinary replies
 still run from the single-file model stub used by the wake Pod check.
 The evidence checker still requires original approval and dispatch records.
@@ -732,6 +747,9 @@ Caller-supplied paths must match these fixed locations and already exist. Startu
 checks ownership, permissions, access and real paths without changing existing
 permissions or contents. Restart refuses lost directories or changed settings.
 It preserves encrypted survey values, revision keys and destroyed-key refusal.
+The refusal fixtures run with a private umask. They set and verify each directory's
+intended mode before checking startup, then restore the process umask. This keeps
+the unsafe-directory case unsafe even when the calling shell uses mode 077.
 Models receives only its listed files, conversation keys, provider credentials
 and working directory; it cannot mount either private directory through their parent.
 The secondary stub's match-count credential lives in `models/model-managed-stub`.
@@ -784,6 +802,8 @@ Each invocation replaces an inherited attempt with `nightly-<UTC time>-<UUID>` i
 and `DEMO_ALLOWANCE_CENTS` before any child starts. No paid key is read.
 The narrow group checks run with the stand-in and never change providers or owners.
 A read-only tool fixture includes its action, consequence and safe argument fields.
+`reviewJourneyTools` writes digest version 2 with the complete fixture tool list.
+The event store refuses an unversioned new catalogue before any browser review.
 The core journey selects Allow for that tool and Block for the write tool, using the
 saved catalogue revision and review digest. The review must return HTTP 200. A 409
 stops the journey; it is never treated as a saved review. The focused regression in

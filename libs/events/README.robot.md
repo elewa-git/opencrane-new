@@ -119,8 +119,14 @@ The Node entrypoints `@opencrane/events/lossless-json` and
 `@opencrane/events/mcp-catalogue` share the existing JSON hash format across discovery,
 append validation and policy replay. They use Node's built-in SHA-256 implementation.
 They are separate from browser event schemas, so browser builds do not load Node crypto.
-`validateMcpCatalogue` checks the complete accepted tool count, distinct names, definition
-names, schemas, annotation flags, tool revisions and the catalogue digest.
+Both `validateNewMcpCatalogue` and `validateStoredMcpCatalogue` check the complete
+accepted tool count, distinct names, definition names, schemas, annotation flags,
+tool revisions and the catalogue digest.
+`validateNewMcpCatalogue` requires `digestVersion: 2` and hashes accepted and rejected
+tool revisions. Append validation and fresh captures use this rule regardless of dates.
+Only `validateStoredMcpCatalogue` accepts snapshots without that field, using the original
+accepted-tools-only rule during reads and rebuilds. Replay never rewrites an older
+snapshot or guesses its rule from a hash.
 The event parser binds every MCP event's server id to its exact subject.
 
 ## Final dispatch admission
@@ -569,6 +575,9 @@ connectionId, generation (positive gateway generation), recordDigest (SHA-256) a
 reviewRevision (positive saved review position). It consumes a published call's permit
 before any send; it does not claim an upstream outcome. It has no reaction on replay.
 `tool.dispatch_recorded` remains the later outcome record used by approval retries.
+Ordinary remote replies also record `costStatus`: `reported` requires integer euro
+`costCents`; `not_reported` and `invalid` carry no amount. Older records omit both.
+These observations do not authorise a call or settle spending.
 Its evidence also accepts `dispatch_refused`: the models process refused a call after
 confirming its start was saved and before opening an upstream connection. It pairs this
 with `outcome: not_dispatched` on the same decision stream. This evidence does not enable
@@ -1090,3 +1099,12 @@ with issuer, subject, actual scopes, expiry and configuration digest. Its existi
 company owner, installation, generation and custody reference fields remain required.
 The reader checks the exact saved credential in custody before using this record.
 No production company confirmation writer is registered in this part.
+
+## Complete tool catalogue evidence
+
+`mcp.server_discovered.declared` says whether any definition in the complete list
+contains `io.opencrane/` metadata, including definitions that discovery rejects.
+Rejected definitions keep their revision and reason, without raw descriptions or
+other data. Older catalogues with rejected tools and no declaration status need
+fresh discovery before ordinary-tool review. The shared catalogue digest includes
+accepted and rejected tools. Discovery and classification share the declaration check.

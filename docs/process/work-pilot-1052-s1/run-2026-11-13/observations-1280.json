@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-13T18:11:53.213Z",
+  "width": 1280,
+  "source": "2520b29e909bebc17b08fbb5e5fc651992b36e18",
+  "verdict": "FAIL",
+  "observations": [
+    {
+      "step": "admin installs an ordinary HTTPS server",
+      "verdict": "PASS",
+      "message": "Standard HTTPS definitions discovered with two tools and zero initially allowed"
+    },
+    {
+      "step": "admin reviews Allow and Ask and grants person and assistant access",
+      "verdict": "PASS",
+      "message": "Allow and Ask selected without cost declarations; both audience grants saved"
+    },
+    {
+      "step": "admin publishes the reviewed ordinary tools",
+      "verdict": "PASS",
+      "message": "Publication and matching gateway acknowledgement confirmed"
+    },
+    {
+      "step": "member calls the reviewed ordinary read tool in a live turn",
+      "verdict": "FAIL",
+      "cause": "The expected quote was absent after 120 seconds. The UI marked read_fixture_quote as Failed and answered: The demo tool did not return a quote."
+    }
+  ],
+  "diagnostics": {
+    "modelsReason": "protocol_refused",
+    "fixtureCalls": 0,
+    "likelyCause": "An HTTP protocol mismatch during live dispatch or its fixture transport. The exact refused status or header was not captured.",
+    "confirmedRootCause": false
+  },
+  "notRun": [
+    "ordinary Ask write approval",
+    "changed-list refusal",
+    "all ordinary-server steps at 390 px"
+  ],
+  "teardown": "PASS: secondary slot 2 released through down.sh"
+}
