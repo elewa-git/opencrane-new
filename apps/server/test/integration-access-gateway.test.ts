@@ -687,7 +687,8 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
   let refused = false;
   let injected = false;
   let elapsed = 0;
-  const clockStart = performance.now();
+  // Reproduce rounding across the next binary exponent when saving refusal evidence.
+  const clockStart = 64000.00299999999;
   const deadlines: number[] = [];
   function currentTime() {
     return clockStart + elapsed;
@@ -749,7 +750,8 @@ async function refusesIncompleteProof(mode: typeof missingProof[number]) {
     for (const deadline of deadlines) {
       expect(Number.isFinite(deadline)).toBe(true);
       expect(deadline).toBe(deadlines[0]);
-      expect(deadline - (clockStart + elapsed)).toBeLessThanOrEqual(1000);
+      // Compare absolute times: subtracting fractional clocks can round above 1,000 ms.
+      expect(deadline).toBeLessThanOrEqual(currentTime() + 1000);
     }
     const timing: unknown = expect.any(Number);
     const diagnostic = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
