@@ -66,10 +66,12 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   assert.equal(await preparing.isDisabled(), true, 'Held delivery keeps Send disabled');
   const ready = page.getByRole('status').getByText('Ready', { exact: true });
   assert.equal(await ready.count(), 0, 'Held delivery cannot show Ready');
+  await page.screenshot({ path: `${screenshots}/upload-preparing-${width}.png`, fullPage: true });
   await releaseDelivery();
   assert.equal(await waitForUpload(page, 'project.pdf', target), 0);
   const send = page.getByRole('button', { name: 'Send message', exact: true });
   assert.equal(await send.isEnabled(), true, 'Ready makes the attachment sendable');
+  await page.screenshot({ path: `${screenshots}/upload-ready-${width}.png`, fullPage: true });
   await page.unroute(filesPattern);
   assert(!loseResponse && retries >= 1, 'The browser recovered from the lost successful upload response');
   // Keep the answer out of the question so the reply proves the converted file was read.
