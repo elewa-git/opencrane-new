@@ -1188,9 +1188,12 @@ safe organisation changes; another joined member is refused private history, and
 members are refused organisation history. The organisation-history API check follows
 older pages to find the saved MCP publication and checks each page for private canaries.
 The browser selects Tools & models with the keyboard, checks that every listed entry
-belongs to that category, then finds the publication by its safe reference. It opens
+belongs to that category, then checks the publication’s full visible title and summary. It opens
 the safe detail and checks that Escape restores focus. Conversation action history
 has no turn filter; it shows the recorded permission and confirmed observation.
+Both history checks retain safe API response status or transport codes. A failure
+saves the screen and accessible results before closing the browser. HTML page
+responses are excluded from API diagnostics; no automatic read retry is added.
 Owner/member sessions use real Zitadel
 sign-in; the extra member uses a dev-only signed session to test resource authority.
 Both views and the refusal screen are checked at 1280px and 390px. Private chat,
