@@ -13,8 +13,8 @@ does not adopt Message DB or Emmett, supersede ADR 0001, or make the owner's dec
 
 | Option | Decision speed | Operations, restore and code |
 | --- | --- | --- |
-| Stay with JetStream plus PostgreSQL | Model/MCP p95 204/129 ms in the 100,000-event run | Keep two event/relational systems and 12 counted restore phases. Keep NATS credentials, placement and snapshot tooling. |
-| Put events in PostgreSQL; retire NATS | PARTIAL: observed model/MCP p95 181/107 ms; transactional access-subject comparisons omitted; protected timings NOT RUN | One event/relational system and 10 counted restore phases. Review 1,567 gross existing NATS implementation lines for replacement/removal. Concentrate log, jobs and checkpoints on PostgreSQL. |
+| Stay with JetStream plus PostgreSQL | Model/MCP p95 266/264 ms in the 100,000-event run | Keep two event/relational systems and 12 counted restore phases. Keep NATS credentials, placement and snapshot tooling. |
+| Put events in PostgreSQL; retire NATS | PARTIAL: observed model/MCP p95 467/212 ms; transactional access-subject comparisons omitted; protected timings NOT RUN | One event/relational system and 10 counted restore phases. Review 1,567 gross existing NATS implementation lines for replacement/removal. Concentrate log, jobs and checkpoints on PostgreSQL. |
 | Defer a product switch | Keep today's behaviour while evidence remains incomplete | Preserve the simplification option; qualify coordinated restore, dispatcher delivery and failure behaviour before deciding. |
 
 Measure (a) is **PARTIAL**. Both observed runs stayed within the copied authority-volume
@@ -26,10 +26,11 @@ A fair protected rerun is not available within this night's comparison. The reco
 numbers compare unequal work and establish no PostgreSQL latency advantage. Destination
 authority is a read; it does not append.
 
-Fifty
-unrelated writer loops caused 100/100 valid JetStream probes to conflict and 0/100
-PostgreSQL probes to conflict. These are single-primary, one-run development-host
-measurements, with different local transports, not an HA or throughput comparison.
+Fifty unrelated writer loops caused 100/100 valid JetStream probes to conflict and 0/100
+PostgreSQL probes to conflict. These are single-primary development-host measurements
+with different local transports,
+not an HA or throughput comparison. The table records the final of two verification runs
+on 13 November; both retained the existing bounds, with variable timings on the busy host.
 The PostgreSQL log used its own container; no 100,000-event log used the shared database.
 
 ## Proposed recommendation

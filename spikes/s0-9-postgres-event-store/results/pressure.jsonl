@@ -1,2 +1,2 @@
-{"backend":"jetstream","writers":50,"probes":100,"overlapping":100,"outcomes":{"appended":0,"conflict":100,"unavailable":0,"rejected":0},"backgroundAppended":28454,"backgroundRefused":0}
-{"backend":"postgres","writers":50,"probes":100,"overlapping":100,"outcomes":{"appended":100,"conflict":0,"unavailable":0,"rejected":0},"backgroundAppended":4980,"backgroundRefused":0}
+{"backend":"jetstream","writers":50,"probes":100,"overlapping":100,"outcomes":{"appended":0,"conflict":100,"unavailable":0,"rejected":0},"backgroundAppended":25537,"backgroundRefused":0}
+{"backend":"postgres","writers":50,"probes":100,"overlapping":100,"outcomes":{"appended":100,"conflict":0,"unavailable":0,"rejected":0},"backgroundAppended":4982,"backgroundRefused":0}

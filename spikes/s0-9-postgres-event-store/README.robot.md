@@ -214,10 +214,12 @@ No NATS configuration, dependencies or product files are removed by this experim
 
 ## Checks and journey
 
-Measurement source: `ae942c9b5f911ccda0902b62b8a4e0989412e6e6`, against
+Final measurement source: `bec6d64309e716503f835fc9575db28f6101ee42`, against
 `90a99afa75e508f32c505d82a4beacc45e236dfd`. The
 [environment record](results/environment.json) includes the complete measured code hash,
 CPU, client versions and PostgreSQL image digest. Later commits contain documents/results only.
+The tables and raw samples record the final verification run on 13 November. Both runner
+executions passed their existing assertions; they do not qualify the omitted access work.
 The expected outcome is unchanged authority work at both log sizes, bounded decision latency,
 and durable probe histories matching each reported write outcome.
 
@@ -235,8 +237,12 @@ and durable probe histories matching each reported write outcome.
 | Measured source hash | PASS | Matches the final committed spike code |
 | Private measurement container cleanup | PASS | Runner removed its container and volumes |
 | Secondary stack cleanup | PASS | Both starts ran `down.sh`; slot 2 was confirmed free |
-| Focused copied contracts plus PostgreSQL tests | PASS | 53 executed, 19 skipped; repeated after cleanup fix |
-| Access comparison mutation | PASS | Removing the comparison made the access-change test fail |
+| Focused contracts, PostgreSQL and documentation tests | PASS | 56 executed, 19 skipped; repeated with the shared disposable database |
+| Access comparison mutation | PASS | Removing the comparison made the access-change test fail; omitting the watched list also reproduced an incorrect append |
+| Global-only conflict mutation | PASS | Removing the global guard made the new test append; restored guard refuses it and accepts a refreshed global position |
+| Clarity checks | PASS | Unbraced branches failed ESLint before cleanup; five inline call-site callbacks became zero; unchanged measurement assertions passed twice |
+| Contract database instructions | PASS | README and runner name the server, URL, port and permissions; first contract stage ran against the shared disposable server |
+| Fresh-machine database provisioning | NOT RUN | The shared disposable server already existed; it was kept intact |
 | Lost-COMMIT/broken-rollback regression | PASS | Failed before the fix; both parameter rows now pass |
 | Product source diff | PASS | `git diff --stat origin/main -- apps libs infra` is empty |
 | Core journey on a fresh secondary dev stack | FAIL | 390 px upload-retry target failed the 44 px bounding-box assertion |
@@ -258,6 +264,9 @@ and `journey.ts` line 557. The assertion checks both a present box and minimum w
 and height; the record does not establish which condition failed. Later core conditions
 are NOT RUN. No product fix or second core run is included. This is a failed live
 qualification of the unchanged product, not a passing PostgreSQL product journey.
+
+The core journey rerun is NOT RUN in this rework, pending main repair #1119. The failed
+receipt above and the PR Evidence line remain unchanged. No secondary stack was claimed.
 
 Full root tests are deliberately NOT RUN; only this experiment's focused suites run.
 Live disaster recovery, replicas/failover, production NATS retirement and migration remain

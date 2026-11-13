@@ -1,8 +1,8 @@
 {
-  "startedAt": "2026-11-12T19:35:09.207Z",
-  "sourceCommit": "ae942c9b5f911ccda0902b62b8a4e0989412e6e6",
+  "startedAt": "2026-11-13T05:28:19.812Z",
+  "sourceCommit": "bec6d64309e716503f835fc9575db28f6101ee42",
   "baseCommit": "90a99afa75e508f32c505d82a4beacc45e236dfd",
-  "codeSha256": "819eaf501bfe0c78df9bfa3dc208341214bbfb8a8e70ea159230d7642dea8cc1",
+  "codeSha256": "0b267ae86784e25b62ca903eee58f43809f014e32091b26a1999e0ccfabdb2c6",
   "codeFiles": [
     "spikes/s0-9-postgres-event-store/eslint.config.mjs",
     "spikes/s0-9-postgres-event-store/pressure.config.ts",
@@ -15,6 +15,7 @@
     "spikes/s0-9-postgres-event-store/tests/append-outcomes.test.ts",
     "spikes/s0-9-postgres-event-store/tests/append.test.ts",
     "spikes/s0-9-postgres-event-store/tests/conversation-command.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/documentation.test.ts",
     "spikes/s0-9-postgres-event-store/tests/history-checked.test.ts",
     "spikes/s0-9-postgres-event-store/tests/postgres.test.ts",
     "spikes/s0-9-postgres-event-store/tests/pressure.test.ts",

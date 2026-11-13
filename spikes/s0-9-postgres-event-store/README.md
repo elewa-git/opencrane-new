@@ -43,12 +43,13 @@ The shared test database holds only ordinary fixture projections, jobs and contr
 
 ## Results
 
-Measured 12 November 2026 on the same Linux x86-64 box, Node 22.23.3.
-This is a busy development machine, with one run and 30 samples per latency row.
+Recorded 13 November 2026 on the same Linux x86-64 box, Node 22.23.3.
+This is a busy development machine. Both verification runs kept the existing bounds;
+the tables record the final run, with 30 samples per latency row.
 
 | Measure | Result | JetStream plus PostgreSQL | PostgreSQL event log, NATS retired |
 | --- | --- | --- | --- |
-| (a) Decisions with 100,000 unrelated events | PARTIAL | Model p95 204.08 ms; MCP 129.36 ms; destination 30.94 ms | Model p95 180.53 ms; MCP 107.17 ms; destination 42.71 ms; transactional access-subject comparisons omitted; protected timings NOT RUN |
+| (a) Decisions with 100,000 unrelated events | PARTIAL | Model p95 266.40 ms; MCP 263.79 ms; destination 64.73 ms | Model p95 467.30 ms; MCP 211.52 ms; destination 46.05 ms; transactional access-subject comparisons omitted; protected timings NOT RUN |
 | (b) Valid writes refused with 50 unrelated writers | PASS | 100/100 conflicts; 0 unavailable | 0/100 conflicts; 0 unavailable |
 | (c) Restore steps and systems | PARTIAL | 12 planned steps; 2 event/relational systems | 10 planned steps; 1 event/relational system; full restore NOT RUN for either |
 | (d) Existing product code that could go | PASS | 1,567 gross candidate lines across 12 files, including package backup/restore | Requires replacements and caller edits; net saving NOT RUN; no lines removed here |
@@ -64,9 +65,9 @@ advantage over JetStream. Destination authority is a read and does not append.
 
 | Route | JetStream | PostgreSQL |
 | --- | --- | --- |
-| Model authorisation | 131.17 / 204.08 / 253.11 | 125.21 / 180.53 / 217.79 |
-| MCP authorisation | 101.51 / 129.36 / 155.84 | 76.46 / 107.17 / 194.76 |
-| Destination authority | 27.30 / 30.94 / 31.00 | 24.06 / 42.71 / 49.07 |
+| Model authorisation | 161.53 / 266.40 / 283.64 | 166.60 / 467.30 / 630.47 |
+| MCP authorisation | 172.10 / 263.79 / 268.84 | 162.41 / 211.52 / 246.87 |
+| Destination authority | 38.55 / 64.73 / 65.04 | 31.23 / 46.05 / 53.92 |
 
 All seven methods exist: `ensureStream`, `append`, `readEvent`, `readStream`,
 `subjectCount`, `subscribe`, `head`. Of the five copied contract files, **2/5 pass

@@ -1,5 +1,5 @@
 {
-  "passed": 53,
+  "passed": 56,
   "failed": 0,
   "skipped": 19,
   "suites": [
@@ -211,6 +211,19 @@
       ]
     },
     {
+      "file": "documentation.test.ts",
+      "tests": [
+        {
+          "title": "marks latency partial while the recorded PostgreSQL run omits transactional access checks",
+          "status": "passed"
+        },
+        {
+          "title": "documents the disposable contract server, connection and schema permissions before running",
+          "status": "passed"
+        }
+      ]
+    },
+    {
       "file": "history-checked.test.ts",
       "tests": [
         {
@@ -255,6 +268,10 @@
         },
         {
           "title": "finds a copy after a category or global refusal (global: true)",
+          "status": "passed"
+        },
+        {
+          "title": "refuses a stale global position with a current subject and accepts a refreshed global position",
           "status": "passed"
         },
         {
