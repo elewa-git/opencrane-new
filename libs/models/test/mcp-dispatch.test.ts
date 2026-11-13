@@ -3235,6 +3235,57 @@ async function concurrentReceiptWork() {
 it('keeps concurrent credential releases within the access window with receipt service work',
   concurrentReceiptWork, 60_000);
 
+async function permissionChangedWhileQueued() {
+  const { setup, remote, headers, bob } = await personalPair();
+  const alicePermit = await permit(setup, headers);
+  const bobPermit = await permit(setup, bob.headers, bob.body);
+  const entered = Promise.withResolvers<void>();
+  const released = Promise.withResolvers<void>();
+  const queued = Promise.withResolvers<void>();
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  async function holdFirstAdmission(command: AppendCommand) {
+    const parsed = z.object({ type: z.string() }).parse(command.event);
+    if (parsed.type === 'budget.call_dispatch_admitted') {
+      entered.resolve();
+      await released.promise;
+    }
+    return append(command);
+  }
+  const admit = setup.actor.admitDispatch.bind(setup.actor);
+  let admissions = 0;
+  function observeAdmission(...args: Parameters<typeof admit>) {
+    admissions += 1;
+    const result = admit(...args);
+    if (admissions === 2) queued.resolve();
+    return result;
+  }
+  const writer = vi.spyOn(setup.nats.store, 'append');
+  writer.mockImplementation(holdFirstAdmission);
+  const admission = vi.spyOn(setup.actor, 'admitDispatch');
+  admission.mockImplementation(observeAdmission);
+  onTestFinished(vi.restoreAllMocks);
+  const alice = send(setup, alicePermit);
+  try {
+    await entered.promise;
+    const bobResponse = send(setup, bobPermit, bob.body);
+    await queued.promise;
+    await setup.append(grantStream('mcp_server', 'fixture'), 'grant.revoked', {
+      resourceType: 'mcp_server', resourceId: 'fixture',
+      granteeKind: 'member', granteeId: 'bob', revokedBy: 'alice',
+    });
+    released.resolve();
+    expect((await bobResponse).status).toBe(403);
+    expect((await alice).status).toBe(200);
+    expect(remote.received).toHaveLength(1);
+    expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
+  } finally {
+    released.resolve();
+    await alice;
+  }
+}
+it('refuses a permission removed while the personal dispatch waits in the budget queue',
+  permissionChangedWhileQueued, 60_000);
+
 async function receiptUnavailableOnNextRequest() {
   const { setup, remote, headers } = await personalPair();
   const first = await permit(setup, headers);

@@ -185,6 +185,30 @@ it('sends a waiting turn without tools when OpenFGA cannot check a grant', async
   }
 });
 
+async function offersToolsWithIndependentSlowGrantChecks() {
+  const fixture = bridgeFixture({ binding: true });
+  async function slowGrant() {
+    await new Promise<void>(resolve => setTimeout(resolve, 600));
+    return { allowed: true };
+  }
+  use.mockImplementation(slowGrant);
+  vi.useFakeTimers();
+  try {
+    const processing = fixture.process();
+    await vi.advanceTimersByTimeAsync(1201);
+    await processing;
+    expect(fixture.sent).toHaveLength(1);
+    expect(JSON.parse(fixture.sent[0]!)).toMatchObject({
+      tools: [{ definitions: [definition] }],
+    });
+    expect(use).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+it('offers reviewed tools when independent grant reads each take 600 ms',
+  offersToolsWithIndependentSlowGrantChecks);
+
 it('sends only the reviewed tool definition and omits private discovery fields', async () => {
   const fixture = bridgeFixture({ binding: true });
   use.mockResolvedValue({ allowed: true });
