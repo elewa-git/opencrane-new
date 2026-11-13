@@ -1,4 +1,4 @@
-import { credentialPatterns, containsCredentialPattern } from './credential-patterns.ts';
+import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -63,7 +63,7 @@ async function checkIdentity(input: BearerIdentityInput) {
   const parsed = identitySchema.parse(JSON.parse(text));
   const subject = parsed.result.structuredContent.subject;
   const patterns = credentialPatterns(input.material);
-  if (parsed.id !== id || containsCredentialPattern(subject, patterns)) {
+  if (parsed.id !== id || containsCredentialText(subject, patterns)) {
     throw new Error('Identity check unavailable');
   }
   const account = { issuer: source.locator, subject, scopes: [],
