@@ -609,6 +609,28 @@ infra/dev-stack/down.sh
 
 `up` includes the core journey. Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
+
+Secondary Zitadel setup verifies the fixed OpenCrane 2 Dev organisation and project
+before retaining a supplied `ZITADEL_KEY_FILE` path in the slot's mode-0700
+`dev-stack-ci-<id>` directory. The mode-0600 `zitadel-key-file` contains only the
+absolute path, never the key. This directory also keeps that slot's existing app
+secret and four test-user passwords after `down`. A later launch uses an explicit
+`ZITADEL_KEY_FILE` first, then its own slot's saved reference, then the repository's
+default key file. An unreadable explicit or saved file fails without falling back.
+Owner setup uses only its explicit or repository key file.
+
+Setup reuses the exact `OpenCrane 2 Dev CI <id>` app and
+`opencrane2-dev-ci-<id>-<role>` users. It checks their organisation and the app's
+fixed redirects. It never deletes provider objects. Missing credentials fail before
+an HTTP request, with a fixed filesystem code and instructions to set
+`ZITADEL_KEY_FILE`. Rejected provider calls report method, endpoint path, HTTP status
+and numeric gRPC code (or `unavailable` for an unreadable code). Diagnostics exclude
+credential paths, headers, tokens and provider response text. The focused tests are
+`zitadel-setup.test.ts` and `zitadel-errors.test.ts`, run by the CI harness job.
+Transport failures name the attempted endpoint without exposing the private cause.
+Endpoint diagnostics accept only known route words and decimal entity ids;
+unexpected provider identifiers receive a fixed `unrecognised endpoint` label.
+
 `claim.sh` prints one free secondary id, or exits non-zero when both ids are in use.
 The owner file records the worktree, claiming process id and claim start time. A
 worktree that claims again gets its existing id. A claim stays reserved for 15 minutes
