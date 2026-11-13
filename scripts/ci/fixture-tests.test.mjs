@@ -39,6 +39,7 @@ function partitionsTests() {
   for (const group of ['1', '2', '3', '4']) {
     const shard = testArguments(group);
     assert.ok(shard.includes(`--shard=${group}/4`));
+    assert.ok(shard.includes('--maxWorkers=2'), 'Bound real-service fixture concurrency');
     for (const file of fixtureFiles) {
       assert.ok(shard.includes(`--exclude=${file}`));
     }
