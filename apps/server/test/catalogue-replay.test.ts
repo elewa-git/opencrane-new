@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
 import { databases } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { catalogueDigest, validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
-import { readToolPolicy } from '@opencrane/models';
+import { catalogueDigest, validateStoredMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { history, readToolPolicy } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { toolPolicySchema } from '@opencrane/protocol';
 import { mcpCatalogue, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -14,7 +14,7 @@ async function replaysSavedDigestRules() {
     checkedAt: '2026-11-12T12:00:00.000Z', expiresAt: '2026-11-12T12:05:00.000Z' };
   Reflect.deleteProperty(legacy, 'declared');
   Reflect.deleteProperty(legacy, 'digestVersion');
-  validateMcpCatalogue(legacy);
+  validateStoredMcpCatalogue(legacy);
   const nats = await natsFixture();
   const storage = await databases();
   async function append(type: string, data: unknown) {
@@ -34,7 +34,7 @@ async function replaysSavedDigestRules() {
     const stored = { ...event('legacy-discovery', 'mcp-fixture', 'mcp.server_discovered'),
       time: '2026-11-12T12:00:00.000Z', data: legacy };
     await nats.seed([stored]);
-    const savedLegacy = await Array.fromAsync(nats.store.readStream('mcp-fixture'));
+    const savedLegacy = await history(nats.store, 'mcp-fixture', 'test');
     const oldPolicy = await readToolPolicy(nats.store, 'test', 'fixture');
     expect(oldPolicy.catalogue).toEqual(legacy);
     expect(oldPolicy.tools).toMatchObject([{ name: 'write', reviewed: false, mode: 'block' }]);
@@ -54,7 +54,7 @@ async function replaysSavedDigestRules() {
     expect(currentProjection.catalogue).toEqual(snapshot);
     await runner.rebuild(mcpCatalogue);
     expect(await catalogueRow()).toEqual(before);
-    const savedCurrent = await Array.fromAsync(nats.store.readStream('mcp-fixture'));
+    const savedCurrent = await history(nats.store, 'mcp-fixture', 'test');
     expect(savedCurrent).toHaveLength(3);
     expect(savedCurrent.slice(0, 2)).toEqual(savedLegacy);
     expect(savedCurrent[2]?.event.data).toEqual(snapshot);
@@ -71,12 +71,12 @@ async function rejectsNewCatalogueDrift() {
   expect(snapshot).toMatchObject({ digestVersion: 2, declared: false });
   const changedRejected = { ...snapshot, rejectedTools: [] };
   function validateChangedRejected() {
-    validateMcpCatalogue(changedRejected);
+    validateStoredMcpCatalogue(changedRejected);
   }
   expect(validateChangedRejected).toThrow('Tool catalogue digest mismatch');
   const acceptedOnlyDigest = { ...snapshot, schemaDigest: catalogueDigest(snapshot.tools!) };
   function validateAcceptedOnlyDigest() {
-    validateMcpCatalogue(acceptedOnlyDigest);
+    validateStoredMcpCatalogue(acceptedOnlyDigest);
   }
   expect(validateAcceptedOnlyDigest).toThrow('Tool catalogue digest mismatch');
 }

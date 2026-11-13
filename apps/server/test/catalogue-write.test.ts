@@ -1,9 +1,10 @@
 import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
+import { history } from '@opencrane/models';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { captureCatalogue, ordinaryWrite, rejectedSibling } from './support/ordinary-catalogue.ts';
 
-async function refusesUnversionedAppend(kind: 'discovery' | 'undated' | 'changed') {
+async function refusesUnversionedAppend(kind: 'discovery' | 'undated' | 'changed' | 'full-list') {
   const snapshot = await captureCatalogue([ordinaryWrite, rejectedSibling]);
   const nats = await natsFixture();
   try {
@@ -11,9 +12,12 @@ async function refusesUnversionedAppend(kind: 'discovery' | 'undated' | 'changed
       time: new Date().toISOString(), data: snapshot };
     const appended = await nats.store.append({ event: fresh, expectedSequence: 0 });
     expect(appended.status).toBe('appended');
-    const before = await Array.fromAsync(nats.store.readStream('mcp-fixture'));
+    const before = await history(nats.store, 'mcp-fixture', 'test');
     const downgraded = { ...snapshot, schemaDigest: catalogueDigest(snapshot.tools!) };
     Reflect.deleteProperty(downgraded, 'digestVersion');
+    if (kind === 'full-list') {
+      downgraded.schemaDigest = snapshot.schemaDigest;
+    }
     if (kind === 'undated') {
       Reflect.deleteProperty(downgraded, 'checkedAt');
       Reflect.deleteProperty(downgraded, 'expiresAt');
@@ -31,12 +35,12 @@ async function refusesUnversionedAppend(kind: 'discovery' | 'undated' | 'changed
     const result = await nats.store.append({ event: next, expectedSequence });
     expect(result).toMatchObject({ status: 'rejected', reason: 'invalid_event' });
     expect(await nats.store.head('mcp-fixture')).toBe(expectedSequence);
-    expect(await Array.fromAsync(nats.store.readStream('mcp-fixture'))).toEqual(before);
+    expect(await history(nats.store, 'mcp-fixture', 'test')).toEqual(before);
   } finally {
     await nats.close();
   }
 }
-it.each(['discovery', 'undated', 'changed'] as const)(
+it.each(['discovery', 'undated', 'changed', 'full-list'] as const)(
   'refuses a new unversioned %s after v2 without saving anything', refusesUnversionedAppend);
 
 async function refusesAcceptedOnlyV2Append(undated: boolean) {

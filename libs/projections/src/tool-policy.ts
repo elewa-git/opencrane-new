@@ -1,4 +1,4 @@
-import { validateMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
+import { validateStoredMcpCatalogue, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscoveredDataSchema,
   mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, mcpConfigurationObservationSchema,
   mcpHostedStartObservedSchema,
@@ -238,7 +238,7 @@ function applyCapture(next: ToolPolicy, previous: Catalogue | null, catalogue: C
     throw new Error('Captured catalogue does not match the hosted run');
   }
   if (catalogue.checkedAt !== undefined) {
-    validateMcpCatalogue(catalogue);
+    validateStoredMcpCatalogue(catalogue);
   }
   const declarations = catalogue.tools ?? [];
   const names = new Set<string>();
@@ -309,7 +309,7 @@ function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: 
       JSON.stringify(state.catalogue.hostedRun) !== JSON.stringify(state.hostedRun)) {
     throw new Error('Catalogue check belongs to an earlier hosted run');
   }
-  validateMcpCatalogue(state.catalogue);
+  validateStoredMcpCatalogue(state.catalogue);
   return { ...state, sequence, checkedAt: String(data['checkedAt']),
     expiresAt: String(data['expiresAt']) };
 }
@@ -384,7 +384,7 @@ export function reviewedToolChoices(state: ToolPolicy,
   if (!catalogue || !matchesReview(state, review, now)) {
     return null;
   }
-  validateMcpCatalogue(catalogue);
+  validateStoredMcpCatalogue(catalogue);
   const choices = new Map<string, typeof review.tools[number]>();
   for (const choice of review.tools) {
     if (choices.has(choice.name)) {

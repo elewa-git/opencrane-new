@@ -73,6 +73,7 @@ async function refusesDowngradeThenSiblingRemoval() {
     time: new Date().toISOString(), data: downgraded };
   const expectedSequence = await setup.nats.store.head('mcp-fixture');
   const appended = await setup.nats.store.append({ event: record, expectedSequence });
+  const retained = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   // Review the latest saved list, then remove the rejected sibling before dispatch.
   await reviewRestoration(setup, 'review-after-downgrade');
   const publication = await publishRestoration(setup, 'publish-after-downgrade');
@@ -96,7 +97,9 @@ async function refusesDowngradeThenSiblingRemoval() {
   expect(appended).toMatchObject({ status: 'rejected', reason: 'invalid_event' });
   const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   expect(policy.driftHeld).toBe(true);
-  expect(policy.catalogue).toEqual(inventory);
+  expect(retained.catalogue).toEqual(inventory);
+  expect(policy.catalogue).toBeNull();
+  expect(policy.previousCatalogue).toEqual(inventory);
 }
 it('never calls a tool after a new downgrade attempt and rejected sibling removal',
   refusesDowngradeThenSiblingRemoval);
