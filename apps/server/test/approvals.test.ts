@@ -199,7 +199,13 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
     // The loser may fail closed on unavailable authority; single use is the invariant.
     expect(statuses[0]).toBe(200);
     expect([403, 503]).toContain(statuses[1]);
-    expect(f.received()).toBe(1); expect(f.upstreamBody()).toBe(f.body());
+    const expectedBody = '{"jsonrpc":"2.0","id":1,"method":"tools/call",' +
+      '"params":{"name":"write",' +
+      '"arguments":{"amount":1.00e2,"note":"hello","order":9007199254740993},' +
+      '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",' +
+      '"io.modelcontextprotocol/clientCapabilities":{}}}}';
+    expect(f.received()).toBe(1);
+    expect(f.upstreamBody()).toBe(expectedBody);
     await f.restart();
     expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
     expect((await f.read()).cards[0]?.state).toBe('outcome_unknown');
