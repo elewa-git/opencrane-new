@@ -98,6 +98,8 @@ async function unsafePaths() {
       if (state === 'unsafe' || state === 'unreadable') {
         const expectedMode = state === 'unsafe' ? 0o755 : 0o000;
         await mkdir(path, { mode: expectedMode });
+        // Override the private umask so this really tests unsafe permissions.
+        await chmod(path, expectedMode);
         const details = await stat(path);
         const actualMode = details.mode & 0o777;
         assert.equal(actualMode, expectedMode, 'Create the intended refusal fixture mode');

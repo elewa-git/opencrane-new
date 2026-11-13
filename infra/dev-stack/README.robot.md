@@ -747,6 +747,9 @@ Caller-supplied paths must match these fixed locations and already exist. Startu
 checks ownership, permissions, access and real paths without changing existing
 permissions or contents. Restart refuses lost directories or changed settings.
 It preserves encrypted survey values, revision keys and destroyed-key refusal.
+The refusal fixtures run with a private umask. They set and verify each directory's
+intended mode before checking startup, then restore the process umask. This keeps
+the unsafe-directory case unsafe even when the calling shell uses mode 077.
 Models receives only its listed files, conversation keys, provider credentials
 and working directory; it cannot mount either private directory through their parent.
 The secondary stub's match-count credential lives in `models/model-managed-stub`.
