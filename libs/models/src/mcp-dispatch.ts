@@ -1,6 +1,6 @@
 /* eslint-disable max-lines */
-import { credentialPatterns, containsCredential, replyContainsCredential }
-  from './mcp-credential-echo.ts';
+import { credentialPatterns } from './credential-patterns.ts';
+import { containsCredential, replyContainsCredential } from './mcp-credential-echo.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { currentRemoteCatalogue, toolServerBody, changedToolListReply } from './mcp-wire.ts';
 import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
