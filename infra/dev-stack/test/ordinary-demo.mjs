@@ -1,4 +1,5 @@
-import { appendFile, access } from 'node:fs/promises';
+import { appendFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { createDemoServer } from '../../../apps/demo-mcp/src/server.ts';
 
 export function ordinaryDemo(directory) {
@@ -14,14 +15,16 @@ export function ordinaryDemo(directory) {
         'io.modelcontextprotocol/clientCapabilities'];
       function isAllowed(key) { return allowed.includes(key); }
       const stripped = metadataKeys.every(isAllowed);
-      await appendFile(directory + '\n', { mode: 0o600 });
+      // Record only protocol facts. Keep arguments, addresses and credentials private.
+      const record = { method: body.method, name: body.params.name, stripped,
+        protocolVersion: request.headers['mcp-protocol-version'],
+        session: request.headers['mcp-session-id'] !== undefined,
+        revision: request.headers['x-opencrane-mcp-revision'] !== undefined };
+      const line = JSON.stringify(record) + '\n';
+      await appendFile(`${directory}/ordinary-wire.jsonl`, line, { mode: 0o600 });
     }
     if (body?.method === 'tools/list') {
-      let drift = false;
-      try {
-        await access(`${directory}/ordinary-drift`);
-        drift = true;
-      } catch { /* No marker means the original catalogue. */ }
+      const drift = existsSync(`${directory}/ordinary-drift`);
       if (drift && payload?.result?.tools?.length) {
         payload.result.tools[0].description = 'Changed fixture definition requiring another review.';
       }

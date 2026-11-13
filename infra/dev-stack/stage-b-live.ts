@@ -25,7 +25,15 @@ if (accountsFile) {
   const raw: unknown = JSON.parse(await readFile(accountsFile, 'utf8'));
   credentials = { accounts: demoAccountsSchema.parse(raw) };
 }
-const demo = createDemoServer(undefined, credentials);
+let demo: ReturnType<typeof createDemoServer>;
+if (process.env['DEMO_MCP_MODE'] === 'standard') {
+  assert(!credentials, 'Choose standard tools or credential-checked tools');
+  const fixtureUrl = new URL('./test/ordinary-demo.mjs', import.meta.url);
+  const { ordinaryDemo } = await import(fixtureUrl.href);
+  demo = ordinaryDemo(directory);
+} else {
+  demo = createDemoServer(undefined, credentials);
+}
 await demo.listen({ path: `${directory}/stage-b-demo.sock` });
 const execute = promisify(execFile);
 const composeFile = `${directory}/stage-b-compose.json`;

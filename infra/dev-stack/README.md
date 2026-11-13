@@ -42,6 +42,9 @@ Not built yet:
 - Qualify native private memory through ordinary browser checks alone.
 - Enable the package's blocked database recovery and three-peer event-log options.
 
+The ordinary demo mode records protocol facts and can change a tool definition
+so the next call requires an admin review.
+
 ## Processes it handles
 
 1. **A developer claims a stack.** A claim reserves one of two spare copies.
