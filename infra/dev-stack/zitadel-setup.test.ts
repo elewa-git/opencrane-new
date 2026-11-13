@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { secondaryOwnerApp } from './test/zitadel-fixture.ts';
 
 const exec = promisify(execFile);
 test('owner restore removes secondary redirects, preserves other settings, and refuses a foreign app', async () => {
@@ -76,12 +77,7 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
   const home = await mkdtemp(`${tmpdir()}/dev-stack-zitadel-`);
   const directory = `${home}/.config/opencrane/dev-stack-1`;
   const providerFile = `${home}/provider.json`;
-  const ownerApp = { id: '393311211707436433', name: 'OpenCrane 2 Dev Web',
-    details: { resourceOwner: '393311211338337681' }, oidcConfig: {
-      clientId: '393311211707501969', devMode: false, idTokenUserinfoAssertion: true,
-      redirectUris: ['https://ocn-dev.tail00285e.ts.net/auth/callback'],
-      postLogoutRedirectUris: ['https://ocn-dev.tail00285e.ts.net/'],
-    } };
+  const ownerApp = secondaryOwnerApp;
   await writeFile(providerFile, JSON.stringify({ apps: { [ownerApp.id]: ownerApp }, users: {} }));
   await writeFile(`${home}/pat`, 'fake-test-pat');
   const env = { PATH: process.env['PATH'], HOME: home, DEV_STACK_ID: '1',

@@ -33,6 +33,9 @@ Local setup uses the event store's certificate issuer to give NATS services priv
 Personal tool keys use the existing Kubernetes secret store through a separate,
 limited dev identity. The server and models process share its private connection.
 [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) provides test sign-in.
+Secondary stacks reuse their own sign-in app, test users and private credentials.
+After a successful setup, each slot also remembers the supplied key file's location
+for later fresh starts. Setup reports missing keys and safe provider error codes.
 
 The dispatcher uses the server's read-only content connection to coordinate gateway
 configuration changes. Its background jobs keep their own database.

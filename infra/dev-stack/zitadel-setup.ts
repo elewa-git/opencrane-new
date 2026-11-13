@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { homedir } from 'node:os';
+import { resolve } from 'node:path';
 import { secondary, stackId, localOrigin } from './identity.ts';
-import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { directory, exists, root, save, prepareDirectory } from './config.ts';
+import { issuer, secondaryCredentials, zitadelApi, ZitadelSetupError } from './zitadel-api.ts';
 
 // Run under the same flock as up.sh. Never pass the PAT through argv or logs.
-const issuer = 'https://weownai-oidc-8dwlat.eu1.zitadel.cloud';
 const name = 'OpenCrane 2 Dev';
 const origin = 'https://ocn-dev.tail00285e.ts.net';
 const object = z.object({ id: z.string(), name: z.string().optional(), preferredLoginName: z.string().optional() });
@@ -16,14 +16,7 @@ const userGrant = z.object({ id: z.string(), userId: z.string(), projectId: z.st
   state: z.string(), details: z.object({ resourceOwner: z.string() }) });
 let orgId: string | undefined;
 async function api(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST') {
-  const response = await fetch(`${issuer}${path}`, {
-    method, redirect: 'error', signal: AbortSignal.timeout(30_000),
-    headers: { Authorization: `Bearer ${(await readFile(process.env['ZITADEL_KEY_FILE'] ?? `${root}/.keys/.zitadel-key`, 'utf8')).trim()}`,
-      'content-type': 'application/json', ...(orgId ? { 'x-zitadel-orgid': orgId } : {}) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  if (!response.ok) throw new Error(`Zitadel ${path} returned ${response.status}`);
-  return response.json() as Promise<unknown>;
+  return zitadelApi(path, orgId, body, method);
 }
 async function list(path: string, queries: unknown[] = []) {
   return z.object({ result: z.array(object).default([]) }).parse(await api(path, { queries })).result;
@@ -84,14 +77,13 @@ async function secondarySetup(readOnly: boolean) {
     .parse(await api(`/management/v1/projects/${projectId}`));
   await checkEmailClaims(projectId, '393311211707436433');
   // Retain only this slot's OIDC credentials when down removes its disposable stack.
-  const credentials = `${homedir()}/.config/opencrane/dev-stack-ci-${stackId}`;
-  await mkdir(credentials, { recursive: true, mode: 0o700 });
-  assert(await realpath(credentials) === credentials, 'Credential directory must not be a symlink');
-  await chmod(credentials, 0o700);
+  const credentials = await secondaryCredentials();
   async function retain(file: string, value: string) {
     await writeFile(`${credentials}/${file}`, value, { mode: 0o600 });
     await chmod(`${credentials}/${file}`, 0o600);
   }
+  const keyFile = process.env['ZITADEL_KEY_FILE'];
+  if (keyFile !== undefined) await retain('zitadel-key-file', resolve(keyFile));
   const appName = `OpenCrane 2 Dev CI ${stackId}`;
   const apps = await list(`/management/v1/projects/${projectId}/apps/_search`, exactName(appName));
   assert(apps.length <= 1, 'Duplicate secondary apps');
@@ -248,6 +240,7 @@ try {
     externalOwner: { subject: externalOwner.subject, userGrantId: ownerGrantId } }, null, 2));
 } catch (error) {
   // Only our fixed diagnostics are public; never dump a provider body or request.
-  console.error(error instanceof assert.AssertionError ? error.message : 'Zitadel setup failed; no provider response was logged');
+  const safe = error instanceof assert.AssertionError || error instanceof ZitadelSetupError;
+  console.error(safe ? error.message : 'Zitadel setup failed; no provider response was logged');
   process.exitCode = 1;
 }
