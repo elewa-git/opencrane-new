@@ -1,5 +1,6 @@
+import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink, truncate } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -95,7 +96,12 @@ test.each(['altered', 'missing', 'extra', 'symlink'])('refuses %s database bytes
   if (mode === 'altered') await writeFile(file, Buffer.alloc(512, 'changed'));
   if (mode === 'missing' || mode === 'symlink') await rm(file);
   if (mode === 'extra') await writeFile(join(settings.databaseDirectory, 'extra'), 'unknown');
-  if (mode === 'symlink') await symlink(join(settings.databaseDirectory, 'main.cvd'), file);
+  if (mode === 'symlink') {
+    // Keep the target's size and digest valid so only the link check can refuse it.
+    const target = join(directory, 'daily.cvd');
+    await writeFile(target, Buffer.alloc(512, 'daily'));
+    await symlink(target, file);
+  }
   await expect(packagedScanner(settings)).rejects.toThrow();
   expect(scanClamd).not.toHaveBeenCalled();
 });
@@ -135,3 +141,69 @@ test('refuses a result if the database expires during transfer', async () => {
   vi.mocked(scanClamd).mockImplementation(expire);
   await expect(scanner.scan(input())).rejects.toThrow();
 });
+
+async function refusesDatabaseSize(size) {
+  const file = join(settings.databaseDirectory, 'daily.cvd');
+  await truncate(file, size);
+  // Match the digest too: removing the size guard must allow startup.
+  const digest = createHash('sha256');
+  for await (const chunk of createReadStream(file)) digest.update(chunk);
+  manifest.databases[1].sha256 = digest.digest('hex');
+  await approve();
+  await expect(packagedScanner(settings)).rejects.toThrow();
+  expect(scanClamd).not.toHaveBeenCalled();
+}
+test.each([511, 512 * 1024 * 1024 + 1])('refuses database size %s despite matching hash',
+  refusesDatabaseSize);
+
+async function refusesInputType() {
+  const scanner = await packagedScanner(settings);
+  const request = input();
+  request.bytes = new Uint8Array(request.bytes);
+  await expect(scanner.scan(request)).rejects.toThrow();
+  expect(scanClamd).not.toHaveBeenCalled();
+}
+test('refuses non-buffer input despite matching bytes and count', refusesInputType);
+
+async function refusesLargeInput() {
+  const scanner = await packagedScanner(settings);
+  const bytes = Buffer.alloc(20 * 1024 * 1024 + 1);
+  const request = { ...input(), bytes, byteCount: bytes.length, sha256: hash(bytes) };
+  await expect(scanner.scan(request)).rejects.toThrow();
+  expect(scanClamd).not.toHaveBeenCalled();
+}
+test('refuses input above 20 MiB despite matching digest and count', refusesLargeInput);
+
+async function refusesWrongCount() {
+  const scanner = await packagedScanner(settings);
+  const request = input();
+  request.byteCount += 1;
+  await expect(scanner.scan(request)).rejects.toThrow();
+  expect(scanClamd).not.toHaveBeenCalled();
+}
+test('refuses a different byte count with the correct digest', refusesWrongCount);
+
+async function refusesClockRollback() {
+  const scanner = await packagedScanner(settings);
+  vi.mocked(Date.now).mockReturnValue(checked + 1000);
+  await scanner.scan(input());
+  vi.mocked(Date.now).mockReturnValue(checked + 999);
+  vi.mocked(scanClamd).mockClear();
+  await expect(scanner.scan(input())).rejects.toThrow();
+  expect(scanClamd).not.toHaveBeenCalled();
+}
+test('refuses clock rollback while the database is still fresh', refusesClockRollback);
+
+async function refusesAbortAfterScan() {
+  const scanner = await packagedScanner(settings);
+  const controller = new AbortController();
+  const request = { ...input(), signal: controller.signal };
+  function cancelAfterClean() {
+    controller.abort();
+    return Promise.resolve('clean');
+  }
+  vi.mocked(scanClamd).mockImplementation(cancelAfterClean);
+  await expect(scanner.scan(request)).rejects.toThrow();
+  expect(scanClamd).toHaveBeenCalledOnce();
+}
+test('refuses cancellation after the transport returns clean', refusesAbortAfterScan);

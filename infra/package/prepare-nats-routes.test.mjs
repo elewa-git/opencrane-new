@@ -120,6 +120,7 @@ exec /usr/bin/openssl "$@"
   const secrets = {};
   for (const name of review.requiredSecrets) secrets[name] = `client-${name.toLowerCase()}`;
   const values = { chartVersion: review.chartVersion, images: review.images, secrets,
+    scanner: review.scanner,
     exposure: { ingress: false, loadBalancer: false, funnel: false },
     natsCluster: { enabled: true, renderOnly: true, routeCASecret: references[0],
       peerCertificateSecrets: references.slice(1) } };
