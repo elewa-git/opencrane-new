@@ -23,7 +23,7 @@ import { expect, it, onTestFinished, vi } from 'vitest';
 import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { auditTrail, conversations } from '@opencrane/projections';
 import { budgetStopHandler } from '../src/index.ts';
-import { grantStream } from '@opencrane/authz';
+import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
@@ -3203,6 +3203,43 @@ async function concurrentPersonalTurns() {
 it('races two personal assistants on one server without mixing credentials',
   concurrentPersonalTurns, 60_000);
 
+async function concurrentReceiptWork() {
+  const { setup, remote, headers, bob } = await personalPair();
+  const alicePermit = await permit(setup, headers);
+  const bobPermit = await permit(setup, bob.headers, bob.body);
+  const auth = memberAuthorisation(setup.binding);
+  const checkApplied = auth.checkApplied.bind(auth);
+  const now = performance.now.bind(performance);
+  let receiptWorkMs = 0;
+  async function readApplied(eventId: string) {
+    const result = await checkApplied(eventId);
+    receiptWorkMs += 70;
+    return result;
+  }
+  function currentTime() {
+    return now() + receiptWorkMs;
+  }
+  function restoreChecks() {
+    vi.restoreAllMocks();
+  }
+  onTestFinished(restoreChecks);
+  vi.spyOn(auth, 'checkApplied').mockImplementation(readApplied);
+  vi.spyOn(performance, 'now').mockImplementation(currentTime);
+  const responses = await Promise.all([
+    send(setup, alicePermit), send(setup, bobPermit, bob.body),
+  ]);
+  for (const response of responses) {
+    expect(response.status, await response.text()).toBe(200);
+  }
+  expect(remote.received).toHaveLength(2);
+  for (const received of remote.received) {
+    const expected = received.raw.toString() === bob.body ? 'Bearer bob-access' : 'Bearer alice-access';
+    expect(received.headers.authorization).toBe(expected);
+  }
+}
+it('keeps concurrent credential releases within the access window with receipt service work',
+  concurrentReceiptWork, 60_000);
+
 async function foreignPersonalLease() {
   const { setup, remote, headers, bob, reads } = await personalPair();
   const alicePermit = await permit(setup, headers);
@@ -3236,6 +3273,35 @@ async function revokedDuringMaterialRead() {
 }
 it('refuses a key revoked during release while the other person can still call',
   revokedDuringMaterialRead, 60_000);
+
+async function unavailablePermissionDuringRelease() {
+  const { setup, remote, headers } = await personalPair();
+  const value = await permit(setup, headers);
+  const auth = memberAuthorisation(setup.binding);
+  const use = auth.use.bind(auth);
+  let unavailable = false;
+  const custody = setup.dispatchOptions.credentialDispatch!.custody;
+  const read = custody.readAccessMaterial;
+  const readAccessMaterial: typeof read = async function readAccessMaterial(stage, identity, format) {
+    const material = await read(stage, identity, format);
+    unavailable = true;
+    return material;
+  };
+  const checkUse: typeof auth.use = async function checkUse(...args) {
+    if (unavailable) return { allowed: false, status: 'unavailable' };
+    return use(...args);
+  };
+  function restoreChecks() {
+    vi.restoreAllMocks();
+  }
+  onTestFinished(restoreChecks);
+  custody.readAccessMaterial = readAccessMaterial;
+  vi.spyOn(auth, 'use').mockImplementation(checkUse);
+  expect((await send(setup, value)).status).toBe(403);
+  expect(remote.received).toHaveLength(0);
+}
+it('rechecks live permission availability after reading personal key material',
+  unavailablePermissionDuringRelease, 60_000);
 
 async function anotherAccountArgument() {
   const { setup, remote, headers } = await personalPair();
