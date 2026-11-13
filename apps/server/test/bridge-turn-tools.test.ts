@@ -179,7 +179,10 @@ it('sends a waiting turn without tools when OpenFGA cannot check a grant', async
     expect(JSON.parse(fixture.sent[1]!)).not.toHaveProperty('tools');
     expect(fixture.rows).toHaveBeenCalledTimes(1);
     expect(fixture.reads.filter(subject => subject === 'mcp-fixture')).toHaveLength(1);
-    expect(use).toHaveBeenCalledTimes(1);
+    expect(use.mock.calls).toEqual([
+      ['person', 'person', 'mcp_server', 'fixture'],
+      ['assistant', 'assistant', 'mcp_server', 'fixture'],
+    ]);
   } finally {
     vi.useRealTimers();
   }

@@ -314,3 +314,57 @@ async function startsAccessAfterQueue(expireAccess: boolean) {
 }
 it.each([false, true])('starts the two-second dispatch check after the queue, expires: %s',
   startsAccessAfterQueue);
+
+async function holdsQueueUntilExpiredWorkFinishes() {
+  const nats = await natsFixture();
+  onTestFinished(nats.close.bind(nats));
+  const actor = new BudgetActor(nats.store, 'test');
+  await actor.start(100, 100, 'group');
+  const firstCall = { ...call, requestId: 'held', turnId: 'held' };
+  const secondCall = { ...call, requestId: 'waiting', turnId: 'waiting' };
+  const firstHold = await actor.reserve(firstCall, 1);
+  const secondHold = await actor.reserve(secondCall, 1);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  async function holdAccess() {
+    entered.resolve();
+    await release.promise;
+  }
+  async function checked() {}
+  const nextAccess = vi.fn(checked);
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockImplementation(now);
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const queueDeadline = performance.now() + 30_000;
+  const first = { ...admission(firstHold), callId: 'held', modelCall: firstCall };
+  const second = { ...admission(secondHold), callId: 'waiting', modelCall: secondCall };
+  const held = actor.admitDispatch(first, holdAccess, undefined, undefined, { queueDeadline });
+  const refused = expect(held).rejects.toThrow('Budget append unavailable');
+  let waiting: Promise<void> | undefined;
+  try {
+    await entered.promise;
+    waiting = actor.admitDispatch(second, nextAccess, undefined, undefined, { queueDeadline });
+    elapsed += 2100;
+    await vi.advanceTimersByTimeAsync(2100);
+    await refused;
+    // A timed-out caller cannot let another command overtake its still-running work.
+    expect(nextAccess).not.toHaveBeenCalled();
+    release.resolve();
+    vi.useRealTimers();
+    await waiting;
+    expect(actor.state.dispatches).toHaveLength(1);
+    expect(actor.state.dispatches[0]?.callId).toBe('waiting');
+  } finally {
+    release.resolve();
+    vi.useRealTimers();
+    await waiting;
+    clock.mockRestore();
+  }
+}
+it('keeps serial budget ownership until expired access work finishes',
+  holdsQueueUntilExpiredWorkFinishes);
