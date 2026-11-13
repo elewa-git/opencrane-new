@@ -53,3 +53,12 @@ function refusesIncompleteRejectedEvidence() {
 }
 it('requires complete-list declaration evidence after a tool was rejected',
   refusesIncompleteRejectedEvidence);
+
+function refusesSavedDeclaration() {
+  const catalogue = standardCatalogue();
+  catalogue.tools![0]!.definition = JSON.stringify({ name: 'read',
+    inputSchema: { type: 'object' }, _meta: { 'io.opencrane/costCents': 1 } });
+  expect(isOrdinaryToolCatalogue(catalogue)).toBe(false);
+}
+it('keeps saved tool declarations strict before complete-list flags were recorded',
+  refusesSavedDeclaration);
