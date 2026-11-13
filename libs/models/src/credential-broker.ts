@@ -16,6 +16,9 @@ const contextSchema = toolCredentialReleaseSchema.pick({ requestId: true, permit
   conversationId: true, turnId: true, threadId: true, serverId: true, toolName: true,
   argumentsDigest: true, purpose: true });
 const savedContextSchema = contextSchema.strip();
+type PersonalPreparedRelease = PreparedCredentialRelease & {
+  release: ReturnType<typeof toolCredentialReleaseSchema.parse>;
+};
 type Access = { deadline: number; checkAccess: () => Promise<void> };
 type Custody = Pick<ReturnType<typeof connectionCustody>, 'readAccessMaterial'>;
 function refuse(): never {
@@ -53,7 +56,7 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
   silo: string, decisionId: string, raw: unknown, loadConfiguration: OAuthConfigurationLoader,
   prepareAccess: () => Promise<Access>, sendAccess: (material: string) => Promise<void>) {
   let used = false;
-  let prepared: PreparedCredentialRelease | undefined;
+  let prepared: PersonalPreparedRelease | undefined;
   // Copy before any wait, so caller mutation cannot replace the authenticated request.
   const context = contextSchema.safeParse(raw);
   async function execute(recover: boolean) {
