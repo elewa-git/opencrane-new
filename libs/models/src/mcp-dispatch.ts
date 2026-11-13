@@ -400,9 +400,11 @@ class McpDispatcher {
 
   async reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
     startedAt: number, stage: string, error: unknown) {
+    const remainingLifetime = permit.expiresAt - Date.now();
+    const remainingAccess = permit.accessDeadline - performance.now();
+    const accessRemainingMs = Math.max(0, Math.floor(Math.min(remainingLifetime, remainingAccess)));
     const diagnostic = { stage, reason: privateDecisionReason(error),
-      elapsedMs: Math.ceil(performance.now() - startedAt),
-      accessRemainingMs: Math.max(0, Math.floor(permit.accessDeadline - performance.now())) };
+      elapsedMs: Math.ceil(performance.now() - startedAt), accessRemainingMs };
     // Keep dependency error text private; log only the recognised refusal reason.
     this.logger.warn(diagnostic, 'MCP dispatch refused');
     try {
