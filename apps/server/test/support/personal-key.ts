@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import Fastify from 'fastify';
 import { randomUUID } from 'node:crypto';
@@ -32,7 +33,7 @@ export async function personalKeyFixture(runtime?: Runtime, accountSubject?: (ke
     return database.lock!(name, work);
   }
   const db = { ...database, lock };
-  const key = randomUUID();
+  const key: string = randomUUID();
   const accounts = [
     { account: 'account-a', key, permitted: true },
     { account: 'account-b', key: randomUUID(), permitted: false },
@@ -46,7 +47,8 @@ export async function personalKeyFixture(runtime?: Runtime, accountSubject?: (ke
     const chunks: Buffer[] = [];
     function collect(chunk: Buffer) { chunks.push(chunk); }
     function respond() {
-      const body = JSON.parse(Buffer.concat(chunks).toString()) as { id: string };
+      const raw: unknown = JSON.parse(Buffer.concat(chunks).toString());
+      const body = z.object({ id: z.string() }).parse(raw);
       reply.writeHead(200, { 'content-type': 'application/json' });
       reply.end(JSON.stringify({ jsonrpc: '2.0', id: body.id,
         result: { isError: false, structuredContent: { subject: accountSubject!(key) } } }));

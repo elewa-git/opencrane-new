@@ -127,10 +127,14 @@ async function clearsSecretAtBoundary(boundary: 'pending' | 'destroy' | 'access'
   vi.spyOn(globalThis, 'fetch').mockImplementation(request);
   const fixture = TestBed.createComponent(PersonalKey);
   fixture.componentRef.setInput('serverId', 'fixture');
+  if (boundary === 'access') {
+    fixture.componentRef.setInput('profile', { serverId: 'fixture', profileId: 'mine',
+      status: 'verified', adminBlocked: false, profileRevision: 4, ownerKind: 'personal' });
+  }
   fixture.detectChanges();
   const nativeElement: unknown = fixture.nativeElement;
   if (!(nativeElement instanceof HTMLElement)) throw new Error('Missing key form');
-    const element = nativeElement;
+  const element = nativeElement;
   function formReady() {
     fixture.detectChanges();
     expect(element.querySelector('input[type=password]')).not.toBeNull();
@@ -143,14 +147,21 @@ async function clearsSecretAtBoundary(boundary: 'pending' | 'destroy' | 'access'
     expect(input.value).toBe('');
     return;
   }
-  element.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+  if (boundary === 'access') {
+    const buttons = element.querySelectorAll<HTMLButtonElement>('button');
+    for (const button of buttons) {
+      if (button.textContent?.trim() === 'Use this key') button.click();
+    }
+  } else {
+    element.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+  }
   expect(postSignal).toBeDefined();
   if (boundary === 'pending') {
     expect(input.value).toBe('');
     expect(sessionStorage.getItem('personal-key:fixture')).not.toContain('synthetic-only');
     complete(new Response('{}', { status: 503 }));
   } else {
-    // Simulate another typed value before the pending request reports access loss.
+    // Use selection so the save method cannot clear this input in its finally block.
     input.value = 'second-synthetic-key';
     complete(new Response('{}', { status: 403 }));
     function accessCleared() {

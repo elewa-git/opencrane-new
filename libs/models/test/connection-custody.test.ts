@@ -6330,11 +6330,12 @@ async function readExactBearerGeneration() {
 }
 it('reads a bearer only from its exact saved custody generation', readExactBearerGeneration);
 
-async function refuseMalformedStoredBearer(value: string) {
+async function refuseMalformedStoredBearer(_name: string, value: string) {
   const test = await fixture();
   const staged = await test.custody.stage(stage, value);
   expect(staged.identity).toBeDefined();
   expect(await test.custody.readAccessMaterial(stage, staged.identity!, 'bearer')).toBeUndefined();
 }
-it.each(['has a space', 'line\nbreak', 'tab\tcharacter', 'non-ascii-£', 'a'.repeat(4097)])(
-  'refuses malformed stored bearer material %j', refuseMalformedStoredBearer);
+it.each([['spaces', 'has a space'], ['line break', 'line\nbreak'],
+  ['tab', 'tab\tcharacter'], ['non-ASCII', 'non-ascii-£'], ['too long', 'a'.repeat(4097)]])(
+  'refuses malformed stored bearer material: %s', refuseMalformedStoredBearer);

@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyBaseLogger } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { encodeSession } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
@@ -16,7 +16,7 @@ async function routeFixture() {
   await setup.grant('alice');
   const logs: string[] = [];
   function write(line: string) { logs.push(line); }
-  const loggerInstance = createLogger('personal-key-test', { level: 'warn',
+  const loggerInstance: FastifyBaseLogger = createLogger('personal-key-test', { level: 'warn',
     destination: { write } });
   const app = Fastify({ loggerInstance });
   async function closeApp() { await app.close(); }
@@ -73,6 +73,8 @@ async function refusesUntrustedRoutes(guard: string) {
   if (guard === 'member') Object.assign(headers, test.headers({ sub: 'unresolved' }));
   const before = test.setup.remote.connections();
   const append = vi.spyOn(test.setup.nats.store, 'append');
+  const historyRead = vi.spyOn(test.setup.nats.store, 'readStream');
+  const query = vi.spyOn(test.setup.db, 'query');
   try {
     const reply = await test.app.inject({ method: 'POST', url: test.path,
       headers, payload: test.payload });
@@ -91,9 +93,13 @@ async function refusesUntrustedRoutes(guard: string) {
     }
     expect(test.stage).not.toHaveBeenCalled();
     expect(append).not.toHaveBeenCalled();
+    expect(historyRead).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
     expect(test.setup.remote.connections()).toBe(before);
   } finally {
     append.mockRestore();
+    historyRead.mockRestore();
+    query.mockRestore();
   }
 }
 it.each(['session', 'organisation', 'origin', 'silo', 'member'])(
@@ -103,7 +109,7 @@ async function classifiesFailureWithoutCredentials(failure: 'tls' | 'identity' |
   const test = await routeFixture();
   let expectedStatus = 422;
   let reason = 'identity_unverified';
-  let diagnostic = 'identity_invalid';
+  let diagnostic: string;
   if (failure === 'tls') {
     test.setup.remote.untrust();
     diagnostic = 'tls_untrusted';
