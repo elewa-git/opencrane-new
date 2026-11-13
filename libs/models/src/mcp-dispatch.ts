@@ -287,8 +287,9 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       stage = 'credential_preparation';
       await permit.prepareCredential?.();
       stage = 'budget_admission';
+      const admissionDeadline = permit.release ? { queueDeadline: deadline } : deadline;
       await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt,
-        undefined, permit.release ? { queueDeadline: deadline } : deadline);
+        undefined, admissionDeadline);
       stage = 'mcp_admission';
       const admittedPosition = await admit(req, res, permit, route, position, deadline);
       if (!route.locator && permit.gatewayBinding) {
