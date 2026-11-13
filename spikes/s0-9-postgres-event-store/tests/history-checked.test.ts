@@ -161,6 +161,37 @@ async function findsCopiesWithOtherConditions(global: boolean) {
 it.each([false, true])('finds a copy after a category or global refusal (global: %s)',
   findsCopiesWithOtherConditions);
 
+async function refusesOnlyStaleGlobalPosition() {
+  fixture = await natsFixture();
+  const initial = { ...event('initial-owner', 'ownership-test', 'ownership.seeded'),
+    data: { ownerIds: ['alice'] } };
+  await fixture.seed([initial]);
+  const subjectPosition = await fixture.store.head(initial.subject);
+  const globalPosition = await fixture.store.head();
+  await fixture.seed([event('unrelated-member', 'member-bob')]);
+  const before = await Array.fromAsync(fixture.store.readStream(initial.subject));
+  const next = { ...event('next-owner', initial.subject, 'ownership.seeded'),
+    data: { ownerIds: ['alice', 'bob'] } };
+  const command = { event: next, expectedSequence: subjectPosition,
+    expectedGlobalSequence: globalPosition, historyChecked: true as const };
+
+  expect(await fixture.store.head(initial.subject)).toBe(subjectPosition);
+  expect(await fixture.store.head()).toBe(globalPosition + 1);
+  expect(await fixture.store.append(command)).toEqual({ status: 'conflict' });
+  expect(await Array.fromAsync(fixture.store.readStream(initial.subject))).toEqual(before);
+  expect(await fixture.store.head()).toBe(globalPosition + 1);
+
+  const refreshedPosition = await fixture.store.head();
+  const refreshed = { ...command, expectedGlobalSequence: refreshedPosition };
+  expect(await fixture.store.append(refreshed)).toEqual({ status: 'appended', sequence: 3 });
+  expect(await Array.fromAsync(fixture.store.readStream(initial.subject))).toEqual([
+    ...before, { sequence: 3, event: next },
+  ]);
+  expect(await fixture.store.head()).toBe(3);
+}
+it('refuses a stale global position with a current subject and accepts a refreshed global position',
+  refusesOnlyStaleGlobalPosition);
+
 async function refusesDuplicateIdOnAnotherSubject() {
   fixture = await natsFixture();
   await fixture.seed([event('same-id')]);
