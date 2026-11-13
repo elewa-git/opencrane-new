@@ -1,7 +1,9 @@
 # Ordinary third-party tool server journey
 
 Date: 13 November 2026.
-Source: `207644124155fadf0e67d0373fe427fccfdbba48`; later changes update documents only.
+Attempted source: `207644124155fadf0e67d0373fe427fccfdbba48`.
+Later changes alter catalogue replay, full-list classification, approval cards and cost
+report checks. This attempt does not qualify those changes.
 Environment: secondary development slot 2, started with `up.sh --fresh`.
 
 ## Result
@@ -14,6 +16,8 @@ refused the inherited `OPENCRANE_FLEET_TASK` marker:
 > Automated journeys require a secondary stack and no fleet task
 
 The marker was preserved. No browser journey ran and no screenshots were captured.
+The owner deferred another attempt until the main repair in PR #1119. The final source
+still needs a fresh secondary stack and browser checks at 1280 px and 390 px.
 Website readiness was an HTTP check; it does not prove a person's journey.
 
 ## Stack attempt
@@ -40,7 +44,7 @@ stack log is included here.
 | Member asks their assistant to call a reviewed tool in a live turn. | NOT RUN | NOT RUN |
 | Server changes its list; the next call is refused with a visible review reason. | NOT RUN | NOT RUN |
 
-## Source checks
+## Earlier source checks
 
 These checks do not substitute for the browser journey.
 
@@ -77,5 +81,44 @@ stripping, declared-server unknown cost, cost-record consistency and certificate
 verification. Both certificate tests returned 200 instead of the required refusal
 when verification was removed. All five mutations were restored.
 
-Independent review and hosted CI are NOT RUN by this builder. A browser PASS at both
-widths remains required before merge.
+## Second fix round
+
+Checked source: `0b4cc6ffa`. The slice changes 1,400 shipped source lines, including
+the Odoo source deletion. Tests and documents are excluded.
+
+The legacy replay test failed with `Tool catalogue digest mismatch` before the fix.
+The review script reproduced the failure too. After the fix, the adapted script reads
+old dated history followed by a new discovery. A PostgreSQL test also rebuilds the
+projection before and after that new discovery and compares the saved catalogue.
+Unversioned events keep accepted-only digests. New discoveries save `digestVersion: 2`
+and validate accepted and rejected tools. Replay changes no saved events.
+
+Money status checks permit only the three fixed report states. Numbers, unrestricted
+strings and an extra enum value still fail under `costStatus`. Forwarding tests assert
+the complete public request body and exact approved argument number text. Routine
+fixtures now use the generic identities in their event examples. The original pinned
+image inventory is restored; the historical image evidence is unchanged.
+
+Four isolated mutations caused six expected test failures: checking old events with
+the full-list rule, ignoring rejected revisions for new events, allowing amounts under
+the report-status name, and forwarding agent metadata. Transforms affected only the
+test processes; repository source was not changed by the mutations.
+
+| Own check | Verdict |
+| --- | --- |
+| Final replay and money tests | PASS: 33 tests on each of two consecutive runs. |
+| Event schemas, examples and replay | PASS: 1,238 tests. |
+| Named CI regressions | PASS: 11 focused cases. |
+| Ordinary classification and full-list dispatch drift | PASS: six cases. |
+| Historical image licence evidence | PASS: 80 tests on each of two runs. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue, Knip, changelog and Markdown | PASS. |
+| Changed-file ESLint | PASS: no warnings. |
+| Process evidence and qualification index consistency | PASS; this checks records, not live behaviour. |
+
+The PR's Evidence section records the longer targeted regression runs and the hosted
+CI result for the final head. These checks do not qualify the browser journey.
+
+Journey: NOT RUN until PR #1119 is repaired. A browser PASS at both widths remains
+required before merge.
+This receipt reports only the builder's own checks.
