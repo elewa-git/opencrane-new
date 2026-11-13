@@ -6205,6 +6205,8 @@ recovery and notice contracts. `personal-key-routes.ts` composes identity checks
 `personal-needs-route.ts` uses the same readers and builder as turn admission.
 The server process loads `CONNECTION_CUSTODY_FILE`, as models and dispatcher do.
 Bearer choices need no OAuth configuration. Keys never enter replies or request logs.
+Personal-key and needs refusals include a typed `reason`. Failure logs retain causal
+order using only fixed diagnostic labels, including TLS and custody transport codes.
 
 ## Explicit personal account choice through HTTP (Part of #49)
 

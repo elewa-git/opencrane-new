@@ -40,11 +40,19 @@ streams to the append. Remote calls never run inside that short write check.
 Only successful identity evidence is stored with the normal bearer activation:
 `verification.toolName`, `toolRevision` and safe `account` metadata. The credential
 itself is staged through the existing secret-store adapter and never enters an event.
+Identity subjects that echo the key or a continuous part of at least eight characters
+are refused, including base64, percent-encoded and nested URL-encoded text.
+Identity verification and dispatch use the same check for encoded credential copies.
 A changed account blocks the replacement. Unverified and blocked keys are unavailable
 for tool offers and releases. OAuth keeps its existing settings and scope checks.
 
 Invalid input returns 400; missing session 401; refused access 403; failed identity
 verification 422 with `identity_unverified`; other unavailable or uncertain writes 503.
+Refusal replies also carry a `reason` from the named `PersonalConnectionReason` union:
+`no_session`, `wrong_organisation`, `wrong_origin`, `wrong_silo`, `access_required`,
+`invalid_input`, `identity_unverified` or `unavailable`. These labels contain no
+provider details. Structured logs classify identity, TLS and custody failure causes
+with fixed labels; raw transport messages and credential-bearing adapter fields are omitted.
 A 422 happens before staging or append and permits a corrected key. After an uncertain
 write, the form keeps only the original profile id and change reference. A missing
 receipt remains unknown and never permits a resend. No response returns key material.

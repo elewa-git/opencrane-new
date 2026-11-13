@@ -353,7 +353,8 @@ Members can inspect their own saved bearer profile even when an admin has disabl
 The reply separates the saved revision, admin block and server availability. Saving
 credentials alone does not enable calls. For a server marked as needing a personal
 key, the server checks the admin-chosen read-only identity tool before saving verified
-account evidence. My tools lets the member explicitly choose that key for use.
+account evidence. It refuses account identifiers that copy the key, including encoded
+text. My tools lets the member explicitly choose that key for use.
 The list shows the same safe facts for each saved personal profile, including a revoked
 or blocked one. It marks the person's explicit choice. A changed list asks the screen
 to start paging again.

@@ -8,6 +8,37 @@ qualification failed separately: its existing live-view journey timed out waitin
 for `.caret` in `browser-live-view.ts`. This run does not qualify the capability
 for merge. No failure was treated as a pass.
 
+## Review repair qualification
+
+Live rerun on the repaired source: NOT RUN. The fresh-stack rerun waits for the
+main journey repair to land, as requested. No secondary stack was claimed for
+these repairs. The earlier slice steps at 1280 px and 390 px remain the only live
+personal-key evidence; the complete startup qualification above remains FAIL.
+
+Journey-visible changes: none to the review controls, key form or displayed
+messages. Malicious identity replies that encode the submitted key are now
+refused before custody staging or append. Refusal JSON adds fixed `reason`
+labels, and server logs classify causes without recording private messages.
+
+Own source checks on 13 November: PASS. All commands ran under `nice -n 10`.
+The 32 route, identity, review and account tests and six focused custody tests
+passed twice. The five browser tests passed twice. The 21 dispatch credential
+checks and two selected-call and missing-key notice regressions passed. All 39
+stack-claim fixture tests passed, followed by a repeat of the four changed cases.
+The full root test suite was NOT RUN.
+
+Guard checks: PASS. Hand-authored mutations disabled each listed HTTP, policy,
+reply-id, review-choice, account, profile, revision, stored-material and input
+clearing guard. Each isolating test failed, then passed after restoration.
+Removing causal diagnostics also failed all four failure-classification tests.
+No mutation remains in the source.
+
+Gates: PASS for workspace, package and dev-stack typecheck; the model typecheck
+again after making an unused helper private; event catalogue (174 types); Knip;
+changelog lint; changed-file ESLint; and Markdown lint. ESLint reports one existing
+size warning in the untouched `mcpDispatch` function. No added or changed function
+has a warning. Knip reports two existing configuration hints.
+
 ## Setup and limits
 
 Claimed secondary slot 1 through `infra/dev-stack/claim.sh`, then ran

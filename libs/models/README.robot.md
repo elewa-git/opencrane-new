@@ -5033,8 +5033,12 @@ custody adapter against a synthetic HTTP transport. A recording HTTPS fixture no
 checks the governed personal path. The models process needs
 `CONNECTION_CUSTODY_FILE`. OAuth also needs `MCP_OAUTH_CONFIGURATION_FILE`, a JSON
 object keyed by server id, reread on each use. Bearer selection instead checks the
-saved identity-tool revision and account evidence against the current reviewed policy. The selected profile, current
-generation, scope, review and access bind the signed turn, approval and permit. A
+saved identity-tool revision and account evidence against the current reviewed policy.
+Identity verification and dispatch check encoded text for credentials in the same helper. Identity
+subjects containing the key or a continuous part of at least eight characters are
+refused before staging or append, including nested URL encoding and base64.
+The selected profile, current generation, scope, review and access bind the signed
+turn, approval and permit. A
 confirmed release
 append comes before the allowlisted outbound header. Caller cookies, alternate keys and
 profile headers do not reach the tool server. A missing audit or changed access sends
