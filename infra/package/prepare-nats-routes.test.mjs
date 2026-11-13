@@ -144,6 +144,7 @@ async function run(prepared, fails = false) {
     result = error;
   }
   // Compare fixed output without printing a captured command error or credentials on failure.
+  assert.notEqual(result.killed, true, 'Preparation fixture exceeded its existing process deadline');
   assert.equal(Boolean(result.code), fails, 'Unexpected preparation exit status');
   const expectedOutput = fails ? '' : 'PASS private NATS route identities prepared\n';
   const expectedError = fails ? 'FAIL private NATS route preparation\n' : '';

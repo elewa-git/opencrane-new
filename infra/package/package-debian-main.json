@@ -1,5 +1,5 @@
 {
-  "imagePin": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
+  "imagePin": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
   "keyringSha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017",
   "indexes": [
     {

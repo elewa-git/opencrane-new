@@ -6,8 +6,8 @@
       "reviewedInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9"
     },
     "server": {
-      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
-      "sourceRevision": "ba0654ee70d618708299cdc0a03a81e4768d4494",
+      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
+      "sourceRevision": "47258e903347daaaf2727da636d4bca3f0f53a36",
       "debianMainReview": "infra/package/package-debian-main.json",
       "bundled": [
         ["Node libraries", ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "Unicode-3.0", "ICU"], "/usr/local/LICENSE", "Named library sections keep their OSI notices; HdrHistogram offers BSD-2-Clause alongside CC0."],
@@ -602,7 +602,7 @@
       ]
     },
     "web": {
-      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:c93724caa47d73214dd9bc0cd9261a17245941a4d4da126cdb143acd8f70fca7",
+      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
       "sameAs": "server"
     },
     "postgres": {
