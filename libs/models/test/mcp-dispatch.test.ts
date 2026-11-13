@@ -3739,3 +3739,77 @@ async function withholdsPermitDuringAccessOutage() {
 }
 it('withholds the MCP permit when current access cannot be checked',
   withholdsPermitDuringAccessOutage, 40_000);
+
+async function ordinaryRemoteFixture(mode = 'allow') {
+  const setup = await fixture();
+  onTestFinished(setup.close.bind(setup));
+  const headers = await prepare(setup, 'remote', true, false);
+  const { review: _review, costCents: _cost, ...ordinaryTool } = tool;
+  const snapshot = catalogueEvidence([ordinaryTool]);
+  const discoverResult = JSON.stringify({ capabilities: { tools: {} } });
+  await setup.append('mcp-fixture', 'mcp.server_discovered', {
+    serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
+    ...snapshot, discoverResult,
+  });
+  await reviewRestoration(setup, 'ordinary-review', mode);
+  const record = await publishRestoration(setup, 'ordinary-publish');
+  const delivery = await restorationDelivery(setup);
+  await delivery.deliver(record);
+  await delivery.waitForWitness(record);
+  expect(await delivery.observe()).not.toBeNull();
+  const remote = await remoteFixture();
+  onTestFinished(remote.close);
+  setup.dispatchOptions.routes.length = 0;
+  setup.dispatchOptions.remoteNetwork = remote.network;
+  setup.dispatchOptions.requireCatalogue = function requireCatalogue() {};
+  function respond(method: string) {
+    if (method === 'tools/list') {
+      return { tools: [JSON.parse(ordinaryTool.definition!) as unknown] };
+    }
+    return { content: [{ type: 'text', text: 'Done' }], isError: false };
+  }
+  remote.respond(respond);
+  return { setup, headers: { ...headers, ...generationHeaders(record) }, remote, ordinaryTool };
+}
+
+it('runs an ordinary reviewed remote tool and records that no cost was reported', async () => {
+  const { setup, headers, remote } = await ordinaryRemoteFixture();
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
+  const decisions: StoredEvent[] = [];
+  const last = await setup.nats.store.head();
+  for (let position = 1; position <= last; position++) {
+    decisions.push(await setup.nats.store.readEvent(position));
+  }
+  const dispatch = decisions.find(row => row.event.type === 'tool.dispatch_recorded');
+  expect(dispatch?.event.data).toMatchObject({ costStatus: 'not_reported' });
+});
+
+it('blocks an ordinary remote tool when its current list differs from the review', async () => {
+  const { setup, headers, remote } = await ordinaryRemoteFixture();
+  remote.respond(function changed() { return { tools: [] }; });
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status).not.toBe(200);
+  expect(remote.calls.map(call => call.method)).toEqual(['tools/list']);
+});
+
+it('removes agent details on the wire while preserving exact argument numbers', async () => {
+  const context = await publishedFixture('allow', true);
+  const { setup } = context;
+  const remote = await remoteFixture();
+  onTestFinished(remote.close);
+  setup.dispatchOptions.routes.length = 0;
+  setup.dispatchOptions.remoteNetwork = remote.network;
+  setup.dispatchOptions.requireCatalogue = function requireCatalogue() {};
+  remote.revision(catalogue.schemaDigest);
+  const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
+  const value = await permit(setup, { ...context.headers, ...context.constants }, raw);
+  const response = await send(setup, value, raw);
+  expect(response.status, await response.text()).toBe(200);
+  const sent = remote.received[0]!.raw.toString();
+  expect(sent).toContain('"number":1.0e3');
+  expect(sent).not.toMatch(/threadId|thread_id|sessionId|session_id|probe-model|sandbox|0\.159\.2|clientInfo/u);
+});
