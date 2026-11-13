@@ -26,6 +26,7 @@ export async function holdUploadDelivery(page: Page) {
   await page.routeWebSocket('**/ws', connect);
   // Replace the existing connection so this journey controls the next upload's frames.
   await page.reload();
+  await page.getByRole('button', { name: 'Attach', exact: true }).waitFor();
   async function release() {
     await delivered.promise;
     assert(held.length > 0, 'The real delivery event was held before Ready');

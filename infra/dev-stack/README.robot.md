@@ -1284,6 +1284,8 @@ existing two-minute delivery limit. It waits for the saved PDF to appear as deli
 and does not upload it again. `demo-prepare.test.ts` checks two applying replies after
 a lost upload reply, followed by delivery, while keeping the exact write assertions.
 
+The delivery hold reloads the page and waits for Attach before opening a new draft,
+so the personal assistant has finished loading.
 The browser starts a draft, attaches `project.pdf` through the native file picker,
 holds the real delivery event and later socket frames, checks that the chip and Send
 both say Preparing files…, releases the frames in order, then checks Ready and an
