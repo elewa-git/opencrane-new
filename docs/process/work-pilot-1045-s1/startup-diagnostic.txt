@@ -1,21 +1,21 @@
-Error: Command failed: /usr/bin/node --experimental-strip-types infra/dev-stack/journey.ts
-Browser transport failures: none
-node:internal/modules/run_main:123
-    triggerUncaughtException(
-    ^
+Fresh secondary stack 2, 13 November 2026
+Tested head: 0e5466e3ae0340292de65094490a5d6b7253f413
 
-locator.waitFor: Timeout 130000ms exceeded.
-Call log:
-  - waiting for locator('.upload-status').filter({ hasText: 'Ready' }).or(locator('.upload-status').filter({ hasText: 'Upload unavailable' })) to be visible
+Attempt 1: FAIL after 368 seconds.
+PASS owner bootstrap, provider setup and website readiness (121559ms).
+Generic startup failure; private diagnostics were removed by teardown.
+Exact failing assertion: unknown.
+Cleanup: PASS, exit 0; stack status free.
 
-    at uploaded ([host path hidden]
-    at browserUploadJourney ([host path hidden]
-    at async browserChatJourney ([host path hidden]
-    at async file://[host path hidden] {
-  log: [
-    "  - waiting for locator('.upload-status').filter({ hasText: 'Ready' }).or(locator('.upload-status').filter({ hasText: 'Upload unavailable' })) to be visible"
-  ],
-  name: 'TimeoutError'
-}
+Attempt 2: FAIL after 1091 seconds.
+PASS owner bootstrap, provider setup and website readiness (100673ms).
+Command failed: node --experimental-strip-types infra/dev-stack/journey.ts
+Error: Spending budget editor did not load; inspect private evidence
+    at loadBudgetEditor (infra/dev-stack/browser-budgets.ts:192)
+    at save (infra/dev-stack/browser-budgets.ts:48)
+    at browserBudgetJourney (infra/dev-stack/browser-budgets.ts:83)
+    at infra/dev-stack/journey.ts:654
+Cleanup: PASS, exit 0; stack status free.
 
-Node.js v22.23.3
+Workspace slice runner: NOT RUN after both startup failures.
+Private paths and credentials are excluded from this public diagnostic.
