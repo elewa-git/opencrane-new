@@ -244,7 +244,10 @@ are also bounded. A failed tool policy read shows a visible notice. It hides Rev
 until a policy has loaded, or labels retained comparison rows with their last check time.
 An expired catalogue says that calls stay paused. The changes page posts the exact
 catalogue digest, policy revision, connection, account mode and every tool choice to
-`POST /api/org/integrations/:id/review`. A new tool is Block. The next POST to
+`POST /api/org/integrations/:id/review`. A new tool is Block. Ordinary server definitions can be reviewed as Allow, Ask or
+Block without a cost declaration. Confirmation explains that reported cost is recorded
+after the call. OpenCrane-declared tools keep their existing cost and review checks.
+The next POST to
 `/:id/publication` uses the review receipt's sequence for both `expectedSequence` and
 `reviewRevision`. Review and publication receipts use global event positions. They must
 advance, but unrelated grants and other events can leave gaps. The browser never adds

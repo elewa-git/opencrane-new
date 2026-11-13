@@ -86,7 +86,7 @@ flowchart LR
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event and command label shapes| events
-  models -.->|checks OAuth settings change records| events
+  models -.->|checks OAuth settings changes and reported tool costs| events
 ```
 
 ## What it is responsible for
@@ -168,6 +168,8 @@ Before sending a published tool call, the models process saves a start record wi
 the request, server, connection, reviewed revision and acknowledged gateway configuration.
 It contains no request bytes or credentials. It records that the pass was spent;
 it does not prove that the call reached the tool. Replaying it never sends a call.
+An ordinary server's reply records its reported cost in euro cents, or says that no
+valid cost was reported. That observation never invents a charge or settles spending.
 If a later check refuses the call before sending, the models process saves a not-sent
 outcome on the same stream.
 

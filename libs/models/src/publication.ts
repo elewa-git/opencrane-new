@@ -2,7 +2,7 @@ import { gatewayEntrySchema } from '@opencrane/events';
 import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { isToolPolicyAvailable, isToolReviewCurrent } from '@opencrane/projections';
-import type { ToolPolicy } from '@opencrane/protocol';
+import { isOrdinaryToolCatalogue, type ToolPolicy } from '@opencrane/protocol';
 
 export function publicationEntry(state: ToolPolicy) {
   const reviewed = isToolReviewCurrent(state);
@@ -13,9 +13,10 @@ export function publicationEntry(state: ToolPolicy) {
       (state.accountMode !== 'none' && state.accountMode !== 'personal')) {
     return null;
   }
+  const ordinary = isOrdinaryToolCatalogue(state.catalogue);
   const tools = [];
   for (const tool of state.tools) {
-    if (tool.mode !== 'block' && (!tool.reviewed || tool.costCents !== 0)) {
+    if (tool.mode !== 'block' && (!tool.reviewed || (!ordinary && tool.costCents !== 0))) {
       return null;
     }
     function matchesName(declaration: { name: string }) {

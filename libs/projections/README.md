@@ -135,8 +135,9 @@ that owner.
 Rebuilding it starts no process and releases no credentials. Its worker is not enabled yet.
 
 The tool catalogue keeps exact tool definitions and their check and expiry dates.
-Allow and Ask both require a declared zero cost and approval details. The admin’s
-review locks those saved values; changing them requires another review.
+The admin reviews ordinary servers from their standard tool definitions, without a
+cost estimate. Servers declaring OpenCrane details still need zero cost and approval
+details for Allow and Ask. The review locks those values; changes need another review.
 It retains both lists after a change, so the earlier list can still be read.
 A server without a fresh check is shown as unavailable. Saved definitions must
 match their hashes before review choices are kept. A hash is a fixed-length value

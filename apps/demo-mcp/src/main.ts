@@ -20,7 +20,11 @@ try {
     const contents: unknown = JSON.parse(readFileSync(accountsPath, 'utf8'));
     credentials = { accounts: demoAccountsSchema.parse(contents) };
   }
-  const server = createDemoServer(https, credentials);
+  const mode = z.enum(['declared', 'standard']).parse(process.env['DEMO_MCP_MODE'] ?? 'declared');
+  const description = z.string().max(16384).optional().parse(process.env['DEMO_MCP_DESCRIPTION']);
+  const standard = mode === 'standard' ?
+    { ...(description === undefined ? {} : { description }) } : undefined;
+  const server = createDemoServer(https, credentials ?? standard);
   const host = https ? '0.0.0.0' : '127.0.0.1';
   await server.listen({ host, port });
   function stop() {

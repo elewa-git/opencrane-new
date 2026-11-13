@@ -40,7 +40,8 @@ function prepareApproval(silo: string, bound: Binding,
     throw new Error('Review unavailable');
   }
   const reviewedFields = new Set(review.fields);
-  if (reviewedFields.size !== review.fields.length || !reviewedFields.has(review.targetArgument)) {
+  const targetReviewed = hasReviewedTarget(policy.ordinary, reviewedFields, review.targetArgument);
+  if (reviewedFields.size !== review.fields.length || !targetReviewed) {
     throw new Error('Unreviewed arguments');
   }
   for (const field of args.keys()) {
@@ -53,11 +54,12 @@ function prepareApproval(silo: string, bound: Binding,
       missingFields.push(field);
       continue;
     }
-    if (argument.kind === 'object' || argument.kind === 'array') {
+    if (isUnreviewedArgument(argument, policy.ordinary)) {
       throw new Error('Unreviewed arguments');
     }
   }
-  const targetText = reviewTarget(args, review.targetArgument, missingFields);
+  const targetText = policy.ordinary ? policy.name :
+    reviewTarget(args, review.targetArgument, missingFields);
   const reviewDetails = {
     action: review.action,
     tool: policy.name,
@@ -84,6 +86,14 @@ function prepareApproval(silo: string, bound: Binding,
   const reviewDigest = hash(text);
   const approvalId = hash(JSON.stringify([silo, binding, reviewDigest]));
   return { binding, text, reviewDigest, approvalId, stepUp: review.stepUp, missingFields };
+}
+
+function hasReviewedTarget(ordinary: boolean | undefined, fields: Set<string>, target: string) {
+  return ordinary || fields.has(target);
+}
+
+function isUnreviewedArgument(argument: JsonValue, ordinary: boolean | undefined) {
+  return !ordinary && (argument.kind === 'object' || argument.kind === 'array');
 }
 
 function approvalAccount(policy: Policy) {

@@ -503,3 +503,11 @@ consumption are implemented together in P4-15 PR 3l.
 `privateOutputClearedSchema`. They remain outside `chatMessageSchema`, the positioned
 feed contract. The browser delivers both through an uncached observable; neither
 notification changes a saved catch-up position. Client messages remain unchanged.
+
+## Ordinary tool definitions
+
+`isOrdinaryToolCatalogue` recognises a saved remote catalogue without hosted-run,
+OpenCrane cost, review or expected-revision declarations. Unavailable or malformed
+discovery is not ordinary. `canReviewTool` permits review of standard definitions;
+OpenCrane-declared tools still need explicit zero cost and approval details.
+Commands, replay, publication, turn offers and website choices share this decision.

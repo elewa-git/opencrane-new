@@ -6,7 +6,9 @@ Shared message shapes for the OpenCrane browser app and back end. Both sides use
 
 The tool policy can name the exact hosted workload whose tools were captured and
 the read-only tool an admin chose to check personal key identities. Shared replies
-show safe profile status and connection needs without returning a key.
+show safe profile status and connection needs without returning a key. Shared review
+rules distinguish ordinary tool definitions from servers declaring OpenCrane cost,
+approval or revision details.
 
 Chat replies can name the files attached to a saved message. Older replies still work.
 Conversation lists can also carry one completed welcome with its own kind and route.
@@ -52,9 +54,9 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat replies with masked views, file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
+  web["apps/web<br/>browser app"] -.->|chat replies with masked views, file ids, service readiness and private clearances and tool review rules| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|chat, personal key status and calls| protocol
-  projections["libs/projections<br/>read tables"] -.->|safe history and family filters| protocol
+  projections["libs/projections<br/>read tables"] -.->|safe history and family filters and tool review rules| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
 ```

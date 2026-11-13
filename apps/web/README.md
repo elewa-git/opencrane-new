@@ -92,7 +92,8 @@ For owners and admins, it:
 - Manages people, groups, invitations, shared assistants and ownership.
 - Connects model providers and changes who may use their models.
 - Shows spending, edits budgets and reviews money held for unfinished calls.
-- Registers tool servers, reviews tools and publishes their settings, even when other
+- Registers ordinary third-party tool servers, reviews their standard definitions
+  without a cost estimate, and publishes their settings, even when other
   changes are saved between review and publication. A paused check is labelled as a
   tool change only when the saved catalogue shows a change. Admins can require a
   personal key and name a read-only tool that checks the account.

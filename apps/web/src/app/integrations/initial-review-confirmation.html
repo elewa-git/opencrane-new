@@ -1,6 +1,10 @@
 @for (tool of policy().catalogue?.tools ?? []; track tool.name) {
+  @if (ordinaryCatalogue(policy().catalogue)) {
+    <p>{{ tool.name }} · Cost is recorded after the call if reported by the server.</p>
+  } @else {
   <p>{{ tool.name }} · Declared cost: {{ tool.costCents === 0 ? '0 euro cents' : 'Not declared' }}</p>
   <pre>{{ tool.review | json }}</pre>
+  }
 }
 <section aria-labelledby="saved-audience">
   <h2 id="saved-audience">Audience</h2>
@@ -27,7 +31,7 @@
   <p class="digest">{{ policy().catalogue?.schemaDigest }}</p>
   <label><input #acknowledgement type="checkbox" [checked]="acknowledged()"
     (change)="acknowledged.set(acknowledgement.checked)" />
-    I have reviewed these definitions, declared costs, approval details and saved audience.
+    I have reviewed these definitions, tool modes, available cost details and saved audience.
   </label>
   <p>Calls wait for the matching gateway acknowledgement.</p>
   <div class="actions">

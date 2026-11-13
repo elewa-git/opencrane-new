@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { isToolCallText } from '@opencrane/events/tool-call';
-import { catalogue, createFixture, discovery } from './tools.ts';
+import { catalogue, createFixture, discovery, standardCatalogue } from './tools.ts';
 import { credentialFixture, type DemoCredentials } from './credential-tools.ts';
 
 const version = '2026-07-28';
@@ -46,14 +46,23 @@ const requestSchema = z.strictObject({
   }),
 });
 
+export interface StandardDemoOptions { description?: string }
+
 export function createDemoServer(https?: { cert: Buffer; key: Buffer },
-  credentials?: DemoCredentials) {
+  options?: StandardDemoOptions | DemoCredentials) {
+  const credentials = options && 'accounts' in options ? options : undefined;
+  const standard = options && !('accounts' in options) ? options : undefined;
+  const checked = credentials ? credentialFixture(credentials) : undefined;
   const transport = https === undefined ? {} : { https };
   const server = Fastify({ ...transport, bodyLimit: 16384,
     requestTimeout: 15000, logger: false });
-  const callTool = createFixture();
-  const checked = credentials ? credentialFixture(credentials) : undefined;
-  // Reuse the Odoo adapter's strict byte parser and method/name checks.
+  const callTool = createFixture(standard === undefined);
+  const listing = standard ? standardCatalogue(standard.description) : catalogue;
+  const discover = standard ? { ...discovery, capabilities: { tools: {} } } : discovery;
+  const schema = standard ? requestSchema.extend({
+    params: requestSchema.shape.params.extend({ _meta: metadata.optional() }),
+  }) : requestSchema;
+  // Reject ambiguous bytes before checking methods and tool names.
   server.removeContentTypeParser('application/json');
   server.addContentTypeParser('application/json', { parseAs: 'buffer' }, parseJson);
   server.setErrorHandler(invalidRequest);
@@ -65,7 +74,7 @@ export function createDemoServer(https?: { cert: Buffer; key: Buffer },
     const parsedId = identifier.safeParse(request.body);
     const id = parsedId.success ? parsedId.data.id : null;
     try {
-      const call = requestSchema.parse(request.body);
+      const call = schema.parse(request.body);
       checkHeaders(request, call, checked !== undefined);
       const result = execute(call, request.headers);
       return reply.send({ jsonrpc: '2.0', id, result });
@@ -77,7 +86,7 @@ export function createDemoServer(https?: { cert: Buffer; key: Buffer },
       return reply.send({ jsonrpc: '2.0', id, error: { code: -32602, message } });
     }
   }
-  function execute(call: z.infer<typeof requestSchema>, headers: FastifyRequest['headers']) {
+  function execute(call: z.infer<typeof schema>, headers: FastifyRequest['headers']) {
     const revision = headers['x-opencrane-mcp-revision'];
     if (call.method === 'tools/call' && call.params.name) {
       if (checked) {
@@ -89,16 +98,16 @@ export function createDemoServer(https?: { cert: Buffer; key: Buffer },
       throw new Error('invalid_request');
     }
     if (call.method === 'server/discover') {
-      return discovery;
+      return discover;
     }
     if (call.method === 'tools/list') {
-      return checked?.catalogue ?? catalogue;
+      return checked?.catalogue ?? listing;
     }
     throw new Error('invalid_request');
   }
 }
-function checkHeaders(request: FastifyRequest, call: z.infer<typeof requestSchema>,
-  credentialled: boolean) {
+function checkHeaders(request: FastifyRequest,
+  call: { method: string; params: { name?: string | undefined } }, credentialled: boolean) {
   const headers = request.headers;
   if (headers['mcp-protocol-version'] !== version || headers['mcp-method'] !== call.method
     || (headers['mcp-name'] ?? '') !== (call.params.name ?? '')

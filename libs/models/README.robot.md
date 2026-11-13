@@ -3770,10 +3770,17 @@ adapter. Replay continues to fold saved metadata only; it never invokes Grype.
 `remote-https.ts` owns DNS checks and the pinned HTTPS exchange shared with discovery.
 Explicit operator and memory routes retain their existing contract. With no operator
 route, a published remote server in account mode `none` uses only its saved locator.
-Its reviewed `discoverResult` must declare
-`capabilities.experimental["io.opencrane/expectedRevision"]`; otherwise it refuses
-before DNS. This declaration promises atomic refusal of a mismatched
-`x-opencrane-mcp-revision` before running a tool. Unsupported servers stay unavailable.
+Servers that declare OpenCrane cost, review or revision details retain the strict
+contract. Their reviewed `discoverResult` must declare
+`capabilities.experimental["io.opencrane/expectedRevision"]`. This promises atomic
+refusal of a mismatched `x-opencrane-mcp-revision` before running a tool.
+Ordinary servers declare none of these details. `isOrdinaryToolCatalogue` makes
+that separate decision for review, publication, turn offers and dispatch. Immediately
+before admission, dispatch reads their complete standard `tools/list` and compares
+its lossless digest with the reviewed catalogue. A mismatch saves `mcp.tools_changed`,
+holds further calls and returns a visible review-required tool error without execution.
+The check cannot make a third-party list and execution atomic; only servers offering
+the strict revision contract provide that guarantee.
 Remote calls require both dated saved evidence and the running catalogue watch at
 admission and immediately before sending. A hold raised after a permit or saved start
 refuses the send without opening an upstream connection. Authenticated adapter outcomes
@@ -3794,9 +3801,12 @@ Short positive TTLs are checked after one quarter of their lifetime. Longer TTLs
 DNS takes at most one second and no longer than the remaining permit/access lifetime,
 before admission or start saving. Every answer must be public. TLS uses the checked
 address, saved hostname, certificate verification and no shared agent. The existing
-last gateway-position read still determines send ordering. Bytes are unchanged.
-Only Host, Content-Type, Accept, Content-Length, MCP version/method/name and the reviewed
-schema digest leave the process. Replies must be HTTP 200 JSON, at most 1 MiB and without
+last gateway-position read still determines send ordering. Tool arguments retain their
+exact number text. Outgoing calls contain only the tool name, arguments, JSON-RPC id
+and standard protocol metadata. Thread, model, sandbox and client version details
+stay inside OpenCrane. Built-in memory retains its private context contract.
+Only Host, Content-Type, Accept, Content-Length and MCP version/method/name leave the
+process for ordinary servers. Strict servers also receive the reviewed schema digest. Replies must be HTTP 200 JSON, at most 1 MiB and without
 an MCP session; only Content-Type is forwarded. Errors return fixed 502/504 responses.
 The whole HTTPS exchange has a 30-second deadline and never retries or follows redirects.
 Remote starts carry `adapter: remote_https`. Only the consumed permit's private callback
@@ -4109,9 +4119,14 @@ orchestrator after the draft pull request is opened.
 
 ## Declared tool evidence for mode changes
 
-`setToolPolicy` requires both explicit zero cost and saved approval details for Allow
-and Ask. It cannot fill missing declarations. Exact review uses the same requirement
-in `reviewedToolChoices`; the projection checks it again when applying mode events.
+`setToolPolicy` and `reviewedToolChoices` share `canReviewTool`; replay checks it again.
+Ordinary server tools can be reviewed as Allow, Ask or Block from their saved standard
+definitions. They need no declared cost. Ask shows the tool description and the exact
+arguments. Servers declaring OpenCrane details still require explicit zero cost and
+saved approval details for Allow and Ask; missing declarations remain refused.
+For ordinary calls, `tool.dispatch_recorded` records reported integer euro cents after
+the reply, or `not_reported` without an amount. Invalid reported costs are labelled
+`invalid` without an amount. No estimate, invented zero or spending settlement is made.
 History still loads before the two-second authority check. No access streams changed.
 
 ## Tool permissions immediately before sending

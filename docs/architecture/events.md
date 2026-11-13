@@ -697,8 +697,12 @@ shared final dispatch gate, work admission bindings and cancellation follow in
 later PRs; this change enables no new dispatch path.
 
 `mcp.server_discovered.tools[].costCents` may be explicitly zero for a reviewed
-non-metered tool such as the Odoo fixture. An allowed tool with absent cost is
-refused as `unknown_cost`. Discovery hints alone never establish price or access;
+non-metered tool that declares the OpenCrane contract. An allowed tool from a server
+that declares OpenCrane details but has absent cost is refused as `unknown_cost`.
+Ordinary servers declare neither cost, review nor revision details. Their reviewed tools
+run without an estimate. After the reply, `tool.dispatch_recorded.costStatus` is
+`reported`, `not_reported` or `invalid`; only `reported` carries integer euro `costCents`.
+Missing reports never imply zero cost. Older dispatch records omit both fields. Discovery hints alone never establish price or access;
 hosted provider tools with unknown prices remain disabled.
 Remote discovery copies cost and approval details from the tool definition’s
 `_meta['io.opencrane/costCents']` and `_meta['io.opencrane/review']`, using the

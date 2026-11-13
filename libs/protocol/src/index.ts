@@ -123,3 +123,4 @@ export { currentEffectsQuerySchema, currentEffectsResponseSchema,
 
 export { personalProfileMetadataSchema, personalConnectionSettingsSchema,
   personalKeyCommandSchema, personalConnectionNeedsSchema, type PersonalProfileMetadata } from './personal-connections.ts';
+export { isOrdinaryToolCatalogue, canReviewTool } from './ordinary-tools.ts';

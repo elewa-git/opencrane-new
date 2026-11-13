@@ -49,7 +49,7 @@ export async function recordToolObservation(actor: BudgetActor,
 type AdapterBinding = NonNullable<z.infer<typeof toolDispatchRecordedDataSchema>['adapter']>;
 type Observation = Omit<z.infer<typeof toolObservationSchema>, 'evidence'> & {
   evidence: z.infer<typeof toolDispatchRecordedDataSchema>['evidence'];
-};
+} & Pick<z.infer<typeof toolDispatchRecordedDataSchema>, 'costStatus' | 'costCents'>;
 
 export async function recordAdapterObservation(actor: BudgetActor,
   binding: AdapterBinding & { silo: string }, observation: Observation, deadline = Infinity) {
@@ -90,6 +90,7 @@ async function recordObservation(actor: BudgetActor, observation: Observation,
     outcome: observation.toolOutcome, evidence: observation.evidence,
     startedAt: adapter ? start!.time : decisionEvent.time, durationMs: observation.durationMs,
     ...(adapter ? { adapter } : {}),
+    costStatus: observation.costStatus, costCents: observation.costCents,
   };
   const data = toolDispatchRecordedDataSchema.parse(dispatchDetails);
   const event = envelope(actor.silo, subject, 'tool.dispatch_recorded', data, eventId);

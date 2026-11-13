@@ -708,7 +708,11 @@ Rebuild uses the event time and needs no key or model call.
 ## Exact tool review
 
 Discovery always sets `reviewed: false`. Only `mcp.server_reviewed` can mark review.
-Its choices must match saved definition and review digests. Replay applies Block immediately;
+Its choices must match saved definition and review digests. Ordinary remote servers
+need no OpenCrane cost or review declaration: Allow, Ask and Block apply to the exact
+standard definition. `canReviewTool` shares this decision with commands and the website.
+Servers declaring OpenCrane details retain the explicit zero-cost and review requirements.
+Replay applies Block immediately;
 widening a mode clears publication. Unchanged catalogue checks keep `policyRevision` stable.
 A review can change none to personal and name `identityTool`. The named tool must be
 read-only and zero-cost in the saved catalogue. Changing account requirements clears
