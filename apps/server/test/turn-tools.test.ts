@@ -327,7 +327,7 @@ async function refusesAskWithoutSupport() {
 }
 it('never offers Ask to a computer without approval support', refusesAskWithoutSupport);
 
-it.each(['allow', 'ask'] as const)('offers a reviewed ordinary tool in a live turn: %s', async mode => {
+async function offersOrdinaryTurnTool(mode: 'allow' | 'ask') {
   const catalogue = { serverId: 'standard', toolCount: 1, schemaDigest: 'b'.repeat(64),
     discoverResult: JSON.stringify({ capabilities: { tools: {} } }),
     tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: false,
@@ -341,4 +341,5 @@ it.each(['allow', 'ask'] as const)('offers a reviewed ordinary tool in a live tu
   expect(await buildTurnTools(input)).toMatchObject([{ modes: { read: mode } }]);
   state.policyTools[0]!.mode = 'block';
   expect(await buildTurnTools(input)).toEqual([]);
-});
+}
+it.each(['allow', 'ask'] as const)('offers a reviewed ordinary tool in a live turn: %s', offersOrdinaryTurnTool);

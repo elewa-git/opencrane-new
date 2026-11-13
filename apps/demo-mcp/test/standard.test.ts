@@ -3,7 +3,7 @@ import { createDemoServer } from '../src/server.ts';
 import { catalogue } from '../src/tools.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
 
-it('offers a standard catalogue without OpenCrane declarations or revision checks', async () => {
+async function offersStandardCatalogue() {
   const original = 'e58b2ca2a63ecb77f6c028056e36c67ffddcdbecefa30ae0b16dc44990ec17da';
   const server = createDemoServer(undefined, {});
   try {
@@ -28,4 +28,5 @@ it('offers a standard catalogue without OpenCrane declarations or revision check
   } finally {
     await server.close();
   }
-});
+}
+it('offers a standard catalogue without OpenCrane declarations or revision checks', offersStandardCatalogue);

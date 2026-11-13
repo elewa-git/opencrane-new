@@ -1,3 +1,4 @@
+import { expectPrivateToolCall } from './support/private-tool-call.ts';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -234,17 +235,6 @@ async function gatewayCall(setup: Setup, approvalId?: string) {
 
 type Context = Awaited<ReturnType<typeof gatewayFixture>>;
 
-function expectPrivateToolCall(received: Buffer, original: string) {
-  const originalCall = z.object({ id: z.string(), params: z.object({
-    name: z.string(), arguments: z.record(z.string(), z.unknown()),
-  }) }).parse(JSON.parse(original));
-  const expected = { jsonrpc: '2.0', id: originalCall.id, method: 'tools/call',
-    params: { name: originalCall.params.name, arguments: originalCall.params.arguments,
-      _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-        'io.modelcontextprotocol/clientCapabilities': {} } } };
-  const sent: unknown = JSON.parse(received.toString());
-  expect(sent).toEqual(expected);
-}
 
 async function allowed(context: Context) {
   const before = context.remote.received.length;

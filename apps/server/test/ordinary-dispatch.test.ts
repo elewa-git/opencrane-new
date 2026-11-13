@@ -1,24 +1,24 @@
 import { expect, it } from 'vitest';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
-import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy } from '@opencrane/models';
 import { ordinaryRemoteFixture, permit, send, body }
   from '@opencrane/models/testing/mcp-dispatch';
-import { discoverInventory } from '../src/integrations/inventory.ts';
-import { captureCatalogue, ordinaryWrite, rejectedSibling } from './support/ordinary-catalogue.ts';
+import { captureCatalogue, ordinaryWrite, rejectedSibling, revision } from './support/ordinary-catalogue.ts';
 
 async function refusesMixedCatalogue() {
   const paid = { ...rejectedSibling, name: 'paid', inputSchema: { type: 'object' },
     _meta: { 'io.opencrane/costCents': 1 } };
   const inventory = await captureCatalogue([ordinaryWrite, paid]);
-  const { setup, headers, remote } = await ordinaryRemoteFixture('allow', undefined, inventory);
+  const { setup, headers, remote, reviewResult } =
+    await ordinaryRemoteFixture('allow', undefined, inventory);
   const request = { method: 'POST', headers, body };
   const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
     request);
   expect(response.status).toBe(403);
   expect(remote.calls).toEqual([]);
+  expect(reviewResult.status).toBe('conflict');
   expect(isOrdinaryToolCatalogue(inventory)).toBe(false);
 }
 it('refuses dispatch for an ordinary write beside a rejected paid declaration', refusesMixedCatalogue);
@@ -58,11 +58,6 @@ async function checksCompleteCatalogue(change: 'unchanged' | 'added' | 'removed'
   expect(inventory.schemaDigest).toBe(catalogueDigest(fullRevisions));
   mcpServerDiscoveredDataSchema.parse(inventory);
 }
-function revision(definition: unknown) {
-  const encoded = losslessJson(JSON.stringify(definition));
-  const name = encoded.value instanceof Map ? encoded.value.get('name')?.value : undefined;
-  if (typeof name !== 'string') throw new Error('Expected named fixture tool');
-  return { name, revision: encoded.digest };
-}
+
 it.each(['unchanged', 'added', 'removed', 'schema', 'annotation'] as const)(
   'checks the complete discovered catalogue before dispatch: %s', checksCompleteCatalogue);

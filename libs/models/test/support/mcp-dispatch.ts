@@ -143,6 +143,7 @@ export async function ordinaryRemoteFixture(mode = 'allow', description?: string
     ...snapshot, discoverResult, ...inventory,
   });
   const reviewResult = await attemptRestorationReview(setup, 'ordinary-review', mode);
+  if (!inventory) expect(reviewResult.status).toBe('appended');
   let currentHeaders = headers;
   if (reviewResult.status === 'appended') {
     const record = await publishRestoration(setup, 'ordinary-publish');
@@ -159,7 +160,7 @@ export async function ordinaryRemoteFixture(mode = 'allow', description?: string
   setup.dispatchOptions.requireCatalogue = function requireCatalogue() {};
   function respond(method: string) {
     if (method === 'tools/list') {
-      return { tools: [JSON.parse(ordinaryTool.definition!) as unknown] };
+      return { tools: [JSON.parse(ordinaryTool.definition) as unknown] };
     }
     return { content: [{ type: 'text', text: 'Done' }], isError: false };
   }
@@ -184,3 +185,7 @@ export async function send(setup: Fixture, value: string, changedBody = body,
   return fetch(`${setup.options.decisionUrl}${path}`, request);
 }
 
+
+export function remoteMethod(call: { method: string }) {
+  return call.method;
+}
