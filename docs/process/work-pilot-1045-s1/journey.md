@@ -1,7 +1,7 @@
 # Workspace sign-out and Settings journey
 
 Journey on a fresh dev stack: FAIL — 13 November 2026, source head
-`2a479ed0ac84f37c3d9d7ffefcf54a7ef1c7ef13`. Startup diagnosis passed on both
+`314a574c624aaed5f991941b1239d285cd7d5c6f`. Startup diagnosis passed on both
 `origin/main` and this PR head at low load. The latest fresh `up.sh --fresh`
 failed during Zitadel setup, before the core or workspace runner. Every slice
 acceptance step is NOT RUN on this run. The previous PASS does not qualify this
@@ -159,3 +159,30 @@ prove why this startup failed.
 
 Public privacy and secret scans are required again before the integration push.
 CI results are recorded in the PR Evidence after that push.
+
+## Final fresh slice attempt
+
+On 13 November 2026, the one-minute host load was 1.22 before claiming secondary
+stack 1. `claim.sh` succeeded. `nice -n 10 infra/dev-stack/up.sh --fresh` returned
+exit 1. The exact failing setup command was `/usr/bin/node
+--experimental-strip-types infra/dev-stack/zitadel-setup.ts`, launched under its
+Zitadel lock. Setup reported failure and no provider response was logged. Private `failure.log` and
+`last-error.log` were retained before cleanup. `down.sh` returned exit 0 and the
+slot was released. The core journey and workspace runner were NOT RUN. No product
+code changed.
+
+This run stopped before Spending, so it produced no budget-editor browser console,
+network-failure list or screenshot. The earlier Spending failure did not recur.
+The PR changes workspace role and navigation behaviour; they do not change
+Zitadel setup or the Spending editor. No direct path from these changes to either
+failure was identified. The startup diagnosis still shows the PR's changed paths
+present during passing fresh core journeys on main and the PR head.
+
+| Step | 1280 px | 390 px |
+| --- | --- | --- |
+| Member has no Settings link | NOT RUN | NOT RUN |
+| Member types `/org/integrations` and sees refusal | NOT RUN | NOT RUN |
+| Member uses Sign out and reaches sign-in | NOT RUN | NOT RUN |
+| Admin sees Settings and opens it | NOT RUN | NOT RUN |
+| Owner sees Settings and opens it | NOT RUN | NOT RUN |
+| Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
