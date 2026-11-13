@@ -3789,11 +3789,15 @@ async function withholdsPermitDuringAccessOutage() {
 it('withholds the MCP permit when current access cannot be checked',
   withholdsPermitDuringAccessOutage, 40_000);
 
-async function ordinaryRemoteFixture(mode = 'allow') {
+async function ordinaryRemoteFixture(mode = 'allow', description?: string) {
   const setup = await fixture();
   onTestFinished(setup.close.bind(setup));
   const headers = await prepare(setup, 'remote', true, false);
-  const { review: _review, costCents: _cost, ...ordinaryTool } = tool;
+  const { review: _review, costCents: _cost, ...baseTool } = tool;
+  const definition = z.record(z.string(), z.unknown()).parse(JSON.parse(baseTool.definition!));
+  if (description !== undefined) definition['description'] = description;
+  const encoded = losslessJson(JSON.stringify(definition));
+  const ordinaryTool = { ...baseTool, definition: encoded.canonical, revision: encoded.digest };
   const snapshot = catalogueEvidence([ordinaryTool]);
   const discoverResult = JSON.stringify({ capabilities: { tools: {} } });
   await setup.append('mcp-fixture', 'mcp.server_discovered', {
@@ -3877,12 +3881,15 @@ it('removes agent details on the wire while preserving exact argument numbers', 
   expect(sent).not.toMatch(/threadId|thread_id|sessionId|session_id|probe-model|sandbox|0\.159\.2|clientInfo/u);
 });
 
-it('asks before an ordinary tool runs without an OpenCrane review descriptor', async () => {
-  const { setup, headers, remote } = await ordinaryRemoteFixture('ask');
+async function approvesOrdinaryDescription(description: string | undefined, consequence: string) {
+  const { setup, headers, remote } = await ordinaryRemoteFixture('ask', description);
   const approvalId = await approvalForReviewedTool(setup, headers, false);
   expect(remote.calls).toHaveLength(0);
   const waiting = await readApproval(setup.nats.store, 'test', approvalId);
   expect(waiting.state).toBe('requested');
+  const card: unknown = JSON.parse(setup.keys.decrypt('test', 'conversation', waiting.request));
+  expect(card).toMatchObject({ tool: 'write', target: 'write', consequence,
+    data: losslessJson(JSON.stringify(capture.body.params.arguments)).canonical });
   async function fresh() {}
   const approved = await decideApproval(setup.nats.store, 'test', approvalId,
     'alice', 'approved', true, fresh, waiting);
@@ -3891,7 +3898,15 @@ it('asks before an ordinary tool runs without an OpenCrane review descriptor', a
   const response = await send(setup, value);
   expect(response.status, await response.text()).toBe(200);
   expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
-});
+}
+const ordinaryDescriptions = [
+  [undefined, 'Run the reviewed tool.'],
+  ['', 'Run the reviewed tool.'],
+  ['x'.repeat(8001), 'x'.repeat(8000)],
+] as const;
+it.each(ordinaryDescriptions)(
+  'shows an ordinary approval card and runs the approved call for description %j',
+  approvesOrdinaryDescription);
 
 it.each([0, 7, -1, 0.5])('records an ordinary tool reported cost after execution: %s', async cost => {
   const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
