@@ -2440,6 +2440,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     remote.network.resolve = heldDns;
   }
   const rowsBefore = await setup.nats.store.head();
+  if (mode === 'wrong_name' || mode === 'untrusted') holdTlsIdentityClock();
   if (mode === 'undeclared' || mode === 'watch_admission') {
     expect(await gatewayCall(context)).toBe(403);
     expect(remote.dnsCalls()).toBe(0);
