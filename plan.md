@@ -145,11 +145,11 @@ Hosted MCP servers never run inside the gateway.
 - Streamed model replies carry usage only in their last chunk. Settlement reads it from the stream (or agentgateway's native LLM fields), not from `json(response.body)`, which only works for replies that aren't streamed.
 - agentgateway 1.5 drops leading zeros in fractional-second log timestamps; log ingestion must parse them carefully.
 
-### Per-user MCP credentials (e.g. per-user Odoo)
+### Per-user MCP credentials
 
 - **Default:** one stateless MCP deployment. Per call, the decision service releases *this user's* lease for the selected profile, and the gateway injects it. The MCP server trusts only the injected credential and ignores identity in arguments.
 - **Fallback, for servers that only take startup credentials:** one instance per user, scaled to zero when idle. Never inside the user's computer.
-- **Team assistants** use the **requester's own profile by default**: the gateway injects the credential of whoever sent that turn, so Odoo applies that person's own rights and its audit shows the real person. A company connection (a bot user owned by an admin) is an opt-in, chosen per connection, mainly for routines with no person behind them. (Owner decision, 2026-10-01.)
+- **Team assistants** use the **requester's own profile by default**: the gateway injects the credential of whoever sent that turn, so the tool server applies that person's own rights and its audit shows the real person. A company connection (a bot user owned by an admin) is an opt-in, chosen per connection, mainly for routines with no person behind them. (Owner decision, 2026-10-01.)
 - **Audit:** every credential release is recorded (user, profile, computer, tool, request).
 
 ### Memory
@@ -341,7 +341,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | --- | --- | --- | --- |
 | **1. Foundation** | Repository, CI and event core; local dev stack (#10); Zitadel sign-in (#11); typed catalogue, conditional append, checkpointed projections, dispatcher, replay, OpenFGA and WebSocket realtime | **Passes on a fresh dev stack:** sign in/out; `member.joined` reaches members, OpenFGA and a live subscriber; members and MCP catalogue replay verify; admin integrations return typed rows | 2–4 |
 | **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); bridge; warm-pool claim/bind; chat UI; upload; models through agentgateway with a simple cap | **Passes on a fresh dev stack:** a person chats with their assistant, it reads an uploaded PDF, and the answer survives reload and Pod replacement | 10–14 |
-| **3. Governed work** | EUR price table, reserve-before-call and settlement; Allow/Ask/Block and approvals; MCP install; per-user connections and credentials; Odoo MCP; screenshots; live view/takeover; audit | **Passes on a fresh dev stack:** Odoo read and approved write, every refusal case, budget exhaustion and audited takeover | 16–22 |
+| **3. Governed work** | EUR price table, reserve-before-call and settlement; Allow/Ask/Block and approvals; MCP install; per-user connections and credentials; third-party MCP; screenshots; live view/takeover; audit | **Passes on a fresh dev stack:** generic tool read and approved write, every refusal case, budget exhaustion and audited takeover | 16–22 |
 | **4. Company product** | Flat groups, shared assistants and child chats; administration screens; Postgres memory MCP (remember/recall/correct/forget, full-text search, capped preferences, pinned facts, nightly dreaming); routines; delegation under one root budget | **Passes on a fresh dev stack:** MVP stories; group memory without approval; isolated personal and group memory; no memory on disk; correction, forgetting, replay and dreaming; cross-user, unauthorised-scope and cross-silo denials | 20–28 |
 | **5. Qualification and hardening (#15)** | Helm umbrella; CNPG and backups; NATS R3 and failover; coordinated NATS/Postgres/volume backup and restore drill; fresh managed-cluster installs; memory replay; gateway/live-view security; negative tests; operator docs; cross-replica realtime | Full journey list passes on a fresh managed-cluster install; restore drill passes; no open Critical/High finding | 14–20 |
 

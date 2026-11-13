@@ -42,7 +42,7 @@ async function rejectsCrossAppTestImport() {
       join(repository, 'scripts/check-dependency-baseline.mjs'),
       join(directory, 'scripts/check-dependency-baseline.mjs'),
     );
-    const applications = ['computer', 'demo-mcp', 'odoo-mcp', 'ops', 'server', 'web'];
+    const applications = ['computer', 'demo-mcp', 'ops', 'server', 'web'];
     for (const app of applications) {
       const source = join(directory, 'apps', app, 'src');
       await mkdir(source, { recursive: true });
