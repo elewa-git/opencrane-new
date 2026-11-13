@@ -461,7 +461,8 @@ It still requires a successful HTTP response from `/org/integrations`. Secondary
 run Angular's development server through `web-server.mjs --development`. Its HTML
 transform fills the installation name without changing Angular's response policy,
 proxying or live updates. The owner builds the production bundle and uses the
-static-file mode of `web-server.mjs`, which reads the generated proxy configuration. Set `ORGANISATION_NAME` before a fresh start to
+static file mode of `web-server.mjs`, which reads the generated proxy configuration.
+Set `ORGANISATION_NAME` before a fresh start to
 save the installation's public name in `settings.env`. Startup passes that saved
 setting to the web server. It fills the public meta tag through the same
 `infra/package/web-page.mjs` function used by the package. An absent name keeps
