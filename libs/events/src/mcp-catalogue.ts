@@ -1,11 +1,16 @@
+import { z } from 'zod';
 import type { mcpServerDiscoveredDataSchema } from './data.ts';
 import { losslessJson, type JsonValue } from './lossless-json.ts';
 
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;
 type Tool = NonNullable<Catalogue['tools']>[number];
 
-export function catalogueDigest(tools: { name: string; revision: string }[]): string {
+export function catalogueDigest(tools: { name: string; revision: string }[],
+  rejectedTools: { name?: string | undefined; revision: string }[] = []): string {
   const revisions = tools.map(toolRevision);
+  for (const rejected of rejectedTools) {
+    revisions.push({ name: rejected.name ?? '', revision: rejected.revision });
+  }
   revisions.sort(compareNames);
   const encoded = JSON.stringify(revisions);
   const parsed = losslessJson(encoded);
@@ -16,13 +21,16 @@ function toolRevision(tool: { name: string; revision: string }) {
   return { name: tool.name, revision: tool.revision };
 }
 
-function compareNames(first: { name: string }, second: { name: string }): number {
+function compareNames(first: { name: string; revision: string },
+  second: { name: string; revision: string }): number {
   if (first.name < second.name) {
     return -1;
   }
   if (first.name > second.name) {
     return 1;
   }
+  if (first.revision < second.revision) return -1;
+  if (first.revision > second.revision) return 1;
   return 0;
 }
 
@@ -42,7 +50,8 @@ export function validateMcpCatalogue(catalogue: Catalogue): void {
     revisions.push({ name: tool.name, revision });
   }
   // Derive the digest from saved definitions before keeping any previous review.
-  if (catalogueDigest(revisions) !== catalogue.schemaDigest) {
+  if (catalogueDigest(revisions, catalogue.rejectedTools) !==
+      catalogue.schemaDigest) {
     throw new Error('Tool catalogue digest mismatch');
   }
 }
@@ -92,4 +101,22 @@ export function toolReviewDigest(tool: { costCents?: number | undefined; review?
   const evidence = { costCents: tool.costCents ?? null, review: tool.review ?? null };
   const encoded = JSON.stringify(evidence);
   return losslessJson(encoded).digest;
+}
+
+export const mcpToolNameSchema = z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/u)
+  .refine(isSafeToolName);
+
+function isSafeToolName(name: string) {
+  return name !== 'constructor' && name !== '__proto__';
+}
+
+export function catalogueToolRevision(original: JsonValue, names: Set<string>) {
+  const rawName = original.value instanceof Map ? original.value.get('name')?.value : undefined;
+  const parsedName = mcpToolNameSchema.safeParse(rawName);
+  const name = parsedName.success ? parsedName.data : '';
+  if (name) {
+    if (names.has(name)) throw new Error('duplicate_tools');
+    names.add(name);
+  }
+  return { name, revision: losslessJson(original.canonical).digest };
 }

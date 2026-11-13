@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, catalogueToolRevision } from '@opencrane/events/mcp-catalogue';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { exchangeRemote, type prepareRemote, type RemoteNetwork } from './remote-https.ts';
 
@@ -43,13 +43,12 @@ export async function currentRemoteCatalogue(target: Target, network: RemoteNetw
     const tools = result.get('tools')?.value;
     if (!Array.isArray(tools) || tools.length > 100) throw new Error('MCP catalogue limit');
     for (const tool of tools) {
-      const name = fields(tool).get('name')?.value;
+      const revision = catalogueToolRevision(tool, names);
       bytes += Buffer.byteLength(tool.canonical);
-      if (typeof name !== 'string' || names.has(name) || bytes > 512 * 1024) {
+      if (bytes > 512 * 1024) {
         throw new Error('MCP catalogue limit');
       }
-      names.add(name);
-      revisions.push({ name, revision: losslessJson(tool.canonical).digest });
+      revisions.push(revision);
     }
     const next = result.get('nextCursor');
     if (!next) return catalogueDigest(revisions);
