@@ -63,7 +63,7 @@ export async function expiryFixture(locator?: string) {
   const checkedAt = Date.now();
   const digest = createHash('sha256').update('[]').digest('hex');
   await save('mcp.server_discovered', 'mcp-mcp_1', { serverId: 'mcp_1', toolCount: 0,
-    schemaDigest: digest, checkedAt: new Date(checkedAt).toISOString(),
+    schemaDigest: digest, digestVersion: 2, checkedAt: new Date(checkedAt).toISOString(),
     expiresAt: new Date(checkedAt + 300_000).toISOString(), connectionId: 'installed', accountMode: 'none', tools: [] });
   const policy = await save('mcp.server_published', 'mcp-mcp_1',
     { serverId: 'mcp_1', publishedBy: 'alice' });

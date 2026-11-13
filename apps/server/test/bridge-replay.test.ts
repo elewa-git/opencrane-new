@@ -1217,7 +1217,7 @@ async function approvalWatcherFixture() {
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   const discovered = {
     checkedAt, expiresAt, serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-    schemaDigest: catalogueDigest([]), toolCount: 0, tools: [],
+    schemaDigest: catalogueDigest([]), digestVersion: 2, toolCount: 0, tools: [],
   };
   await append('mcp-fixture', 'mcp.server_discovered', discovered);
   const published = { serverId: 'fixture', publishedBy: 'alice' };
