@@ -4,6 +4,7 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
+import { toolPolicySchema } from '@opencrane/protocol';
 import { mcpCatalogue, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { captureCatalogue, ordinaryWrite, rejectedSibling } from './support/ordinary-catalogue.ts';
 
@@ -38,13 +39,16 @@ async function replaysSavedDigestRules() {
     const runner = new ProjectionRunner(pgDb(storage.queue), nats.reader, logger);
     await runner.initialise(mcpCatalogue);
     await runner.rebuild(mcpCatalogue);
-    expect(await catalogueRow()).toEqual({ policy: expect.objectContaining({ catalogue: legacy }) });
+    const replayed = await catalogueRow();
+    const legacyProjection = toolPolicySchema.parse(replayed?.policy);
+    expect(legacyProjection.catalogue).toEqual(legacy);
     await append('mcp.server_discovered', snapshot);
     const current = await readToolPolicy(nats.store, 'test', 'fixture');
     expect(current.catalogue).toEqual(snapshot);
     await runner.run(mcpCatalogue);
     const before = await catalogueRow();
-    expect(before).toEqual({ policy: expect.objectContaining({ catalogue: snapshot }) });
+    const currentProjection = toolPolicySchema.parse(before?.policy);
+    expect(currentProjection.catalogue).toEqual(snapshot);
     await runner.rebuild(mcpCatalogue);
     expect(await catalogueRow()).toEqual(before);
   } finally {
