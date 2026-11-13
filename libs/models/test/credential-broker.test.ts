@@ -1,3 +1,4 @@
+import { credentialReleaseEvidence } from '../src/credential-release.ts';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -508,3 +509,19 @@ async function refusalSurvivesLaterFailures(laterFailure: string) {
 }
 it.each(['audit', 'expiry', 'unlock'])(
   'preserves a permission refusal through a later %s failure', refusalSurvivesLaterFailures);
+
+async function callerCannotReplacePreparedRelease() {
+  const test = await fixture();
+  const evidence = await credentialReleaseEvidence(nats.store, 'test', test.decision.id,
+    test.release, test.loadConfiguration);
+  const replacement = { release: { ...test.release, ownerId: 'another-person' }, evidence };
+  const broker = test.broker();
+  // Exercise JavaScript callers too: extra arguments must not replace the bound request.
+  await Reflect.apply(broker.send, broker, [replacement]);
+  const rows = await history(nats.store, `credential-${test.userId}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.data).toEqual(test.release);
+  expect(test.sends).toEqual(['synthetic-access']);
+}
+it('keeps its saved release binding when a caller supplies replacement prepared data',
+  callerCannotReplacePreparedRelease);
