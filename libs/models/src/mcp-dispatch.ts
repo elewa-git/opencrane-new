@@ -1,13 +1,16 @@
+import { consumePermit, dispatchRemoteTarget, dispatchDigest as digest,
+  type McpAccessCheck, type PersonalDispatchRequest, type RemoteTarget }
+  from './mcp-dispatch-request.ts';
 import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
 /* eslint-disable max-lines */
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
-import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
+import { exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
-import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { ModelCall } from './state.ts';
@@ -26,7 +29,7 @@ export const mcpDispatchRouteSchema = z.strictObject({
   generation: identifier.optional(),
   revisionHeader: z.literal('x-opencrane-mcp-revision').optional(),
 });
-type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
+export type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
 export interface McpDispatchOptions {
   routes: Route[];
   remoteNetwork?: RemoteNetwork;
@@ -47,12 +50,7 @@ interface BudgetBinding {
   decisionId: string;
   admittedAt: number;
 }
-export interface McpAccessCheck {
-  (): Promise<void>;
-  prepare?: (deadline: number) => Promise<void>;
-}
-
-interface Permit {
+export interface Permit {
   gatewayBinding?: NonNullable<Policy['gatewayBinding']>;
   budget: BudgetBinding;
   memory?: MemorySend;
@@ -78,22 +76,6 @@ type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatche
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
-const callerCredentialHeaders = ['authorization', 'proxy-authorization', 'cookie',
-  'x-api-key', 'x-opencrane-profile-id'];
-
-function hasCallerCredentialHeaders(req: IncomingMessage) {
-  for (const name of callerCredentialHeaders) {
-    if (req.headers[name] !== undefined) return true;
-  }
-  return false;
-}
-
-function digest(body: string) {
-  const hash = createHash('sha256');
-  hash.update(body);
-  return hash.digest('hex');
-}
-
 function remoteAccountAvailable(policy: Policy, hasCredentialDispatch: boolean) {
   if (policy.policy.accountMode === 'none') return true;
   return policy.policy.accountMode === 'personal' && Boolean(policy.personal) &&
@@ -507,7 +489,7 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
   upstream.end(body);
 }
 
-async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, permit: Permit,
+async function forwardRemote(target: RemoteTarget, permit: Permit,
   raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver,
   material?: string) {
   if (material !== undefined && !/^[\x21-\x7e]+$/u.test(material)) {
@@ -666,38 +648,6 @@ function requireRemoteRevision(saved: string | undefined) {
   throw new Error('Remote MCP revision unavailable');
 }
 
-export interface PermitConsumer {
-  pending: Map<string, Permit>;
-  silo: string;
-}
-
-function consumePermit(req: IncomingMessage, body: string, state: PermitConsumer) {
-  const { pending, silo } = state;
-  const token = req.headers['x-opencrane-mcp-permit'];
-  const permit = typeof token === 'string' ? pending.get(token) : undefined;
-  if (typeof token === 'string') pending.delete(token);
-  // Consume even refused attempts, so neither errors nor lost replies cause a resend.
-  if (!permit || permit.silo !== silo || permit.expiresAt <= Date.now() ||
-      permit.bodyDigest !== digest(body) || req.method !== 'POST') {
-    throw new Error('MCP permit refused');
-  }
-  if (permit.release && hasCallerCredentialHeaders(req)) {
-    throw new Error('MCP credential headers refused');
-  }
-  return permit;
-}
-
-
-export interface PersonalDispatchRequest {
-  permit: Permit;
-  target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
-  body: string;
-  res: ServerResponse;
-  deadline: number;
-  dispatch: PersonalCredentialDispatch | undefined;
-  network: RemoteNetwork;
-}
-
 function personalDispatch(store: BudgetActor['store'], silo: string,
   request: PersonalDispatchRequest) {
   const { permit, target, dispatch, body, res, deadline, network } = request;
@@ -720,11 +670,4 @@ function personalDispatch(store: BudgetActor['store'], silo: string,
     await sendCredential();
   }
   return { prepare, send };
-}
-
-async function dispatchRemoteTarget(route: Route, deadline: number, network: RemoteNetwork) {
-  if (!route.locator) return undefined;
-  const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
-  const signal = AbortSignal.timeout(duration);
-  return prepareRemote(route.locator, network, signal);
 }
