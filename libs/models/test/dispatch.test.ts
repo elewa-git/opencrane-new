@@ -263,3 +263,54 @@ async function closesExpiredLegacyModelHold() {
 }
 it('closes an expired legacy model hold before admission and after replay with an earlier clock',
   closesExpiredLegacyModelHold);
+
+async function startsAccessAfterQueue(expireAccess: boolean) {
+  const nats = await natsFixture();
+  onTestFinished(nats.close.bind(nats));
+  const actor = new BudgetActor(nats.store, 'test');
+  await actor.start(100, 100, 'group');
+  const firstCall = { ...call, requestId: 'first', turnId: 'first' };
+  const secondCall = { ...call, requestId: 'second', turnId: 'second' };
+  const firstHold = await actor.reserve(firstCall, 1);
+  const secondHold = await actor.reserve(secondCall, 1);
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockImplementation(now);
+  async function holdAccess() {
+    entered.resolve();
+    await release.promise;
+  }
+  function advanceAccess() {
+    if (expireAccess) elapsed += 2001;
+    return Promise.resolve();
+  }
+  const queueDeadline = performance.now() + 30_000;
+  const first = { ...admission(firstHold), callId: 'first', modelCall: firstCall };
+  const second = { ...admission(secondHold), callId: 'second', modelCall: secondCall };
+  const blocked = actor.admitDispatch(first, holdAccess, undefined, undefined, { queueDeadline });
+  const blockedResult = expect(blocked).rejects.toThrow('Budget append unavailable');
+  try {
+    await entered.promise;
+    const queued = actor.admitDispatch(second, advanceAccess, undefined, undefined,
+      { queueDeadline });
+    const result = expireAccess
+      ? expect(queued).rejects.toThrow('Budget append unavailable')
+      : expect(queued).resolves.toBeUndefined();
+    elapsed += 2100;
+    release.resolve();
+    await blockedResult;
+    await result;
+    expect(actor.state.dispatches).toHaveLength(expireAccess ? 0 : 1);
+  } finally {
+    release.resolve();
+    clock.mockRestore();
+  }
+}
+it.each([false, true])('starts the two-second dispatch check after the queue, expires: %s',
+  startsAccessAfterQueue);
