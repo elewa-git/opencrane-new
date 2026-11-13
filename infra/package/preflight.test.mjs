@@ -262,3 +262,20 @@ for (const mode of ['cnpg', 'standalone']) {
       recoveryInstallStaysClosed);
   }
 }
+
+function differentApprovedScannerHashRefuses() {
+  const { directory, values, review } = fixture();
+  try {
+    review.scanner = { approvedSha: 'a'.repeat(64) };
+    values.scanner = { approvedSha: 'b'.repeat(64) };
+    const result = check(values, review, directory);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stderr.trim(), 'Scanner manifest is absent from the reviewed release');
+    values.scanner = { ...review.scanner };
+    assert.equal(check(values, review, directory).status, 0);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}
+test('preflight refuses a different well-formed approved scanner hash',
+  differentApprovedScannerHashRefuses);

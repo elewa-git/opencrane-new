@@ -848,3 +848,14 @@ for (const cluster of [null, {}, { enabled: 'true' }, { enabled: true },
   test(`preparation refuses invalid replica choice ${JSON.stringify(cluster)}`,
     refusesInvalidReplicaChoice);
 }
+
+function credentialReadinessChecksLease() {
+  const server = namedResource('Deployment', 'server');
+  function isCredentialContainer(container) {
+    return container.name === 'storage-credentials';
+  }
+  const container = server.spec.template.spec.containers.find(isCredentialContainer);
+  assert.deepEqual(container.readinessProbe.exec.command,
+    ['node', 'infra/package/object-credentials.mjs', '--ready']);
+}
+test('storage credential readiness checks the lease validity', credentialReadinessChecksLease);
