@@ -53,9 +53,10 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
   silo: string, decisionId: string, raw: unknown, loadConfiguration: OAuthConfigurationLoader,
   prepareAccess: () => Promise<Access>, sendAccess: (material: string) => Promise<void>) {
   let used = false;
+  let prepared: PreparedCredentialRelease | undefined;
   // Copy before any wait, so caller mutation cannot replace the authenticated request.
   const context = contextSchema.safeParse(raw);
-  async function execute(recover: boolean, prepared?: PreparedCredentialRelease) {
+  async function execute(recover: boolean) {
     let permission: Promise<Access> | undefined;
     let refusal: MemberAccessRefused | undefined;
     async function decide() {
@@ -84,14 +85,7 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
       return permission;
     }
     try {
-      let release: ReturnType<typeof toolCredentialReleaseSchema.parse>;
-      if (prepared) {
-        if (!context.success || !isDeepStrictEqual(context.data,
-          savedContextSchema.parse(prepared.release))) refuse();
-        release = toolCredentialReleaseSchema.parse(prepared.release);
-      } else {
-        release = await binding(store, silo, context);
-      }
+      const release = prepared?.release ?? await binding(store, silo, context);
       const profile = { siloId: silo, userId: release.userId,
         serverId: release.serverId, profileId: release.profileId };
       async function work(locked: Db) {
@@ -118,18 +112,25 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
       return refuse();
     }
   }
-  async function send(prepared?: PreparedCredentialRelease) {
+  async function prepare() {
+    if (used) refuse();
+    const release = await binding(store, silo, context);
+    const evidence = await credentialReleaseEvidence(store, silo, decisionId, release,
+      loadConfiguration);
+    prepared = { release, evidence };
+  }
+  async function send() {
     if (used) {
       refuse();
     }
     used = true;
-    await execute(false, prepared);
+    await execute(false);
   }
   async function recover() {
     // Recover only evidence. Neither this result nor a restarted instance permits another send.
     return execute(true);
   }
-  return { send, recover };
+  return { prepare, send, recover };
 }
 
 export interface CredentialSendRequest {
