@@ -9,7 +9,8 @@ establish that this additional failure is fixed; the PR remains held for the own
 13 November 2026. All three qualifying runs used source `9726a297f`, secondary
 slot 1, the stand-in provider and a separate `claim.sh` / `up.sh --fresh` /
 `down.sh` cycle. The fleet marker remained set. The owner stack was not used.
-Only documentation and captured evidence changed after that executable source.
+Only documentation, qualification test fixtures and captured evidence changed after
+that core-journey source.
 
 ## Consecutive qualification
 
@@ -109,6 +110,26 @@ mismatch; the original failed live run had no retained trace to establish its ex
 cause. An earlier Action history load failure also remains an explicit follow-up.
 No retry or timeout increase is claimed as a repair for either symptom.
 
+## CI qualification fixture repair
+
+CI on the first pushed head `2a4badbe8` passed Chromium but failed all nine hosted-MCP
+fixture cases. The fixture removed function exports before evaluating the shared
+journey guard, leaving its newly exported refusal constant as invalid script syntax.
+The fixture now removes the runtime export keyword for every shared declaration.
+
+That repair exposed a missing fleet refusal in hosted admission setup. The core
+journey guard intentionally permits secondary stand-in fleet runs, so hosted admission
+checks now separately refuse every fleet marker before Kubernetes calls. The owner
+refusal remains in the shared guard. Both refusal messages are asserted exactly and
+the test still requires no Kubernetes calls. The changed test was committed before
+both repairs. After the parser repair it failed with Missing expected rejection for
+the fleet case; after restoring the explicit refusal all nine cases passed twice.
+Removing that refusal by hand made its test fail; it was restored.
+
+Ops/dev-stack typecheck and scoped ESLint passed. These fixtures are not called by
+the core journey, so its executable path and the three consecutive results above are
+unchanged. No access, money or memory assertion was loosened.
+
 ## Own checks
 
 - PASS: 183 focused Angular upload, composer, workspace, drag/drop and private-reply
@@ -120,6 +141,8 @@ No retry or timeout increase is claimed as a repair for either symptom.
 - PASS: audit API helper tests and the shipped audit browser case twice with the
   shared disposable PostgreSQL database. An earlier audit fixture invocation missed
   its existing Angular startup limit; no limit was raised.
+- PASS: nine hosted admission fixture cases twice, with an additional hand-removal
+  check for the fleet refusal; scoped Ops/dev-stack typecheck after that repair.
 - PASS: full workspace, package and dev-stack typecheck; dev-stack typecheck again
   after the reload fix.
 - PASS: event catalogue (174 types), Knip, changelog lint, Markdown lint and scoped

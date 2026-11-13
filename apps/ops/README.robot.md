@@ -933,8 +933,9 @@ usage to settle. The independent count check raises only the CPU and memory tota
 then restores them. Upstream rules require same-silo Pods approved by UID label;
 raw IPs are refused. The live connection checks include node API and kubelet ports,
 unlabelled Pods, withdrawn bindings and lifecycle GET/POST proxy refusal. Listener
-health requests use the gateway path. The shared journey guard refuses owner and
-fleet runs before setup. No runtime start path or
+health requests use the gateway path. The shared journey guard refuses owner runs.
+Hosted admission checks separately refuse every fleet marker before setup, including
+an empty marker; secondary stand-in core journeys may still run in fleet tasks. No runtime start path or
 hosted dispatch is connected. See the [receipt](../../docs/process/p3-6-pr8b/receipt.md).
 
 ## Scheduled private connection maintenance

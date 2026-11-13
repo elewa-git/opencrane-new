@@ -73,9 +73,16 @@ function approvedImages(image: string) {
   return { apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'mcp-approved-images' },
     data: { [specDigest]: image, [otherDigest]: secondImage } };
 }
+function requireHostedJourney(): void {
+  requireAutomatedJourney();
+  // Refuse fleet runs before these admission checks can change Kubernetes.
+  if (process.env['OPENCRANE_FLEET_TASK'] !== undefined) {
+    throw new Error('Hosted MCP checks require a secondary stack and no fleet task');
+  }
+}
 async function setup() {
   if (!live) return;
-  requireAutomatedJourney();
+  requireHostedJourney();
   const slot = process.env['DEV_STACK_ID'];
   expect(['1', '2']).toContain(slot);
   const owner = join(homedir(), '.config/opencrane', `dev-stack-${slot}`, 'stack-owner');
