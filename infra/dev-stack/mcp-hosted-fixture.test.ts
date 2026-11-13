@@ -80,13 +80,15 @@ test('cleanup recovers an owned policy after a lost create response without leak
   assert.equal(fixture.objects.size, 0);
 });
 test('owner and fleet runs stop before any Kubernetes call', async function guard() {
-  const environments = [
-    { MCP_HOSTED_K3D: '1', DEV_STACK_ID: 'owner' },
-    { MCP_HOSTED_K3D: '1', DEV_STACK_ID: '1', OPENCRANE_FLEET_TASK: '' },
+  const cases = [
+    { environment: { MCP_HOSTED_K3D: '1', DEV_STACK_ID: 'owner' },
+      refusal: 'Automated journeys require a secondary stack' },
+    { environment: { MCP_HOSTED_K3D: '1', DEV_STACK_ID: '1', OPENCRANE_FLEET_TASK: '' },
+      refusal: 'Hosted MCP checks require a secondary stack and no fleet task' },
   ];
-  for (const environment of environments) {
-    const fixture = hostedFixture(environment);
-    await assert.rejects(fixture.setup, /secondary stack and no fleet task/u);
+  for (const entry of cases) {
+    const fixture = hostedFixture(entry.environment);
+    await assert.rejects(fixture.setup, { message: entry.refusal });
     assert.deepEqual(fixture.calls, []);
   }
 });
