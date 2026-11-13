@@ -246,7 +246,7 @@ flowchart LR
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads bounded routine presence for departure reviews, memory facts, conversations, spending by month, current effect pages, checked publication and task history, current accounting and exact membership receipts| postgres
   server -->|waits briefly for Forget locks| postgres
-  server <-->|chat work, selected personal tool offers, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
+  server <-->|chat work, checked personal tool offers, command labels and masked views, checked reports, Stops and publication files| computer["apps/computer<br/>assistant computers"]
   server -->|wakes the original held Ask call| computer
   server -->|checks saved OAuth settings changes before routine sends| nats
   server -->|checks child starts and nightly and child allowances with the shared budget actor| runtime
@@ -429,7 +429,9 @@ For a chat turn, the server offers a personal tool only when the requester still
 a verified choice for that server. The signed turn pass holds the chosen profile and
 choice revision. The computer sees the usual tool fields, and the models process checks
 the current choice again before sending a call. Account choices load before the short
-access check for the turn starts.
+access check for the turn starts. Tool offers read independent grant checks and
+selected-account facts together, so slow reads do not add their waiting times.
+Every check must still allow the offer within the existing build deadline.
 Members can recover their own original account selection or clear receipt by its
 change reference. Later choices do not replace it. Reading requires current silo
 membership and changes nothing. Missing evidence stays unknown and never permits a resend.
