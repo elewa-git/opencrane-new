@@ -121,6 +121,10 @@ async function checksGatewayRefusalEvidence() {
   await expect.poll(dispatchRecords).toHaveLength(3);
   const records = await dispatchRecords();
   checkOrdinaryCosts(records);
+  const changedCost = structuredClone(records);
+  changedCost[0].costCents = 7;
+  function refusesInventedAmount() { checkOrdinaryCosts(changedCost); }
+  expect(refusesInventedAmount).toThrow();
 }
 it('checks two remote replies and the separate gateway receipt for a drift refusal',
   checksGatewayRefusalEvidence);

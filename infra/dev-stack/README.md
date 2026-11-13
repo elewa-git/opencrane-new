@@ -19,7 +19,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps and checks tool calls| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks and launches| package["infra/package<br/>Helm install"]
 ```
