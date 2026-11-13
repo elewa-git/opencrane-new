@@ -12,7 +12,9 @@ let repository;
 let base;
 
 function git(...args) {
-  return execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
+  const options = { cwd: repository, encoding: 'utf8' };
+  const output = execFileSync('git', args, options);
+  return output.trim();
 }
 
 function write(path, content) {

@@ -4,7 +4,8 @@ export function baseCommit() {
   if (process.env.BASE_SHA) return process.env.BASE_SHA;
   try {
     const options = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] };
-    return execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], options).trim();
+    const output = execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], options);
+    return output.trim();
   } catch {
     // A new clone may not have a remote base to compare with yet.
     return undefined;

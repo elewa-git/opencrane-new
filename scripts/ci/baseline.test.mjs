@@ -11,7 +11,9 @@ const originalBase = process.env.BASE_SHA;
 let repository;
 
 function git(...args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+  const options = { encoding: 'utf8' };
+  const output = execFileSync('git', args, options);
+  return output.trim();
 }
 
 function setup() {
