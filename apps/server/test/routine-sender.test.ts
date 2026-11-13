@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 1980, skipBlankLines: true, skipComments: true }] */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';

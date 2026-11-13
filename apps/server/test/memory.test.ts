@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 4126, skipBlankLines: true, skipComments: true }] */
 import { mkdtemp, rm, readFile, writeFile, copyFile, access, rename } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';

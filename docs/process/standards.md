@@ -88,13 +88,13 @@ To restructure code safely, first pin what it does with tests, then change the s
 | Concern | Rule | How it is checked |
 | --- | --- | --- |
 | Duplication | No new copy of a decision that already exists. Two functions with the same structure and the same rule become one. | Review today. Once #1034 lands: `dryer` reports no duplicate at a similarity of 0.8 or above in changed files. |
-| Function size | At most 80 counted lines. Split by responsibility, so that each part does a job a reader can name. Do not split a function that is within the limit and reads from top to bottom, and do not declare a named function inside another one to pass the limit. | ESLint warning today: fix every warning in a function you added or changed. An error once #120 lands. |
-| Parameters | At most five. A function that needs more is usually doing two jobs: split it first. Pass one named object with a named, exported type only for values that belong together; do not bundle unrelated values to pass the limit. | Review today; ESLint `max-params` once #120 lands. |
+| Function size | At most 80 counted lines. Split by responsibility, so that each part does a job a reader can name. Do not split a function that is within the limit and reads from top to bottom, and do not declare a named function inside another one to pass the limit. | ESLint `max-lines-per-function` error at 80; existing violations use bulk suppressions. |
+| Parameters | At most five. A function that needs more is usually doing two jobs: split it first. Pass one named object with a named, exported type only for values that belong together; do not bundle unrelated values to pass the limit. | ESLint `max-params` error at five; existing violations use bulk suppressions. |
 | Complexity against tests | Every changed function scores under 10 on CRAP: complexity² × (1 − coverage)³ + complexity. A flat `switch` with one short branch per event type or state may stay whole when every branch is tested. ESLint `complexity` 15 stays the hard limit. | Not checked today. `crapper` on changed files once #1034 lands. |
-| File size | At most 500 counted lines. Never raise or switch off the limit inside a file. A file that needs more is doing two jobs: split it, or ask the owner. | ESLint error today. Review refuses a new or raised per-file override; a check does so once #120 lands. |
+| File size | At most 500 counted lines. Never raise or switch off the limit inside a file. A file that needs more is doing two jobs: split it, or ask the owner. | ESLint error today. `lint:debt` refuses a new or raised per-file override. |
 | Module direction | One app never imports another app's source. Product source never imports from `scripts/`. Shared code moves to a library. | Review today; dependency-cruiser once #1032 lands. |
 | Errors | Follow the Errors row under [Code](#code-strict-where-behaviour-depends-on-it). Keep the cause (`new Error(message, { cause })`) and log it through the structured logger, which hides credentials and private content, before returning the safe message. A refusal carries a `reason` from a named union type, as existing routes do, not only a sentence. | Review. |
-| Tests | Follow [Tests and evidence](#tests-and-evidence): check what the user of the code would see, use the shared test helpers, control time (pass it in, or use Vitest fake timers) instead of sleeping, and delete tests the change makes redundant. | Review today; a size limit for test files once #120 lands. |
+| Tests | Follow [Tests and evidence](#tests-and-evidence): check what the user of the code would see, use the shared test helpers, control time (pass it in, or use Vitest fake timers) instead of sleeping, and delete tests the change makes redundant. | Review and ESLint `max-lines` error at 1,500 counted lines for test files. |
 | Test strength | Tests of access checks, approvals and money must fail when the rule they protect is broken. | Today: when you add or change such a test, break the rule by hand once, see the test fail, restore the code and say so in your report. `mutator` on those packages, on a schedule, once #1034 lands. |
 | READMEs | Describe the package as it is now. Edit the sentence that changed; never append a note per change. | Review today; the README check once #1035 lands. |
 
@@ -116,8 +116,8 @@ A check marked "once … lands" is not enabled yet, and nobody estimates a tool'
 | Typed lint | Keep type-aware recommended ESLint rules; explicitly enforce `no-floating-promises`, `no-misused-promises`, the `no-unsafe-*` rules, `no-explicit-any`, `only-throw-error` and `switch-exhaustiveness-check`. Unknown external data starts as `unknown` and is validated once at entry. |
 | Errors | Distinguish rejected input, conflict, unavailable dependency and unexpected failure. Preserve the underlying cause internally; return a stable, sanitised error. No empty catches, silent fallback success or unbounded retries. Each background promise has an error path; retries declare deadline and idempotency behaviour. |
 | Readability | Follow the owner's code style in [AGENTS.md](../../AGENTS.md#style): build only what is needed, as verbose, clear code; small atomic named functions; no chaining, inline definitions with logic or nested ternaries; why-comments at invariants and boundaries. Use Prettier output, braces and descriptive names. No underscore taxonomy, one-line import requirement, blanket arrow ban, enum mandate or mandatory paired `.types.ts` file. Keep types with the behaviour unless separating a public contract helps. Formatter enforcement is a separate rollout, not a prerequisite hidden in the first change. |
-| Size | ESLint `complexity` maximum 15 and `max-depth` maximum 4; `max-lines` maximum 500 excluding blank/comment lines for hand-written production modules. `max-lines-per-function` warns at 80 until #120 makes it an error; reviewers already hold new and changed functions to 80. Split by responsibility; do not compress statements to pass. |
-| Exceptions | Size limits (`max-lines`, `max-lines-per-function`, `max-params`) are never raised or disabled inside a file. For other rules, a narrow lint disable explains the actual constraint beside the code; temporary debt links an issue. Reject unused disables. No global date-expiring exception that breaks unrelated work. Generated/vendor code has an explicit tool exclusion and is still checked at its integration boundary. |
+| Size | ESLint `complexity` maximum 15 and `max-depth` maximum 4; `max-lines` maximum 500 excluding blank/comment lines for hand-written production modules. `max-lines-per-function` errors at 80 and `max-params` at five. Test files (`*.test.ts`, `*.spec.ts`, `*.test.mjs`) have at most 1,500 counted lines. Split by responsibility; do not compress statements to pass. |
+| Exceptions | `eslint-suppressions.json` and `scripts/lint-size-exceptions.json` are the only size-debt records. Existing function-length and parameter violations use ESLint bulk suppressions. File-size exceptions have numbered comments capped by the latter list; its one existing complexity disable is recorded there too. `lint:debt` rejects unlisted or missing comments, extra file-size config blocks, new entries, raised caps and increased per-rule suppression totals against the base commit. Never add or raise an in-file size limit. For other rules, a narrow lint disable explains the actual constraint beside the code; temporary debt links an issue. Reject unused disables. No global date-expiring exception that breaks unrelated work. Generated/vendor code has an explicit tool exclusion and is still checked at its integration boundary. |
 | Dependency direction | Dependency-cruiser rejects cycles, imports from libraries into apps, private cross-package imports and service SDK imports outside their adapter. `libs/events` imports no apps or product-domain packages; its schema dependency, Zod, is permitted. Commands depend on event contracts and the append port; projection adapters own projection writes. Encode paths for the packages that actually exist. |
 | Unused code | Knip checks unused files, exports and dependencies after configuring genuine runtime/test entrypoints. Delete replaced routes and reachable legacy behaviour during review too: an unused-code tool cannot find everything obsolete. |
 | Logging | ESLint `no-console` in services; structured logs with operation, trace and safe entity identifiers. Test redaction of credentials, personal content and upstream error bodies. CLI output and test diagnostics have scoped exceptions. |
@@ -338,7 +338,7 @@ Defer Prettier's formatting rollout (`.prettierrc.json`, `.prettierignore`, pinn
 
 ## Enabled checks and local setup — 1 October 2026
 
-The first implementation is installed. `lint` now runs code, dependency direction,
+The first implementation is installed. `lint` runs code, recorded size debt, dependency direction,
 unused code, Markdown and offline local-link checks in that order. Spikes and
 infrastructure code stay separately qualified. Markdown inputs are root documents,
 `docs/**/*.md`, and README.md and README.robot.md files under apps, libs and infra.
@@ -346,9 +346,16 @@ Generated builds, dependency trees and vendored material stay outside those inpu
 
 Typed lint enforces every `no-unsafe-*` rule plus the named promise, `any`, error and
 exhaustiveness rules. Production modules have complexity 15, depth 4 and 500 code lines;
-function length warns at 80. Tests are outside size limits, but retain typed correctness.
+function length errors at 80 and parameters at five. Tests have a 1,500 counted-line
+file limit and retain typed correctness. `lint:code` refuses all warnings.
+`lint:debt` runs immediately afterwards and checks both debt records.
 Services and Node libraries reject console logging. Unused disables are errors; two
 partial pino test doubles explain their assertion exceptions beside the affected code.
+CI supplies the pull request base as `BASE_SHA`; local checks use
+`git merge-base origin/main HEAD`. Without a base commit, only the comparison is
+skipped. A ledger absent from the base may be introduced once. Debt may rise only
+in the change that adds `.prettierrc.json` when the base has none, to allow the
+planned formatting rollout. Comment/list checks still apply in that change.
 All six packages typecheck. The root command runs every workspace without `--if-present`,
 so a missing workspace script fails the check. `noImplicitReturns` and `noEmitOnError`
 are set; Angular keeps its existing bundler module model and now also refuses emission

@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 3874, skipBlankLines: true, skipComments: true }] */
 import { afterEach, beforeEach, expect, it, vi, type TestContext } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
 import * as crypto from 'node:crypto';

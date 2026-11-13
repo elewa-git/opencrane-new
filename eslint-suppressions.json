@@ -1,0 +1,918 @@
+{
+  "apps/computer/src/approval-holds.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/bridge-socket.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 5
+    }
+  },
+  "apps/computer/src/bridge.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/item-reports.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/mcp-proxy.ts": {
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/computer/src/private-session.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/proxy.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/routine-threads.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/thread-loads.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/computer/src/turn-runner.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/odoo-mcp/src/odoo.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/ops/src/departure-cleanup.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/ops/src/hosted-image-check.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/ops/src/lifecycle.ts": {
+    "max-params": {
+      "count": 7
+    }
+  },
+  "apps/ops/src/memory-cleanup.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/ops/src/nightly-memory.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/ops/src/routine-scan.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/auth/routes.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/access.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/approvals.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge-approvals.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge-control.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge-conversation.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 4
+    }
+  },
+  "apps/server/src/chat/bridge-opening.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge-pausing.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/chat/bridge-poll.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge-resume.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge-turn-admission.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/bridge.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 4
+    }
+  },
+  "apps/server/src/chat/chat-summary.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/child-failure.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/child-requests.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/child-root.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/child-start.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/close-cleanup.ts": {
+    "max-params": {
+      "count": 5
+    }
+  },
+  "apps/server/src/chat/participation.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/chat/private-output.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/chat/publications.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/recall-bridge.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/reports.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/chat/routes.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/chat/state.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/chat/turn-credentials.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/chat/turn-tools.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/chat/turns.ts": {
+    "max-params": {
+      "count": 5
+    }
+  },
+  "apps/server/src/computers/takeover.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/computers/view.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/computers/writer-lease.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/effects/routes.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/files/artifacts.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/files/commands.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/files/routes.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/integrations/explanation-routes.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/integrations/hosted-capture.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/integrations/profile-list.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/integrations/remote-catalogue-watch.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/integrations/routes.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/members/admission.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/members/bootstrap.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/members/inventory-routes.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/members/inventory.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/members/invitation-routes.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/members/invitations.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/members/join.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/members/refusals.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/access.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/agent-lineage.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/bridge.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/command-history.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/commands.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/correct.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/memory/forget.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/initial-delivery.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/invalidation.ts": {
+    "max-params": {
+      "count": 4
+    }
+  },
+  "apps/server/src/memory/maintenance-root.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/maintenance.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/mcp.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/reads.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/recall-delivery.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/memory/recall-proof.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/memory/turn-preview.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/models-main.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/models/access-changes.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/onboarding/welcome.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/overview/routes.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/realtime.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/routine-activation.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/routine-bridge.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/routine-company-preflight.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/routine-composition.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "apps/server/src/routine-computer.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/server/src/routine-finish.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/routine-root.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 4
+    }
+  },
+  "apps/server/src/routine-sender.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/routine-session.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "apps/server/src/routine-success.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "apps/server/src/websocket.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/web/src/app/chat/approvals.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/web/src/app/chat/chat-session-status.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/authz/src/members.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "libs/authz/src/routines.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/event-store/src/jetstream.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/event-store/src/stream-summary.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/handlers/src/upgrade-scan.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/accounting.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/actor.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/approvals.ts": {
+    "max-params": {
+      "count": 7
+    }
+  },
+  "libs/models/src/authority.ts": {
+    "max-params": {
+      "count": 4
+    }
+  },
+  "libs/models/src/bearer-connections.ts": {
+    "max-params": {
+      "count": 5
+    }
+  },
+  "libs/models/src/budget-migration.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/budget-refusal.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/budget-resource.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/budget-turn.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/call-retry.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/company-bearer.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "libs/models/src/company-oauth.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/connection-scan.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/connection-selection.ts": {
+    "max-params": {
+      "count": 4
+    }
+  },
+  "libs/models/src/connection-stage-journal.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "libs/models/src/credential-broker.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/credential-release.ts": {
+    "max-params": {
+      "count": 4
+    }
+  },
+  "libs/models/src/decision-activity.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "libs/models/src/decision-maintenance.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/decision-provider.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/decision.ts": {
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 4
+    }
+  },
+  "libs/models/src/descendant-admission.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/egress-admission.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/egress-startup.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "libs/models/src/gateway-admission.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/gateway-delivery.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "libs/models/src/gateway.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/hosted-admission.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/loaded-memory.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/mcp-catalogue-watch.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "libs/models/src/mcp-dispatch.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 6
+    }
+  },
+  "libs/models/src/mcp-position.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/mcp.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/memory-context.ts": {
+    "max-params": {
+      "count": 5
+    }
+  },
+  "libs/models/src/memory-preparation.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/memory-prepare-request.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/native-call-check.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "libs/models/src/oauth-callback.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/oauth-confirmation.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/oauth-refresh-save.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/oauth-refresh-worker.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/oauth-refresh.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/oauth-revoke-worker.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/oauth-start.ts": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 3
+    }
+  },
+  "libs/models/src/oauth-worker.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/original-call-status.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/paying-group.ts": {
+    "max-params": {
+      "count": 3
+    }
+  },
+  "libs/models/src/personal-mcp-dispatch.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/personal-tool-context.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/provider-bindings.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/provider-retirement-preview.ts": {
+    "max-params": {
+      "count": 8
+    }
+  },
+  "libs/models/src/provider-verification.ts": {
+    "max-params": {
+      "count": 5
+    }
+  },
+  "libs/models/src/providers.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/reconciliation.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/remote-https.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/root-budget.ts": {
+    "max-params": {
+      "count": 5
+    }
+  },
+  "libs/models/src/root-stop-evidence.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/routine-approval-evidence.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/routine-company-release.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/routine-dispatch.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/state.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/models/src/tool-policy.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/models/src/welcome-completion.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/projections/src/audit.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/projections/src/conversations.ts": {
+    "max-params": {
+      "count": 2
+    }
+  },
+  "libs/projections/src/inventory-inputs.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/projections/src/memory.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/projections/src/model-access.ts": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "libs/projections/src/routines.ts": {
+    "max-params": {
+      "count": 2
+    }
+  }
+}

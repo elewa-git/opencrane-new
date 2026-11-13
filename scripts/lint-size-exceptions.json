@@ -1,0 +1,126 @@
+[
+  {
+    "file": "apps/computer/src/turn-runner.ts",
+    "rule": "max-lines",
+    "max": 1001
+  },
+  {
+    "file": "apps/server/src/chat/bridge-conversation.ts",
+    "rule": "max-lines",
+    "max": 520
+  },
+  {
+    "file": "apps/server/test/approvals.test.ts",
+    "rule": "max-lines",
+    "max": 1686
+  },
+  {
+    "file": "apps/server/test/bridge-replay.test.ts",
+    "rule": "max-lines",
+    "max": 2073
+  },
+  {
+    "file": "apps/server/test/chat-access-regression.test.ts",
+    "rule": "max-lines",
+    "max": 2706
+  },
+  {
+    "file": "apps/server/test/direct-chat-http.test.ts",
+    "rule": "max-lines",
+    "max": 1946
+  },
+  {
+    "file": "apps/server/test/integrations.test.ts",
+    "rule": "max-lines",
+    "max": 2189
+  },
+  {
+    "file": "apps/server/test/memory-delivery.test.ts",
+    "rule": "max-lines",
+    "max": 1558
+  },
+  {
+    "file": "apps/server/test/memory-dispatch.test.ts",
+    "rule": "max-lines",
+    "max": 1889
+  },
+  {
+    "file": "apps/server/test/memory-mcp.test.ts",
+    "rule": "max-lines",
+    "max": 3874
+  },
+  {
+    "file": "apps/server/test/memory.test.ts",
+    "rule": "max-lines",
+    "max": 4126
+  },
+  {
+    "file": "apps/server/test/routine-sender.test.ts",
+    "rule": "max-lines",
+    "max": 1980
+  },
+  {
+    "file": "apps/server/test/routine-session.test.ts",
+    "rule": "max-lines",
+    "max": 2512
+  },
+  {
+    "file": "apps/web/src/app/chat/chat-session.ts",
+    "rule": "max-lines",
+    "max": 750
+  },
+  {
+    "file": "apps/web/src/app/chat/direct-chat.spec.ts",
+    "rule": "max-lines",
+    "max": 2825
+  },
+  {
+    "file": "apps/web/src/app/chat/direct-chat.ts",
+    "rule": "max-lines",
+    "max": 675
+  },
+  {
+    "file": "apps/web/src/app/chat/workspace.spec.ts",
+    "rule": "max-lines",
+    "max": 2926
+  },
+  {
+    "file": "apps/web/src/app/chat/workspace.ts",
+    "rule": "max-lines",
+    "max": 600
+  },
+  {
+    "file": "libs/models/src/decision.ts",
+    "rule": "complexity"
+  },
+  {
+    "file": "libs/models/src/decision.ts",
+    "rule": "max-lines",
+    "max": 565
+  },
+  {
+    "file": "libs/models/src/mcp-dispatch.ts",
+    "rule": "max-lines",
+    "max": 672
+  },
+  {
+    "file": "libs/models/test/connection-custody.test.ts",
+    "rule": "max-lines",
+    "max": 6083
+  },
+  {
+    "file": "libs/models/test/connection-selection.test.ts",
+    "rule": "max-lines",
+    "max": 1502
+  },
+  {
+    "file": "libs/models/test/mcp-dispatch.test.ts",
+    "rule": "max-lines",
+    "max": 3622
+  },
+  {
+    "file": "libs/projections/src/audit.ts",
+    "rule": "max-lines",
+    "max": 545
+  }
+]

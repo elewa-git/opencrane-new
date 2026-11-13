@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 2926, skipBlankLines: true, skipComments: true }] */
 import { z } from 'zod';
 import { chatRowSchema, type ChatRow } from '@opencrane/protocol';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';

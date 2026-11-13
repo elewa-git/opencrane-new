@@ -145,6 +145,12 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-05 | [#159](https://github.com/elewa-git/opencrane-new/pull/159) | P4-4 direct chat backend | Backend source checks: private chats, access checks, replay and bridge guards | PARTIAL | Focused tests/lint/typecheck/events PASS (95 types); full root FAIL (two cases passed on rerun; gateway missed keep-alive replies); UI and fresh-install journey NOT RUN | [Backend receipt](p4-4-backend-evidence.md) |
 | 2026-10-05 | [#197](https://github.com/elewa-git/opencrane-new/pull/197) | Private team turns, PR 1 | Fresh private processes, context after admission and lost output; live proof pending | PARTIAL | F1 FAIL; F2 host FAIL; F3 NOT RUN; memory admission DISABLED | [Check record](p4-14-private-turns-evidence.md), [probe](evidence/p4-14/private-turns.json) |
 
+## Lint size debt
+
+| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-13 | — | #120, slice 1 | Fresh secondary core journey entry | FAIL (main defect) | Bootstrap, provider setup and website ready; fleet-task guard refused core entry; claim released | [Lint receipt](clean-120-s1.md#fresh-secondary-stack) |
+
 ## Still NOT RUN
 
 The evidence does not qualify these conditions yet:

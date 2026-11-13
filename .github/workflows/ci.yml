@@ -98,6 +98,7 @@ jobs:
         if: needs.select.outputs.mode != 'docs'
         # Public runners have 16 GB of memory.
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           NODE_OPTIONS: --max-old-space-size=8192
         run: /usr/bin/time -v nice -n 10 npm run lint
 
