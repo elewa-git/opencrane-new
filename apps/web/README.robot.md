@@ -1167,6 +1167,8 @@ with multiple chips against an intercepted API.
 Composer and sent states were captured at 1280 and 390 px with intercepted
 replies in `docs/process/chat-attachments/`. Fresh-install qualification remains NOT RUN.
 `file-drop.spec.ts` checks workspace drag events at the upload request boundary.
+The batch cases use Angular signals and run in `chat/upload-batch.spec.ts` with the
+other Angular tests.
 `composer.spec.ts` checks that chats without Attach have no drop controls.
 `workspace.spec.ts` supplies the dialog methods missing from the test browser and
 restores them after each test. Access-loss checks open the preview before clearing it.

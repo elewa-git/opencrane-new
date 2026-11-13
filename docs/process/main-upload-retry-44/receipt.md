@@ -9,7 +9,7 @@ establish that this additional failure is fixed; the PR remains held for the own
 13 November 2026. All three qualifying runs used source `9726a297f`, secondary
 slot 1, the stand-in provider and a separate `claim.sh` / `up.sh --fresh` /
 `down.sh` cycle. The fleet marker remained set. The owner stack was not used.
-Only documentation, qualification test fixtures and captured evidence changed after
+Only documentation, test files and captured evidence changed after
 that core-journey source.
 
 ## Consecutive qualification
@@ -130,8 +130,21 @@ Ops/dev-stack typecheck and scoped ESLint passed. These fixtures are not called 
 the core journey, so its executable path and the three consecutive results above are
 unchanged. No access, money or memory assertion was loosened.
 
+## Angular test registration repair
+
+CI on `fd9402aec` passed the hosted fixture stage and Chromium, then failed compiling
+the web unit suite. The batch regression imports Angular `signal`, but its `.test.ts`
+filename was outside Angular's spec TypeScript compilation. The same targeted Angular command
+reproduced File not found in TypeScript compilation before any case could run.
+The committed five cases were moved unchanged to `upload-batch.spec.ts`, which the spec configuration
+includes. No assertion or product code changed. The full web unit suite then
+passed twice: 1,556 tests in 81 files each time. Web typecheck and scoped ESLint passed.
+The three core journey results and captured product behaviour are unchanged.
+
 ## Own checks
 
+- PASS: full Angular web unit suite twice after registering the batch cases:
+  1,556 tests in 81 files per run.
 - PASS: 183 focused Angular upload, composer, workspace, drag/drop and private-reply
   tests twice; five upload-batch tests twice, including both delivery orders.
 - PASS: Chromium chat-frame qualification twice, with all four tests in
