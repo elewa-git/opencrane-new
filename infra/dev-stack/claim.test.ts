@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { watch } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
@@ -594,7 +595,6 @@ if (program === 'k3d' && args[1] === 'create') {
 }
 if (program === 'k3d' && args[0] === 'kubeconfig') process.stdout.write('PRIVATE-KUBECONFIG');
 if (program === 'kubectl' && args.includes('port-forward') && state.holdForward) {
-  fs.writeFileSync(home + '/forward-started', String(process.pid));
   function stayRunning() {}
   function stopped() {
     fs.writeFileSync(home + '/forward-stopped', 'stopped');
@@ -602,6 +602,7 @@ if (program === 'kubectl' && args.includes('port-forward') && state.holdForward)
   }
   setInterval(stayRunning, 1000);
   process.on('SIGTERM', stopped);
+  fs.writeFileSync(home + '/forward-started', String(process.pid));
 }
 if (program === 'helm' && args.includes('list')) {
   output([]);
@@ -851,11 +852,18 @@ async function packageConnectionLifecycle(isolated: boolean) {
     const env = { ...fixture.env, DEV_STACK_ID: '1' };
     fixture.state.holdForward = true;
     await fixture.saveState();
+    const started = forwardStarted(fixture.home);
     const forward = spawn('infra/package/forward.sh', [], { env, stdio: 'ignore' });
     const closed = once(forward, 'close');
     try {
-      await waitForFixtureFile(`${fixture.home}/forward-started`);
+      function exitedBeforeReady(): never {
+        throw new Error('Fixture forward exited before signalling readiness');
+      }
+      const earlyExit = closed.then(exitedBeforeReady);
+      await Promise.race([started.ready, earlyExit]);
+      assert.ok((await stat(`${fixture.home}/forward-started`)).isFile());
     } finally {
+      started.close();
       forward.kill('SIGTERM');
       await closed;
     }
@@ -883,20 +891,16 @@ async function packageConnectionLifecycle(isolated: boolean) {
     await fixture.close();
   }
 }
-async function waitForFixtureFile(path: string) {
-  const deadline = Date.now() + 10_000;
-  while (Date.now() < deadline) {
-    try {
-      await stat(path);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
-      }
-    }
-    await delay(25);
+function forwardStarted(home: string) {
+  let ready!: () => void;
+  function awaitingReady(resolve: () => void) { ready = resolve; }
+  const promise = new Promise<void>(awaitingReady);
+  function changed(_event: string, filename: string | Buffer | null) {
+    if (filename?.toString() === 'forward-started') ready();
   }
-  throw new Error('Fixture forward did not start');
+  // Subscribe before spawning. Wait for the fixture's signal rather than CPU scheduling time.
+  const watcher = watch(home, changed);
+  return { ready: promise, close: watcher.close.bind(watcher) };
 }
 async function packageUsesCheckedTarget() {
   await packageConnectionLifecycle(true);
