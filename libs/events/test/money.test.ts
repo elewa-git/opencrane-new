@@ -168,7 +168,7 @@ describe('the money checks catch a bad field added to a real event type', () => 
     expect(moneyFieldsNotInCents(acceptedShape(z.object({ [name]: z.string() }).strict()))).toEqual([]);
   });
 
-  it('allows the fixed cost report status without allowing an amount under that name', () => {
+  function allowsCostReportStatus() {
     const status = z.enum(['reported', 'not_reported', 'invalid']);
     const valid = acceptedShape(withField('effect.observed', 'costStatus', status));
     expect(moneyFieldsNotInCents(valid)).toEqual([]);
@@ -178,7 +178,9 @@ describe('the money checks catch a bad field added to a real event type', () => 
       const shape = acceptedShape(withField('effect.observed', 'costStatus', schema));
       expect(moneyFieldsNotInCents(shape)).toEqual(['costStatus']);
     }
-  });
+  }
+  it('allows the fixed cost report status without allowing an amount under that name',
+    allowsCostReportStatus);
 
   it.each<[shape: string, schema: z.ZodType]>([
     ['a float', z.number()],
