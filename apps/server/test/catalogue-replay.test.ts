@@ -53,3 +53,14 @@ async function replaysSavedDigestRules() {
 }
 it('replays dated accepted-only history and fresh full-list discovery through policy and rebuild',
   replaysSavedDigestRules);
+
+async function rejectsNewCatalogueDrift() {
+  const snapshot = await captureCatalogue([ordinaryWrite, rejectedSibling]);
+  expect(snapshot).toMatchObject({ digestVersion: 2, declared: false });
+  const changedRejected = { ...snapshot, rejectedTools: [] };
+  expect(() => validateMcpCatalogue(changedRejected)).toThrow('Tool catalogue digest mismatch');
+  const acceptedOnlyDigest = { ...snapshot, schemaDigest: catalogueDigest(snapshot.tools!) };
+  expect(() => validateMcpCatalogue(acceptedOnlyDigest)).toThrow('Tool catalogue digest mismatch');
+}
+it('requires the full-list digest for new discoveries and detects rejected sibling drift',
+  rejectsNewCatalogueDrift);
