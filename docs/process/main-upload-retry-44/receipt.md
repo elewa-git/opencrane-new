@@ -1,6 +1,6 @@
 # Journey on a fresh dev stack: PASS (core journey)
 
-13 November 2026. The final run used source `72377ecc8`, a claimed secondary
+13 November 2026. The final review-fix run used source `2cd035468`, a claimed secondary
 stack, the stand-in provider and `infra/dev-stack/up.sh --fresh`. The fleet marker
 remained set. The final journey uses passive browser-read diagnostics.
 Cleanup PASS: every claimed stack was stopped with `down.sh` and released.
@@ -29,11 +29,11 @@ token boundaries, sign-out and reauthentication; and listener checks.
   before the repair.
 - Stale audit journey: `4f06d18d0` (#1004) removed conversation filters and changed
   row wording. Following the owner decision of 13 November, the journey selects
-  Tools & models with the keyboard, checks every returned entry's category,
-  searches for the saved publication by its safe reference and opens safe details.
-  Escape and focus checks remain. P3-19 now states category/reference filtering
-  and no conversation turn filter. Private-history refusals, member organisation
-  refusal, integer money checks and UI/log canaries remain.
+  Tools & models with the keyboard, checks that a visible member change is excluded,
+  and checks the publication's exact visible title, decision and observation.
+  It opens safe details and restores focus on Escape. The browser fixture keeps
+  Older history reachable by keyboard with the publication behind a newer page.
+  Private-history refusals, integer money checks and UI/log canaries remain.
 - Stale target measurement: the menu animation introduced by `ed21e0b42` can still
   reduce a 44 px control when Playwright considers its subpixel movement stable.
   Attempt 1 failed that assertion. Measurements now await finite animations on
@@ -45,6 +45,15 @@ token boundaries, sign-out and reauthentication; and listener checks.
 The reported live-view `.caret` failure was not reproduced in this continuation.
 The unchanged streaming assertion, actual assistant completion while viewing,
 missing-grant refusal, revocation, pixel clearing and stop audit pass at both widths.
+
+The first review-fix fresh run reached desktop Tools & models, then failed because
+an exact-text locator expected the title without its visible icon. A browser fixture
+reproduced that mismatch before the assertion was corrected. The second fresh run
+failed earlier in upload: after a ready file, the Send message control was absent
+for 30 seconds. The saved browser state for that run was lost during cleanup, so
+its cause remains unproved. The third fresh run passed the complete core journey
+at both widths without a retry or timeout change. Each run used a fresh claimed
+secondary stack and ended with `down.sh`.
 
 ## Intermediate failure still unexplained
 
@@ -58,13 +67,14 @@ fresh run passed with that wrapper removed and passive status/transport diagnost
 ## Own checks
 
 - PASS: final full fresh core journey and secondary cleanup.
-- PASS: three targeted audit/animation tests, including malformed/missing money,
-  wrong-call matches, missing publication and permanent undersizing refusals.
-- PASS: removing the integer-money assertion made its test fail; restored afterwards.
-- PASS: whole-workspace typecheck and final dev-stack typecheck.
-- PASS: scoped typed ESLint for the changed journey code, fixtures and browser script.
-- PASS: Markdown lint, event catalogue (174 types), Knip and changelog checks.
-- PASS: public privacy check and secret scan before push.
+- PASS: browser Older history fixture; audit/animation and launcher guard tests.
+- PASS: hand removal of same-conversation, same-turn, admin canary, launcher saved-real
+  and marker-forwarding checks made each targeted test fail; each guard was restored.
+- PASS: whole-workspace typecheck after the final locator fix.
+- PASS: scoped ESLint on changed application test code; the repository excludes
+  infra from its configured lint project.
+- PASS: CI test grouping, event catalogue (174 types), Knip, changelog and Markdown lint.
+- PASS: public privacy and secret checks before the evidence commit.
 - NOT RUN: full root suite, real-provider qualification, owner operations and the
   approval journey that the core launcher already skips. CI was not awaited.
 
@@ -74,8 +84,9 @@ continuation. No additional independent review was run.
 
 ## Screenshots
 
-Each pair comes from the final fresh run, except the retained intercepted Retry
-captures, which use synthetic records. All widths were checked from the PNG files.
+History pairs come from the final review-fix fresh run. The other pairs come from
+the earlier passing fresh run, except the retained intercepted Retry captures,
+which use synthetic records. All widths were checked from the PNG files.
 
 | Step | 390 px | 1280 px |
 | --- | --- | --- |
@@ -83,9 +94,17 @@ captures, which use synthetic records. All widths were checked from the PNG file
 | Live upload | [Phone](upload-390.png) | [Desktop](upload-1280.png) |
 | Action history | [Phone](audit-action-390.png) | [Desktop](audit-action-1280.png) |
 | Category selection | [Phone](audit-category-390.png) | [Desktop](audit-category-1280.png) |
-| Safe-reference search | [Phone](audit-reference-390.png) | [Desktop](audit-reference-1280.png) |
+| Publication entry | [Phone](audit-publication-390.png) | [Desktop](audit-publication-1280.png) |
 | Member refusal | [Phone](audit-refused-390.png) | [Desktop](audit-refused-1280.png) |
 | Computer view | [Phone](live-view-390.png) | [Desktop](live-view-1280.png) |
 | Revocation clears pixels | [Phone](live-revoked-390.png) | [Desktop](live-revoked-1280.png) |
+
+## Not in this PR
+
+- The safe reference search is not checked: Change history shows no reference a person could copy (owner question).
+- Diagnose intermittent Action history load failure: correlate browser transport/status
+  with server requests. No retry was added.
+- Diagnose the single intermittent upload Send message control failure if it recurs;
+  the next fresh run passed the same unchanged upload checks.
 
 Part of #576.
