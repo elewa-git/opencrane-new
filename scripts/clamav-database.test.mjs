@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdtemp, readFile, rm, symlink, truncate, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -59,7 +59,11 @@ test('refresh accepts exact regular database bytes and verified headers', accept
 async function refusesSymlink() {
   const file = join(directory, 'daily.cvd');
   const bytes = await readFile(file);
-  const target = join(directory, 'daily.saved');
+  // Match link and content sizes so only the regular-file rule refuses this input.
+  const targetDirectory = join(directory, 'a'.repeat(200), 'b'.repeat(200));
+  await mkdir(targetDirectory, { recursive: true });
+  const targetNameLength = 512 - Buffer.byteLength(targetDirectory) - 1;
+  const target = join(targetDirectory, 'd'.repeat(targetNameLength));
   await writeFile(target, bytes);
   await rm(file);
   await symlink(target, file);
