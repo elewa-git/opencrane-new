@@ -31,6 +31,11 @@ infra/clamav/*
 !infra/clamav/image-client.mjs
 !infra/clamav/image-walk.mjs
 !infra/clamav/image-walk.py
+!infra/clamav/instream.mjs
+!infra/clamav/packaged.mjs
+!infra/clamav/service.mjs
+!infra/clamav/release.mjs
+!infra/clamav/refresh.mjs
 infra/devbox
 infra/nats
 infra/package/*
@@ -39,6 +44,8 @@ infra/package/*
 !infra/package/bootstrap.ts
 !infra/package/worker.mjs
 !infra/package/kubeconfig.mjs
+!infra/package/scanner.mjs
+!infra/package/object-credentials.mjs
 **/test
 **/tests
 **/*.spec.*

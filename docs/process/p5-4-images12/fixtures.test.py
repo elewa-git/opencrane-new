@@ -67,6 +67,9 @@ class BuildTests(unittest.TestCase):
         root = self.checker.candidate.ROOT
         reviewed = inherited.read_json(root / "infra/package/reviewed-images.json")
         inventory = inherited.read_json(root / "infra/package/licence-inventory.json")
+        inherited.check_package_review(reviewed, inventory)
+        # Keep the missing-review refusal independent of later image promotion.
+        reviewed["packageImage"]["sourceRevision"] = ""
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             inherited.check_package_review(reviewed, inventory)
 

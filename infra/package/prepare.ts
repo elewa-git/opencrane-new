@@ -11,6 +11,8 @@ import {
 } from '../dev-stack/config.ts';
 import { localOrigin, secondary } from '../dev-stack/identity.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
+import { prepareScannerFiles } from '../dev-stack/scanner-settings.ts';
+import { readApprovedRelease } from '../clamav/release.mjs';
 
 const execute = promisify(execFile);
 type PackageOwner = Awaited<ReturnType<typeof verifyPackageOwner>>;
@@ -70,7 +72,23 @@ function packageReplicas(values: { natsCluster?: unknown }): 1 | 3 {
   throw new Error(invalid);
 }
 
-async function prepareSettings(values: { natsCluster?: unknown }) {
+function modelRuntimeSettings() {
+  return {
+    MODEL_DECISION_URL: 'http://server:43001',
+    MODEL_STATE_DIR: '/var/lib/opencrane/models',
+    MODEL_JWKS_FILE: '/run/opencrane/files/model-jwks.json',
+    MODEL_KEY_FILE: '/run/opencrane/files/model-stub-key',
+    MODEL_UPSTREAM: '127.0.0.1:43003',
+    AGENTGATEWAY_BINARY: '/usr/local/bin/agentgateway',
+    MODEL_GATEWAY_PORT: '43000', MODEL_DECISION_PORT: '43001',
+    MODEL_READINESS_PORT: '43002', MODEL_STUB_PORT: '43003',
+    MODEL_GATEWAY_CONTROL_PORT: '43004',
+    MODEL_STUB_MCP_GENERATION: 'local-package',
+    MODEL_STUB_MCP_REVISION: 'local-package',
+  };
+}
+
+async function prepareSettings(values: { natsCluster?: unknown; scanner: { approvedSha: string } }) {
   const replicas = packageReplicas(values);
   const ownerEmail = await readOwnerEmail();
   assert(ownerEmail, 'Private dev-owner-email file is empty');
@@ -117,17 +135,12 @@ async function prepareSettings(values: { natsCluster?: unknown }) {
     PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
     CONVERSATION_KEYS_DIR: '/var/lib/opencrane/conversation-keys',
     CONVERSATION_WRAP_KEY_FILE: '/run/opencrane/files/conversation-wrap-key',
-    MODEL_DECISION_URL: 'http://server:43001',
-    MODEL_STATE_DIR: '/var/lib/opencrane/models',
-    MODEL_JWKS_FILE: '/run/opencrane/files/model-jwks.json',
-    MODEL_KEY_FILE: '/run/opencrane/files/model-stub-key',
-    MODEL_UPSTREAM: '127.0.0.1:43003',
-    AGENTGATEWAY_BINARY: '/usr/local/bin/agentgateway',
-    MODEL_GATEWAY_PORT: '43000', MODEL_DECISION_PORT: '43001',
-    MODEL_READINESS_PORT: '43002', MODEL_STUB_PORT: '43003',
-    MODEL_GATEWAY_CONTROL_PORT: '43004',
-    MODEL_STUB_MCP_GENERATION: 'local-package',
-    MODEL_STUB_MCP_REVISION: 'local-package',
+    ...modelRuntimeSettings(),
+    MINIO_URL: 'http://objects:9000',
+    MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
+    SCANNER_URL: 'https://scanner:8443/scan/upload',
+    SCANNER_CA_FILE: '/run/opencrane/files/scanner-ca.crt',
+    SCANNER_MANIFEST_DIGEST: `sha256:${values.scanner.approvedSha}`,
   });
   await writeEnv('package-bootstrap', {
     POSTGRES_ADMIN_URL: databaseUrl('postgres', passwords['postgres']!, 'postgres'),
@@ -168,6 +181,31 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
     'model-jwks.json': `${directory}/model-jwks.json`,
     'model-stub-key': `${directory}/model-stub-key`,
     'conversation-wrap-key': `${directory}/conversation-wrap-key`,
+    'scanner-ca.crt': `${directory}/scanner-ca.crt`,
+  });
+}
+
+async function prepareFileServices(values: {
+  images: Record<string, string>; scanner: { approvedSha: string };
+  secrets: Record<string, string>;
+}, owner: PackageOwner) {
+  const manifestPath = process.env['PACKAGE_SCANNER_MANIFEST_FILE'];
+  const releasePath = process.env['PACKAGE_SCANNER_RELEASE_FILE'];
+  assert(manifestPath && releasePath, 'Reviewed scanner manifest and release files are required');
+  const image = values.images['scanner']!;
+  const approvedSha = values.scanner.approvedSha;
+  await readApprovedRelease({ image, approvedSha, manifestPath, releasePath }, Date.now());
+  await prepareScannerFiles(directory);
+  const jwks = JSON.parse(await readFile(`${directory}/model-jwks.json`, 'utf8')) as unknown;
+  const trust = [{ issuer: `${localOrigin}/`, jwks,
+    services: { server: 'dev', 'image-worker': 'dev' } }];
+  await writeFile(`${directory}/scanner-trust.json`, JSON.stringify(trust), { mode: 0o600 });
+  await createSecret(owner, values.secrets['objects']!, 'minio');
+  await createSecret(owner, values.secrets['scanner']!, undefined, {
+    'signatures.json': manifestPath, 'release.json': releasePath,
+    'server.key': `${directory}/scanner-server.key`,
+    'server.crt': `${directory}/scanner-server.crt`,
+    'trust.json': `${directory}/scanner-trust.json`,
   });
 }
 
@@ -187,6 +225,7 @@ async function main() {
   stage = 'claim';
   const owner = await verifyPackageOwner();
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
+    images: Record<string, string>; scanner: { approvedSha: string };
     secrets: Record<string, string>; natsCluster?: unknown;
   };
   stage = 'development sign-in setup';
@@ -199,6 +238,8 @@ async function main() {
   }
   stage = 'private settings';
   await prepareSettings(values);
+  stage = 'file services';
+  await prepareFileServices(values, owner);
   stage = 'Kubernetes secrets';
   await provisionSecrets(values.secrets, owner);
   console.log('PASS private package secrets created from files in the claimed slot');

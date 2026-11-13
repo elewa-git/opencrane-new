@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scanner-config
+data:
+  package.conf: |
+{{ .Files.Get "scanner.conf" | indent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: objects
+spec:
+  serviceName: objects
+  replicas: 1
+  selector:
+    matchLabels: { app: objects }
+  template:
+    metadata:
+      labels: { app: objects }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 1000 }
+      containers:
+        - name: objects
+          image: {{ required "objects pin" .Values.images.objects | quote }}
+          envFrom:
+            - secretRef: { name: {{ .Values.secrets.objects | quote }} }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          ports: [{ containerPort: 9000 }]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: temporary, mountPath: /tmp }
+          readinessProbe:
+            httpGet: { path: /minio/health/ready, port: 9000 }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: temporary
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: objects
+spec:
+  type: ClusterIP
+  selector: { app: objects }
+  ports: [{ port: 9000, targetPort: 9000 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scanner
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: scanner }
+  template:
+    metadata:
+      labels: { app: scanner }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 1000 }
+      initContainers:
+        - name: copy-evidence
+          image: {{ .Values.images.server | quote }}
+          command: [sh, -ec]
+          args:
+            - >-
+              cp /run/scanner-source/* /run/scanner/ &&
+              chown 1000:1000 /run/scanner/* &&
+              chmod 0400 /run/scanner/*
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: evidence-source, mountPath: /run/scanner-source, readOnly: true }
+            - { name: evidence, mountPath: /run/scanner }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
+        - name: copy-databases
+          image: {{ .Values.images.scanner | quote }}
+          command: [sh, -ec]
+          args: ["cp /var/lib/clamav/* /databases/"]
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts: [{ name: databases, mountPath: /databases }]
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 500m, memory: 64Mi }
+      containers:
+        - name: engine
+          image: {{ required "scanner pin" .Values.images.scanner | quote }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: databases, mountPath: /var/lib/clamav, readOnly: true }
+            - { name: config, mountPath: /etc/clamav, readOnly: true }
+            - { name: temporary, mountPath: /tmp }
+          readinessProbe:
+            exec:
+              command: [clamdscan, --config-file=/etc/clamav/package.conf, --ping=1]
+          resources:
+            requests: { cpu: 50m, memory: 1Gi }
+            limits: { cpu: 1000m, memory: 2Gi }
+        - name: https
+          image: {{ .Values.images.server | quote }}
+          command: [node, --experimental-strip-types, infra/package/scanner.mjs]
+          env:
+            - { name: SCANNER_IMAGE, value: {{ .Values.images.scanner | quote }} }
+            - { name: SCANNER_APPROVED_SHA, value: {{ .Values.scanner.approvedSha | quote }} }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          ports: [{ containerPort: 8443 }]
+          volumeMounts:
+            - { name: databases, mountPath: /var/lib/clamav, readOnly: true }
+            - { name: evidence, mountPath: /run/scanner, readOnly: true }
+          readinessProbe:
+            tcpSocket: { port: 8443 }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: databases
+          emptyDir: {}
+        - name: config
+          configMap: { name: scanner-config }
+        - name: evidence
+          emptyDir: { medium: Memory }
+        - name: evidence-source
+          secret: { secretName: {{ .Values.secrets.scanner | quote }} }
+        - name: temporary
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scanner
+spec:
+  type: ClusterIP
+  selector: { app: scanner }
+  ports: [{ port: 8443, targetPort: 8443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: scanner
+spec:
+  podSelector:
+    matchLabels: { app: scanner }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: server }
+        - podSelector:
+            matchLabels: { app: worker-dispatcher }
+      ports: [{ protocol: TCP, port: 8443 }]
+  egress: []

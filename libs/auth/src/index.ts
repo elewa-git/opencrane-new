@@ -39,3 +39,5 @@ export { readComputerControl, isComputerLifecycle, type ComputerControl }
   from './computer-summary.ts';
 
 export { verifyEgressCapability, type EgressCapability } from './tokens.ts';
+
+export { readStorageLease } from './storage-lease.ts';

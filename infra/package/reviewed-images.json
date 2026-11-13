@@ -6,14 +6,28 @@
     "postgres",
     "nats",
     "openfga",
-    "bootstrap"
+    "bootstrap",
+    "objects",
+    "scanner"
   ],
   "images": {
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
     "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
-    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0"
+    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+    "scanner": "k3d-ocn-registry:5000/opencrane/scanner@sha256:126d7e9292b6c260c60d4fc945bb74698ddd387da474b73bca78d3b0ad2becfb",
+    "objects": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c"
+  },
+  "scanner": {
+    "approvedSha": "6cbd70a9814fb2860aa30dccc32d9e97b8efc990f355637c0231d867f70108ee"
+  },
+  "packageImage": {
+    "sourceRevision": "47258e903347daaaf2727da636d4bca3f0f53a36",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
+    "imageId": "sha256:b3579c1c70e69ed72db4018861cd0f19f17cefd4293142ee3550d35d1fd7fce7",
+    "scanSha256": "4c2aeb35e9b2b99d52beb7d378b0590296607372aed002f3ded6288aef3aeaad"
   }
 }

@@ -9,18 +9,18 @@ from collections import Counter
 from pathlib import Path
 
 PACKAGE = Path(__file__).parent
-ROLES = ("server", "web", "postgres", "nats", "openfga", "computer")
+ROLES = ("server", "web", "postgres", "nats", "openfga", "computer", "objects", "scanner")
 APPLICATION_TYPES = {"npm", "go-module", "binary"}
 
 # Require a new index review when either Debian-based image changes.
 INDEX_IMAGE_PINS = {
     "server": (
         "k3d-ocn-registry:5000/opencrane/package@sha256:"
-        "0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a"
+        "1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c"
     ),
     "web": (
         "k3d-ocn-registry:5000/opencrane/package@sha256:"
-        "0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a"
+        "1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c"
     ),
     "postgres": (
         "postgres:17@sha256:"
@@ -274,7 +274,16 @@ def parse_debian_main_packages(index_text):
     return packages
 
 
-def check_entry(entry, osi_ids, debian_main_packages, pgdg_packages=None):
+def reviewed_bundled_grant(name, version, licence, notices):
+    if licence != "CC0-1.0":
+        return False
+    for notice in notices:
+        if notice[0] == f"{name}@{version}" and licence in notice[1]:
+            return True
+    return False
+
+
+def check_entry(entry, osi_ids, debian_main_packages, pgdg_packages=None, bundled_notices=()):
     if len(entry) not in (5, 6):
         raise ValueError("Inventory entry needs type, name, version, licence and evidence")
     package_type, name, version, licence, evidence = entry[:5]
@@ -296,7 +305,9 @@ def check_entry(entry, osi_ids, debian_main_packages, pgdg_packages=None):
     elif package_type in APPLICATION_TYPES:
         if len(entry) != 5:
             raise ValueError(f"Application package has an extra source label: {name}")
-        if licence not in osi_ids:
+        bundled = package_type == "go-module" and reviewed_bundled_grant(
+            name, version, licence, bundled_notices)
+        if licence not in osi_ids and not bundled:
             raise ValueError(f"Unknown or non-OSI application licence: {name} {licence}")
     else:
         raise ValueError(f"Unknown package type: {package_type}")
@@ -323,7 +334,7 @@ def check_bundled_notice(notice, osi_ids):
     if not notice[1]:
         raise ValueError("Bundled notice has no licence")
     for licence in notice[1]:
-        if licence not in osi_ids and licence != "LicenseRef-Public-Domain":
+        if licence not in osi_ids and licence not in ("LicenseRef-Public-Domain", "CC0-1.0"):
             raise ValueError(f"Unknown or non-free bundled licence: {licence}")
 
 
@@ -401,11 +412,11 @@ def check_candidate_server(path):
 
 
 def check_package_review(reviewed, inventory):
-    proof = reviewed.get("natsCluster", {})
+    proof = reviewed.get("packageImage", reviewed.get("natsCluster", {}))
     revision = proof.get("sourceRevision", "")
     if not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{40}", revision):
         raise ValueError("Package review needs an exact source revision")
-    if proof.get("replicas") != 3:
+    if "packageImage" not in reviewed and proof.get("replicas") != 3:
         raise ValueError("Package review needs R3 compatibility proof")
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", proof.get("imageId", "")):
         raise ValueError("Package review needs a scanned configuration digest")
@@ -459,7 +470,7 @@ def check_package_promotion(reviewed, inventory, inspection, scan_path, revision
 def main(arguments, promotion=None):
     reviewed = read_json(PACKAGE / "reviewed-images.json")
     inventory = read_json(PACKAGE / "licence-inventory.json")
-    if "natsCluster" in reviewed:
+    if "natsCluster" in reviewed or "packageImage" in reviewed:
         check_package_review(reviewed, inventory)
     if promotion is not None:
         revision, inspection_path = promotion
@@ -486,7 +497,15 @@ def main(arguments, promotion=None):
         "postgres": trixie_main,
         "nats": set(),
         "openfga": set(),
+        "objects": set(),
     }
+    scanner_main = read_json(PACKAGE / "scanner-debian-main.json")
+    if scanner_main["imagePin"] != reviewed["images"]["scanner"]:
+        raise ValueError("Debian main index was reviewed for a different scanner image")
+    scanner_packages = set()
+    for index in scanner_main["indexes"]:
+        scanner_packages.update(tuple(package) for package in index["packages"])
+    debian_main_by_role["scanner"] = scanner_packages
     if set(inventory["images"]) != set(ROLES):
         raise ValueError("An image is missing from the licence inventory")
     for role in ROLES:
@@ -514,7 +533,8 @@ def main(arguments, promotion=None):
             raise ValueError(f"{role} has an empty licence inventory")
         for entry in entries:
             reviewed_pgdg = pgdg_packages if role == "postgres" else {}
-            check_entry(entry, osi_ids, debian_main_by_role[role], reviewed_pgdg)
+            check_entry(entry, osi_ids, debian_main_by_role[role], reviewed_pgdg,
+                        image.get("bundled", ()))
         if role in arguments:
             check_scan(role, entries, arguments[role], osi_ids)
         print(f"PASS {role}: {len(entries)} reviewed components")

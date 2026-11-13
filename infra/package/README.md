@@ -24,7 +24,7 @@ flowchart LR
   stack -->|checks ownership, nodes, certificates and backup token references| package
   package -->|uses local cluster| devbox
   package -->|starts services and checks capture and restored file and home bytes| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
   stack -->|keeps qualification image records in its spare slot| package
@@ -33,7 +33,12 @@ flowchart LR
 The install runs a fake AI model for testing and creates its first owner through
 saved [events](../../GLOSSARY.md#event). Workers start a computer when the owner
 first chats. Computers belong to assistants, including shared group assistants,
-and remain the same across chats. File storage and virus scanning are outside this package.
+and remain the same across chats. The installation includes persistent MinIO file storage
+and a private ClamAV scanner. Storage credentials rotate, and readiness checks
+their expiry. The server checks attachments before saving them,
+then uses the existing chat path to answer questions about clean files.
+Infected files are refused. Uploads stay unavailable when scanning cannot be proved
+or its last verified update check is more than 24 hours old.
 
 The dispatcher keeps its jobs in a separate database. It uses the server's read-only
 content connection to coordinate gateway configuration changes with delivery.
@@ -66,6 +71,7 @@ navigation show it, with their usual fallback words when it is empty.
 - Installs the website, server, workers and core services together with [Helm](../../GLOSSARY.md#helm).
 - Uses fixed, reviewed images and checks their licences before installation.
 - Builds the server image with a fixed Codex executable for private memory checks.
+- Stores clean chat attachments on a persistent volume and scans uploads through private HTTPS.
 - Includes the image scanner files loaded by the server's image evidence check.
 - Checks that a proposed server and website image matches its source and all shipped layers.
 - Refuses a bootstrap image if its setup code imports a test-only file.

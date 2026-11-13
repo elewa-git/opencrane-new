@@ -28,6 +28,21 @@ checks remain in disposable test support and in the wrapper's owned scan operati
 is retained in `upstream/LICENCE`; no OpenCrane 1 contracts or other runtime code
 are imported.
 
+## Packaged scanner
+
+The [Helm package](../package/README.robot.md#packaged-upload-services) runs the
+same authenticated HTTPS wrapper with `packaged.mjs`. It reads the approved
+manifest and release, verifies the shared read-only database bytes and uses the
+private loopback INSTREAM transport. It has no Docker socket, updater or reload.
+The image preparation removes the database directory before copying the approved
+set, including the upstream image's hidden shell startup files. Only main, daily
+and bytecode reach the runtime directory. The wrapper refuses extra, missing,
+altered or symbolic-link files, stale evidence and an image/release mismatch.
+
+The development adapter shares `instream.mjs` but supplies development database
+facts. It cannot qualify a packaged release. The owned Docker launcher keeps its
+existing lifecycle and uses the same release reader as the packaged scanner.
+
 ## Refresh on the dev box
 
 Run `infra/clamav/refresh.sh /absolute/scratch/candidate-signatures`. FreshClam
@@ -408,6 +423,14 @@ is checked before the one-scan claim. The production enable switch remains
 closed and image promotion remains
 closed. Fresh-install two-silo, deployed custody, signed-release and rotation
 qualification are NOT RUN.
+
+## Database files
+
+`database.mjs` owns the regular-file, 512-byte minimum, 512-MiB maximum and
+streamed SHA-256 checks shared by refresh and the packaged adapter. Refresh checks
+the returned hash against both tool observations and checks the verified header.
+The packaged adapter compares it with the approved manifest before serving scans.
+Neither caller follows database symlinks.
 
 ## Real upload consumer fixture
 

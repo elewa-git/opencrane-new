@@ -6,7 +6,9 @@
       "reviewedInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9"
     },
     "server": {
-      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
+      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
+      "sourceRevision": "47258e903347daaaf2727da636d4bca3f0f53a36",
+      "debianMainReview": "infra/package/package-debian-main.json",
       "bundled": [
         ["Node libraries", ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "Unicode-3.0", "ICU"], "/usr/local/LICENSE", "Named library sections keep their OSI notices; HdrHistogram offers BSD-2-Clause alongside CC0."],
         ["ICU time zone data", ["LicenseRef-Public-Domain"], "/usr/local/LICENSE", "The Node notice identifies this data as public domain and Debian accepts it as free."]
@@ -17,95 +19,275 @@
         ["OpenCrane runtime scripts and website bundle", "source", "AGPL-3.0-or-later", "OpenCrane root LICENSE"]
       ],
       "artifacts": [
-        ["binary", "node", "22.23.1", "MIT", "Node.js LICENSE sha256:c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"],
+        ["npm", "@angular/common", "21.2.24", "MIT", "Declared npm package licence"],
+        ["npm", "@angular/compiler", "21.2.24", "MIT", "Declared npm package licence"],
+        ["npm", "@angular/core", "21.2.24", "MIT", "Declared npm package licence"],
+        ["npm", "@angular/platform-browser", "21.2.24", "MIT", "Declared npm package licence"],
+        ["npm", "@antfu/install-pkg", "2.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@borewit/text-codec", "0.2.2", "MIT", "Declared npm package licence"],
+        ["npm", "@braintree/sanitize-url", "7.1.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@chevrotain/cst-dts-gen", "13.2.0", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@chevrotain/gast", "13.2.0", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@chevrotain/regexp-to-ast", "13.2.0", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@chevrotain/types", "13.2.0", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@chevrotain/utils", "13.2.0", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@electric-sql/pglite", "0.5.8", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@fastify/ajv-compiler", "4.0.6", "MIT", "Declared npm package licence"],
+        ["npm", "@fastify/error", "4.2.0", "MIT", "Declared npm package licence"],
+        ["npm", "@fastify/fast-json-stringify-compiler", "5.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "@fastify/forwarded", "3.0.2", "MIT", "Declared npm package licence"],
+        ["npm", "@fastify/merge-json-schemas", "0.2.1", "MIT", "Declared npm package licence"],
+        ["npm", "@fastify/proxy-addr", "5.1.1", "MIT", "Declared npm package licence"],
+        ["npm", "@fontsource/dm-mono", "5.3.0", "OFL-1.1", "Declared npm package licence"],
+        ["npm", "@fontsource/dm-sans", "5.3.0", "OFL-1.1", "Declared npm package licence"],
+        ["npm", "@grpc/grpc-js", "1.14.5", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@grpc/proto-loader", "0.8.1", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@iconify/types", "2.0.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@iconify/utils", "3.1.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@js-sdsl/ordered-map", "4.4.2", "MIT", "Declared npm package licence"],
+        ["npm", "@mermaid-js/parser", "2.0.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@nats-io/jetstream", "3.4.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@nats-io/nats-core", "3.4.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@nats-io/nkeys", "2.0.3", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@nats-io/nuid", "3.0.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@nats-io/transport-node", "3.4.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@noble/hashes", "2.4.0", "MIT", "Declared npm package licence"],
+        ["npm", "@nodable/entities", "3.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "@novnc/novnc", "1.5.0", "MPL-2.0", "Declared npm package licence"],
+        ["npm", "@openai/codex", "0.159.2", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@openai/codex", "0.159.2-linux-x64", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@opencrane/auth", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/authz", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/demo-mcp", "0.1.0", "AGPL-3.0-or-later", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@opencrane/event-store", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/events", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/handlers", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/models", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/observability", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/odoo-mcp", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/ops", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/projections", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/protocol", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/server", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@opencrane/web", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
+        ["npm", "@openfga/sdk", "0.9.7", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/api", "1.9.1", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/api-logs", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/configuration", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/context-async-hooks", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/core", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-logs-otlp-grpc", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-logs-otlp-http", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-logs-otlp-proto", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-metrics-otlp-grpc", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-metrics-otlp-http", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-metrics-otlp-proto", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-prometheus", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-trace-otlp-grpc", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-trace-otlp-http", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-trace-otlp-proto", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/exporter-zipkin", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/instrumentation", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/otlp-exporter-base", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/otlp-grpc-exporter-base", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/otlp-transformer", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/propagator-b3", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/propagator-jaeger", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/resources", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/sdk-logs", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/sdk-metrics", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/sdk-node", "0.222.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/sdk-trace", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/sdk-trace-base", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/sdk-trace-node", "2.11.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@opentelemetry/semantic-conventions", "1.43.0", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "@pinojs/redact", "0.4.0", "MIT", "Declared npm package licence"],
+        ["npm", "@protobufjs/aspromise", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/base64", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/codegen", "2.0.5", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/eventemitter", "1.1.1", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/fetch", "1.1.1", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/float", "1.0.2", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/path", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/pool", "1.1.0", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@protobufjs/utf8", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "@secretlint/core", "13.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@secretlint/profiler", "13.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@secretlint/secretlint-rule-preset-recommend", "13.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@secretlint/types", "13.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@tokenizer/inflate", "0.4.1", "MIT", "Declared npm package licence"],
+        ["npm", "@tokenizer/token", "0.3.0", "MIT", "Declared npm package licence"],
+        ["npm", "@types/d3", "7.4.3", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-array", "3.2.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-axis", "3.0.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-brush", "3.0.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-chord", "3.0.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-color", "3.1.3", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-contour", "3.0.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-delaunay", "6.0.4", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-dispatch", "3.0.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-drag", "3.0.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-dsv", "3.0.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-ease", "3.0.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-fetch", "3.0.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-force", "3.0.10", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-format", "3.0.4", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-geo", "3.1.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-hierarchy", "3.1.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-interpolate", "3.0.4", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-path", "3.1.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-polygon", "3.0.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-quadtree", "3.0.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-random", "3.0.4", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-scale", "4.0.9", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-scale-chromatic", "3.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-selection", "3.0.12", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-shape", "3.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-time", "3.0.4", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-time-format", "4.0.3", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-timer", "3.0.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-transition", "3.0.9", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/d3-zoom", "3.0.9", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/geojson", "7946.0.16", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@types/node", "22.20.4", "MIT", "Declared npm package licence"],
+        ["npm", "@types/trusted-types", "2.0.7", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "@upsetjs/venn.js", "2.0.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "abstract-logging", "2.0.1", "MIT", "Declared npm package licence"],
         ["deb", "adduser", "3.134", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "adler-32", "1.3.1", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "agent-base", "6.0.2", "MIT", "Declared npm package licence"],
+        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
+        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
+        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
+        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
+        ["npm", "ajv-formats", "3.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "ansi-regex", "5.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "ansi-styles", "4.3.0", "MIT", "Declared npm package licence"],
+        ["npm", "anynum", "1.0.1", "MIT", "Declared npm package licence"],
         ["deb", "apt", "2.6.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "async", "3.2.6", "MIT", "Declared npm package licence"],
+        ["npm", "asynckit", "0.4.0", "MIT", "Declared npm package licence"],
+        ["npm", "atomic-sleep", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "avvio", "9.3.0", "MIT", "Declared npm package licence"],
+        ["npm", "axios", "1.20.0", "MIT", "Declared npm package licence"],
         ["deb", "base-files", "12.4+deb12u15", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["deb", "base-passwd", "3.6.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["deb", "bash", "5.2.15-2+b13", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
+        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
+        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
+        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
+        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
+        ["npm", "block-stream2", "2.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "boundary", "2.0.0", "BSD-2-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "browser-or-node", "2.1.1", "MIT", "Declared npm package licence"],
         ["deb", "bsdutils", "1:2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "buffer-crc32", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "call-bind-apply-helpers", "1.0.2", "MIT", "Declared npm package licence"],
+        ["npm", "cfb", "1.2.2", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "chevrotain", "13.2.0", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "cjs-module-lexer", "2.2.1", "MIT", "Declared npm package licence"],
+        ["npm", "cliui", "8.0.1", "ISC", "Declared npm package licence"],
+        ["npm", "color-convert", "2.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "color-name", "1.1.4", "MIT", "Declared npm package licence"],
+        ["npm", "combined-stream", "1.0.8", "MIT", "Declared npm package licence"],
+        ["npm", "commander", "15.0.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "commander", "7.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "cookie", "1.1.1", "MIT", "Declared npm package licence"],
+        ["npm", "corepack", "0.34.6", "MIT", "Declared npm package licence"],
         ["deb", "coreutils", "9.1-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "cose-base", "1.0.3", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "cose-base", "2.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "crc-32", "1.2.2", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "cron-parser", "5.10.1", "MIT", "Declared npm package licence"],
+        ["npm", "cytoscape", "3.34.4", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "cytoscape-cose-bilkent", "4.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "cytoscape-fcose", "2.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3", "7.9.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-array", "2.12.1", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-array", "3.2.5", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-axis", "3.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-brush", "3.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-chord", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-color", "3.1.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-contour", "4.0.3", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-delaunay", "6.0.6", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-dispatch", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-drag", "3.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-dsv", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-ease", "3.0.2", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-fetch", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-force", "3.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-format", "3.1.3", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-geo", "3.1.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-hierarchy", "3.1.3", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-interpolate", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-path", "1.0.9", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-path", "3.1.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-polygon", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-quadtree", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-random", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-sankey", "0.12.3", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-scale", "4.0.3", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-scale-chromatic", "3.1.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-selection", "3.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-shape", "1.3.7", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-shape", "3.2.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-time", "3.1.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-time-format", "4.1.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-timer", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-transition", "3.0.2", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "d3-zoom", "3.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "dagre-d3-es", "7.0.14", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["deb", "dash", "0.5.12-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "dayjs", "1.11.23", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["deb", "debconf", "1.5.82", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["deb", "debian-archive-keyring", "2023.3+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["deb", "debianutils", "5.7-0.5~deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "debug", "4.4.3", "MIT", "Declared npm package licence"],
+        ["npm", "decode-uri-component", "0.5.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "delaunator", "5.1.0", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "delayed-stream", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "dequal", "2.0.3", "MIT", "Declared npm package licence"],
         ["deb", "diffutils", "1:3.8-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "dompurify", "3.4.17", "Apache-2.0", "Installed package licence declaration in the all-layer image scan"],
         ["deb", "dpkg", "1.21.23", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "dunder-proto", "1.0.1", "MIT", "Declared npm package licence"],
         ["deb", "e2fsprogs", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "elkjs", "0.9.3", "EPL-2.0", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "emoji-regex", "8.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "es-define-property", "1.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "es-errors", "1.3.0", "MIT", "Declared npm package licence"],
+        ["npm", "es-module-lexer", "3.0.2", "MIT", "Declared npm package licence"],
+        ["npm", "es-object-atoms", "1.1.2", "MIT", "Declared npm package licence"],
+        ["npm", "es-set-tostringtag", "2.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "es-toolkit", "1.53.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "escalade", "3.2.0", "MIT", "Declared npm package licence"],
+        ["npm", "eventemitter3", "5.0.4", "MIT", "Declared npm package licence"],
+        ["npm", "fast-decode-uri-component", "1.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "fast-deep-equal", "3.1.3", "MIT", "Declared npm package licence"],
+        ["npm", "fast-json-stringify", "7.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "fast-querystring", "1.1.2", "MIT", "Declared npm package licence"],
+        ["npm", "fast-uri", "3.1.9", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "fast-uri", "3.1.9", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "fast-uri", "3.1.9", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "fast-uri", "3.1.9", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "fast-uri", "4.2.3", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "fast-xml-builder", "1.3.1", "MIT", "Declared npm package licence"],
+        ["npm", "fast-xml-parser", "5.11.2", "MIT", "Declared npm package licence"],
+        ["npm", "fastify", "5.12.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "fastq", "1.20.3", "ISC", "Declared npm package licence"],
+        ["npm", "file-type", "21.3.4", "MIT", "Declared npm package licence"],
+        ["npm", "filter-obj", "1.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "find-my-way", "9.9.0", "MIT", "Declared npm package licence"],
         ["deb", "findutils", "4.9.0-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "follow-redirects", "1.16.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "form-data", "4.0.6", "MIT", "Declared npm package licence"],
+        ["npm", "function-bind", "1.1.2", "MIT", "Declared npm package licence"],
         ["deb", "gcc-12-base", "12.2.0-14+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "gpgv", "2.2.40-1.1+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "grep", "3.8-5", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "gzip", "1.12-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "hostname", "3.23+nmu1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "init-system-helpers", "1.65.2+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libacl1", "2.3.1-3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libapt-pkg6.0", "2.6.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libattr1", "1:2.5.1-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libaudit-common", "1:3.0.9-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libaudit1", "1:3.0.9-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libblkid1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libbz2-1.0", "1.0.8-5+b1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libc-bin", "2.36-9+deb12u14", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libc6", "2.36-9+deb12u14", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libcap-ng0", "0.8.3-1+b3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libcap2", "1:2.66-4+deb12u3+b1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libcom-err2", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libcrypt1", "1:4.4.33-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libdb5.3", "5.3.28+dfsg2-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libdebconfclient0", "0.270", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libext2fs2", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libffi8", "3.4.4-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libgcc-s1", "12.2.0-14+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libgcrypt20", "1.10.1-3+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libgmp10", "2:6.2.1+dfsg1-1.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libgnutls30", "3.7.9-2+deb12u7", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libgpg-error0", "1.46-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libhogweed6", "3.8.1-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libidn2-0", "2.3.3-1+b1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "liblz4-1", "1.9.4-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "liblzma5", "5.4.1-1+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libmd0", "1.0.4-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libmount1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libnettle8", "3.8.1-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libp11-kit0", "0.24.1-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libpam-modules", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libpam-modules-bin", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libpam-runtime", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libpam0g", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libpcre2-8-0", "10.42-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libseccomp2", "2.5.4-1+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libselinux1", "3.4-1+b6", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libsemanage-common", "3.4-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libsemanage2", "3.4-1+b5", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libsepol2", "3.4-2.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libsmartcols1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libss2", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libstdc++6", "12.2.0-14+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libsystemd0", "252.39-1~deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libtasn1-6", "4.19.0-2+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libtinfo6", "6.4-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libudev1", "252.39-1~deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libunistring2", "1.0-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libuuid1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libxxhash0", "0.8.1-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "libzstd1", "1.5.4+dfsg2-5", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "login", "1:4.13+dfsg1-1+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "logsave", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "mawk", "1.3.4.20200120-3.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "mount", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "ncurses-base", "6.4-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "ncurses-bin", "6.4-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "passwd", "1:4.13+dfsg1-1+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "perl-base", "5.36.0-7+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "sed", "4.9-1+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "sysvinit-utils", "3.06-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "tar", "1.34+dfsg-1.2+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "tzdata", "2026b-0+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "usr-is-merged", "37~deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "util-linux", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "util-linux-extra", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
-        ["deb", "zlib1g", "1:1.2.13.dfsg-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "get-caller-file", "2.0.5", "ISC", "Declared npm package licence"],
+        ["npm", "get-intrinsic", "1.3.0", "MIT", "Declared npm package licence"],
+        ["npm", "get-proto", "1.0.1", "MIT", "Declared npm package licence"],
         ["go-module", "github.com/MakeNowJust/heredoc", "v1.0.0", "MIT", "Go module LICENSE sha256:3cf06d7751ecd37a2822b9fa6ca09510436c0abbfdf3c6261f59c0f0a7f92fe3"],
         ["go-module", "github.com/beorn7/perks", "v1.0.1", "MIT", "Go module LICENSE sha256:0db7c9ebb3717e526f34f87dd1ee8bc77d36846e29cb0cec9246f7138fbe962b"],
         ["go-module", "github.com/blang/semver/v4", "v4.0.0", "MIT", "Go module LICENSE sha256:895d625d7bae6d50064367de0c9f283fbd4565da9cdeb103620fe357d80d52a1"],
@@ -173,8 +355,36 @@
         ["go-module", "golang.org/x/text", "v0.40.0", "BSD-3-Clause", "Go module LICENSE sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"],
         ["go-module", "golang.org/x/time", "v0.15.0", "BSD-3-Clause", "Go module LICENSE sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"],
         ["go-module", "google.golang.org/protobuf", "v1.36.12-0.20260120151049-f2248ac996af", "BSD-3-Clause", "Go module LICENSE sha256:4835612df0098ca95f8e7d9e3bffcb02358d435dbb38057c844c99d7f725eb20"],
+        ["npm", "gopd", "1.2.0", "MIT", "Declared npm package licence"],
         ["go-module", "gopkg.in/evanphx/json-patch.v4", "v4.13.0", "BSD-3-Clause", "Go module LICENSE sha256:9cb8ce7ebecf456a156e04c999c32b2eeafb3f7d7e05b9435ac8829d6e0bf734"],
         ["go-module", "gopkg.in/inf.v0", "v0.9.1", "BSD-3-Clause", "Go module LICENSE sha256:050855d9ceedf916a9e9f30d20c6f61a484448d2c2ed5810934bc8aef43861b4"],
+        ["deb", "gpgv", "2.2.40-1.1+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "grep", "3.8-5", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "gzip", "1.12-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "hachure-fill", "0.5.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "has-symbols", "1.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "has-tostringtag", "1.0.2", "MIT", "Declared npm package licence"],
+        ["npm", "hasown", "2.0.4", "MIT", "Declared npm package licence"],
+        ["deb", "hostname", "3.23+nmu1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "https-proxy-agent", "5.0.1", "MIT", "Declared npm package licence"],
+        ["npm", "iconv-lite", "0.6.3", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "ieee754", "1.2.1", "BSD-3-Clause", "Declared npm package licence"],
+        ["npm", "import-in-the-middle", "3.5.2", "Apache-2.0", "Declared npm package licence"],
+        ["npm", "import-meta-resolve", "4.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "inherits", "2.0.4", "ISC", "Declared npm package licence"],
+        ["deb", "init-system-helpers", "1.65.2+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "internmap", "1.0.1", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "internmap", "2.0.3", "ISC", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "ipaddr.js", "2.5.0", "MIT", "Declared npm package licence"],
+        ["npm", "is-fullwidth-code-point", "3.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "is-unsafe", "2.0.2", "MIT", "Declared npm package licence"],
+        ["npm", "jose", "5.10.0", "MIT", "Declared npm package licence"],
+        ["npm", "jose", "6.2.12", "MIT", "Declared npm package licence"],
+        ["npm", "json-schema-ref-resolver", "3.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
         ["go-module", "k8s.io/api", "UNKNOWN", "Apache-2.0", "Kubernetes v1.37.1 LICENSE sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"],
         ["go-module", "k8s.io/apimachinery", "UNKNOWN", "Apache-2.0", "Kubernetes v1.37.1 LICENSE sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"],
         ["go-module", "k8s.io/cli-runtime", "UNKNOWN", "Apache-2.0", "Kubernetes v1.37.1 LICENSE sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"],
@@ -188,204 +398,95 @@
         ["go-module", "k8s.io/metrics", "UNKNOWN", "Apache-2.0", "Kubernetes v1.37.1 LICENSE sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"],
         ["go-module", "k8s.io/streaming", "UNKNOWN", "Apache-2.0", "Kubernetes v1.37.1 LICENSE sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"],
         ["go-module", "k8s.io/utils", "v0.0.0-20260626114624-be93311217bd", "Apache-2.0", "Go module LICENSE sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"],
-        ["go-module", "sigs.k8s.io/json", "v0.0.0-20250730193827-2d320260d730", "Apache-2.0", "Go module LICENSE sha256:ef523ecf6292d4b80e02e6003dcbaf386e774efe70e8607ad762b1437d1f383b"],
-        ["go-module", "sigs.k8s.io/kustomize/api", "v0.21.1", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
-        ["go-module", "sigs.k8s.io/kustomize/kustomize/v5", "v5.8.1", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
-        ["go-module", "sigs.k8s.io/kustomize/kyaml", "v0.21.1", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
-        ["go-module", "sigs.k8s.io/randfill", "v1.0.0", "Apache-2.0", "Go module LICENSE sha256:fafd604c0c068855ab2ec82d6d962d21fb0d08e13085f01ac4a8463053fa1138"],
-        ["go-module", "sigs.k8s.io/structured-merge-diff/v6", "v6.4.2", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
-        ["go-module", "sigs.k8s.io/yaml", "v1.6.0", "Apache-2.0", "Go module LICENSE sha256:5dc79da695aea39a47245008a168e3f7d461b686da8bec299fd55fee0393cbcc"],
-        ["go-module", "stdlib", "go1.26.8", "BSD-3-Clause", "Licence found in image scan"],
-        ["npm", "@angular/common", "21.2.24", "MIT", "Declared npm package licence"],
-        ["npm", "@angular/compiler", "21.2.24", "MIT", "Declared npm package licence"],
-        ["npm", "@angular/core", "21.2.24", "MIT", "Declared npm package licence"],
-        ["npm", "@angular/platform-browser", "21.2.24", "MIT", "Declared npm package licence"],
-        ["npm", "@borewit/text-codec", "0.2.2", "MIT", "Declared npm package licence"],
-        ["npm", "@electric-sql/pglite", "0.5.8", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@fastify/ajv-compiler", "4.0.6", "MIT", "Declared npm package licence"],
-        ["npm", "@fastify/error", "4.2.0", "MIT", "Declared npm package licence"],
-        ["npm", "@fastify/fast-json-stringify-compiler", "5.1.0", "MIT", "Declared npm package licence"],
-        ["npm", "@fastify/forwarded", "3.0.2", "MIT", "Declared npm package licence"],
-        ["npm", "@fastify/merge-json-schemas", "0.2.1", "MIT", "Declared npm package licence"],
-        ["npm", "@fastify/proxy-addr", "5.1.1", "MIT", "Declared npm package licence"],
-        ["npm", "@fontsource/dm-mono", "5.3.0", "OFL-1.1", "Declared npm package licence"],
-        ["npm", "@fontsource/dm-sans", "5.3.0", "OFL-1.1", "Declared npm package licence"],
-        ["npm", "@grpc/grpc-js", "1.14.5", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@grpc/proto-loader", "0.8.1", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@js-sdsl/ordered-map", "4.4.2", "MIT", "Declared npm package licence"],
-        ["npm", "@nats-io/jetstream", "3.4.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@nats-io/nats-core", "3.4.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@nats-io/nkeys", "2.0.3", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@nats-io/nuid", "3.0.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@nats-io/transport-node", "3.4.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@noble/hashes", "2.4.0", "MIT", "Declared npm package licence"],
-        ["npm", "@nodable/entities", "3.1.0", "MIT", "Declared npm package licence"],
-        ["npm", "@novnc/novnc", "1.5.0", "MPL-2.0", "Declared npm package licence"],
-        ["npm", "@opencrane/auth", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/authz", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/event-store", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/events", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/handlers", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/models", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/observability", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/odoo-mcp", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/ops", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/projections", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/protocol", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/server", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@opencrane/web", "0.1.0", "AGPL-3.0-or-later", "OpenCrane root LICENSE"],
-        ["npm", "@openfga/sdk", "0.9.7", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/api", "1.9.1", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/api-logs", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/configuration", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/context-async-hooks", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/core", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-logs-otlp-grpc", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-logs-otlp-http", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-logs-otlp-proto", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-metrics-otlp-grpc", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-metrics-otlp-http", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-metrics-otlp-proto", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-prometheus", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-trace-otlp-grpc", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-trace-otlp-http", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-trace-otlp-proto", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/exporter-zipkin", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/instrumentation", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/otlp-exporter-base", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/otlp-grpc-exporter-base", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/otlp-transformer", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/propagator-b3", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/propagator-jaeger", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/resources", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/sdk-logs", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/sdk-metrics", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/sdk-node", "0.222.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/sdk-trace", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/sdk-trace-base", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/sdk-trace-node", "2.11.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@opentelemetry/semantic-conventions", "1.43.0", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "@pinojs/redact", "0.4.0", "MIT", "Declared npm package licence"],
-        ["npm", "@protobufjs/aspromise", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/base64", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/codegen", "2.0.5", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/eventemitter", "1.1.1", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/fetch", "1.1.1", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/float", "1.0.2", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/path", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/pool", "1.1.0", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@protobufjs/utf8", "1.1.2", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "@tokenizer/inflate", "0.4.1", "MIT", "Declared npm package licence"],
-        ["npm", "@tokenizer/token", "0.3.0", "MIT", "Declared npm package licence"],
-        ["npm", "@types/node", "22.20.4", "MIT", "Declared npm package licence"],
-        ["npm", "abstract-logging", "2.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "adler-32", "1.3.1", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "agent-base", "6.0.2", "MIT", "Declared npm package licence"],
-        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
-        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
-        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
-        ["npm", "ajv", "8.20.0", "MIT", "Declared npm package licence"],
-        ["npm", "ajv-formats", "3.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "ansi-regex", "5.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "ansi-styles", "4.3.0", "MIT", "Declared npm package licence"],
-        ["npm", "anynum", "1.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "async", "3.2.6", "MIT", "Declared npm package licence"],
-        ["npm", "asynckit", "0.4.0", "MIT", "Declared npm package licence"],
-        ["npm", "atomic-sleep", "1.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "avvio", "9.3.0", "MIT", "Declared npm package licence"],
-        ["npm", "axios", "1.20.0", "MIT", "Declared npm package licence"],
-        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
-        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
-        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
-        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
-        ["npm", "benchmark", "1.0.0", "ISC", "Declared npm package licence"],
-        ["npm", "block-stream2", "2.1.0", "MIT", "Declared npm package licence"],
-        ["npm", "browser-or-node", "2.1.1", "MIT", "Declared npm package licence"],
-        ["npm", "buffer-crc32", "1.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "call-bind-apply-helpers", "1.0.2", "MIT", "Declared npm package licence"],
-        ["npm", "cfb", "1.2.2", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "cjs-module-lexer", "2.2.1", "MIT", "Declared npm package licence"],
-        ["npm", "cliui", "8.0.1", "ISC", "Declared npm package licence"],
-        ["npm", "color-convert", "2.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "color-name", "1.1.4", "MIT", "Declared npm package licence"],
-        ["npm", "combined-stream", "1.0.8", "MIT", "Declared npm package licence"],
-        ["npm", "cookie", "1.1.1", "MIT", "Declared npm package licence"],
-        ["npm", "corepack", "0.34.6", "MIT", "Declared npm package licence"],
-        ["npm", "crc-32", "1.2.2", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "cron-parser", "5.10.1", "MIT", "Declared npm package licence"],
-        ["npm", "debug", "4.4.3", "MIT", "Declared npm package licence"],
-        ["npm", "decode-uri-component", "0.5.0", "MIT", "Declared npm package licence"],
-        ["npm", "delayed-stream", "1.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "dequal", "2.0.3", "MIT", "Declared npm package licence"],
-        ["npm", "dunder-proto", "1.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "emoji-regex", "8.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "es-define-property", "1.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "es-errors", "1.3.0", "MIT", "Declared npm package licence"],
-        ["npm", "es-module-lexer", "3.0.2", "MIT", "Declared npm package licence"],
-        ["npm", "es-object-atoms", "1.1.2", "MIT", "Declared npm package licence"],
-        ["npm", "es-set-tostringtag", "2.1.0", "MIT", "Declared npm package licence"],
-        ["npm", "escalade", "3.2.0", "MIT", "Declared npm package licence"],
-        ["npm", "eventemitter3", "5.0.4", "MIT", "Declared npm package licence"],
-        ["npm", "fast-decode-uri-component", "1.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "fast-deep-equal", "3.1.3", "MIT", "Declared npm package licence"],
-        ["npm", "fast-json-stringify", "7.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "fast-querystring", "1.1.2", "MIT", "Declared npm package licence"],
-        ["npm", "fast-uri", "3.1.8", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "fast-uri", "3.1.8", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "fast-uri", "3.1.8", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "fast-uri", "3.1.8", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "fast-uri", "4.2.1", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "fast-xml-builder", "1.3.1", "MIT", "Declared npm package licence"],
-        ["npm", "fast-xml-parser", "5.11.2", "MIT", "Declared npm package licence"],
-        ["npm", "fastify", "5.12.5", "MIT", "Declared npm package licence"],
-        ["npm", "fastq", "1.20.3", "ISC", "Declared npm package licence"],
-        ["npm", "file-type", "21.3.4", "MIT", "Declared npm package licence"],
-        ["npm", "filter-obj", "1.1.0", "MIT", "Declared npm package licence"],
-        ["npm", "find-my-way", "9.9.0", "MIT", "Declared npm package licence"],
-        ["npm", "follow-redirects", "1.16.0", "MIT", "Declared npm package licence"],
-        ["npm", "form-data", "4.0.6", "MIT", "Declared npm package licence"],
-        ["npm", "function-bind", "1.1.2", "MIT", "Declared npm package licence"],
-        ["npm", "get-caller-file", "2.0.5", "ISC", "Declared npm package licence"],
-        ["npm", "get-intrinsic", "1.3.0", "MIT", "Declared npm package licence"],
-        ["npm", "get-proto", "1.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "gopd", "1.2.0", "MIT", "Declared npm package licence"],
-        ["npm", "has-symbols", "1.1.0", "MIT", "Declared npm package licence"],
-        ["npm", "has-tostringtag", "1.0.2", "MIT", "Declared npm package licence"],
-        ["npm", "hasown", "2.0.4", "MIT", "Declared npm package licence"],
-        ["npm", "https-proxy-agent", "5.0.1", "MIT", "Declared npm package licence"],
-        ["npm", "ieee754", "1.2.1", "BSD-3-Clause", "Declared npm package licence"],
-        ["npm", "import-in-the-middle", "3.5.2", "Apache-2.0", "Declared npm package licence"],
-        ["npm", "inherits", "2.0.4", "ISC", "Declared npm package licence"],
-        ["npm", "ipaddr.js", "2.5.0", "MIT", "Declared npm package licence"],
-        ["npm", "is-fullwidth-code-point", "3.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "is-unsafe", "2.0.2", "MIT", "Declared npm package licence"],
-        ["npm", "jose", "5.10.0", "MIT", "Declared npm package licence"],
-        ["npm", "jose", "6.2.12", "MIT", "Declared npm package licence"],
-        ["npm", "json-schema-ref-resolver", "3.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
-        ["npm", "json-schema-traverse", "1.0.0", "MIT", "Declared npm package licence"],
+        ["npm", "katex", "0.18.10", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "khroma", "2.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "layout-base", "1.0.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "layout-base", "2.0.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["deb", "libacl1", "2.3.1-3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libapt-pkg6.0", "2.6.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libattr1", "1:2.5.1-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libaudit-common", "1:3.0.9-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libaudit1", "1:3.0.9-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libblkid1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libbz2-1.0", "1.0.8-5+b1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libc-bin", "2.36-9+deb12u14", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libc6", "2.36-9+deb12u14", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libcap-ng0", "0.8.3-1+b3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libcap2", "1:2.66-4+deb12u3+b1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libcom-err2", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libcrypt1", "1:4.4.33-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libdb5.3", "5.3.28+dfsg2-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libdebconfclient0", "0.270", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libext2fs2", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libffi8", "3.4.4-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libgcc-s1", "12.2.0-14+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libgcrypt20", "1.10.1-3+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libgmp10", "2:6.2.1+dfsg1-1.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libgnutls30", "3.7.9-2+deb12u7", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libgpg-error0", "1.46-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libhogweed6", "3.8.1-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libidn2-0", "2.3.3-1+b1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "liblz4-1", "1.9.4-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "liblzma5", "5.4.1-1+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libmd0", "1.0.4-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libmount1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libnettle8", "3.8.1-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libp11-kit0", "0.24.1-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libpam-modules", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libpam-modules-bin", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libpam-runtime", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libpam0g", "1.5.2-6+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libpcre2-8-0", "10.42-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libseccomp2", "2.5.4-1+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libselinux1", "3.4-1+b6", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libsemanage-common", "3.4-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libsemanage2", "3.4-1+b5", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libsepol2", "3.4-2.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libsmartcols1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libss2", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libstdc++6", "12.2.0-14+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libsystemd0", "252.39-1~deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libtasn1-6", "4.19.0-2+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libtinfo6", "6.4-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libudev1", "252.39-1~deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libunistring2", "1.0-2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libuuid1", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libxxhash0", "0.8.1-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "libzstd1", "1.5.4+dfsg2-5", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "light-my-request", "6.6.0", "BSD-3-Clause", "Declared npm package licence"],
         ["npm", "lodash", "4.18.1", "MIT", "Declared npm package licence"],
+        ["npm", "lodash-es", "4.18.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "lodash.camelcase", "4.3.0", "MIT", "Declared npm package licence"],
+        ["deb", "login", "1:4.13+dfsg1-1+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "logsave", "1.47.0-2+b2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "long", "5.3.2", "Apache-2.0", "Declared npm package licence"],
         ["npm", "luxon", "3.7.2", "MIT", "Declared npm package licence"],
+        ["npm", "marked", "16.4.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "math-intrinsics", "1.1.0", "MIT", "Declared npm package licence"],
+        ["deb", "mawk", "1.3.4.20200120-3.1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "mermaid", "12.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "mime-db", "1.52.0", "MIT", "Declared npm package licence"],
         ["npm", "mime-db", "1.52.0", "MIT", "Declared npm package licence"],
         ["npm", "mime-types", "2.1.35", "MIT", "Declared npm package licence"],
         ["npm", "mime-types", "2.1.35", "MIT", "Declared npm package licence"],
         ["npm", "minio", "8.0.7", "Apache-2.0", "Declared npm package licence"],
         ["npm", "module-details-from-path", "1.0.4", "MIT", "Declared npm package licence"],
+        ["deb", "mount", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "ms", "2.1.3", "MIT", "Declared npm package licence"],
+        ["deb", "ncurses-base", "6.4-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "ncurses-bin", "6.4-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["binary", "node", "22.23.1", "MIT", "Node.js LICENSE sha256:c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"],
         ["npm", "non-error", "0.1.0", "MIT", "Declared npm package licence"],
         ["npm", "oauth4webapi", "3.8.8", "MIT", "Declared npm package licence"],
         ["npm", "on-exit-leak-free", "2.1.2", "MIT", "Declared npm package licence"],
         ["npm", "opencrane-2", "UNKNOWN", "AGPL-3.0-or-later", "Declared npm package licence"],
         ["npm", "openid-client", "6.8.8", "MIT", "Declared npm package licence"],
+        ["npm", "package-manager-detector", "1.8.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["deb", "passwd", "1:4.13+dfsg1-1+deb12u2", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "path-data-parser", "0.1.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "path-expression-matcher", "1.6.2", "MIT", "Declared npm package licence"],
         ["npm", "pend", "1.2.0", "MIT", "Declared npm package licence"],
+        ["deb", "perl-base", "5.36.0-7+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "pg", "8.16.3", "MIT", "Declared npm package licence"],
         ["npm", "pg", "8.23.1", "MIT", "Declared npm package licence"],
         ["npm", "pg-boss", "12.35.0", "MIT", "Declared npm package licence"],
@@ -399,6 +500,8 @@
         ["npm", "pino", "10.3.1", "MIT", "Declared npm package licence"],
         ["npm", "pino-abstract-transport", "3.0.0", "MIT", "Declared npm package licence"],
         ["npm", "pino-std-serializers", "7.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "points-on-curve", "0.2.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "points-on-path", "0.2.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "postgres-array", "2.0.0", "MIT", "Declared npm package licence"],
         ["npm", "postgres-bytea", "1.0.1", "MIT", "Declared npm package licence"],
         ["npm", "postgres-date", "1.0.7", "MIT", "Declared npm package licence"],
@@ -419,7 +522,10 @@
         ["npm", "ret", "0.5.0", "MIT", "Declared npm package licence"],
         ["npm", "reusify", "1.1.0", "MIT", "Declared npm package licence"],
         ["npm", "rfdc", "1.4.1", "MIT", "Declared npm package licence"],
+        ["npm", "robust-predicates", "3.0.3", "Unlicense", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "roughjs", "4.6.6", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "rrule-temporal", "2.2.7", "MIT", "Declared npm package licence"],
+        ["npm", "rw", "1.3.3", "BSD-3-Clause", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "rxjs", "7.8.2", "Apache-2.0", "Declared npm package licence"],
         ["npm", "rxjs/ajax", "UNKNOWN", "Apache-2.0", "Parent rxjs 7.8.2 package licence"],
         ["npm", "rxjs/fetch", "UNKNOWN", "Apache-2.0", "Parent rxjs 7.8.2 package licence"],
@@ -429,14 +535,24 @@
         ["npm", "safe-buffer", "5.2.1", "MIT", "Declared npm package licence"],
         ["npm", "safe-regex2", "5.1.1", "MIT", "Declared npm package licence"],
         ["npm", "safe-stable-stringify", "2.5.0", "MIT", "Declared npm package licence"],
+        ["npm", "safer-buffer", "2.1.2", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "sax", "1.6.1", "BlueOak-1.0.0", "Declared npm package licence"],
         ["npm", "secure-json-parse", "4.1.0", "BSD-3-Clause", "Declared npm package licence"],
+        ["deb", "sed", "4.9-1+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "semver", "7.8.5", "ISC", "Declared npm package licence"],
         ["npm", "serialize-error", "13.0.2", "MIT", "Declared npm package licence"],
         ["npm", "set-cookie-parser", "2.7.2", "MIT", "Declared npm package licence"],
+        ["go-module", "sigs.k8s.io/json", "v0.0.0-20250730193827-2d320260d730", "Apache-2.0", "Go module LICENSE sha256:ef523ecf6292d4b80e02e6003dcbaf386e774efe70e8607ad762b1437d1f383b"],
+        ["go-module", "sigs.k8s.io/kustomize/api", "v0.21.1", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
+        ["go-module", "sigs.k8s.io/kustomize/kustomize/v5", "v5.8.1", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
+        ["go-module", "sigs.k8s.io/kustomize/kyaml", "v0.21.1", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
+        ["go-module", "sigs.k8s.io/randfill", "v1.0.0", "Apache-2.0", "Go module LICENSE sha256:fafd604c0c068855ab2ec82d6d962d21fb0d08e13085f01ac4a8463053fa1138"],
+        ["go-module", "sigs.k8s.io/structured-merge-diff/v6", "v6.4.2", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
+        ["go-module", "sigs.k8s.io/yaml", "v1.6.0", "Apache-2.0", "Go module LICENSE sha256:5dc79da695aea39a47245008a168e3f7d461b686da8bec299fd55fee0393cbcc"],
         ["npm", "sonic-boom", "4.2.1", "MIT", "Declared npm package licence"],
         ["npm", "split-on-first", "1.1.0", "MIT", "Declared npm package licence"],
         ["npm", "split2", "4.2.0", "ISC", "Declared npm package licence"],
+        ["go-module", "stdlib", "go1.26.8", "BSD-3-Clause", "Licence found in image scan"],
         ["npm", "stream-chain", "2.2.5", "BSD-3-Clause", "Declared npm package licence"],
         ["npm", "stream-json", "1.9.1", "BSD-3-Clause", "Declared npm package licence"],
         ["npm", "strict-uri-encode", "2.0.0", "MIT", "Declared npm package licence"],
@@ -445,19 +561,30 @@
         ["npm", "strip-ansi", "6.0.1", "MIT", "Declared npm package licence"],
         ["npm", "strnum", "2.4.2", "MIT", "Declared npm package licence"],
         ["npm", "strtok3", "10.3.5", "MIT", "Declared npm package licence"],
+        ["npm", "structured-source", "4.0.0", "BSD-2-Clause", "Installed package licence declaration in the all-layer image scan"],
+        ["npm", "stylis", "4.4.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
+        ["deb", "sysvinit-utils", "3.06-4", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "tagged-tag", "1.0.0", "MIT", "Declared npm package licence"],
+        ["deb", "tar", "1.34+dfsg-1.2+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "temporal-spec", "1.0.1", "Apache-2.0", "Declared npm package licence"],
         ["npm", "thread-stream", "4.2.0", "MIT", "Declared npm package licence"],
         ["npm", "through2", "4.0.2", "MIT", "Declared npm package licence"],
         ["npm", "tiny-async-pool", "2.1.0", "MIT", "Declared npm package licence"],
+        ["npm", "tinyexec", "1.3.1", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "toad-cache", "3.7.4", "MIT", "Declared npm package licence"],
         ["npm", "token-types", "6.1.2", "MIT", "Declared npm package licence"],
+        ["npm", "ts-dedent", "2.3.0", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "tslib", "2.8.1", "0BSD", "Declared npm package licence"],
         ["npm", "tweetnacl", "1.0.3", "Unlicense", "Declared npm package licence"],
         ["npm", "type-fest", "5.10.0", "MIT", "MIT option in declared MIT OR CC0 licence"],
+        ["deb", "tzdata", "2026b-0+deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "uint8array-extras", "1.6.0", "MIT", "Declared npm package licence"],
         ["npm", "undici-types", "6.21.0", "MIT", "Declared npm package licence"],
+        ["deb", "usr-is-merged", "37~deb12u1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
         ["npm", "util-deprecate", "1.0.2", "MIT", "Declared npm package licence"],
+        ["deb", "util-linux", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["deb", "util-linux-extra", "2.38.1-5+deb12u3", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "uuid", "14.0.3", "MIT", "Installed package licence declaration in the all-layer image scan"],
         ["npm", "wrap-ansi", "7.0.0", "MIT", "Declared npm package licence"],
         ["npm", "ws", "8.22.0", "MIT", "Declared npm package licence"],
         ["npm", "xml-naming", "0.3.0", "MIT", "Declared npm package licence"],
@@ -470,11 +597,12 @@
         ["npm", "yargs-parser", "21.1.1", "ISC", "Declared npm package licence"],
         ["npm", "yarn", "1.22.22", "BSD-2-Clause", "Declared npm package licence"],
         ["npm", "yauzl", "3.4.0", "MIT", "Declared npm package licence"],
-        ["npm", "zod", "4.6.5", "MIT", "Declared npm package licence"]
+        ["deb", "zlib1g", "1:1.2.13.dfsg-1", "Debian-main", "Signed Debian main package index: bookworm 2026-07-13"],
+        ["npm", "zod", "4.6.6", "MIT", "Installed package licence declaration in the all-layer image scan"]
       ]
     },
     "web": {
-      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:0a92219795920c6ebf4fd054b2331a69b6538a30a2d30c723591e4c8c25ef15a",
+      "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:1d4e3cf8ef189954fe1a2e6751de79e3c37c9f9742b14186163447bef8f3c22c",
       "sameAs": "server"
     },
     "postgres": {
@@ -790,6 +918,2550 @@
         ["go-module", "sigs.k8s.io/structured-merge-diff/v6", "v6.3.2-0.20260122202528-d9cc6641c482", "Apache-2.0", "Go module LICENSE sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"],
         ["go-module", "sigs.k8s.io/yaml", "v1.6.0", "Apache-2.0", "Go module LICENSE sha256:5dc79da695aea39a47245008a168e3f7d461b686da8bec299fd55fee0393cbcc"],
         ["go-module", "stdlib", "go1.26.8", "BSD-3-Clause", "Licence found in image scan"]
+      ]
+    },
+    "objects": {
+      "pin": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c",
+      "manual": [
+        [
+          "MinIO static executable",
+          "source 9e49d5e7a648",
+          "AGPL-3.0-only",
+          "Pinned source image; embedded Go build information names this exact source commit. The image contains no Alpine operating-system files."
+        ]
+      ],
+      "bundled": [
+        [
+          "github.com/dchest/siphash@v1.2.3",
+          [
+            "CC0-1.0"
+          ],
+          "object-notices.json; notice sha256:a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+          "CC0 hashing code is a DFSG-free part statically bundled inside the AGPL MinIO application."
+        ]
+      ],
+      "artifacts": [
+        [
+          "go-module",
+          "aead.dev/mem",
+          "v0.2.0",
+          "MIT",
+          "Reviewed module source notice sha256:e79c0433576f2a5b748470d19709f32c0b5abfd3fa1ca9001550590a84d29d19; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "aead.dev/minisign",
+          "v0.3.0",
+          "MIT",
+          "Reviewed module source notice sha256:d2e73e3423b8898d7d2fba4e55a2abb43969603fe32fdd468f197ff238969d28; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "aead.dev/mtls",
+          "v0.2.1",
+          "MIT",
+          "Reviewed module source notice sha256:3cb67631a1948ac19ca45fcce2ee7b8d078a9687fbf7bee93e8f8f9df2354346; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cel.dev/expr",
+          "v0.23.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go",
+          "v0.120.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go/auth",
+          "v0.16.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go/auth/oauth2adapt",
+          "v0.2.8",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go/compute/metadata",
+          "v0.6.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go/iam",
+          "v1.5.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go/monitoring",
+          "v1.24.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "cloud.google.com/go/storage",
+          "v1.52.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "filippo.io/edwards25519",
+          "v1.1.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/Azure/azure-sdk-for-go/sdk/azcore",
+          "v1.18.0",
+          "MIT",
+          "Reviewed module source notice sha256:646f8936b8ddcd14e13e578ff6857e368780b0d1a4f6066bee89211923a373e2; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/Azure/azure-sdk-for-go/sdk/azidentity",
+          "v1.9.0",
+          "MIT",
+          "Reviewed module source notice sha256:646f8936b8ddcd14e13e578ff6857e368780b0d1a4f6066bee89211923a373e2; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/Azure/azure-sdk-for-go/sdk/internal",
+          "v1.11.1",
+          "MIT",
+          "Reviewed module source notice sha256:646f8936b8ddcd14e13e578ff6857e368780b0d1a4f6066bee89211923a373e2; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob",
+          "v1.6.1",
+          "MIT",
+          "Reviewed module source notice sha256:a096a435e19bb6b631da46992c011a39be563e97ce7366879ad516c772904632; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/Azure/go-ntlmssp",
+          "v0.0.0-20221128193559-754e69321358",
+          "MIT",
+          "Reviewed module source notice sha256:7b7c80bf1253f5dabfe692633bd7908b6a44d1caba1ab2a776911b224e93f0fd; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/AzureAD/microsoft-authentication-library-for-go",
+          "v1.4.2",
+          "MIT",
+          "Reviewed module source notice sha256:9906940f61b1f0b533fa7d99baf55178b2808fbe113ea51dfbfad8572ccd5f2b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp",
+          "v1.27.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric",
+          "v0.51.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping",
+          "v0.51.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/IBM/sarama",
+          "v1.45.1",
+          "MIT",
+          "Reviewed module source notice sha256:1f1f8d575f61c095eb4d5f0cae1d4e046f06d2fa17d857d5d003122d43d396a8; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/VividCortex/ewma",
+          "v1.2.0",
+          "MIT",
+          "Reviewed module source notice sha256:9a6c3aa72d265f8f5fd6068d3de786741acb89edccf1c4011bc6a8b2ca64668c; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/acarl005/stripansi",
+          "v0.0.0-20180116102854-5a71ef0e047d",
+          "MIT",
+          "Reviewed module source notice sha256:53d72b0698ee5dfb05c614698d52b98e37f45d337e1f59f63186cccf52766bb3; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/alecthomas/participle",
+          "v0.7.1",
+          "MIT",
+          "Reviewed module source notice sha256:e7bf754e7153012a3a8ff697d21acd6c12e590d6a55f2aef8ee83616aa9a795f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/apache/thrift",
+          "v0.21.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:d315e6cdedc07c478de6992027bfb66f220886c6216fd7e9885ced30c3703646; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/asaskevich/govalidator",
+          "v0.0.0-20230301143203-a9d515a09cc2",
+          "MIT",
+          "Reviewed module source notice sha256:e1a36eac3f3109d06869f57127cc32683f70a170dcefe5f143ee378ff313ddfe; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/aymanbagabas/go-osc52/v2",
+          "v2.0.1",
+          "MIT",
+          "Reviewed module source notice sha256:11319e34d9dac2f45392f14f4f62e28b24173cfa13d39b32e7b7b66c2f3bdccd; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/beevik/ntp",
+          "v1.4.3",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:219e31ede044804aa5c1a4eefc304eacf0fd91a51ec5b6bb7c53aa46d6c27205; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/beorn7/perks",
+          "v1.0.1",
+          "MIT",
+          "Reviewed module source notice sha256:0db7c9ebb3717e526f34f87dd1ee8bc77d36846e29cb0cec9246f7138fbe962b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/buger/jsonparser",
+          "v1.1.1",
+          "MIT",
+          "Reviewed module source notice sha256:632b59709152e1b5bfd3e2794848bcd2f4c70e3e175646726dbf53439ea1dbe1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/cespare/xxhash/v2",
+          "v2.3.0",
+          "MIT",
+          "Reviewed module source notice sha256:f566a9f97bacdaf00d9f21dd991e81dc11201c4e016c86b470799429a1c9a79c; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/charmbracelet/bubbles",
+          "v0.20.0",
+          "MIT",
+          "Reviewed module source notice sha256:9ca49aaf6748976a8f0a9d7448f34a5f5edf1f363385f1a789e09e328c3d3f84; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/charmbracelet/bubbletea",
+          "v1.3.4",
+          "MIT",
+          "Reviewed module source notice sha256:9ca49aaf6748976a8f0a9d7448f34a5f5edf1f363385f1a789e09e328c3d3f84; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/charmbracelet/lipgloss",
+          "v1.0.0",
+          "MIT",
+          "Reviewed module source notice sha256:699cffa88b62691ea09706d356e5ee0982e87ca2b1c58ca682f27d6ae87f9efc; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/charmbracelet/x/ansi",
+          "v0.8.0",
+          "MIT",
+          "Reviewed module source notice sha256:0baa4a5942a801d93f4050d2bc0039d8c037105fcd335230d118eec99a11782b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/charmbracelet/x/term",
+          "v0.2.1",
+          "MIT",
+          "Reviewed module source notice sha256:0baa4a5942a801d93f4050d2bc0039d8c037105fcd335230d118eec99a11782b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/cheggaaa/pb",
+          "v1.0.29",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:70fa746d8e9547f977b99dc684ec1e4d059a99960f50493ba56332302ff73869; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/cncf/xds/go",
+          "v0.0.0-20250326154945-ae57f3c0d45f",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/coreos/go-oidc/v3",
+          "v3.14.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cb5e8e7e5f4a3988e1063c142c60dc2df75605f4c46515e776e3aca6df976e14; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/coreos/go-semver",
+          "v0.3.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/coreos/go-systemd/v22",
+          "v22.5.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:73ba74dfaa520b49a401b5d21459a8523a146f3b7518a833eea5efa85130bf68; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/cosnicolaou/pbzip2",
+          "v1.0.5",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/davecgh/go-spew",
+          "v1.1.2-0.20180830191138-d8f796af33cc",
+          "ISC",
+          "Reviewed module source notice sha256:1b93a317849ee09d3d7e4f1d20c2b78ddb230b4becb12d7c224c927b9d470251; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/dchest/siphash",
+          "v1.2.3",
+          "CC0-1.0",
+          "Reviewed module source notice sha256:a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/docker/go-units",
+          "v0.5.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:ba3065d2f4b11bb42a0f7b708b021d1c28fa45d097b3eab3e7db9ab4745040d1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/dustin/go-humanize",
+          "v1.0.1",
+          "MIT",
+          "Reviewed module source notice sha256:a973b4498c13eb74baa2a8e5c351426a6826f2fcdd909916dbe53ee2e755fd71; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/eapache/go-resiliency",
+          "v1.7.0",
+          "MIT",
+          "Reviewed module source notice sha256:570e75cd7eb9c305596059bd0cad4c17b6f6fae7e4a7beb4131242741f1e18f0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/eapache/go-xerial-snappy",
+          "v0.0.0-20230731223053-c322873962e3",
+          "MIT",
+          "Reviewed module source notice sha256:9ceb66eb208b519721694befc61953d42b84bdfc6b5379ad8f6590119a4b1b19; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/eapache/queue",
+          "v1.1.0",
+          "MIT",
+          "Reviewed module source notice sha256:65883406565456e553496b6c37bee3b05c1fe5a1c0e5ab177f19901d03a2b9ed; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/eclipse/paho.mqtt.golang",
+          "v1.5.0",
+          "EPL-2.0",
+          "Reviewed module source notice sha256:e2bcf9854f46a58b6e6f014d64e102a6b4e35a87d117094903e66fb68454a3fd; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/elastic/go-elasticsearch/v7",
+          "v7.17.10",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:51a94a9e94d814050a24af93bd0ea7a70aa3ebe766a7b2b367d4ef46763f8e48; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/envoyproxy/go-control-plane/envoy",
+          "v1.32.4",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/envoyproxy/protoc-gen-validate",
+          "v1.2.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/fatih/color",
+          "v1.18.0",
+          "MIT",
+          "Reviewed module source notice sha256:de95ed802d2f90e3c72cb3c9a927cca5f2aec234a3ef1250232db0f8178b2d93; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/fatih/structs",
+          "v1.1.0",
+          "MIT",
+          "Reviewed module source notice sha256:8f09e42906e1a3c7bd39629a17225b3b62f25783444d8d75ad5d6657916915df; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/felixge/fgprof",
+          "v0.9.5",
+          "MIT",
+          "Reviewed module source notice sha256:5dbe91d8ef47ef84cc1272dbbed96acd483e592f15fff64afc8b035776a4a9d3; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/felixge/httpsnoop",
+          "v1.0.4",
+          "MIT",
+          "Reviewed module source notice sha256:8108e14b5cb2b6bcd51583d3849ef0c2b5c4de61758256c20308bc70d1775dbb; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/fraugster/parquet-go",
+          "v0.12.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-asn1-ber/asn1-ber",
+          "v1.5.8-0.20250403174932-29230038a667",
+          "MIT",
+          "Reviewed module source notice sha256:ec62b7caba679339176c55c4030ac6770c37d422128054e4ecd802aea536f193; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-ini/ini",
+          "v1.67.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:f6918bd93ffe07f4b2c61b8287c32cb3122e08aed0be50f1c7d0eddc87877a8f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-jose/go-jose/v4",
+          "v4.1.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-ldap/ldap/v3",
+          "v3.4.11",
+          "MIT",
+          "Reviewed module source notice sha256:35f64977248ea3fd59074171ad76e883fe4a576a7b1c58bba85c8e5c880bb269; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-logr/logr",
+          "v1.4.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-logr/stdr",
+          "v1.2.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/analysis",
+          "v0.23.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/errors",
+          "v0.22.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/jsonpointer",
+          "v0.21.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/jsonreference",
+          "v0.21.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/loads",
+          "v0.22.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/runtime",
+          "v0.28.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/spec",
+          "v0.21.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/strfmt",
+          "v0.23.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/swag",
+          "v0.23.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-openapi/validate",
+          "v0.24.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/go-sql-driver/mysql",
+          "v1.9.2",
+          "MPL-2.0",
+          "Reviewed module source notice sha256:fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/gobwas/httphead",
+          "v0.1.0",
+          "MIT",
+          "Reviewed module source notice sha256:7d168561ad5212bf5b3023d55cba37c9594eb011ba74445d99f82055be662589; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/gobwas/pool",
+          "v0.2.1",
+          "MIT",
+          "Reviewed module source notice sha256:bcc745631c0144db2c601650c55d108172c80d601cf2346c71594a0bc32f6f1c; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/gobwas/ws",
+          "v1.4.0",
+          "MIT",
+          "Reviewed module source notice sha256:db823214b3ef18274418accda3812faac38a1545b8bd589aeb613a849b949c7a; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/goccy/go-json",
+          "v0.10.5",
+          "MIT",
+          "Reviewed module source notice sha256:a707cd425201945d57500566c47c74dc9fb8cd02ef91b9a761abddeb2401e6a7; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/gogo/protobuf",
+          "v1.3.2",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:3f571768c0ba2f330e5fee90de89bfe5141f48c1939be8008fa61461c30ca07f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/golang-jwt/jwt/v4",
+          "v4.5.2",
+          "MIT",
+          "Reviewed module source notice sha256:fe26ca41577b9b2b4448050a24b25e5753af66b5d5945d5d36094e7790bfcb2f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/golang-jwt/jwt/v5",
+          "v5.2.2",
+          "MIT",
+          "Reviewed module source notice sha256:fe26ca41577b9b2b4448050a24b25e5753af66b5d5945d5d36094e7790bfcb2f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/golang/protobuf",
+          "v1.5.4",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:8778a9fc1eaffb03ab873caae251df2d224f6b5502be8777d3cd573a4dd43903; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/golang/snappy",
+          "v1.0.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:f69f157b0be75da373605dbc8bbf142e8924ee82d8f44f11bcaf351335bf98cf; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/gomodule/redigo",
+          "v1.9.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/google/pprof",
+          "v0.0.0-20250422154841-e1f9c1950416",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/google/s2a-go",
+          "v0.1.9",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/google/shlex",
+          "v0.0.0-20191202100458-e7afc7fbc510",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/google/uuid",
+          "v1.6.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:0a8d61ed3cbfd5312326e8126c31ce9c627a283adc99131b56896d29ada04b2d; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/googleapis/enterprise-certificate-proxy",
+          "v0.3.6",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/googleapis/gax-go/v2",
+          "v2.14.1",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:b95218cd9607855a6536384c0262922b30a0c2bf56e4ced790240f3a3bac4722; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/gorilla/websocket",
+          "v1.5.3",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:2be1b548b0387ca8948e1bb9434e709126904d15f622cc2d0d8e7f186e4d122d; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/hashicorp/errwrap",
+          "v1.1.0",
+          "MPL-2.0",
+          "Reviewed module source notice sha256:bef1747eda88b9ed46e94830b0d978c3499dad5dfe38d364971760881901dadd; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/hashicorp/go-multierror",
+          "v1.1.1",
+          "MPL-2.0",
+          "Reviewed module source notice sha256:a830016911a348a54e89bd54f2f8b0d8fffdeac20aecfba8e36ebbf38a03f5ff; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/hashicorp/go-uuid",
+          "v1.0.3",
+          "MPL-2.0",
+          "Reviewed module source notice sha256:87b250b11ffadc5f872cb676caa219e2871e454ddd562d9e532d52d5c9b7520d; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/inconshreveable/mousetrap",
+          "v1.1.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:4819582701f150b28a563a6cd8ed0bf5a754e3c67b90ad38d78ba4131bf77795; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jcmturner/aescts/v2",
+          "v2.0.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jcmturner/dnsutils/v2",
+          "v2.0.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jcmturner/gofork",
+          "v1.7.6",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jcmturner/gokrb5/v8",
+          "v8.4.4",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jcmturner/rpc/v2",
+          "v2.0.3",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jedib0t/go-pretty/v6",
+          "v6.6.7",
+          "MIT",
+          "Reviewed module source notice sha256:3bae97d2a030c19562fab307f791630ce40a90052a51df83d16ed9cfebd49a07; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/jessevdk/go-flags",
+          "v1.6.1",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:399c48e1c027899b5c7de5e37cbd441081e8332bab41cedbf08d873b3a676819; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/josharian/intern",
+          "v1.0.0",
+          "MIT",
+          "Reviewed module source notice sha256:ad754e4f7d16f789dd0694828254cb4011928025b0d500339a5c4eded5a0c346; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/json-iterator/go",
+          "v1.1.12",
+          "MIT",
+          "Reviewed module source notice sha256:3247931083f058b00760a3c32a9ca0962c05e4d562ad2ffcc1753451fa8d4486; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/juju/ratelimit",
+          "v1.0.2",
+          "LGPL-3.0-only",
+          "Reviewed module source notice sha256:a92f49abd3f15a3523b022a9b74fb885b53c228f8244c817add3a835427b10d9; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/klauspost/compress",
+          "v1.18.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:0d9e582ee4bff57bf1189c9e514e6da7ce277f9cd3bc2d488b22fbb39a6d87cf; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/klauspost/cpuid/v2",
+          "v2.2.10",
+          "MIT",
+          "Reviewed module source notice sha256:5d966570d7a442d4e969892860a914e542c97f262c873baee8f0aa48e1f40212; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/klauspost/filepathx",
+          "v1.1.1",
+          "MIT",
+          "Reviewed module source notice sha256:8582c87d9a6baa28f7827c5205b7d16c3179bc794ebd4c7cc287c49a89b7eaa1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/klauspost/pgzip",
+          "v1.2.6",
+          "MIT",
+          "Reviewed module source notice sha256:7709cc030f078b17809884f92f33a2016944e1180312dc3f1371b02313d313ed; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/klauspost/readahead",
+          "v1.4.0",
+          "MIT",
+          "Reviewed module source notice sha256:10fa24a602fde465db603cd5d546e37e33642a73cd24ddf5910be81724fec8b2; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/klauspost/reedsolomon",
+          "v1.12.4",
+          "MIT",
+          "Reviewed module source notice sha256:345aa942daa8c117669a85bd75f44a8364faceee962812ddb5a576977e0610ee; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/kr/fs",
+          "v0.1.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:dd26a7abddd02e2d0aba97805b31f248ef7835d9e10da289b22e3b8ab78b324d; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/kylelemons/godebug",
+          "v1.1.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lestrrat-go/blackmagic",
+          "v1.0.2",
+          "MIT",
+          "Reviewed module source notice sha256:b9b5b03485eb7446da7ecad22178664a53c7fcecceb74d69f905819a807d710e; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lestrrat-go/httpcc",
+          "v1.0.1",
+          "MIT",
+          "Reviewed module source notice sha256:d5c8d4935994cfcfbc53d12fe756b28316858736d6e0a61acaff5fe4a84fca12; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lestrrat-go/httprc",
+          "v1.0.6",
+          "MIT",
+          "Reviewed module source notice sha256:4f4b72f6680d92713562d527612f6b016a0d50c5b47e6b5d39f177bb23d8ce52; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lestrrat-go/iter",
+          "v1.0.2",
+          "MIT",
+          "Reviewed module source notice sha256:d5c8d4935994cfcfbc53d12fe756b28316858736d6e0a61acaff5fe4a84fca12; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lestrrat-go/jwx/v2",
+          "v2.1.4",
+          "MIT",
+          "Reviewed module source notice sha256:0c4868a07b1c2dbb67c75767b4f1b2936c392d02ca2c7ee9827cac1a9d60ab1d; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lestrrat-go/option",
+          "v1.0.1",
+          "MIT",
+          "Reviewed module source notice sha256:b9b5b03485eb7446da7ecad22178664a53c7fcecceb74d69f905819a807d710e; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lib/pq",
+          "v1.10.9",
+          "MIT",
+          "Reviewed module source notice sha256:3e2d79d27727d59ab1c9752f57654733d6c8824936c22800594dccfe8864ec28; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lithammer/shortuuid/v4",
+          "v4.2.0",
+          "MIT",
+          "Reviewed module source notice sha256:d2e98cf1530c13d97df36a890831a2a1adb0a4580af192b6477bdac7f7af2461; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/lucasb-eyer/go-colorful",
+          "v1.2.0",
+          "MIT",
+          "Reviewed module source notice sha256:1e4cf2a117516ec1b54041d68ed4f5d331878b04de3386f4790e7b5b9c04e1ec; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mailru/easyjson",
+          "v0.9.0",
+          "MIT",
+          "Reviewed module source notice sha256:87baa92c3100cf37441761262d622db99492ee386a063460d4676143db49af57; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mattn/go-colorable",
+          "v0.1.14",
+          "MIT",
+          "Reviewed module source notice sha256:88a2379b3ca34bf5c57127aff9dcb802bbb60ece0805cdbda65b3bd115f971d9; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mattn/go-ieproxy",
+          "v0.0.12",
+          "MIT",
+          "Reviewed module source notice sha256:7fccc0a3d7cea8c7cbf9ae0d32c6457427d85461e938d048d4bbbb5f2a91d745; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mattn/go-isatty",
+          "v0.0.20",
+          "MIT",
+          "Reviewed module source notice sha256:08eab1118c80885fa1fa6a6dd7303f65a379fcb3733e063d20d1bbc2c76e6fa1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mattn/go-runewidth",
+          "v0.0.16",
+          "MIT",
+          "Reviewed module source notice sha256:88a2379b3ca34bf5c57127aff9dcb802bbb60ece0805cdbda65b3bd115f971d9; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/matttproud/golang_protobuf_extensions",
+          "v1.0.4",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/miekg/dns",
+          "v1.1.65",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:f200ff9bad73385db2ed81e23ee2c1fe069eb5776e17fae4ee85ad0a9e1361a5; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/cli",
+          "v1.24.2",
+          "MIT",
+          "Reviewed module source notice sha256:da277af11b85227490377fbcac6afccc68be560c4fff36ac05ca62de55345fd7; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/colorjson",
+          "v1.0.8",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/console",
+          "v1.7.7-0.20250905210349-2017f33b26e1",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/crc64nvme",
+          "v1.0.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/csvparser",
+          "v1.0.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/dnscache",
+          "v0.1.1",
+          "MIT",
+          "Reviewed module source notice sha256:5fd6a0a51e9d91ad65d3c0809b0a520801472d31dc932fa3fb3b08e5dfc95f9c; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/dperf",
+          "v0.6.3",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/filepath",
+          "v1.0.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/highwayhash",
+          "v1.0.3",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/kms-go/kes",
+          "v0.3.1",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/kms-go/kms",
+          "v0.5.1-0.20250225090116-4e64ce8d0f35",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/madmin-go/v3",
+          "v3.0.109",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/mc",
+          "v0.0.0-20250313080218-cf909e1063a9",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/md5-simd",
+          "v1.1.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/minio",
+          "v0.0.0-20251015172955-9e49d5e7a648",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/minio-go/v7",
+          "v7.0.91",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/mux",
+          "v1.9.2",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:0b77fdea862f869ef4f201ac5649bdbd38ccb055c7f6454dffae9e2adb4941c1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/pkg/v3",
+          "v3.1.3",
+          "AGPL-3.0-only",
+          "Reviewed module source notice sha256:0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/selfupdate",
+          "v0.6.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/simdjson-go",
+          "v0.4.5",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/sio",
+          "v0.4.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/websocket",
+          "v1.6.0",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:2be1b548b0387ca8948e1bb9434e709126904d15f622cc2d0d8e7f186e4d122d; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/xxml",
+          "v0.0.3",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/minio/zipindex",
+          "v0.4.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mitchellh/go-homedir",
+          "v1.1.0",
+          "MIT",
+          "Reviewed module source notice sha256:22adc4abdece712a737573672f082fd61ac2b21df878efb87ffcff4354a07f26; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/mitchellh/mapstructure",
+          "v1.5.0",
+          "MIT",
+          "Reviewed module source notice sha256:22adc4abdece712a737573672f082fd61ac2b21df878efb87ffcff4354a07f26; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/modern-go/concurrent",
+          "v0.0.0-20180306012644-bacd9c7ef1dd",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/modern-go/reflect2",
+          "v1.0.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/muesli/ansi",
+          "v0.0.0-20230316100256-276c6243b2f6",
+          "MIT",
+          "Reviewed module source notice sha256:43f65e00e8919fa43c5f45bb2ae578b6d3ee823eb99aa14c85c9ecd06e0350b5; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/muesli/cancelreader",
+          "v0.2.2",
+          "MIT",
+          "Reviewed module source notice sha256:8c139dbbc83b4fb055b4100b6b9402f7de3dd6bbca05015bdfcc4b392c8cfd5f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/muesli/reflow",
+          "v0.3.0",
+          "MIT",
+          "Reviewed module source notice sha256:233e8cf9a812999ccee4d3edb270b0f11ab3539658e680bcb873604915ca5038; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/muesli/termenv",
+          "v0.16.0",
+          "MIT",
+          "Reviewed module source notice sha256:233e8cf9a812999ccee4d3edb270b0f11ab3539658e680bcb873604915ca5038; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/munnerz/goautoneg",
+          "v0.0.0-20191010083416-a7dc8b61c822",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:aa1376b9bc5dea6f30cdefde40c176a254f247d2814d0a9929395138631b2ae0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/nats-io/nats.go",
+          "v1.41.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/nats-io/nkeys",
+          "v0.4.11",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/nats-io/nuid",
+          "v1.0.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/nats-io/stan.go",
+          "v0.10.4",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/ncw/directio",
+          "v1.0.5",
+          "MIT",
+          "Reviewed module source notice sha256:8cd2e9e750b90a04b7d82dbbca3930c696ae0309d7c10464f90a44f45754cd04; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/nsqio/go-nsq",
+          "v1.1.0",
+          "MIT",
+          "Reviewed module source notice sha256:89807acf2309bd285f033404ee78581602f3cd9b819a16ac2f0e5f60ff4a473e; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/oklog/ulid",
+          "v1.3.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/olekukonko/tablewriter",
+          "v0.0.5",
+          "MIT",
+          "Reviewed module source notice sha256:0583acca2b32a7e4f7bc2d98422b2f55097333273731b3ba2a16d66f9e422744; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/philhofer/fwd",
+          "v1.2.0",
+          "MIT",
+          "Reviewed module source notice sha256:430da36bd967b28fc662f05e9245306da10941e93911052114a20ef10e4410f8; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/pierrec/lz4/v4",
+          "v4.1.22",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:6a358d2540ca14048f02d366f23787c0a480157e58f058113f0e27168dd4e447; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/pkg/browser",
+          "v0.0.0-20240102092130-5ac0b6a4141c",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:4801bb0c5d70b980b3e1f63d1d2df8d84fec22548e3d73f03a68df1fb808791f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/pkg/errors",
+          "v0.9.1",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:8d427fd87bc9579ea368fde3d49f9ca22eac857f91a9dec7e3004bdfab7dee86; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/pkg/sftp",
+          "v1.13.9",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:f5b5087b8e596d015cfea7db26527fe67a196c18ca37415c288dd2534ff74c37; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/pkg/xattr",
+          "v0.4.10",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:2c71fbccf236906a9961d375625a08dc696c112a7ebcfbfd32900e80f8ecaa51; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/posener/complete",
+          "v1.2.3",
+          "MIT",
+          "Reviewed module source notice sha256:42707f6d0ca72916d2a48dbc977aab20a5e23270a7651bd18227e992f9d41548; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/prometheus/client_golang",
+          "v1.22.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/prometheus/client_model",
+          "v0.6.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/prometheus/common",
+          "v0.63.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/prometheus/procfs",
+          "v0.16.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/prometheus/prom2json",
+          "v1.4.2",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/prometheus/prometheus",
+          "v0.303.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/puzpuzpuz/xsync/v3",
+          "v3.5.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/rabbitmq/amqp091-go",
+          "v1.10.0",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:2fa3f380607b1591fa0e0962f70a1bd8b648427832abb647be85b141574be3c2; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/rcrowley/go-metrics",
+          "v0.0.0-20250401214520-65e299d6c5c9",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:d2571186acad91c8a3121fb31f1aa5963e82ccd08608d00cef3eb3f3a6c8ad38; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/rivo/uniseg",
+          "v0.4.7",
+          "MIT",
+          "Reviewed module source notice sha256:a59885f5f0f3b3c07cf9444db5fe399b6f0791eac82055f7b85cc65500551039; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/rjeczalik/notify",
+          "v0.9.3",
+          "MIT",
+          "Reviewed module source notice sha256:42efbe213a0bfa04fcfb1efb683efc3e19cd31a8725e296c277cf5dc48a6bd11; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/rs/cors",
+          "v1.11.1",
+          "MIT",
+          "Reviewed module source notice sha256:c21f3b628875c093885ba085d13959b5e78841d64a8fe76c10ba7293aec32fc7; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/rs/xid",
+          "v1.6.0",
+          "MIT",
+          "Reviewed module source notice sha256:c480873f0ff2b7e2c539bdd84fb4da4178d8d02479c94924f7bffeafb7add358; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/safchain/ethtool",
+          "v0.5.10",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:9b630bec609d7f1fa60387ecf3ccc3e1c86e8e18503ae07d050c26b174bbc8d9; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/secure-io/sio-go",
+          "v0.3.1",
+          "MIT",
+          "Reviewed module source notice sha256:95ca6ef20a59612853abf39c6667785c8d0971414de8cd0a90b44987d9f8f7f8; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/shirou/gopsutil/v3",
+          "v3.24.5",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:ad1e64b82c04fb2ee6bfe521bff01266971ffaa70500024d4ac767c6033aafb9; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/spiffe/go-spiffe/v2",
+          "v2.5.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/tidwall/gjson",
+          "v1.18.0",
+          "MIT",
+          "Reviewed module source notice sha256:be83ad53208d03a9fe08c7fac231cabf79422989ef5706bff217bd35104ebf07; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/tidwall/match",
+          "v1.1.1",
+          "MIT",
+          "Reviewed module source notice sha256:be83ad53208d03a9fe08c7fac231cabf79422989ef5706bff217bd35104ebf07; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/tidwall/pretty",
+          "v1.2.1",
+          "MIT",
+          "Reviewed module source notice sha256:0ca70311227fe097c662dece3f359e3317fa7f9d41f8d29eb45fc5135e216139; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/tinylib/msgp",
+          "v1.4.0",
+          "MIT",
+          "Reviewed module source notice sha256:17df22e31ef6a84f70909eed5185f41443a03dd05b14e8dec319d5c2bd7d7b3b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/tklauser/go-sysconf",
+          "v0.3.15",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:fdaaa923d83d44f8b2ed1185600c5aa8c10673f11fba9feb78bd2816786fd6be; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/tklauser/numcpus",
+          "v0.10.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/unrolled/secure",
+          "v1.17.0",
+          "MIT",
+          "Reviewed module source notice sha256:2db31eaf6759b6eb757e171daffc5c75d677a0d71d99ad48fb25bc9063f1565f; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/valyala/bytebufferpool",
+          "v1.0.0",
+          "MIT",
+          "Reviewed module source notice sha256:c4c2923938be3bf985290743398835cb6097d277663eeb1addec34b4df28d806; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/vbauerster/mpb/v8",
+          "v8.9.3",
+          "Unlicense",
+          "Reviewed module source notice sha256:7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/xdg/scram",
+          "v1.0.5",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/xdg/stringprep",
+          "v1.0.3",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:09e8a9bcec8067104652c168685ab0931e7868f9c8284b66f5ae6edae5f1130b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/zeebo/errs",
+          "v1.4.0",
+          "MIT",
+          "Reviewed module source notice sha256:c5c82acbbb56f625b57a5a15c83662b444caca8be37323c7e56e06b7e06fa293; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "github.com/zeebo/xxh3",
+          "v1.0.2",
+          "BSD-2-Clause",
+          "Reviewed module source notice sha256:cc347497d766f469091ce91cb17cb927a286dcd76b075a9d75496bf4375af4b3; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.etcd.io/etcd/api/v3",
+          "v3.5.21",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.etcd.io/etcd/client/pkg/v3",
+          "v3.5.21",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.etcd.io/etcd/client/v3",
+          "v3.5.21",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.mongodb.org/mongo-driver",
+          "v1.17.3",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/auto/sdk",
+          "v1.1.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/contrib/detectors/gcp",
+          "v1.35.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc",
+          "v0.60.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+          "v0.60.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/otel",
+          "v1.35.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/otel/metric",
+          "v1.35.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/otel/sdk",
+          "v1.35.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/otel/sdk/metric",
+          "v1.35.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.opentelemetry.io/otel/trace",
+          "v1.35.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.uber.org/atomic",
+          "v1.11.0",
+          "MIT",
+          "Reviewed module source notice sha256:edbb5a4d165ac69376c765b551c0662ff42bea87e1f1eda85f42ac90c34b09d0; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.uber.org/multierr",
+          "v1.11.0",
+          "MIT",
+          "Reviewed module source notice sha256:dcdabe03bef2382a130640d1c3a4cd5ec42aba1035095c38272fde694eb72405; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "go.uber.org/zap",
+          "v1.27.0",
+          "MIT",
+          "Reviewed module source notice sha256:7de716e70addb64f9305298ef32a9dd68e40d5b3095a5d868ba4461404dbfbcf; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "goftp.io/server/v2",
+          "v2.0.1",
+          "MIT",
+          "Reviewed module source notice sha256:b283cb4c679f7d14cf4245ec7d6cdb78c340064328c86c596b2f6be09cd61670; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/crypto",
+          "v0.37.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/net",
+          "v0.39.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/oauth2",
+          "v0.29.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/sync",
+          "v0.13.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/sys",
+          "v0.32.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/term",
+          "v0.31.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/text",
+          "v0.24.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "golang.org/x/time",
+          "v0.11.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "google.golang.org/api",
+          "v0.230.0",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:110244b02140866ee37d17fa7449436a377ec3b85a481fbb208f4c87964382de; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "google.golang.org/genproto",
+          "v0.0.0-20250422160041-2d3770c4ea7f",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "google.golang.org/genproto/googleapis/api",
+          "v0.0.0-20250422160041-2d3770c4ea7f",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "google.golang.org/genproto/googleapis/rpc",
+          "v0.0.0-20250422160041-2d3770c4ea7f",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "google.golang.org/grpc",
+          "v1.72.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "google.golang.org/protobuf",
+          "v1.36.6",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:4835612df0098ca95f8e7d9e3bffcb02358d435dbb38057c844c99d7f725eb20; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "gopkg.in/yaml.v2",
+          "v2.4.0",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "gopkg.in/yaml.v3",
+          "v3.0.1",
+          "Apache-2.0",
+          "Reviewed module source notice sha256:d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b; infra/package/object-notices.json"
+        ],
+        [
+          "go-module",
+          "stdlib",
+          "go1.24.9",
+          "BSD-3-Clause",
+          "Reviewed module source notice sha256:911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad; infra/package/object-notices.json"
+        ]
+      ]
+    },
+    "scanner": {
+      "pin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:126d7e9292b6c260c60d4fc945bb74698ddd387da474b73bca78d3b0ad2becfb",
+      "manual": [
+        [
+          "ClamAV",
+          "1.5.2",
+          "GPL-2.0-only",
+          "Upstream GPL-2.0 with the OpenSSL linking exception; infra/clamav/LICENCES.md. Scanner.Dockerfile removes UnRAR and flattens the final filesystem."
+        ]
+      ],
+      "bundled": [
+        [
+          "ClamAV parsers",
+          [
+            "LGPL-2.1-only",
+            "Apache-2.0",
+            "BSD-3-Clause",
+            "MIT",
+            "Zlib",
+            "NCSA"
+          ],
+          "infra/clamav/LICENCES.md; upstream ClamAV 1.5.2 COPYING directory",
+          "Reviewed OSI grants for the bundled parsing libraries."
+        ],
+        [
+          "ClamAV LZMA/7z parser",
+          [
+            "LicenseRef-Public-Domain"
+          ],
+          "infra/clamav/LICENCES.md; upstream ClamAV 1.5.2 COPYING directory",
+          "The public-domain parser is a DFSG-free part bundled inside GPL ClamAV."
+        ]
+      ],
+      "artifacts": [
+        [
+          "deb",
+          "apt",
+          "3.0.3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "base-files",
+          "13.8+deb13u5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "base-passwd",
+          "3.6.7",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "bash",
+          "5.2.37-2+b9",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "bsdutils",
+          "1:2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "ca-certificates",
+          "20250419",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "coreutils",
+          "9.7-3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "dash",
+          "0.5.12-12",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "debconf",
+          "1.5.91",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "debian-archive-keyring",
+          "2025.1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "debianutils",
+          "5.23.2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "diffutils",
+          "1:3.10-4",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "dpkg",
+          "1.22.22",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "findutils",
+          "4.10.0-3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "gcc-14-base",
+          "14.2.0-19",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "grep",
+          "3.11-4",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "gzip",
+          "1.13-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "hostname",
+          "3.25",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "init-system-helpers",
+          "1.69~deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "krb5-locales",
+          "1.21.3-5+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libacl1",
+          "2.3.2-2+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libapt-pkg7.0",
+          "3.0.3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libattr1",
+          "1:2.5.2-3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libaudit-common",
+          "1:4.0.2-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libaudit1",
+          "1:4.0.2-2+b2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libblkid1",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libbrotli1",
+          "1.1.0-2+b7",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libbsd0",
+          "0.12.2-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libbz2-1.0",
+          "1.0.8-6",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libc-bin",
+          "2.41-12+deb13u3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libc6",
+          "2.41-12+deb13u3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libcap-ng0",
+          "0.8.5-4+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libcap2",
+          "1:2.75-10+deb13u1+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libcom-err2",
+          "1.47.2-3+b11",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libcrypt1",
+          "1:4.4.38-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libcurl4t64",
+          "8.14.1-2+deb13u3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libdb5.3t64",
+          "5.3.28+dfsg2-9",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libdebconfclient0",
+          "0.280",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libffi8",
+          "3.4.8-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libgcc-s1",
+          "14.2.0-19",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libgmp10",
+          "2:6.3.0+dfsg-3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libgnutls30t64",
+          "3.8.9-3+deb13u4",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libgpm2",
+          "1.20.7-11+b2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libgssapi-krb5-2",
+          "1.21.3-5+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libhogweed6t64",
+          "3.10.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libidn2-0",
+          "2.3.8-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libjson-c5",
+          "0.18+ds-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libk5crypto3",
+          "1.21.3-5+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libkeyutils1",
+          "1.6.3-6",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libkrb5-3",
+          "1.21.3-5+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libkrb5support0",
+          "1.21.3-5+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "liblastlog2-2",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libldap-common",
+          "2.6.10+dfsg-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libldap2",
+          "2.6.10+dfsg-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "liblz4-1",
+          "1.10.0-4",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "liblzma5",
+          "5.8.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libmd0",
+          "1.1.0-2+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libmilter1.0.1",
+          "8.18.1-6+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libmount1",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libncurses6",
+          "6.5+20250216-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libnettle8t64",
+          "3.10.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libnghttp2-14",
+          "1.64.0-1.1+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libnghttp3-9",
+          "1.8.0-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libp11-kit0",
+          "0.25.5-3",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libpam-modules",
+          "1.7.0-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libpam-modules-bin",
+          "1.7.0-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libpam-runtime",
+          "1.7.0-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libpam0g",
+          "1.7.0-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libpcre2-8-0",
+          "10.46-1~deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libpsl5t64",
+          "0.21.2-1.1+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "librtmp1",
+          "2.4+20151223.gitfa8646d.1-2+b5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsasl2-2",
+          "2.1.28+dfsg1-9",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsasl2-modules",
+          "2.1.28+dfsg1-9",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsasl2-modules-db",
+          "2.1.28+dfsg1-9",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libseccomp2",
+          "2.6.0-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libselinux1",
+          "3.8.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsemanage-common",
+          "3.8.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsemanage2",
+          "3.8.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsepol2",
+          "3.8.1-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsmartcols1",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsqlite3-0",
+          "3.46.1-7+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libssh2-1t64",
+          "1.11.1-1+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libssl3t64",
+          "3.5.6-1~deb13u2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libstdc++6",
+          "14.2.0-19",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libsystemd0",
+          "257.13-1~deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libtasn1-6",
+          "4.20.0-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libtinfo6",
+          "6.5+20250216-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libudev1",
+          "257.13-1~deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libunistring5",
+          "1.3-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libuuid1",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libxml2",
+          "2.12.7+dfsg+really2.9.14-2.1+deb13u2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libxxhash0",
+          "0.8.3-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "libzstd1",
+          "1.5.7+dfsg-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "login",
+          "1:4.16.0-2+really2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "login.defs",
+          "1:4.17.4-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "mawk",
+          "1.3.4.20250131-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "mount",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "ncurses-base",
+          "6.5+20250216-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "ncurses-bin",
+          "6.5+20250216-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "netcat-openbsd",
+          "1.229-1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "openssl",
+          "3.5.6-1~deb13u2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "openssl-provider-legacy",
+          "3.5.6-1~deb13u2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "passwd",
+          "1:4.17.4-2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "perl-base",
+          "5.40.1-6",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "publicsuffix",
+          "20250328.1952-0.1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "sed",
+          "4.9-2+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "sqv",
+          "1.3.0-3+b2",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "sysvinit-utils",
+          "3.14-4",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "tar",
+          "1.35+dfsg-3.1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "tzdata",
+          "2026b-0+deb13u1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "util-linux",
+          "2.41-5",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ],
+        [
+          "deb",
+          "zlib1g",
+          "1:1.3.dfsg+really1.3.1-1+b1",
+          "Debian-main",
+          "Signed Debian main indexes and exact versions: infra/package/scanner-debian-main.json"
+        ]
       ]
     }
   }

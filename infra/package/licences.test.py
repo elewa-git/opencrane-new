@@ -20,7 +20,29 @@ checker = importlib.util.module_from_spec(specification)
 specification.loader.exec_module(checker)
 
 
+def unreviewed_package_fixture():
+    reviewed = checker.read_json(source.with_name("reviewed-images.json"))
+    inventory = checker.read_json(source.with_name("licence-inventory.json"))
+    # Keep historical candidate checks independent of later image promotion.
+    reviewed.pop("packageImage", None)
+    reviewed.pop("natsCluster", None)
+    return reviewed, inventory
+
+
 class LicenceTests(unittest.TestCase):
+    def test_cc0_is_allowed_only_as_a_named_part_bundled_inside_minio(self):
+        notice = ["github.com/dchest/siphash@v1.2.3", ["CC0-1.0"],
+                  "Reviewed source notice SHA-256", "Static hashing code bundled in AGPL MinIO"]
+        entry = ["go-module", "github.com/dchest/siphash", "v1.2.3", "CC0-1.0", "Source notice"]
+        checker.check_bundled_notice(notice, {"AGPL-3.0-only"})
+        checker.check_entry(entry, {"AGPL-3.0-only"}, set(), None, [notice])
+        with self.assertRaises(ValueError):
+            checker.check_entry(entry, {"AGPL-3.0-only"}, set())
+        changed = list(entry)
+        changed[2] = "v1.2.4"
+        with self.assertRaises(ValueError):
+            checker.check_entry(changed, {"AGPL-3.0-only"}, set(), None, [notice])
+
     def corepack_fixture(self):
         path = source.parents[2] / "docs/process/p5-4-images9/check-corepack.py"
         module_spec = importlib.util.spec_from_file_location("corepack", path)
@@ -38,8 +60,7 @@ class LicenceTests(unittest.TestCase):
         self.assertEqual(len(contents[corepack.BUNDLE]), 967004)
         regions = gzip.decompress(corepack.RECORD.with_name("regions.json.gz").read_bytes())
         self.assertEqual(len(json.loads(regions)), 175)
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -381,8 +402,7 @@ else:
         self.assertEqual(valgrind.check_review(earlier, terms), "V8 Valgrind client API")
         pcre, earlier, terms = self.pcre_fixture()
         self.assertEqual(pcre.check_review(earlier, terms), "V8 PCRE test suite")
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -703,8 +723,7 @@ else:
             checker.check_bundled_notice(
                 ["Other bundle", ["bzip2-1.0.6"], "other.h", "Unreviewed terms"],
                 valgrind.candidate.OSI)
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
         node, historical, notice = self.node_review_fixture()
@@ -951,8 +970,7 @@ else:
         node, historical, notice = self.node_review_fixture()
         self.assertEqual(node.check_review(historical, notice), 43)
         self.assertEqual(len(historical["blockedReferences"]), 10)
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -1095,8 +1113,7 @@ else:
         node_review, review, contents = self.node_review_fixture()
         self.assertEqual(node_review.check_review(review, contents), 43)
         self.assertEqual(review["status"], "PARTIAL")
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             checker.check_package_review(reviewed, inventory)
 
@@ -1406,8 +1423,7 @@ else:
         self.assertIn('LABEL org.opencontainers.image.revision="$SOURCE_REVISION"', runtime)
 
     def promotion_fixture(self, directory):
-        reviewed = checker.read_json(source.with_name("reviewed-images.json"))
-        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        reviewed, inventory = unreviewed_package_fixture()
         revision = "a" * 40
         image_id = "sha256:" + "b" * 64
         pin = reviewed["images"]["server"]
@@ -1441,6 +1457,15 @@ else:
             fixture = self.promotion_fixture(directory)
             reviewed, _, inspection, _, _ = fixture
             inspection[0]["Id"] = reviewed["images"]["server"].split("@")[1]
+            checker.check_package_promotion(*fixture)
+
+    def test_one_server_promotion_requires_the_same_source_and_scan_proof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.promotion_fixture(directory)
+            reviewed, _, _, _, _ = fixture
+            proof = reviewed.pop("natsCluster")
+            del proof["replicas"]
+            reviewed["packageImage"] = proof
             checker.check_package_promotion(*fixture)
 
     def test_promotion_refuses_a_package_deleted_only_from_the_final_filesystem(self):
@@ -1522,7 +1547,7 @@ else:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
                              "reviewed-images.json", "osi-licences.json", "Dockerfile",
-                             "pgdg-trixie-main.json"):
+                             "pgdg-trixie-main.json", "scanner-debian-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
 
             inventory_path = package / "licence-inventory.json"
@@ -1570,7 +1595,7 @@ else:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
                              "reviewed-images.json", "osi-licences.json", "Dockerfile",
-                             "pgdg-trixie-main.json"):
+                             "pgdg-trixie-main.json", "scanner-debian-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
             for index in source.parent.glob("debian-main-*.json"):
                 shutil.copy2(index, package / index.name)
@@ -1606,7 +1631,7 @@ else:
             package = Path(temporary_directory)
             for filename in ("check-licences.py", "licence-inventory.json",
                              "reviewed-images.json", "osi-licences.json", "Dockerfile",
-                             "pgdg-trixie-main.json"):
+                             "pgdg-trixie-main.json", "scanner-debian-main.json"):
                 shutil.copy2(source.with_name(filename), package / filename)
 
             inventory_path = package / "licence-inventory.json"
@@ -1617,6 +1642,7 @@ else:
             for role in ("server", "web"):
                 inventory["images"][role]["pin"] = changed_pin
                 reviewed["images"][role] = changed_pin
+                reviewed["packageImage"][role] = changed_pin
             inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
             reviewed_path.write_text(json.dumps(reviewed), encoding="utf-8")
 
