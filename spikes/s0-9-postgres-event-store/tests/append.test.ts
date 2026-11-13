@@ -248,20 +248,24 @@ it("keeps global order across read-ahead, aborts mid-history and resumes from th
   const sequences: number[] = [];
   for await (const stored of fixture.store.subscribe(2, abort.signal)) {
     sequences.push(stored.sequence);
-    if (stored.sequence === 66) abort.abort();
+    if (stored.sequence === 66) {
+      abort.abort();
+    }
   }
   expect(sequences).toEqual(Array.from({ length: 65 }, (_, i) => i + 2));
   const resumed: number[] = [];
   for await (const stored of fixture.store.subscribe(67)) {
     resumed.push(stored.sequence);
-    if (stored.sequence === 129) break;
+    if (stored.sequence === 129) {
+      break;
+    }
   }
   expect(resumed).toEqual(Array.from({ length: 63 }, (_, i) => i + 67));
   const tailAbort = new AbortController();
   const pending = fixture.store.subscribe(130, tailAbort.signal).next();
   tailAbort.abort();
   expect((await pending).done).toBe(true);
-}, 15_000); // Includes TLS setup and 129 real appends on the shared dev host.
+}, 15_000); // Includes PostgreSQL setup and 129 real appends on the shared dev host.
 
 it.skip("retries no-responder failures through recovery and the full deadline", async () => {
   fixture = await natsFixture();

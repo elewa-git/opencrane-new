@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Before the first contract run, provide a disposable PostgreSQL server.
+# On a fresh machine, if pg-test does not already exist and port 55432 is free:
+# docker run -d --name pg-test -p 127.0.0.1:55432:5432 \
+#   -e POSTGRES_PASSWORD=test postgres:17.6-alpine
+# Check readiness with: docker exec pg-test pg_isready -U postgres
+# PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres
+# The role needs CONNECT and CREATE on the database. Fixtures own their random
+# schemas and create/drop tables and indexes there. The disposable postgres role
+# has these permissions. Keep this shared server; cleanup below owns only pgtest-clean-1094.
+# Model fixtures also use PG_TEST_URL and need the role's CREATEDB permission.
+
 spike=spikes/s0-9-postgres-event-store
 export PG_TEST_URL=${PG_TEST_URL:-postgres://postgres:test@127.0.0.1:55432/postgres}
 nice -n 10 npx vitest run --config "$spike/vitest.config.ts" \

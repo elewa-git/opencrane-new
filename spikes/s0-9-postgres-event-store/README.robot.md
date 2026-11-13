@@ -63,7 +63,7 @@ its read-failure injection does not accidentally stop the concurrent writer.
 | --- | --- | --- | --- | --- |
 | `append.test.ts` | PARTIAL | 9 | 13 | None; transport cases below are NOT RUN |
 | `append-outcomes.test.ts` | PARTIAL | 16 | 4 | None; transport cases below are NOT RUN |
-| `history-checked.test.ts` | PARTIAL | 15 | 2 | None; transport cases below are NOT RUN |
+| `history-checked.test.ts` | PARTIAL | 16 | 2 | None; transport cases below are NOT RUN |
 | `read-event-at.test.ts` | PASS | 1 | 0 | None |
 | `conversation-command.test.ts` | PASS | 6 | 0 | None |
 
@@ -92,6 +92,15 @@ The access-change test was manually checked with its transaction comparison remo
 it failed as expected, then the comparison was restored. No retry or longer timeout
 was added to make a failed acceptance check pass.
 
+The global-only conflict test keeps the target subject position current, advances only
+an unrelated subject, and refuses a new ownership write with the stale global position.
+It verifies unchanged target history and success after refreshing only the global position.
+Removing the `expectedGlobalSequence` comparison by hand made this test append incorrectly;
+restoring it made the test pass. Omitting `accessSubjects` from the existing access-change
+test also reproduced an incorrect append. The list and both comparisons are restored.
+Two documentation checks failed before correcting the partial latency result and the
+database prerequisites; they now protect those public claims.
+
 ## Measurements
 
 `volume.test.ts` copies `libs/models/test/authority-volume.test.ts`: identical setup,
@@ -103,6 +112,14 @@ That fixture still starts a NATS connection for its dispatcher setup; dispatch a
 workers are stopped before timed calls. Its event log, budget and audit appends use
 the selected store. This measures the log replacement, not a fully NATS-free silo.
 Provider responses are local stubs; no paid model or real secret is used.
+
+**(a) PARTIAL:** product model/MCP callbacks do not pass `accessSubjects`, so those
+PostgreSQL appends compare no access positions inside the transaction. JetStream still
+conditions its publish on the log position. The unprotected PostgreSQL timings below
+are observations of unequal work; timings with transactional access-subject comparisons
+are NOT RUN. The callback-only contract does not reveal the complete watched subjects
+to this fixture. Supplying and verifying those subjects before a fair rerun remains work
+outside this night's comparison. A destination authority read does not append.
 
 Both stores are local single-primary fixtures. JetStream uses file storage and test TLS;
 PostgreSQL uses the requested Docker image and loopback connection without TLS. Default

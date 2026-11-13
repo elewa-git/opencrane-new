@@ -20,18 +20,24 @@ export type AccessPosition = { subject: string; sequence: number };
 
 function requireTime(deadline: number, signal?: AbortSignal) {
   signal?.throwIfAborted();
-  if (performance.now() >= deadline) throw new Error('Event store deadline expired');
+  if (performance.now() >= deadline) {
+    throw new Error('Event store deadline expired');
+  }
 }
 
 function storedEvent(row: EventRow): StoredEvent {
   const sequence = Number(row.position);
-  if (!Number.isSafeInteger(sequence) || sequence <= 0) throw new Error('Invalid event position');
+  if (!Number.isSafeInteger(sequence) || sequence <= 0) {
+    throw new Error('Invalid event position');
+  }
   return { sequence, event: row.event };
 }
 
 function subjectPattern(subject: string) {
   const category = /^(chat-state|[a-z]+)-\*$/u.exec(subject);
-  if (category) return `${category[1]}-%`;
+  if (category) {
+    return `${category[1]}-%`;
+  }
   wireSubject(subject);
   return undefined;
 }
@@ -46,7 +52,9 @@ async function latest(database: Database, subject?: string) {
   }
   const result = await database.query<{ position: string }>(sql, values);
   const position = Number(result.rows[0]!.position);
-  if (!Number.isSafeInteger(position)) throw new Error('Invalid event position');
+  if (!Number.isSafeInteger(position)) {
+    throw new Error('Invalid event position');
+  }
   return position;
 }
 
@@ -54,10 +62,14 @@ async function releaseTransaction(client: PoolClient, open: boolean,
   discard: boolean, failure: unknown) {
   let discardConnection = discard;
   try {
-    if (open) await client.query('ROLLBACK');
+    if (open) {
+      await client.query('ROLLBACK');
+    }
   } catch (rollbackCause) {
     discardConnection = true;
-    if (failure === undefined) throw rollbackCause;
+    if (failure === undefined) {
+      throw rollbackCause;
+    }
     const causes = [failure, rollbackCause];
     const options = { cause: failure };
     throw new AggregateError(causes, 'Transaction and rollback failed', options);
@@ -86,14 +98,18 @@ export class PostgresEventStore {
 
   async append(command: PostgresAppendCommand): Promise<AppendResult> {
     const event = validateCommand(command);
-    if (!event) return rejectedAppend('invalid_event');
+    if (!event) {
+      return rejectedAppend('invalid_event');
+    }
     const deadline = Math.min(command.deadline ?? Infinity, performance.now() + 10_000);
     let committed = false;
     try {
       requireTime(deadline, command.signal);
       if (!command.historyChecked) {
         const previous = await previousAppend(this.readStream(event.subject, 1, deadline), event);
-        if (previous) return previous;
+        if (previous) {
+          return previous;
+        }
       }
       const positions: AccessPosition[] = [];
       const accessSubjects = [...new Set(command.accessSubjects ?? [])];
@@ -136,7 +152,9 @@ export class PostgresEventStore {
       await client.query('SELECT pg_advisory_xact_lock(1094)');
       requireTime(deadline, command.signal);
       const duplicate = await this.duplicate(client, event);
-      if (duplicate) return duplicate;
+      if (duplicate) {
+        return duplicate;
+      }
       const allowed = await this.conditions(client, command, positions, event);
       if (!allowed) {
         await client.query('ROLLBACK');
@@ -170,23 +188,33 @@ export class PostgresEventStore {
     const result = await client.query<EventRow>("SELECT * FROM events WHERE event->>'id' = $1",
       [event.id]);
     const row = result.rows[0];
-    if (!row) return undefined;
+    if (!row) {
+      return undefined;
+    }
     const saved = storedEvent(row);
-    if (!sameCommand(saved.event, event)) return rejectedAppend('duplicate_id');
+    if (!sameCommand(saved.event, event)) {
+      return rejectedAppend('duplicate_id');
+    }
     return savedAppend(saved);
   }
 
   private async conditions(client: PoolClient, command: PostgresAppendCommand,
     positions: AccessPosition[], event: EventEnvelope) {
     const subject = command.expectedSubject ?? event.subject;
-    if (await latest(client, subject) !== command.expectedSequence) return false;
+    if (await latest(client, subject) !== command.expectedSequence) {
+      return false;
+    }
     if (command.expectedGlobalSequence !== undefined &&
-        await latest(client) !== command.expectedGlobalSequence) return false;
+        await latest(client) !== command.expectedGlobalSequence) {
+      return false;
+    }
     if (event.type === 'conversation.created' && await latest(client, event.subject) !== 0) {
       return false;
     }
     for (const position of positions) {
-      if (await latest(client, position.subject) !== position.sequence) return false;
+      if (await latest(client, position.subject) !== position.sequence) {
+        return false;
+      }
     }
     return true;
   }
@@ -197,7 +225,9 @@ export class PostgresEventStore {
       [sequence]);
     requireTime(deadline);
     const row = result.rows[0];
-    if (!row) throw new Error('Event position missing');
+    if (!row) {
+      throw new Error('Event position missing');
+    }
     return storedEvent(row);
   }
 
@@ -218,12 +248,16 @@ export class PostgresEventStore {
     let sequence = Math.max(1, fromSequence);
     while (sequence <= snapshot) {
       const values: (string | number)[] = [subjects[0]!, sequence, snapshot];
-      if (subjects[1]) values.push(subjects[1]);
+      if (subjects[1]) {
+        values.push(subjects[1]);
+      }
       const sql = `SELECT * FROM events WHERE ${predicate}
         AND position >= $2 AND position <= $3 ORDER BY position LIMIT 256`;
       const result = await this.pool.query<EventRow>(sql, values);
       requireTime(deadline);
-      if (result.rows.length === 0) return;
+      if (result.rows.length === 0) {
+        return;
+      }
       for (const row of result.rows) {
         sequence = Number(row.position) + 1;
         if (!includeConversationCloses || matchesConversationRead(row.event, subject)) {
@@ -247,12 +281,18 @@ export class PostgresEventStore {
       const result = await this.pool.query<EventRow>(
         'SELECT * FROM events WHERE position >= $1 ORDER BY position LIMIT 256', [sequence]);
       for (const row of result.rows) {
-        if (signal?.aborted) return;
-        if (Number(row.position) !== sequence) throw new Error('Event sequence gap');
+        if (signal?.aborted) {
+          return;
+        }
+        if (Number(row.position) !== sequence) {
+          throw new Error('Event sequence gap');
+        }
         yield storedEvent(row);
         sequence += 1;
       }
-      if (result.rows.length === 0) await delay(100);
+      if (result.rows.length === 0) {
+        await delay(100);
+      }
     }
   }
 
@@ -261,7 +301,9 @@ export class PostgresEventStore {
     requireTime(deadline);
     if (includeConversationCloses && subject !== undefined) {
       let sequence = 0;
-      for await (const row of this.readStream(subject, 1, deadline, true)) sequence = row.sequence;
+      for await (const row of this.readStream(subject, 1, deadline, true)) {
+        sequence = row.sequence;
+      }
       return sequence;
     }
     const sequence = await latest(this.pool, subject);
