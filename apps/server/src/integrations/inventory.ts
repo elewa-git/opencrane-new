@@ -79,7 +79,7 @@ export async function discoverInventory(call: (method: 'server/discover' | 'tool
       const identity = discoverResult._meta['io.modelcontextprotocol/serverInfo'];
       const serverInfo = { name: identity.name, version: identity.version };
       const snapshot = { checkedAt, expiresAt: new Date(expiresAt).toISOString(),
-        toolCount: tools.length, tools, rejectedTools, declared,
+        toolCount: tools.length, tools, rejectedTools, declared, digestVersion: 2 as const,
         discoverResult: losslessJson(discoveryJson).canonical,
         serverInfo,
         schemaDigest: catalogueDigest(tools, rejectedTools) };

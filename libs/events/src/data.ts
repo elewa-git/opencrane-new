@@ -473,6 +473,7 @@ export const mcpServerDiscoveredDataSchema = z
     serverId: id,
     toolCount: z.int().nonnegative(),
     schemaDigest: digestSchema,
+    digestVersion: z.literal(2).optional(),
     serverInfo: z.object({ name: id, version: id }).strict().optional(),
     checkedAt: catalogueDates.checkedAt.optional(),
     expiresAt: catalogueDates.expiresAt.optional(),
