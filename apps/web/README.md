@@ -74,7 +74,8 @@ For everyone, the website:
   Approval details say when the tool replied, while an uncertain result stays unconfirmed.
 - Uploads and previews files, saves screenshots and opens the assistant's read-only
   [computer](../../GLOSSARY.md#computer) view when permitted.
-  Desktop file drops use the same uploads where Attach is available.
+  Files show Preparing files… until the workspace receives them, then Ready and Send
+  become available together. Desktop file drops use the same uploads where Attach is available.
   Colleague chats have no file-drop controls. Phones keep the Attach button.
 - Shows permitted memory facts and supports saving, correcting and forgetting personal facts.
   While saved membership permissions are still being applied, Memory shows a setup

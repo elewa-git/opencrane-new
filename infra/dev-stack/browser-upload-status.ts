@@ -29,6 +29,8 @@ export async function waitForUpload(
     await delay(1000);
     await target(retry);
     await retry.click();
+    // Wait for this click to leave its refusal before reading the next upload result.
+    await retry.waitFor({ state: 'hidden' });
   }
   throw new Error('Upload did not reach the expected status');
 }

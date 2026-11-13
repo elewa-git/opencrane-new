@@ -6,10 +6,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { Page, Locator } from 'playwright';
 import { sendUploadedMessage } from './browser-upload-message.ts';
 import { assertTouchTarget } from './browser-target.ts';
+import { holdUploadDelivery } from './browser-upload-delivery.ts';
 import { waitForUpload } from './browser-upload-status.ts';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 
 export async function browserUploadJourney(page: Page, origin: string, screenshots = 'docs/design/chat/live') {
+  const releaseDelivery = await holdUploadDelivery(page);
   const width = page.viewportSize()!.width;
   const target = async (locator: Locator) => {
     if (width !== 390) return;
@@ -59,7 +61,15 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     loseResponse = false; await route.abort('failed');
   });
   await choose({ name: 'project.pdf', mimeType: 'application/pdf', buffer: uploadPdf() });
-  retries += await waitForUpload(page, 'project.pdf', target);
+  retries += await waitForUpload(page, 'project.pdf', target, 'Preparing files…');
+  const preparing = page.getByRole('button', { name: 'Preparing files…', exact: true });
+  assert.equal(await preparing.isDisabled(), true, 'Held delivery keeps Send disabled');
+  const ready = page.getByRole('status').getByText('Ready', { exact: true });
+  assert.equal(await ready.count(), 0, 'Held delivery cannot show Ready');
+  await releaseDelivery();
+  assert.equal(await waitForUpload(page, 'project.pdf', target), 0);
+  const send = page.getByRole('button', { name: 'Send message', exact: true });
+  assert.equal(await send.isEnabled(), true, 'Ready makes the attachment sendable');
   await page.unroute(filesPattern);
   assert(!loseResponse && retries >= 1, 'The browser recovered from the lost successful upload response');
   // Keep the answer out of the question so the reply proves the converted file was read.

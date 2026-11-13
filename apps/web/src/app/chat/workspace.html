@@ -54,7 +54,7 @@
     <div class="chat-drop-area" #fileDrop="ocFileDrop"
       [ocFileDrop]="!isClosedConversation() && !reason() && !teamSession() && !chat.busy() && !chat.queued()
         && !chat.uploadBatch.batchRunning() && !chat.uploadBatch.uploading()
-        && !chat.uploadPending() && !chat.requestedUnavailable()
+        && !chat.uploadBatch.awaitingDelivery() && !chat.requestedUnavailable()
         && !chat.requestedLookupFailed()" (filesDropped)="chat.uploadBatch.send($event)">
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages"
       [attr.aria-busy]="chat.loading()" (scroll)="transcriptScrolled()">

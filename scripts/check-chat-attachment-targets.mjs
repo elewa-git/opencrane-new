@@ -97,7 +97,8 @@ export async function checkUploadStatusFlow(page, fixture) {
   const ready = { name: 'ready.txt', mimeType: 'text/plain',
     buffer: Buffer.from('Ready fixture') };
   await input.setInputFiles(ready);
-  const retries = await waitForUpload(page, 'ready.txt', assertTouchTarget);
+  const retries = await waitForUpload(page, 'ready.txt', assertTouchTarget,
+    'Preparing files…');
   assert.equal(retries, 1);
   assert.equal(requestKeys.length, 2);
   assert.equal(requestKeys[0], requestKeys[1], 'Retry keeps the original request key');
@@ -105,7 +106,15 @@ export async function checkUploadStatusFlow(page, fixture) {
     'File refused: malware detected.');
   assert.equal(refusedRetries, 0);
   const delivery = { fileId: 'ready-file' };
+  const preparing = page.getByRole('button', { name: 'Preparing files…', exact: true });
+  assert.equal(await preparing.isDisabled(), true);
+  const readyStatus = page.getByRole('status').getByText('Ready', { exact: true });
+  assert.equal(await readyStatus.count(), 0, 'Held delivery cannot show Ready');
   fixture.add('file.delivered', delivery);
+  const deliveredRetries = await waitForUpload(page, 'ready.txt', assertTouchTarget);
+  assert.equal(deliveredRetries, 0);
+  const send = page.getByRole('button', { name: 'Send message', exact: true });
+  assert.equal(await send.isEnabled(), true, 'Ready and Send use the same delivery state');
   await checkSendCompletion(page, fixture);
   const unsupported = { name: 'program.exe', mimeType: 'application/octet-stream',
     buffer: Buffer.from('MZbinary') };

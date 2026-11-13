@@ -1285,7 +1285,9 @@ and does not upload it again. `demo-prepare.test.ts` checks two applying replies
 a lost upload reply, followed by delivery, while keeping the exact write assertions.
 
 The browser starts a draft, attaches `project.pdf` through the native file picker,
-checks that file's Ready chip, waits for delivery and sends its project-code question
+holds the real delivery event and later socket frames, checks that the chip and Send
+both say Preparing files…, releases the frames in order, then checks Ready and an
+enabled Send before sending its project-code question
 with the attachment. It waits for the completed answer before previewing the promoted original.
 The question does not contain the answer. The stub uses the inline MarkItDown text
 when it contains the requested fact. Otherwise it requests a file read through `exec`
@@ -1298,7 +1300,8 @@ It drops the first upload response after the server handles it, clicks Retry and
 checks that only one attachment exists. The size check selects a real sparse file
 through the native picker rather than copying 20 MiB through Playwright.
 If a response is lost, the journey clicks the shipped Retry control at most twice
-with a one-second pause. Known type, size and malware refusals are never retried.
+with a one-second pause. After clicking Retry it waits for that refusal control to
+leave before reading the next result. Known type, size and malware refusals are never retried.
 Each later text or image attachment is sent with a short message. The journey waits
 for that new reply's Done state before continuing; Send can still be visible before
 a saved command starts its reply. Each refusal is checked on its named file chip.
