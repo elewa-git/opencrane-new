@@ -126,8 +126,8 @@ This receipt reports only the builder's own checks.
 
 ## Third fix round
 
-Checked source: `34a61ec7c`. The slice changes 1,437 shipped source lines, including
-354 lines deleting the Odoo source. This repair adds 37 source changes to the earlier
+Checked source: `3d3b2ded5`. The slice changes 1,439 shipped source lines, including
+354 lines deleting the Odoo source. This repair adds 39 source changes to the earlier
 1,400-line count. Tests and documents are excluded.
 
 New appends and fresh captures use `validateNewMcpCatalogue`. It requires digest
@@ -147,6 +147,16 @@ the unversioned full-list test. Routing append through the stored-history valida
 failed the three downgrade append cases and reached `tools/call` in the dispatch test.
 Both source mutations were restored before final checks.
 
+New-event fixtures also use v2, including the dev-stack catalogue builder. Its added
+regression failed at the public append before the marker was added. It now saves the
+catalogue and stops before any browser operation. Other affected fixtures were refused
+by the new guard; their markers now match the current write contract. Empty lists use
+the empty-list digest instead of an image digest. All existing refusal assertions remain.
+The first hosted run of this round failed on those outdated fixture writes. The register
+and inventory tests now seed their incomplete old catalogues as stored history and check
+the saved events exactly; their current discoveries still use the normal append guard.
+Snapshot integrity probes also use v2 so their refusals still test definitions and hashes.
+
 The reviewer append/rebuild probes pass unchanged: four cases with the disposable
 PostgreSQL test database. The downgrade dispatch regression uses the public conditional
 append; a stored-history fixture deliberately bypasses that interface.
@@ -154,6 +164,11 @@ append; a stored-history fixture deliberately bypasses that interface.
 | Own check | Verdict |
 | --- | --- |
 | Targeted append, dispatch, declarations, watch and replay regressions | PASS: 129 tests on each of two consecutive runs (71.24 and 68.52 seconds). |
+| New-event fixture regressions | PASS: 106 tests on each of two runs (70.81 and 71.41 seconds). The journey builder also passed a separate repeat. |
+| Register and member inventory regressions | PASS: 96 register and 27 inventory cases twice; the register Chromium case was not selected locally and remains covered by hosted CI. |
+| Bridge replay and routine expiry regressions | PASS: 84 cases on each of two runs (81.95 and 83.58 seconds). |
+| Snapshot integrity probes with current write markers | PASS: 34 cases twice. |
+| Selected Memory preview regressions | PASS: three cases on each of two runs; other file cases were not selected. |
 | Reviewer append and rebuild probes | PASS: four cases. |
 | Offline approval-evidence checks | PASS: 28 tests. |
 | Selected watch restart and renewal cases | PASS: three cases; the remaining file cases were not selected. |

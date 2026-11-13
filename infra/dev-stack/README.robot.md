@@ -784,6 +784,8 @@ Each invocation replaces an inherited attempt with `nightly-<UTC time>-<UUID>` i
 and `DEMO_ALLOWANCE_CENTS` before any child starts. No paid key is read.
 The narrow group checks run with the stand-in and never change providers or owners.
 A read-only tool fixture includes its action, consequence and safe argument fields.
+`reviewJourneyTools` writes digest version 2 with the complete fixture tool list.
+The event store refuses an unversioned new catalogue before any browser review.
 The core journey selects Allow for that tool and Block for the write tool, using the
 saved catalogue revision and review digest. The review must return HTTP 200. A 409
 stops the journey; it is never treated as a saved review. The focused regression in
