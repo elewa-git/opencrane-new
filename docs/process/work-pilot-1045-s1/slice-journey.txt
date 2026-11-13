@@ -1,0 +1,15 @@
+PASS sign-in: owner and member via Zitadel + PKCE at the selected stack origin at 390px, and member at 1280px, in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member 1280px: no Settings link; visible Integrations refusal
+PASS member 390px: no Settings link; visible Integrations refusal
+PASS Admin 1280px: Settings visible and opens
+PASS Admin 390px: Settings visible and opens
+PASS Owner 1280px: Settings visible and opens
+PASS Owner 390px: Settings visible and opens
+PASS member 1280px: native Sign out reaches sign-in
+PASS separate owner browser remains signed in
+PASS member 390px: native Sign out reaches sign-in
+PASS separate owner browser remains signed in
+PASS #1045 slice journey at 1280px and 390px with screenshots
