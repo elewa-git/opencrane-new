@@ -1,14 +1,133 @@
 # Packaged file uploads
 
-Journey on a fresh dev stack: FAIL — `package-up --id 1` could not bootstrap the
-fresh packaged installation. Kubernetes could not pull the reviewed application
-and object-store digests: both returned `not found` from the registry.
+Journey on a fresh dev stack: NOT RUN — this attempt stopped at the scanner review
+boundary. The checked scanner release expired before the attempt began. A fresh
+manifest needs an independently supplied approval before installation. The previous
+packaged installation remains FAIL; no passing packaged journey exists.
 
-Recorded on 13 November 2026 for issue #15, slice 1 of 3. Tested rebased code head:
-`ba6d15abf23c0e003a38d9b18ef3d9c8495fbe10`. Base: `7ec65e982` (`origin/main`, including #1118 and #1121).
-This run changes the receipt and installation evidence only.
+Recorded on 13 November 2026 for issue #15, slice 1 of 3. Rebased source:
+`9932cac1b51a6b8ea5c99081cc9f9e388ee252b3`. Base: `1e8588842` (`origin/main`).
 
-## Current packaged journey
+## Current diagnosis and required approval
+
+Fetched `origin` and rebased onto the updated `origin/main`. The rebase completed.
+The image-layer test conflict retained both main's required `web-page.mjs` check
+and this slice's scanner and credential helper allowlist. No runtime code, image
+pin, inventory, approval check or deadline changed in this attempt.
+
+Waited while the one-minute load exceeded 10. At 20:27 UTC it fell to 9.97 before
+source checks began. No secondary slot was claimed or started. Slot 1 was already
+running; slot 2 reported free. Left the existing stack alone.
+
+Read both package guides and traced the commands. `package-prepare` creates the
+owned namespace and ownership record only. It does not build or publish images.
+The [image promotion instructions](../../../infra/package/README.robot.md#package-image-promotion)
+describe a committed-source build, actual image checks, an all-layer Syft scan,
+Docker inspection, authenticated Debian main index review and a read-only promotion
+check. They provide no command that publishes images or automatically approves a
+replacement. The local qualification builder explicitly does not push or approve
+deployment. Do not describe `package-prepare` as an image publisher.
+
+Read-only registry checks at 20:27–20:28 UTC confirmed:
+
+- HTTP `GET /v2/` inside `k3d-ocn-registry` returned **200**.
+- Exact manifest requests for the reviewed application, object-store and scanner
+  digests inside that container each returned **404**.
+- Plain HTTP `HEAD /v2/` through `127.0.0.1:5001`, with proxy use disabled,
+  failed with `Recv failure: Connection reset by peer` too.
+
+The previous Docker HTTPS reset therefore does not by itself establish a scheme
+bug in a package publisher. No such publisher is called by `package-prepare`.
+No Docker daemon settings, network settings or existing containers were changed.
+
+At `2026-11-13T20:27:55.048Z`, the production `readApprovedRelease` function refused
+the checked scanner inputs with `Scanner release refused`. Their verified complete
+upstream check was `2026-11-12T20:25:13.766Z`; the 24-hour allowance expired at
+`2026-11-13T20:25:13.766Z`. Restarts, copied records and a changed timestamp cannot
+renew that evidence.
+
+The [scanner packaging instructions](../../../infra/clamav/README.robot.md#packaging-evidence)
+require: “The approval must come from the job's review inputs, not a hash supplied
+alongside untrusted JSON.” This builder has no independent approved replacement
+inputs. As instructed, stopped the packaged installation at that boundary.
+
+The missing independent input is approval of a fresh scanner candidate from
+`infra/clamav/refresh.sh`: its complete upstream check, all three verified database
+files, independently approved manifest SHA-256 and reviewed immutable scanner image
+containing those exact bytes. `release.mjs` must verify that approved pair and
+produce the matching release. The reviewed scanner image and manifest hash then
+belong in the review record consumed by preflight. A candidate's calculated hash
+alone grants no approval. The trusted packaging reviewer or owner must provide
+those approved inputs.
+
+Resuming also requires a newly built application image from the rebased committed
+source, with its immutable digest, revision label, Docker inspection, all-layer
+Syft scan, complete licence inventory and authenticated Debian main package
+evidence, followed by the documented promotion check. This is the documented
+operator review, rather than an automatic pin update; no separate human-only
+application review requirement was found in these instructions. The current image
+still records source `47258e903347daaaf2727da636d4bca3f0f53a36`; rebasing does not
+make its imported sources match this checkout.
+
+These are image and scanner review inputs for slice 1, not permission to enable
+three-replica NATS or resume the parked image-review work. No replacement was
+self-approved by editing `reviewed-images.json` or its supporting inventory.
+Publication of the approved immutable images and host-registry connectivity still
+need proving after those inputs exist.
+
+| Current attempt | Result |
+| --- | --- |
+| Fetch and rebase onto updated main | PASS; completed |
+| Registry API inside existing container | PASS; HTTP 200 |
+| Reviewed application, object-store and scanner manifests in registry | FAIL; all three HTTP 404 |
+| Host plain-HTTP registry connection | FAIL; connection reset |
+| Checked scanner release at actual current time | FAIL; stale, correctly refused |
+| New image/scanner approval | NOT RUN; independent packaging review inputs needed |
+| Fresh package preparation, installation and package-check | NOT RUN; stopped before claiming a slot |
+| Packaged clean upload, answer and EICAR refusal at 1280 and 390 px | NOT RUN |
+| Packaged screenshots | NOT RUN; no browser journey |
+| New package/stack cleanup | NOT RUN; no slot or installation created |
+| Current source checks | PARTIAL; results below |
+
+## Current source checks
+
+| Check | Result |
+| --- | --- |
+| Six focused scanner/storage Vitest files: 32 checks | PASS twice; 15 and 36 seconds |
+| Chart rendering and preflight, including licence/promotion refusals: 292 checks | PASS; 87 seconds |
+| NATS preparation: 19 checks | FAIL; 13 passed and six hit the existing 30-second process deadline; 342 seconds |
+| Workspace, package and dev-stack typecheck | PASS |
+| `check:events`, Knip, changelog lint and changed-file ESLint | NOT RUN; stopped at packaging approval boundary |
+| Markdown lint | NOT RUN; stopped at packaging approval boundary |
+| All changed tests twice | PARTIAL; focused tests repeated, chart/preflight once, NATS failed |
+| Actual application image layer/source checks | NOT RUN; no replacement image built or approved |
+| Final privacy and secret scans | PASS |
+| Pushed-head CI | Recorded in PR Evidence after push |
+
+Started source checks only after load fell below 10, under `nice -n 10`. The load
+rose during those checks, reaching 24.85. No full root suite or fleet batch ran.
+The queued remaining gates waited for load, then were cancelled when applying the
+explicit packaging approval stop. No test was turned into a pass by a retry.
+
+The NATS failures were `expired certificate`, `client issuer`, `changed object`,
+`changed reference`, `partial objects` and `replaced object`. Each reported
+`Preparation fixture exceeded its existing process deadline`. Both positive
+preparation cases passed. No timeout, assertion or production check changed;
+these six fixture failures remain unresolved. No second NATS run was attempted.
+
+Retained the earlier repairs for findings 2–7: historical/scanner fixtures, safe STS
+diagnostics, bounded issuance and valid-lease readiness, isolated refusal cases,
+shared database validation, named callbacks and the eight-box scanner diagram.
+The focused tests passed twice on this rebased source. This attempt introduced no
+production fix, so there is no new failing-test/fix commit pair or new guard-removal
+claim. Finding 1 remains open. No further review result is asserted here.
+
+## Earlier failed installation
+
+The following attempt ran before this diagnosis, on rebased code
+`ba6d15abf23c0e003a38d9b18ef3d9c8495fbe10`, base `7ec65e982`.
+
+## Previous packaged journey
 
 1. Fetched `origin` and rebased because `origin/main` had moved. The rebase
    completed without conflicts. The lockfile was unchanged, so `npm ci` was
