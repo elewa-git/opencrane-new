@@ -784,6 +784,8 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   const composer = root.querySelector('textarea')!; composer.value = 'Read it'; composer.dispatchEvent(new Event('input'));
   await new Promise(resolve => setTimeout(resolve, 0)); await fixture.whenStable();
   expect(root.querySelector<HTMLButtonElement>('[type="submit"]')!.disabled).toBe(true);
+  expect(root.querySelector('.attachment-chip [role="status"]')?.textContent?.trim())
+    .toBe('Preparing files…');
 
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position: 2,
     row: { id: 'upload', position: 2, type: 'file.uploaded', time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', fileId: 'file', uploadedBy: 'me', name: 'project.pdf', size: 1024, mime: 'application/pdf' } } }) }));
@@ -801,6 +803,11 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   await fixture.whenStable();
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position: 3,
     row: { id: 'delivered', position: 3, type: 'file.delivered', time: '2026-10-03T10:00:02Z', data: { fileId: 'file', outcome: 'saved' } } }) }));
+  await fixture.whenStable();
+  expect(root.querySelector('.attachment-chip [role="status"]')?.textContent?.trim())
+    .toBe('Ready');
+  expect(root.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.disabled)
+    .toBe(false);
   composer.value = 'a'.repeat(32000); composer.dispatchEvent(new Event('input')); await fixture.whenStable();
   root.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.click();
   await vi.waitFor(() => expect(postedText).toBe('a'.repeat(32000)));
