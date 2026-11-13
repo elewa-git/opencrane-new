@@ -427,7 +427,8 @@ export function toolEvidence(tool: Omit<CatalogueTool, 'revision' | 'definition'
 }
 
 export function catalogueEvidence(tools: CatalogueTool[]) {
-  return { tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools) };
+  return { tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools),
+    digestVersion: 2 as const };
 }
 
 export async function reviewCatalogue(setup: Awaited<ReturnType<typeof fixture>>,

@@ -34,7 +34,21 @@ function compareNames(first: { name: string; revision: string },
   return 0;
 }
 
-export function validateMcpCatalogue(catalogue: Catalogue): void {
+export function validateNewMcpCatalogue(catalogue: Catalogue): void {
+  if (catalogue.digestVersion !== 2) {
+    throw new Error('New tool catalogues require digest version 2');
+  }
+  validateMcpCatalogue(catalogue, catalogue.rejectedTools);
+}
+
+export function validateStoredMcpCatalogue(catalogue: Catalogue): void {
+  // Only stored history may select the original accepted-only digest rule.
+  const rejectedTools = catalogue.digestVersion === 2 ? catalogue.rejectedTools : [];
+  validateMcpCatalogue(catalogue, rejectedTools);
+}
+
+function validateMcpCatalogue(catalogue: Catalogue,
+  rejectedTools: Catalogue['rejectedTools']): void {
   const tools = catalogue.tools;
   if (!tools || catalogue.toolCount !== tools.length) {
     throw new Error('Incomplete tool catalogue');
@@ -50,7 +64,6 @@ export function validateMcpCatalogue(catalogue: Catalogue): void {
     revisions.push({ name: tool.name, revision });
   }
   // Derive the digest from saved definitions before keeping any previous review.
-  const rejectedTools = catalogue.digestVersion === 2 ? catalogue.rejectedTools : [];
   if (catalogueDigest(revisions, rejectedTools) !== catalogue.schemaDigest) {
     throw new Error('Tool catalogue digest mismatch');
   }

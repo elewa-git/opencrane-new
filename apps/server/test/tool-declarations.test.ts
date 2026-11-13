@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
-import { catalogueDigest, toolReviewDigest, validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { catalogueDigest, toolReviewDigest, validateNewMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { envelope } from '@opencrane/models';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
@@ -32,7 +32,7 @@ async function savesExactDeclaration() {
     definition: original.canonical, reviewed: false, readOnly: true, destructive: false,
     costCents: 0, review }]);
   expect(saved.schemaDigest).toBe(catalogueDigest(saved.tools!));
-  validateMcpCatalogue(saved);
+  validateNewMcpCatalogue(saved);
 }
 it('saves literal zero and approval details without changing the definition or reviewing it',
   savesExactDeclaration);
