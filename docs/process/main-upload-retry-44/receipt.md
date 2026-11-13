@@ -36,9 +36,9 @@ Own checks:
   both new browser helpers also passed explicit typed ESLint checks.
 - NOT RUN: full root suite, owner-stack operations and real-provider qualification.
 
-The final journey-order correction needs owner review: the two permitted review
-passes had already been used. The remaining audit blocker also needs an owner decision
-before extending this repair. These checks do not qualify a successful core journey.
+The orchestrator confirmed on 13 November that no independent review has run on
+this PR and authorised continuing the repair. Independent review remains NOT RUN.
+These own checks do not qualify a successful core journey.
 
 Causes found:
 
@@ -52,3 +52,46 @@ The shared UI button rule now supplies the attachment target size. Remove also
 cancels the active upload; there is no separate Cancel upload control.
 The captures use an intercepted API and synthetic names, not live account data:
 [390 px Retry](retry-390.png) and [1280 px Retry](retry-1280.png).
+
+## Continuation on 13 November
+
+Fetched origin. Main remained at `90a99afa7`, the branch base; no rebase was needed.
+The first continuation attempt claimed secondary slot 1 and ran `up.sh --fresh`
+with the stand-in provider. Startup failed during Zitadel setup before services or
+browser journeys started. The expected `.keys/.zitadel-key` file was absent from
+this checkout. Existing key files were then linked by path in the ignored `.keys/`
+directory for a future authorised continuation. No credential value was read or
+printed. This attempt supplies no new live qualification. The earlier full core verdict remains FAIL.
+
+Traced the audit timeout to merged commit `4f06d18d0` (PR #1004). It removed the
+conversation's Turn id and Request id inputs, Decision selection and Apply filters
+button. Conversation history now has no filters; organisation history has the
+new family, date, outcome and safe-reference filters. The old journey also expects
+an exact decision label and `Observed outcome: Success`; the redesigned row combines
+`Decision: allow` with `Observation: Confirmed`.
+
+Repair is paused for one product decision. The
+[P3-19 acceptance criteria](../../specs/phase-3/tickets.md#p3-19--explain-work-through-a-permission-scoped-audit-trail)
+still require action history and change-history views with filters and keyboard
+support. PR #1004 describes an organisation-history redesign, not the removal of
+conversation filtering. Simply removing the journey's filtering and focus steps
+would discard a checked user capability. The owner must choose:
+
+- Restore conversation filtering while retaining the current visual design; treat
+  its removal as a product regression and reproduce it with a failing test first.
+- Intentionally remove conversation filtering, revise the acceptance criteria and
+  approve the replacement journey assertion before calling the old journey stale.
+
+No product or journey change was made while this decision was pending. New audit
+screenshots are NOT RUN. The reported live-view `.caret` failure, budget checks,
+replay and later checks remain NOT RUN in this continuation. Their causes have not
+been classified. No independent review was requested or reported as passed.
+
+Continuation checks:
+
+- PASS: `down.sh --id 1`; the secondary claim was released.
+- PASS: whole-workspace typecheck, Markdown lint, event catalogue, Knip and
+  changelog checks.
+- PASS: public privacy check and secret scan.
+- NOT RUN: new code tests, scoped ESLint and repaired-step captures; only this
+  receipt changed. Earlier code-check results above remain historical evidence.
