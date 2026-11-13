@@ -16,7 +16,7 @@ const review = { action: 'Read a record', consequence: 'Show the record',
   targetArgument: 'id', fields: ['id'], stepUp: false };
 const tool = { review, name: 'read', revision, reviewed: true, definition, costCents: 0 };
 const catalogue = { serverId: 'fixture', toolCount: 1, schemaDigest,
-  checkedAt, expiresAt, connectionId: 'installed', accountMode: 'none', tools: [tool] };
+  digestVersion: 2 as const, checkedAt, expiresAt, connectionId: 'installed', accountMode: 'none', tools: [tool] };
 
 function record(type: string, data: unknown, silo = 'test', subject = 'mcp-fixture') {
   return { ...event(type), type, subject, silo, data, time: checkedAt };
