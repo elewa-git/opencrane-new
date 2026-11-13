@@ -5,7 +5,8 @@ import { decisionRecordedDataSchema, toolCredentialReleaseSchema } from '@opencr
 import { history } from './actor.ts';
 import type { connectionCustody, ConnectionStage } from './connection-custody.ts';
 import { withConnectionStage } from './connection-stage-lock.ts';
-import { confirmCredentialRelease, credentialReleaseEvidence } from './credential-release.ts';
+import { confirmCredentialRelease, confirmPreparedCredentialRelease, credentialReleaseEvidence,
+  type PreparedCredentialRelease } from './credential-release.ts';
 import { MemberAccessRefused } from './member-authority.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { requireTrackedPosition } from './mcp-position.ts';
@@ -54,7 +55,7 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
   let used = false;
   // Copy before any wait, so caller mutation cannot replace the authenticated request.
   const context = contextSchema.safeParse(raw);
-  async function execute(recover: boolean) {
+  async function execute(recover: boolean, prepared?: PreparedCredentialRelease) {
     let permission: Promise<Access> | undefined;
     let refusal: MemberAccessRefused | undefined;
     async function decide() {
@@ -83,7 +84,14 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
       return permission;
     }
     try {
-      const release = await binding(store, silo, context);
+      let release: ReturnType<typeof toolCredentialReleaseSchema.parse>;
+      if (prepared) {
+        if (!context.success || !isDeepStrictEqual(context.data,
+          savedContextSchema.parse(prepared.release))) refuse();
+        release = toolCredentialReleaseSchema.parse(prepared.release);
+      } else {
+        release = await binding(store, silo, context);
+      }
       const profile = { siloId: silo, userId: release.userId,
         serverId: release.serverId, profileId: release.profileId };
       async function work(locked: Db) {
@@ -91,8 +99,9 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
           return confirmCredentialRelease(store, silo, release.userId, decisionId, release,
             prepare, 'recover', loadConfiguration);
         }
-        return sendCurrent(store, locked, custody, silo, decisionId, release,
-          loadConfiguration, prepare, sendAccess);
+        const request = { silo, decisionId, release, loadConfiguration,
+          prepareAccess: prepare, sendAccess, prepared };
+        return sendCurrent(store, locked, custody, request);
       }
       // Keep retirement behind the exact read and the final invocation of the callback.
       return await withConnectionStage(db, profile, work);
@@ -109,12 +118,12 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
       return refuse();
     }
   }
-  async function send() {
+  async function send(prepared?: PreparedCredentialRelease) {
     if (used) {
       refuse();
     }
     used = true;
-    await execute(false);
+    await execute(false, prepared);
   }
   async function recover() {
     // Recover only evidence. Neither this result nor a restarted instance permits another send.
@@ -123,19 +132,22 @@ export function credentialBroker(store: EventStore, db: Pick<Db, 'lock'>, custod
   return { send, recover };
 }
 
-async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo: string,
-  decisionId: string, release: ReturnType<typeof toolCredentialReleaseSchema.parse>,
-  loadConfiguration: OAuthConfigurationLoader, prepareAccess: () => Promise<Access>,
-  sendAccess: (material: string) => Promise<void>) {
+export interface CredentialSendRequest {
+  silo: string;
+  decisionId: string;
+  release: ReturnType<typeof toolCredentialReleaseSchema.parse>;
+  loadConfiguration: OAuthConfigurationLoader;
+  prepareAccess: () => Promise<Access>;
+  sendAccess: (material: string) => Promise<void>;
+  prepared?: PreparedCredentialRelease | undefined;
+}
+
+async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
+  request: CredentialSendRequest) {
+  const { silo, release, prepareAccess, sendAccess } = request;
   const profile = { siloId: silo, userId: release.userId,
     serverId: release.serverId, profileId: release.profileId };
-  const checked = await credentialReleaseEvidence(store, silo, decisionId, release,
-    loadConfiguration);
-  const evidence = personalEvidence(checked);
-  if (!evidence.oauth || evidence.receipts.length !== 0 ||
-      !Number.isFinite(evidence.expiresAt) || Date.now() >= evidence.expiresAt) {
-    refuse();
-  }
+  const evidence = await readSendEvidence(store, request);
   const saved = evidence.profile;
   const activation = saved.activation;
   const stage: ConnectionStage = { ...profile, connectionId: activation.connectionId,
@@ -158,8 +170,10 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
       access = { ...current, deadline };
       return access;
     }
-    const receipt = await confirmCredentialRelease(store, silo, release.userId, decisionId,
-      release, prepare, 'claim', loadConfiguration);
+    const prepared = { release, evidence };
+    const accessCheck = await prepare();
+    const receipt = await confirmPreparedCredentialRelease(store, silo, prepared,
+      accessCheck, 'claim');
     evidence.positions.set(`credential-${release.requestId}`, receipt.sequence);
     if (!access) {
       refuse();
@@ -199,4 +213,16 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody, silo
     clearTimeout(timer);
     discard();
   }
+}
+
+async function readSendEvidence(store: EventStore, request: CredentialSendRequest) {
+  const { silo, decisionId, release, loadConfiguration } = request;
+  const checked = request.prepared?.evidence ?? await credentialReleaseEvidence(store,
+    silo, decisionId, release, loadConfiguration);
+  const evidence = personalEvidence(checked);
+  if (!evidence.oauth || evidence.receipts.length !== 0 ||
+      !Number.isFinite(evidence.expiresAt) || Date.now() >= evidence.expiresAt) {
+    refuse();
+  }
+  return { ...evidence, oauth: evidence.oauth };
 }
