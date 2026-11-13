@@ -1,16 +1,52 @@
 // A provider boundary for the CLI tests. No request can reach the network.
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
+import files from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const originalReadFile = files.readFile;
+const defaultKey = fileURLToPath(new URL('../../../.keys/.zitadel-key', import.meta.url));
+// Never read a developer's real default key. Tests supply private temporary files.
+files.readFile = async function readFixtureFile(path, ...options) {
+  if (path === defaultKey) {
+    if (process.env.MOCK_ZITADEL_DEFAULT_KEY_PRESENT === '1') return 'fake-default-credential';
+    const error = new Error('Fixture has no default key');
+    error.code = 'ENOENT';
+    throw error;
+  }
+  return originalReadFile(path, ...options);
+};
+syncBuiltinESMExports();
 
 const file = process.env.MOCK_ZITADEL_FILE;
 const orgId = '393311211338337681';
 const projectId = '393311211539664273';
-globalThis.fetch = async (url, options) => {
-  const state = JSON.parse(await readFile(file, 'utf8'));
+const appBase = `/management/v1/projects/${projectId}/apps`;
+
+function parseRequest(url, options) {
   assert.equal(options.headers['x-zitadel-orgid'], orgId);
   const path = new URL(url).pathname;
   const body = options.body ? JSON.parse(options.body) : undefined;
-  const appBase = `/management/v1/projects/${projectId}/apps`;
+  return { path, body };
+}
+
+function failRequest(failure) {
+  if (failure.networkError) throw new Error(failure.networkError);
+  if (failure.rawBody) return new Response(failure.rawBody, { status: failure.status });
+  return Response.json(failure.body, { status: failure.status });
+}
+
+function failureResponse(state, path) {
+  if (!state.failure || (state.failure.path && state.failure.path !== path)) return undefined;
+  return failRequest(state.failure);
+}
+
+globalThis.fetch = async (url, options) => {
+  const state = JSON.parse(await readFile(file, 'utf8'));
+  const { path, body } = parseRequest(url, options);
+  const failure = failureResponse(state, path);
+  if (failure) return failure;
   let result;
   if (path === '/management/v1/orgs/me') {
     result = { org: state.org ?? { id: orgId, name: 'OpenCrane 2 Dev' } };
