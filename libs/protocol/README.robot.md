@@ -67,7 +67,8 @@ against the [event catalogue package](../events/README.md) before accepting it.
 `integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
 
 `chatContextSchema` includes the authorised member’s optional display name and
-personal assistant id. Chat feed and live reply schemas type the computer state
+role (`owner`, `admin` or `member`), and personal assistant id. The role reuses
+`memberHeaderSchema`; older replies may omit it. `ChatContext` is the shared reply type. Chat feed and live reply schemas type the computer state
 as ready, starting, recovering or not applicable. They may include the time of
 the latest computer loss. `sessionSlug` formats the first message consistently for
 the server list, rail and header. Conversation list status distinguishes `stopped` from

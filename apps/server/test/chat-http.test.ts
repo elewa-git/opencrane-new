@@ -100,6 +100,7 @@ it('serves private chat commands and reads to joined members, refusing other org
       memberId: 'alice',
       assistantId: 'assistant',
       displayName: 'Alice',
+      role: 'member',
       memoryAdmission: {
         state: 'disabled',
         failing: ['The P4-15 private memory checks have not run yet.'],

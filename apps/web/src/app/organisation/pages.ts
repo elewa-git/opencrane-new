@@ -32,9 +32,13 @@ function capabilityValue(capabilities: object, name: string): unknown {
   return undefined;
 }
 
+export function isOwnerOrAdmin(role: unknown): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
 export function permittedOrganisationPages(viewer: unknown, capabilities: unknown): OrganisationPage[] {
   if (viewer === null || typeof viewer !== 'object' || !('role' in viewer)) return [];
-  if (viewer.role !== 'admin' && viewer.role !== 'owner') return [];
+  if (!isOwnerOrAdmin(viewer.role)) return [];
   if (capabilities === null || typeof capabilities !== 'object') return ['overview'];
 
   const permitted: OrganisationPage[] = ['overview'];

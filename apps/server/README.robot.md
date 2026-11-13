@@ -1752,8 +1752,9 @@ checked before this wait and still closes with 1008 within two seconds.
 Reads use no authority fence. Writes read history with its own ten-second limit
 before opening their short access check.
 
-`GET /api/chat` returns the authenticated member id and their personal assistant
-id (null while provisioning). It requires live silo membership and `acts_for`;
+`GET /api/chat` returns the authenticated member id, display name, own role
+(`owner`, `admin` or `member`) and personal assistant id (null while provisioning).
+`chatContextSchema` checks this reply; its optional role keeps older replies readable. It requires live silo membership and `acts_for`;
 it does not expose the organisation computer register. Conversation list rows
 include an event-derived title and status, computed only after per-conversation
 read permission. No administrative bypass grants access to private sessions.

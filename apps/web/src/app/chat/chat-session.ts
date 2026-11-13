@@ -7,7 +7,7 @@ import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
 import { chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
-import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
+import type { ChatContext, ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
   recoveredLostTurn, shouldAnnounceBudgetStop, transcript, uploadedFile, hasSavedClose }
@@ -34,6 +34,7 @@ export class ChatSession implements OnDestroy {
   readonly memberId = signal('');
   readonly displayName = signal('You');
   readonly personalConnections = signal(false);
+  readonly role = signal<ChatContext['role']>(undefined);
   readonly assistantId = signal<string | null>(null);
   readonly computer = signal<ComputerState>('ready');
   readonly dispatcherReady = signal(true);
@@ -150,6 +151,7 @@ export class ChatSession implements OnDestroy {
       const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await requestChat('/auth/me'));
       if (revision !== this.revision) return;
       this.memberId.set(context.memberId);
+      this.role.set(context.role);
       this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You');
       this.assistantId.set(context.assistantId);
       this.personalConnections.set(context.personalConnections === true);
@@ -722,6 +724,7 @@ export class ChatSession implements OnDestroy {
     this.conversations.set([]);
     this.listHasMore.set(false);
     this.memberId.set('');
+    this.role.set(undefined);
     this.displayName.set('You');
     this.assistantId.set(null);
     this.computer.set('ready');

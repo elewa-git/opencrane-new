@@ -3,7 +3,7 @@ import {
   type AfterViewInit, type OnDestroy,
 } from '@angular/core';
 import { NAVIGATE } from '../core/navigate';
-import { BrowserSession } from '../core/browser-session';
+import { SignOut } from './sign-out';
 import { DogEar, PaperSurface } from '../ui/paper';
 import { SharedState } from '../shared-state/shared-state';
 
@@ -20,13 +20,12 @@ const REJECTION_COPY = {
 
 @Component({
   selector: 'oc-sign-in',
-  imports: [SharedState, PaperSurface, DogEar],
+  imports: [SharedState, PaperSurface, DogEar, SignOut],
   templateUrl: './sign-in.html',
   styleUrl: './sign-in.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SignIn implements AfterViewInit, OnDestroy {
-  private readonly session = inject(BrowserSession);
   private readonly navigate = inject(NAVIGATE);
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly cancelButton = viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
@@ -68,10 +67,6 @@ export class SignIn implements AfterViewInit, OnDestroy {
 
   protected signIn(): void {
     this.navigate('/signin/handoff');
-  }
-
-  protected signOut(): void {
-    this.session.signOut();
   }
 
   private rejectionCopy(): { message: string; detail: string } {

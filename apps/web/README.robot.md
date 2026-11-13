@@ -1510,7 +1510,13 @@ reconnect catch-up cannot enable an old turn. Completion retains an existing rep
 refuses first delivery after completion. Output-loss metadata does not clear live text.
 Stop, failure, closure, access loss, projection replacement, socket loss/replacement,
 navigation and destruction discard it. HTTP completions cannot restore it.
-`BrowserSession` broadcasts sign-out before the native logout form navigates away.
+`oc-sign-out` shares one native `POST /auth/logout` form with `text/plain` encoding
+between the sign-in screen, workspace rail footer and phone menu. It calls
+`BrowserSession.signOut()` before navigation, which broadcasts sign-out.
+`ChatSession` keeps the optional role from `chatContextSchema` in a signal and
+clears it on access refusal. Settings links use `isOwnerOrAdmin`, shared with
+organisation navigation; a missing role hides them. Server access checks still
+decide whether a person may open organisation settings.
 Other tabs disconnect and clear protected content immediately. Focus, pageshow and a
 return to visible state check `/auth/me` with `cache: no-store`. New private replies
 are blocked during that read; clearance still discards existing text immediately. A refused, signed-out, failed or timed-out read ends delivery;

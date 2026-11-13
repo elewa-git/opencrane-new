@@ -2,6 +2,8 @@ import { PersonalConnectionNotice } from './personal-connection-notice';
 // Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
 // The bridge supplies all state; the screen follows the owner's Workspace Live design.
 /* eslint max-lines: ["error", { max: 600, skipBlankLines: true, skipComments: true }] */
+import { SignOut } from '../sign-in/sign-out';
+import { isOwnerOrAdmin } from '../organisation/pages';
 import { HingeDrawer } from '../ui/hinge-drawer';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
@@ -14,7 +16,7 @@ import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
 import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
-import { activityExpanded, nextExpandedActivity } from './activity-panel';
+import { activityExpanded, nextExpandedActivity, turnTools } from './activity-panel';
 import { RecoveryNotice } from './recovery-notice';
 import { MemoryFreeNotice } from './memory-free-notice';
 import { MemoryPanel } from '../memory/memory-panel';
@@ -46,9 +48,6 @@ import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 
-function turnTools(turn: Turn): ToolActivityRecord[] {
-  return turn.tools;
-}
 import {
   capturedByLine, displayTextParts, fileCreator, fileName, fileScreenshotCreator, fileType,
   fileUrl, hasAttachment, hasScreenshotFile, hasTranscriptScreenshot, imageThumbnailUrl,
@@ -64,7 +63,7 @@ import {
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
     ToolActivityLine, RecoveryNotice, MemoryFreeNotice, MemoryPanel, AssistantMarkdown,
     FoldLoader, ChatComposer, FileDrop, FilePreview, LiveView, CloseReviewDialog,
-    NgTemplateOutlet, ChatIcon, BrandMark,
+    NgTemplateOutlet, ChatIcon, BrandMark, SignOut,
   ],
   providers: [ChatSession, WebSocketService, ScreenshotCapture],
   templateUrl: './workspace.html',
@@ -81,6 +80,7 @@ import {
 })
 export class Workspace implements OnInit {
   protected readonly chat = inject(ChatSession);
+  protected readonly isOwnerOrAdmin = isOwnerOrAdmin;
   protected readonly closeReview = new CloseReview(
     this.chat.load.bind(this.chat), this.chat.clearAfterAccessChange.bind(this.chat));
   protected readonly capture = inject(ScreenshotCapture);
@@ -576,7 +576,7 @@ export class Workspace implements OnInit {
     }
     if (this.chat.denied()) return 'Sign in to send messages.';
     if (this.chat.loading()) return 'Loading your workspace…';
-    if (this.chat.railUnavailable()) return 'Reconnect to your pod to start a session.';
+    if (this.chat.railUnavailable()) return 'Reconnect to your computer to start a session.';
     if (!this.chat.selected() && !this.recipient()) return 'Choose your agent to start a session.';
     if (!this.chat.selectedAssistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
     return '';

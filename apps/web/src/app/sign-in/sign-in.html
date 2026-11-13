@@ -25,9 +25,7 @@
         [evidenceAt]="authenticatedAt()" [showAction]="false" />
       <a class="button primary" href="/workspace">Open workspace</a>
       <a class="button secondary" href="/org/integrations">Organisation integrations</a>
-      <form method="post" action="/auth/logout" enctype="text/plain" (submit)="signOut()">
-        <button type="submit" class="button secondary">Sign out</button>
-      </form>
+      <oc-sign-out />
     } @else {
       @if (invited) {
         <p class="invitation">You were invited by {{ organisation }}. Your work here stays private to you.</p>
