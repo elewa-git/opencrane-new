@@ -1,9 +1,12 @@
-Final fresh secondary startup on source head bf981001ef6498c22a10e4679e2e6c8d9e44b2e9: FAIL.
-`up.sh --fresh` returned exit 1. The public output was generic; the failed stage
-is unknown. The private launcher error records were retained before cleanup.
-`down.sh` returned exit 0 and the slot reported free.
+Fresh slice attempt on source head 2a479ed0ac84f37c3d9d7ffefcf54a7ef1c7ef13: FAIL.
+The one-minute host load before claim was 9.31. `claim.sh` succeeded.
+`up.sh --fresh` returned exit 1 during Zitadel setup before the core journey.
+Private launcher logs were retained before cleanup. `down.sh` returned exit 0.
 
-Workspace slice runner: NOT RUN because the fresh start failed.
+Startup diagnosis: PASS on origin/main and this PR head at low load; see diagnosis.md.
+This final stack attempt: FAIL during Zitadel setup, with no provider response logged.
+Core journey in this attempt: NOT RUN.
+Workspace slice runner: NOT RUN.
 
 | Step | 1280 px | 390 px |
 | --- | --- | --- |
@@ -13,3 +16,7 @@ Workspace slice runner: NOT RUN because the fresh start failed.
 | Admin sees Settings and opens it | NOT RUN | NOT RUN |
 | Owner sees Settings and opens it | NOT RUN | NOT RUN |
 | Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
+
+The earlier Spending Budget scope failure did not recur. No budget-editor browser
+console, network-failure list or screenshot was produced in this attempt because
+startup stopped before the core journey. No product code changed.

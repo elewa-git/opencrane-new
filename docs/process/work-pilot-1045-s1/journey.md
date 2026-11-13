@@ -1,9 +1,11 @@
 # Workspace sign-out and Settings journey
 
-Journey on a fresh dev stack: FAIL — 13 November 2026, tested source head
-`bf981001ef6498c22a10e4679e2e6c8d9e44b2e9`. The latest fresh `up.sh --fresh`
-failed, so the workspace slice runner did not start. Every slice acceptance
-step is NOT RUN on this head. The previous PASS does not qualify this source.
+Journey on a fresh dev stack: FAIL — 13 November 2026, source head
+`2a479ed0ac84f37c3d9d7ffefcf54a7ef1c7ef13`. Startup diagnosis passed on both
+`origin/main` and this PR head at low load. The latest fresh `up.sh --fresh`
+failed during Zitadel setup, before the core or workspace runner. Every slice
+acceptance step is NOT RUN on this run. The previous PASS does not qualify this
+source.
 
 ## Integration
 
@@ -136,6 +138,24 @@ It passed alone with unchanged code and limits. Concurrent load is a possible ca
 not a proved diagnosis. The complete initial failures remain explicit in the source
 record. The audit fixture passed after the documented development build warmed
 Angular's cache; no timeout or test assertion changed.
+
+## Fresh slice attempt after startup diagnosis
+
+The startup diagnosis in [diagnosis.md](diagnosis.md) recorded fresh startup and
+the full core journey passing on both `origin/main` and this PR head at low load.
+This fresh attempt used the PR head above. The one-minute host load was 9.31
+before the secondary claim. `claim.sh` succeeded, then `nice -n 10
+infra/dev-stack/up.sh --fresh` returned exit 1 during `zitadel-setup.ts` before
+the core journey started. The launcher reported that setup failed without a
+provider response. Its private `failure.log` and `last-error.log` were saved
+before cleanup. `down.sh` returned exit 0. The workspace runner was NOT RUN;
+all six workspace steps remain NOT RUN at both widths. No product code changed.
+
+This attempt did not reach Spending. The earlier Budget scope failure did not
+recur. The PR changes workspace role and navigation behaviour; it does not
+change Zitadel setup or the Spending editor. The diagnosis confirms that the
+PR's changed paths were present during a passing core journey, but it does not
+prove why this startup failed.
 
 Public privacy and secret scans are required again before the integration push.
 CI results are recorded in the PR Evidence after that push.
