@@ -19,7 +19,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|shares installation settings, memory, account custody and readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
+  stack -->|shares installation settings and private services; checks tool calls| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
   stack -->|checks ownership, nodes and backup leases| package["infra/package<br/>Helm install"]
   stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
   stack -->|uses local cluster; creates and removes owned test nodes| devbox

@@ -195,6 +195,10 @@ stack directory changes the next listed definition. It does not execute a tool.
 HTTPS dispatch and this collector. It checks the quote, recorded metadata and refusal
 before execution after drift. The separate personal-key dispatch tests retain the
 verified-identity release coverage.
+`test/ordinary-evidence.mjs` checks exactly two remote reply records with missing
+costs and one separate gateway receipt for the local drift refusal. The latter
+does not claim a remote start or a tool cost. Extra records, amounts and changed
+evidence are refused.
 
 The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
 It calls only the matching tool offered by Codex and refuses a missing tool. It
