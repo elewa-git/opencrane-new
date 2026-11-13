@@ -80,13 +80,29 @@ const MONEY_WORDS = new Set([
   'charge', 'budget', 'ceiling', 'limit', 'reserved', 'settled', 'balance', 'total',
 ]);
 function moneyFieldsNotInCents(jsonSchema: unknown): string[] {
-  return declaredProperties(jsonSchema)
-    .map(([name]) => name)
-    .filter((name) => {
-      const words = name.replace(/([a-z\d])([A-Z])/g, '$1_$2').toLowerCase().split('_');
-      const last = words[words.length - 1];
-      return words.some((word) => MONEY_WORDS.has(word)) && last !== 'cents' && last !== 'id';
-    });
+  const invalid: string[] = [];
+  for (const [name, schema] of declaredProperties(jsonSchema)) {
+    if (isCostReportStatus(name, schema)) continue;
+    const separated = name.replace(/([a-z\d])([A-Z])/g, '$1_$2');
+    const words = separated.toLowerCase().split('_');
+    const last = words.at(-1);
+    const moneyWord = words.some(isMoneyWord);
+    if (moneyWord && last !== 'cents' && last !== 'id') invalid.push(name);
+  }
+  return invalid;
+}
+
+function isMoneyWord(word: string): boolean {
+  return MONEY_WORDS.has(word);
+}
+
+function isCostReportStatus(name: string, schema: unknown): boolean {
+  if (name !== 'costStatus') return false;
+  const shape = asRecord(schema);
+  const values = shape['enum'];
+  if (shape['type'] !== 'string' || !Array.isArray(values) || values.length !== 3) return false;
+  // Exempt only the fixed report states; an amount under this name still fails.
+  return values.includes('reported') && values.includes('not_reported') && values.includes('invalid');
 }
 
 // A `...Cents` field must be an integer that cannot go below zero. A plain

@@ -88,7 +88,7 @@ export async function expiryFixture(locator?: string) {
       await save('tool.dispatch_recorded', `decision-${permitId}`,
         { ...example('tool.dispatch_recorded'), requestId: permitId,
           approvalId: 'ask-Requested', conversationId, turnId, serverId: 'mcp_1',
-          toolName: 'odoo.write', outcome, evidence, ...adapterFields });
+          toolName: 'crm.write', outcome, evidence, ...adapterFields });
     }
   }
   return { nats, now, advance, save, input, decision, use, actor, binding,
