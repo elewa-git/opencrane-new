@@ -8,15 +8,15 @@ function standardCatalogue() {
   return toolPolicySchema.shape.catalogue.unwrap().unwrap().parse(data);
 }
 
-it('recognises standard definitions without inventing a zero cost', () => {
+function recognisesOrdinaryCatalogue() {
   const catalogue = standardCatalogue();
   expect(isOrdinaryToolCatalogue(catalogue)).toBe(true);
   expect(canReviewTool(catalogue, catalogue.tools![0])).toBe(true);
   expect(catalogue.tools![0]).not.toHaveProperty('costCents');
-});
+}
+it('recognises standard definitions without inventing a zero cost', recognisesOrdinaryCatalogue);
 
-it.each(['cost', 'review', 'revision', 'invalid', 'missing'])(
-'keeps the strict contract for declarations and unavailable discovery: %s', mode => {
+function refusesDeclaredOrUnavailableCatalogue(mode: string) {
   const catalogue = standardCatalogue();
   const tool = catalogue.tools![0]!;
   if (mode === 'cost') tool.costCents = 0;
@@ -28,7 +28,9 @@ it.each(['cost', 'review', 'revision', 'invalid', 'missing'])(
   if (mode === 'missing') delete catalogue.discoverResult;
   expect(isOrdinaryToolCatalogue(catalogue)).toBe(false);
   expect(canReviewTool(catalogue, tool)).toBe(false);
-});
+}
+it.each(['cost', 'review', 'revision', 'invalid', 'missing'])(
+'keeps the strict contract for declarations and unavailable discovery: %s', refusesDeclaredOrUnavailableCatalogue);
 
 function refusesHostedCatalogue() {
   const catalogue = standardCatalogue();
@@ -38,3 +40,16 @@ function refusesHostedCatalogue() {
   expect(canReviewTool(catalogue, catalogue.tools![0])).toBe(false);
 }
 it('keeps a hosted run outside ordinary catalogue review', refusesHostedCatalogue);
+
+function refusesIncompleteRejectedEvidence() {
+  const catalogue = standardCatalogue();
+  catalogue.rejectedTools = [{ name: 'paid', revision: 'c'.repeat(64),
+    reason: 'invalid_tool_cost' }];
+  expect(isOrdinaryToolCatalogue(catalogue)).toBe(false);
+  catalogue.declared = true;
+  expect(isOrdinaryToolCatalogue(catalogue)).toBe(false);
+  catalogue.declared = false;
+  expect(isOrdinaryToolCatalogue(catalogue)).toBe(true);
+}
+it('requires complete-list declaration evidence after a tool was rejected',
+  refusesIncompleteRejectedEvidence);

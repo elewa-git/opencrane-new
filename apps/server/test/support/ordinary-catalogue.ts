@@ -1,3 +1,4 @@
+import { losslessJson } from '@opencrane/events/lossless-json';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { discoverInventory } from '../../src/integrations/inventory.ts';
 
@@ -16,4 +17,11 @@ export async function captureCatalogue(definitions: unknown[]) {
   const snapshot = await discoverInventory(call);
   return mcpServerDiscoveredDataSchema.parse({ serverId: 'fixture',
     connectionId: 'installed', accountMode: 'none', ...snapshot });
+}
+
+export function revision(definition: unknown) {
+  const encoded = losslessJson(JSON.stringify(definition));
+  const name = encoded.value instanceof Map ? encoded.value.get('name')?.value : undefined;
+  if (typeof name !== 'string') throw new Error('Expected named fixture tool');
+  return { name, revision: encoded.digest };
 }

@@ -1,5 +1,5 @@
 import { prepare, reviewRestoration, publishRestoration, restorationDelivery,
-  generationHeaders, ordinaryRemoteFixture, permit, send, review, tool, catalogue, body }
+  generationHeaders, ordinaryRemoteFixture, permit, send, remoteMethod, review, tool, catalogue, body }
   from './support/mcp-dispatch.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
@@ -16,10 +16,9 @@ import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
 import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
-import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
-import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
+import { approvalDecision } from '../src/approvals.ts';
+import { mcpPolicy, parseMcpCall } from '../src/mcp.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import { freePort } from './gateway-delivery-fixture.ts';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
@@ -30,7 +29,7 @@ import { budgetStopHandler } from '../src/index.ts';
 import { grantStream } from '@opencrane/authz';
 import { approvalCards, decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
-import { catalogueEvidence, fixture, toolEvidence } from './fixture.ts';
+import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 import { oauthSelectionFixture } from './support/oauth-selection.ts';
 import { createHash } from 'node:crypto';
@@ -3114,7 +3113,11 @@ async function checksRepeatedAdapterCost(change: 'identical' | 'amount' | 'statu
   if (change === 'amount') repeated = { ...reported, costCents: 99 };
   const invalid = { ...observation, costStatus: 'invalid' as const };
   const callback = change === 'status' ? invalid : repeated;
-  const recording = recordAdapterObservation(setup.actor, binding, callback);
+  const repeatedBinding = { reviewRevision: binding.reviewRevision,
+    recordDigest: binding.recordDigest, generation: binding.generation,
+    connectionId: binding.connectionId, startId: binding.startId,
+    decisionId: binding.decisionId, silo: binding.silo };
+  const recording = recordAdapterObservation(setup.actor, repeatedBinding, callback);
   if (change === 'identical') {
     await recording;
   } else {
@@ -3672,12 +3675,12 @@ async function withholdsPermitDuringAccessOutage() {
 it('withholds the MCP permit when current access cannot be checked',
   withholdsPermitDuringAccessOutage, 40_000);
 
-it('runs an ordinary reviewed remote tool and records that no cost was reported', async () => {
+async function runsOrdinaryRemoteTool() {
   const { setup, headers, remote } = await ordinaryRemoteFixture();
   const value = await permit(setup, headers);
   const response = await send(setup, value);
   expect(response.status, await response.text()).toBe(200);
-  expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list', 'tools/call']);
   const sentCall: unknown = JSON.parse(remote.received[1]!.raw.toString());
   expect(sentCall).toHaveProperty('params._meta', {
     'io.modelcontextprotocol/protocolVersion': '2026-07-28',
@@ -3691,11 +3694,13 @@ it('runs an ordinary reviewed remote tool and records that no cost was reported'
   }
   const dispatch = decisions.find(row => row.event.type === 'tool.dispatch_recorded');
   expect(dispatch?.event.data).toMatchObject({ costStatus: 'not_reported' });
-});
+}
+it('runs an ordinary reviewed remote tool and records that no cost was reported', runsOrdinaryRemoteTool);
 
-it('blocks an ordinary remote tool when its current list differs from the review', async () => {
+async function refusesOrdinaryCatalogueDrift() {
   const { setup, headers, remote } = await ordinaryRemoteFixture();
-  remote.respond(function changed() { return { tools: [] }; });
+  function changed() { return { tools: [] }; }
+  remote.respond(changed);
   const value = await permit(setup, headers);
   const response = await send(setup, value);
   expect(response.status).toBe(200);
@@ -3703,10 +3708,11 @@ it('blocks an ordinary remote tool when its current list differs from the review
     content: [{ text: 'The tool list changed. An admin must review it before another call.' }] } });
   const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
   expect(policy.driftHeld).toBe(true);
-  expect(remote.calls.map(call => call.method)).toEqual(['tools/list']);
-});
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list']);
+}
+it('blocks an ordinary remote tool when its current list differs from the review', refusesOrdinaryCatalogueDrift);
 
-it('removes agent details on the wire while preserving exact argument numbers', async () => {
+async function preservesNumbersWithoutAgentDetails() {
   const context = await publishedFixture('allow', true);
   const { setup } = context;
   const remote = await remoteFixture();
@@ -3726,9 +3732,11 @@ it('removes agent details on the wire while preserving exact argument numbers', 
     'io.modelcontextprotocol/protocolVersion': '2026-07-28',
     'io.modelcontextprotocol/clientCapabilities': {} });
   expect(sent).not.toMatch(/threadId|thread_id|sessionId|session_id|probe-model|sandbox|0\.159\.2|clientInfo/u);
-});
+}
+it('removes agent details on the wire while preserving exact argument numbers', preservesNumbersWithoutAgentDetails);
 
-async function approvesOrdinaryDescription(description: string | undefined, consequence: string) {
+async function approvesOrdinaryDescription(_name: string, description: string | undefined,
+  consequence: string) {
   const { setup, headers, remote } = await ordinaryRemoteFixture('ask', description);
   const approvalId = await approvalForReviewedTool(setup, headers, false);
   expect(remote.calls).toHaveLength(0);
@@ -3745,23 +3753,24 @@ async function approvesOrdinaryDescription(description: string | undefined, cons
   const value = await permit(setup, { ...headers, 'x-opencrane-approval-id': approvalId });
   const response = await send(setup, value);
   expect(response.status, await response.text()).toBe(200);
-  expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list', 'tools/call']);
 }
 const ordinaryDescriptions = [
-  [undefined, 'Run the reviewed tool.'],
-  ['', 'Run the reviewed tool.'],
-  ['x'.repeat(8001), 'x'.repeat(8000)],
+  ['missing', undefined, 'Run the reviewed tool.'],
+  ['empty', '', 'Run the reviewed tool.'],
+  ['long', 'x'.repeat(8001), 'x'.repeat(8000)],
 ] as const;
 it.each(ordinaryDescriptions)(
-  'shows an ordinary approval card and runs the approved call for description %j',
+  'shows an ordinary approval card and runs the approved call for a %s description',
   approvesOrdinaryDescription);
 
-it.each([0, 7, -1, 0.5, 9007199254740992])('records an ordinary tool reported cost after execution: %s', async cost => {
+async function recordsReportedOrdinaryCost(cost: number) {
   const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
-  remote.respond(function result(method: string) {
-    if (method === 'tools/list') return { tools: [JSON.parse(ordinaryTool.definition!) as unknown] };
+  function result(method: string) {
+    if (method === 'tools/list') return { tools: [JSON.parse(ordinaryTool.definition) as unknown] };
     return { content: [], _meta: { 'io.opencrane/costCents': cost } };
-  });
+  }
+  remote.respond(result);
   const value = await permit(setup, headers);
   const response = await send(setup, value);
   expect(response.status, await response.text()).toBe(200);
@@ -3774,24 +3783,27 @@ it.each([0, 7, -1, 0.5, 9007199254740992])('records an ordinary tool reported co
   } else {
     expect(dispatch.event.data).toMatchObject({ costStatus: 'reported', costCents: cost });
   }
-});
+}
+it.each([0, 7, -1, 0.5, 9007199254740992])('records an ordinary tool reported cost after execution: %s', recordsReportedOrdinaryCost);
 
-it('compares every page of an ordinary server list before executing', async () => {
+async function checksEveryOrdinaryCataloguePage() {
   const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
-  remote.respond(function result(method: string, cursor?: string) {
+  function result(method: string, cursor?: string) {
     if (method === 'tools/list' && cursor === undefined) {
       return { tools: [], nextCursor: 'remaining-tools' };
     }
     if (method === 'tools/list') {
-      return { tools: [JSON.parse(ordinaryTool.definition!) as unknown] };
+      return { tools: [JSON.parse(ordinaryTool.definition) as unknown] };
     }
     return { content: [], isError: false };
-  });
+  }
+  remote.respond(result);
   const value = await permit(setup, headers);
   const response = await send(setup, value);
   expect(response.status, await response.text()).toBe(200);
-  expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/list', 'tools/call']);
-});
+  expect(remote.calls.map(remoteMethod)).toEqual(['tools/list', 'tools/list', 'tools/call']);
+}
+it('compares every page of an ordinary server list before executing', checksEveryOrdinaryCataloguePage);
 
 async function refusesUnreviewedDeclaredArguments(kind: 'target' | 'object' | 'array') {
   const setup = await fixture();
@@ -3804,14 +3816,28 @@ async function refusesUnreviewedDeclaredArguments(kind: 'target' | 'object' | 'a
     ...catalogueEvidence([declaration]) };
   await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
   await reviewRestoration(setup, 'argument-review', 'ask');
+  const record = await publishRestoration(setup, 'argument-publication');
+  const delivery = await restorationDelivery(setup);
+  await delivery.deliver(record);
+  await delivery.waitForWitness(record);
+  expect(await delivery.observe()).not.toBeNull();
+  Object.assign(headers, generationHeaders(record));
   const argumentsValue: Record<string, unknown> = { ...capture.body.params.arguments };
   if (kind === 'object') argumentsValue['note'] = { text: 'ordinary text' };
   if (kind === 'array') argumentsValue['note'] = ['ordinary text'];
   const call = { ...capture.body, params: { ...capture.body.params, arguments: argumentsValue } };
-  const request = { method: 'POST', headers, body: JSON.stringify(call) };
-  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-    request);
-  expect(response.status, await response.text()).toBe(403);
+  const parsed = parseMcpCall(JSON.stringify(call));
+  const policy = await mcpPolicy(setup.nats.store, 'test', 'fixture', 'installed', parsed,
+    headers, Infinity, setup.dispatchOptions.acknowledged);
+  expect(policy.outcome).toBe('ask');
+  const bound = { requesterId: 'alice', assistantId: 'assistant', conversationId: 'conversation',
+    turnId: 'dispatch', serverId: 'fixture', connectionId: 'installed' };
+  async function fresh() {}
+  const before = await setup.nats.store.head();
+  const decision = approvalDecision(setup.nats.store, 'test', bound, policy, setup.keys,
+    setup.actor.now, fresh, 'unreviewed-arguments');
+  await expect(decision).rejects.toThrow('Unreviewed arguments');
+  expect(await setup.nats.store.head()).toBe(before);
   const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
   expect(cards).toEqual([]);
   expect(setup.received()).toBe(0);

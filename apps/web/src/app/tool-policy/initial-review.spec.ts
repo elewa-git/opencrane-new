@@ -117,7 +117,7 @@ it('keeps reviewed mode editing available when the separate audience read is una
   fixture.destroy();
 });
 
-it('lets the admin review ordinary definitions without declaring cost or approval details', async () => {
+async function reviewsOrdinaryDefinitions() {
   const policy = initialPolicy();
   const declaration = policy.catalogue!.tools![0]!;
   delete declaration.costCents;
@@ -134,11 +134,17 @@ it('lets the admin review ordinary definitions without declaring cost or approva
   fixture.detectChanges();
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Expected tools');
-  await vi.waitFor(() => expect(root.querySelector('fieldset')?.disabled).toBe(false));
+  const element = root;
+  function fieldsetEnabled() {
+    expect(element.querySelector('fieldset')?.disabled).toBe(false);
+  }
+  await vi.waitFor(fieldsetEnabled);
   const allow = root.querySelector<HTMLInputElement>('input[value="allow"]');
   expect(allow?.disabled).toBe(false);
   allow?.click();
   fixture.detectChanges();
   expect(allow?.checked).toBe(true);
   fixture.destroy();
-});
+}
+it('lets the admin review ordinary definitions without declaring cost or approval details',
+  reviewsOrdinaryDefinitions);
