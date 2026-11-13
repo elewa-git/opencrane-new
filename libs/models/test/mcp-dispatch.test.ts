@@ -150,7 +150,9 @@ async function refusesReuse() {
     const second = await send(setup, value);
     expect(second.status).toBe(403);
     expect(setup.received()).toBe(1);
-    expect(setup.upstreamBody()).toBe(body);
+    expect(JSON.parse(setup.upstreamBody())).toMatchObject({
+      params: { name: 'write', arguments: capture.body.params.arguments } });
+    expect(setup.upstreamBody()).not.toContain('x-codex-turn-metadata');
     expect(setup.providerHeaders()).toContain('x-opencrane-mcp-revision');
     expect(setup.providerHeaders()).not.toContain('x-opencrane-mcp-permit');
   } finally {
@@ -2557,7 +2559,8 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     expect(remote.dnsCalls()).toBe(0);
   } else if (mode === 'gateway') {
     expect(await gatewayCall(context, {}, raw)).toBe(200);
-    expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
+    expect(remote.received[0]!.raw.toString()).toContain('"number":1.0e3');
+    expect(remote.received[0]!.raw.toString()).not.toContain('x-codex-turn-metadata');
   } else {
     const headers = { ...context.headers, ...context.constants };
     const value = await permit(setup, headers, raw);
@@ -2632,11 +2635,13 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       if (mode === 'permit_timeout') expect(performance.now() - beforeSend).toBeLessThan(700);
       if (success || ['redirect', 'oversize', 'session', 'mime', 'revision', 'deadline'].includes(mode)) {
         expect(remote.received).toHaveLength(1);
-        expect(remote.received[0]!.raw).toEqual(Buffer.from(raw));
+        expect(remote.received[0]!.raw.toString()).toContain('"number":1.0e3');
+        expect(remote.received[0]!.raw.toString()).not.toContain('x-codex-turn-metadata');
         expect(remote.received[0]!.hostname).toBe('mcp.example.test');
         expect(remote.received[0]!.headers).toEqual({ host: 'mcp.example.test',
           'content-type': 'application/json', accept: 'application/json',
-          'content-length': String(Buffer.byteLength(raw)), 'mcp-protocol-version': '2026-07-28',
+          'content-length': String(remote.received[0]!.raw.length),
+          'mcp-protocol-version': '2026-07-28',
           'mcp-method': 'tools/call', 'mcp-name': 'write',
           'x-opencrane-mcp-revision': catalogue.schemaDigest });
         expect(remote.dnsCalls()).toBe(1);
@@ -3778,6 +3783,12 @@ it('runs an ordinary reviewed remote tool and records that no cost was reported'
   const response = await send(setup, value);
   expect(response.status, await response.text()).toBe(200);
   expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
+  const sentCall: unknown = JSON.parse(remote.received[1]!.raw.toString());
+  expect(sentCall).toMatchObject({ params: {
+    _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientCapabilities': {} } } });
+  expect(remote.received[1]!.headers).not.toHaveProperty('x-opencrane-mcp-revision');
+  expect(JSON.stringify(sentCall)).not.toMatch(/threadId|sessionId|sandbox|clientInfo/u);
   const decisions: StoredEvent[] = [];
   const last = await setup.nats.store.head();
   for (let position = 1; position <= last; position++) {
@@ -3792,7 +3803,11 @@ it('blocks an ordinary remote tool when its current list differs from the review
   remote.respond(function changed() { return { tools: [] }; });
   const value = await permit(setup, headers);
   const response = await send(setup, value);
-  expect(response.status).not.toBe(200);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ result: { isError: true,
+    content: [{ text: 'The tool list changed. An admin must review it before another call.' }] } });
+  const policy = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(policy.driftHeld).toBe(true);
   expect(remote.calls.map(call => call.method)).toEqual(['tools/list']);
 });
 
@@ -3812,4 +3827,40 @@ it('removes agent details on the wire while preserving exact argument numbers', 
   const sent = remote.received[0]!.raw.toString();
   expect(sent).toContain('"number":1.0e3');
   expect(sent).not.toMatch(/threadId|thread_id|sessionId|session_id|probe-model|sandbox|0\.159\.2|clientInfo/u);
+});
+
+it('asks before an ordinary tool runs without an OpenCrane review descriptor', async () => {
+  const { setup, headers, remote } = await ordinaryRemoteFixture('ask');
+  const approvalId = await approvalForReviewedTool(setup, headers, false);
+  expect(remote.calls).toHaveLength(0);
+  const waiting = await readApproval(setup.nats.store, 'test', approvalId);
+  expect(waiting.state).toBe('requested');
+  async function fresh() {}
+  const approved = await decideApproval(setup.nats.store, 'test', approvalId,
+    'alice', 'approved', true, fresh, waiting);
+  expect(approved.status).toBe('appended');
+  const value = await permit(setup, { ...headers, 'x-opencrane-approval-id': approvalId });
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  expect(remote.calls.map(call => call.method)).toEqual(['tools/list', 'tools/call']);
+});
+
+it.each([0, 7, -1, 0.5])('records an ordinary tool reported cost after execution: %s', async cost => {
+  const { setup, headers, remote, ordinaryTool } = await ordinaryRemoteFixture();
+  remote.respond(function result(method: string) {
+    if (method === 'tools/list') return { tools: [JSON.parse(ordinaryTool.definition!) as unknown] };
+    return { content: [], _meta: { 'io.opencrane/costCents': cost } };
+  });
+  const value = await permit(setup, headers);
+  const response = await send(setup, value);
+  expect(response.status, await response.text()).toBe(200);
+  const last = await setup.nats.store.head();
+  const dispatch = await setup.nats.store.readEvent(last);
+  expect(dispatch.event.type).toBe('tool.dispatch_recorded');
+  if (cost < 0 || cost === 0.5) {
+    expect(dispatch.event.data).toMatchObject({ costStatus: 'invalid' });
+    expect(dispatch.event.data).not.toHaveProperty('costCents');
+  } else {
+    expect(dispatch.event.data).toMatchObject({ costStatus: 'reported', costCents: cost });
+  }
 });

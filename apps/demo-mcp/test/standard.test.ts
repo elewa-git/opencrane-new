@@ -4,7 +4,7 @@ import { catalogue } from '../src/tools.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
 
 it('offers a standard catalogue without OpenCrane declarations or revision checks', async () => {
-  const original = losslessJson(JSON.stringify(catalogue)).digest;
+  const original = 'e58b2ca2a63ecb77f6c028056e36c67ffddcdbecefa30ae0b16dc44990ec17da';
   const server = createDemoServer(undefined, {});
   try {
     async function call(method: string, params = {}) {
@@ -15,8 +15,10 @@ it('offers a standard catalogue without OpenCrane declarations or revision check
       return reply.json<unknown>();
     }
     const discovery = await call('server/discover');
+    expect(discovery).toHaveProperty('result.capabilities.tools');
     expect(JSON.stringify(discovery)).not.toContain('io.opencrane');
     const tools = await call('tools/list');
+    expect(tools).toHaveProperty('result.tools');
     expect(JSON.stringify(tools)).not.toContain('io.opencrane');
     const result = await call('tools/call', { name: 'read_fixture_quote',
       arguments: { quoteId: 'DEMO-001' } });
