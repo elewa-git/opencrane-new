@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { homedir } from 'node:os';
-import type { Page, Request } from 'playwright';
+import type { Page, Request, Response } from 'playwright';
 import { encodeSession } from '../../libs/auth/src/session.ts';
 import { loadAuthConfig } from '../../libs/auth/src/config.ts';
 import { browserSessions } from './browser-signin.ts';
@@ -69,7 +69,10 @@ async function checkSettings(page: Page, role: 'Admin' | 'Owner', width: number)
   const navigation = page.locator(width === 390 ? 'oc-navigation-menu' : 'nav.rail');
   const settingsLink = navigation.getByRole('link', { name: 'Settings', exact: true });
   await settingsLink.waitFor();
+  const integrationsRead = page.waitForResponse(isIntegrationsRead);
   await settingsLink.click();
+  assert.equal((await integrationsRead).status(), 200);
+  await page.getByText('Loading integrations…', { exact: true }).waitFor({ state: 'hidden' });
   await page.getByRole('heading', { name: 'Integrations', exact: true }).waitFor();
   assert.equal(await page.locator('oc-integrations-access-lost').count(), 0,
     `${role} must open Settings at ${width}px`);
@@ -98,10 +101,32 @@ async function checkSignOut(page: Page, width: number, menu: boolean) {
 }
 
 async function capture(page: Page, name: string) {
+  await page.evaluate(waitForPageAppearance);
   const privateFields = page.locator('input[type=email], input[type=password]');
   const emailText = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
   const mask = [privateFields, emailText];
   await page.screenshot({ path: `${evidenceDirectory}/${name}.png`, fullPage: true, mask });
+}
+
+async function waitForPageAppearance() {
+  await document.fonts.ready;
+  const animations = document.getAnimations();
+  const finiteAnimations = animations.filter(animationEnds);
+  const finishedAnimations = finiteAnimations.map(animationFinished);
+  await Promise.all(finishedAnimations);
+
+  // Wait for menu transitions without waiting for repeating status indicators.
+  function animationEnds(animation: Animation) {
+    return animation.effect?.getComputedTiming().iterations !== Infinity;
+  }
+
+  function animationFinished(animation: Animation) {
+    return animation.finished;
+  }
+}
+
+function isIntegrationsRead(response: Response) {
+  return new URL(response.url()).pathname === '/api/org/integrations';
 }
 
 function isLogoutPost(request: Request) {
