@@ -160,8 +160,14 @@ function requireAdapterStart(decision: EventEnvelope, start: EventEnvelope | und
 function requireSameAdapter(event: EventEnvelope, observation: Observation,
   adapter: AdapterBinding) {
   const saved = toolDispatchRecordedDataSchema.parse(event.data);
-  if (JSON.stringify(saved.adapter) !== JSON.stringify(adapter) ||
-      saved.evidence !== observation.evidence || saved.outcome !== observation.toolOutcome) {
+  if (saved.adapter?.decisionId !== adapter.decisionId ||
+      saved.adapter.startId !== adapter.startId ||
+      saved.adapter.connectionId !== adapter.connectionId ||
+      saved.adapter.generation !== adapter.generation ||
+      saved.adapter.recordDigest !== adapter.recordDigest ||
+      saved.adapter.reviewRevision !== adapter.reviewRevision ||
+      saved.evidence !== observation.evidence || saved.outcome !== observation.toolOutcome ||
+      saved.costStatus !== observation.costStatus || saved.costCents !== observation.costCents) {
     throw new Error('Tool dispatch evidence unavailable');
   }
 }
