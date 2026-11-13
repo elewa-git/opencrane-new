@@ -9,8 +9,8 @@ establish that this additional failure is fixed; the PR remains held for the own
 13 November 2026. All three qualifying runs used source `9726a297f`, secondary
 slot 1, the stand-in provider and a separate `claim.sh` / `up.sh --fresh` /
 `down.sh` cycle. The fleet marker remained set. The owner stack was not used.
-Only documentation, test files and captured evidence changed after
-that core-journey source.
+Only documentation, test files, CI worker configuration and captured evidence changed
+after that core-journey source.
 
 ## Consecutive qualification
 
@@ -141,6 +141,22 @@ includes. No assertion or product code changed. The full web unit suite then
 passed twice: 1,556 tests in 81 files each time. Web typecheck and scoped ESLint passed.
 The three core journey results and captured product behaviour are unchanged.
 
+## CI fixture concurrency
+
+CI on `67d3989dc` passed the checks and Chromium jobs, but a routine handoff test
+failed while reading NATS stream information. Its error was a service timeout,
+not a failed access, credential or execution assertion. The runner reports four
+CPUs; its ordinary shards previously used Vitest's automatic worker count while
+each test file also started real service fixtures.
+
+The CI argument regression failed before the worker limit was added. Ordinary
+shards now use two workers, leaving CPU time for NATS, PostgreSQL and OpenFGA.
+All existing service and authority deadlines, cases and assertions are unchanged.
+The 48 CI helper tests passed twice. The affected routine handoff file passed all
+69 tests twice with the shared disposable PostgreSQL database. Runner contention
+is an inference; the isolated local passes do not prove the historical timeout's
+cause. Final-head CI is reported separately on the PR.
+
 ## Own checks
 
 - PASS: full Angular web unit suite twice after registering the batch cases:
@@ -154,6 +170,8 @@ The three core journey results and captured product behaviour are unchanged.
 - PASS: audit API helper tests and the shipped audit browser case twice with the
   shared disposable PostgreSQL database. An earlier audit fixture invocation missed
   its existing Angular startup limit; no limit was raised.
+- PASS: 48 CI helper tests twice and all 69 routine handoff tests twice, with the
+  shared disposable PostgreSQL database for handoff.
 - PASS: nine hosted admission fixture cases twice, with an additional hand-removal
   check for the fleet refusal; scoped Ops/dev-stack typecheck after that repair.
 - PASS: full workspace, package and dev-stack typecheck; dev-stack typecheck again

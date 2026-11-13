@@ -76,6 +76,8 @@ export function testArguments(group) {
     }
   } else if (['1', '2', '3', '4'].includes(group)) {
     argumentsList.push(`--shard=${group}/4`);
+    // Leave CPU time for the NATS, database and OpenFGA fixture processes.
+    argumentsList.push('--maxWorkers=2');
     for (const file of fixtureFiles) {
       argumentsList.push(`--exclude=${file}`);
     }
