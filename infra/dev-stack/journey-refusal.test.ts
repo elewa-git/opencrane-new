@@ -6,6 +6,62 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { ScriptTarget, transpileModule } from 'typescript';
 
+type LauncherRun = { environment: Record<string, string> };
+
+async function launcherJourneyFixture(savedReal: boolean, fleet?: string, attempt?: string) {
+  const source = await readFile('infra/dev-stack/stack.ts', 'utf8');
+  const start = source.indexOf('async function journey()');
+  const end = source.indexOf('async function status()', start);
+  assert(start >= 0 && end > start, 'The launcher journey is available to the fixture');
+  const compiled = transpileModule(source.slice(start, end), {
+    compilerOptions: { target: ScriptTarget.ES2022 },
+  }).outputText;
+  const calls: LauncherRun[] = [];
+  const environment: Record<string, string> = {};
+  if (fleet !== undefined) environment['OPENCRANE_FLEET_TASK'] = fleet;
+  if (attempt !== undefined) environment['P4_JOURNEY_ATTEMPT'] = attempt;
+  async function readSettings() {
+    return { DEV_REAL_PROVIDER: savedReal ? '1' : '0' };
+  }
+  function requireAutomatedJourney() {}
+  function requireFleetStandInProvider(real: boolean) {
+    if (real && fleet !== undefined) throw new Error('Fleet tasks require the stand-in model');
+  }
+  async function run(_node: string, _args: string[], passed: Record<string, string>) {
+    calls.push({ environment: passed });
+    return '';
+  }
+  const context = {
+    base: {}, directory: '/fixture', process: { env: environment, execPath: '/fixture/node' },
+    readEnv: readSettings, requireAutomatedJourney, requireFleetStandInProvider,
+    run, console: { log() {} },
+  };
+  const journey = runInNewContext(compiled + '\njourney', context) as () => Promise<void>;
+  return { journey, calls };
+}
+
+async function launcherRefusesSavedRealProvider() {
+  const fixture = await launcherJourneyFixture(true, 'fleet-task');
+  await assert.rejects(fixture.journey, /Fleet tasks require the stand-in model/u);
+  assert.equal(fixture.calls.length, 0, 'A saved real provider cannot launch the journey');
+}
+
+test('stack launcher refuses a saved real provider before invoking the journey',
+  launcherRefusesSavedRealProvider);
+
+async function launcherForwardsFleetMarkers() {
+  for (const marker of ['', 'fleet-task']) {
+    const fixture = await launcherJourneyFixture(false, marker, 'attempt-one');
+    await fixture.journey();
+    assert.equal(fixture.calls.length, 1);
+    assert.equal(fixture.calls[0]?.environment['OPENCRANE_FLEET_TASK'], marker);
+    assert.equal(fixture.calls[0]?.environment['P4_JOURNEY_ATTEMPT'], 'attempt-one');
+  }
+}
+
+test('stack launcher forwards even an empty fleet marker and the journey attempt',
+  launcherForwardsFleetMarkers);
+
 type Invocation = { script: string; args: string[]; shell?: boolean; real?: boolean };
 const commands: Invocation[] = [
   { script: 'journey.sh', args: ['--id', 'owner'], shell: true },

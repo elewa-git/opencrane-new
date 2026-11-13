@@ -11,7 +11,7 @@ async function checksAdminMoney() {
     requesterId: 'member', conversationId: 'conversation', turnId: 'turn',
     decision: 'allow', outcome: 'success', records: [] };
   const adminRow = { ...memberRow, reservedCents: 17, settledCents: 1 };
-  const cases = [
+  const cases: Array<{ row: AuditRow; passes: boolean; privateText?: string }> = [
     { row: adminRow, passes: true },
     { row: { ...adminRow, reservedCents: 0, settledCents: 0 }, passes: true },
     { row: memberRow, passes: false },
@@ -19,6 +19,9 @@ async function checksAdminMoney() {
     { row: { ...adminRow, requestId: 'another-request' }, passes: false },
     { row: { ...adminRow, permitId: 'another-permit' }, passes: false },
     { row: { ...adminRow, requesterId: 'another-member' }, passes: false },
+    { row: { ...adminRow, conversationId: 'another-conversation' }, passes: false },
+    { row: { ...adminRow, turnId: 'another-turn' }, passes: false },
+    { row: adminRow, passes: false, privateText: 'private-canary' },
   ];
   let current = cases[0]!;
   function handle(incoming: import('node:http').IncomingMessage,
@@ -26,7 +29,7 @@ async function checksAdminMoney() {
     incoming.resume();
     assert.equal(incoming.url, '/api/org/history?requestId=request');
     response.setHeader('content-type', 'application/json');
-    response.end(JSON.stringify({ rows: [current.row] }));
+    response.end(JSON.stringify({ rows: [current.row], privateText: current.privateText }));
   }
   const server = createServer(handle);
   const origin = await listen(server);
