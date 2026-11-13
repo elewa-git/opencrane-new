@@ -16,6 +16,10 @@ const contextSchema = toolCredentialReleaseSchema.pick({ requestId: true, permit
   conversationId: true, turnId: true, threadId: true, serverId: true, toolName: true,
   argumentsDigest: true, purpose: true });
 const savedContextSchema = contextSchema.strip();
+export function credentialBrokerContext(release: unknown) {
+  return savedContextSchema.parse(release);
+}
+
 type PersonalPreparedRelease = PreparedCredentialRelease & {
   release: ReturnType<typeof toolCredentialReleaseSchema.parse>;
 };
@@ -44,7 +48,7 @@ async function binding(store: EventStore, silo: string,
       release.ownerId !== context.data.userId) {
     refuse();
   }
-  const expected = savedContextSchema.parse(release);
+  const expected = credentialBrokerContext(release);
   if (!isDeepStrictEqual(context.data, expected)) {
     refuse();
   }

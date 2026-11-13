@@ -661,8 +661,9 @@ function personalDispatch(store: BudgetActor['store'], silo: string,
     await forwardRemote(target!, permit, body, res, network, observer, material);
   }
   async function prepare() {
-    sendCredential = await preparePersonalCredential(store, silo, dispatch!,
-      permit.budget.decisionId, release!, deadline, permit.confirmAccess, sendAccess);
+    const credentialRequest = { decisionId: permit.budget.decisionId, release: release!,
+      deadline, confirmAccess: permit.confirmAccess, sendAccess };
+    sendCredential = await preparePersonalCredential(store, silo, dispatch!, credentialRequest);
   }
   async function send(observe: RemoteObserver) {
     if (!sendCredential) throw new Error('Personal tool unavailable');
