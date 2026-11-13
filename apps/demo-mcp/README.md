@@ -11,8 +11,8 @@ Each of its two accounts can be allowed or refused independently.
 ## Where it fits
 
 This separate application sits beside the product back end and the Odoo tool server.
-The product can discover it through the ordinary remote-tool connection once public
-hosting is ready. Public hosting and a live chat demonstration remain untested.
+The product can discover it through the ordinary remote-tool connection. Development
+checks use a guarded local TLS fixture. Public hosting remains untested.
 
 ```mermaid
 flowchart LR
