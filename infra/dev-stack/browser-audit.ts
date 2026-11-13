@@ -139,6 +139,17 @@ export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin:
 }
 
 async function checkChangeHistory(page: Page, publication: AuditRow, screenshot: string) {
+  await page.getByText('History loaded', { exact: true }).waitFor();
+  while (await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count() === 0) {
+    const older = page.getByRole('button', { name: 'Older history', exact: true });
+    assert(await older.count(), 'An older page shows a member change');
+    const previousCount = await page.locator('oc-audit article').count();
+    await older.focus();
+    await older.press('Enter');
+    await page.locator('oc-audit article').nth(previousCount).waitFor();
+  }
+  assert(await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count() > 0,
+    'The unfiltered screen shows a member change');
   function categoryResponse(response: Response) {
     const url = new URL(response.url());
     return url.pathname === '/api/org/history' && url.searchParams.get('family') === 'tools'
@@ -158,31 +169,40 @@ async function checkChangeHistory(page: Page, publication: AuditRow, screenshot:
   }
   await page.getByText('History loaded', { exact: true }).waitFor();
   assert.equal(await page.locator('oc-audit article').count(), categoryHistory.rows.length);
+  assert.equal(await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count(), 0,
+    'The Tools & models screen excludes member changes');
   assert(await category.evaluate(isFocused), 'Keyboard selection keeps focus on the category');
   await capture(page, screenshot);
-
-  function referenceResponse(response: Response) {
-    const url = new URL(response.url());
-    return url.pathname === '/api/org/history'
-      && url.searchParams.get('reference') === publication.id;
+  const visibleRows = [...categoryHistory.rows];
+  while (!visibleRows.some(row => row.id === publication.id)) {
+    const older = page.getByRole('button', { name: 'Older history', exact: true });
+    assert(await older.count(), 'The publication is on an older Tools & models page');
+    function olderResponse(response: Response) {
+      const url = new URL(response.url());
+      return url.pathname === '/api/org/history' && url.searchParams.get('family') === 'tools'
+        && url.searchParams.has('before');
+    }
+    const olderLoaded = page.waitForResponse(olderResponse);
+    await older.focus();
+    await older.press('Enter');
+    const olderReply = await olderLoaded;
+    assert.equal(olderReply.status(), 200);
+    const olderHistory = auditResponseSchema.parse(await olderReply.json());
+    assert(olderHistory.rows.length > 0, 'An older page contains saved changes');
+    visibleRows.push(...olderHistory.rows);
+    await page.locator('oc-audit article').nth(visibleRows.length - 1).waitFor();
+    assert.equal(await page.locator('oc-audit article').count(), visibleRows.length);
   }
-  const referenceLoaded = page.waitForResponse(referenceResponse);
-  await page.getByRole('searchbox', { name: 'Safe reference', exact: true }).fill(publication.id);
-  const search = page.getByRole('button', { name: 'Search', exact: true });
-  await search.focus();
-  await search.press('Enter');
-  const referenceReply = await referenceLoaded;
-  assert.equal(referenceReply.status(), 200);
-  const found = auditResponseSchema.parse(await referenceReply.json());
-  assert.equal(found.rows.length, 1, 'A safe reference finds exactly one saved change');
-  assert.equal(found.rows[0]?.id, publication.id);
-  await page.getByText('History loaded', { exact: true }).waitFor();
-  assert.equal(await page.locator('oc-audit article').count(), 1);
-  assert(await search.evaluate(isFocused), 'Keyboard search keeps focus on Search');
-  const entry = page.locator('oc-audit article .row-button');
+  const publicationIndex = visibleRows.findIndex(row => row.id === publication.id);
+  const entry = page.locator('oc-audit article .row-button').nth(publicationIndex);
+  assert.equal(await entry.getByText('Organisation change', { exact: true }).count(), 1,
+    'The publication has the title shown on the shipped screen');
+  assert.equal(await entry.getByText('Decision: Not recorded · Observation: Change recorded',
+    { exact: true }).count(), 1, 'The publication has its visible decision and observation');
+  await entry.focus();
   await entry.press('Enter');
   const detail = page.getByRole('dialog');
-  await detail.getByRole('heading', { name: 'Saved observation', exact: true }).waitFor();
+  await detail.getByRole('heading', { name: 'Organisation change', exact: true }).waitFor();
   assert(!(await detail.innerText()).includes('canary'), 'Admin detail contains safe metadata only');
   await page.keyboard.press('Escape');
   assert(await entry.evaluate(isFocused), 'Closing the detail restores keyboard focus');

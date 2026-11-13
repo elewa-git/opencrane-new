@@ -1593,7 +1593,8 @@ An authorised owner start uses service health, process and listener checks to re
 readiness. It does not invoke `journey.ts`. Automated owner journeys are always refused.
 The shell launcher, direct stack journey action, main journey, bootstrap journey,
 MCP journey, screenshot journey, repeated live-view journey and package chat scripts refuse the owner id
-and any `OPENCRANE_FLEET_TASK` marker before configuration is evaluated.
+before configuration is evaluated, including when a fleet marker is present. Claimed secondary
+stacks accept fleet stand-in journeys and reject requested or saved real-provider mode.
 The main journey checks `DEV_REAL_PROVIDER` against the saved mode before setup;
 bootstrap and repeated live-view journeys require the saved stand-in mode.
 

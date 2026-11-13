@@ -20,23 +20,25 @@ async function launcherJourneyFixture(savedReal: boolean, fleet?: string, attemp
   const environment: Record<string, string> = {};
   if (fleet !== undefined) environment['OPENCRANE_FLEET_TASK'] = fleet;
   if (attempt !== undefined) environment['P4_JOURNEY_ATTEMPT'] = attempt;
-  async function readSettings() {
-    return { DEV_REAL_PROVIDER: savedReal ? '1' : '0' };
+  function readSettings() {
+    return Promise.resolve({ DEV_REAL_PROVIDER: savedReal ? '1' : '0' });
   }
   function requireAutomatedJourney() {}
   function requireFleetStandInProvider(real: boolean) {
     if (real && fleet !== undefined) throw new Error('Fleet tasks require the stand-in model');
   }
-  async function run(_node: string, _args: string[], passed: Record<string, string>) {
+  function run(_node: string, _args: string[], passed: Record<string, string>) {
     calls.push({ environment: passed });
-    return '';
+    return Promise.resolve('');
   }
   const context = {
     base: {}, directory: '/fixture', process: { env: environment, execPath: '/fixture/node' },
     readEnv: readSettings, requireAutomatedJourney, requireFleetStandInProvider,
     run, console: { log() {} },
   };
-  const journey = runInNewContext(compiled + '\njourney', context) as () => Promise<void>;
+  const candidate: unknown = runInNewContext(compiled + '\njourney', context);
+  assert.equal(typeof candidate, 'function');
+  const journey = candidate as () => Promise<void>;
   return { journey, calls };
 }
 
@@ -46,7 +48,7 @@ async function launcherRefusesSavedRealProvider() {
   assert.equal(fixture.calls.length, 0, 'A saved real provider cannot launch the journey');
 }
 
-test('stack launcher refuses a saved real provider before invoking the journey',
+void test('stack launcher refuses a saved real provider before invoking the journey',
   launcherRefusesSavedRealProvider);
 
 async function launcherForwardsFleetMarkers() {
@@ -59,7 +61,7 @@ async function launcherForwardsFleetMarkers() {
   }
 }
 
-test('stack launcher forwards even an empty fleet marker and the journey attempt',
+void test('stack launcher forwards even an empty fleet marker and the journey attempt',
   launcherForwardsFleetMarkers);
 
 type Invocation = { script: string; args: string[]; shell?: boolean; real?: boolean };

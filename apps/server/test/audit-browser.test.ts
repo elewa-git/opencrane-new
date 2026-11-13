@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { expect, it, vi } from 'vitest';
-import { chromium } from 'playwright';
+import { chromium, type Page, type Route } from 'playwright';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -14,6 +14,46 @@ import { auditTrail, members, connectMemberFeed, pgDb, ProjectionRunner } from '
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+
+function isFocused(element: Element): boolean {
+  return element === document.activeElement;
+}
+
+async function checkOlderHistory(page: Page, base: string): Promise<void> {
+  const recordedAt = new Date().toISOString();
+  const memberRecord = { eventId: 'member-event', type: 'member.role_changed', position: 42,
+    source: 'authoritative', status: 'recorded', recordedAt, operation: 'role_change' };
+  const publicationRecord = { eventId: 'publication-event', type: 'mcp.server_published',
+    position: 21, source: 'authoritative', status: 'recorded', recordedAt };
+  const firstPage = { rows: [{ id: 'member-change', decision: 'not_recorded',
+    outcome: 'recorded', records: [memberRecord] }], nextBefore: 42 };
+  const olderPage = { rows: [{ id: 'publication-change', decision: 'not_recorded',
+    outcome: 'recorded', records: [publicationRecord] }] };
+  async function servePagedHistory(route: Route) {
+    const requestUrl = new URL(route.request().url());
+    const body = requestUrl.searchParams.has('before') ? olderPage : firstPage;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  }
+  await page.route('**/api/org/history?*', servePagedHistory);
+  try {
+    await page.goto(`${base}/org/history`);
+    const memberEntry = page.getByRole('button', { name: /Member role changed/u });
+    await memberEntry.waitFor();
+    await memberEntry.focus();
+    await page.keyboard.press('Tab');
+    const older = page.getByRole('button', { name: 'Older history', exact: true });
+    expect(await older.evaluate(isFocused)).toBe(true);
+    await page.keyboard.press('Enter');
+    const publicationEntry = page.getByRole('button', { name: /Organisation change/u });
+    await publicationEntry.waitFor();
+    await page.keyboard.press('Shift+Tab');
+    expect(await publicationEntry.evaluate(isFocused)).toBe(true);
+    await page.keyboard.press('Enter');
+    await page.getByRole('dialog').getByRole('heading', { name: 'Organisation change' }).waitFor();
+  } finally {
+    await page.unrouteAll();
+  }
+}
 
 it('shows action and change history states at 1280 and 390px with keyboard filters', async () => {
   const fga = await openfga(), dbs = await databases(), nats = await natsFixture();
@@ -106,6 +146,7 @@ it('shows action and change history states at 1280 and 390px with keyboard filte
           await page.unrouteAll();
         }
       }
+      await checkOlderHistory(page, base);
     } finally {
       eventReads.mockRestore();
     }
