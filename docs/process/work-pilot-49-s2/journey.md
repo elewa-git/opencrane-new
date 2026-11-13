@@ -4,8 +4,8 @@ Date: 13 November 2026.
 Application source: `e3bca0e3771811e1d062ad1f3b7e4486ae78badb`.
 Journey on a fresh dev stack: FAIL.
 
-The capability is not qualified for merge. Source checks pass, but the final
-fresh-stack concurrent turns did not return either account's tool result.
+The capability is not qualified for merge. The latest test gate and live journey
+both FAIL. The final fresh-stack turns did not return either account's tool result.
 
 ## Fresh environment
 
@@ -89,20 +89,24 @@ scope to the existing HTTP dispatch entry point. Only positive immutable
 projection receipts are reused within one request. Current permissions, stream
 positions, private-key checks and both original time limits remain enforced.
 
-The assumption taken to the owner is: repeated projection-receipt reads were the
-remaining obstacle to concurrent live personal tool calls. The final fix passes
-its regression checks, but the end-to-end claim is still unproved. No further
-product fix was attempted after the second fresh journey failed.
+The assumption taken to the owner is: reusing confirmed projection receipts within
+one dispatch is enough for concurrent requests to finish inside the existing
+two-second access window. The broker-only approach failed its latency check. The
+HTTP-dispatch approach initially passed focused tests and the 527-test batch, but
+failed the same latency check on the final repeat. Stopped under the two-fix rule.
+No deadline was extended, and no further product fix or test retry was attempted.
 
 ## Own checks
 
 - PASS: failing-first demo test observed on `9fa8acb37`; its schema had rejected
   a permitted second account. The shared account schema permits independent flags
   and retains the existing refused-account fixture.
-- PASS: receipt-work regression observed failing before the dispatch-scope fix,
-  then passing with concurrent own-key results and late permission refusal.
-- PASS: changed tests twice, including the final 527 tests in 13 files, with real
-  disposable NATS, PostgreSQL, OpenFGA, gateway and HTTPS fixtures. The final run
+- FAIL: final receipt-work repeat returned HTTP 403 instead of 200. After naming
+  the test spies, the first repeat passed all three cases; the second passed two
+  and failed the concurrency latency case. This is the latest test verdict. See
+  [repeat metadata](run/final-test-repeat.json). No product code changed in that cleanup.
+- PASS: the earlier 527-test regression run in 13 files, with real
+  disposable NATS, PostgreSQL, OpenFGA, gateway and HTTPS fixtures. That run
   included standalone authority, 100,000 unrelated events, outages and precedence.
 - PASS: earlier complete affected run, 500 tests in eight files. An intermediate
   run had passed 494 and failed six replay/TLS fixture cases. Reused a direct Node
@@ -128,7 +132,7 @@ product fix was attempted after the second fresh journey failed.
 ## Made right
 
 Shared the demo account schema, demo HTTP requests, selection events and refresh
-fixtures. Removed their replaced copies. Split rotation setup from its refusal
+fixtures. Named the new receipt and permission test spies and their return values. Removed their replaced copies. Split rotation setup from its refusal
 case and checked the new generation is valid. Reused the existing receipt reader
 and a small request wrapper; retained the original unavailable-service cause.
 Removed duplicate attachment-button sizing. Added or edited production functions
