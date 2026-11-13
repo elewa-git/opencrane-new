@@ -63,28 +63,28 @@ function unrelated(index: number): EventEnvelope {
   }
 }
 
-async function prepareFixture(f: ModelFixture) {
+async function prepareFixture(modelFixture: ModelFixture) {
   // Equal local history in each run; background replay is outside admission timing.
-  await f.stopDispatch();
-  await f.runtime.stop();
-  await f.append('mcp-fixture', 'mcp.server_registered', {
+  await modelFixture.stopDispatch();
+  await modelFixture.runtime.stop();
+  await modelFixture.append('mcp-fixture', 'mcp.server_registered', {
     serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
     registeredBy: 'alice',
   });
   const tool = toolEvidence({ name: 'read', reviewed: true, readOnly: true, costCents: 0 });
   const catalogue = catalogueEvidence([tool]);
-  await f.append('mcp-fixture', 'mcp.server_discovered', {
+  await modelFixture.append('mcp-fixture', 'mcp.server_discovered', {
     serverId: 'fixture', connectionId: 'installed', accountMode: 'none', ...catalogue,
   });
-  await reviewCatalogue(f);
-  await f.append('mcp-fixture', 'mcp.server_published', {
+  await reviewCatalogue(modelFixture);
+  await modelFixture.append('mcp-fixture', 'mcp.server_published', {
     serverId: 'fixture', publishedBy: 'alice',
   });
-  await f.append('mcp-fixture', 'mcp.tool_mode_set', {
+  await modelFixture.append('mcp-fixture', 'mcp.tool_mode_set', {
     serverId: 'fixture', connectionId: 'installed', toolName: 'read',
     toolRevision: tool.revision, mode: 'allow', setBy: 'alice',
   });
-  await f.append('mcp-fixture', 'mcp.server_published', {
+  await modelFixture.append('mcp-fixture', 'mcp.server_published', {
     serverId: 'fixture', publishedBy: 'alice',
   });
   const resources = [['mcp_server', 'fixture'], ['destination', 'docs']] as const;
@@ -92,25 +92,26 @@ async function prepareFixture(f: ModelFixture) {
   for (const [resourceType, resourceId] of resources) {
     for (const [granteeId, granteeKind] of grantees) {
       const data = { resourceType, resourceId, granteeId, granteeKind, grantedBy: 'alice' };
-      const event = await f.append(grantStream(resourceType, resourceId), 'grant.given', data);
-      await f.auth.handler.handle(event, f.db);
+      const subject = grantStream(resourceType, resourceId);
+      const event = await modelFixture.append(subject, 'grant.given', data);
+      await modelFixture.auth.handler.handle(event, modelFixture.db);
     }
   }
 }
 
-async function seedUnrelated(f: ModelFixture, seeded: number) {
+async function seedUnrelated(modelFixture: ModelFixture, seeded: number) {
   for (let index = 0; index < 5; index++) {
     expect(parseEventByType(unrelated(index)).success).toBe(true);
   }
-  const before = await f.nats.store.head();
+  const before = await modelFixture.nats.store.head();
   for (let offset = 0; offset < seeded; offset += 100) {
     function batchEvent(_unused: unknown, index: number) {
       return unrelated(offset + index);
     }
     const batch = Array.from({ length: 100 }, batchEvent);
-    await f.nats.seed(batch);
+    await modelFixture.nats.seed(batch);
   }
-  expect(await f.nats.store.head()).toBe(before + seeded);
+  expect(await modelFixture.nats.store.head()).toBe(before + seeded);
 }
 
 function observeReads(store: EventStore) {
@@ -141,14 +142,16 @@ function observeReads(store: EventStore) {
   return { reset, snapshot, close };
 }
 
-async function decisionCalls(f: ModelFixture) {
+async function decisionCalls(modelFixture: ModelFixture) {
   // Refresh credentials after seeding; token issuance is outside admission timing.
-  const headers = { ...f.headers, authorization: `Bearer ${await f.sign(f.c, 'agentgateway')}`,
-    'x-turn-token': await f.sign(f.t, 'decision-service') };
+  const capability = await modelFixture.sign(modelFixture.c, 'agentgateway');
+  const turnToken = await modelFixture.sign(modelFixture.t, 'decision-service');
+  const headers = { ...modelFixture.headers, authorization: `Bearer ${capability}`,
+    'x-turn-token': turnToken };
   async function model() {
     const body = { model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128, stream: true };
     const request = { method: 'POST', headers, body: JSON.stringify(body) };
-    const response = await fetch(`${f.options.decisionUrl}/authorize`, request);
+    const response = await fetch(`${modelFixture.options.decisionUrl}/authorize`, request);
     expect(response.status, await response.text()).toBe(200);
   }
   async function mcp() {
@@ -162,12 +165,13 @@ async function decisionCalls(f: ModelFixture) {
     const requestHeaders = { ...headers, 'mcp-protocol-version': '2026-07-28',
       'mcp-method': 'tools/call', 'mcp-name': 'read' };
     const request = { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
-    const response = await fetch(`${f.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
+    const url = `${modelFixture.options.decisionUrl}/authorize/mcp/fixture/installed`;
+    const response = await fetch(url, request);
     expect(response.status, await response.text()).toBe(200);
   }
   function destinationAuthority() {
-    return currentAuthority(f.nats.store, f.binding, 'alice', 'assistant', 'conversation',
-      'destination', 'docs');
+    return currentAuthority(modelFixture.nats.store, modelFixture.binding, 'alice',
+      'assistant', 'conversation', 'destination', 'docs');
   }
   return { model, mcp, destinationAuthority };
 }
@@ -191,13 +195,13 @@ function volumeSuite(backend: string) {
     const counts: Record<string, number[]> = {};
     const latencies: { times: number[]; bound: number }[] = [];
     for (const seeded of [0, 100_000]) {
-      const f = await fixture(1_000_000, 1_000_000);
+      const modelFixture = await fixture(1_000_000, 1_000_000);
       try {
-        await prepareFixture(f);
-        await seedUnrelated(f, seeded);
-        const probe = observeReads(f.nats.store);
+        await prepareFixture(modelFixture);
+        await seedUnrelated(modelFixture, seeded);
+        const probe = observeReads(modelFixture.nats.store);
         try {
-          const calls = await decisionCalls(f);
+          const calls = await decisionCalls(modelFixture);
           for (const [route, call] of Object.entries(calls)) {
             const times: number[] = [];
             for (let sample = 0; sample < 30; sample++) {
@@ -227,7 +231,7 @@ function volumeSuite(backend: string) {
           probe.close();
         }
       } finally {
-        await f.close();
+        await modelFixture.close();
       }
     }
     for (const route of ['model', 'mcp', 'destinationAuthority']) {
