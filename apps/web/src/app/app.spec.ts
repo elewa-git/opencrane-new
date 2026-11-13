@@ -67,9 +67,29 @@ function button(rootElement: HTMLElement, label: string): HTMLButtonElement {
   return found;
 }
 
+async function showsInstallationName(name: string, expected: string): Promise<void> {
+  const meta = document.createElement('meta');
+  meta.name = 'opencrane-org';
+  meta.content = name;
+  document.head.append(meta);
+  try {
+    const fixture = await create();
+    expect(root(fixture).querySelector('oc-organisation-shell .organisation strong')?.textContent?.trim())
+      .toBe(expected);
+  } finally {
+    meta.remove();
+  }
+}
+
 describe('MCP register', () => {
   beforeEach(() => globalThis.history.replaceState({}, '', '/org/integrations'));
   afterEach(() => { fetchSpy?.mockRestore(); globalThis.history.replaceState({}, '', '/'); });
+
+  it.each([
+    ['  Acme & Sons  ', 'Acme & Sons'],
+    ['', 'Your organisation'],
+    ['   ', 'Your organisation'],
+  ])('shows the installation name %j in the organisation shell', showsInstallationName);
 
   it('loads typed rows and filters the counted tabs', async () => {
     const fixture = await create();

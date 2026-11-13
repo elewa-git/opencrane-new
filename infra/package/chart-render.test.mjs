@@ -724,3 +724,30 @@ function preservesOtherExactRecoveryValues() {
 }
 test('CNPG recovery preserves other recorded names and target values',
   preservesOtherExactRecoveryValues);
+
+function organisationSetting(variable) {
+  return variable.name === 'ORGANISATION_NAME';
+}
+
+function rendersOrganisationName() {
+  for (const name of ['', 'Acme & Sons']) {
+    const values = { ...chartValues(), organisation: { name } };
+    const options = { encoding: 'utf8', input: JSON.stringify(values) };
+    const argumentsList = ['template', 'chart-test', 'infra/package/chart', '--values', '-'];
+    const result = spawnSync('helm', argumentsList, options);
+    assert.equal(result.status, 0, result.stderr);
+    const documents = parseAllDocuments(result.stdout);
+    let web;
+    for (const document of documents) {
+      const resource = document.toJS();
+      if (resource.kind === 'Deployment' && resource.metadata.name === 'web') {
+        web = resource.spec.template.spec.containers[0];
+      }
+    }
+    assert.ok(web, 'The web deployment must exist');
+    const setting = web.env?.find(organisationSetting);
+    assert.deepEqual(setting, { name: 'ORGANISATION_NAME', value: name });
+  }
+}
+
+test('the installation name reaches the web container', rendersOrganisationName);

@@ -16,7 +16,7 @@ shared rules for checking messages before the website shows them.
 ```mermaid
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
-  browser["Person's browser<br/>pages and file drops where Attach is available"] -->|requests and tab sign-out| web
+  browser["Person's browser<br/>pages with the installation name and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|messages, settings and personal keys| server["apps/server<br/>the back end"]
   server -->|saved chats, command labels and masked views, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
@@ -34,6 +34,7 @@ No credentials are built into its public assets.
 For everyone, the website:
 
 - Shows sign-in, first-owner setup, the welcome survey and private persona review.
+  Sign-in and workspace navigation show the organisation name set by the installer.
 - Supports assistant sessions and direct or group chats with colleagues.
   An own message in a group chat can open a review to ask a shared assistant for work.
   The first review includes people who could read the source message. The server

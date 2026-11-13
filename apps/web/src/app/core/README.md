@@ -9,6 +9,7 @@ This folder keeps the website's live connection to the server running. It lets c
 - Reconnects after a dropped connection, with varied waits so browsers do not all retry together.
 - Shares sign-out between tabs and checks the session when a tab returns. Blocks new private replies during that check.
 - Stops reconnecting after an access-related closure and tells open chats to clear their content.
+- Reads the public organisation name supplied by the installation.
 - Supplies replaceable browser navigation and connection helpers for checks.
 
 ## Main files
@@ -18,6 +19,7 @@ This folder keeps the website's live connection to the server running. It lets c
 | `browser-session.ts` | Shares sign-out and checks whether a returning tab still has a session. |
 | `websocket.service.ts` | Manages the live connection, recent messages and connection status. |
 | `socket-factory.ts` | Supplies browser connections, page addresses and random retry timing. |
+| `organisation-name.ts` | Reads and trims the public organisation name. |
 | `navigate.ts` | Supplies normal browser page navigation. |
 
 ## How it connects

@@ -458,8 +458,15 @@ Operations use a separate `flock` per id; different stacks run concurrently.
 Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
 Website readiness has its own five-minute deadline, measured with a monotonic clock.
 It still requires a successful HTTP response from `/org/integrations`. Secondary stacks
-use Angular's development server. The owner builds the production bundle before starting
-`web-server.mjs`, which reads the generated proxy configuration. If the recorded website process
+run Angular's development server through `web-server.mjs --development`. Its HTML
+transform fills the installation name without changing Angular's response policy,
+proxying or live updates. The owner builds the production bundle and uses the
+static file mode of `web-server.mjs`, which reads the generated proxy configuration.
+Set `ORGANISATION_NAME` before a fresh start to
+save the installation's public name in `settings.env`. Startup passes that saved
+setting to the web server. It fills the public meta tag through the same
+`infra/package/web-page.mjs` function used by the package. An absent name keeps
+the sign-in and workspace fallback words. If the recorded website process
 stops, startup fails promptly and points to the private `web.log`, without printing
 its contents. A successful check prints
 `PASS website readiness: <milliseconds>ms`, measured from the request to start or reuse
@@ -487,6 +494,11 @@ or changes the live owner stack.
 `nice -n 10 node --test infra/dev-stack/web-server.test.mjs` builds the production
 website and checks compression, caching, proxy routes, security headers and a Mermaid
 diagram in Chromium. It starts only temporary HTTP servers.
+`nice -n 10 node --experimental-strip-types --test infra/dev-stack/web-development.test.mjs`
+starts Angular's development server and checks the escaped installation name,
+development client and blob PDF preview. The development entry uses the installed
+Angular builder's HTML transform extension; this integration test checks that
+extension against the pinned Angular version.
 
 Repeated startup stops the secondary model container before migration and starts
 it again afterwards, alongside the restarted server and dispatcher. Fresh secondary
@@ -918,7 +930,9 @@ The journey signs in as both real users in separate Playwright browser contexts
 at 390px and uses their actual encrypted cookies for HTTP and WebSocket requests.
 It refuses hostile/missing logout Origins and requests without a session. It checks
 an empty 303 body and probes manual/follow fetch, XHR, the DOM and page cookies for
-ID-token exposure. Native keyboard sign-out returns without a chooser, removes
+ID-token exposure. Fetch and XHR checks require the logout response to be HTTP 303
+and require cookie removal.
+Native keyboard sign-out returns without a chooser, removes
 the OpenCrane cookie and is followed by a successful sign-in requiring credentials.
 The five process logs are checked for the current ID token without printing it. Dev-only bootstrap
 invitations bind these subjects to stable member IDs; they do not define the

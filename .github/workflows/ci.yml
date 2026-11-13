@@ -160,7 +160,7 @@ jobs:
           infra/dev-stack/handler-upgrade.test.ts infra/dev-stack/dispatcher-ready.test.ts
           infra/dev-stack/scanner-settings.test.ts
           infra/dev-stack/private-settings.test.ts infra/dev-stack/compose.secondary.test.ts
-          infra/dev-stack/web-server.test.mjs
+          infra/dev-stack/web-server.test.mjs infra/dev-stack/web-development.test.mjs
           infra/dev-stack/demo-prepare.test.ts infra/dev-stack/demo-smoke.test.ts
           infra/dev-stack/demo-recovery.test.ts infra/dev-stack/demo-spending.test.ts
           infra/dev-stack/demo-rehearsal.test.ts infra/dev-stack/demo-rehearsal-repeat.test.ts
@@ -170,7 +170,7 @@ jobs:
           infra/package/company-qualification.test.ts
           infra/package/nats-placement.test.ts
           infra/package/nats-placement-collect.test.ts
-          infra/package/chart-render.test.mjs
+          infra/package/chart-render.test.mjs infra/package/web-page.test.mjs
           infra/package/prepare-nats-routes.test.mjs infra/package/cnpg-install.test.mjs
           infra/dev-stack/cnpg-backup.test.ts
           infra/dev-stack/cnpg-backup-identity.test.ts

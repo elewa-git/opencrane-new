@@ -2,8 +2,10 @@ import { createServer, request } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { extname, join, resolve } from 'node:path';
+import { organisationPage } from './web-page.mjs';
 
 const webRoot = '/app/apps/web/dist/web/browser';
+const indexPath = join(webRoot, 'index.html');
 const proxyPaths = ['/api', '/auth', '/ws', '/members'];
 const mime = {
   '.css': 'text/css', '.html': 'text/html', '.ico': 'image/x-icon',
@@ -41,7 +43,11 @@ function proxyRequest(incoming, response) {
 
 async function serveFile(response, path) {
   try {
-    const content = await readFile(path);
+    let content = await readFile(path);
+    if (path === indexPath) {
+      const page = organisationPage(content.toString('utf8'), process.env['ORGANISATION_NAME']);
+      content = Buffer.from(page);
+    }
     response.writeHead(200, { 'content-type': mime[extname(path)] ?? 'application/octet-stream' });
     response.end(content);
   } catch {
@@ -81,7 +87,7 @@ async function handleRequest(incoming, response) {
   } catch {
     // Let the browser app handle its own routes.
   }
-  await serveFile(response, join(webRoot, 'index.html'));
+  await serveFile(response, indexPath);
 }
 
 function handleUpgrade(incoming, socket, head) {

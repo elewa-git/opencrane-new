@@ -3158,3 +3158,43 @@ async function missingKeyNoticeUsesSelectedAssistant(personalAssistantId: string
 it.each([null, 'different-personal-assistant'])(
   'uses the selected shared assistant for the key notice with personal default %s',
   missingKeyNoticeUsesSelectedAssistant);
+
+async function showsInstallationName(name: string, expected: string): Promise<void> {
+  const meta = document.createElement('meta');
+  meta.name = 'opencrane-org';
+  meta.content = name;
+  document.head.append(meta);
+  try {
+    const { root } = await createCaptureWorkspace();
+    expect(root.querySelector('.current-user small')?.textContent)
+      .toBe(`${expected} · Personal`);
+  } finally {
+    meta.remove();
+  }
+}
+
+it.each([
+  ['  Acme & Sons  ', 'Acme & Sons'],
+  ['', 'Your organisation'],
+  ['   ', 'Your organisation'],
+])('shows the installation name %j in the workspace', showsInstallationName);
+
+async function showsPhoneOrganisation(): Promise<void> {
+  Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 390 });
+  const meta = document.createElement('meta');
+  meta.name = 'opencrane-org';
+  meta.content = 'Acme & Sons';
+  document.head.append(meta);
+  try {
+    const { root, fixture } = await createCaptureWorkspace();
+    root.querySelector<HTMLButtonElement>('#navigation-toggle')?.click();
+    fixture.detectChanges();
+    expect(root.querySelector('#workspace-navigation .rail-footer')?.textContent)
+      .toContain('Acme & Sons');
+  } finally {
+    meta.remove();
+  }
+}
+
+it('shows the installation name when a phone user opens session navigation',
+  showsPhoneOrganisation);

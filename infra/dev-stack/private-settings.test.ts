@@ -168,3 +168,18 @@ console.log(await config.readOwnerEmail());
 
 test('the private owner email survives deletion of a disposable stack',
   retainsOwnerEmailAfterTeardown);
+
+async function savesOrganisationName() {
+  const home = await mkdtemp(`${tmpdir()}/organisation-setting-`);
+  try {
+    const directory = await fixture(home, '1');
+    const result = generate(home, '1', { ORGANISATION_NAME: 'Acme & Sons' });
+    assert.equal(result.status, 0, result.stderr);
+    const saved = await settings(directory, 'settings');
+    assert.equal(saved['ORGANISATION_NAME'], 'Acme & Sons');
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+test('a fresh secondary slot saves its installation name', savesOrganisationName);

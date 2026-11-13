@@ -12,8 +12,18 @@ reviewed contents of every pinned image. It refuses unknown application licences
 non-OSI application licences and operating-system packages without a matching
 Debian main or PostgreSQL apt archive review.
 
+Set `organisation.name` in the Helm values to the installation's public name.
+It defaults to an empty string. The chart passes it only to the web container as
+`ORGANISATION_NAME`. `web.mjs` uses `web-page.mjs` to HTML-escape it into the
+`opencrane-org` meta tag when serving `index.html`, directly or for browser routes.
+Sign-in, the organisation shell and workspace show the trimmed name. Empty names
+keep each screen's fallback. This setting grants no access and adds no API route.
+`web-page.test.mjs` checks escaping and absence; `chart-render.test.mjs` checks
+that the value reaches the web container.
+
 The root `.dockerignore` excludes repository test folders and test files from the
-package build. The runtime cleanup also removes the nested `fast-uri/test` and
+package build. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
+The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
 It keeps the three image scanner files used by the server's image evidence import.
 `scripts/private-memory-qualification/memory-image.test.ts` builds this Dockerfile,

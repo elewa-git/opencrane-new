@@ -1,4 +1,6 @@
 chartVersion: "0.1.0"
+organisation:
+  name: ""
 images:
   server: ""
   web: ""

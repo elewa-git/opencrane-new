@@ -783,18 +783,18 @@ async function up(fresh: boolean) {
     await writeEnv('settings', settings);
   }
   const websiteStartedAt = performance.now();
+  const webEnvironment = { ORGANISATION_NAME: settings['ORGANISATION_NAME'] ?? '' };
   if (secondary) {
-    await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve',
-      '--project', 'web', '--host', '127.0.0.1', '--port', settings['WEB_PORT']!,
-      '--proxy-config', `${directory}/proxy.json`], {
-      __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname,
-      NG_BUILD_MAX_WORKERS: '2',
+    await start('web', [`${root}/infra/dev-stack/web-server.mjs`,
+      `${root}/apps/web/dist/web/browser`, settings['WEB_PORT']!,
+      new URL(origin).hostname, `${directory}/proxy.json`, '--development'], {
+      ...webEnvironment, NG_BUILD_MAX_WORKERS: '2',
     });
   } else if (!await processId('web')) {
     await run('nice', ['-n', '10', 'npm', 'run', 'build', '-w', 'apps/web'], base, 300_000);
     await start('web', [`${root}/infra/dev-stack/web-server.mjs`,
       `${root}/apps/web/dist/web/browser`, settings['WEB_PORT']!,
-      new URL(origin).hostname, `${directory}/proxy.json`], {});
+      new URL(origin).hostname, `${directory}/proxy.json`], webEnvironment);
   }
   async function websiteReady() {
     if (!await processId('web')) {

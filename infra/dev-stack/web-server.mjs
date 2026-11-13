@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { basename, extname, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { createGzip } from 'node:zlib';
+import { organisationPage } from '../package/web-page.mjs';
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -134,7 +135,8 @@ async function serveFile(request, response, pathname, buildDirectory) {
   let source;
   if (isIndex) {
     const index = await readFile(filename, 'utf8');
-    const body = index.replace('<app-root', `<app-root ngCspNonce="${nonce}"`);
+    const page = organisationPage(index, process.env['ORGANISATION_NAME']);
+    const body = page.replace('<app-root', `<app-root ngCspNonce="${nonce}"`);
     source = Readable.from([body]);
   } else {
     source = createReadStream(filename);
@@ -253,6 +255,11 @@ export async function startWebServer(buildDirectory, port, ownerHost, proxyFile)
 }
 
 if (process.argv[1] === new URL(import.meta.url).pathname) {
-  const [buildDirectory, port, ownerHost, proxyFile] = process.argv.slice(2);
-  await startWebServer(buildDirectory, Number(port), ownerHost, proxyFile);
+  const [buildDirectory, port, ownerHost, proxyFile, mode] = process.argv.slice(2);
+  if (mode === '--development') {
+    const { startDevelopmentServer } = await import('./web-development.mjs');
+    await startDevelopmentServer(Number(port), ownerHost, proxyFile);
+  } else {
+    await startWebServer(buildDirectory, Number(port), ownerHost, proxyFile);
+  }
 }

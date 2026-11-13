@@ -130,6 +130,7 @@ export async function generate(origin: string) {
   await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory,
     DEV_STACK_ROOT: root, DEV_STACK_UID: String(process.getuid!()),
     DEV_STACK_GID: String(process.getgid!()), SILO_ID: 'dev', ORIGIN: origin,
+    ORGANISATION_NAME: process.env['ORGANISATION_NAME'] ?? '',
     OPENFGA_API_URL: `http://127.0.0.1:${ports['FGA_PORT']}` });
 }
 

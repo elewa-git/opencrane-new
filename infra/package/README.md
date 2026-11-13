@@ -18,7 +18,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, evidence and installs"]
+  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, installation settings and evidence"]
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and backup token references| package
@@ -59,6 +59,9 @@ settings by name. Installation remains blocked until a real restore is checked;
 rendering cannot prove that the saved data is readable.
 
 ## What it is responsible for
+
+The installer can set the organisation's public name. Sign-in and workspace
+navigation show it, with their usual fallback words when it is empty.
 
 - Installs the website, server, workers and core services together with [Helm](../../GLOSSARY.md#helm).
 - Uses fixed, reviewed images and checks their licences before installation.

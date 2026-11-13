@@ -45,6 +45,7 @@ import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
+import { organisationName } from '../core/organisation-name';
 
 function turnTools(turn: Turn): ToolActivityRecord[] {
   return turn.tools;
@@ -86,7 +87,7 @@ export class Workspace implements OnInit {
   protected readonly capture = inject(ScreenshotCapture);
   protected readonly draft = signal('');
   protected readonly recipient = signal(true);
-  protected readonly organisation = document.querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
+  protected readonly organisation = organisationName() || 'Your organisation';
   protected readonly initials = computed(() => this.chat.displayName().split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase());
   protected readonly rail = signal(false);
   protected readonly panelTab = signal<'files' | 'activity' | 'memory'>('files');

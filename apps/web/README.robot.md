@@ -541,8 +541,11 @@ before opening `/auth/login?returnTo=/`. Cancel returns home and stops the timer
 `/signin/rejected` never reads `/auth/me`. It selects one fixed message from the
 reason lookup, focuses the heading and announces one polite status. Sign in again
 opens the same handoff. No reason or session value is stored or logged.
-The public `opencrane-org` meta tag in `src/index.html` supplies the organisation
-name. A non-empty `?invitation=…` shows invitation copy but does not grant membership.
+The public `opencrane-org` meta tag in `src/index.html` starts empty. The package
+and dev web servers fill it from `ORGANISATION_NAME`, escaping HTML attribute text.
+`core/organisation-name.ts` reads and trims it for sign-in, the organisation shell
+and the workspace, including the phone's session navigation. Empty or whitespace-only
+names retain “this organisation” on sign-in and “Your organisation” elsewhere. A non-empty `?invitation=…` shows invitation copy but does not grant membership.
 These views use one dog-eared card on the paper page at desktop and 390px widths.
 
 `npm run visual:screen-p4-19-signin` builds the web app and writes twelve
