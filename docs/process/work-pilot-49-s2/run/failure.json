@@ -1,0 +1,12 @@
+{
+  "verdict": "FAIL",
+  "applicationSource": "e3bca0e3771811e1d062ad1f3b7e4486ae78badb",
+  "width": 1280,
+  "step": "concurrent personal turns",
+  "observedReply": "The demo tool did not return a quote.",
+  "mcpDecisionObserved": false,
+  "credentialReleaseObserved": false,
+  "laterRevocation": "NOT RUN",
+  "mobileConcurrentJourney": "NOT RUN",
+  "cause": "Not confirmed; catalogue time mismatch is a possible lead."
+}
