@@ -3,6 +3,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
+import { history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { conversations, members, routines, computers, pgDb, ProjectionRunner,
   rebuildMemberProjection } from '@opencrane/projections';
@@ -31,6 +32,14 @@ async function append(subject: string, type: string, data: unknown, apply = true
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
   return record;
+}
+async function seedStoredCatalogue(serverId: string, data: unknown) {
+  const record = { ...event(`inventory-${++counter}`, `mcp-${serverId}`,
+    'mcp.server_discovered'), silo: 'acme', data };
+  // Read these incomplete historical snapshots without sending them as new commands.
+  await nats.seed([record]);
+  const rows = await history(nats.store, record.subject, 'acme');
+  expect(rows.at(-1)?.event).toEqual(record);
 }
 async function project() {
   for (const projection of [members, conversations, computers]) await runner.run(projection);
@@ -557,7 +566,7 @@ async function explainsToolSources() {
       name: 'read', revision: 'a'.repeat(64), reviewed: false, costCents: 0,
     }],
   };
-  await append('mcp-explained-server', 'mcp.server_discovered', catalogue);
+  await seedStoredCatalogue('explained-server', catalogue);
   await project();
   const before = await nats.store.head();
   const reads = vi.spyOn(nats.store, 'readStream');
@@ -774,7 +783,7 @@ async function waitsForNewGrantInputs() {
     toolCount: 1, schemaDigest: 'c'.repeat(64), tools: [{
       name: 'read', revision: 'c'.repeat(64), reviewed: false, costCents: 0,
     }] };
-  await append(`mcp-${serverId}`, 'mcp.server_discovered', catalogue);
+  await seedStoredCatalogue(serverId, catalogue);
   try {
     expect(await auth.use('person', memberId, 'mcp_server', serverId))
       .toMatchObject({ allowed: true });
@@ -832,7 +841,7 @@ async function reportsExplanationOverflow() {
     serverId: 'explained-server', connectionId: 'explained-connection', accountMode: 'none',
     toolCount: 51, schemaDigest: 'b'.repeat(64), tools,
   };
-  await append('mcp-explained-server', 'mcp.server_discovered', catalogue);
+  await seedStoredCatalogue('explained-server', catalogue);
   await project();
   const response = await request('access', 'owner', 'org-acme', 'explained');
   const inventory = memberAccessSchema.parse(response.json());
