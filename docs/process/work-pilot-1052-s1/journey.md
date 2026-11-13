@@ -1,48 +1,104 @@
 # Ordinary third-party tool server journey
 
 Date: 13 November 2026.
-Attempted source: `207644124155fadf0e67d0373fe427fccfdbba48`.
-Later changes alter catalogue write validation and replay, full-list classification,
-approval cards and cost report checks. This attempt does not qualify those changes.
-Environment: secondary development slot 2, started with `up.sh --fresh`.
+Checked source: `2520b29e909bebc17b08fbb5e5fc651992b36e18`.
+Rebased onto `7ec65e982`, including the personal-key changes and the core journey repair.
+Environment: secondary slot 2, claimed through `claim.sh` and started with `up.sh --fresh`.
 
 ## Result
 
-Journey on a fresh dev stack: NOT RUN
+Journey on a fresh dev stack: FAIL
 
-`requireAutomatedJourney` in [the journey guard](../../../infra/dev-stack/journey-guard.ts)
-refused the inherited `OPENCRANE_FLEET_TASK` marker:
+The failing step was **member asks their assistant to call the reviewed ordinary read
+tool in a live turn at 1280 px**. The transcript marked `read_fixture_quote` as Failed
+and answered: “The demo tool did not return a quote.” The expected quote did not appear
+within the collector's unchanged 120-second wait.
 
-> Automated journeys require a secondary stack and no fleet task
+The models process logged `Remote tool exchange failed` with `protocol_refused`.
+No `tools/call` execution reached the recording fixture. The remote HTTP check uses
+that reason for an unexpected status, a session header or an invalid content type.
+The likely cause is a live HTTP protocol mismatch between dispatch and the synthetic
+HTTPS fixture. The exact refused status or header was not captured, so the root cause
+and whether it belongs to the product or the fixture remain unconfirmed.
 
-The marker was preserved. No browser journey ran and no screenshots were captured.
-The owner deferred another attempt until the main repair in PR #1119. The final source
-still needs a fresh secondary stack and browser checks at 1280 px and 390 px.
-Website readiness was an HTTP check; it does not prove a person's journey.
+The run stopped at that failure. No product fix, longer timeout or repeat of the failed
+read was attempted. The ordinary Ask write, changed-list refusal, live metadata and
+cost-record checks, and the entire ordinary-server journey at 390 px are **NOT RUN**.
+The passing built-in stack journey does not qualify those missing slice steps.
 
-## Stack attempt
-
-Both slots were initially busy. Retrying the claim obtained slot 2.
-The Zitadel setup credential was supplied by path only. No credential or raw private
-stack log is included here.
-
-| Operation | Observed outcome | Verdict |
-| --- | --- | --- |
-| `infra/dev-stack/claim.sh` | Claimed secondary slot 2. | PASS |
-| `infra/dev-stack/up.sh --fresh` | Bootstrap, managed provider setup and website readiness completed; the automatic journey guard then refused. Exit 1. | FAIL |
-| `infra/dev-stack/status.sh` | Command exited 0 before teardown. | PASS |
-| Explicit `requireAutomatedJourney` check | Refused the fleet marker again. Exit 1. | NOT RUN |
-| `infra/dev-stack/down.sh` | Exit 0; the slot directory and process records were removed. | PASS |
+[Failed live read](run-2026-11-13/read-failed-1280.png) ·
+[Structured observations](run-2026-11-13/observations-1280.json).
 
 ## Browser steps
 
 | Person's action | 1280 px | 390 px |
 | --- | --- | --- |
-| Admin installs a standard HTTPS server without OpenCrane declarations. | NOT RUN | NOT RUN |
-| Admin reviews each tool and saves Allow, Ask or Block. | NOT RUN | NOT RUN |
-| Admin publishes the review and grants member and assistant access. | NOT RUN | NOT RUN |
-| Member asks their assistant to call a reviewed tool in a live turn. | NOT RUN | NOT RUN |
-| Server changes its list; the next call is refused with a visible review reason. | NOT RUN | NOT RUN |
+| Admin enters an ordinary HTTPS server address. | [PASS](run-2026-11-13/install-1280.png) | NOT RUN |
+| Admin discovers two definitions without OpenCrane declarations. | [PASS](run-2026-11-13/ordinary-definitions-1280.png) | NOT RUN |
+| Admin chooses Allow and Ask and grants person and assistant access. | [PASS](run-2026-11-13/modes-and-access-1280.png) | NOT RUN |
+| Admin reviews the definitions and selects Needs no key. | [PASS](run-2026-11-13/review-1280.png) | NOT RUN |
+| Admin publishes and sees the matching acknowledgement. | [PASS](run-2026-11-13/published-1280.png) | NOT RUN |
+| Member asks their assistant to read the quote in a live turn. | [FAIL](run-2026-11-13/read-failed-1280.png) | NOT RUN |
+| Member approves an ordinary Ask write. | NOT RUN | NOT RUN |
+| Server changes its list; the next call shows a review-required refusal. | NOT RUN | NOT RUN |
+
+The browser used real sign-in in the development organisation and the shipped controls.
+The server was `apps/demo-mcp` in standard mode, reached through the existing guarded
+Stage B HTTPS transport. Discovery saved digest version 2. The free model stand-in
+requested the real offered tools. A temporary collector adapter could quote the actual
+review-required tool result; that later step was never reached. It supplied no successful
+quote or refusal of its own. No live vendor server or paid model was used.
+Screenshots contain no credentials or email addresses. The 1280 px pages fit their viewport.
+
+## Startup and teardown
+
+The first fresh startup passed its built-in journey, but a newline-escaping error in the
+temporary collector prevented the slice fixture from starting. No slice browser action
+ran in that attempt: NOT RUN. Its logs were preserved privately and `down.sh` released
+slot 2. Only the collector was corrected, and its generated TypeScript parse check passed.
+
+A new claim and a second `up.sh --fresh` then passed the built-in journey, including its
+1280 px and 390 px checks, replay checks and token boundaries. The guarded standard
+fixture started successfully. The slice then failed at the read described above.
+`down.sh` exited 0 and released slot 2 again. The fleet marker remained set throughout.
+No owner stack, Docker daemon setting or other organisation was changed.
+
+## Checks after the rebase
+
+Both sets of changed tests were run twice, including the personal-key tests from the
+base branch. Tests, lint and typecheck ran under `nice -n 10`; tests that need PostgreSQL
+used the shared disposable test database. No full root suite ran.
+
+| Own check | Verdict |
+| --- | --- |
+| First targeted application/library pass, 38 files | FAIL: 1,770 passed, nine failed, one skipped; 3,462.36 seconds. |
+| Unchanged second targeted application/library pass, 38 files | PASS: 1,779 passed, one skipped; 2,154.67 seconds. All nine earlier failures passed. |
+| Changed infrastructure tests, both passes | PASS: 111 each, no skips; 675.31 and 377.12 seconds. |
+| Changed web specs, both passes | PASS: 150 each across four files; 155.39 and 116.26 seconds including builds. |
+| Existing approval browser case gated by `APPROVAL_BROWSER=1` | NOT RUN locally. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS. |
+| Changed-file ESLint | PASS after routing unchanged schema exports through their owning module. The existing outer catalogue-watch size warning remains; infrastructure is ignored by configuration. |
+
+The first application pass failed at the Angular dev-server build limit, two gateway
+responses containing an upstream error instead of JSON, and six routine send cases that
+did not reach their expected hooks or result. The unchanged repeat passed all nine.
+No product timeout or behaviour was changed. These passing tests do not turn the live
+slice failure into a PASS.
+
+The rebase retained both demo modes and the unchanged default, verified-key release,
+ordinary catalogue validation and cost recording. Shared credential scanning still uses
+one implementation. A combined event-schema file exceeded its existing limit by one
+line; the public exports and registry now import the same schemas from their existing
+module. No schema validation or size limit changed.
+
+## Earlier guarded attempt
+
+An earlier source (`207644124155fadf0e67d0373fe427fccfdbba48`) could not start the browser
+journey because the old guard refused the fleet marker. It was recorded as NOT RUN and
+its secondary stack was released. The earlier source checks below predate this rebase;
+they do not qualify the current failed journey.
 
 ## Earlier source checks
 
@@ -62,6 +118,7 @@ These checks do not substitute for the browser journey.
 | Typecheck | PASS: root workspaces and infrastructure; subsequent changed models/server checks also passed. |
 | Root workspace and infrastructure typecheck | PASS. |
 | Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS. |
 | Knip, changed-file ESLint, Markdown and changelog | PASS; changed-file ESLint has no warnings. |
 | Fixture boundary, package licences and offline links | PASS. |
 
@@ -174,6 +231,7 @@ append; a stored-history fixture deliberately bypasses that interface.
 | Selected watch restart and renewal cases | PASS: three cases; the remaining file cases were not selected. |
 | Root workspace and infrastructure typecheck | PASS. |
 | Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS. |
 | Knip, Markdown, changelog, process/privacy checks and secret scan | PASS. |
 | Changed-file ESLint | PASS: no warnings in changed functions. The untouched outer watch function retains its existing size warning; infrastructure is excluded by repository configuration. |
 
