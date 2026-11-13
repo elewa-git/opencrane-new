@@ -119,11 +119,14 @@ The Node entrypoints `@opencrane/events/lossless-json` and
 `@opencrane/events/mcp-catalogue` share the existing JSON hash format across discovery,
 append validation and policy replay. They use Node's built-in SHA-256 implementation.
 They are separate from browser event schemas, so browser builds do not load Node crypto.
-`validateMcpCatalogue` checks the complete accepted tool count, distinct names, definition
-names, schemas, annotation flags, tool revisions and the catalogue digest.
-New snapshots record `digestVersion: 2` and hash accepted and rejected tool revisions.
-Snapshots without that field keep the original accepted-tools-only rule during reads
-and rebuilds. Replay never rewrites an older snapshot or guesses its rule from a hash.
+Both `validateNewMcpCatalogue` and `validateStoredMcpCatalogue` check the complete
+accepted tool count, distinct names, definition names, schemas, annotation flags,
+tool revisions and the catalogue digest.
+`validateNewMcpCatalogue` requires `digestVersion: 2` and hashes accepted and rejected
+tool revisions. Append validation and fresh captures use this rule regardless of dates.
+Only `validateStoredMcpCatalogue` accepts snapshots without that field, using the original
+accepted-tools-only rule during reads and rebuilds. Replay never rewrites an older
+snapshot or guesses its rule from a hash.
 The event parser binds every MCP event's server id to its exact subject.
 
 ## Final dispatch admission

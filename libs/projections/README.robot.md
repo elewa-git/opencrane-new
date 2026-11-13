@@ -673,7 +673,9 @@ cancel approvals on configuration reload, or qualify worker replacement. Those n
 the remaining watch/dispatch coordination work. Configuration acknowledgement and
 restoration must reuse #45 when available. Fresh-install journeys are NOT RUN.
 
-Policy replay recalculates hashes from saved tool definitions before keeping any review
+Policy replay uses `validateStoredMcpCatalogue`: unversioned stored snapshots keep their
+accepted-only digest rule, while stored v2 snapshots include rejected tools. This rule is
+not used for new appends. Replay recalculates hashes from saved definitions before keeping any review
 choice or renewing a check. It checks the tool count, distinct names, names inside definitions
 and copied annotation flags too. `silo` and `serverId` are taken from saved event identity;
 each following event must match both and its exact subject. `policyRevision` comes from

@@ -2,8 +2,8 @@
 
 Date: 13 November 2026.
 Attempted source: `207644124155fadf0e67d0373fe427fccfdbba48`.
-Later changes alter catalogue replay, full-list classification, approval cards and cost
-report checks. This attempt does not qualify those changes.
+Later changes alter catalogue write validation and replay, full-list classification,
+approval cards and cost report checks. This attempt does not qualify those changes.
 Environment: secondary development slot 2, started with `up.sh --fresh`.
 
 ## Result
@@ -60,6 +60,7 @@ These checks do not substitute for the browser journey.
 | Web tests and repeated changed spec | PASS: 1,556 full web tests and all 8 initial-review tests on repeat. |
 | Production web build | PASS, with existing stylesheet and CommonJS warnings. |
 | Typecheck | PASS: root workspaces and infrastructure; subsequent changed models/server checks also passed. |
+| Root workspace and infrastructure typecheck | PASS. |
 | Event catalogue | PASS: 174 event types agree. |
 | Knip, changed-file ESLint, Markdown and changelog | PASS; changed-file ESLint has no warnings. |
 | Fixture boundary, package licences and offline links | PASS. |
@@ -90,8 +91,8 @@ The legacy replay test failed with `Tool catalogue digest mismatch` before the f
 The review script reproduced the failure too. After the fix, the adapted script reads
 old dated history followed by a new discovery. A PostgreSQL test also rebuilds the
 projection before and after that new discovery and compares the saved catalogue.
-Unversioned events keep accepted-only digests. New discoveries save `digestVersion: 2`
-and validate accepted and rejected tools. Replay changes no saved events.
+Unversioned stored events keep accepted-only digests during reads and rebuilds.
+New discoveries save `digestVersion: 2` and validate accepted and rejected tools. Replay changes no saved events.
 
 Money status checks permit only the three fixed report states. Numbers, unrestricted
 strings and an extra enum value still fail under `costStatus`. Forwarding tests assert
@@ -122,3 +123,45 @@ CI result for the final head. These checks do not qualify the browser journey.
 Journey: NOT RUN until PR #1119 is repaired. A browser PASS at both widths remains
 required before merge.
 This receipt reports only the builder's own checks.
+
+## Third fix round
+
+Checked source: `34a61ec7c`. The slice changes 1,437 shipped source lines, including
+354 lines deleting the Odoo source. This repair adds 37 source changes to the earlier
+1,400-line count. Tests and documents are excluded.
+
+New appends and fresh captures use `validateNewMcpCatalogue`. It requires digest
+version 2 and checks accepted and rejected tool revisions. Removing dates cannot bypass validation. Only stored-history
+reads use `validateStoredMcpCatalogue`, which keeps the original accepted-only rule
+for unversioned saved events. The schema still parses those older records.
+
+The regression tests were committed before the fix. Three unversioned append cases
+and an undated v2 accepted-only digest were incorrectly saved. The downgrade followed
+by rejected-sibling removal reached `tools/call`. After the fix, the append is refused
+without changing saved history, and the subsequent changed list blocks execution.
+The replay test seeds an already stored legacy event, then appends a fresh v2 discovery
+and rebuilds PostgreSQL. The original saved events remain identical.
+
+Two manual mutations checked test strength. Removing the version requirement failed
+the unversioned full-list test. Routing append through the stored-history validator
+failed the three downgrade append cases and reached `tools/call` in the dispatch test.
+Both source mutations were restored before final checks.
+
+The reviewer append/rebuild probes pass unchanged: four cases with the disposable
+PostgreSQL test database. The downgrade dispatch regression uses the public conditional
+append; a stored-history fixture deliberately bypasses that interface.
+
+| Own check | Verdict |
+| --- | --- |
+| Targeted append, dispatch, declarations, watch and replay regressions | PASS: 129 tests on each of two consecutive runs (71.24 and 68.52 seconds). |
+| Reviewer append and rebuild probes | PASS: four cases. |
+| Offline approval-evidence checks | PASS: 28 tests. |
+| Selected watch restart and renewal cases | PASS: three cases; the remaining file cases were not selected. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown, changelog, process/privacy checks and secret scan | PASS. |
+| Changed-file ESLint | PASS: no warnings in changed functions. The untouched outer watch function retains its existing size warning; infrastructure is excluded by repository configuration. |
+
+Journey: NOT RUN, explicitly deferred until PR #1119. No stack was claimed in this
+round. The earlier stack was released. Fresh-stack browser PASS at 1280 and 390 px
+matching the final source remains required before merge.
