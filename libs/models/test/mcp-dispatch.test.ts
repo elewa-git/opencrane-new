@@ -2520,6 +2520,22 @@ const remoteGuards = ['gateway', 'bytes', 'private', 'metadata', 'mixed', 'empty
   'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'mime', 'reply_fields',
   'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
   'deadline', 'watch_admission', 'watch_final'] as const;
+function restoreTlsAdmissionClock() {
+  vi.restoreAllMocks();
+}
+
+function freezeTlsAdmissionClock() {
+  // Reach the certificate check even when the test process is paused by other work.
+  // Keep the network timers real; separate cases prove permit and access expiry.
+  const wallTime = Date.now();
+  const monotonicTime = performance.now();
+  const wallClock = vi.spyOn(Date, 'now');
+  wallClock.mockReturnValue(wallTime);
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockReturnValue(monotonicTime);
+  onTestFinished(restoreTlsAdmissionClock);
+}
+
 async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
   const context = await publishedFixture('allow', true, mode !== 'undeclared');
@@ -2554,6 +2570,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
     remote.network.resolve = heldDns;
   }
   const rowsBefore = await setup.nats.store.head();
+  if (mode === 'wrong_name' || mode === 'untrusted') freezeTlsAdmissionClock();
   if (mode === 'undeclared' || mode === 'watch_admission') {
     expect(await gatewayCall(context)).toBe(403);
     expect(remote.dnsCalls()).toBe(0);
