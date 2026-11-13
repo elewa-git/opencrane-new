@@ -1181,11 +1181,12 @@ unconfirmed Stop reservations while leaving enough headroom for the repeat run.
 Secondary journeys also read each member's completed stub turn in Action history,
 with the permission decision and observed outcome shown separately. The owner reads
 safe organisation changes; another joined member is refused private history, and
-members are refused organisation history. The organisation-history check follows older pages to find the saved MCP
-publication, checking each page for private canaries. Newer membership grants can
-fill the first page before this check starts.
-The browser waits for **History loaded** on each page before checking for the
-publication or an **Older history** button.
+members are refused organisation history. The organisation-history API check follows
+older pages to find the saved MCP publication and checks each page for private canaries.
+The browser selects Tools & models with the keyboard, checks that every listed entry
+belongs to that category, then finds the publication by its safe reference. It opens
+the safe detail and checks that Escape restores focus. Conversation action history
+has no turn filter; it shows the recorded permission and confirmed observation.
 Owner/member sessions use real Zitadel
 sign-in; the extra member uses a dev-only signed session to test resource authority.
 Both views and the refusal screen are checked at 1280px and 390px. Private chat,
