@@ -1,9 +1,10 @@
 import type { BudgetBinding, McpAccessCheck, MemorySend, Permit, Route }
   from './mcp-dispatch-contract.ts';
-import { consumePermit, dispatchDigest as digest } from './mcp-dispatch-request.ts';
+import { consumePermit, dispatchDigest as digest,
+  type PersonalDispatchRequest } from './mcp-dispatch-request.ts';
 /* eslint max-lines: ["error", { max: 672, skipBlankLines: true, skipComments: true }] */
-import { credentialPatterns, containsCredential, replyContainsCredential }
-  from './mcp-credential-echo.ts';
+import { credentialPatterns } from './credential-patterns.ts';
+import { containsCredential, replyContainsCredential } from './mcp-credential-echo.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { currentRemoteCatalogue, toolServerBody, changedToolListReply } from './mcp-wire.ts';
 import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
@@ -232,37 +233,15 @@ class McpDispatcher {
       memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
     }
     await this.options!.requireLeader();
-    let observer: RemoteObserver | undefined;
-    let sendCredential: (() => Promise<void>) | undefined;
-    if (target && permit.release) {
-      const dispatch = this.options?.credentialDispatch;
-      if (!dispatch) throw new Error('Personal tool unavailable');
-      const call: RemoteToolCall = { target, raw: toolServerBody(body), res,
-        network: this.options?.remoteNetwork ?? {}, toolName: permit.toolName,
-        revision: route.standard ? undefined : permit.schemaDigest,
-        observe: observePersonal };
-      async function observePersonal(outcome: Parameters<RemoteObserver>[0],
-        remaining?: number, cost?: ReturnType<typeof observedToolCost>) {
-        if (!observer) throw new Error('Personal tool unavailable');
-        await observer(outcome, remaining, cost);
-      }
-      async function sendAccess(material: string) {
-        await forwardRemote({ ...call, material });
-      }
-      const credentialRequest = { decisionId: permit.budget.decisionId,
-        release: permit.release, deadline, confirmAccess: permit.confirmAccess, sendAccess };
-      async function prepare() {
-        sendCredential = await preparePersonalCredential(
-          this.actor.store, this.actor.silo, dispatch, credentialRequest);
-      }
-      permit.prepareCredential = prepare.bind(this);
-    }
+    const personalRequest = { permit, target, body, res, deadline,
+      dispatch: this.options?.credentialDispatch, network: this.options?.remoteNetwork ?? {} };
+    const personal = personalDispatch(this.actor.store, this.actor.silo, personalRequest);
+    if (personal) permit.prepareCredential = personal.prepare;
     const attempt = { req, res, permit, position, deadline, startedAt };
     const observe = await this.admitCall(attempt);
-    if (sendCredential) {
-      observer = observe;
+    if (personal) {
       try {
-        await sendCredential();
+        await personal.send(observe!);
       } catch (error) {
         await this.reportRefusal(permit, observe, startedAt, 'credential_release', error);
         throw error;
@@ -678,4 +657,33 @@ function requireRemoteReply(data: Buffer, contentType: string, raw: string,
     return safeRemoteError(sent, material);
   }
   return { data, cost: observedToolCost(parsedReply) };
+}
+
+function personalDispatch(store: BudgetActor['store'], silo: string,
+  request: PersonalDispatchRequest) {
+  const { permit, target, dispatch, body, res, deadline, network } = request;
+  const release = permit.release;
+  if (!target || !release) return undefined;
+  if (!dispatch) throw new Error('Personal tool unavailable');
+  let observer: RemoteObserver | undefined;
+  let sendCredential: (() => Promise<void>) | undefined;
+  async function sendAccess(material: string) {
+    if (!observer) throw new Error('Personal tool unavailable');
+    const call: RemoteToolCall = { target: target!, raw: toolServerBody(body), res, network,
+      toolName: permit.toolName,
+      revision: permit.route.standard ? undefined : permit.schemaDigest,
+      observe: observer, material };
+    await forwardRemote(call);
+  }
+  async function prepare() {
+    const credentialRequest = { decisionId: permit.budget.decisionId, release: release!,
+      deadline, confirmAccess: permit.confirmAccess, sendAccess };
+    sendCredential = await preparePersonalCredential(store, silo, dispatch!, credentialRequest);
+  }
+  async function send(observe: RemoteObserver) {
+    if (!sendCredential) throw new Error('Personal tool unavailable');
+    observer = observe;
+    await sendCredential();
+  }
+  return { prepare, send };
 }
