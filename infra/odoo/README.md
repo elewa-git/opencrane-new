@@ -57,4 +57,4 @@ infra/odoo/stop.sh
 
 - [README.robot.md](README.robot.md): accounts, private files, network rules and image versions.
 - [Reviewed runtime licences](licences.md): licences for Odoo and this test setup.
-- [Planned Odoo access using each person's rights](../../plan.md#per-user-mcp-credentials-eg-per-user-odoo).
+- [Planned access using each person's rights](../../plan.md#per-user-mcp-credentials).
