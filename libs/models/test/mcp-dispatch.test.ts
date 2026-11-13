@@ -3218,7 +3218,8 @@ async function concurrentReceiptWork() {
     vi.restoreAllMocks();
   }
   onTestFinished(restoreChecks);
-  vi.spyOn(auth, 'checkApplied').mockImplementation(readApplied);
+  const appliedCheck = vi.spyOn(auth, 'checkApplied');
+  appliedCheck.mockImplementation(readApplied);
   const responses = await Promise.all([
     send(setup, alicePermit), send(setup, bobPermit, bob.body),
   ]);
@@ -3244,7 +3245,9 @@ async function receiptUnavailableOnNextRequest() {
     vi.restoreAllMocks();
   }
   onTestFinished(restoreChecks);
-  vi.spyOn(auth, 'checkApplied').mockResolvedValue({ allowed: false, status: 'ok' });
+  const missingReceipt = { allowed: false, status: 'ok' as const };
+  const appliedCheck = vi.spyOn(auth, 'checkApplied');
+  appliedCheck.mockResolvedValue(missingReceipt);
   expect((await send(setup, second)).status).toBe(403);
   expect(remote.received).toHaveLength(1);
 }
@@ -3308,7 +3311,8 @@ async function unavailablePermissionDuringRelease() {
   }
   onTestFinished(restoreChecks);
   custody.readAccessMaterial = readAccessMaterial;
-  vi.spyOn(auth, 'use').mockImplementation(checkUse);
+  const permissionCheck = vi.spyOn(auth, 'use');
+  permissionCheck.mockImplementation(checkUse);
   expect((await send(setup, value)).status).toBe(403);
   expect(remote.received).toHaveLength(0);
 }

@@ -1,0 +1,18 @@
+{
+  "verdict": "FAIL",
+  "test": "keeps concurrent credential releases within the access window with receipt service work",
+  "firstRepeat": {
+    "passed": 3,
+    "failed": 0,
+    "durationSeconds": 46.42
+  },
+  "secondRepeat": {
+    "passed": 2,
+    "failed": 1,
+    "durationSeconds": 51.6,
+    "expectedHttpStatus": 200,
+    "actualHttpStatus": 403
+  },
+  "productCodeChangedInCleanup": false,
+  "action": "Stopped under the two-fix rule; no further retries or timeout changes."
+}
