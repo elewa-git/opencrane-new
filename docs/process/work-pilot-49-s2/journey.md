@@ -120,7 +120,7 @@ product fix was attempted after the second fresh journey failed.
 - PASS: 1,564 web tests in 82 files and the production build, with its existing
   size and CommonJS warnings. No full root test suite ran. Tests, typechecking,
   lint and builds ran under `nice -n 10`.
-- PENDING: final public privacy and full-range secret scans before push.
+- PASS: public privacy and full-range secret scans before push.
 - NOT RUN live: final-source revocation, rotation, admin disable, lease attacks,
   paid/external models, public third-party servers, company-account turns or
   per-assistant consent controls. Automated coverage is not a live verdict.
