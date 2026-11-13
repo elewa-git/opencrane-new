@@ -3263,7 +3263,10 @@ async function permissionChangedWhileQueued() {
   writer.mockImplementation(holdFirstAdmission);
   const admission = vi.spyOn(setup.actor, 'admitDispatch');
   admission.mockImplementation(observeAdmission);
-  onTestFinished(vi.restoreAllMocks);
+  function restoreChecks() {
+    vi.restoreAllMocks();
+  }
+  onTestFinished(restoreChecks);
   const alice = send(setup, alicePermit);
   try {
     await entered.promise;
