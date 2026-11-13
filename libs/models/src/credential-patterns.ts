@@ -13,7 +13,7 @@ export function credentialPatterns(material: string | undefined): string[] {
   return [...patterns];
 }
 
-export function containsCredentialPattern(value: string, patterns: string[]): boolean {
+function containsCredentialPattern(value: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     if (value.includes(pattern)) return true;
   }

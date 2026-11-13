@@ -29,7 +29,6 @@ esac
 `;
   await writeFile(`${bin}/kubectl`, script);
   await chmod(`${bin}/kubectl`, 0o755);
-  await mockFlock(bin);
 }
 async function mockFlock(bin: string) {
   const script = `#!/usr/bin/env node
@@ -53,9 +52,10 @@ async function claimSkipsHeldPort(stackPort: number) {
   const bin = `${home}/bin`;
   await mkdir(bin);
   await mockKubectl(bin);
+  await mockFlock(bin);
   await writeFile(`${bin}/docker`, '#!/bin/sh\nexit 0\n');
   await chmod(`${bin}/docker`, 0o755);
-  // Model-stub port: checking just the browser or database is insufficient.
+  // Probe the chosen service port; checking just the browser or database is insufficient.
   const held = createServer().listen(0, '127.0.0.1');
   try {
     await once(held, 'listening');
@@ -69,7 +69,8 @@ async function claimSkipsHeldPort(stackPort: number) {
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
     assert.ok((await stat(`${home}/.config/opencrane/dev-stack-2/stack-owner`)).isFile());
   } finally {
-    await new Promise<void>(resolve => held.close(() => resolve()));
+    function closeHeld(resolve: () => void) { held.close(resolve); }
+    await new Promise<void>(closeHeld);
     await rm(home, { recursive: true, force: true });
   }
 }
@@ -83,6 +84,7 @@ test('status leaves a free slot alone and claim reuses this worktree slot', asyn
   const bin = `${home}/bin`;
   await mkdir(bin);
   await mockKubectl(bin);
+  await mockFlock(bin);
   await writeFile(`${bin}/docker`, '#!/bin/sh\nexit 0\n');
   await chmod(`${bin}/docker`, 0o755);
   const env = claimEnvironment(home);
@@ -114,6 +116,7 @@ async function createClaimFixture(runningContainer = false) {
   const slotDirectory = `${home}/.config/opencrane/dev-stack-1`;
   await mkdir(bin);
   await mockKubectl(bin);
+  await mockFlock(bin);
   await mkdir(slotDirectory, { recursive: true });
   let dockerScript = '#!/bin/sh\nexit 0\n';
   if (runningContainer) {
