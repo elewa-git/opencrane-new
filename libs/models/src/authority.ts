@@ -88,16 +88,19 @@ export async function prepareAuthorityFacts(store: EventStore, binding: Binding,
     ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
   const teamReads = [...teams].map(readSubject);
   histories.push(...await Promise.all(teamReads));
-  for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
-    const e = row.event, d = data(e);
-    if (e.silo !== binding.silo) continue;
-    if (relevant(e, requester, assistant, conversation, resourceType, resourceId, decisionGrantees)) {
-      receipts.push(e.id);
-      facts.push([e.id, row.sequence, d]);
+  const authorityRows = histories.flat();
+  authorityRows.sort(compareAuthorityRows);
+  for (const row of authorityRows) {
+    const event = row.event;
+    const fields = data(event);
+    if (event.silo !== binding.silo) continue;
+    if (relevant(event, requester, assistant, conversation, resourceType, resourceId, decisionGrantees)) {
+      receipts.push(event.id);
+      facts.push([event.id, row.sequence, fields]);
     }
-    if (e.subject === `assistant-${assistant}` && e.type === 'assistant.settings_changed') {
-      facts.push([e.id, row.sequence, d]);
-      if (typeof d['active'] === 'boolean') active = d['active'];
+    if (event.subject === `assistant-${assistant}` && event.type === 'assistant.settings_changed') {
+      facts.push([event.id, row.sequence, fields]);
+      if (typeof fields['active'] === 'boolean') active = fields['active'];
     }
   }
   if (!active) throw new AuthorityRefused('Assistant inactive');
@@ -105,6 +108,10 @@ export async function prepareAuthorityFacts(store: EventStore, binding: Binding,
   const watched = [...subjects, ...teams];
   if (resourceType === 'mcp_server') watched.push(`mcp-${resourceId}`);
   return { facts, subjects: watched };
+}
+
+function compareAuthorityRows(first: DecisionGrantRow, second: DecisionGrantRow) {
+  return first.sequence - second.sequence;
 }
 
 async function permissionReader(binding: Binding, permissions?: AuthorityPermissions) {
