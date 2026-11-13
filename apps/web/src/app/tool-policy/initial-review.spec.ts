@@ -116,3 +116,29 @@ it('keeps reviewed mode editing available when the separate audience read is una
   expect(root.textContent).toContain('Review access');
   fixture.destroy();
 });
+
+it('lets the admin review ordinary definitions without declaring cost or approval details', async () => {
+  const policy = initialPolicy();
+  const declaration = policy.catalogue!.tools![0]!;
+  delete declaration.costCents;
+  delete declaration.review;
+  delete policy.tools[0]!.costCents;
+  policy.catalogue!.discoverResult = JSON.stringify({ capabilities: { tools: {} } });
+  expect(initialModeDisabled(policy, declaration.name)).toBe(false);
+  policy.tools[0]!.mode = 'ask';
+  const command = await reviewCommand(policy, 'ordinary-review');
+  expect(command.tools).toMatchObject([{ name: declaration.name, mode: 'ask' }]);
+  servePolicy(policy);
+  const fixture = TestBed.createComponent(ToolPolicyScreen);
+  fixture.componentRef.setInput('serverId', 'fixture');
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Expected tools');
+  await vi.waitFor(() => expect(root.querySelector('fieldset')?.disabled).toBe(false));
+  const allow = root.querySelector<HTMLInputElement>('input[value="allow"]');
+  expect(allow?.disabled).toBe(false);
+  allow?.click();
+  fixture.detectChanges();
+  expect(allow?.checked).toBe(true);
+  fixture.destroy();
+});

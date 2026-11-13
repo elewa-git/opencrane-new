@@ -326,3 +326,19 @@ async function refusesAskWithoutSupport() {
   expect(await buildTurnTools(input)).toEqual([]);
 }
 it('never offers Ask to a computer without approval support', refusesAskWithoutSupport);
+
+it.each(['allow', 'ask'] as const)('offers a reviewed ordinary tool in a live turn: %s', async mode => {
+  const catalogue = { serverId: 'standard', toolCount: 1, schemaDigest: 'b'.repeat(64),
+    discoverResult: JSON.stringify({ capabilities: { tools: {} } }),
+    tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: false,
+      definition: toolDefinition }] };
+  const state = serverState('standard', { catalogue,
+    policyTools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, mode }] });
+  function readServer() { return Promise.resolve(state); }
+  function canUse() { return Promise.resolve(true); }
+  const input = { rows: [{ serverId: 'standard' }], requesterId: 'person',
+    assistantId: 'assistant', baseMessageBytes: 100, readServer, canUse, approvalWaiting: true };
+  expect(await buildTurnTools(input)).toMatchObject([{ modes: { read: mode } }]);
+  state.policyTools[0]!.mode = 'block';
+  expect(await buildTurnTools(input)).toEqual([]);
+});
