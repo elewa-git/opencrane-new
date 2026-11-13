@@ -1,0 +1,922 @@
+[
+  {
+    "mode": "pair",
+    "sample": 0,
+    "submittedAt": "2026-11-13T20:30:16.537Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:26:33.001Z",
+      "expiresAt": "2026-11-13T20:31:33.001Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 1,
+    "submittedAt": "2026-11-13T20:30:42.947Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:26:33.001Z",
+      "expiresAt": "2026-11-13T20:31:33.001Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 2,
+    "submittedAt": "2026-11-13T20:31:08.228Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 3,
+    "submittedAt": "2026-11-13T20:31:32.870Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 4,
+    "submittedAt": "2026-11-13T20:31:53.418Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 5,
+    "submittedAt": "2026-11-13T20:32:18.454Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 6,
+    "submittedAt": "2026-11-13T20:32:42.816Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 7,
+    "submittedAt": "2026-11-13T20:33:05.520Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 8,
+    "submittedAt": "2026-11-13T20:33:28.876Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 9,
+    "submittedAt": "2026-11-13T20:33:50.537Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 10,
+    "submittedAt": "2026-11-13T20:34:14.791Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 11,
+    "submittedAt": "2026-11-13T20:34:43.233Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 12,
+    "submittedAt": "2026-11-13T20:35:05.236Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:31:03.183Z",
+      "expiresAt": "2026-11-13T20:36:03.183Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 13,
+    "submittedAt": "2026-11-13T20:35:32.264Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 14,
+    "submittedAt": "2026-11-13T20:35:58.481Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 15,
+    "submittedAt": "2026-11-13T20:36:20.416Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 16,
+    "submittedAt": "2026-11-13T20:36:41.445Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 17,
+    "submittedAt": "2026-11-13T20:37:03.517Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 18,
+    "submittedAt": "2026-11-13T20:37:26.328Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "pair",
+    "sample": 19,
+    "submittedAt": "2026-11-13T20:37:48.127Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      },
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 0,
+    "submittedAt": "2026-11-13T20:38:10.794Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 1,
+    "submittedAt": "2026-11-13T20:38:27.574Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 2,
+    "submittedAt": "2026-11-13T20:38:44.483Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 3,
+    "submittedAt": "2026-11-13T20:39:03.577Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 4,
+    "submittedAt": "2026-11-13T20:39:22.652Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 5,
+    "submittedAt": "2026-11-13T20:39:39.709Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:35:33.503Z",
+      "expiresAt": "2026-11-13T20:40:33.503Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 6,
+    "submittedAt": "2026-11-13T20:39:57.654Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 7,
+    "submittedAt": "2026-11-13T20:40:14.976Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 8,
+    "submittedAt": "2026-11-13T20:40:31.281Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 9,
+    "submittedAt": "2026-11-13T20:40:47.967Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 10,
+    "submittedAt": "2026-11-13T20:41:09.693Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 11,
+    "submittedAt": "2026-11-13T20:41:26.032Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 12,
+    "submittedAt": "2026-11-13T20:41:45.909Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 13,
+    "submittedAt": "2026-11-13T20:42:02.438Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 14,
+    "submittedAt": "2026-11-13T20:42:23.463Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 15,
+    "submittedAt": "2026-11-13T20:42:40.552Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 16,
+    "submittedAt": "2026-11-13T20:42:57.045Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 17,
+    "submittedAt": "2026-11-13T20:43:14.564Z",
+    "results": [
+      {
+        "hasAccount": true,
+        "noQuote": false
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 18,
+    "submittedAt": "2026-11-13T20:43:36.781Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  },
+  {
+    "mode": "single",
+    "sample": 19,
+    "submittedAt": "2026-11-13T20:43:54.186Z",
+    "results": [
+      {
+        "hasAccount": false,
+        "noQuote": true
+      }
+    ],
+    "profileReadStatus": 200,
+    "catalogueReadStatus": 200,
+    "catalogue": {
+      "checkedAt": "2026-11-13T20:40:03.995Z",
+      "expiresAt": "2026-11-13T20:45:03.995Z",
+      "embeddedCheckedAt": "2026-11-13T20:26:31.954Z",
+      "embeddedExpiresAt": "2026-11-13T20:31:31.954Z",
+      "published": true,
+      "driftHeld": false
+    }
+  }
+]
