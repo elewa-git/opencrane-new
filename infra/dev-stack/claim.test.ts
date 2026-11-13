@@ -47,6 +47,7 @@ async function claimSkipsHeldPort(stackPort: number) {
       env: claimEnvironment(home, address.port, stackPort),
     });
     assert.equal(stdout.trim(), '2');
+    assert.ok((await stat(`${home}/stack-2.lock`)).isFile());
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
     assert.ok((await stat(`${home}/.config/opencrane/dev-stack-2/stack-owner`)).isFile());
   } finally {
