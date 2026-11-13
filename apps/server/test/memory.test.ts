@@ -835,7 +835,8 @@ async function previewSetup() {
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   await append('mcp-memory', 'mcp.server_discovered', { serverId: 'memory', connectionId: 'server',
-    accountMode: 'none', schemaDigest: catalogueDigest(tools), toolCount: 1, tools,
+    accountMode: 'none', schemaDigest: catalogueDigest(tools), digestVersion: 2,
+    toolCount: 1, tools,
     checkedAt, expiresAt });
   const state = await readToolPolicy(nats.store, 'acme', 'memory');
   const choice = { name: tool.name, revision: tool.revision,

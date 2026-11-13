@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { Page } from 'playwright';
-import { it, onTestFinished } from 'vitest';
+import { it, onTestFinished, vi } from 'vitest';
 import { databases } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -48,7 +48,7 @@ async function fixture(originalRemote = false) {
   const checkedAt = new Date();
   const expiresAt = new Date(checkedAt.getTime() + 300_000);
   const catalogue = { serverId, connectionId: 'installed', accountMode: 'none',
-    tools, toolCount: 2, schemaDigest: catalogueDigest(tools),
+    tools, toolCount: 2, schemaDigest: catalogueDigest(tools), digestVersion: 2,
     checkedAt: checkedAt.toISOString(), expiresAt: expiresAt.toISOString(),
     serverInfo: { name: 'Journey MCP', version: '1.0.0' } };
   await append('mcp.server_discovered', catalogue);
@@ -146,7 +146,8 @@ it('the typed-row journey fixture remains Ready when remote monitoring runs', st
 async function writesCurrentJourneyCatalogue() {
   const nats = await natsFixture();
   const stopped = new Error('Catalogue append checked');
-  const ownerPage = {} as Page;
+  const createUnusedPage = vi.fn<() => Page>();
+  const ownerPage = createUnusedPage();
   async function append(type: string, subject: string, data: Record<string, unknown>) {
     const event = envelope('test', subject, type, data);
     const result = await nats.store.append({ event, expectedSequence: 0 });
