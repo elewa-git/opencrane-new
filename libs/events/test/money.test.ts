@@ -84,7 +84,8 @@ function moneyFieldsNotInCents(jsonSchema: unknown): string[] {
   for (const [name, schema] of declaredProperties(jsonSchema)) {
     if (isCostReportStatus(name, schema)) continue;
     const separated = name.replace(/([a-z\d])([A-Z])/g, '$1_$2');
-    const words = separated.toLowerCase().split('_');
+    const normalised = separated.toLowerCase();
+    const words = normalised.split('_');
     const last = words.at(-1);
     const moneyWord = words.some(isMoneyWord);
     if (moneyWord && last !== 'cents' && last !== 'id') invalid.push(name);
