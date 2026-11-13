@@ -36,6 +36,7 @@ flowchart LR
 - Show permitted memory facts and support personal saving, correction and forgetting.
 - Let members choose personal tool keys and which assistants may use them.
 - Let admins manage people, groups, assistants, model providers and tool servers.
+- Review ordinary tool definitions without a cost estimate before publishing them.
 - Show spending, budgets, held money and permitted organisation history.
 - Keep unknown save results tied to their original reference while checking status.
 - Support phones, keyboard navigation and clear messages when access changes.

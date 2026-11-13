@@ -32,6 +32,7 @@ flowchart LR
 - Keep membership, participation and grant history for callers to check.
 - Keep chat messages, activity, files and each person's private list choices.
 - Keep tool reviews, publication records and provider choices separate from permission to act.
+- Keep ordinary tool definitions for review without requiring a cost estimate.
 - Keep spending records as integer euro cents.
 - Build a safe organisation history without copying private text or credentials.
 - Encrypt conversation content and keep memory keys separate from searchable text.

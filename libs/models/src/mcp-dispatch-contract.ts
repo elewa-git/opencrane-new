@@ -11,7 +11,7 @@ export const mcpDispatchRouteSchema = z.strictObject({
   generation: identifier.optional(),
   revisionHeader: z.literal('x-opencrane-mcp-revision').optional(),
 });
-export type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
+export type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string; standard?: boolean };
 export interface McpAccessCheck {
   (): Promise<void>;
   prepare?: (deadline: number) => Promise<void>;
@@ -46,6 +46,6 @@ export interface Permit {
   expiresAt: number;
   accessDeadline: number;
   confirmAccess: McpAccessCheck;
-  release?: z.infer<typeof toolCredentialReleaseSchema>;
+  release?: z.infer<typeof toolCredentialReleaseSchema> | undefined;
   prepareCredential?: () => Promise<void>;
 }

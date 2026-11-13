@@ -32,6 +32,7 @@ flowchart LR
 - Rebuild routine definitions and preview their scheduled dates without starting work.
 - Derive session settings and tool choices from saved facts.
 - Keep private text encrypted and credentials out of event data.
+- Record reported tool costs without inventing a charge or settling spending.
 
 ## Processes it handles
 

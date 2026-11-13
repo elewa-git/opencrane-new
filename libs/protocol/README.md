@@ -7,6 +7,8 @@ Shared message shapes for the OpenCrane browser app and back end. Both sides use
 Tool policy can name the hosted workload that supplied its tools and the admin's read-only identity tool.
 Replies carry the person's allowed assistants and refusals for assistants without consent.
 They show safe profile status and connection needs without returning a key.
+Shared review rules distinguish ordinary tool definitions from servers declaring
+OpenCrane cost, approval or revision details.
 
 Chat replies can name the files attached to a saved message. Older replies still work.
 Conversation lists can also carry one completed welcome with its own kind and route.

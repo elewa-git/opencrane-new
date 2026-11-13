@@ -42,14 +42,14 @@ export const discovery = { resultType: 'complete', supportedVersions: ['2026-07-
   ttlMs: 300000, cacheScope: 'public' };
 export const catalogue = { resultType: 'complete', tools, ttlMs: 300000, cacheScope: 'public' };
 
-export function createFixture() {
+export function createFixture(requireRevision = true) {
   let deliverySlot: z.infer<typeof slot> = 'morning';
   let effectCount = 0;
   return callTool;
 
   function callTool(name: string, args: unknown, expectedRevision: unknown) {
     // Keep the revision check and effect synchronous against a fixed catalogue.
-    if (expectedRevision !== revision) {
+    if (requireRevision && expectedRevision !== revision) {
       throw new Error('revision_mismatch');
     }
     if (name === readTool.name) {
@@ -66,4 +66,15 @@ export function createFixture() {
     const content = [{ type: 'text', text: JSON.stringify(structuredContent) }];
     return { content, structuredContent, isError: false };
   }
+}
+
+export function standardCatalogue(description?: string) {
+  function standardTool(tool: typeof readTool) {
+    const { _meta: _declaration, ...definition } = tool;
+    if (description !== undefined && definition.name === readTool.name) {
+      return { ...definition, description };
+    }
+    return definition;
+  }
+  return { ...catalogue, tools: tools.map(standardTool) };
 }

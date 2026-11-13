@@ -3,7 +3,7 @@ import { getEventDefinition, hostedCredentialContractSchema, mcpServerDiscovered
   mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, mcpConfigurationObservationSchema,
   mcpHostedStartObservedSchema,
   type EventEnvelope } from '@opencrane/events';
-import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
+import { canReviewTool, toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
 const sequenceOnlyEvents = new Set([
@@ -284,8 +284,7 @@ function applyMode(state: ToolPolicy, data: Record<string, unknown>): ToolPolicy
   }
   const mode = z.enum(['allow', 'ask', 'block']).parse(data['mode']);
   const declaration = state.catalogue?.tools?.find(matchesName);
-  if (mode !== 'block' && (selected.costCents !== 0 ||
-      !declaration?.review)) {
+  if (mode !== 'block' && !canReviewTool(state.catalogue, declaration)) {
     return state.tools;
   }
   function setMode(tool: ToolPolicy['tools'][number]) {
@@ -400,7 +399,7 @@ export function reviewedToolChoices(state: ToolPolicy,
       return declaration.name === tool.name;
     }
     const declaration = catalogue.tools?.find(matchesName);
-    if (!choice || !declaration || !matchesChoice(tool, declaration, choice)) {
+    if (!choice || !declaration || !matchesChoice(tool, declaration, choice, catalogue)) {
       return null;
     }
     const reviewed = { ...tool, reviewed: true, mode: choice.mode };
@@ -448,14 +447,12 @@ function matchesAccountReview(state: ToolPolicy, review: Review): boolean {
 }
 
 function matchesChoice(tool: ToolPolicy['tools'][number],
-  declaration: NonNullable<Catalogue['tools']>[number], choice: Review['tools'][number]): boolean {
+  declaration: NonNullable<Catalogue['tools']>[number], choice: Review['tools'][number],
+  catalogue: Catalogue): boolean {
   if (choice.revision !== tool.revision || choice.reviewDigest !== toolReviewDigest(declaration)) {
     return false;
   }
-  if (choice.mode !== 'block' && declaration.costCents !== 0) {
-    return false;
-  }
-  if (choice.mode !== 'block' && !declaration.review) {
+  if (choice.mode !== 'block' && !canReviewTool(catalogue, declaration)) {
     return false;
   }
   return true;

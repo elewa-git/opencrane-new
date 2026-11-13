@@ -1,3 +1,4 @@
+import { canReviewTool } from '@opencrane/protocol';
 import type { ToolPolicy } from '@opencrane/protocol';
 
 type Tool = ToolPolicy['tools'][number];
@@ -58,7 +59,7 @@ export function canReviewUnpublished(policy: ToolPolicy | undefined): boolean {
 export function initialModeDisabled(policy: ToolPolicy | undefined, name: string): boolean {
   for (const declaration of policy?.catalogue?.tools ?? []) {
     if (declaration.name === name) {
-      return declaration.costCents !== 0 || !declaration.review;
+      return !canReviewTool(policy?.catalogue, declaration);
     }
   }
   return canReviewUnpublished(policy);
