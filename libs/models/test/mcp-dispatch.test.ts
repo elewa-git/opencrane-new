@@ -3220,6 +3220,28 @@ async function repeatsIdenticalAdapterCallback() {
 }
 it('adds nothing for an identical direct adapter callback', repeatsIdenticalAdapterCallback);
 
+async function checksRepeatedAdapterCost(change: 'identical' | 'amount' | 'status') {
+  const { setup, subject, binding, observation } = await adapterRecorderFixture();
+  const reported = { ...observation, costStatus: 'reported' as const, costCents: 7 };
+  await recordAdapterObservation(setup.actor, binding, reported);
+  const rows = await history(setup.nats.store, subject, 'test');
+  expect(rows).toHaveLength(3);
+  expect(rows[2]!.event.data).toMatchObject({ costStatus: 'reported', costCents: 7 });
+  let repeated = reported;
+  if (change === 'amount') repeated = { ...reported, costCents: 99 };
+  const invalid = { ...observation, costStatus: 'invalid' as const };
+  const callback = change === 'status' ? invalid : repeated;
+  const recording = recordAdapterObservation(setup.actor, binding, callback);
+  if (change === 'identical') {
+    await recording;
+  } else {
+    await expect(recording).rejects.toThrow('Tool dispatch evidence unavailable');
+  }
+  expect(await history(setup.nats.store, subject, 'test')).toEqual(rows);
+}
+it.each(['identical', 'amount', 'status'] as const)(
+  'checks repeated adapter cost by fields: %s', checksRepeatedAdapterCost);
+
 async function refusesForeignAdapterCallback() {
   const { setup, remote, subject, binding, observation } = await adapterRecorderFixture();
   const rows = await history(setup.nats.store, subject, 'test');
