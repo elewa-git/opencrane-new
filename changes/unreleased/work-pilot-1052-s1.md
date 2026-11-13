@@ -11,3 +11,7 @@ descriptions. Repeated result callbacks refuse conflicting cost reports.
 Older saved catalogues keep their original digest rule during policy reads and rebuilds;
 new discoveries must carry digest version 2 and pass full-list validation before append.
 Omitting the version or dates cannot select the older read rule.
+
+Fresh-stack checks use a recording ordinary server that preserves its tool replies
+and reports catalogue drift from the actual refused call. Declared-server and
+verified personal-key dispatch checks remain unchanged.

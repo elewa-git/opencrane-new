@@ -186,9 +186,20 @@ and the shared fixture state. A missing socket refuses before services start.
 The transport test writes through one adapter and reads the actual effect through
 another. Those direct calls are test coverage, not approval qualification.
 
+`DEMO_MCP_MODE=standard` selects the ordinary demo through `test/ordinary-demo.mjs`.
+It omits OpenCrane declarations and revision checks. The collector appends one JSON
+line to `ordinary-wire.jsonl` for each call, recording the tool name and protocol
+facts without arguments or credentials. Creating `ordinary-drift` in the claimed
+stack directory changes the next listed definition. It does not execute a tool.
+`scripts/ordinary-dispatch.test.mjs` uses real member-turn authorisation, publication,
+HTTPS dispatch and this collector. It checks the quote, recorded metadata and refusal
+before execution after drift. The separate personal-key dispatch tests retain the
+verified-identity release coverage.
+
 The free model understands `STAGE_B_READ` and `STAGE_B_WRITE` rehearsal messages.
 It calls only the matching tool offered by Codex and refuses a missing tool. It
 answers with the returned quote after receiving a tool result, without repeating the call.
+For an error result from the current call, it quotes the returned refusal text.
 The model loads the tools helper only for those rehearsal messages. Ordinary replies
 still run from the single-file model stub used by the wake Pod check.
 The evidence checker still requires original approval and dispatch records.

@@ -125,6 +125,8 @@ available for diagnosis.
   claimed spare stacks with the free stand-in model; real providers are refused.
 - Checks the demo tool server through local TLS. Requires saved tool definitions and
   linked approval and dispatch records in event-log order.
+  Its ordinary mode records protocol facts and can change a definition so the next
+  call requires an admin review.
   A disposable computer also checks that the free model can call a published read
   tool and answer with its result in the same chat turn.
   A guarded test launch keeps the full server and models processes and connects both
