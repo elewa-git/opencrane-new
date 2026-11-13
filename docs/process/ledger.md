@@ -149,6 +149,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 
 | Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-11-13 | — | #120, slice 1 | Source checks for size limits and recorded debt | PASS | 39 function / 298 parameter suppressions; seven rejected probes; 21 checker and 52 CI script tests; uncached full lint | [Lint receipt](clean-120-s1.md#final-full-lint) |
 | 2026-11-13 | — | #120, slice 1 | Fresh secondary core journey entry | FAIL (main defect) | Bootstrap, provider setup and website ready; fleet-task guard refused core entry; claim released | [Lint receipt](clean-120-s1.md#fresh-secondary-stack) |
 
 ## Still NOT RUN

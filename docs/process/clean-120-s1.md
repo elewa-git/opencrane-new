@@ -44,7 +44,7 @@ Before generating debt, a focused ESLint command measured `decision.ts` at 565
 counted lines and `connection-custody.test.ts` at 6,083. Their caps were added by
 hand. That same command reported two long functions and four parameter violations
 in `decision.ts`, including `startDecision` at 325 counted lines. The generated
-suppression entry is checked against those manual observations.
+suppression entry matches those manual observations exactly.
 
 The checker tests were written first. The first command test failed because the
 checker did not yet exist; the baseline tests likewise failed before their module
@@ -62,7 +62,55 @@ the function, `npx eslint . --max-warnings 0` exited 2 and requested pruning.
 record. The fixture was removed. This proves the CLI behaviour separately from
 the seven repository-wide rejection probes.
 
-## Remaining evidence
+## Recorded debt
 
-The debt totals, full lint and acceptance probe results are recorded below when
-those commands finish. A skipped condition is not a passing condition.
+Bulk generation used exactly `--suppress-rule max-lines-per-function` and
+`--suppress-rule max-params`. It exited 0. The committed suppression record contains
+only those rules: **39 function-length violations** and **298 parameter violations**.
+The two totals are appended to `benchmarks.jsonl`.
+
+The exact exception list contains **eight production file caps, sixteen test file
+caps and one complexity disable**. There are no `eslint-disable max-lines` comments
+under apps or libs. `npm run lint:debt` passes on snapshot
+`2195ab19a04e710a593f1292d52222e8ddd4f104`.
+
+## Acceptance probes
+
+All seven cases ran separately through repository-wide `npm run lint`, with
+`BASE_SHA=2195ab19a04e710a593f1292d52222e8ddd4f104`. The comparison needs a base
+containing the new ledgers, so this snapshot proves later debt cannot rise.
+Each run temporarily added ESLint's content-cache flags to `lint:code`; the rule
+configuration, file scope and zero-warning requirement stayed the same. The final
+full gate uses the committed command without caching.
+
+| Temporary violation | Expected rejection observed | Seconds |
+| --- | --- | --- |
+| 81 counted-line function | PASS, exit 1: max-lines-per-function | 639.89 |
+| Six parameters | PASS, exit 1: max-params | 17.00 |
+| New 1,501-line test | PASS, exit 1: max-lines: 1,501 > 1,500 | 5.06 |
+| Capped custody test +1 line | PASS, exit 1: max-lines: 6,084 > 6,083 | 29.10 |
+| Unlisted file-size override | PASS, exit 1: unlisted size exception | 40.60 |
+| Listed cap raised by one | PASS, exit 1: cap rose from 565 to 566 | 32.69 |
+| Hand-made suppression for a new long function | PASS, exit 1: function-length suppressions rose from 39 to 40 | 32.91 |
+
+All probes were removed. The original package script, list and suppression record
+were restored, and the probe cache was deleted. A byte comparison with origin/main
+confirmed three replaced production size comments and sixteen added test/spec
+comments, with every existing file body unchanged.
+
+## Final full lint
+
+PASS: uncached `nice -n 10 npm run lint`, with CI's 8 GiB Node heap setting,
+completed in **722.16 seconds**. `lint:code` used exactly
+`eslint . --max-warnings 0` and reported zero warnings. Debt, dependency direction,
+unused code, Markdown, folder guides, offline links, fixture checks, package
+licences and changelog checks all passed.
+
+This full gate qualified code commit
+`2706975bab516fc805222523375e49ccabcea256`. The final edits only complete evidence
+and clarify the short style summary. The change has 401 added plus deleted code
+and configuration lines, excluding generated suppressions, tests and documents.
+
+The final helper cleanup gives Git output a name before trimming it. All 21
+checker tests, four baseline tests and changed-code ESLint passed afterwards.
+The earlier complete CI-script run passed 52 tests. No full root suite was run.

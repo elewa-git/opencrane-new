@@ -143,7 +143,7 @@ any agent skill that prefers short code.
   or switch off a size limit inside a file; split the file by responsibility,
   or ask the owner.
 - Lint enforces complexity 15, depth 4, 80 counted lines per function, five parameters,
-  500 counted lines per production file and 1,500 per test file; recorded debt may only fall.
+  500 counted lines per production file and 1,500 per test file.
 - Give a function at most five parameters. If it needs more, split it first.
   Pass one named object with a named, exported type only for values that
   belong together.
