@@ -403,13 +403,14 @@ class McpDispatcher {
     const diagnostic = { stage, reason: privateDecisionReason(error),
       elapsedMs: Math.ceil(performance.now() - startedAt),
       accessRemainingMs: Math.max(0, Math.floor(permit.accessDeadline - performance.now())) };
-    this.logger.warn({ ...diagnostic, err: error }, 'MCP dispatch refused');
+    // Keep dependency error text private; log only the recognised refusal reason.
+    this.logger.warn(diagnostic, 'MCP dispatch refused');
     try {
       await this.recordRefusedStart(permit, observe, startedAt);
-    } catch (error) {
+    } catch {
       const evidence = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
         elapsedMs: Math.ceil(performance.now() - startedAt) };
-      this.logger.warn({ ...evidence, err: error }, 'MCP dispatch refused');
+      this.logger.warn(evidence, 'MCP dispatch refused');
     }
   }
 
