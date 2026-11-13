@@ -153,11 +153,12 @@ class McpDispatcher {
   readonly acknowledged = () => this.options?.acknowledged?.() ?? null;
 
   routeFor(serverId: string, connectionId: string) {
+    const options = this.options;
     function matches(route: Route) {
       return route.serverId === serverId && route.connectionId === connectionId;
     }
-    this.options?.requireCatalogue?.(serverId);
-    const route = this.options?.routes.find(matches);
+    options?.requireCatalogue?.(serverId);
+    const route = options?.routes.find(matches);
     if (!route?.generation || !route.revisionHeader) {
       throw new Error('MCP atomic revision contract unavailable');
     }
@@ -165,6 +166,7 @@ class McpDispatcher {
   }
 
   requireContract(policy: Policy) {
+    const options = this.options;
     // Keep built-in memory on this path. Other hosted images still need image admission.
     const builtInMemory = isBuiltInMemory(policy);
     if (policy.serverKind === 'hosted' && !builtInMemory) {
@@ -174,19 +176,19 @@ class McpDispatcher {
       return route.serverId === policy.policy.serverId &&
         route.connectionId === policy.policy.connectionId;
     }
-    const configuredRoute = this.options?.routes.find(configured);
+    const configuredRoute = options?.routes.find(configured);
     const hasConfiguredRoute = configuredRoute ?? builtInMemory;
     if (!policy.personal && hasConfiguredRoute) {
       return this.routeFor(policy.policy.serverId!, policy.policy.connectionId!);
     }
     if (!policy.gatewayBinding || !policy.locator || policy.serverKind !== 'remote' ||
-        !remoteAccountAvailable(policy, Boolean(this.options?.credentialDispatch))) {
+        !remoteAccountAvailable(policy, Boolean(options?.credentialDispatch))) {
       throw new Error('Remote MCP unavailable');
     }
-    if (!this.options?.requireCatalogue) {
+    if (!options?.requireCatalogue) {
       throw new Error('MCP catalogue watch unavailable');
     }
-    this.options.requireCatalogue(policy.policy.serverId!);
+    options.requireCatalogue(policy.policy.serverId!);
     const standard = isOrdinaryToolCatalogue(policy.policy.catalogue);
     requireRemoteRevision(policy.policy.catalogue?.discoverResult, standard);
     return { serverId: policy.policy.serverId!, connectionId: policy.policy.connectionId!,
@@ -439,29 +441,31 @@ class McpDispatcher {
 
   async requirePublishedPositions(permit: Permit, admittedPosition: number,
     deadline: number) {
+    const { store, silo } = this.actor;
     if (!permit.gatewayBinding) {
       return;
     }
-    await requireGatewayPosition(this.actor.store, this.actor.silo, permit.gatewayBinding,
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
       this.acknowledged, deadline);
-    const currentPosition = await this.actor.store.head(`mcp-${permit.route.serverId}`, deadline);
+    const currentPosition = await store.head(`mcp-${permit.route.serverId}`, deadline);
     if (currentPosition !== admittedPosition) {
       throw new Error('MCP policy changed');
     }
     // Catch a saved replacement while the MCP read waited, even with an unchanged member.
-    await requireGatewayPosition(this.actor.store, this.actor.silo, permit.gatewayBinding,
+    await requireGatewayPosition(store, silo, permit.gatewayBinding,
       this.acknowledged, deadline);
   }
 
   async recordStarted(permit: Permit, deadline: number) {
+    const { store, silo } = this.actor;
     const binding = permit.gatewayBinding;
     if (!binding) {
       return;
     }
     const subject = `decision-${permit.requestId}`;
-    const expectedSequence = await this.actor.store.head(subject, deadline);
+    const expectedSequence = await store.head(subject, deadline);
     // Keep any saved outcome last, including one written after a gateway timeout.
-    const decision = await this.actor.store.readEvent(expectedSequence, deadline);
+    const decision = await store.readEvent(expectedSequence, deadline);
     if (decision.event.id !== permit.budget.decisionId) {
       throw new Error('Tool dispatch decision changed');
     }
@@ -470,10 +474,10 @@ class McpDispatcher {
       recordDigest: binding.recordDigest, reviewRevision: permit.reviewRevision,
       ...(permit.route.locator ? { adapter: 'remote_https' } : {}) };
     const eventId = `${permit.requestId}:tool-dispatch-started`;
-    const event = envelope(this.actor.silo, subject, 'tool.dispatch_started', payload, eventId);
+    const event = envelope(silo, subject, 'tool.dispatch_started', payload, eventId);
     // Consume once in this process. Never recover a failed save reply by sending later.
     const command = { event, expectedSequence, deadline, historyChecked: true as const };
-    const result = await this.actor.store.append(command);
+    const result = await store.append(command);
     if (result.status !== 'appended') {
       throw new Error('Tool dispatch start unavailable');
     }
@@ -516,6 +520,7 @@ class McpDispatcher {
   }
 
   async admit(attempt: DispatchAttempt) {
+    const { store, silo } = this.actor;
     const { req, res, permit, position, deadline } = attempt;
     const route = permit.route;
     const subject = `mcp-${route.serverId}`;
@@ -523,24 +528,24 @@ class McpDispatcher {
       requestId: permit.requestId, toolName: permit.toolName,
       toolRevision: permit.toolRevision, schemaDigest: permit.schemaDigest,
       generation: route.generation! };
-    const event = envelope(this.actor.silo, subject, 'mcp.dispatch_admitted', payload);
+    const event = envelope(silo, subject, 'mcp.dispatch_admitted', payload);
     let expectedSequence = position;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await permit.confirmAccess();
-      await requireGatewayPosition(this.actor.store, this.actor.silo, permit.gatewayBinding,
+      await requireGatewayPosition(store, silo, permit.gatewayBinding,
         this.acknowledged, deadline);
       this.requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
       // Order admission with Block and quarantine writes on the same server stream.
       // Published calls also recheck this position after saving their start.
       const command = { event, expectedSequence, deadline, historyChecked: true as const };
-      const result = await this.actor.store.append(command);
+      const result = await store.append(command);
       if (result.status === 'appended') return result.sequence;
       if (result.status !== 'conflict' || attempt === 2) {
         throw new Error('MCP admission refused');
       }
-      const currentPosition = await this.actor.store.head(subject, deadline);
-      await requireOnlyAdmissions(this.actor.store, this.actor.silo, subject, expectedSequence,
+      const currentPosition = await store.head(subject, deadline);
+      await requireOnlyAdmissions(store, silo, subject, expectedSequence,
         currentPosition, deadline);
       expectedSequence = currentPosition;
     }
