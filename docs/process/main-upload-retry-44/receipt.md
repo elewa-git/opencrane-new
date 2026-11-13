@@ -1,97 +1,91 @@
-# Journey on a fresh dev stack: FAIL (core journey)
+# Journey on a fresh dev stack: PASS (core journey)
 
-12 November 2026. The final run used source `e7819000a`, a newly claimed secondary
-stack and the stand-in provider. The fleet marker stayed set. Startup used
-`infra/dev-stack/up.sh --fresh`; website readiness took 66.3 seconds.
-Cleanup PASS: `down.sh` ran after every attempt and the final secondary claim was released.
+13 November 2026. The final run used source `72377ecc8`, a claimed secondary
+stack, the stand-in provider and `infra/dev-stack/up.sh --fresh`. The fleet marker
+remained set. The final journey uses passive browser-read diagnostics.
+Cleanup PASS: every claimed stack was stopped with `down.sh` and released.
+The owner stack was not used.
 
-The browser upload journeys completed at 390 px and 1280 px: a lost successful
-response recovered through Retry without duplicate files; the PDF answer contained
-Willow-47; native PDF rendering and original bytes, reload, malware/type/size
-refusals and promoted text/image previews passed. The later audit journey failed
-at `infra/dev-stack/browser-audit.ts:60` while looking for `Turn id filter`.
-Later budget and replay checks were NOT RUN. The complete core journey remains FAIL.
+The complete core journey passed: real sign-in and refusals; chat, streaming,
+Stop and reload; uploads, lost-response Retry without duplicates, PDF answer and
+original bytes, malware/type/size refusals and text/image previews; live view;
+computer suspension, wake and Pod replacement with preserved files; tool review
+and publication; audit; budgets; members and MCP catalogue replay verification;
+token boundaries, sign-out and reauthentication; and listener checks.
 
-Earlier fresh attempts also failed. The first attempt's private diagnostics were
-removed by cleanup before retention. The second retained a timeout waiting for
-Send while the preceding attachment reply was still running. A delayed-message
-acknowledgement regression reproduced the premature Send-visibility check; the
-journey now waits for the new reply's Done state before continuing.
+## Failures and changes
 
-The first commit, `813e06555`, reproduced Retry at 91 × 28 px at a 390 px viewport
-before any product fix. Guard refusal regressions were also committed before their fixes.
+- Product regression: `6d879a75c` moved attachment controls into the composer with
+  a 28 px minimum height. The shared button rule now gives Retry and Remove at
+  least 44 × 44 px at both widths. Remove also cancels an active upload.
+  The original phone measurement failed before the fix.
+- Stale upload journey: `6d879a75c` moved status onto individual chips and delayed
+  transcript cards until Send; `3391faf4f` changed unsupported-file wording.
+  The journey follows each Ready/refusal status and waits for the new reply to
+  finish before proceeding. A delayed acknowledgement test reproduced the race.
+- Product/tooling regression: `2ecadcc3e` refused all fleet journeys, including
+  secondary stand-in stacks. Secondary stand-in journeys are allowed; owner
+  automation and fleet real-provider use remain refused. Refusal tests failed
+  before the repair.
+- Stale audit journey: `4f06d18d0` (#1004) removed conversation filters and changed
+  row wording. Following the owner decision of 13 November, the journey selects
+  Tools & models with the keyboard, checks every returned entry's category,
+  searches for the saved publication by its safe reference and opens safe details.
+  Escape and focus checks remain. P3-19 now states category/reference filtering
+  and no conversation turn filter. Private-history refusals, member organisation
+  refusal, integer money checks and UI/log canaries remain.
+- Stale target measurement: the menu animation introduced by `ed21e0b42` can still
+  reduce a 44 px control when Playwright considers its subpixel movement stable.
+  Attempt 1 failed that assertion. Measurements now await finite animations on
+  the control and its ancestors. The deterministic reproduction failed at
+  43.956 px before the fix; a permanent 28 px control is still refused.
+- Earlier setup failure: the expected local key-file path was absent. Ignored
+  local links now refer to the existing files. Credential values were not printed.
 
-Own checks:
+The reported live-view `.caret` failure was not reproduced in this continuation.
+The unchanged streaming assertion, actual assistant completion while viewing,
+missing-grant refusal, revocation, pixel clearing and stop audit pass at both widths.
 
-- PASS: web tests, 81 files and 1,555 tests; test execution took 80.1 seconds.
-- PASS: web production build, approximately 107 seconds, with style-budget and
-  CommonJS warnings.
-- PASS: 92 targeted dev-stack refusal, startup and model-environment tests,
-  including empty fleet markers, both secondary ids and saved real mode on fresh starts.
-- PASS: whole-workspace typecheck and a final dev-stack typecheck after the journey correction.
-- PASS: full `npm run visual:chat`, including the delayed acknowledgement regression
-  and Retry/Remove/cancellation targets at both widths.
-- PASS: scoped ESLint, Knip, Markdown, event catalogue (174 types) and changelog checks.
-  The repository excludes infrastructure from ESLint; the shared journey guard and
-  both new browser helpers also passed explicit typed ESLint checks.
-- NOT RUN: full root suite, owner-stack operations and real-provider qualification.
+## Intermediate failure still unexplained
 
-The orchestrator confirmed on 13 November that no independent review has run on
-this PR and authorised continuing the repair. Independent review remains NOT RUN.
-These own checks do not qualify a successful core journey.
+Attempt 2 showed Action history as unavailable, after its filtered API read had
+passed. The corresponding browser read was not visible in the server log. A later
+API read and a separate browser loaded the same history. Its exact cause remains
+unproved; no product fix, retry or timeout increase is claimed for this failure.
+Attempt 3 passed the full core with a temporary fetch diagnostic wrapper. The final
+fresh run passed with that wrapper removed and passive status/transport diagnostics.
 
-Causes found:
+## Own checks
 
-- `6d879a75c` moved attachment buttons into the composer and gave them a 28 px minimum,
-  outside the old workspace component's 44 px rule.
-- `6d879a75c` moved status onto individual chips and delayed transcript cards until Send;
-  `3391faf4f` also changed the unsupported-file wording that the old journey awaited.
-- `2ecadcc3e` refused every fleet-marked journey, including secondary stand-in stacks.
+- PASS: final full fresh core journey and secondary cleanup.
+- PASS: three targeted audit/animation tests, including malformed/missing money,
+  wrong-call matches, missing publication and permanent undersizing refusals.
+- PASS: removing the integer-money assertion made its test fail; restored afterwards.
+- PASS: whole-workspace typecheck and final dev-stack typecheck.
+- PASS: scoped typed ESLint for the changed journey code, fixtures and browser script.
+- PASS: Markdown lint, event catalogue (174 types), Knip and changelog checks.
+- PASS: public privacy check and secret scan before push.
+- NOT RUN: full root suite, real-provider qualification, owner operations and the
+  approval journey that the core launcher already skips. CI was not awaited.
 
-The shared UI button rule now supplies the attachment target size. Remove also
-cancels the active upload; there is no separate Cancel upload control.
-The captures use an intercepted API and synthetic names, not live account data:
-[390 px Retry](retry-390.png) and [1280 px Retry](retry-1280.png).
+Earlier branch checks passed 1,555 web tests, the production web build, 92 targeted
+stack tests and the full chat visual check. Those checks were not repeated in this
+continuation. No additional independent review was run.
 
-## Continuation on 13 November
+## Screenshots
 
-Fetched origin. Main remained at `90a99afa7`, the branch base; no rebase was needed.
-The first continuation attempt claimed secondary slot 1 and ran `up.sh --fresh`
-with the stand-in provider. Startup failed during Zitadel setup before services or
-browser journeys started. The expected `.keys/.zitadel-key` file was absent from
-this checkout. Existing key files were then linked by path in the ignored `.keys/`
-directory for a future authorised continuation. No credential value was read or
-printed. This attempt supplies no new live qualification. The earlier full core verdict remains FAIL.
+Each pair comes from the final fresh run, except the retained intercepted Retry
+captures, which use synthetic records. All widths were checked from the PNG files.
 
-Traced the audit timeout to merged commit `4f06d18d0` (PR #1004). It removed the
-conversation's Turn id and Request id inputs, Decision selection and Apply filters
-button. Conversation history now has no filters; organisation history has the
-new family, date, outcome and safe-reference filters. The old journey also expects
-an exact decision label and `Observed outcome: Success`; the redesigned row combines
-`Decision: allow` with `Observation: Confirmed`.
+| Step | 390 px | 1280 px |
+| --- | --- | --- |
+| Retry and Remove | [Phone](retry-390.png) | [Desktop](retry-1280.png) |
+| Live upload | [Phone](upload-390.png) | [Desktop](upload-1280.png) |
+| Action history | [Phone](audit-action-390.png) | [Desktop](audit-action-1280.png) |
+| Category selection | [Phone](audit-category-390.png) | [Desktop](audit-category-1280.png) |
+| Safe-reference search | [Phone](audit-reference-390.png) | [Desktop](audit-reference-1280.png) |
+| Member refusal | [Phone](audit-refused-390.png) | [Desktop](audit-refused-1280.png) |
+| Computer view | [Phone](live-view-390.png) | [Desktop](live-view-1280.png) |
+| Revocation clears pixels | [Phone](live-revoked-390.png) | [Desktop](live-revoked-1280.png) |
 
-Repair is paused for one product decision. The
-[P3-19 acceptance criteria](../../specs/phase-3/tickets.md#p3-19--explain-work-through-a-permission-scoped-audit-trail)
-still require action history and change-history views with filters and keyboard
-support. PR #1004 describes an organisation-history redesign, not the removal of
-conversation filtering. Simply removing the journey's filtering and focus steps
-would discard a checked user capability. The owner must choose:
-
-- Restore conversation filtering while retaining the current visual design; treat
-  its removal as a product regression and reproduce it with a failing test first.
-- Intentionally remove conversation filtering, revise the acceptance criteria and
-  approve the replacement journey assertion before calling the old journey stale.
-
-No product or journey change was made while this decision was pending. New audit
-screenshots are NOT RUN. The reported live-view `.caret` failure, budget checks,
-replay and later checks remain NOT RUN in this continuation. Their causes have not
-been classified. No independent review was requested or reported as passed.
-
-Continuation checks:
-
-- PASS: `down.sh --id 1`; the secondary claim was released.
-- PASS: whole-workspace typecheck, Markdown lint, event catalogue, Knip and
-  changelog checks.
-- PASS: public privacy check and secret scan.
-- NOT RUN: new code tests, scoped ESLint and repaired-step captures; only this
-  receipt changed. Earlier code-check results above remain historical evidence.
+Part of #576.
