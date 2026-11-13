@@ -1,0 +1,42 @@
+{
+  "startedAt": "2026-11-13T05:28:19.812Z",
+  "sourceCommit": "bec6d64309e716503f835fc9575db28f6101ee42",
+  "baseCommit": "90a99afa75e508f32c505d82a4beacc45e236dfd",
+  "codeSha256": "0b267ae86784e25b62ca903eee58f43809f014e32091b26a1999e0ccfabdb2c6",
+  "codeFiles": [
+    "spikes/s0-9-postgres-event-store/eslint.config.mjs",
+    "spikes/s0-9-postgres-event-store/pressure.config.ts",
+    "spikes/s0-9-postgres-event-store/run.sh",
+    "spikes/s0-9-postgres-event-store/src/inventory.ts",
+    "spikes/s0-9-postgres-event-store/src/postgres-event-store.ts",
+    "spikes/s0-9-postgres-event-store/src/postgres-fixture.ts",
+    "spikes/s0-9-postgres-event-store/src/record-contracts.ts",
+    "spikes/s0-9-postgres-event-store/src/record-environment.ts",
+    "spikes/s0-9-postgres-event-store/tests/append-outcomes.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/append.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/conversation-command.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/documentation.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/history-checked.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/postgres.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/pressure.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/read-event-at.test.ts",
+    "spikes/s0-9-postgres-event-store/tests/testing.ts",
+    "spikes/s0-9-postgres-event-store/tests/volume.test.ts",
+    "spikes/s0-9-postgres-event-store/vitest.config.ts",
+    "spikes/s0-9-postgres-event-store/volume.config.ts"
+  ],
+  "platform": "linux",
+  "arch": "x64",
+  "cpus": 8,
+  "cpuModel": "DO-Regular",
+  "memoryBytes": 16768589824,
+  "node": "v22.23.3",
+  "pgClient": {
+    "version": "8.16.3",
+    "license": "MIT"
+  },
+  "nats": "nats-server: v2.15.0",
+  "postgresImage": "postgres@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94",
+  "priority": "Each test and inventory command runs under nice -n 10",
+  "limitations": "Shared development host; no dedicated-host load control or HA qualification"
+}

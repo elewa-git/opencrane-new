@@ -1,0 +1,342 @@
+{
+  "passed": 56,
+  "failed": 0,
+  "skipped": 19,
+  "suites": [
+    {
+      "file": "append-outcomes.test.ts",
+      "tests": [
+        {
+          "title": "reports evidence for appended (after conflict: false)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for appended (after conflict: true)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for duplicate_saved (after conflict: false)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for duplicate_saved (after conflict: true)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for conditional_rejection_unchanged (after conflict: false)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for conditional_rejection_unchanged (after conflict: true)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for conditional_rejection_changed (after conflict: false)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for conditional_rejection_changed (after conflict: true)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for conditional_rejection_unknown (after conflict: false)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for conditional_rejection_unknown (after conflict: true)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for definitely unpublished (after conflict: false)",
+          "status": "passed"
+        },
+        {
+          "title": "reports evidence for definitely unpublished (after conflict: true)",
+          "status": "passed"
+        },
+        {
+          "title": "reports invalid_event without saving",
+          "status": "passed"
+        },
+        {
+          "title": "reports duplicate_id without saving",
+          "status": "passed"
+        },
+        {
+          "title": "retains a lost attempt after a later definite rejection and empty read",
+          "status": "skipped"
+        },
+        {
+          "title": "keeps failed duplicate readback uncertain instead of reporting a collision",
+          "status": "skipped"
+        },
+        {
+          "title": "keeps saved recovery history out of serialised receipts",
+          "status": "passed"
+        },
+        {
+          "title": "refuses a duplicate from another silo with the same command and principal",
+          "status": "passed"
+        },
+        {
+          "title": "reports a lost NATS publish reply (after conflict: false)",
+          "status": "skipped"
+        },
+        {
+          "title": "reports a lost NATS publish reply (after conflict: true)",
+          "status": "skipped"
+        }
+      ]
+    },
+    {
+      "file": "append.test.ts",
+      "tests": [
+        {
+          "title": "creates the event table and supports two projection consumers",
+          "status": "passed"
+        },
+        {
+          "title": "rejects incompatible max_msgs without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects incompatible max_consumers without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects incompatible max_msg_size without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects incompatible republish without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects incompatible no_ack without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects incompatible duplicate_window without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects incompatible consumer_limits without repairing it",
+          "status": "skipped"
+        },
+        {
+          "title": "accepts settings that only affect operations or read access",
+          "status": "skipped"
+        },
+        {
+          "title": "rejects malformed events without writing; races have exactly one winner",
+          "status": "passed"
+        },
+        {
+          "title": "recognises concurrent and old commands by principal and subject, not event id",
+          "status": "passed"
+        },
+        {
+          "title": "reads a category across entities in global order without unrelated events",
+          "status": "passed"
+        },
+        {
+          "title": "refuses a stream-wide duplicate acknowledgement for another subject or command",
+          "status": "passed"
+        },
+        {
+          "title": "retries through a real restart, then reports unavailable at the ten-second bound",
+          "status": "skipped"
+        },
+        {
+          "title": "keeps global order across read-ahead, aborts mid-history and resumes from the caller's checkpoint",
+          "status": "passed"
+        },
+        {
+          "title": "retries no-responder failures through recovery and the full deadline",
+          "status": "skipped"
+        },
+        {
+          "title": "stops append retries at the caller access deadline",
+          "status": "skipped"
+        },
+        {
+          "title": "does not publish again when backoff uses the last fraction of permission time",
+          "status": "skipped"
+        },
+        {
+          "title": "refuses an event saved between the append access check and the conditional publish",
+          "status": "passed"
+        },
+        {
+          "title": "refuses an append when its access check exceeds the original deadline",
+          "status": "passed"
+        },
+        {
+          "title": "keeps an unavailable access check uncertain without publishing",
+          "status": "passed"
+        },
+        {
+          "title": "checks the publication log position atomically when NATS receives the write",
+          "status": "skipped"
+        }
+      ]
+    },
+    {
+      "file": "conversation-command.test.ts",
+      "tests": [
+        {
+          "title": "refuses mismatched subjects and 98 people, accepts member ids and keeps old events parseable",
+          "status": "passed"
+        },
+        {
+          "title": "rejects conversation and participation subjects that disagree with the recorded id",
+          "status": "passed"
+        },
+        {
+          "title": "saves preferences only on the named person’s stream with their human identity",
+          "status": "passed"
+        },
+        {
+          "title": "writes current closes to the small access stream and accepts legacy close appends",
+          "status": "passed"
+        },
+        {
+          "title": "includes current closes in one conversation activity read without unrelated records",
+          "status": "passed"
+        },
+        {
+          "title": "creates conversations only on empty streams and keeps retries and category checks",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "documentation.test.ts",
+      "tests": [
+        {
+          "title": "marks latency partial while the recorded PostgreSQL run omits transactional access checks",
+          "status": "passed"
+        },
+        {
+          "title": "documents the disposable contract server, connection and schema permissions before running",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "history-checked.test.ts",
+      "tests": [
+        {
+          "title": "stores a new command on 500 events without reading history",
+          "status": "passed"
+        },
+        {
+          "title": "finds a lost acknowledgement after the expected position without storing twice",
+          "status": "passed"
+        },
+        {
+          "title": "refuses a stale position with no copy and reads only the later events",
+          "status": "passed"
+        },
+        {
+          "title": "returns one stored position to eight racing attempts with different event ids",
+          "status": "passed"
+        },
+        {
+          "title": "rejects historyChecked false before storing anything",
+          "status": "passed"
+        },
+        {
+          "title": "rejects historyChecked null before storing anything",
+          "status": "passed"
+        },
+        {
+          "title": "rejects historyChecked 1 before storing anything",
+          "status": "passed"
+        },
+        {
+          "title": "rejects historyChecked true before storing anything",
+          "status": "passed"
+        },
+        {
+          "title": "retries with the original position after NATS stores an event but its reply is lost",
+          "status": "skipped"
+        },
+        {
+          "title": "finds a copy after a category or global refusal (global: false)",
+          "status": "passed"
+        },
+        {
+          "title": "finds a copy after a category or global refusal (global: true)",
+          "status": "passed"
+        },
+        {
+          "title": "refuses a stale global position with a current subject and accepts a refreshed global position",
+          "status": "passed"
+        },
+        {
+          "title": "checks a duplicate acknowledgement against the command subject",
+          "status": "passed"
+        },
+        {
+          "title": "returns the stored copy when a duplicate acknowledgement arrives before a refusal",
+          "status": "skipped"
+        },
+        {
+          "title": "checks commandId on a duplicate acknowledgement",
+          "status": "passed"
+        },
+        {
+          "title": "checks principal id on a duplicate acknowledgement",
+          "status": "passed"
+        },
+        {
+          "title": "checks principal kind on a duplicate acknowledgement",
+          "status": "passed"
+        },
+        {
+          "title": "returns the first stored copy when seeded history contains several copies",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "postgres.test.ts",
+      "tests": [
+        {
+          "title": "accepts access-checked writes when only an unlisted subject changes",
+          "status": "passed"
+        },
+        {
+          "title": "does not expose uncommitted positions or leave a gap after rollback",
+          "status": "passed"
+        },
+        {
+          "title": "publishes fifty concurrent commits in a gap-free replay order",
+          "status": "passed"
+        },
+        {
+          "title": "rolls back a write that times out waiting for the commit-order lock",
+          "status": "passed"
+        },
+        {
+          "title": "keeps a lost COMMIT reply uncertain and recovers once (rollback broken: false)",
+          "status": "passed"
+        },
+        {
+          "title": "keeps a lost COMMIT reply uncertain and recovers once (rollback broken: true)",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "file": "read-event-at.test.ts",
+      "tests": [
+        {
+          "title": "returns only the requested event and keeps the caller deadline",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}
