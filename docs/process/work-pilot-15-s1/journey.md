@@ -1,5 +1,102 @@
 # Packaged file uploads
 
+Journey on a fresh dev stack: FAIL — `package-up --id 1` could not bootstrap the
+fresh packaged installation. Kubernetes could not pull the reviewed application
+and object-store digests: both returned `not found` from the registry.
+
+Recorded on 13 November 2026 for issue #15, slice 1 of 3. Tested rebased code head:
+`ba6d15abf23c0e003a38d9b18ef3d9c8495fbe10`. Base: `7ec65e982` (`origin/main`, including #1118 and #1121).
+This run changes the receipt and installation evidence only.
+
+## Current packaged journey
+
+1. Fetched `origin` and rebased because `origin/main` had moved. The rebase
+   completed without conflicts. The lockfile was unchanged, so `npm ci` was
+   not required.
+2. Claimed secondary slot **1** through `claim.sh` and ran `up.sh --fresh`.
+   The built-in Compose journey passed, including clean PDF upload, its answer
+   and EICAR refusal at 1280 px and 390 px. Startup and the journey took about
+   16 minutes. Preserved its generated files locally before cleanup and restored
+   the unrelated tracked evidence files that the built-in journey overwrote.
+3. Stopped Compose with the slot's supported teardown, then claimed slot **1**
+   again. Set `DEV_STACK_DIR` to the dedicated private directory fixed by that
+   secondary id. Its `stack-owner` belonged to this worktree. The current
+   configuration refuses arbitrary directories for secondary ids.
+4. `package-prepare --id 1` passed and created a new namespace. Private
+   preparation passed with the reviewed scanner manifest and release. It created
+   the named Secrets from files in the claimed slot.
+5. `package-up --id 1` installed the Helm release and created new bound claims.
+   Its bootstrap Pod remained Pending with `ImagePullBackOff`. The website and
+   object-store Pods also could not pull their pinned images. Kubernetes reported
+   `failed to resolve reference` followed by `not found` for both reviewed digests.
+   The likely cause is that those digests are absent from the registry.
+6. Stopped the owned installer after those definitive image-pull failures, while
+   it was waiting for bootstrap. The command exited **143**. Left its existing
+   ten-minute bootstrap deadline unchanged and stopped the journey here.
+7. Cleanup: **PASS**. `package-down --id 1` and `down.sh --id 1` both exited
+   zero. The slot subsequently reported `free`; the package namespace was absent.
+
+[Installation identities, new claims and registry errors](packaged-2026-11-13/installation.md)
+were retained before cleanup. The inherited fleet marker stayed set throughout.
+Only the claimed secondary slot was used.
+
+| Step | Result |
+| --- | --- |
+| Fresh Compose startup and built-in journey | PASS |
+| Fresh packaged namespace and private preparation | PASS |
+| `package-up --id 1` | FAIL: bootstrap image pull; reviewed digests not found |
+| `package-check --id 1` | NOT RUN: installation did not complete |
+| Signed-in packaged clean upload and answer, 1280 px | NOT RUN |
+| Packaged EICAR refusal, 1280 px | NOT RUN |
+| Signed-in packaged clean upload and answer, 390 px | NOT RUN |
+| Packaged EICAR refusal, 390 px | NOT RUN |
+| Packaged screenshots at either width | NOT RUN: browser could not start against the failed installation |
+
+Compose evidence does not satisfy packaged acceptance. The PR remains draft and
+its packaged merge condition is not met.
+
+## Checks on the rebased code
+
+| Check | Result |
+| --- | --- |
+| Six changed Vitest files, two workers: 32 checks, 44 seconds | PASS |
+| Changed backup test: 207 checks, 21 seconds | PASS |
+| Changed package Node tests: 608 checks, about 14 minutes | FAIL: 601 passed; seven NATS preparation cases hit their existing process deadline |
+| Licence checks: 82 checks, 22 seconds | PASS |
+| Five historical image suites: 48 checks | PASS |
+| Actual image-layer checks: 11 checks, 133 seconds | FAIL: 10 passed; bootstrap runtime imports do not match this checkout |
+| Workspace and infrastructure typecheck | PASS |
+| `check:events`: 174 catalogue entries | PASS |
+| Knip and changelog lint | PASS |
+| Changed-file ESLint | PASS for checked files; 20 infrastructure files were ignored by the existing configuration |
+| Markdown lint before receipt update | PASS |
+| Final Markdown lint, public privacy and secret scans | PASS |
+
+The seven preparation failures were `expired certificate`, `client issuer`,
+`changed object`, `changed reference`, `partial objects`, `replaced object` and
+`wrong SAN` in `infra/package/prepare-nats-routes.test.mjs`. Each reported
+`Preparation fixture exceeded its existing process deadline` while the checks
+ran alongside startup. Recorded the failures without extending deadlines or
+rerunning those cases.
+
+The image suite used the reviewed application image and its saved archive.
+`test_bootstrap_runtime_imports_match_source_recursively` failed with
+`Packaged bootstrap imports failed`. The image was built from
+`47258e903347daaaf2727da636d4bca3f0f53a36`; its imported
+`infra/dev-stack/identity.ts` differs from the rebased checkout.
+
+The first test commands used Vitest for a Node test file and Node for six Vitest
+files. Those invocations did not run the intended tests. The correct runners
+subsequently produced the 207-check and 32-check results above. Tests, lint,
+typecheck and startup ran under `nice -n 10`; no full root suite ran.
+
+CI for the pushed receipt commit is recorded in the PR Evidence and checks.
+
+## Earlier runs and source evidence
+
+The material below records earlier heads and attempts. Its passing source checks
+and Compose results do not replace the current packaged FAIL above.
+
 Journey on a fresh dev stack: FAIL — the Compose fresh-stack journey passed, but the
 packaged journey stopped before package preparation when `target-up --id 2` exited
 non-zero with: “DEV_STACK_DIR must be an empty dedicated directory outside the
@@ -25,7 +122,7 @@ cause is unknown. No package namespace or installation was created, and no
 packaged browser steps or screenshots were captured. `package-down --id 2` and
 `down.sh --id 2` completed; the slot reported free.
 
-## Earlier attempt (12 November 2026)
+### Earlier attempt (12 November 2026)
 
 1. Checked `origin/main` and open pull requests before starting. This slice was
    neither merged nor open. Read the issue's owner decisions and Slices comment.
@@ -49,7 +146,7 @@ with **connection reset by peer** while Docker attempted HTTPS to
 changes no registry publication implementation. The reviewed images exist locally; their presence
 in the registry and their installation on Kubernetes have not been proved.
 
-## Packaged browser acceptance
+### Packaged browser acceptance
 
 | Width | Packaged clean upload and answer | Packaged EICAR refusal | Screenshot |
 | --- | --- | --- | --- |
@@ -69,7 +166,7 @@ wait for Ready, and ask for a fact present only in that file. Save the chat answ
 Then choose the EICAR test file and save the visible
 **File refused: malware detected.** message. Always run package-down and down.
 
-## Own checks
+### Own checks
 
 | Check | Result |
 | --- | --- |
@@ -102,7 +199,7 @@ and **infected** for EICAR. This was a component check, without a browser or cha
 Its disposable container was removed. The real MinIO fixture verified short-lived
 leases, renewal, object access and refusal of another bucket and bucket creation.
 
-## Image records
+### Image records
 
 The application image was built from committed source
 `47258e903347daaaf2727da636d4bca3f0f53a36`. Later commits change chart delivery,
@@ -119,7 +216,7 @@ notices are recorded separately. Signed Debian main indexes cover every installe
 OS package. The image inventory also records the reviewed CC0 hashing library
 bundled inside AGPL MinIO, as allowed by the runtime-layer policy.
 
-## Work log and cleanup
+### Work log and cleanup
 
 Started with failing tests for package services and source-bound image promotion.
 A real image check then exposed hidden shell files in the upstream scanner database
@@ -141,7 +238,7 @@ for the real storage test.
 The worktree is retained for review. The claimed slot and disposable test containers
 were released; the existing shared registry and test database were left in place.
 
-## Review repairs
+### Review repairs
 
 Recorded on 13 November 2026. Own source checks: PASS. CI is recorded on the PR.
 Capability: NOT RUN, awaiting #1119 and the complete fresh packaged journey.
