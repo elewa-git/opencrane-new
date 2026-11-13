@@ -80,11 +80,12 @@ async function refusesUntrustedRoutes(guard: string) {
     expect(reply.json()).toMatchObject({ reason });
     if (guard !== 'origin') {
       // Reads have no Origin requirement. Exercise both settings and needs routes.
-      if (guard === 'silo') expected = 403;
       for (const url of [`/api/my/tools/${test.setup.serverId}/connection`,
         '/api/my/tools/needs?assistantId=assistant']) {
         const read = await test.app.inject({ method: 'GET', url, headers });
-        expect(read.statusCode, read.body).toBe(expected);
+        let readStatus = expected;
+        if (guard === 'silo' && url.includes('/needs?')) readStatus = 403;
+        expect(read.statusCode, read.body).toBe(readStatus);
         expect(read.json()).toMatchObject({ reason });
       }
     }
@@ -108,7 +109,7 @@ async function classifiesFailureWithoutCredentials(failure: 'tls' | 'identity' |
     diagnostic = 'tls_untrusted';
   } else if (failure === 'identity') {
     test.payload.material = 'invalid-synthetic-key';
-    diagnostic = 'connection_required';
+    diagnostic = 'invalid_reply';
   } else {
     expectedStatus = 503;
     reason = 'unavailable';
@@ -132,3 +133,50 @@ async function classifiesFailureWithoutCredentials(failure: 'tls' | 'identity' |
 it.each(['tls', 'identity', 'custody'] as const)(
   'classifies %s failure causes without logging credential-bearing messages',
   classifiesFailureWithoutCredentials, 120_000);
+
+async function refusesInvalidRouteInput() {
+  const test = await routeFixture();
+  const before = test.setup.remote.connections();
+  for (const url of [`/api/my/tools/${test.setup.serverId}/connection?owner=foreign`,
+    '/api/my/tools/needs', '/api/my/tools/needs?assistantId=assistant&owner=foreign']) {
+    const reply = await test.app.inject({ method: 'GET', url, headers: test.headers() });
+    expect(reply.statusCode).toBe(400);
+    expect(reply.json()).toEqual({ status: 'refused', reason: 'invalid_input' });
+  }
+  for (const payload of [{ ...test.payload, material: 'has spaces' },
+    { ...test.payload, material: 'a'.repeat(9000) }]) {
+    const reply = await test.app.inject({ method: 'POST', url: test.path,
+      headers: test.headers(), payload });
+    const expected = payload.material.length > 8192 ? 413 : 400;
+    expect(reply.statusCode).toBe(expected);
+    expect(reply.json()).toEqual({ status: 'refused', reason: 'invalid_input' });
+  }
+  expect(test.stage).not.toHaveBeenCalled();
+  expect(test.setup.remote.connections()).toBe(before);
+}
+it('gives malformed route inputs typed reasons before using a key', refusesInvalidRouteInput, 120_000);
+
+async function keepsNeedsFailurePrivate() {
+  const test = await routeFixture();
+  const material = test.payload.material;
+  const cause = Object.assign(new Error(`https://private.example.test/?key=${material}`),
+    { code: 'ECONNREFUSED' });
+  const failed = new Error(`Private lookup ${material}`, { cause });
+  const lookup = vi.spyOn(test.options.feed, 'memberId').mockRejectedValue(failed);
+  try {
+    const reply = await test.app.inject({ method: 'GET',
+      url: '/api/my/tools/needs?assistantId=assistant', headers: test.headers() });
+    expect(reply.statusCode).toBe(503);
+    expect(reply.json()).toEqual({ status: 'unavailable', reason: 'unavailable' });
+    const output = test.logs.join('\n');
+    expect(output).toContain('connection.needs');
+    expect(output).toContain('connection_refused');
+    expect(output + reply.body).not.toContain(material);
+    expect(output).not.toContain('private.example.test');
+    expect(output).not.toContain('Private lookup');
+    expect(test.stage).not.toHaveBeenCalled();
+  } finally {
+    lookup.mockRestore();
+  }
+}
+it('classifies needs failures without exposing lookup messages', keepsNeedsFailurePrivate, 120_000);
