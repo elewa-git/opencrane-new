@@ -92,8 +92,9 @@ async function checksGatewayRefusalEvidence() {
     const options = { method: 'POST', headers: { ...headers, 'mcp-name': name }, body: raw };
     const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
     const reply = await fetch(url, options);
-    expect(reply.status).toBe(200);
-    return reply.json();
+    const replyText = await reply.text();
+    expect(reply.status, replyText).toBe(200);
+    return JSON.parse(replyText);
   }
   expect(await call('read_fixture_quote', 'call_read')).toMatchObject({ result: {
     structuredContent: { amountCents: 12500, slot: 'morning', effectCount: 0 } } });
