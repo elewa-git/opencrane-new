@@ -2706,7 +2706,8 @@ missing databases, expired append deadlines and rejected join identity projectio
 
 ## Waiting tool calls
 
-Turn lists now include reviewed, zero-cost Ask tools only when discovery carries a review.
+Turn lists include reviewed ordinary Ask tools without OpenCrane cost or review details.
+OpenCrane-declared Ask tools still need zero cost and a saved review descriptor.
 Allow tools still fail if policy changes to Ask mid-turn.
 
 Human group events are now valid stored records. Chat reads, lists and

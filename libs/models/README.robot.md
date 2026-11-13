@@ -1275,8 +1275,9 @@ at desktop and 390px. Phase 4 group administration remains separate.
 Model multiplicity stays one, with a positive bounded output limit and the
 existing conservative prompt bound. Unknown tariffs, overflowing/fractional
 money and provider tools with unreviewed cost are refused before dispatch.
-Reviewed non-metered MCP tools, including Odoo fixture calls, must explicitly
-carry `costCents: 0` in discovery. A hold that may have been sent is never refunded
+Reviewed MCP tools from OpenCrane-declared servers must explicitly carry `costCents: 0`
+in discovery. Ordinary tools need no estimate; their reply supplies any recorded cost.
+A hold that may have been sent is never refunded
 by time. A hold that was never allowed or sent is released at zero cents.
 P3-14/P3-15 own hard-stop cascades and evidence-based uncertainty resolution.
 
@@ -2738,8 +2739,9 @@ complete row 3 or #49.
 ## Free tool calls and stopped renewals (P3-14 PR 3; Part of #55)
 
 Every MCP send, including memory discovery, recall and remember, obtains
-`budget.call_dispatch_admitted` through the existing actor queue. Only reviewed
-zero-cost tools qualify for `model: mcp-zero-cost`; no reservation is created.
+`budget.call_dispatch_admitted` through the existing actor queue. Reviewed zero-cost
+tools and ordinary tools admitted without an estimate use `model: mcp-zero-cost`.
+This budget class creates no reservation; it does not state the external server's fee.
 The one-use pass holds the decision id, body hash and recorded turn's payer,
 requester, assistant and generation. The existing conditional tool-rule admission
 still follows budget admission. Both must succeed before the sender writes upstream.
@@ -3813,8 +3815,8 @@ Remote starts carry `adapter: remote_https`. Only the consumed permit's private 
 can save `adapter_response_received`, `adapter_transport_uncertain` or
 `adapter_dispatch_refused`. The last requires a confirmed start and a refusal before
 opening a connection. It allows the requester to record `approval.retry_requested`
-once; the next successful call cannot reuse that proof. No money is held for these
-zero-cost calls. The recorder checks
+once; the next successful call cannot reuse that proof. No estimated tool charge is
+reserved. The recorder checks
 the silo, decision id, start id, connection, generation, record digest and review revision
 against saved history. It uses the existing outcome id and conditional append, then reads
 back a lost save reply. It never repeats the remote call. No public observation route exists.

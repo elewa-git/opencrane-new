@@ -1106,8 +1106,8 @@ The fresh policy must match the staged sequence, catalogue, connection and saved
 At review, `account-review.*` offers Needs no key or Needs a personal key. The latter
 requires an explicitly chosen read-only identity tool. `review-command.ts` includes
 that choice in the saved review. The publication confirmation names the chosen mode.
-Definitions and declarations are escaped text. Allow and Ask require declared zero cost
-and approval details. The audience GET must return a complete, current list before
+Definitions and declarations are escaped text. Ordinary tools need no cost declaration
+for Allow or Ask. OpenCrane-declared tools still need zero cost and approval details. The audience GET must return a complete, current list before
 confirmation. Publishing changes no grants, accounts or approvals.
 Only the original review or publication id enters sessionStorage. Reload checks that original command.
 A Ready reply needs complete acknowledgement fields and the current publication binding.

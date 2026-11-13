@@ -298,8 +298,9 @@ Pending closure records retry after storage recovers, without restarting. Restar
 recovers saved closure records without reopening connections. Outside networking
 remains switched off. Crash recovery and live qualification are still pending.
 
-Tool mode changes require the server’s declared zero cost and approval details
-for both Allow and Ask. Admin review locks those values before a tool can be enabled.
+Admin review locks the tool definition before Allow or Ask can be enabled.
+Servers declaring OpenCrane details must also declare zero cost and approval details.
+Ordinary tools need no estimate; any reported cost is recorded after the reply.
 
 Background workers copy saved events into spending read tables. The server can
 page through effect records for owners and admins without loading the whole history.

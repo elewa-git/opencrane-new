@@ -1014,15 +1014,17 @@ The volume regression projects the refusal before seeding its large message batc
 
 ## Declared tool costs and approval details
 
-Both Allow and Ask require `costCents: 0` and saved `review` details in exact review
-and later mode changes. Block remains available when either is missing. Discovery
+For OpenCrane-declared servers, both Allow and Ask require `costCents: 0` and saved
+`review` details in exact review and later mode changes. Ordinary servers use their
+standard definitions without a cost estimate. Block remains available for every tool. Discovery
 never marks review. Existing definition and review digests detect metadata changes;
 `mcp.tools_changed` holds the whole server, including unchanged siblings. Unchanged
 catalogue checks preserve the review and policy revision. Replay uses the same checks.
-Older exact Allow reviews without approval details remain readable during replay,
+Older exact Allow reviews for OpenCrane-declared tools without approval details remain
+readable during replay,
 but all their tools become unreviewed Block and publication is cleared. The fold still
 checks their original digests, connection, account, reviewer and dates. New review
-commands refuse the incomplete choice before appending it.
+commands refuse an incomplete declared-server choice before appending it.
 
 ## Request deadlines for database reads
 
