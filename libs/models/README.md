@@ -787,6 +787,8 @@ after saving its release record. Saved authority facts, projection receipts and
 credential metadata load before the call waits for the budget writer. Each write
 checks current access within two seconds after admission. The broker checks access
 and revocation again before sending. Prepared facts never grant another request access.
+Calls to tools that need no personal key also load their saved checks before waiting
+for the writer. They keep their original access deadline.
 
 The reply scan is a best-effort extra check. It looks for the full credential and
 long continuous parts in reply fields, joined text and encoded text. A match returns

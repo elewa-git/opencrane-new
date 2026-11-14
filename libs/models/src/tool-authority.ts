@@ -2,7 +2,8 @@ import { confirmDecisionAccess, type decisionActivity } from './decision-activit
 import type { prepareLoadedMemory } from './loaded-memory.ts';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { decisionAuthorityFence, prepareAuthorityFacts, checkAuthorityPermissions, requirePermissions }
+import { decisionAuthorityFence, prepareAuthorityFacts, checkAuthorityPermissions, requirePermissions,
+  type authorityFence }
   from './authority.ts';
 
 export interface ToolAuthorityRequest {
@@ -62,6 +63,29 @@ export function personalToolAccess(store: EventStore, binding: Binding,
     await prepared.confirm(current);
     await request.memory.confirm(fresh, true);
     await confirmDecisionAccess(request.activity, current, request.needsApproval, true);
+  }
+  const preparation = { prepare };
+  return Object.assign(confirm, preparation);
+}
+
+/** Keep the original access deadline for a server that needs no personal key. */
+export function toolAccessWithinDeadline(store: EventStore, binding: Binding,
+  request: ToolAuthorityRequest, fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  let prepared: Awaited<ReturnType<typeof prepareToolAuthority>> | undefined;
+  async function prepare(deadline: number) {
+    const originalDeadline = Math.min(deadline, fresh.deadline);
+    prepared = await prepareToolAuthority(store, binding, request, originalDeadline);
+    fresh.include(...prepared.subjects);
+  }
+  async function confirmOriginal() {
+    await fresh();
+    return false;
+  }
+  const snapshot = { include: fresh.include, head: fresh.head, deadline: fresh.deadline };
+  const current = Object.assign(confirmOriginal, snapshot);
+  async function confirm() {
+    if (!prepared) throw new Error('Tool authority not prepared');
+    await prepared.confirm(current);
   }
   const preparation = { prepare };
   return Object.assign(confirm, preparation);

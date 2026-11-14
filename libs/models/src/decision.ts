@@ -1,4 +1,4 @@
-import { personalToolAccess } from './tool-authority.ts';
+import { personalToolAccess, toolAccessWithinDeadline } from './tool-authority.ts';
 /* eslint-disable max-lines */
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
@@ -376,17 +376,12 @@ export async function startDecision(
         const decisionId = await audit(outcome, reason, permitId, approvalId, release);
         const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         const serverId = match[1]!;
-        async function confirmToolAccess() {
-          await currentAuthority(actor.store, binding, turnToken.requester,
-            computer.assistant, turnToken.conversation, 'mcp_server', serverId,
-            fresh, conversation, undefined, undefined, readAuthorityHistory);
-        }
-        let access = confirmToolAccess;
+        const toolRequest = { requesterId: turnToken.requester, assistantId: computer.assistant,
+          conversationId: turnToken.conversation, serverId, conversationRows: conversation };
+        let access = toolAccessWithinDeadline(actor.store, binding, toolRequest, fresh);
         if (policy.personal) {
-          const request = { requesterId: turnToken.requester, assistantId: computer.assistant,
-            conversationId: turnToken.conversation, serverId, conversationRows: conversation,
-            activity, needsApproval, memory };
-          access = personalToolAccess(actor.store, binding, request);
+          const personalRequest = { ...toolRequest, activity, needsApproval, memory };
+          access = personalToolAccess(actor.store, binding, personalRequest);
         }
         await fresh();
         mcpSender.setPermit(res, outcome, policy, raw, requestId,
