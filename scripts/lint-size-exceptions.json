@@ -82,7 +82,7 @@
   {
     "file": "apps/web/src/app/chat/workspace.spec.ts",
     "rule": "max-lines",
-    "max": 2926
+    "max": 2999
   },
   {
     "file": "apps/web/src/app/chat/workspace.ts",
@@ -106,7 +106,7 @@
   {
     "file": "libs/models/test/connection-custody.test.ts",
     "rule": "max-lines",
-    "max": 6083
+    "max": 6104
   },
   {
     "file": "libs/models/test/connection-selection.test.ts",

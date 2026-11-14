@@ -1,44 +1,49 @@
 # Lint size debt checks
 
-Date: 13 November 2026. Branch: `work/clean-120-s1`. Base:
-`90a99afa75e508f32c505d82a4beacc45e236dfd`. This is slice 1 of #120.
-The product-source changes are size comments only. No suppressed function was
-changed and no file was split.
+Date: 14 November 2026. Branch: `work/clean-120-s1`. Rebased onto
+`origin/main` at `1e8588842`. Rebased head: `024dd6710ecb5452d1f2ca1cc93dcafd1a7e2457`.
+This is slice 1 of #120. The product-source changes are size comments only. No
+suppressed function was changed and no file was split.
 
 ## Fresh secondary stack
 
-Journey on a fresh dev stack: FAIL (core journey; no product change).
+Journey on a fresh dev stack: PASS — 14 November 2026, head
+`024dd6710ecb5452d1f2ca1cc93dcafd1a7e2457`, secondary stack 1.
 
-One fresh attempt used secondary id 2, claimed through `claim.sh`. The Zitadel
-credential was supplied by file path, without reading or printing it. Bootstrap,
-provider setup and website readiness passed. Website readiness took 89,257 ms.
-The core journey entry then refused the inherited fleet-task marker:
-`Automated journeys require a secondary stack and no fleet task`.
+`infra/dev-stack/up.sh --fresh` completed its built-in core journey. The separate
+`infra/dev-stack/journey.sh` run also passed. Both used the real Zitadel login in
+the OpenCrane 2 Dev organisation. Bootstrap, provider setup, website readiness,
+access refusals, uploads, chat, live view at 390px and 1280px, lifecycle, replay,
+audit and budget-ceiling checks passed. The approval journey was skipped because
+it waits for rows 4, 5 and 14 of #45; that condition is outside this slice. The
+secondary stack was stopped with `down.sh` after the journey.
 
-This is a main defect in the core-entry guard, outside the lint change. No core
-browser step ran. The guard was not changed or bypassed and the journey was not
-retried. Main's core journey repair is [PR #1119](https://github.com/elewa-git/opencrane-new/pull/1119).
-The EXIT trap ran `down.sh`; the secondary claim and its stack directory were
-removed. The owner stack was not used.
+Screenshots from this fresh run:
 
-The attempt ran from `7233f8a54` with the in-progress lint-only working tree.
-Product executable code matched the base commit; subsequent product-source
-changes also only number existing size exceptions.
+- [Chat at 390px](screenshots/chat-390.png)
+- [Chat at 1280px](screenshots/chat-1280.png)
+- [Live view at 390px](screenshots/live-view-390.png)
+- [Action history at 390px](screenshots/action-history-390.png)
 
-## Checks and manual proof
+## Rebased-head checks
 
-- PASS: clean `npm ci`; pinned NATS and Lychee tools linked into `.tools`.
-- PASS: 21 debt-check tests and 52 CI script tests, including four baseline-helper tests.
-- PASS: repository typecheck, event catalogue (174 types), changed-code ESLint,
-  Markdown lint without file arguments, Knip and changelog lint.
-- PARTIAL: the initial full default-heap lint measurement was stopped after
-  running close to the default heap limit. Subsequent full scans use CI's existing
-  `NODE_OPTIONS=--max-old-space-size=8192` setting.
-- NOT RUN: full root tests, as instructed. Existing product tests were unchanged
-  apart from numbered size comments. Separate web tests/build were not run as
-  source gates; the fresh startup built the website before the entry refusal.
+- PASS: changed tests, 15 files; 2,498 passed, 1 skipped (2,499 total), under
+  `nice -n 10` with `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+- PASS: fresh-stack startup and the separate core journey described above.
+- PASS: changed-code ESLint and `npm run lint:debt`.
+- PASS: `npm run typecheck`, `npm run check:events` (174 types), Knip and
+  `npm run lint:changelog`.
+- PASS: `npx markdownlint-cli2` with no file arguments (CLI reported 0 issues in
+  0 files).
+- NOT RUN: public-privacy scan, secret scan, push and CI watch.
 
-All lint, typecheck and test commands ran under `nice -n 10`.
+After the rebase, main added lines to two capped test files. Their existing
+maximums and matching ESLint comments were raised to the exact counted line totals
+(2,999 and 6,104). This is lint bookkeeping only; test and product behaviour did
+not change.
+
+The following source-slice checks were run before the rebase and retain their
+original evidence below; they do not replace the post-rebase checks above.
 
 Before generating debt, a focused ESLint command measured `decision.ts` at 565
 counted lines and `connection-custody.test.ts` at 6,083. Their caps were added by
