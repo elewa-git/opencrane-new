@@ -20,10 +20,10 @@ secondary stack was stopped with `down.sh` after the journey.
 
 Screenshots from this fresh run:
 
-- [Chat at 390px](screenshots/chat-390.png)
-- [Chat at 1280px](screenshots/chat-1280.png)
-- [Live view at 390px](screenshots/live-view-390.png)
-- [Action history at 390px](screenshots/action-history-390.png)
+- [Chat at 390px](clean-120-s1/screenshots/chat-390.png)
+- [Chat at 1280px](clean-120-s1/screenshots/chat-1280.png)
+- [Live view at 390px](clean-120-s1/screenshots/live-view-390.png)
+- [Action history at 390px](clean-120-s1/screenshots/action-history-390.png)
 
 ## Rebased-head checks
 
