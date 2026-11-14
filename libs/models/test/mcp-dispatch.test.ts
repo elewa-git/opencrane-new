@@ -3203,10 +3203,7 @@ async function concurrentPersonalTurns() {
 it('races two personal assistants on one server without mixing credentials',
   concurrentPersonalTurns, 60_000);
 
-async function concurrentReceiptWork() {
-  const { setup, remote, headers, bob } = await personalPair();
-  const alicePermit = await permit(setup, headers);
-  const bobPermit = await permit(setup, bob.headers, bob.body);
+function delayReceiptReplies(setup: Fixture) {
   const auth = memberAuthorisation(setup.binding);
   const checkApplied = auth.checkApplied.bind(auth);
   async function readApplied(eventId: string) {
@@ -3220,6 +3217,28 @@ async function concurrentReceiptWork() {
   onTestFinished(restoreChecks);
   const appliedCheck = vi.spyOn(auth, 'checkApplied');
   appliedCheck.mockImplementation(readApplied);
+}
+
+async function noKeyReceiptWork() {
+  const context = await publishedFixture();
+  const { setup } = context;
+  const headers = { ...context.headers, ...context.constants };
+  const value = await permit(setup, headers);
+  delayReceiptReplies(setup);
+  const started = performance.now();
+  const response = await send(setup, value);
+  const elapsedMs = Math.ceil(performance.now() - started);
+  expect(response.status, `Dispatch completed in ${elapsedMs} ms`).toBe(200);
+  expect(setup.received()).toBe(1);
+}
+it('prepares immutable receipt work for a tool that needs no personal key',
+  noKeyReceiptWork, 60_000);
+
+async function concurrentReceiptWork() {
+  const { setup, remote, headers, bob } = await personalPair();
+  const alicePermit = await permit(setup, headers);
+  const bobPermit = await permit(setup, bob.headers, bob.body);
+  delayReceiptReplies(setup);
   const responses = await Promise.all([
     send(setup, alicePermit), send(setup, bobPermit, bob.body),
   ]);
