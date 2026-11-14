@@ -140,17 +140,22 @@ or finishes in another batch. Inactive assistants are refused before receipt che
 Confirmed membership or resource denials remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
 after recovery only by passing the normal access and spending checks again.
 
-A personal MCP dispatch prepares saved authority history, immutable projection
-receipts and credential evidence before joining the shared budget writer queue.
-The preparation is private to that single-use permit. Queue waiting is bounded by
-the unused permit lifetime; the writer starts its two-second deadline after admission.
-The live checks keep the prepared access-stream positions, current IAM permissions,
+The ordinary MCP dispatch path prepares saved authority history and immutable
+projection receipts before joining the shared budget writer queue. Personal-key
+calls also prepare credential evidence there. Each preparation belongs to one
+single-use permit. A personal call bounds queue waiting by the unused permit
+lifetime, then starts the writer's two-second deadline after admission. A call
+requiring no personal key retains its original access deadline through preparation,
+queueing and sending; preparation never renews its permit.
+
+The live checks keep prepared access-stream positions, current IAM permissions,
 turn activity, memory, revocation, admin disable and conditional appends. Another
 person's admission can advance the server stream without changing those rights.
 The credential broker checks prepared positions again after private material reads.
 A permission outage or changed grant still refuses the send. No receipt or authority
-result is reused across requests. The concurrent dispatch test retains real 400 ms
-receipt work; a separate test revokes a grant during the budget queue wait.
+result is reused across requests. The dispatch tests retain real 400 ms receipt
+work for personal and no-key calls. A separate test revokes a grant during the
+budget queue wait.
 
 `decision-refusal.test.ts` injects failures at event-store reads and budget writes,
 and forwards real OpenFGA traffic through a local proxy that can return errors or
