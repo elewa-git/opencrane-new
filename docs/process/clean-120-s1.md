@@ -35,7 +35,10 @@ Screenshots from this fresh run:
   `npm run lint:changelog`.
 - PASS: `npx markdownlint-cli2` with no file arguments (CLI reported 0 issues in
   0 files).
-- NOT RUN: public-privacy scan, secret scan, push and CI watch.
+- PASS: public-privacy check, commit-range secret scan and force-with-lease push
+  of evidence head `b169bffebc805a286449399a8bfeabbff41830d4`.
+- PARTIAL: CI was pending on that evidence head. The watch was stopped so this
+  receipt could include the scan results; the final pushed head will be watched.
 
 After the rebase, main added lines to two capped test files. Their existing
 maximums and matching ESLint comments were raised to the exact counted line totals
