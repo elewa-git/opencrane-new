@@ -119,11 +119,8 @@
     }
   },
   "apps/server/src/chat/bridge-conversation.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    },
     "max-params": {
-      "count": 4
+      "count": 3
     }
   },
   "apps/server/src/chat/bridge-opening.ts": {
@@ -298,11 +295,6 @@
   },
   "apps/server/src/integrations/profile-list.ts": {
     "max-params": {
-      "count": 1
-    }
-  },
-  "apps/server/src/integrations/remote-catalogue-watch.ts": {
-    "max-lines-per-function": {
       "count": 1
     }
   },
@@ -580,7 +572,7 @@
   },
   "libs/models/src/bearer-connections.ts": {
     "max-params": {
-      "count": 5
+      "count": 4
     }
   },
   "libs/models/src/budget-migration.ts": {

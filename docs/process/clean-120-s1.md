@@ -37,13 +37,20 @@ Screenshots from this fresh run:
   0 files).
 - PASS: public-privacy check, commit-range secret scan and force-with-lease push
   of evidence head `b169bffebc805a286449399a8bfeabbff41830d4`.
-- PARTIAL: CI was pending on that evidence head. The watch was stopped so this
-  receipt could include the scan results; the final pushed head will be watched.
+- PASS: CI test shards and browser/image fixture jobs on that evidence head.
 
 After the rebase, main added lines to two capped test files. Their existing
 maximums and matching ESLint comments were raised to the exact counted line totals
 (2,999 and 6,104). This is lint bookkeeping only; test and product behaviour did
 not change.
+
+Main also removed two previously suppressed long functions and two parameter
+violations. Stale suppression counts in three files were pruned. The rebased record
+now contains 37 `max-lines-per-function` violations and 296 `max-params`
+violations. This only updates lint metadata; product behaviour did not change.
+
+- FAIL, first pushed head: CI full lint rejected those stale suppression records.
+- NOT RUN: final-head CI rerun after pruning; it will be watched on the next push.
 
 The following source-slice checks were run before the rebase and retain their
 original evidence below; they do not replace the post-rebase checks above.
