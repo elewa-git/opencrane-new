@@ -1,0 +1,17 @@
+{
+  "verdict": "FAIL",
+  "stage": "Audience setup before publication",
+  "reason": "A grant returned HTTP 409 in 212.650278 ms; UI required refresh and collector later waited on disabled Person",
+  "applicationSource": "3c1ea9595a730cdb921b22e10cae441b3a2d3bca",
+  "initialAudience": {
+    "complete": true,
+    "content": "current",
+    "iam": "current"
+  },
+  "catalogueCheckProcessingAfterResponseMs": 112,
+  "exactConflictReason": "NOT CAPTURED",
+  "causeInference": "Initial catalogue renewal may have moved the server stream during the live target check; exact response body was not captured",
+  "concurrentCalls": "NOT RUN",
+  "revocation": "NOT RUN",
+  "cleanup": "PASS"
+}

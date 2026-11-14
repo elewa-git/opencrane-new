@@ -1,0 +1,13 @@
+{
+  "verdict": "FAIL",
+  "stage": "Audience setup before publication",
+  "reason": "Collector waited on disabled Person button while the panel reported projection applying; it omitted the existing Refresh audience action",
+  "applicationSource": "3c1ea9595a730cdb921b22e10cae441b3a2d3bca",
+  "widthsCaptured": [
+    1280,
+    390
+  ],
+  "concurrentCalls": "NOT RUN",
+  "revocation": "NOT RUN",
+  "cleanup": "PASS"
+}

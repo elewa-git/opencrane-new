@@ -1,0 +1,324 @@
+{
+  "sourceCommit": "3c1ea9595a730cdb921b22e10cae441b3a2d3bca",
+  "changedTests": {
+    "verdict": "PASS",
+    "files": 6,
+    "testsPerRun": 348,
+    "runs": 2,
+    "durationsSeconds": [
+      884.69,
+      848.99
+    ]
+  },
+  "concurrencyRepeats": [
+    {
+      "iteration": 1,
+      "startedAt": "2026-11-14T00:41:20Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.43,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 2,
+      "startedAt": "2026-11-14T00:41:37Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.46,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 3,
+      "startedAt": "2026-11-14T00:41:52Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.28,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 4,
+      "startedAt": "2026-11-14T00:42:09Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 1.82,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 5,
+      "startedAt": "2026-11-14T00:42:25Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.09,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 6,
+      "startedAt": "2026-11-14T00:42:39Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.27,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 7,
+      "startedAt": "2026-11-14T00:42:53Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.77,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 8,
+      "startedAt": "2026-11-14T00:43:09Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.44,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 9,
+      "startedAt": "2026-11-14T00:43:23Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.41,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 10,
+      "startedAt": "2026-11-14T00:43:39Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.66,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 11,
+      "startedAt": "2026-11-14T00:43:55Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.37,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 12,
+      "startedAt": "2026-11-14T00:44:11Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.14,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 13,
+      "startedAt": "2026-11-14T00:44:27Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.03,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 14,
+      "startedAt": "2026-11-14T00:44:42Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 2.09,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 15,
+      "startedAt": "2026-11-14T00:45:01Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 3.71,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 16,
+      "startedAt": "2026-11-14T00:45:21Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 4.12,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 17,
+      "startedAt": "2026-11-14T00:45:39Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 3.67,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 18,
+      "startedAt": "2026-11-14T00:45:57Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 3.74,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 19,
+      "startedAt": "2026-11-14T00:46:15Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 3.65,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    },
+    {
+      "iteration": 20,
+      "startedAt": "2026-11-14T00:46:32Z",
+      "verdict": "PASS",
+      "oneMinuteLoad": 3.52,
+      "expectedHttpStatuses": [
+        200,
+        200
+      ],
+      "receiptReplyDelayMs": 400
+    }
+  ],
+  "queueRevocation": "PASS",
+  "liveWindowExpiry": "PASS",
+  "serialWriterOwnership": "PASS",
+  "privateBrokerBinding": "PASS",
+  "noKeyReceiptLatency": "PASS",
+  "toolOfferFirstFrame": "PASS",
+  "typecheck": "PASS",
+  "eventCatalogue": {
+    "verdict": "PASS",
+    "types": 174
+  },
+  "knip": {
+    "verdict": "PASS",
+    "existingConfigurationHints": 2
+  },
+  "changedFileEslint": {
+    "errors": 0,
+    "existingEnclosingFunctionSizeWarnings": 3
+  },
+  "changelog": "PASS",
+  "markdown": {
+    "verdict": "PASS",
+    "files": 513
+  },
+  "historicalFailures": [
+    {
+      "stage": "Post-extraction full test run",
+      "testsPassed": 346,
+      "testsFailed": 1,
+      "cause": "Repeated no-key projection receipts after cache removal",
+      "resolution": "Failing-first 400 ms receipt test and prequeue preparation; final 348 tests pass twice"
+    },
+    {
+      "stage": "Earlier concurrency series fixture setup",
+      "cause": "Gateway delivery unavailable before dispatch; exact child exit cause unproved",
+      "resolution": "Retained failure; no concurrent Vitest commands in final series"
+    },
+    {
+      "stage": "Fresh secondary startup command",
+      "cause": "Key-file path absent in this worktree",
+      "resolution": "Reference existing main checkout key by path only; failed slot released"
+    },
+    {
+      "stage": "First fresh source qualification setup",
+      "cause": "Initial audience projection was applying; collector omitted the existing explicit Refresh audience action and waited on disabled Person",
+      "resolution": "Preserve failed setup; collector now performs one explicit UI refresh and requires complete/current results before changing grants; no product change"
+    },
+    {
+      "stage": "Second fresh source qualification setup",
+      "cause": "Grant HTTP 409 in 212.650278 ms while initial catalogue renewal was completing",
+      "exactConflictReason": "Not captured",
+      "causeProved": false,
+      "resolution": "Preserve failure and inference; next collector waits for initial unchanged catalogue check before audience snapshot, without changing the grant guard"
+    },
+    {
+      "stage": "Third fresh source qualification setup",
+      "cause": "Collector rejected contract status applying because it expected invented pending",
+      "resolution": "Failing-first collector fixture; use shared protocol status schema; four cases pass, retaining disabled and changed-reference refusal"
+    }
+  ],
+  "publicationCollectorContract": {
+    "failingFirst": {
+      "passed": 2,
+      "failed": 2
+    },
+    "final": {
+      "passed": 4,
+      "failed": 0
+    },
+    "scope": "Private evidence collector; product source unchanged"
+  },
+  "journey": {
+    "verdict": "PASS",
+    "widths": [
+      1280,
+      390
+    ],
+    "refusalMs": [
+      11542,
+      10260
+    ],
+    "concurrentAccountResults": [
+      "account-a",
+      "account-b"
+    ],
+    "eventReadback": "PASS",
+    "cleanup": "PASS",
+    "browserBatchInitialOneMinuteLoad": 7.31
+  }
+}

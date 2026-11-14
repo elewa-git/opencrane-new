@@ -1,0 +1,30 @@
+[
+  {
+    "width": 1280,
+    "submittedAt": "2026-11-14T01:50:34.476Z",
+    "aliceProfile": "9c1e7c3a-fb96-4011-b4d4-8275971bd3e0",
+    "bobProfile": "b197e00a-13d8-4b0a-a730-ae325dc6b699",
+    "refusalMs": 11542,
+    "refusalStatus": "Done",
+    "bobRefusedConversation": "8b9e0eec-9bb2-4f9f-b869-ad33a560241d",
+    "revokeStartedAt": "2026-11-14T01:50:54.178Z",
+    "finishedAt": "2026-11-14T01:51:17.664Z",
+    "aliceAfterRevocationConversation": "a6485620-2cb9-4fb4-9614-234e5301ee6f",
+    "aliceConversation": "d41b8f5e-01a7-4516-880e-d2e46ac9a0d7",
+    "bobConversation": "e365dc7a-a52a-4ca4-be63-66f9ee9fe222"
+  },
+  {
+    "width": 390,
+    "submittedAt": "2026-11-14T01:51:42.055Z",
+    "aliceProfile": "2c4ad6bf-2b05-42dd-993d-c7770fb75780",
+    "bobProfile": "14244cbb-ce1b-4ea7-ae6d-e2cac4f9211a",
+    "refusalMs": 10260,
+    "refusalStatus": "Done",
+    "bobRefusedConversation": "9db0f9d0-3539-41da-bfcd-d018e7fc7832",
+    "revokeStartedAt": "2026-11-14T01:51:58.726Z",
+    "finishedAt": "2026-11-14T01:52:21.020Z",
+    "aliceAfterRevocationConversation": "9e9d7c6c-a21f-4ed2-9c51-6d8f504a655e",
+    "aliceConversation": "a8719b5e-aa53-4c2a-be61-155074bbe8d6",
+    "bobConversation": "9b365480-e7c9-4a52-a70b-477ac0e281f5"
+  }
+]
