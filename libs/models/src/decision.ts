@@ -1,3 +1,4 @@
+import { personalToolAccess, toolAccessWithinDeadline } from './tool-authority.ts';
 /* eslint-disable max-lines */
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
@@ -20,7 +21,8 @@ import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { readBody } from './decision-request-body.ts';
-import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority, authorityHistoryReader }
+import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority,
+  authorityHistoryReader }
   from './authority.ts';
 import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
@@ -374,36 +376,16 @@ export async function startDecision(
         const decisionId = await audit(outcome, reason, permitId, approvalId, release);
         const budget = { modelCall, decisionId, admittedAt, ...root, confirmRoutine };
         const serverId = match[1]!;
-        async function confirmToolAccess() {
-          // Reuse the earlier chat history and original deadline. Event positions alone
-          // cannot confirm that IAM is still available before the remote send.
-          if (policy.personal) {
-            const subjects = [`member-${turnToken.requester}`,
-              `assistant-${computer.assistant}`];
-            const current = await decisionAuthorityFence(actor.store, performance.now(),
-              subjects, turnToken.requester, computer.assistant);
-            async function checkCurrent() {
-              await current();
-            }
-            const freshCurrent = Object.assign(checkCurrent, {
-              include: current.include, head: current.head, deadline: current.deadline,
-            });
-            const latestReader = authorityHistoryReader(actor.store, freshCurrent);
-            await confirmDecisionAccess(activity, current, needsApproval, true);
-            await currentAuthority(actor.store, binding, turnToken.requester,
-              computer.assistant, turnToken.conversation, 'mcp_server', serverId,
-              freshCurrent, conversation, undefined, undefined, latestReader);
-            await memory.confirm(freshCurrent, true);
-            await confirmDecisionAccess(activity, current, needsApproval, true);
-            return;
-          }
-          await currentAuthority(actor.store, binding, turnToken.requester,
-            computer.assistant, turnToken.conversation, 'mcp_server', serverId,
-            fresh, conversation, undefined, undefined, readAuthorityHistory);
+        const toolRequest = { requesterId: turnToken.requester, assistantId: computer.assistant,
+          conversationId: turnToken.conversation, serverId, conversationRows: conversation };
+        let access = toolAccessWithinDeadline(actor.store, binding, toolRequest, fresh);
+        if (policy.personal) {
+          const personalRequest = { ...toolRequest, activity, needsApproval, memory };
+          access = personalToolAccess(actor.store, binding, personalRequest);
         }
         await fresh();
         mcpSender.setPermit(res, outcome, policy, raw, requestId,
-          confirmToolAccess, policy.personal ? Infinity : fresh.deadline,
+          access, policy.personal ? Infinity : fresh.deadline,
           budget, undefined, release);
         res.setHeader('x-request-id', requestId);
         markRefusedDecision(res, outcome === 'allow');

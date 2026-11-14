@@ -38,11 +38,12 @@ The quote starts at 12500 euro cents, morning, zero effects; every process start
 ## Credential-checked mode
 
 `createDemoServer(https, { accounts })` accepts exactly two caller-supplied synthetic
-accounts: `{ account, key, permitted: true }` and `{ account, key, permitted: false }`.
+accounts with `{ account, key, permitted: boolean }`. Each account has its own permission.
 Account names and keys must differ. No test key is written in source.
 Discovery remains public. Calls require the requester's key in `Authorization: Bearer`.
-Missing and unknown keys return `invalid_request`. The first account can read and
-change `DEMO-001`; the second receives `isError: true`, `reason: not_permitted`.
+Missing and unknown keys return `invalid_request`. A permitted account can read and
+change `DEMO-001`; an account without permission receives `isError: true`,
+`reason: not_permitted`. Both accounts may be permitted for concurrent personal calls.
 Arguments cannot select an account. Successful quote results and refused tool results
 name `actedAs`. `who_am_i` accepts `{}` and returns `subject` and `actedAs` without
 changing anything. Its optional `check` argument defaults to `account`.

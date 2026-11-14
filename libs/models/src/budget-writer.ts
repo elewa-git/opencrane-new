@@ -205,3 +205,31 @@ export async function withinBudgetDeadline<Value>(work: Promise<Value>, deadline
     clearTimeout(timer);
   }
 }
+
+export interface DispatchQueueDeadline {
+  queueDeadline: number;
+}
+
+export function accessDeadline(checkAccess?: () => Promise<void>, deadline?: number) {
+  const original = deadline ?? knownAccessDeadline(checkAccess);
+  const fallback = performance.now() + 2000;
+  if (typeof original === 'number') return Math.min(original, fallback);
+  return fallback;
+}
+
+export function knownAccessDeadline(checkAccess?: () => Promise<void>) {
+  const deadline: unknown = Reflect.get(checkAccess ?? {}, 'deadline');
+  if (typeof deadline === 'number') return deadline;
+  return undefined;
+}
+
+/** Bound the caller's wait without releasing ownership of unfinished serial work. */
+export function withinAdmissionDeadline<Value>(work: Promise<Value>,
+  admitted: Promise<number>, queueDeadline: number) {
+  async function waitForAdmission() {
+    const accessDeadline = await admitted;
+    return withinBudgetDeadline(work, accessDeadline);
+  }
+  const result = Promise.race([work, waitForAdmission()]);
+  return withinBudgetDeadline(result, queueDeadline);
+}

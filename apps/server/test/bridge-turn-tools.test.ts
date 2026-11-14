@@ -179,11 +179,38 @@ it('sends a waiting turn without tools when OpenFGA cannot check a grant', async
     expect(JSON.parse(fixture.sent[1]!)).not.toHaveProperty('tools');
     expect(fixture.rows).toHaveBeenCalledTimes(1);
     expect(fixture.reads.filter(subject => subject === 'mcp-fixture')).toHaveLength(1);
-    expect(use).toHaveBeenCalledTimes(1);
+    expect(use.mock.calls).toEqual([
+      ['person', 'person', 'mcp_server', 'fixture'],
+      ['assistant', 'assistant', 'mcp_server', 'fixture'],
+    ]);
   } finally {
     vi.useRealTimers();
   }
 });
+
+async function offersToolsWithIndependentSlowGrantChecks() {
+  const fixture = bridgeFixture({ binding: true });
+  async function slowGrant() {
+    await new Promise<void>(resolve => setTimeout(resolve, 600));
+    return { allowed: true };
+  }
+  use.mockImplementation(slowGrant);
+  vi.useFakeTimers();
+  try {
+    const processing = fixture.process();
+    await vi.advanceTimersByTimeAsync(1201);
+    await processing;
+    expect(fixture.sent).toHaveLength(1);
+    expect(JSON.parse(fixture.sent[0]!)).toMatchObject({
+      tools: [{ definitions: [definition] }],
+    });
+    expect(use).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+}
+it('offers reviewed tools when independent grant reads each take 600 ms',
+  offersToolsWithIndependentSlowGrantChecks);
 
 it('sends only the reviewed tool definition and omits private discovery fields', async () => {
   const fixture = bridgeFixture({ binding: true });

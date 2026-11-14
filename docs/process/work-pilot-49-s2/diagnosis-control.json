@@ -1,0 +1,82 @@
+[
+  {
+    "started": 1794600453223,
+    "elapsedMs": 3943,
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "started": 1794600469598,
+    "elapsedMs": 3818,
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "started": 1794600487400,
+    "elapsedMs": 2920,
+    "statuses": [
+      200,
+      200
+    ]
+  },
+  {
+    "started": 1794600502137,
+    "elapsedMs": 3235,
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "started": 1794600517909,
+    "elapsedMs": 3397,
+    "statuses": [
+      200,
+      200
+    ]
+  },
+  {
+    "started": 1794600530038,
+    "elapsedMs": 2740,
+    "statuses": [
+      200,
+      200
+    ]
+  },
+  {
+    "started": 1794600539950,
+    "elapsedMs": 2233,
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "started": 1794600549662,
+    "elapsedMs": 3708,
+    "statuses": [
+      200,
+      403
+    ]
+  },
+  {
+    "started": 1794600563936,
+    "elapsedMs": 2146,
+    "statuses": [
+      403,
+      200
+    ]
+  },
+  {
+    "started": 1794600577598,
+    "elapsedMs": 3255,
+    "statuses": [
+      200,
+      403
+    ]
+  }
+]

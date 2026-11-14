@@ -6,12 +6,13 @@ A tool server for synthetic demo quotes with optional credential checks.
 It uses [MCP](../../GLOSSARY.md#mcp-server-tool-server), the tool protocol.
 It offers a made-up quote and lets a caller change its delivery slot. Its default mode
 needs no credentials. An optional mode checks caller-supplied test keys and account rights.
+Each of its two accounts can be allowed or refused independently.
 
 ## Where it fits
 
 This separate application sits beside the product back end and the Odoo tool server.
-The product can discover it through the ordinary remote-tool connection once public
-hosting is ready. Public hosting and a live chat demonstration remain untested.
+The product can discover it through the ordinary remote-tool connection. Development
+checks use a guarded local TLS fixture. Public hosting remains untested.
 
 ```mermaid
 flowchart LR

@@ -1,3 +1,4 @@
+import { credentialReleaseEvidence } from '../src/credential-release.ts';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,7 +13,7 @@ import { authorityFence } from '../src/authority.ts';
 import { connectionCustody, type ConnectionStage } from '../src/connection-custody.ts';
 import { credentialBroker } from '../src/credential-broker.ts';
 import { MemberAccessRefused } from '../src/member-authority.ts';
-import { oauthSelectionFixture } from './support/oauth-selection.ts';
+import { oauthSelectionFixture, selectPersonalFixture } from './support/oauth-selection.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let storage: Awaited<ReturnType<typeof databases>>;
@@ -77,15 +78,8 @@ async function fixture(settings: { serverId?: string; secrets?: Map<string, stri
     return custody.stage(input, contents);
   }
   const saved = await oauthSelectionFixture(nats, userId, serverId, profileId, stageMaterial);
-  const selected = { action: 'select', userId, serverId, connectionId: 'installed',
-    profileId, profileRevision: saved.revision, expectedSequence: 0 };
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
-  const selection = envelope('test', selectionSubject, 'connection.selected', selected,
-    digest(['test', selectionSubject, 'choice']));
-  selection.source = 'opencrane-server';
-  selection.principal = { kind: 'human', id: userId };
-  selection.commandId = 'choice';
-  await nats.seed([selection]);
+  const selectionRevision = await selectPersonalFixture(nats, saved);
   const issuedAt = Date.now();
   const release = { userId, ownerId: userId, serverId, ownerKind: 'personal' as const,
     purpose: 'tool_call' as const, assistantId: 'assistant', computerId: 'computer',
@@ -93,7 +87,7 @@ async function fixture(settings: { serverId?: string; secrets?: Map<string, stri
     toolName: 'read', generation: 1, argumentsDigest: 'a'.repeat(64),
     requestId: userId, permitId: userId, leaseId: userId, profileId,
     connectionId: 'installed', profileRevision: saved.revision,
-    selectionRevision: await nats.store.head(selectionSubject),
+    selectionRevision,
     policyRevision: saved.configuration.policyRevision,
     accountDigest: digest(saved.saved.activation.account),
     scopeDigest: digest(saved.saved.activation.account.scopes), issuedAt, expiresAt: issuedAt + 30_000 };
@@ -515,3 +509,19 @@ async function refusalSurvivesLaterFailures(laterFailure: string) {
 }
 it.each(['audit', 'expiry', 'unlock'])(
   'preserves a permission refusal through a later %s failure', refusalSurvivesLaterFailures);
+
+async function callerCannotReplacePreparedRelease() {
+  const test = await fixture();
+  const evidence = await credentialReleaseEvidence(nats.store, 'test', test.decision.id,
+    test.release, test.loadConfiguration);
+  const replacement = { release: { ...test.release, ownerId: 'another-person' }, evidence };
+  const broker = test.broker();
+  // Exercise JavaScript callers too: extra arguments must not replace the bound request.
+  await Reflect.apply(broker.send, broker, [replacement]);
+  const rows = await history(nats.store, `credential-${test.userId}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.event.data).toEqual(test.release);
+  expect(test.sends).toEqual(['synthetic-access']);
+}
+it('keeps its saved release binding when a caller supplies replacement prepared data',
+  callerCannotReplacePreparedRelease);

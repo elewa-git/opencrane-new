@@ -1,0 +1,12 @@
+{
+  "verdict": "FAIL",
+  "width": 390,
+  "requestId": "e5d9318b-0de1-426b-8da9-14b876ac8553",
+  "stage": "credential_release",
+  "reason": "decision_unavailable",
+  "elapsedMs": 2321,
+  "accessRemainingMs": 27677,
+  "outcome": "not_dispatched",
+  "desktopVerdict": "PASS",
+  "desktopRefusalMs": 8328
+}

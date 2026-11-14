@@ -1,19 +1,22 @@
+import { consumePermit, dispatchRemoteTarget, dispatchDigest as digest,
+  type McpAccessCheck, type PersonalDispatchRequest, type RemoteTarget }
+  from './mcp-dispatch-request.ts';
 import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
 /* eslint-disable max-lines */
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
-import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
+import { exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
-import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { ModelCall } from './state.ts';
 import { toolCredentialReleaseSchema } from '@opencrane/events';
 import { requireOnlyAdmissions } from './mcp-position.ts';
-import { sendPersonalCredential, type PersonalCredentialDispatch }
+import { preparePersonalCredential, type PersonalCredentialDispatch }
   from './personal-mcp-dispatch.ts';
 import type { MemoryDispatch } from './memory-context.ts';
 import type { mcpPolicy } from './mcp.ts';
@@ -26,7 +29,7 @@ export const mcpDispatchRouteSchema = z.strictObject({
   generation: identifier.optional(),
   revisionHeader: z.literal('x-opencrane-mcp-revision').optional(),
 });
-type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
+export type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
 export interface McpDispatchOptions {
   routes: Route[];
   remoteNetwork?: RemoteNetwork;
@@ -47,7 +50,7 @@ interface BudgetBinding {
   decisionId: string;
   admittedAt: number;
 }
-interface Permit {
+export interface Permit {
   gatewayBinding?: NonNullable<Policy['gatewayBinding']>;
   budget: BudgetBinding;
   memory?: MemorySend;
@@ -64,30 +67,15 @@ interface Permit {
   bodyDigest: string;
   expiresAt: number;
   accessDeadline: number;
-  confirmAccess: () => Promise<void>;
+  confirmAccess: McpAccessCheck;
   release?: z.infer<typeof toolCredentialReleaseSchema>;
+  prepareCredential?: () => Promise<void>;
 }
 type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
   deadline?: number) => Promise<void>;
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
-const callerCredentialHeaders = ['authorization', 'proxy-authorization', 'cookie',
-  'x-api-key', 'x-opencrane-profile-id'];
-
-function hasCallerCredentialHeaders(req: IncomingMessage) {
-  for (const name of callerCredentialHeaders) {
-    if (req.headers[name] !== undefined) return true;
-  }
-  return false;
-}
-
-function digest(body: string) {
-  const hash = createHash('sha256');
-  hash.update(body);
-  return hash.digest('hex');
-}
-
 function remoteAccountAvailable(policy: Policy, hasCredentialDispatch: boolean) {
   if (policy.policy.accountMode === 'none') return true;
   return policy.policy.accountMode === 'personal' && Boolean(policy.personal) &&
@@ -113,6 +101,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   const logger = createLogger('mcp-dispatch');
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
+  const consumer = { pending, silo };
 
   function acknowledged() {
     return options?.acknowledged?.() ?? null;
@@ -164,7 +153,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   }
 
   function issue(policy: Policy, body: string, requestId: string,
-    confirmAccess: () => Promise<void>, accessDeadline: number, budget: BudgetBinding,
+    confirmAccess: McpAccessCheck, accessDeadline: number, budget: BudgetBinding,
     memory?: MemorySend, release?: z.infer<typeof toolCredentialReleaseSchema>) {
     const route = requireContract(policy);
     if (policy.gatewayBinding) {
@@ -205,7 +194,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   }
 
   function setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
-    requestId: string, confirmAccess: () => Promise<void>, accessDeadline: number,
+    requestId: string, confirmAccess: McpAccessCheck, accessDeadline: number,
     budget: BudgetBinding, memory?: MemorySend,
     release?: z.infer<typeof toolCredentialReleaseSchema>) {
     if (outcome !== 'allow') {
@@ -216,35 +205,17 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     res.setHeader('x-opencrane-mcp-permit', permit);
   }
 
-  function consume(req: IncomingMessage, body: string) {
-    const token = req.headers['x-opencrane-mcp-permit'];
-    const permit = typeof token === 'string' ? pending.get(token) : undefined;
-    if (typeof token === 'string') pending.delete(token);
-    // Consume even refused attempts, so neither errors nor lost replies cause a resend.
-    if (!permit || permit.silo !== silo || permit.expiresAt <= Date.now() ||
-        permit.bodyDigest !== digest(body) || req.method !== 'POST') {
-      throw new Error('MCP permit refused');
-    }
-    if (permit.release && hasCallerCredentialHeaders(req)) {
-      throw new Error('MCP credential headers refused');
-    }
-    return permit;
-  }
-
   async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
     const startedAt = performance.now();
-    const permit = consume(req, body);
+    const permit = consumePermit(req, body, consumer);
     const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
     if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
     const route = requireCurrentRoute(permit);
     const remaining = Math.max(0, permit.expiresAt - Date.now());
     const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
-    let target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
-    if (route.locator) {
-      const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
-      const signal = AbortSignal.timeout(duration);
-      target = await prepareRemote(route.locator, options?.remoteNetwork ?? {}, signal);
-    }
+    // Prepare immutable history and receipts before entering the shared budget queue.
+    await permit.confirmAccess.prepare?.(deadline);
+    const target = await dispatchRemoteTarget(route, deadline, options?.remoteNetwork ?? {});
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
@@ -255,17 +226,14 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
     }
     await options!.requireLeader();
+    const personalRequest = { permit, target, body, res, deadline,
+      dispatch: options?.credentialDispatch, network: options?.remoteNetwork ?? {} };
+    const personal = personalDispatch(store, silo, personalRequest);
+    if (personal) permit.prepareCredential = personal.prepare;
     const observe = await admitCall(req, res, permit, route, position, deadline, startedAt);
-    if (target && permit.release) {
-      const dispatch = options?.credentialDispatch;
-      if (!dispatch || !observe) throw new Error('Personal tool unavailable');
-      async function sendAccess(material: string) {
-        await forwardRemote(target!, permit, body, res, options?.remoteNetwork ?? {},
-          observe!, material);
-      }
+    if (personal) {
       try {
-        await sendPersonalCredential(store, silo, dispatch, permit.budget.decisionId,
-          permit.release, deadline, permit.confirmAccess, sendAccess);
+        await personal.send(observe!);
       } catch (error) {
         await reportRefusal(permit, observe, startedAt, 'credential_release', deadline, error);
         throw error;
@@ -298,9 +266,12 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       if (route.locator) {
         observe = await recordStarted(permit, deadline);
       }
+      stage = 'credential_preparation';
+      await permit.prepareCredential?.();
       stage = 'budget_admission';
+      const admissionDeadline = permit.release ? { queueDeadline: deadline } : deadline;
       await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt,
-        undefined, deadline);
+        undefined, admissionDeadline);
       stage = 'mcp_admission';
       const admittedPosition = await admit(req, res, permit, route, position, deadline);
       if (!route.locator && permit.gatewayBinding) {
@@ -518,7 +489,7 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
   upstream.end(body);
 }
 
-async function forwardRemote(target: Awaited<ReturnType<typeof prepareRemote>>, permit: Permit,
+async function forwardRemote(target: RemoteTarget, permit: Permit,
   raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver,
   material?: string) {
   if (material !== undefined && !/^[\x21-\x7e]+$/u.test(material)) {
@@ -675,4 +646,29 @@ function requireRemoteRevision(saved: string | undefined) {
     }
   } catch { /* Refuse malformed declarations without exposing their contents. */ }
   throw new Error('Remote MCP revision unavailable');
+}
+
+function personalDispatch(store: BudgetActor['store'], silo: string,
+  request: PersonalDispatchRequest) {
+  const { permit, target, dispatch, body, res, deadline, network } = request;
+  const release = permit.release;
+  if (!target || !release) return undefined;
+  if (!dispatch) throw new Error('Personal tool unavailable');
+  let observer: RemoteObserver | undefined;
+  let sendCredential: (() => Promise<void>) | undefined;
+  async function sendAccess(material: string) {
+    if (!observer) throw new Error('Personal tool unavailable');
+    await forwardRemote(target!, permit, body, res, network, observer, material);
+  }
+  async function prepare() {
+    const credentialRequest = { decisionId: permit.budget.decisionId, release: release!,
+      deadline, confirmAccess: permit.confirmAccess, sendAccess };
+    sendCredential = await preparePersonalCredential(store, silo, dispatch!, credentialRequest);
+  }
+  async function send(observe: RemoteObserver) {
+    if (!sendCredential) throw new Error('Personal tool unavailable');
+    observer = observe;
+    await sendCredential();
+  }
+  return { prepare, send };
 }
