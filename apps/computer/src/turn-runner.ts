@@ -1,4 +1,4 @@
-/* eslint-disable max-lines -- Keep approval renewal and release beside the turn state they share. */
+/* eslint max-lines: ["error", { max: 1001, skipBlankLines: true, skipComments: true }] */
 import { privateRecall } from './private-recall.ts';
 import { BridgeGate } from './bridge-gate.ts';
 import type { GateIdentity } from './bridge-gate-authority.ts';

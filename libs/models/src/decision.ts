@@ -1,4 +1,4 @@
-/* eslint-disable max-lines */
+/* eslint max-lines: ["error", { max: 565, skipBlankLines: true, skipComments: true }] */
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
 import { privateDecisionReason, decisionError, respondDecisionUnavailable } from './decision-refusal.ts';

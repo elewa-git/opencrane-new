@@ -31,6 +31,19 @@ This is how OpenCrane 2 gets built day to day. The [standards](standards.md) say
    collects the files in stable name order and removes them before a release.
 10. **Report.** A few lines to the owner: what landed, what is running, what needs a decision.
 
+## Resolve suppression conflicts
+
+Take main's `eslint-suppressions.json`, then run:
+
+```sh
+npx eslint . --prune-suppressions
+```
+
+Pruning removes entries that are no longer needed; it does not add debt for new
+violations. Fix new violations and rerun lint. Keep the exact numbered exceptions
+in `scripts/lint-size-exceptions.json`; `lint:debt` refuses increases against the
+base commit except during the one change introducing Prettier.
+
 ## Choosing what to start
 
 Follow the [delivery rules](standards.md#delivery-rules-finish-before-you-start): they set the order of work, the limit of six feature tickets in progress, and what parking a ticket means.

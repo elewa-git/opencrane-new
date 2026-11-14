@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 1502, skipBlankLines: true, skipComments: true }] */
 import { createServer, type Socket } from 'node:net';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';

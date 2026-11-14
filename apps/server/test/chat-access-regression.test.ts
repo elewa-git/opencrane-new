@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 2706, skipBlankLines: true, skipComments: true }] */
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { getEventDefinition, toolApprovalRequestedDataSchema } from '@opencrane/events';

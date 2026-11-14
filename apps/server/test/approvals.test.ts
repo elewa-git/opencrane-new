@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 1686, skipBlankLines: true, skipComments: true }] */
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFile, mkdir } from 'node:fs/promises';

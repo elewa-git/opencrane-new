@@ -1,5 +1,5 @@
 import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
-/* eslint-disable max-lines */
+/* eslint max-lines: ["error", { max: 672, skipBlankLines: true, skipComments: true }] */
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
 import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
