@@ -77,6 +77,19 @@ cases). A further 54 release/scanner checks passed twice; 44 preflight cases pas
 The image checks and completed journey verdict are in the linked exact-head receipt.
 No independent review result is claimed.
 
+## Repaired application image
+
+Built the application from committed source
+`1429086ff5eb20db05f1dccceb7c0095940b2fe1`.
+The published image is
+`sha256:829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3`.
+Own checks: **PASS** for all 14 actual-image tests, all 580 reviewed components,
+all three re-authenticated Debian main indexes and source-bound promotion.
+The 82 licence fixtures passed twice. Later commits change test clarity,
+documentation and image records; they change no application runtime module.
+The final head's scanner approval and installed scanner digest are recorded
+separately in the exact-head receipt.
+
 ## Historical qualification
 
 The [previous installation](packaged-rebased-2026-11-15/installation.json),

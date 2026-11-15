@@ -11,8 +11,8 @@
     "scanner"
   ],
   "images": {
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3",
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
     "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
@@ -24,10 +24,10 @@
     "approvedSha": "6cbd70a9814fb2860aa30dccc32d9e97b8efc990f355637c0231d867f70108ee"
   },
   "packageImage": {
-    "sourceRevision": "bd73de7f728894c38b18e4dc5e171a2867a3acfb",
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
-    "imageId": "sha256:1075378221058a5ccb9654349cc28ffe12a514f8a147589e37081d137d578968",
-    "scanSha256": "d8c835086a1310eaf64d401b73176efe9a67e872c7040254deaf46067b818c39"
+    "sourceRevision": "1429086ff5eb20db05f1dccceb7c0095940b2fe1",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3",
+    "imageId": "sha256:c04b12e4acbc8f08bf4b83794394c0c3a802b6a40512328cf59251967fca87b7",
+    "scanSha256": "678fb3c19665e1f71453af1680214c5aa4d464045d34c109c9040801e8b14364"
   }
 }
