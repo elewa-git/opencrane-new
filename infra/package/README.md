@@ -96,14 +96,8 @@ navigation show it, with their usual fallback words when it is empty.
 - Checks three event-log placements against Kubernetes and fresh-install observations.
 - Removes only this worktree's install, including after an interrupted launcher.
 
-The recovery fixture captures events, files and two computer homes together before
-interrupting a handler upgrade. It checks those same archives before rebuilding
-rows, rights and spending twice, then checks who can read the restored files.
-A separate fixture restores the exact home bytes to new temporary files after
-checking current memory deletion records. This does not put homes back on mounted
-volumes. The fixtures use disposable services and do not reopen a running installation.
-The event and file targets keep private directory paths out of command arguments
-and errors, including when setup or cleanup fails.
+Recovery fixtures and their limits are documented in the [handler upgrade](README.robot.md#interrupted-handler-upgrade-check)
+and [computer home restoration](README.robot.md#raw-computer-home-restoration-fixture) guides.
 
 ## Processes it handles
 

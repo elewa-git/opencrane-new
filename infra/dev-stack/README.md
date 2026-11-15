@@ -54,10 +54,6 @@ the claimed secondary slot before it starts a native attempt.
 
 ## What it is responsible for
 
-The personal Memory browser helper records the first reply status before reading
-its body. A body that does not finish fails after ten seconds, leaving that status
-available for diagnosis.
-
 - Starts and stops local services and apps with private local credentials.
 - Stops every worker recorded by this stack before checking subscription changes.
 - Starts the scanner for uploads and checks one signed scan before the server starts.
@@ -192,8 +188,7 @@ image review and publication steps.
 
 Detailed recovery steps, real-provider choices and daily timer settings
 are in the operator notes.
-The server reads the same private readiness marker. Chat can explain a long wait
-without showing members the operator's maintenance steps.
+See [README.robot.md](README.robot.md#starting-and-stopping-the-stack) for the readiness marker.
 
 The owner stack builds the website for production when its website process starts.
 To show a new website change on the owner stack, stop it with
