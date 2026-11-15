@@ -6350,8 +6350,11 @@ saved revision, confirming one saved event and the same receipt.
 `GET /api/my/tools/:serverId/profiles` lists the signed-in member's personal profiles.
 Valid bearer and OAuth profiles remain listed after revocation or an admin block.
 The strict query accepts `limit` (1–50, default 20), `status` (all, saved or unavailable)
-and a signed cursor. It never accepts an owner id. The read checks projection progress,
-loads exact profile, control, server and selection histories, then checks current
+and a signed cursor. It never accepts an owner id. When the projection trails the
+connection stream, the reader checks the unprojected records. Only a profile
+creation requires inventory progress; selection and consent changes do not add
+rows. The read loads exact profile, control, server and selection histories,
+then checks current
 membership once. A changed event position or projection generation returns 409 restart.
 Missing membership returns 403; dependency failure returns 503. All replies use
 `no-store`. The read makes no credential-store or provider call and returns no secret

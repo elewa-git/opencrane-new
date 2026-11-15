@@ -356,7 +356,8 @@ key, the server checks the admin-chosen read-only identity tool before saving ve
 account evidence. It refuses account identifiers that copy the key, including encoded
 text. My tools lets the member explicitly choose that key for use.
 The list shows the same safe facts for each saved personal profile, including a revoked
-or blocked one. It marks the person's explicit choice. A changed list asks the screen
+or blocked one. It marks the person's explicit choice. Selection and consent changes
+remain readable while the profile list is catching up. A changed list asks the screen
 to start paging again.
 Current owners and admins can inspect one member’s personal profile metadata.
 They also see the saved admin block revision, without reading credentials.
