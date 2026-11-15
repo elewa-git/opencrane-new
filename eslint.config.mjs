@@ -62,10 +62,17 @@ export default tseslint.config(
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
     ignores: ['**/*.spec.ts'],
     rules: {
+      'max-params': ['error', 5],
       complexity: ['error', 15],
       'max-depth': ['error', 4],
       'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
-      'max-lines-per-function': ['warn', { max: 80, skipBlankLines: true, skipComments: true }],
+      'max-lines-per-function': ['error', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
+    files: ['**/*.test.ts', '**/*.spec.ts', '**/*.test.mjs'],
+    rules: {
+      'max-lines': ['error', { max: 1500, skipBlankLines: true, skipComments: true }],
     },
   },
   {

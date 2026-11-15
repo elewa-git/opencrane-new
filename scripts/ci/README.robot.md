@@ -254,3 +254,23 @@ screenshot opt-in test was skipped. The three-worker browser experiment failed
 four startup checks; 159 tests passed and three existing opt-in tests were skipped.
 The retained one-worker browser group is NOT RUN locally after that experiment.
 Hosted qualification and the separate image/browser job times remain NOT RUN.
+
+## Base commit for debt checks
+
+`baseline.mjs` exports `baseCommit()`, `readAtBase(path)` and
+`mustNotRise(label, before, after)`. `baseCommit()` prefers `BASE_SHA`, then
+`git merge-base origin/main HEAD`, then returns `undefined`. `readAtBase` reads
+that commit's file, returning `undefined` for a missing file or unavailable base.
+`mustNotRise` returns a problem line only for an increase.
+
+The Lint step sets `BASE_SHA` to the pull request base SHA. Main pushes use the
+merge-base fallback. `scripts/check-lint-debt.mjs` checks actual directive comments
+in tracked JavaScript and TypeScript files under apps, libs and scripts. The
+installed TypeScript parser keeps example strings out of the comment list.
+The checker requires the documented numbered file-limit comment, rejects duplicate
+comments and other inline size-rule settings, and compares the exact exception list
+and per-rule suppression totals.
+A missing base skips comparison, while missing ledgers allow their initial creation.
+A change introducing `.prettierrc.json` may increase debt once; existing comment
+and configuration checks still run. `baseline.test.mjs` uses Node's test runner;
+`../check-lint-debt.test.mjs` uses Vitest with disposable Git repositories.

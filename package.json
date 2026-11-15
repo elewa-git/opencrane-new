@@ -11,7 +11,7 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
+    "lint": "npm run lint:code && npm run lint:debt && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
     "typecheck": "npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack",
     "typecheck:package": "tsc --noEmit -p infra/package/tsconfig.json",
     "typecheck:dev-stack": "tsc --noEmit -p infra/dev-stack/tsconfig.json",
@@ -27,7 +27,8 @@
     "visual:screen-tools-access": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-tools-access.mjs",
     "visual:screen-tools-publish": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-tools-publish.mjs",
     "visual:org-admin": "node scripts/capture-org-admin.mjs",
-    "lint:code": "eslint .",
+    "lint:code": "eslint . --max-warnings 0",
+    "lint:debt": "node scripts/check-lint-debt.mjs",
     "lint:deps": "depcruise apps/demo-mcp/src apps/odoo-mcp/src apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs && depcruise apps --config .dependency-cruiser-tests.mjs",
     "lint:unused": "knip",
     "lint:docs": "node scripts/check-process-evidence.mjs && npm run check:qualification && markdownlint-cli2 && node scripts/check-public-privacy.mjs",

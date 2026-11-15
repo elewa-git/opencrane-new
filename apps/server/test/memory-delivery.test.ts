@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 1558, skipBlankLines: true, skipComments: true }] */
 import { preflightFixture } from '../../computer/test/private-recall-preflight-fixture.ts';
 import { privateToolOffer } from './support/private-catalogue.ts';
 import { recallTool } from '../src/memory/mcp.ts';

@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 3622, skipBlankLines: true, skipComments: true }] */
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';

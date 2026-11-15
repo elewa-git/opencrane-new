@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 1889, skipBlankLines: true, skipComments: true }] */
 import { invalidateMemoryContext } from '../src/memory/invalidation.ts';
 import { once } from 'node:events';
 import { WebSocketServer, type WebSocket, type RawData } from 'ws';

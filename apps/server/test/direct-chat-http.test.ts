@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 1946, skipBlankLines: true, skipComments: true }] */
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { generateKeyPairSync } from 'node:crypto';

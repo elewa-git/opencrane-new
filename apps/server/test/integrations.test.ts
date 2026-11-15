@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 2189, skipBlankLines: true, skipComments: true }] */
 import type { AppendCommand } from '@opencrane/event-store';
 import { Writable } from 'node:stream';
 import { prepareGatewayConfiguration, gatewayConfigurationCurrent, publicationEntry, envelope } from '@opencrane/models';

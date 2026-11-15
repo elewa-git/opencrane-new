@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 6104, skipBlankLines: true, skipComments: true }] */
 import { saveCompanyBearerConnection, foldCompanyConnection } from '../src/company-bearer.ts';
 import { prepareCompanyOAuthAttempt } from '../src/company-oauth.ts';
 import { changeCompanyOptIn } from '../src/company-opt-in.ts';

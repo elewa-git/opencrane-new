@@ -2,21 +2,23 @@
 
 ## What this is
 
-These scripts share the root tests between GitHub Actions jobs. Separate jobs run
+These scripts share the root tests between GitHub Actions jobs and find the base
+commit for debt checks. Separate jobs run
 tests that need the computer image and tests that need Chromium. Other test jobs
 avoid that setup.
 
 ## Where it fits
 
-GitHub Actions calls these scripts to choose jobs and share tests. Vitest runs the tests.
+GitHub Actions calls these scripts to choose jobs, share tests and supply the base
+commit for lint debt checks. Vitest runs the root tests.
 
 ```mermaid
 flowchart LR
   actions["GitHub Actions<br/>repository checks"] -->|chooses jobs and tests| ci["scripts/ci<br/>test jobs"]
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
-  ci -->|sets worker limits and runs files| vitest["Vitest<br/>root tests"]
+  debt["scripts/check-lint-debt<br/>size limits"] -->|reads base commit| ci
+  ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
-  registry["GitHub registry<br/>saved base image"] -->|supplies packages| computer
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   ci -->|pulls exact Linux images and retries downloads| docker["Docker<br/>test containers"]
 ```
@@ -30,6 +32,7 @@ flowchart LR
 - Skip expensive jobs for documentation changes only when the base commit permits it.
 - Refuse a passing result if a root test file is missing or runs twice.
 - Require every dev-stack test to run in CI or have an exclusion with a reason.
+- Find the base commit so lint can refuse increases in recorded size debt.
 - Save test reports on main so future changes can use measured times.
 
 ## Processes it handles

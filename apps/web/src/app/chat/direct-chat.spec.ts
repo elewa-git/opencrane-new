@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 2825, skipBlankLines: true, skipComments: true }] */
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { By } from '@angular/platform-browser';

@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 2512, skipBlankLines: true, skipComments: true }] */
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { once, once as onceEvent } from 'node:events';
 import { randomBytes } from 'node:crypto';

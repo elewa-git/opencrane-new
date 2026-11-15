@@ -1,3 +1,4 @@
+/* eslint max-lines: ["error", { max: 2073, skipBlankLines: true, skipComments: true }] */
 import { memoryContextRecordedEventSchema } from '@opencrane/events';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { z } from 'zod';
