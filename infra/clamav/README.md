@@ -93,12 +93,7 @@ build dates, hashes and the successful update-check time. Unchanged files keep t
 original build dates. A failed refresh removes the previous candidate record.
 This file is evidence for review; it does not authorise uploads or image admission.
 
-The release verifier takes this reviewed file, its separately approved SHA-256
-hash and an immutable image reference. It records success only after checking
-the image's actual files and removing its temporary containers. The complete
-update check must be within 24 hours, even when the files themselves are older.
-Neither JSON file grants trust or admits an upload. The verifier does not deploy
-an image or refresh a running scanner. Commands and limits are in
+The verifier's inputs, checks and limits are in
 [README.robot.md](README.robot.md#packaging-evidence).
 
 The separate launcher keeps ClamAV inside its own container, with no host port
@@ -124,10 +119,7 @@ startup and key rotation still need qualification.
 The upload server checks the approved virus list digest in each reply. A result
 from an earlier list cannot save a file after the reviewed list changes.
 
-The local upload proof starts this reviewed launcher and HTTPS service with
-fresh approved virus definitions. It sends clean and virus test bytes through
-the server's normal upload consumer. The proof needs a second reviewed set to
-check recovery after an outage. The exact inputs are listed in
+The upload fixture and its inputs are in
 [README.robot.md](README.robot.md#real-upload-consumer-fixture).
 
 If updater cleanup fails, the directory stays locked to prevent another updater
