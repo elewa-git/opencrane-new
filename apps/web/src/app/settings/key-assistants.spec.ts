@@ -163,3 +163,65 @@ async function definiteRejectionDoesNotStayPending() {
 }
 it('keeps a definite HTTP rejection editable instead of waiting for an impossible receipt',
   definiteRejectionDoesNotStayPending);
+
+async function safeFailureDiagnostic(operation: 'load' | 'save' | 'status') {
+  const privateText = 'synthetic-credential private-account private-response-body';
+  const diagnostic = vi.spyOn(console, 'warn').mockImplementation(function ignore() {});
+  sessionStorage.clear();
+  if (operation === 'status') {
+    sessionStorage.setItem('key-assistants:fixture', JSON.stringify({ changeRef: 'original' }));
+  }
+  function serve(input: string | URL | Request, options?: RequestInit) {
+    const path = input instanceof Request ? input.url : input.toString();
+    if (operation === 'load' && path.endsWith('/connection')) {
+      return Promise.reject(new TypeError(privateText));
+    }
+    if (options?.method === 'POST') {
+      return Promise.resolve(new Response(JSON.stringify({ changeRef: 'wrong', sequence: 9,
+        account: privateText })));
+    }
+    if (path.includes('/changes/')) {
+      return Promise.resolve(new Response(JSON.stringify({ sequence: privateText })));
+    }
+    let body: unknown = { serverId: 'fixture', connectionId: 'installed',
+      identityTool: 'who_am_i', selectionRevision: 8, selectedProfileId: 'personal' };
+    if (path === '/api/chat') body = { memberId: 'alice', assistantId: 'own' };
+    if (path === '/api/assistants') body = { rows: [] };
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  }
+  vi.stubGlobal('fetch', serve);
+  const fixture = TestBed.createComponent(KeyAssistants);
+  fixture.componentRef.setInput('serverId', 'fixture');
+  fixture.componentRef.setInput('profileId', 'personal');
+  fixture.componentRef.setInput('profileRevision', 3);
+  fixture.componentRef.setInput('selected', true);
+  fixture.detectChanges();
+  const element: HTMLElement = fixture.nativeElement as HTMLElement;
+  function loaded() {
+    fixture.detectChanges();
+    expect(element.querySelector('input')).not.toBeNull();
+  }
+  if (operation !== 'load') {
+    await vi.waitFor(loaded);
+    if (operation === 'save') element.querySelector<HTMLInputElement>('input')!.click();
+    else element.querySelector<HTMLButtonElement>('button')!.click();
+  }
+  function reported() {
+    fixture.detectChanges();
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+  }
+  await vi.waitFor(reported);
+  const categories = { load: 'network', save: 'receipt_identity', status: 'validation' };
+  expect(diagnostic).toHaveBeenCalledWith('Personal key assistant choices failed', {
+    component: 'key-assistants', operation, category: categories[operation],
+  });
+  expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(privateText);
+  const messages = { load: 'could not be loaded', save: 'Outcome unknown', status: 'Still unknown' };
+  expect(element.textContent).toContain(messages[operation]);
+  fixture.destroy();
+  sessionStorage.clear();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+}
+it.each(['load', 'save', 'status'] as const)(
+  'reports a safe structured cause for a failed consent %s', safeFailureDiagnostic);
