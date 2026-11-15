@@ -1,3 +1,4 @@
+import { personalToolContext } from '../src/personal-tool-context.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -370,3 +371,28 @@ const refusalCases = [
 ];
 it.each(refusalCases)(
   'preserves saved %s refusal with failed %s preparation on %s', savedRefusalWithFailure);
+
+async function authorisationRefusesDeniedAssistantAtCurrentRevision() {
+  const test = await fixture();
+  const assistantId = `${test.userId}-assistant`;
+  const assistant = envelope('test', `assistant-${assistantId}`, 'assistant.created', {
+    assistantId, ownerId: test.userId, kind: 'personal',
+  });
+  await nats.seed([assistant]);
+  const initial = await test.select();
+  const request = { assistantId, toolName: 'read', loadConfiguration: test.loadConfiguration,
+    boundSelection: { profileId: 'oauth', selectionRevision: initial.sequence } };
+  const prepared = await personalToolContext(nats.store, binding, test.userId,
+    test.serverId, request);
+  expect(prepared).toMatchObject({ selectionRevision: initial.sequence, profileId: 'oauth',
+    requesterId: test.userId, serverId: test.serverId, generation: 1 });
+  const denied = await test.select({ ...test.command, expectedSequence: initial.sequence,
+    changeRef: 'deny-assistant', allowedAssistantIds: [] });
+  expect((await test.read('read')).status).toBe('verified');
+  const current = { ...request,
+    boundSelection: { profileId: 'oauth', selectionRevision: denied.sequence } };
+  await expect(personalToolContext(nats.store, binding, test.userId, test.serverId, current))
+    .rejects.toThrow('Personal tool unavailable');
+}
+it('refuses call authorisation for a denied assistant at the current selection revision',
+  authorisationRefusesDeniedAssistantAtCurrentRevision);
