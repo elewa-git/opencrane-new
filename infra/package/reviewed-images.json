@@ -11,8 +11,8 @@
     "scanner"
   ],
   "images": {
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:a41d33a06778511747270141933cbeeed2167c72a9a606ec87c3ecef9d2e3cb2",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:a41d33a06778511747270141933cbeeed2167c72a9a606ec87c3ecef9d2e3cb2",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
     "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
@@ -24,10 +24,10 @@
     "approvedSha": "6cbd70a9814fb2860aa30dccc32d9e97b8efc990f355637c0231d867f70108ee"
   },
   "packageImage": {
-    "sourceRevision": "7a7009fea0d679b225a29a327443777a59cfb8d8",
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:a41d33a06778511747270141933cbeeed2167c72a9a606ec87c3ecef9d2e3cb2",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:a41d33a06778511747270141933cbeeed2167c72a9a606ec87c3ecef9d2e3cb2",
-    "imageId": "sha256:7513242bde07fe27c65d71e91d2ed968b267a209bf94fade01b486a13fc8cbc8",
-    "scanSha256": "116609145ad21cce08e524a5851a3e9acf7a675be3198c011e63dd26d8314c9a"
+    "sourceRevision": "e0a528a7fb998ff50a3d51014e15febe8797170a",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
+    "imageId": "sha256:b0f38725f0422d571be73a8518c5b1255f40a03a205e0a5d937a2e73f07f5eb0",
+    "scanSha256": "09750ecf16f315c063fe313e5619a8de60d0028f78cd7f1debae84379cab127d"
   }
 }
