@@ -28,7 +28,8 @@ flowchart LR
 - Link Assistant to saved persona review.
 - Save a personal key only after the reviewed server verifies its account, then choose it for use.
 - List saved personal profiles for a chosen integration and explain their safe status.
-- Let the person choose which assistants may use their selected key.
+- Let the person choose which assistants may use their selected key and keep confirmed
+  choices usable while the profile list is catching up.
 - Review the effects before revoking a saved personal connection.
 - Account editing and preferences are not available yet.
 

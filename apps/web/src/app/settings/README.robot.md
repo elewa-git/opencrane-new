@@ -34,7 +34,9 @@ select its old key by editing consent. Page Refresh reloads the consent panels a
 as profile rows. Confirmed consent saves update the selection revision locally;
 they do not refresh the profile inventory. Original receipt checks reload only consent.
 Definite input and body-size refusals clear the unpublished change
-reference; uncertain outcomes still require the original receipt.
+reference; uncertain outcomes still require the original receipt. Failed reads, writes
+and receipt checks report only fixed operation and cause categories to the browser
+console. They never log exception messages, account fields or response bodies.
 The Connect or choose a key action opens `personal-key.*` on the same page.
 It loads the reviewed connection settings, accepts a password input and clears it
 before waiting for POST. A successful own-profile read shows the verified account.

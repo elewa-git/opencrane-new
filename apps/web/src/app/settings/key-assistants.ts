@@ -9,6 +9,28 @@ const assistantListSchema = z.object({ rows: z.array(z.object({
 })) });
 const receiptSchema = z.object({ changeRef: identifier, sequence: z.int().positive() });
 const pendingSchema = z.object({ changeRef: identifier });
+type FailureCategory = 'http' | 'receipt_identity';
+
+class AssistantChoicesFailure extends Error {
+  readonly category: FailureCategory;
+
+  constructor(category: FailureCategory) {
+    super('Assistant choices unavailable');
+    this.category = category;
+  }
+}
+
+function reportFailure(error: unknown, operation: 'load' | 'save' | 'status'): void {
+  let category = 'unexpected';
+  if (error instanceof AssistantChoicesFailure) category = error.category;
+  else if (error instanceof z.ZodError) category = 'validation';
+  else if (error instanceof SyntaxError) category = 'invalid_json';
+  else if (error instanceof TypeError) category = 'network';
+  // Log only fixed categories: exception messages and validation inputs can contain private data.
+  const diagnostic = { component: 'key-assistants', operation, category };
+  console.warn('Personal key assistant choices failed', diagnostic);
+}
+
 type Settings = z.infer<typeof personalConnectionSettingsSchema>;
 
 @Component({
@@ -79,7 +101,7 @@ export class KeyAssistants implements OnInit, OnDestroy, OnChanges {
   private async get(url: string): Promise<unknown> {
     const options = { cache: 'no-store' as const, signal: this.request.signal };
     const response = await fetch(url, options);
-    if (!response.ok) throw new Error('Assistant choices unavailable');
+    if (!response.ok) throw new AssistantChoicesFailure('http');
     return response.json();
   }
 
@@ -109,7 +131,8 @@ export class KeyAssistants implements OnInit, OnDestroy, OnChanges {
       this.allowed.set(allowedAssistants);
       this.settings.set(settings);
       this.message.set(this.pending() ? 'Outcome unknown. Check the original change.' : '');
-    } catch {
+    } catch (error) {
+      reportFailure(error, 'load');
       this.settings.set(null);
       this.assistants.set([]);
       this.allowed.set([]);
@@ -143,15 +166,16 @@ export class KeyAssistants implements OnInit, OnDestroy, OnChanges {
       };
       const response = await fetch(`${this.baseUrl()}/selection`, options);
       if (await this.handleRefusal(response)) return;
-      if (!response.ok) throw new Error('Assistant change unconfirmed');
+      if (!response.ok) throw new AssistantChoicesFailure('http');
       const receipt = receiptSchema.parse(await response.json());
-      if (receipt.changeRef !== changeRef) throw new Error('Wrong assistant change');
+      if (receipt.changeRef !== changeRef) throw new AssistantChoicesFailure('receipt_identity');
       const updatedSettings = { ...settings, selectionRevision: receipt.sequence };
       this.settings.set(updatedSettings);
       this.allowed.set(allowedAssistantIds);
       this.clearPending();
       this.message.set('Assistant choices saved. New calls use this list.');
-    } catch {
+    } catch (error) {
+      reportFailure(error, 'save');
       this.message.set('Outcome unknown. Check the original change before changing this list again.');
     } finally {
       this.busy.set(false);
@@ -190,10 +214,11 @@ export class KeyAssistants implements OnInit, OnDestroy, OnChanges {
     try {
       const raw = await this.get(`${this.baseUrl()}/selection/changes/${changeRef}`);
       const receipt = receiptSchema.parse(raw);
-      if (receipt.changeRef !== changeRef) throw new Error('Wrong assistant change');
+      if (receipt.changeRef !== changeRef) throw new AssistantChoicesFailure('receipt_identity');
       this.clearPending();
       await this.load();
-    } catch {
+    } catch (error) {
+      reportFailure(error, 'status');
       this.message.set('Still unknown. Check the original change again later.');
     } finally {
       this.busy.set(false);
