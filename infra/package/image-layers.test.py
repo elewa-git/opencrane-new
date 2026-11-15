@@ -159,6 +159,15 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertIn(path.removeprefix("app/infra/dev-stack/"), allowed)
             self.assertFalse(path.startswith(("app/.keys/", "app/.tools/", "app/.git/")))
 
+    def test_scanner_imports_and_storage_readiness_entry_point_are_packaged(self):
+        self.assertIn("app/infra/clamav/database.mjs", self.paths)
+        self.assertIn("app/infra/package/object-lease-ready.mjs", self.paths)
+        command = ["docker", "run", "--rm", "--network", "none", "--read-only",
+                   self.inspection["Id"], "node", "--input-type=module", "-e",
+                   "await import('./infra/clamav/packaged.mjs')"]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, "Packaged scanner imports are incomplete")
+
     def test_real_bootstrap_entry_point_with_synthetic_services(self):
         image = self.inspection["Id"]
         fixture = Path("infra/package/bootstrap-runtime-fixture.mjs").resolve()
