@@ -37,6 +37,7 @@ flowchart LR
 | [Watching a computer screen](s0-5-live-view/README.md) | Can people watch a computer screen safely? Yes. Others can only watch, and only the person who asked can take control. | `apps/computer`, `apps/server` and [how computer disks and screen viewing work](../docs/adr/0006-computer-disk-and-live-view.md). | The warm-pool lab reads it for the warm-pool and live-view runs. Current tests do not. |
 | [The event log](s0-7-jetstream/README.md) | Can NATS JetStream keep the [event log](../GLOSSARY.md#event-log-event-store)? Yes. | `libs/event-store` and [why NATS JetStream keeps the event log](../docs/adr/0001-event-store-nats-jetstream.md). | No |
 | [Background work](s0-8-handler-runtime/README.md) | Which job runner handles background work? pg-boss was chosen provisionally. | `libs/handlers` and [why pg-boss runs background reactions](../docs/adr/0004-handler-runtime.md). | No |
+| [Comparing event stores](s0-9-postgres-event-store/README.md) | Could PostgreSQL keep the event log while retiring NATS? The local comparison works; a product switch awaits recovery and dispatcher proof. | [Proposed comparison](../docs/adr/0007-postgres-event-store-comparison.md). | No |
 
 ## Processes it handles
 
