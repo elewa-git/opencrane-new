@@ -82,6 +82,19 @@ function validFixture() {
   const operators = { items: [{ spec: { template: { spec: { containers: [manager] } } } }] };
   return { values, review, secrets, api, operators, canary };
 }
+async function fixtureInputFiles(directory, fixture) {
+  const privateDirectory = `${directory}/private-values`;
+  await mkdir(privateDirectory, { mode: 0o700 });
+  const bin = `${directory}/bin`;
+  await scannerApprovalFixture(bin, fixture.review);
+  fixture.values.scanner = { ...fixture.review.scanner };
+  await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
+  const valuesFile = `${privateDirectory}/values.json`;
+  await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
+  await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
+  return { valuesFile, bin, privateDirectory };
+}
+
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
   const directory = await mkdtemp(`${tmpdir()}/cnpg-install-`);
   try {
@@ -99,15 +112,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
     await prepareNatsFixture(fixture, directory);
     if (fixture.cluster) await prepareClusterFixture(fixture, directory, owner);
-    const privateDirectory = `${directory}/private-values`;
-    await mkdir(privateDirectory, { mode: 0o700 });
-    const bin = `${directory}/bin`;
-    await scannerApprovalFixture(bin, fixture.review);
-    fixture.values.scanner = { ...fixture.review.scanner };
-    await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
-    const valuesFile = `${privateDirectory}/values.json`;
-    await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
-    await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
+    const { valuesFile, bin, privateDirectory } = await fixtureInputFiles(directory, fixture);
     let valuesArgument = JSON.stringify(valuesFile);
     if (environmentValues) {
       valuesArgument = 'process.env.PACKAGE_VALUES_FILE';

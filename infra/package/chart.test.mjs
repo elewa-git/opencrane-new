@@ -154,9 +154,7 @@ await issueCertificate(process.argv[1], 'server', '/CN=nats');`;
 test('certificate issuer passes absolute stack paths to OpenSSL',
   certificateIssuerUsesAbsolutePaths);
 
-async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
-  packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
-  const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
+async function scannerFixtureEnvironment(directory, mainValuesSource) {
   const fixtureEnvironment = { ...process.env };
   if (mainValuesSource) {
     const bin = join(directory, 'bin');
@@ -164,6 +162,13 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     values.scanner = { ...reviewed.scanner };
     fixtureEnvironment.PATH = `${bin}:${process.env.PATH}`;
   }
+  return fixtureEnvironment;
+}
+
+async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
+  packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
+  const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
+  const fixtureEnvironment = await scannerFixtureEnvironment(directory, mainValuesSource);
   const settings = new Map();
   const secrets = new Map();
   const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';

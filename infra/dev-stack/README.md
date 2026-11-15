@@ -15,8 +15,8 @@ assistant computers run.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
-  infra --> devbox["infra/devbox<br/>machine setup"]
+  packaging["GitHub packaging job"] -->|supplies the approved scanner image| stack["infra/dev-stack<br/>local OpenCrane"]
+  stack -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|shares installation settings, memory, account custody and readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
