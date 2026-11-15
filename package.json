@@ -11,7 +11,7 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:debt && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
+    "lint": "npm run lint:code && npm run lint:debt && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:reads && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
     "typecheck": "npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack",
     "typecheck:package": "tsc --noEmit -p infra/package/tsconfig.json",
     "typecheck:dev-stack": "tsc --noEmit -p infra/dev-stack/tsconfig.json",
@@ -104,7 +104,8 @@
     "visual:screen-p3-14-stop": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-14-stop.mjs",
     "visual:screen-p3-5-facts": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-5-facts.mjs",
     "visual:screen-p3-5-times": "nice -n 10 npm run build -w apps/web && node scripts/capture-screen-p3-5-times.mjs",
-    "visual:p4-15-pr3l": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-p4-15-pr3l.mjs"
+    "visual:p4-15-pr3l": "nice -n 10 npm run build -w apps/web && nice -n 10 node scripts/capture-p4-15-pr3l.mjs",
+    "lint:reads": "node scripts/check-whole-stream-reads.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

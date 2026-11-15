@@ -54,6 +54,10 @@ if 2 seconds passed. So:
 - Activity that does not change who has access, such as a turn starting or a
   file arriving, must never refuse a reader or close a viewer.
 
+`npm run lint:reads` blocks new whole-stream reads in product source.
+A new whole-stream read is a blocking finding. When a pull request removes
+a recorded read, lower its count in `scripts/whole-stream-reads.json` in that change.
+
 Three branches broke these rules in the same week and locked users out of long
 chats, so reviewers treat a break as a blocking finding.
 

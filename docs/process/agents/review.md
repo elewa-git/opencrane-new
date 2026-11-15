@@ -27,6 +27,8 @@ Review is read-only; isolated tests are allowed. Do not deploy, grant access or 
    the 2-second fence, no conversation stream in a read fence, and no reader refused or
    viewer closed by activity that does not change access. Probe a long conversation
    (about 1,500 events) and a turn starting during a read. A break is blocking.
+   A new whole-stream read is blocking; `npm run lint:reads` checks the recorded counts.
+   When a pull request removes a read, lower its baseline count in the same change.
 6. When gateway or computer exposure changes, trace sockets, previews, desktop, browser
    control and shell routes through the authorised gateway. Check rendered Services,
    ingress and network policies for bypasses; do not assume a private port is unreachable.
