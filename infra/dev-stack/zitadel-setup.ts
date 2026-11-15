@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { resolve } from 'node:path';
 import { secondary, stackId, localOrigin } from './identity.ts';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { directory, exists, root, save, prepareDirectory } from './config.ts';
-import { issuer, secondaryCredentials, zitadelApi, ZitadelSetupError } from './zitadel-api.ts';
+import {
+  issuer, retainCredentialReference, secondaryCredentials, zitadelApi, ZitadelSetupError,
+} from './zitadel-api.ts';
 
 // Run under the same flock as up.sh. Never pass the PAT through argv or logs.
 const name = 'OpenCrane 2 Dev';
@@ -83,7 +84,7 @@ async function secondarySetup(readOnly: boolean) {
     await chmod(`${credentials}/${file}`, 0o600);
   }
   const keyFile = process.env['ZITADEL_KEY_FILE'];
-  if (keyFile !== undefined) await retain('zitadel-key-file', resolve(keyFile));
+  if (keyFile !== undefined) await retainCredentialReference(keyFile);
   const appName = `OpenCrane 2 Dev CI ${stackId}`;
   const apps = await list(`/management/v1/projects/${projectId}/apps/_search`, exactName(appName));
   assert(apps.length <= 1, 'Duplicate secondary apps');

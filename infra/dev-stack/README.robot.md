@@ -613,8 +613,10 @@ overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
 Secondary Zitadel setup verifies the fixed OpenCrane 2 Dev organisation and project
 before retaining a supplied `ZITADEL_KEY_FILE` path in the slot's mode-0700
 `dev-stack-ci-<id>` directory. The mode-0600 `zitadel-key-file` contains only the
-absolute path, never the key. This directory also keeps that slot's existing app
-secret and four test-user passwords after `down`. A later launch uses an explicit
+absolute path, never the key. Setup refuses a linked credentials directory or reference
+file. It opens the reference without following links for both reads and writes; an
+explicitly supplied shared key path may still be a link. This directory also keeps
+that slot's existing app secret and four test-user passwords after `down`. A later launch uses an explicit
 `ZITADEL_KEY_FILE` first, then its own slot's saved reference, then the repository's
 default key file. An unreadable explicit or saved file fails without falling back.
 Owner setup uses only its explicit or repository key file.
@@ -628,6 +630,8 @@ and numeric gRPC code (or `unavailable` for an unreadable code). Diagnostics exc
 credential paths, headers, tokens and provider response text. The focused tests are
 `zitadel-setup.test.ts` and `zitadel-errors.test.ts`, run by the CI harness job.
 Transport failures name the attempted endpoint without exposing the private cause.
+Failures while reading an HTTP error body retain their cause internally and keep
+the same safe HTTP-status diagnostic.
 Endpoint diagnostics accept only known route words and decimal entity ids;
 unexpected provider identifiers receive a fixed `unrecognised endpoint` label.
 

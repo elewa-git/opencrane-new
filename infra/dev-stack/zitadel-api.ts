@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, readFile, realpath } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -26,13 +27,47 @@ export async function secondaryCredentials() {
   return directory;
 }
 
+async function openCredentialReference(flags: number) {
+  const directory = await secondaryCredentials();
+  // Refuse links in the open itself so a replacement cannot redirect the read or write.
+  const file = await open(`${directory}/zitadel-key-file`, flags | constants.O_NOFOLLOW, 0o600);
+  try {
+    const metadata = await file.stat();
+    assert(metadata.isFile(), 'Credential reference must be a regular file');
+    return file;
+  } catch (cause) {
+    await file.close();
+    throw cause;
+  }
+}
+
+async function readCredentialReference() {
+  const file = await openCredentialReference(constants.O_RDONLY);
+  try {
+    return await file.readFile('utf8');
+  } finally {
+    await file.close();
+  }
+}
+
+export async function retainCredentialReference(path: string) {
+  const file = await openCredentialReference(constants.O_WRONLY | constants.O_CREAT);
+  try {
+    // Truncate only after opening and checking the actual file, never a linked target.
+    await file.truncate(0);
+    await file.writeFile(resolve(path));
+    await file.chmod(0o600);
+  } finally {
+    await file.close();
+  }
+}
+
 async function credentialFile() {
   const explicitFile = process.env['ZITADEL_KEY_FILE'];
   if (explicitFile !== undefined) return resolve(explicitFile);
   if (secondary) {
-    const directory = await secondaryCredentials();
     try {
-      return await readFile(`${directory}/zitadel-key-file`, 'utf8');
+      return await readCredentialReference();
     } catch (error) {
       const missing = missingFileSchema.safeParse(error);
       if (!missing.success) throw error;
@@ -66,12 +101,15 @@ async function providerCode(response: Response) {
     const parsed = providerCodeSchema.safeParse(body);
     if (parsed.success) {
       const code = parsed.data.code;
-      if (Number.isInteger(code) && code >= 0 && code <= 16) return String(code);
+      if (Number.isInteger(code) && code >= 0 && code <= 16) {
+        return { code: String(code), cause: undefined };
+      }
     }
-  } catch {
-    // A proxy can return non-JSON errors; the HTTP status still identifies that response.
+  } catch (cause) {
+    // Keep interrupted bodies and malformed JSON private while retaining the HTTP status.
+    return { code: 'unavailable', cause };
   }
-  return 'unavailable';
+  return { code: 'unavailable', cause: undefined };
 }
 
 function publicEndpoint(path: string) {
@@ -103,9 +141,9 @@ export async function zitadelApi(path: string, orgId: string | undefined,
       { cause });
   }
   if (!response.ok) {
-    const code = await providerCode(response);
+    const failure = await providerCode(response);
     throw new ZitadelSetupError(`Zitadel ${method} ${endpoint} returned HTTP ${response.status}; ` +
-      `code ${code}`);
+      `code ${failure.code}`, { cause: failure.cause });
   }
   return response.json() as Promise<unknown>;
 }

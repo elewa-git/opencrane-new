@@ -200,7 +200,8 @@ for (const target of ['dev-stack', 'dev-stack-ci-2']) {
 }
 
 async function linkedCredentialDirectory() {
-  const fixture = await createZitadelFixture({ apps: {}, users: {} });
+  const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
+  const fixture = await createZitadelFixture(initial);
   const parent = `${fixture.home}/.config/opencrane`;
   const target = `${parent}/dev-stack-ci-2`;
   const reference = `${target}/zitadel-key-file`;
@@ -261,3 +262,23 @@ async function interruptedErrorBody() {
 }
 test('an interrupted HTTP error body keeps its private cause and safe CLI message',
   interruptedErrorBody);
+
+async function explicitSharedKey() {
+  const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
+  const fixture = await createZitadelFixture(initial);
+  const sharedKey = `${fixture.home}/shared-key-link`;
+  const env: NodeJS.ProcessEnv = { ...fixture.env, ZITADEL_KEY_FILE: sharedKey };
+  try {
+    await symlink(fixture.env.ZITADEL_KEY_FILE, sharedKey);
+    await fixture.setup(env);
+    const state = await fixture.readState();
+    delete env['ZITADEL_KEY_FILE'];
+    await fixture.setup(env);
+    assert.deepEqual(await fixture.readState(), state);
+    const reference = `${fixture.home}/.config/opencrane/dev-stack-ci-1/zitadel-key-file`;
+    assert.equal(await readFile(reference, 'utf8'), sharedKey);
+  } finally {
+    await fixture.close();
+  }
+}
+test('an explicitly supplied shared key path may be a link and can be retained', explicitSharedKey);

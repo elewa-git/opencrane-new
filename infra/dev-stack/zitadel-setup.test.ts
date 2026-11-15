@@ -74,19 +74,14 @@ test('owner restore removes secondary redirects, preserves other settings, and r
   }
 });
 test('secondary setup keeps the owner app unchanged and reuses its own private credentials after teardown', async () => {
-  const home = await mkdtemp(`${tmpdir()}/dev-stack-zitadel-`);
-  const directory = `${home}/.config/opencrane/dev-stack-1`;
-  const providerFile = `${home}/provider.json`;
   const ownerApp = secondaryOwnerApp;
-  await writeFile(providerFile, JSON.stringify({ apps: { [ownerApp.id]: ownerApp }, users: {} }));
-  await writeFile(`${home}/pat`, 'fake-test-pat');
-  const env = { PATH: process.env['PATH'], HOME: home, DEV_STACK_ID: '1',
-    ZITADEL_KEY_FILE: `${home}/pat`, MOCK_ZITADEL_FILE: providerFile };
-  const setup = () => exec(process.execPath, ['--experimental-strip-types', '--import',
-    './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts'], { env });
-  const readOnlySetup = () => exec(process.execPath, ['--experimental-strip-types', '--import',
-    './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts',
-    '--read-only'], { env });
+  const initial = { apps: { [ownerApp.id]: ownerApp }, users: {} };
+  const fixture = await createZitadelFixture(initial);
+  const { home, directory, env, setup } = fixture;
+  const providerFile = env.MOCK_ZITADEL_FILE;
+  async function readOnlySetup() {
+    return fixture.setup(env, ['--read-only']);
+  }
   try {
     for (const value of [false, undefined, 'true']) {
       const refused = { apps: { [ownerApp.id]: { ...ownerApp,
@@ -174,24 +169,9 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     await assert.rejects(setup());
     assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), state);
   } finally {
-    await rm(home, { recursive: true, force: true });
-  }
-});
-
-async function sharedReadOnlyFixture() {
-  const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
-  const fixture = await createZitadelFixture(initial);
-  async function readOnlySetup() {
-    return fixture.setup(fixture.env, ['--read-only']);
-  }
-  try {
-    await assert.rejects(readOnlySetup, /requires the existing secondary app/u);
-    assert.deepEqual(await fixture.readState(), initial);
-  } finally {
     await fixture.close();
   }
-}
-test('the shared secondary fixture preserves the read-only setup option', sharedReadOnlyFixture);
+});
 
 async function secondaryResourceGuards() {
   const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
@@ -210,9 +190,10 @@ async function secondaryResourceGuards() {
     const project = { id: projectId, name: org.name, details: { resourceOwner: orgId } };
     const cases = [
       { name: 'organisation id', path: '/management/v1/orgs/me',
-        body: { org: { ...org, id: 'another-org' } } },
+        body: { org: { ...org, id: 'another-org' } }, expected: /Refusing another organisation/u },
       { name: 'organisation name', path: '/management/v1/orgs/me',
-        body: { org: { ...org, name: 'Another organisation' } } },
+        body: { org: { ...org, name: 'Another organisation' } },
+        expected: /Refusing another organisation/u },
       { name: 'project id', path: projectPath,
         body: { project: { ...project, id: 'another-project' } } },
       { name: 'project name', path: projectPath,
@@ -220,14 +201,17 @@ async function secondaryResourceGuards() {
       { name: 'project owner', path: projectPath,
         body: { project: { ...project, details: { resourceOwner: 'another-org' } } } },
       { name: 'owner app', path: `${projectPath}/apps/_search`,
-        body: { result: [{ id: secondaryOwnerApp.id, name: app.name }] } },
+        body: { result: [{ id: secondaryOwnerApp.id, name: app.name }] },
+        expected: /Refusing the owner app/u },
       { name: 'secondary app name', path: `${projectPath}/apps/ci-app`,
         body: { app: { ...app, name: 'Another app' } } },
       { name: 'secondary app owner', path: `${projectPath}/apps/ci-app`,
-        body: { app: { ...app, details: { resourceOwner: 'another-org' } } } },
+        body: { app: { ...app, details: { resourceOwner: 'another-org' } } },
+        expected: /Refusing another organisation/u },
       { name: 'logout redirects', path: `${projectPath}/apps/ci-app`,
         body: { app: { ...app, oidcConfig: { ...app.oidcConfig,
-          postLogoutRedirectUris: ['http://127.0.0.1:25206/'] } } } },
+          postLogoutRedirectUris: ['http://127.0.0.1:25206/'] } } },
+        expected: /Unexpected secondary logout redirects/u },
       { name: 'user name', path: `/management/v1/users/${userId}`,
         body: { user: { ...user, userName: 'another-user' } } },
       { name: 'user owner', path: `/management/v1/users/${userId}`,
@@ -236,7 +220,8 @@ async function secondaryResourceGuards() {
     for (const refusal of cases) {
       const refused = { ...state, responses: { [refusal.path]: refusal.body } };
       await writeFile(providerFile, JSON.stringify(refused));
-      await assert.rejects(fixture.setup, undefined, refusal.name);
+      const expected = refusal.expected ?? /Zitadel setup failed; no provider response was logged/u;
+      await assert.rejects(fixture.setup, expected, refusal.name);
       assert.deepEqual(await fixture.readState(), refused, refusal.name);
     }
   } finally {

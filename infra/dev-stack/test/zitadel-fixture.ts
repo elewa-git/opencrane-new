@@ -25,8 +25,8 @@ export async function createZitadelFixture(state: unknown) {
     './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts'];
   await writeFile(providerFile, JSON.stringify(state));
   await writeFile(env.ZITADEL_KEY_FILE, 'fake-private-credential');
-  async function setup(environment: NodeJS.ProcessEnv = env) {
-    return exec(process.execPath, args, { env: environment });
+  async function setup(environment: NodeJS.ProcessEnv = env, options: string[] = []) {
+    return exec(process.execPath, [...args, ...options], { env: environment });
   }
   async function readState(): Promise<unknown> {
     return JSON.parse(await readFile(providerFile, 'utf8')) as unknown;
