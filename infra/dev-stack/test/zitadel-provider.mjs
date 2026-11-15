@@ -1,6 +1,6 @@
 // A provider boundary for the CLI tests. No request can reach the network.
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import files from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,12 @@ function parseRequest(url, options) {
 }
 
 function failRequest(failure) {
+  if (failure.bodyError) {
+    function interruptBody(controller) {
+      controller.error(new Error(failure.bodyError));
+    }
+    return new Response(new ReadableStream({ start: interruptBody }), { status: failure.status });
+  }
   if (failure.networkError) throw new Error(failure.networkError);
   if (failure.rawBody) return new Response(failure.rawBody, { status: failure.status });
   return Response.json(failure.body, { status: failure.status });
@@ -43,10 +49,12 @@ function failureResponse(state, path) {
 }
 
 globalThis.fetch = async (url, options) => {
+  await appendFile(`${file}.requests`, 'request\n');
   const state = JSON.parse(await readFile(file, 'utf8'));
   const { path, body } = parseRequest(url, options);
   const failure = failureResponse(state, path);
   if (failure) return failure;
+  if (state.responses?.[path]) return Response.json(state.responses[path]);
   let result;
   if (path === '/management/v1/orgs/me') {
     result = { org: state.org ?? { id: orgId, name: 'OpenCrane 2 Dev' } };

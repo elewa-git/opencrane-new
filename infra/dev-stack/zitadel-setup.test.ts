@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { secondaryOwnerApp } from './test/zitadel-fixture.ts';
+import { createZitadelFixture, secondaryOwnerApp } from './test/zitadel-fixture.ts';
 
 const exec = promisify(execFile);
 test('owner restore removes secondary redirects, preserves other settings, and refuses a foreign app', async () => {
@@ -177,3 +177,71 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     await rm(home, { recursive: true, force: true });
   }
 });
+
+async function sharedReadOnlyFixture() {
+  const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
+  const fixture = await createZitadelFixture(initial);
+  async function readOnlySetup() {
+    return fixture.setup(fixture.env, ['--read-only']);
+  }
+  try {
+    await assert.rejects(readOnlySetup, /requires the existing secondary app/u);
+    assert.deepEqual(await fixture.readState(), initial);
+  } finally {
+    await fixture.close();
+  }
+}
+test('the shared secondary fixture preserves the read-only setup option', sharedReadOnlyFixture);
+
+async function secondaryResourceGuards() {
+  const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
+  const fixture = await createZitadelFixture(initial);
+  const providerFile = fixture.env.MOCK_ZITADEL_FILE;
+  const orgId = secondaryOwnerApp.details.resourceOwner;
+  const projectId = '393311211539664273';
+  const projectPath = `/management/v1/projects/${projectId}`;
+  try {
+    await fixture.setup();
+    const state = JSON.parse(await readFile(providerFile, 'utf8'));
+    const app = state.apps['ci-app'];
+    const userId = 'opencrane2-dev-ci-1-owner';
+    const user = state.users[userId];
+    const org = { id: orgId, name: 'OpenCrane 2 Dev' };
+    const project = { id: projectId, name: org.name, details: { resourceOwner: orgId } };
+    const cases = [
+      { name: 'organisation id', path: '/management/v1/orgs/me',
+        body: { org: { ...org, id: 'another-org' } } },
+      { name: 'organisation name', path: '/management/v1/orgs/me',
+        body: { org: { ...org, name: 'Another organisation' } } },
+      { name: 'project id', path: projectPath,
+        body: { project: { ...project, id: 'another-project' } } },
+      { name: 'project name', path: projectPath,
+        body: { project: { ...project, name: 'Another project' } } },
+      { name: 'project owner', path: projectPath,
+        body: { project: { ...project, details: { resourceOwner: 'another-org' } } } },
+      { name: 'owner app', path: `${projectPath}/apps/_search`,
+        body: { result: [{ id: secondaryOwnerApp.id, name: app.name }] } },
+      { name: 'secondary app name', path: `${projectPath}/apps/ci-app`,
+        body: { app: { ...app, name: 'Another app' } } },
+      { name: 'secondary app owner', path: `${projectPath}/apps/ci-app`,
+        body: { app: { ...app, details: { resourceOwner: 'another-org' } } } },
+      { name: 'logout redirects', path: `${projectPath}/apps/ci-app`,
+        body: { app: { ...app, oidcConfig: { ...app.oidcConfig,
+          postLogoutRedirectUris: ['http://127.0.0.1:25206/'] } } } },
+      { name: 'user name', path: `/management/v1/users/${userId}`,
+        body: { user: { ...user, userName: 'another-user' } } },
+      { name: 'user owner', path: `/management/v1/users/${userId}`,
+        body: { user: { ...user, details: { resourceOwner: 'another-org' } } } },
+    ];
+    for (const refusal of cases) {
+      const refused = { ...state, responses: { [refusal.path]: refusal.body } };
+      await writeFile(providerFile, JSON.stringify(refused));
+      await assert.rejects(fixture.setup, undefined, refusal.name);
+      assert.deepEqual(await fixture.readState(), refused, refusal.name);
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+test('secondary setup refuses foreign identities and logout redirects without provider changes',
+  secondaryResourceGuards);

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createZitadelFixture, secondaryOwnerApp } from './test/zitadel-fixture.ts';
 
 async function credentialFailure() {
@@ -158,3 +160,104 @@ test('provider identifiers cannot expose private text or inject log lines in dia
   untrustedEndpoint);
 test('non-JSON responses and untrusted error codes retain only the safe HTTP status',
   unreadableProviderCode);
+
+async function linkedReference(targetSlot: string, explicit: boolean) {
+  const initial = { apps: { [secondaryOwnerApp.id]: secondaryOwnerApp }, users: {} };
+  const fixture = await createZitadelFixture(initial);
+  const credentials = `${fixture.home}/.config/opencrane/dev-stack-ci-1`;
+  const targetDirectory = `${fixture.home}/.config/opencrane/${targetSlot}`;
+  const target = `${targetDirectory}/zitadel-key-file`;
+  const original = `${fixture.home}/shared-key`;
+  const env: NodeJS.ProcessEnv = { ...fixture.env };
+  if (!explicit) delete env['ZITADEL_KEY_FILE'];
+  async function setup() {
+    return fixture.setup(env);
+  }
+  try {
+    await mkdir(credentials, { recursive: true });
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(original, 'fake-private-credential');
+    await writeFile(target, original);
+    await symlink(target, `${credentials}/zitadel-key-file`);
+    await assert.rejects(setup);
+    assert.equal(await readFile(target, 'utf8'), original);
+    assert.deepEqual(await fixture.readState(), initial);
+    if (!explicit) {
+      await assert.rejects(stat(`${fixture.env.MOCK_ZITADEL_FILE}.requests`), { code: 'ENOENT' });
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+
+for (const target of ['dev-stack', 'dev-stack-ci-2']) {
+  for (const explicit of [false, true]) {
+    async function refuseReferenceLink() {
+      await linkedReference(target, explicit);
+    }
+    test(`refuse reference links into ${target}, explicit key ${explicit}`, refuseReferenceLink);
+  }
+}
+
+async function linkedCredentialDirectory() {
+  const fixture = await createZitadelFixture({ apps: {}, users: {} });
+  const parent = `${fixture.home}/.config/opencrane`;
+  const target = `${parent}/dev-stack-ci-2`;
+  const reference = `${target}/zitadel-key-file`;
+  const env: NodeJS.ProcessEnv = { ...fixture.env };
+  delete env['ZITADEL_KEY_FILE'];
+  async function setup() {
+    return fixture.setup(env);
+  }
+  try {
+    await mkdir(target, { recursive: true });
+    await writeFile(reference, fixture.env.ZITADEL_KEY_FILE);
+    await symlink(target, `${parent}/dev-stack-ci-1`);
+    await assert.rejects(setup, /Zitadel credentials unavailable/u);
+    assert.equal(await readFile(reference, 'utf8'), fixture.env.ZITADEL_KEY_FILE);
+    await assert.rejects(stat(`${fixture.env.MOCK_ZITADEL_FILE}.requests`), { code: 'ENOENT' });
+  } finally {
+    await fixture.close();
+  }
+}
+test('refuse a credential directory linked to another slot before any provider request',
+  linkedCredentialDirectory);
+
+async function interruptedErrorBody() {
+  const privateCause = 'private interrupted body fake-private-credential';
+  const fixture = await createZitadelFixture({ failure: { status: 502, bodyError: privateCause } });
+  const exec = promisify(execFile);
+  const program = `
+    import assert from 'node:assert/strict';
+    import { zitadelApi, ZitadelSetupError } from './infra/dev-stack/zitadel-api.ts';
+    async function request() {
+      return zitadelApi('/management/v1/orgs/me', '393311211338337681');
+    }
+    function checkError(error) {
+      assert.ok(error instanceof ZitadelSetupError);
+      assert.ok(error.cause instanceof Error, 'Preserve the interrupted response body cause');
+      assert.equal(error.cause.message, 'private interrupted body fake-private-credential');
+      assert.equal(error.message,
+        'Zitadel GET /management/v1/orgs/me returned HTTP 502; code unavailable');
+      return true;
+    }
+    await assert.rejects(request, checkError);
+  `;
+  function checkCli(error: unknown) {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /returned HTTP 502; code unavailable/u);
+    assert.ok(!error.message.includes('private interrupted body'));
+    assert.ok(!error.message.includes('fake-private-credential'));
+    return true;
+  }
+  try {
+    await assert.rejects(fixture.setup, checkCli);
+    await exec(process.execPath, ['--experimental-strip-types', '--import',
+      './infra/dev-stack/test/zitadel-provider.mjs', '--input-type=module', '--eval', program],
+    { env: fixture.env });
+  } finally {
+    await fixture.close();
+  }
+}
+test('an interrupted HTTP error body keeps its private cause and safe CLI message',
+  interruptedErrorBody);
