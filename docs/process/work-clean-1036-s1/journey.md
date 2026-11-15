@@ -1,18 +1,20 @@
 # Fresh core journey and checker evidence
 
-Date: 15 November 2026  
-Source head: `04bf6fe17ebd95048bc9a8e082d118c765a40eb8`  
-Stack: fresh secondary stack 1, claimed with `infra/dev-stack/claim.sh` and started
-with `infra/dev-stack/up.sh --fresh` using the local model stub.
+Date: 15 November 2026
 
-Startup began at `807de07f920eb6135bc31ce7d002ad1f37f0f95f`. Only checker helpers
-and review instructions changed during the run. The product source stayed identical
-throughout; the final diff against origin/main contains zero changed lines under
-`apps/` and `libs/`.
+Source head: `7b82633924e3ceca83376617be703176a612809a`
+
+Stack: fresh secondary stack 1, claimed with `infra/dev-stack/claim.sh` and started
+with `infra/dev-stack/up.sh --fresh` using the local model stub. The load was 4.64
+when the stack was claimed and rose to 13.70 during the journey.
+
+Startup began at the source head above. The product source stayed identical
+throughout; the diff against origin/main contains zero changed lines under `apps/`
+and `libs/`.
 
 ## Journey
 
-Journey on a fresh dev stack: PASS (core journey; no product change).
+Journey on a fresh dev stack at the rebased source head: PASS (core journey; no product change).
 
 - PASS: Existing members and assistants retained model grant history, including revocations.
 - PASS: Owner and member signed in through Zitadel and PKCE at 390 px; member sign-in
@@ -22,13 +24,15 @@ Journey on a fresh dev stack: PASS (core journey; no product change).
 - PASS: Member join reached PostgreSQL, OpenFGA and the live WebSocket. New member
   and assistant model grants reached OpenFGA before chat.
 - PASS: Browser chat at 390 px and 1280 px streamed a stub reply, reloaded without
-  duplicates and retained partial text after Stop and reload.
+  duplicates and retained partial text after Stop and reload. First token took
+  8,012 ms at 390 px and 2,913 ms at 1280 px; completion took 8,878 ms and
+  4,616 ms respectively.
 - PASS: Uploads at both widths passed scanning, bounded turn context, previews and
   reload without duplicate files. EICAR, type and size refusals passed. The runner
   reported one upload retry and zero preview retries at each width.
 - PASS: Live view at both widths refused access without a grant. A grant enabled
   the real desktop and stub turn; revocation cleared pixels and audited Stop.
-  Revocation took 414 ms at 390 px and 188 ms at 1280 px.
+  Revocation took 249 ms at 390 px and 358 ms at 1280 px.
 - PASS: Joined-member HTTP chat streamed through the projection and browser reconnect
   produced no duplicate reply. PDF scanning, bridge and MarkItDown supplied the
   expected text to the stub; EICAR was refused.
@@ -61,30 +65,29 @@ Both images were copied before teardown and visually inspected for private detai
 - PASS: Test-first refusal of a new whole-stream read, followed by parser, scope,
   exact-count and Git-base comparison tests. The first test failed before the
   script existed; the additional cases failed before baseline support was added.
-- PASS: Final focused checker tests passed twice, 22/22 each, in 22.70 and
-  27.30 seconds after the helper split. Tests and gates ran under `nice -n 10`.
+- PARTIAL: A direct Node invocation failed before assertions because this test
+  requires the Vitest runner.
+- PASS: The rebased focused checker test then passed once, 22/22, in 32.08 seconds.
+  Tests and CPU-heavy checks ran under `nice -n 10`.
 - PASS: The repository scan recorded 312 known reads and 5 rebuild reads across
   exactly three files with reasons. Its final measured elapsed time was 2.66 seconds.
+- PASS: The earlier branch run recorded dependency direction, offline links, fixture
+  boundaries, package licences, CI grouping (52 tests) and shard sequencing (3 tests).
+  The new file is selected by `scripts/*.test.mjs` and recorded in the shard timing registry.
+- FAIL: `nice -n 10 npm run lint` stopped during repository-wide ESLint after
+  Node reached its 4 GB heap limit. The new script and test passed changed-file
+  ESLint. The remaining lint stages were not run by this command.
 - PASS: Typecheck, event-catalogue agreement (174 types), changelog, Markdown,
-  changed-file ESLint, dependency direction, Knip, offline links, fixture boundaries
-  and package licence checks.
-- PASS: CI grouping checks, 52 tests; shard sequencer checks, 3 tests. The new file
-  is selected by `scripts/*.test.mjs` and recorded in the shard timing registry.
-- FAIL: `npm run lint`, with ESLint temporarily scoped to the two changed code
-  files to follow the local lint-scope rule. Its original package script was
-  restored afterwards. The README check refuses three existing entries:
-  `infra/clamav/README.md` has 154 lines with no record;
-  `infra/dev-stack/README.md` has 218 against 213 recorded;
-  `infra/package/README.md` has 341 against 335 recorded. These files and their
-  baseline are unchanged from origin/main. Later lint stages passed separately.
+  Knip and changed-file ESLint.
 - NOT RUN: Full root suite, separate web tests, crapper, dryer and mutator.
   The three clean-code tools are not enabled in this repository.
 
 ## Cleanup
 
 PASS: Stack 1 was stopped and released with `infra/dev-stack/down.sh` after both
-screenshots were copied. The runner's updates to older evidence files were restored.
-The one-minute host load was checked before startup and teardown; queued final
-checks waited while it exceeded 10. The worktree is retained for review.
+screenshots were copied. Generated updates to unrelated evidence files were
+restored. The one-minute load was checked before startup; it was below 10 when
+the stack was claimed. The worktree is retained for review.
 
-PASS: Final public-privacy and secret scans were clean. Stack status reported `free`.
+PASS: Stack status reported `free` after teardown. Public-privacy and secret scans
+are run after the final evidence edits and before the push.
