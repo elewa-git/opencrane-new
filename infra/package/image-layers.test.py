@@ -170,6 +170,13 @@ class ImageLayerTests(unittest.TestCase):
         result = subprocess.run(command, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, "Packaged scanner imports are incomplete")
 
+    def test_worker_scanner_import_is_packaged(self):
+        command = ["docker", "run", "--rm", "--network", "none", "--read-only",
+                   self.inspection["Id"], "node", "--experimental-strip-types",
+                   "--input-type=module", "-e", "await import('./infra/clamav/image-worker.mjs')"]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, "Packaged projection worker imports are incomplete")
+
     def test_real_bootstrap_entry_point_with_synthetic_services(self):
         image = self.inspection["Id"]
         fixture = Path("infra/package/bootstrap-runtime-fixture.mjs").resolve()
