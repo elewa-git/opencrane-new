@@ -66,3 +66,46 @@ it('publishes three checked parts from one stopped point and lists exactly those
     }
     expect(test.observations).toEqual(['verify', 'events', 'database', 'files', 'verify']);
   });
+
+for (const part of ['events', 'database', 'files'] as const) {
+  it(`fails the whole run visibly when ${part} fails and restores admission`,
+    async function refusesFailedPart() {
+      const test = await fixture();
+      async function broken() { throw new Error('private-credential-canary'); }
+      test.source.parts[part] = broken;
+      await expect(captureScheduledBackup(test.options, test.source))
+        .rejects.toThrow('Scheduled backup failed');
+      expect(test.wasResumed()).toBe(true);
+      expect(await listBackups(test.directory)).toEqual([]);
+      expect(await readdir(test.directory)).toEqual([]);
+    });
+}
+
+it('refuses a changed position rather than publishing a mixed backup', async function movedPoint() {
+  const test = await fixture();
+  let reads = 0;
+  async function verify() {
+    reads++;
+    if (reads === 2) return { ...test.point, sequence: 43 };
+    return test.point;
+  }
+  test.source.verify = verify;
+  await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
+  expect(await listBackups(test.directory)).toEqual([]);
+  expect(test.wasResumed()).toBe(true);
+});
+
+it('does not report corrupted saved bytes as a complete backup', async function corruptPart() {
+  const test = await fixture();
+  await captureScheduledBackup(test.options, test.source);
+  await writeFile(join(test.directory, 'backup-one', 'files'), 'changed bytes');
+  await expect(listBackups(test.directory)).rejects.toThrow('Backup bytes differ');
+});
+
+it('leaves an interrupted capture alone and refuses overlapping work', async function overlap() {
+  const test = await fixture();
+  await writeFile(join(test.directory, '.lock'), 'interrupted');
+  await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
+  expect(await listBackups(test.directory)).toEqual([]);
+  expect(await readFile(join(test.directory, '.lock'), 'utf8')).toBe('interrupted');
+});
