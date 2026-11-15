@@ -442,3 +442,56 @@ async function refreshRetriesAssistantChoices() {
 }
 it('refreshing My tools retries failed assistant choices in an existing profile row',
   refreshRetriesAssistantChoices);
+
+async function consentDoesNotRefreshPausedProfiles() {
+  let selectionRevision = 8;
+  let allowedAssistantIds = ['own'];
+  let profileReads = 0;
+  const expectedRevisions: number[] = [];
+  function serve(input: string | URL | Request, options?: RequestInit) {
+    const path = input instanceof Request ? input.url : input.toString();
+    if (path.includes('/profiles?')) {
+      profileReads += 1;
+      // Pause the inventory projection after its initial page; later reads would fail.
+      if (profileReads > 1) return response({}, 503);
+      return response(page([saved]));
+    }
+    if (options?.method === 'POST') {
+      const command = JSON.parse(String(options.body)) as {
+        expectedSequence: number; allowedAssistantIds: string[]; changeRef: string };
+      expectedRevisions.push(command.expectedSequence);
+      allowedAssistantIds = command.allowedAssistantIds;
+      selectionRevision += 1;
+      return response({ changeRef: command.changeRef, sequence: selectionRevision });
+    }
+    if (path === '/api/chat') return response({ memberId: 'alice', assistantId: 'own' });
+    if (path === '/api/assistants') return response({ rows: [] });
+    return response({ serverId: 'odoo', connectionId: 'installed', identityTool: 'who_am_i',
+      selectionRevision, selectedProfileId: 'alex', allowedAssistantIds });
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+  const { fixture, element } = view();
+  function loaded() {
+    fixture.detectChanges();
+    expect(element.querySelector('input[type=checkbox]')).not.toBeNull();
+  }
+  await vi.waitFor(loaded);
+  const checkbox = element.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+  for (const checked of [false, true]) {
+    checkbox.click();
+    function savedChoice() {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Assistant choices saved');
+      expect(checkbox.checked).toBe(checked);
+      expect(checkbox.matches(':disabled')).toBe(false);
+      expect(element.textContent).not.toContain('last loaded');
+    }
+    await vi.waitFor(savedChoice);
+  }
+  expect(expectedRevisions).toEqual([8, 9]);
+  expect(profileReads).toBe(1);
+  fixture.destroy();
+  vi.restoreAllMocks();
+}
+it('keeps confirmed consent usable without reading a paused profile projection',
+  consentDoesNotRefreshPausedProfiles);
