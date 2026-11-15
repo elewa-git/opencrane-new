@@ -185,7 +185,12 @@ prepares its survey and memory directories automatically. On repeat starts, the 
 checks changes to background work before starting apps. It applies changes with no matching
 events or only new event types while services are stopped. Changes that remove types with
 history need a manual upgrade. The stack reports ready only after the dispatcher starts
-reading events. Detailed recovery steps, real-provider choices and daily timer settings
+reading events. For packaged checks, preparation fetches the scanner image and
+approval from the successful GitHub packaging job for the current source commit. The
+[package guide](../package/README.robot.md#packaged-upload-services) describes the
+image review and publication steps.
+
+Detailed recovery steps, real-provider choices and daily timer settings
 are in the operator notes.
 The server reads the same private readiness marker. Chat can explain a long wait
 without showing members the operator's maintenance steps.

@@ -33,7 +33,7 @@ python3 infra/package/publish-image.py "$package_directory/scanner.tar" \
   http://127.0.0.1:5000 "$scanner_image"
 docker pull "$scanner_image"
 docker image save -o "$package_directory/scanner-check.tar" "$scanner_image"
-scripts/fetch-hosted-syft.sh
+sh scripts/fetch-hosted-syft.sh
 .tools/syft scan "docker:$scanner_image" -o "syft-json=$package_directory/scanner-syft.json"
 python3 infra/clamav/check-package.py "$package_directory/scanner-check.tar" \
   "$package_directory/scanner-syft.json"

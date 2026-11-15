@@ -24,6 +24,7 @@ flowchart LR
   stack -->|checks ownership, nodes, certificates and backup token references| package
   package -->|uses local cluster| devbox
   package -->|starts services and fake model; checks captured and restored bytes| apps["apps<br/>product services and replay"]
+  packaging["GitHub packaging job"] -->|supplies scanner approval and image| package
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -39,7 +40,9 @@ and a private ClamAV scanner. Storage credentials rotate, and readiness checks
 their expiry. The server checks attachments before saving them,
 then uses the existing chat path to answer questions about clean files.
 Infected files are refused. Uploads stay unavailable when scanning cannot be proved
-or its last verified update check is more than 24 hours old.
+or its last verified update check is more than 24 hours old. A scheduled GitHub job
+verifies and packages fresh definitions. Preparation fetches its approved output
+for the current source commit; a locally built candidate cannot grant approval.
 
 The dispatcher keeps its jobs in a separate database. It uses the server's read-only
 content connection to coordinate gateway configuration changes with delivery.

@@ -13,14 +13,14 @@ function mockProcesses() {
 const revision = 'a'.repeat(40);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
 
-function runRecord() {
-  return { id: 42, status: 'completed', conclusion: 'success', event: 'push',
-    path: '.github/workflows/scanner-package.yml', head_branch: 'work/pilot-15-s1',
-    head_sha: revision, repository: { full_name: 'elewa-git/opencrane-new' },
-    head_repository: { full_name: 'elewa-git/opencrane-new' } };
+async function approvalFixture() {
+  const directory = await mkdtemp(join(tmpdir(), 'scanner-approval-fixture-'));
+  const image = `k3d-ocn-registry:5000/opencrane/scanner@${imageDigest}`;
+  const fixture = await scannerApprovalFixture(directory, { images: { scanner: image } });
+  return { directory, image, ...fixture };
 }
 
-function setup(run = runRecord(), files = {}) {
+function setup(run, files) {
   function execute(program, args) {
     if (program === 'git') {
       if (args.includes('HEAD')) return revision + '\n';
@@ -46,16 +46,19 @@ async function loadApproval() {
 for (const field of ['status', 'conclusion', 'event', 'path', 'head_branch', 'head_sha',
   'repository', 'head_repository']) {
   async function refuseUntrustedRun() {
-    const run = runRecord();
-    run[field] = 'untrusted';
-    setup(run);
-    await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
+    const fixture = await approvalFixture();
+    try {
+      fixture.run[field] = 'untrusted';
+      setup(fixture.run, fixture.files);
+      await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
+    } finally {
+      await rm(fixture.directory, { recursive: true, force: true });
+    }
   }
   test(`refuses a forged or wrong CI ${field}`, refuseUntrustedRun);
 }
 
 async function noLocalApproval() {
-  setup();
   vi.mocked(execFileSync).mockImplementation(noJob);
   function noJob(program, args) {
     if (program === 'git') return args.includes('HEAD') ? revision : 'work/pilot-15-s1';

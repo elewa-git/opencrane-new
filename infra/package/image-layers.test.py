@@ -150,7 +150,7 @@ class ImageLayerTests(unittest.TestCase):
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
                    "secondary-models.ts", "zitadel.json"}
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
-                         "scanner.mjs", "object-credentials.mjs"}
+                         "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
             if path.startswith("app/infra/package/"):
@@ -160,8 +160,10 @@ class ImageLayerTests(unittest.TestCase):
             self.assertFalse(path.startswith(("app/.keys/", "app/.tools/", "app/.git/")))
 
     def test_scanner_imports_and_storage_readiness_entry_point_are_packaged(self):
-        self.assertIn("app/infra/clamav/database.mjs", self.paths)
-        self.assertIn("app/infra/package/object-lease-ready.mjs", self.paths)
+        required = ("app/infra/clamav/database.mjs", "app/infra/package/object-lease-ready.mjs")
+        for path in required:
+            with self.subTest(path=path):
+                self.assertTrue(path in self.paths, f"Missing packaged runtime helper: {path}")
         command = ["docker", "run", "--rm", "--network", "none", "--read-only",
                    self.inspection["Id"], "node", "--input-type=module", "-e",
                    "await import('./infra/clamav/packaged.mjs')"]

@@ -38,6 +38,7 @@ infra/clamav/*
 !infra/clamav/service.mjs
 !infra/clamav/release.mjs
 !infra/clamav/refresh.mjs
+!infra/clamav/database.mjs
 infra/devbox
 infra/nats
 infra/package/*
@@ -48,6 +49,7 @@ infra/package/*
 !infra/package/kubeconfig.mjs
 !infra/package/scanner.mjs
 !infra/package/object-credentials.mjs
+!infra/package/object-lease-ready.mjs
 **/test
 **/tests
 **/*.spec.*

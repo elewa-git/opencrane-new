@@ -76,6 +76,7 @@ type PackageOwner = {
   installId?: string;
 };
 type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
+  images: Record<string, string>;
   natsCluster?: { enabled: boolean };
 };
 type PackageReview = {
