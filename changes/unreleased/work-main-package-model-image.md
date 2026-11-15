@@ -1,0 +1,1 @@
+Packaged local installations include the fake model’s connection bridge and tool-rehearsal helper, so its launcher can load. Source and saved-image checks follow the model’s relative imports and reject missing modules.

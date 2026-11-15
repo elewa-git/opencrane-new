@@ -23,7 +23,7 @@ flowchart LR
   infra --> devbox["infra/devbox<br/>machine setup"]
   stack -->|checks ownership, nodes, certificates and backup token references| package
   package -->|uses local cluster| devbox
-  package -->|starts services and checks capture and restored file and home bytes| apps["apps<br/>product services and replay"]
+  package -->|starts services and fake model; checks captured and restored bytes| apps["apps<br/>product services and replay"]
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -31,7 +31,8 @@ flowchart LR
 ```
 
 The install runs a fake AI model for testing and creates its first owner through
-saved [events](../../GLOSSARY.md#event). Workers start a computer when the owner
+saved [events](../../GLOSSARY.md#event). It reuses the spare stack’s model launcher
+and includes its imported helpers in the image. Workers start a computer when the owner
 first chats. Computers belong to assistants, including shared group assistants,
 and remain the same across chats. File storage and virus scanning are outside this package.
 
@@ -68,7 +69,8 @@ navigation show it, with their usual fallback words when it is empty.
 - Builds the server image with a fixed Codex executable for private memory checks.
 - Includes the image scanner files loaded by the server's image evidence check.
 - Checks that a proposed server and website image matches its source and all shipped layers.
-- Refuses a bootstrap image if its setup code imports a test-only file.
+- Checks that every relative import used by setup and the fake model is in the image.
+- Refuses an image if its runtime code imports a test-only file.
 - Keeps the install in the test space [claimed](../../GLOSSARY.md#claim) by this worktree.
 - Refuses missing private settings and public network access.
 - Renders an optional three-peer event log and prepares its separate private certificates.
@@ -105,7 +107,7 @@ files hidden by later image layers. The build copies the cleaned filesystem into
 one filesystem layer, so removed npm and computer files are absent from the saved image.
 The image also carries the four small helpers used to start and check private
 Codex processes. Its saved layers must contain their exact source and the fixed
-Codex version. The image checks follow every relative setup import and run the setup entry point
+Codex version. The image checks follow every relative setup and model import and run the setup entry point
 with made-up services and settings. This checks that the packaged code loads and
 finishes the fixture; a running installation needs its own checks.
 The image also contains a small Linux helper that protects and measures the memory

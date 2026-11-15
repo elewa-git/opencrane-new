@@ -116,9 +116,9 @@ class ImageLayerTests(unittest.TestCase):
             input=json.dumps(sources), capture_output=True, text=True, timeout=90)
         return result
 
-    def test_bootstrap_runtime_imports_match_source_recursively(self):
+    def test_bootstrap_and_model_runtime_imports_match_source_recursively(self):
         result = self.check_imports(self.sources)
-        self.assertEqual(result.returncode, 0, "Packaged bootstrap imports failed")
+        self.assertEqual(result.returncode, 0, "Packaged bootstrap or model imports failed")
 
     def test_missing_transitive_import_refuses_even_with_bootstrap_present(self):
         required = ("infra/dev-stack/config.ts", "infra/dev-stack/identity.ts",
@@ -130,11 +130,25 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertIn("infra/package/bootstrap.ts", sources)
                 result = self.check_imports(sources)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stderr, "FAIL packaged bootstrap imports\n")
+                self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
+
+    def test_missing_model_import_refuses_even_with_entry_point_present(self):
+        required = ("infra/dev-stack/connection-custody-bridge.ts",
+                    "infra/dev-stack/model-stub.ts", "infra/dev-stack/stage-b-model.ts",
+                    "apps/server/src/models-main.ts")
+        for module in required:
+            with self.subTest(module=module):
+                sources = dict(self.sources)
+                sources.pop(module, None)
+                self.assertIn("infra/dev-stack/secondary-models.ts", sources)
+                result = self.check_imports(sources)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
-                   "model-stub.ts", "secondary-models.ts", "zitadel.json"}
+                   "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
+                   "secondary-models.ts", "zitadel.json"}
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
