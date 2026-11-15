@@ -279,3 +279,21 @@ function differentApprovedScannerHashRefuses() {
 }
 test('preflight refuses a different well-formed approved scanner hash',
   differentApprovedScannerHashRefuses);
+
+function localScannerApprovalRefuses() {
+  const { directory, values, review } = fixture();
+  try {
+    values.images.scanner = `registry.local/scanner@${digest}`;
+    review.images.scanner = values.images.scanner;
+    values.scanner = { approvedSha: 'c'.repeat(64) };
+    review.scanner = { ...values.scanner };
+    const result = check(values, review, directory);
+    assert.notEqual(result.status, 0,
+      'Matching builder-written review and values must never approve a scanner');
+    assert.match(result.stderr, /Scanner CI approval refused/u);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}
+test('preflight refuses builder-written scanner approval without a CI output',
+  localScannerApprovalRefuses);
