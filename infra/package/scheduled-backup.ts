@@ -148,6 +148,7 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
     if (!resumed) throw error;
     // Dependency output may contain credentials or file content. Keep only the failed stage.
     const cause = { kind: 'scheduled_backup', reason: stage };
+    // eslint-disable-next-line preserve-caught-error -- Withhold credential-bearing dependency output.
     throw new Error('Scheduled backup failed', { cause });
   } finally {
     try {

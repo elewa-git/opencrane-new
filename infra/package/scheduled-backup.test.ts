@@ -7,6 +7,14 @@ import { captureScheduledBackup, listBackups, showBackup } from './scheduled-bac
 import type { BackupPoint } from './scheduled-backup.ts';
 
 const directories: string[] = [];
+type MaintenanceHandle = Pick<FileHandle, 'writeFile' | 'sync'>;
+
+function isMaintenanceHandle(value: unknown): value is MaintenanceHandle {
+  return value !== null && typeof value === 'object' &&
+    'writeFile' in value && typeof value.writeFile === 'function' &&
+    'sync' in value && typeof value.sync === 'function';
+}
+
 afterEach(async function clean() {
   for (const directory of directories) await rm(directory, { recursive: true, force: true });
 });
@@ -149,24 +157,28 @@ for (const failure of ['write', 'sync'] as const) {
       async function maintenanceStorageFailure() {
         const test = await fixture();
         const probe = await open(join(test.directory, 'probe'), 'wx');
-        const prototype = Object.getPrototypeOf(probe) as FileHandle;
+        const prototype: unknown = Object.getPrototypeOf(probe);
+        if (!isMaintenanceHandle(prototype)) throw new Error('Missing file handle methods');
         await probe.close();
         await rm(join(test.directory, 'probe'));
-        const originalWrite = prototype.writeFile;
-        const originalSync = prototype.sync;
+        const originalWrite: unknown = Reflect.get(prototype, 'writeFile');
+        const originalSync: unknown = Reflect.get(prototype, 'sync');
+        if (typeof originalWrite !== 'function' || typeof originalSync !== 'function') {
+          throw new Error('Missing file handle implementations');
+        }
         let markerAttempted = false;
         async function writeMarker(this: FileHandle, ...args: Parameters<FileHandle['writeFile']>) {
           if (args[0] === '\nresume_failed\n') {
             markerAttempted = true;
             if (failure === 'write') throw new Error('private-volume-full-canary');
           }
-          return originalWrite.apply(this, args);
+          await Reflect.apply(originalWrite, this, args);
         }
-        function syncMarker(this: FileHandle) {
+        async function syncMarker(this: FileHandle) {
           if (markerAttempted && failure === 'sync') {
-            return Promise.reject(new Error('private-volume-sync-canary'));
+            throw new Error('private-volume-sync-canary');
           }
-          return originalSync.call(this);
+          await Reflect.apply(originalSync, this, []);
         }
         function restartFailure() {
           return Promise.reject(new Error('private-scale-failure-canary'));
@@ -188,9 +200,10 @@ for (const failure of ['write', 'sync'] as const) {
           expect(await readFile(join(test.directory, '.backup-one', 'events'), 'utf8'))
             .toBe('events at sequence 42');
           expect(error).toBeInstanceOf(Error);
-          expect((error as Error).message)
+          if (!(error instanceof Error)) throw new Error('Missing maintenance failure');
+          expect(error.message)
             .toBe('Maintenance remains active; services could not restart');
-          expect((error as Error).cause)
+          expect(error.cause)
             .toEqual({ kind: 'scheduled_backup', reason: 'resume_marker' });
           await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
         } finally {
