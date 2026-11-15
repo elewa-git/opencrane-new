@@ -25,6 +25,7 @@ public-domain notices are accepted only as DFSG-free parts bundled in ClamAV.
 
 Both Debian source entries in the inspected image name only `Components: main`;
 there is no `contrib` or `non-free` source. System libraries and tools belong to
-that DFSG-free OS layer. ClamAV's signature databases are the pinned operational
-data, main 63 / daily 28046 / bytecode 339. FreshClam writes a separate dev-box
-candidate and never changes those deployed databases at startup.
+that DFSG-free OS layer. ClamAV's signature databases are operational data. The
+packaging job records their current versions and hashes in its approved manifest.
+FreshClam prepares a separate candidate; the deployed scanner never updates its
+databases at startup.
