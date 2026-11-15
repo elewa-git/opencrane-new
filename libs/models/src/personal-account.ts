@@ -8,6 +8,21 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 
 type Selection = Extract<z.infer<typeof connectionSelectedDataSchema>, { action: 'select' }>;
 
+export interface PersonalToolContext {
+  requesterId: string;
+  serverId: string;
+  connectionId: string;
+  profileId: string;
+  profileRevision: number;
+  selectionRevision: number;
+  generation: number;
+  policyRevision: number;
+  accountDigest: string;
+  scopeDigest: string;
+  accountLabel: string;
+  expiresAt: number;
+}
+
 /** Share verified account eligibility across selection, turn admission and per-call release. */
 export async function selectedPersonalAccount(rows: StoredEvent[], serverRows: StoredEvent[],
   selection: Selection, loadConfiguration?: OAuthConfigurationLoader, toolName?: string) {

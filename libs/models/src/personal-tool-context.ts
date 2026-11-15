@@ -7,7 +7,8 @@ import type { EventStore } from '@opencrane/event-store';
 import { history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { readConnectionSelection } from './connection-selection.ts';
-import { selectedPersonalAccount } from './personal-account.ts';
+import { selectedPersonalAccount, type PersonalToolContext } from './personal-account.ts';
+export type { PersonalToolContext } from './personal-account.ts';
 import { assistantMayUsePersonalKey } from './personal-key-consent.ts';
 import { connectionAccount } from './connection-account.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
@@ -28,7 +29,8 @@ export interface PersonalToolRequest {
 }
 
 export async function personalToolContext(store: EventStore, binding: Binding,
-  requesterId: string, serverId: string, request: PersonalToolRequest) {
+  requesterId: string, serverId: string,
+  request: PersonalToolRequest): Promise<PersonalToolContext> {
   const { assistantId, toolName, loadConfiguration, boundSelection } = request;
   const readOptions = { loadConfiguration, toolName };
   const selected = await readConnectionSelection(store, binding, requesterId, serverId, readOptions);
@@ -74,8 +76,6 @@ export async function personalToolContext(store: EventStore, binding: Binding,
     expiresAt: oauth.expiresAt,
   };
 }
-
-export type PersonalToolContext = Awaited<ReturnType<typeof personalToolContext>>;
 
 export interface PersonalCallRequest {
   assistantId: string;
