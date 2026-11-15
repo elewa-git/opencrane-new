@@ -247,8 +247,11 @@ async function interruptedErrorBody() {
   function checkCli(error: unknown) {
     assert.ok(error instanceof Error);
     assert.match(error.message, /returned HTTP 502; code unavailable/u);
-    assert.ok(!error.message.includes('private interrupted body'));
-    assert.ok(!error.message.includes('fake-private-credential'));
+    assert.ok('stdout' in error && typeof error.stdout === 'string');
+    assert.ok('stderr' in error && typeof error.stderr === 'string');
+    const output = error.stdout + error.stderr;
+    assert.ok(!output.includes('private interrupted body'));
+    assert.ok(!output.includes('fake-private-credential'));
     return true;
   }
   try {
