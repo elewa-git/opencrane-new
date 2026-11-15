@@ -1,0 +1,87 @@
+{
+  "step": "switch own assistant off at 390px",
+  "name": "Error",
+  "recentResponses": [
+    {
+      "path": "/api/conversations/11506241-a2c4-40f7-9942-7abc1dc5fb8a/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/needs",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/11506241-a2c4-40f7-9942-7abc1dc5fb8a/messages",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/11506241-a2c4-40f7-9942-7abc1dc5fb8a/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/a4904e59-8184-40ab-9364-1dc3085b10e7/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/a4904e59-8184-40ab-9364-1dc3085b10e7/messages",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/a4904e59-8184-40ab-9364-1dc3085b10e7/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/a4904e59-8184-40ab-9364-1dc3085b10e7/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/profiles",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/connection",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/connection",
+      "status": 200
+    },
+    {
+      "path": "/api/assistants",
+      "status": 200
+    },
+    {
+      "path": "/api/assistants",
+      "status": 200
+    }
+  ],
+  "verdict": "FAIL"
+}

@@ -1,0 +1,87 @@
+{
+  "step": "check release and dispatch records",
+  "name": "Error",
+  "recentResponses": [
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/connection",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/connection",
+      "status": 200
+    },
+    {
+      "path": "/api/assistants",
+      "status": 200
+    },
+    {
+      "path": "/api/assistants",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/selection",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/profiles",
+      "status": 503
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/needs",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/3b489c89-76f0-47ca-ade1-519f2c087ce8/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/3b489c89-76f0-47ca-ade1-519f2c087ce8/messages",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/e5908d39-be7b-49ba-b100-682daa3e31e6/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/e5908d39-be7b-49ba-b100-682daa3e31e6/messages",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/e5908d39-be7b-49ba-b100-682daa3e31e6/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/e5908d39-be7b-49ba-b100-682daa3e31e6/approvals",
+      "status": 200
+    }
+  ],
+  "verdict": "FAIL"
+}
