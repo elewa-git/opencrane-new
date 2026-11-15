@@ -88,7 +88,8 @@ function readSections(content) {
     } else {
       const heading = /^ {0,3}##[ \t]+(.+?)\s*#*\s*$/.exec(line);
       if (heading) {
-        sections.push({ heading: heading[1], lines: [] });
+        const section = { heading: heading[1], lines: [] };
+        sections.push(section);
         continue;
       }
     }
