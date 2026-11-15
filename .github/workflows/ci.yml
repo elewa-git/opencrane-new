@@ -196,6 +196,8 @@ jobs:
 
       - name: Check documentation
         if: needs.select.outputs.mode == 'docs'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           nice -n 10 npm run lint:docs
           nice -n 10 npm run lint:readmes

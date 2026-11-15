@@ -101,8 +101,9 @@ function documentationCommands() {
   const workflow = readFileSync(path, 'utf8');
   const stepHeader = '- name: Check documentation\\n';
   const condition = " +if: needs\\.select\\.outputs\\.mode == 'docs'\\n";
+  const environment = '(?: +env:\\n(?: +.*\\n)+)?';
   const commandBlock = ' +run: \\|\\n((?:          .*\\n)+)';
-  const docsStep = new RegExp(stepHeader + condition + commandBlock, 'u');
+  const docsStep = new RegExp(stepHeader + condition + environment + commandBlock, 'u');
   const match = workflow.match(docsStep);
   assert.ok(match, 'The documentation checks must run when CI selects docs.');
   return match[1];
@@ -128,7 +129,9 @@ if (!otherChecks.includes(script)) throw new Error('Unexpected documentation che
     const executableOptions = { mode: 0o755 };
     mkdirSync(join(directory, 'bin'));
     mkdirSync(join(directory, 'libs/example'), directoryOptions);
+    mkdirSync(join(directory, 'scripts'), directoryOptions);
     writeFileSync(join(directory, 'bin/npm'), npmFixture, executableOptions);
+    writeFileSync(join(directory, 'scripts/readme-baseline.json'), '[]\n');
     writeFileSync(join(directory, 'libs/example/README.md'), '# Example\n\nAdded in #123.\n');
     execFileSync('git', ['init', '--quiet'], options);
     execFileSync('git', ['add', 'libs'], options);

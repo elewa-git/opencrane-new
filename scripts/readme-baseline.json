@@ -1,0 +1,134 @@
+[
+  {
+    "file": "apps/computer/README.md",
+    "rule": "opening"
+  },
+  {
+    "file": "apps/computer/README.md",
+    "rule": "length",
+    "count": 235
+  },
+  {
+    "file": "apps/computer/README.robot.md",
+    "rule": "robot-length",
+    "count": 2049
+  },
+  {
+    "file": "apps/odoo-mcp/README.md",
+    "rule": "opening"
+  },
+  {
+    "file": "apps/ops/README.md",
+    "rule": "opening"
+  },
+  {
+    "file": "apps/ops/README.md",
+    "rule": "length",
+    "count": 275
+  },
+  {
+    "file": "apps/server/README.md",
+    "rule": "headings"
+  },
+  {
+    "file": "apps/server/README.md",
+    "rule": "summary",
+    "count": 212
+  },
+  {
+    "file": "apps/server/README.md",
+    "rule": "length",
+    "count": 807
+  },
+  {
+    "file": "apps/server/README.robot.md",
+    "rule": "robot-length",
+    "count": 7454
+  },
+  {
+    "file": "apps/web/README.md",
+    "rule": "headings"
+  },
+  {
+    "file": "apps/web/README.md",
+    "rule": "length",
+    "count": 198
+  },
+  {
+    "file": "apps/web/README.robot.md",
+    "rule": "robot-length",
+    "count": 1603
+  },
+  {
+    "file": "infra/dev-stack/README.md",
+    "rule": "length",
+    "count": 213
+  },
+  {
+    "file": "infra/dev-stack/README.robot.md",
+    "rule": "robot-length",
+    "count": 2467
+  },
+  {
+    "file": "infra/package/README.md",
+    "rule": "length",
+    "count": 335
+  },
+  {
+    "file": "infra/package/README.robot.md",
+    "rule": "robot-length",
+    "count": 1792
+  },
+  {
+    "file": "libs/event-store/README.md",
+    "rule": "opening"
+  },
+  {
+    "file": "libs/events/README.md",
+    "rule": "summary",
+    "count": 54
+  },
+  {
+    "file": "libs/events/README.md",
+    "rule": "length",
+    "count": 266
+  },
+  {
+    "file": "libs/handlers/README.md",
+    "rule": "opening"
+  },
+  {
+    "file": "libs/models/README.md",
+    "rule": "opening"
+  },
+  {
+    "file": "libs/models/README.md",
+    "rule": "summary",
+    "count": 98
+  },
+  {
+    "file": "libs/models/README.md",
+    "rule": "length",
+    "count": 904
+  },
+  {
+    "file": "libs/models/README.robot.md",
+    "rule": "robot-length",
+    "count": 5189
+  },
+  {
+    "file": "libs/projections/README.md",
+    "rule": "summary",
+    "count": 48
+  },
+  {
+    "file": "libs/projections/README.md",
+    "rule": "length",
+    "count": 384
+  },
+  {
+    "file": "libs/protocol/README.md",
+    "rule": "summary",
+    "count": 34
+  }
+]
