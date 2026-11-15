@@ -6,6 +6,17 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 
+def inspect_layer(source):
+    found = False
+    with tarfile.open(fileobj=source, mode='r|*') as entries:
+        for entry in entries:
+            found = True
+            name = str(PurePosixPath(entry.name)).lstrip('/')
+            if 'libclamunrar' in name or name.endswith('libclamav_rust.a'):
+                raise ValueError('Forbidden scanner library remains in a layer')
+    return found
+
+
 def check_layers(path):
     populated = 0
     with tarfile.open(path) as archive:
@@ -14,15 +25,8 @@ def check_layers(path):
             raise ValueError('Save exactly one scanner image')
         for layer in images[0]['Layers']:
             with archive.extractfile(layer) as source:
-                with tarfile.open(fileobj=source, mode='r|*') as entries:
-                    found = False
-                    for entry in entries:
-                        found = True
-                        name = str(PurePosixPath(entry.name)).lstrip('/')
-                        if 'libclamunrar' in name or name.endswith('libclamav_rust.a'):
-                            raise ValueError('Forbidden scanner library remains in a layer')
-                    if found:
-                        populated += 1
+                if inspect_layer(source):
+                    populated += 1
     if populated != 1:
         raise ValueError('Scanner filesystem must be flattened')
 

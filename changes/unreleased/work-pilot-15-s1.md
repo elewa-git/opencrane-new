@@ -19,3 +19,8 @@ and packaged projection workers retain their required scanner import.
 
 The fresh packaged browser journey now passes clean upload, an answer about the
 file and visible EICAR refusal at desktop and mobile widths with the stand-in model.
+
+Scanner approval now pins github.com and refuses inherited enterprise settings.
+Safe structured failure reasons distinguish an outage, expired evidence and malformed
+records without exposing CLI diagnostics. Focused refusal tests cover each approval
+and publication binding, forbidden scanner libraries and unflattened image layers.

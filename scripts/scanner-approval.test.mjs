@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { scannerApprovalFixture } from '../infra/clamav/approval-fixture.mjs';
 import { join } from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { createLogger } from '@opencrane/observability';
 
 vi.mock('node:child_process', mockProcesses);
 vi.mock('@opencrane/observability', mockLogging);
@@ -235,7 +234,8 @@ for (const failure of ['outage', 'expired', 'malformed']) {
         vi.setSystemTime(Date.now() + 86400000);
       }
       if (failure === 'malformed') fixture.files['approval.json'] = '{' + canary;
-      await expect(loadApproval()).rejects.toThrow(/^Scanner CI approval refused$/);
+      const result = loadApproval();
+      await expect(result).rejects.toThrow(/^Scanner CI approval refused$/);
       const output = logLines.join('');
       expect(output).not.toContain(canary);
       expect(logLines).toHaveLength(1);
@@ -245,11 +245,22 @@ for (const failure of ['outage', 'expired', 'malformed']) {
       if (failure === 'outage') expectedStage = 'checkout';
       if (failure === 'expired') expectedStage = 'release';
       expect(record.stage).toBe(expectedStage);
-      expect(vi.mocked(createLogger)).toHaveBeenCalledWith('scanner-approval');
+      await expect(result).rejects.toMatchObject({ cause: { stage: expectedStage, reason: failure } });
+      expect(record.name).toBe('scanner-approval');
     } finally {
       vi.useRealTimers();
       await rm(fixture.directory, { recursive: true, force: true });
     }
   }
   test(`logs only safe stage and ${failure} reason`, safeFailureClassification);
+}
+
+for (const name of ['GH_HOST', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN']) {
+  async function enterpriseEnvironmentRefuses() {
+    vi.stubEnv(name, 'synthetic-enterprise-canary');
+    await expect(loadApproval()).rejects.toThrow(/^Scanner CI approval refused$/);
+    expect(execFileSync).not.toHaveBeenCalled();
+    expect(logLines.join('')).not.toContain('synthetic-enterprise-canary');
+  }
+  test(`refuses inherited ${name} before running any CLI`, enterpriseEnvironmentRefuses);
 }

@@ -26,7 +26,8 @@ def blob(archive, digest):
 
 def request(endpoint, method, path, body=None, headers=None):
     address = urlsplit(endpoint)
-    if address.scheme != 'http' or address.path or address.username:
+    if (address.scheme != 'http' or not address.hostname or address.path or
+            address.username or address.query or address.fragment):
         raise ValueError('Expected a plain HTTP registry endpoint')
     connection = http.client.HTTPConnection(address.netloc, timeout=60)
     connection.request(method, path, body, headers or {})

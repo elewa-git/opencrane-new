@@ -18,11 +18,8 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, installation settings and evidence"]
-  infra --> stack["infra/dev-stack<br/>local OpenCrane"]
-  infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership, nodes, certificates and backup token references| package
-  package -->|uses local cluster| devbox
+  stack["infra/dev-stack<br/>local OpenCrane"] -->|checks ownership, nodes, certificates and backup token references| package["infra/package<br/>images, installation settings and evidence"]
+  package -->|uses local cluster| devbox["infra/devbox<br/>machine setup"]
   package -->|starts services and fake model; checks captured and restored bytes| apps["apps<br/>product services and replay"]
   packaging["GitHub packaging job"] -->|supplies scanner approval and image| package
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]

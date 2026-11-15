@@ -119,7 +119,12 @@ contains the matching OCI archive. Both expire after one day. The job summary
 also prints the manifest SHA-256 and image digest. Local refresh, build, release
 records, environment variables and candidate hashes cannot grant approval.
 
-`approval.mjs` uses the existing authenticated `gh` CLI to download these outputs.
+`approval.mjs` uses the existing authenticated `gh` CLI to download these outputs
+from github.com. API calls select `--hostname=github.com`; artifact downloads use
+the full github.com repository URL. Inherited `GH_HOST`, `GH_ENTERPRISE_TOKEN` or
+`GITHUB_ENTERPRISE_TOKEN` settings refuse before any CLI runs, and child environments
+remove those settings. The structured logger records only a fixed stage and safe
+reason (`outage`, `expired` or `malformed`). Raw CLI errors and output stay private.
 It checks GitHub's run metadata independently: this repository and source
 repository, workflow path, successful completion, allowed trigger, current branch
 and exact checkout commit. It checks the output's run id and source revision,

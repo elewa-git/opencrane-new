@@ -12,9 +12,9 @@ const deadlineMs = 15 * 60 * 1000;
 const maxAgeMs = 24 * 60 * 60 * 1000;
 const names = ['main', 'daily', 'bytecode'];
 
-function requireEvidence(condition) {
+function requireEvidence(condition, reason = 'malformed') {
   if (!condition) {
-    throw new Error(refusal);
+    throw new Error(refusal, { cause: reason });
   }
 }
 
@@ -28,7 +28,8 @@ function timestamp(value) {
 export function validateManifest(manifest, now) {
   requireEvidence(manifest.formatVersion === 1 && manifest.toolImage === toolImage);
   const updatedAt = timestamp(manifest.databaseUpdatedAt);
-  requireEvidence(updatedAt <= now && now - updatedAt < maxAgeMs);
+  requireEvidence(updatedAt <= now);
+  requireEvidence(now - updatedAt < maxAgeMs, 'expired');
   const evidence = manifest.updaterEvidence;
   requireEvidence(evidence.tool === 'FreshClam' && evidence.exitCode === 0 &&
     Array.isArray(evidence.databases) && Array.isArray(manifest.databases) &&

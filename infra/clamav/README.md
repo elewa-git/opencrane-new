@@ -20,7 +20,7 @@ scanner before saving them in [MinIO](../../GLOSSARY.md#minio-file-storage).
 
 ```mermaid
 flowchart LR
-  packaging["GitHub packaging job"] -->|approves current signature bytes and image| clamav["infra/clamav<br/>virus scanner"]
+  packaging["GitHub packaging job<br/>github.com"] -->|approves current signature bytes and image| clamav["infra/clamav<br/>virus scanner"]
   stack["infra/dev-stack<br/>local OpenCrane"] -->|fetches the approved package| clamav
   package["infra/package<br/>packaged installation"] -->|checks approved bytes and starts the private service| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
@@ -54,7 +54,8 @@ flowchart LR
    The running scanner keeps its current list until a reviewed image replaces it.
 4. **The scheduled packaging job checks an image.** It downloads and verifies virus
    definitions, checks the image and licences, then publishes approval in its output.
-   The package accepts approval only from a successful run for its source commit.
+   The package accepts approval only from a successful run on github.com for its source commit.
+   It refuses inherited settings that select another GitHub server.
 5. **The separate launcher starts a scanner.** It checks the approved files again,
    starts only that set, and stops it 24 hours after its verified update check.
 6. **A trusted process requests a scan.** The launcher copies the bounded bytes, checks

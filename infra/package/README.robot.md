@@ -192,7 +192,7 @@ the existing typed upload-unavailable response. Infected bytes keep the existing
 refusal; neither case stores a file or appends `file.uploaded`.
 
 The `scanner` value has one field, `approvedSha`. Preflight fetches the approved
-manifest hash and scanner image digest directly from a successful
+manifest hash and scanner image digest directly from a successful github.com
 [packaging workflow](../clamav/README.robot.md#packaging-evidence) for the checkout's
 branch and exact commit. Matching local review and values files cannot approve a
 scanner. Other image roles retain the checked-in licence and source review.
@@ -204,7 +204,8 @@ expired database check refuses; copies and restarts cannot renew it. The checked
 scanner records describe the earlier review and grant no current approval.
 
 `publish-image.py ARCHIVE HTTP_ENDPOINT IMAGE@sha256:DIGEST` publishes an OCI archive
-with its exact existing digest, verifying each manifest and blob. Use it after the
+with its exact existing digest, verifying each manifest and blob. Endpoints must
+use plain HTTP with a hostname and no user details, path, query or fragment. Use it after the
 normal image build, source/layer checks and licence review for application and
 object-store images, and inside scanner preparation for the CI-approved archive.
 For the local registry, read its existing `k3d-ocn` network address with
