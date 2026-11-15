@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import type { legacyTurnSchema } from './decision-turn-token.ts';
+import { parseMcpCall } from './mcp.ts';
 import { createHash } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
@@ -73,3 +76,31 @@ export async function personalToolContext(store: EventStore, binding: Binding,
 }
 
 export type PersonalToolContext = Awaited<ReturnType<typeof personalToolContext>>;
+
+export interface PersonalCallRequest {
+  assistantId: string;
+  url: string | undefined;
+  body: string;
+  loadConfiguration: OAuthConfigurationLoader | undefined;
+}
+
+/** Prepare personal account history before the decision's short access check starts. */
+export async function preparePersonalCall(store: EventStore, binding: Binding,
+  turn: z.infer<typeof legacyTurnSchema>, request: PersonalCallRequest) {
+  const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(request.url ?? '');
+  if (!match) throw new Error('Unknown MCP route');
+  const serverId = match[1]!;
+  const rows = await history(store, `mcp-${serverId}`, binding.silo, performance.now() + 10_000);
+  const policy = toolPolicyFromRows(rows);
+  if (policy.accountMode !== 'personal') return undefined;
+  if (!request.loadConfiguration) throw new Error('Personal tool unavailable');
+  const parsed = parseMcpCall(request.body);
+  function matchesServer(selection: NonNullable<typeof turn.personalSelections>[number]) {
+    return selection.serverId === serverId;
+  }
+  const boundSelection = turn.personalSelections?.find(matchesServer);
+  if (!boundSelection) throw new Error('Personal tool unavailable');
+  const personalRequest = { assistantId: request.assistantId, toolName: parsed.call.params.name,
+    loadConfiguration: request.loadConfiguration, boundSelection };
+  return personalToolContext(store, binding, turn.requester, serverId, personalRequest);
+}

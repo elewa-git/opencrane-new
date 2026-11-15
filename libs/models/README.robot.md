@@ -4205,6 +4205,8 @@ the existing consent on a new selection; original retries preserve their saved f
 `assistantMayUsePersonalKey` interprets an absent list as the owner’s own personal
 assistant only, using its saved creation event. An empty list allows nobody.
 Tool preparation, personal call preparation and final release share that decision.
+`personal-tool-context.ts` prepares the route, policy and signed selection before
+the decision starts its short access check.
 Release still checks the exact selection revision before and after custody reads.
 The command takes optional `SelectionDependencies` as its fifth argument.
 The reader takes optional `PersonalSelectionRead` settings as its fifth argument.
