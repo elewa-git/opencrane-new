@@ -1,6 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { baseCommit, readAtBase, mustNotRise } from './ci/baseline.mjs';
+
+const baselinePath = 'scripts/readme-baseline.json';
 
 const packageGroups = new Set(['apps', 'libs', 'infra', 'tools']);
 const excludedFolders = new Set([
@@ -156,39 +159,111 @@ function checkPackage(readme) {
   const content = readFileSync(readme, 'utf8');
   const sections = readSections(content);
   const problems = [];
-  if (!checkHeadings(sections)) problems.push(`${readme}: headings: use the six headings in order`);
-  if (!checkOpening(readme, sections)) problems.push(`${readme}: opening: start with the description`);
+  if (!checkHeadings(sections)) problems.push({ file: readme, rule: 'headings' });
+  if (!checkOpening(readme, sections)) problems.push({ file: readme, rule: 'opening' });
   const summary = checkSummary(sections);
-  if (summary) problems.push(`${readme}: summary: ${summary} non-blank lines exceeds 10`);
+  if (summary) problems.push({ file: readme, rule: 'summary', count: summary });
   const length = checkLength(content, 150);
-  if (length) problems.push(`${readme}: length: ${length} lines exceeds 150`);
+  if (length) problems.push({ file: readme, rule: 'length', count: length });
   return problems;
+}
+
+function findEntry(entries, expected) {
+  function matches(entry) {
+    return entry.file === expected.file && entry.rule === expected.rule;
+  }
+  return entries.find(matches);
+}
+
+function checkBaseline(listed, actual) {
+  const problems = [];
+  for (const entry of actual) {
+    const allowed = findEntry(listed, entry);
+    const label = `${entry.file}: ${entry.rule}`;
+    if (!allowed) problems.push(`${label}: ${entry.count ?? 'failed'} (unlisted offender)`);
+    else if (entry.rule === 'length' || entry.rule === 'summary') {
+      const problem = mustNotRise(label, allowed.count, entry.count);
+      if (problem) problems.push(problem);
+    }
+  }
+  for (const entry of listed) {
+    if (!findEntry(actual, entry)) {
+      problems.push(`${entry.file}: ${entry.rule}: remove the passing baseline entry`);
+    }
+  }
+  return problems;
+}
+
+function compareWithBase(listed) {
+  if (!baseCommit()) return [];
+  const previous = readAtBase(baselinePath);
+  // Allow the first ledger; later commits may only remove entries or lower counts.
+  if (previous === undefined) return [];
+  const before = JSON.parse(previous);
+  validateBaseline(before);
+  const problems = [];
+  for (const entry of listed) {
+    const old = findEntry(before, entry);
+    const label = `${entry.file}: ${entry.rule}`;
+    if (!old) problems.push(`${label}: new baseline entry`);
+    else if (entry.count !== undefined) {
+      const problem = mustNotRise(label, old.count, entry.count);
+      if (problem) problems.push(problem);
+    }
+  }
+  return problems;
+}
+
+function validateBaseline(entries) {
+  if (!Array.isArray(entries)) throw new Error('Invalid README baseline: expected a list');
+  const seen = new Set();
+  const limits = { length: 150, summary: 10, 'robot-length': 1500 };
+  for (const entry of entries) {
+    const key = `${entry.file}:${entry.rule}`;
+    const limit = limits[entry.rule];
+    const knownRule = entry.rule === 'headings' || entry.rule === 'opening' || limit !== undefined;
+    if (typeof entry.file !== 'string' || !knownRule || seen.has(key)) {
+      throw new Error(`Invalid baseline entry: ${key}`);
+    }
+    if (limit !== undefined && (!Number.isSafeInteger(entry.count) || entry.count <= limit)) {
+      throw new Error(`Invalid baseline entry count: ${key}`);
+    }
+    if (limit === undefined && entry.count !== undefined) {
+      throw new Error(`Invalid baseline entry count: ${key}`);
+    }
+    seen.add(key);
+  }
 }
 
 function main() {
   const files = readTrackedFiles();
   const folders = collectFolders(files);
   const problems = [];
+  const violations = [];
   for (const folder of folders) {
     problems.push(...checkFolder(folder, files));
     const readme = `${folder}/README.md`;
     if (folder.split('/').length === 2 && files.has(readme) && existsSync(readme)) {
-      problems.push(...checkPackage(readme));
+      violations.push(...checkPackage(readme));
     }
   }
   for (const file of files) {
     const group = file.split('/')[0];
     if (packageGroups.has(group) && file.endsWith('/README.robot.md') && existsSync(file)) {
       const length = checkLength(readFileSync(file, 'utf8'), 1500);
-      if (length) problems.push(`${file}: robot-length: ${length} lines exceeds 1500`);
+      if (length) violations.push({ file, rule: 'robot-length', count: length });
     }
   }
+  const listed = JSON.parse(readFileSync(baselinePath, 'utf8'));
+  validateBaseline(listed);
+  problems.push(...checkBaseline(listed, violations));
+  problems.push(...compareWithBase(listed));
   if (problems.length > 0) {
     console.error(problems.join('\n'));
     process.exitCode = 1;
     return;
   }
-  console.log('Every checked folder has a README.md without ticket or phase references.');
+  console.log('Folder READMEs pass; package and robot exceptions match the baseline.');
 }
 
 main();

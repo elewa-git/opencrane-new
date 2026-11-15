@@ -48,8 +48,9 @@ function trackFiles(files) {
   execFileSync('git', ['add', '--all'], options);
 }
 
-function runCheck() {
-  const options = { cwd: repository, encoding: 'utf8' };
+function runCheck(base = '') {
+  const env = { ...process.env, BASE_SHA: base };
+  const options = { cwd: repository, encoding: 'utf8', env };
   return spawnSync(process.execPath, [checker], options);
 }
 
@@ -285,3 +286,138 @@ function rejectsLongRobotReadme() {
 }
 
 test('refuses a robot README with 1501 lines', rejectsLongRobotReadme);
+
+function writeBaseline(entries) {
+  writeFile('scripts/readme-baseline.json', JSON.stringify(entries));
+}
+
+function allowsListedOffenders() {
+  const files = {
+    'libs/example/README.md': readmeWithLines(151),
+    'libs/example/README.robot.md': 'Detail.\n'.repeat(1700),
+  };
+  trackFiles(files);
+  writeBaseline([
+    { file: 'libs/example/README.md', rule: 'length', count: 151 },
+    { file: 'libs/example/README.robot.md', rule: 'robot-length', count: 1501 },
+  ]);
+  const result = runCheck();
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('allows listed offenders and lets listed robot files grow', allowsListedOffenders);
+
+function refusesListedGrowth() {
+  trackFiles({ 'libs/example/README.md': readmeWithLines(152) });
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 151 }]);
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('length rose from 151 to 152');
+}
+
+test('refuses a listed package README growing by one line', refusesListedGrowth);
+
+function refusesPassingEntry() {
+  trackFiles({ 'libs/example/README.md': validReadme });
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'headings' }]);
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('remove the passing baseline entry');
+}
+
+test('requires removal of an entry whose file now passes', refusesPassingEntry);
+
+function commitBase() {
+  const options = { cwd: repository, encoding: 'utf8' };
+  execFileSync('git', ['add', '--all'], options);
+  const args = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture',
+    'commit', '--quiet', '--no-gpg-sign', '-m', 'Fixture base'];
+  execFileSync('git', args, options);
+  return execFileSync('git', ['rev-parse', 'HEAD'], options).trim();
+}
+
+function refusesNewBaselineEntry() {
+  trackFiles({ 'libs/example/README.md': validReadme });
+  const base = commitBase();
+  writeFile('libs/example/README.md', readmeWithLines(151));
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 151 }]);
+  const result = runCheck(base);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('new baseline entry');
+}
+
+test('refuses a new entry against the base commit', refusesNewBaselineEntry);
+
+function refusesRaisedCount() {
+  trackFiles({ 'libs/example/README.md': readmeWithLines(151) });
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 151 }]);
+  const base = commitBase();
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 152 }]);
+  const result = runCheck(base);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('length rose from 151 to 152');
+}
+
+test('refuses a recorded number rising against the base', refusesRaisedCount);
+
+function skipsMissingBase() {
+  trackFiles({ 'libs/example/README.md': readmeWithLines(151) });
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 151 }]);
+  const result = runCheck();
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('skips comparison when no base commit exists', skipsMissingBase);
+
+function allowsOptionalFoldersAndFencedHeadings(marker) {
+  const folders = validReadme.replace('## Where to read more', '## Folders\n\n## Where to read more');
+  const content = folders.replace('## Where it fits', `${marker}md\n## Ignored\n${marker}\n\n## Where it fits`);
+  trackFiles({ 'libs/example/README.md': content });
+  const result = runCheck();
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test.each(['```', '~~~~'])(
+  'allows Folders before the final heading and ignores headings inside %s fences',
+  allowsOptionalFoldersAndFencedHeadings,
+);
+
+function allowsWrappedOpening() {
+  const content = validReadme.replace('Example package.', '[Example](./README.md)\n`package`');
+  const files = {
+    'libs/example/README.md': content,
+    'libs/example/package.json': JSON.stringify({ description: 'Example package.' }),
+  };
+  trackFiles(files);
+  const result = runCheck();
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('joins wrapped opening lines and removes link, code and final full-stop markup',
+  allowsWrappedOpening);
+
+function allowsExactLimits() {
+  const content = readmeWithLines(120);
+  const extra = '\nChange note.\n'.repeat(9);
+  const summary = content.replace('Example package.', `Example package.${extra}`);
+  const files = {
+    'libs/example/README.md': readmeWithLines(150),
+    'libs/example/README.robot.md': 'Detail.\n'.repeat(1500),
+    'libs/summary/README.md': summary,
+  };
+  trackFiles(files);
+  const result = runCheck();
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('allows 150 package lines, 10 non-blank summary lines and 1500 robot lines', allowsExactLimits);
+
+function refusesInvalidBaseline() {
+  trackFiles({ 'libs/example/README.md': readmeWithLines(151) });
+  writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 'unlimited' }]);
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Invalid baseline entry');
+}
+
+test('refuses an invalid recorded number instead of bypassing the cap', refusesInvalidBaseline);

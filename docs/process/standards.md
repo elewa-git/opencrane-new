@@ -96,7 +96,7 @@ To restructure code safely, first pin what it does with tests, then change the s
 | Errors | Follow the Errors row under [Code](#code-strict-where-behaviour-depends-on-it). Keep the cause (`new Error(message, { cause })`) and log it through the structured logger, which hides credentials and private content, before returning the safe message. A refusal carries a `reason` from a named union type, as existing routes do, not only a sentence. | Review. |
 | Tests | Follow [Tests and evidence](#tests-and-evidence): check what the user of the code would see, use the shared test helpers, control time (pass it in, or use Vitest fake timers) instead of sleeping, and delete tests the change makes redundant. | Review and ESLint `max-lines` error at 1,500 counted lines for test files. |
 | Test strength | Tests of access checks, approvals and money must fail when the rule they protect is broken. | Today: when you add or change such a test, break the rule by hand once, see the test fail, restore the code and say so in your report. `mutator` on those packages, on a schedule, once #1034 lands. |
-| READMEs | Describe the package as it is now. Edit the sentence that changed; never append a note per change. | Review today; the README check once #1035 lands. |
+| READMEs | Describe the package as it is now. Edit the sentence that changed; never append a note per change. | Review today; `npm run lint:readmes` for headings, opening, length and opening-section size. |
 
 A check marked "once … lands" is not enabled yet, and nobody estimates a tool's score by eye. `dryer`, `crapper` and `mutator` are not installed: do not install or run them until this table says they are enabled.
 
@@ -167,6 +167,12 @@ It is written for a new engineer, or for a manager who is not an engineer. It us
 5. `## How to run or test it`: the two or three commands people actually use. For a library, add one short real example of calling it.
 6. `## Where to read more`: README.robot.md, related packages, and decisions in `docs/adr`, each linked with a plain description of the decision, not its file title, for example [why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 
+An optional `## Folders` heading may appear straight before `## Where to read more`.
+Keep `## What this is` at or under 10 non-blank lines and the whole file at or under
+150 lines. `npm run lint:readmes` enforces these limits, the heading order and the
+opening description for package READMEs directly inside `apps`, `libs`, `infra` and
+`tools`. It ignores headings inside fenced code blocks.
+
 Rules for the diagram:
 
 - Use a Mermaid `flowchart` (GitHub draws it) with at most 8 boxes.
@@ -184,7 +190,7 @@ Writing rules:
 - Describe today's code. Mark anything planned as planned.
 - Keep it current, not chronological. When a change alters a fact, edit the sentence that states it. Never add a paragraph per change: the PR and the release note record what changed.
 - Use UK English and the active voice.
-- Aim for about 50 to 120 lines. More than 150 lines means some detail belongs in README.robot.md.
+- Aim for about 50 to 120 lines. The limit is 150 lines; put further detail in README.robot.md.
 
 Template:
 
@@ -229,6 +235,16 @@ npm test -w @opencrane/example
 ````
 
 #### README.robot.md, for agents and maintainers
+
+Keep each file at or under 1,500 lines. `npm run lint:readmes` enforces this for every
+README.robot.md under `apps`, `libs`, `infra` and `tools`.
+
+Existing offenders are listed in `scripts/readme-baseline.json`. Listed package
+READMEs may not grow beyond their recorded line or opening-section counts. Listed
+robot files may grow until they are tidied. Remove an entry when its file passes.
+Against the base commit, no entry may be added and no recorded count may rise.
+The first introduction of the list, or a checkout without a base commit, skips that
+comparison. Heading and opening exceptions last only until the file passes.
 
 - **What goes in it.** Everything agents need and people do not:
   - ticket and issue ids, handoff and state codes, phase numbers;
