@@ -192,6 +192,7 @@ export async function preparePackage() {
     namespaceUid: found.metadata.uid, release, heartbeatAt: '',
   };
   await saveOwner(owner);
+  await command('node', [resolve(root, 'infra/package/prepare-scanner.mjs'), directory]);
 }
 
 export async function verifyPackageOwner(limits: CommandLimits = {}) {
@@ -247,6 +248,9 @@ async function readReviewedValues(valuesFile: string) {
     location.name, reviewFile], 120_000, location.directory);
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as PackageValues;
   const review = JSON.parse(await readFile(reviewFile, 'utf8')) as PackageReview;
+  // Preflight has checked this scanner against the successful CI job, separately
+  // from the fixed application and object-store image review.
+  review.images['scanner'] = values.images['scanner']!;
   const chart = await readFile('infra/package/chart/Chart.yaml', 'utf8');
   const version = chart.match(/^version:\s*["']?([^"'\s]+)["']?\s*$/mu)?.[1];
   if (version !== review.chartVersion) throw new Error('Chart version is not reviewed');

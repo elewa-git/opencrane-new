@@ -9,6 +9,7 @@ import { isDeepStrictEqual, promisify } from 'node:util';
 import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 import { copyPackagedFixture } from './packaged-fixture.ts';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const execute = promisify(execFile);
@@ -117,6 +118,7 @@ exec /usr/bin/openssl "$@"
   } };
   await writeFile(join(home, 'namespace.json'), JSON.stringify({ metadata }));
   const review = JSON.parse(await readFile('infra/package/reviewed-images.json', 'utf8'));
+  await scannerApprovalFixture(join(home, 'bin'), review);
   const secrets = {};
   for (const name of review.requiredSecrets) secrets[name] = `client-${name.toLowerCase()}`;
   const values = { chartVersion: review.chartVersion, images: review.images, secrets,

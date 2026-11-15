@@ -189,15 +189,29 @@ A copy, file date or restart cannot renew this time. Stale or uncertain scans ke
 the existing typed upload-unavailable response. Infected bytes keep the existing
 refusal; neither case stores a file or appends `file.uploaded`.
 
-The `scanner` value has one field, `approvedSha`. Preflight compares it with the
-reviewed release. Before running `prepare.ts`, supply the matching manifest and
-release through `PACKAGE_SCANNER_MANIFEST_FILE` and `PACKAGE_SCANNER_RELEASE_FILE`.
-The checked public records are `scanner-signatures.json` and `scanner-release.json`.
-Their database bytes belong to the pinned image. Once they expire, deploy a newly
-reviewed image, manifest and release together; preparation refuses stale evidence.
-The existing `infra/clamav/refresh.sh` and `release.mjs` produce and verify candidates.
-Build `Scanner.Dockerfile` with a `signatures` build context containing only the three
-reviewed CVD or CLD files. Refresh never changes a running scanner.
+The `scanner` value has one field, `approvedSha`. Preflight fetches the approved
+manifest hash and scanner image digest directly from a successful
+[packaging workflow](../clamav/README.robot.md#packaging-evidence) for the checkout's
+branch and exact commit. Matching local review and values files cannot approve a
+scanner. Other image roles retain the checked-in licence and source review.
+`run.sh package-prepare --id <slot>` downloads the approval and image, publishes the
+scanner digest and writes the private `package-values.json`. `prepare.ts` reads
+`scanner-approval/signatures.json` and `scanner-approval/release.json` from that
+slot. It rechecks the release before creating Secrets. A missing job output or
+expired database check refuses; copies and restarts cannot renew it. The checked-in
+scanner records describe the earlier review and grant no current approval.
+
+`publish-image.py ARCHIVE HTTP_ENDPOINT IMAGE@sha256:DIGEST` publishes an OCI archive
+with its exact existing digest, verifying each manifest and blob. Use it after the
+normal image build, source/layer checks and licence review for application and
+object-store images, and inside scanner preparation for the CI-approved archive.
+For the local registry, read its existing `k3d-ocn` network address with
+`docker inspect k3d-ocn-registry` and use `http://<address>:5000`. This avoids
+Docker's HTTPS push negotiation and a broken host-port forward without changing
+Docker daemon, network or container settings. The cluster still uses
+`k3d-ocn-registry:5000` in its immutable image pins. No tag or digest is promoted
+by this publisher; it transfers only the selected bytes. A missing or changed
+blob refuses before its manifest can be published.
 
 Preparation creates separate `objects` and `scanner` Secrets. The scanner Secret
 contains its TLS key/certificate, public issuer trust, manifest and release.

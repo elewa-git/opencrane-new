@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fetchScannerApproval } from '../clamav/approval.mjs';
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -100,18 +101,24 @@ function checkNatsCluster(values, review) {
   }
 }
 
-function checkScanner(values, review) {
-  if (review.scanner === undefined && values.scanner === undefined) return;
+async function checkScanner(values, review) {
+  if (review.scanner === undefined && values.scanner === undefined &&
+      review.images.scanner === undefined && values.images.scanner === undefined) return;
   const scanner = values.scanner;
   if (!scanner || typeof scanner !== 'object' || Array.isArray(scanner) ||
       Object.keys(scanner).length !== 1 ||
       !/^[a-f0-9]{64}$/u.test(scanner.approvedSha) ||
-      scanner.approvedSha !== review.scanner?.approvedSha) {
+      typeof values.images.scanner !== 'string') {
+    throw new Error('Scanner manifest is absent from the reviewed release');
+  }
+  const approved = await fetchScannerApproval();
+  requireImage('scanner', values.images.scanner, approved.image);
+  if (scanner.approvedSha !== approved.approvedSha) {
     throw new Error('Scanner manifest is absent from the reviewed release');
   }
 }
 
-function check(values, review) {
+async function check(values, review) {
   const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres', 'natsCluster',
     'scanner'];
   for (const key of Object.keys(values)) {
@@ -119,7 +126,7 @@ function check(values, review) {
   }
   if (!values.images || !review.images) throw new Error('Image pins are missing');
   for (const [name, image] of Object.entries(review.images)) {
-    requireImage(name, values.images[name], image);
+    if (name !== 'scanner') requireImage(name, values.images[name], image);
   }
   for (const name of Object.keys(values.images)) {
     if (!(name in review.images)) throw new Error('Unreviewed image role');
@@ -134,7 +141,7 @@ function check(values, review) {
   }
   checkPostgres(values, review);
   checkNatsCluster(values, review);
-  checkScanner(values, review);
+  await checkScanner(values, review);
   const exposure = values.exposure;
   if (!exposure || exposure.ingress !== false || exposure.loadBalancer !== false ||
       exposure.funnel !== false) {
@@ -153,7 +160,7 @@ function check(values, review) {
 try {
   const values = readJson(process.argv[2]);
   const review = readJson(process.argv[3]);
-  check(values, review);
+  await check(values, review);
 } catch (error) {
   if (error instanceof SyntaxError) console.error('Invalid package JSON');
   else console.error(error.message);

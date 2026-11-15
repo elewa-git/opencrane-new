@@ -273,7 +273,8 @@ function differentApprovedScannerHashRefuses() {
     assert.notEqual(result.status, 0);
     assert.equal(result.stderr.trim(), 'Scanner manifest is absent from the reviewed release');
     values.scanner = { ...review.scanner };
-    assert.equal(check(values, review, directory).status, 0);
+    assert.notEqual(check(values, review, directory).status, 0,
+      'A matching local hash without an approved image cannot grant approval');
   } finally {
     rmSync(directory, { recursive: true });
   }

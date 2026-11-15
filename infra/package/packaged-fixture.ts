@@ -4,6 +4,10 @@ import { dirname, join } from 'node:path';
 import { preProcessFile } from 'typescript';
 
 const files = [
+  'infra/clamav/approval.mjs',
+  'infra/clamav/release.mjs',
+  'infra/clamav/refresh.mjs',
+  'infra/clamav/database.mjs',
   'infra/package/prepare-nats-routes.ts',
   'infra/package/check-nats-inputs.ts',
   'infra/dev-stack/bounded-input.ts',

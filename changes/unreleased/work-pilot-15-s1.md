@@ -6,3 +6,9 @@ update evidence. The application receives rotating, short-lived storage credenti
 Storage credential issuance now has a deadline and cancellation. Readiness refuses
 expired leases, and STS diagnostics cannot reach errors or logs. Scanner database
 validation is shared and refusal tests isolate each size, identity and time bound.
+
+A scheduled GitHub job now verifies and packages fresh scanner definitions on free
+standard runners. Packaged preparation fetches approval from the successful job
+for its exact source commit; local candidates cannot approve a scanner. Image
+publication supports the existing plain HTTP development registry without changing
+Docker settings.

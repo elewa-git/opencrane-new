@@ -11,6 +11,7 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const reviewed = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
@@ -156,6 +157,13 @@ test('certificate issuer passes absolute stack paths to OpenSSL',
 async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
   packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
+  const fixtureEnvironment = { ...process.env };
+  if (mainValuesSource) {
+    const bin = join(directory, 'bin');
+    await scannerApprovalFixture(bin, reviewed);
+    values.scanner = { ...reviewed.scanner };
+    fixtureEnvironment.PATH = `${bin}:${process.env.PATH}`;
+  }
   const settings = new Map();
   const secrets = new Map();
   const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
@@ -214,7 +222,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     }
     if (program === 'node') {
       if (args[0].endsWith('preflight.mjs')) {
-        execFileSync(process.execPath, args, { cwd: options.cwd });
+        execFileSync(process.execPath, args, { cwd: options.cwd, env: fixtureEnvironment });
       } else {
         assert.deepEqual(Array.from(args), ['--experimental-strip-types',
           'infra/dev-stack/zitadel-setup.ts', '--read-only']);
@@ -261,15 +269,15 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   };
   try {
     if (mainValuesSource) {
-      const manifestFile = join(directory, 'fixture-signatures.json');
-      const releaseFile = join(directory, 'fixture-release.json');
+      mkdirSync(join(directory, 'scanner-approval'));
+      const manifestFile = join(directory, 'scanner-approval/signatures.json');
+      const releaseFile = join(directory, 'scanner-approval/release.json');
       writeFileSync(manifestFile, '{}');
       writeFileSync(releaseFile, '{}');
       const valuesFile = join(directory, 'values.json');
       writeFileSync(valuesFile, JSON.stringify(values), { mode: 0o600 });
       const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts'],
-        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined,
-          PACKAGE_SCANNER_MANIFEST_FILE: manifestFile, PACKAGE_SCANNER_RELEASE_FILE: releaseFile } };
+        env: { ...fixtureEnvironment, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined } };
       if (mainValuesSource === 'environment') {
         fixtureProcess.env.PACKAGE_VALUES_FILE = valuesFile;
       } else {

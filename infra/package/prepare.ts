@@ -189,9 +189,8 @@ async function prepareFileServices(values: {
   images: Record<string, string>; scanner: { approvedSha: string };
   secrets: Record<string, string>;
 }, owner: PackageOwner) {
-  const manifestPath = process.env['PACKAGE_SCANNER_MANIFEST_FILE'];
-  const releasePath = process.env['PACKAGE_SCANNER_RELEASE_FILE'];
-  assert(manifestPath && releasePath, 'Reviewed scanner manifest and release files are required');
+  const manifestPath = `${directory}/scanner-approval/signatures.json`;
+  const releasePath = `${directory}/scanner-approval/release.json`;
   const image = values.images['scanner']!;
   const approvedSha = values.scanner.approvedSha;
   await readApprovedRelease({ image, approvedSha, manifestPath, releasePath }, Date.now());

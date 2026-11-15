@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
 import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { prepareNatsFixture } from './nats-install-fixture.mjs';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const source = resolve('.');
@@ -101,6 +102,9 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
     const privateDirectory = `${directory}/private-values`;
     await mkdir(privateDirectory, { mode: 0o700 });
+    const bin = `${directory}/bin`;
+    await scannerApprovalFixture(bin, fixture.review);
+    fixture.values.scanner = { ...fixture.review.scanner };
     const valuesFile = `${privateDirectory}/values.json`;
     await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
     await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
@@ -113,7 +117,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       catch (error) { console.error(error); process.exitCode = 1; }`;
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
-    const env = { ...process.env, DEV_STACK_ID: '1', PACKAGE_VALUES_FILE: undefined };
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1', PACKAGE_VALUES_FILE: undefined };
     if (environmentValues) {
       env.PACKAGE_VALUES_FILE = valuesFile;
     }

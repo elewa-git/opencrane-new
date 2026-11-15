@@ -43,7 +43,7 @@ async function loadApproval() {
   return module.fetchScannerApproval();
 }
 
-for (const field of ['conclusion', 'event', 'path', 'head_branch', 'head_sha',
+for (const field of ['status', 'conclusion', 'event', 'path', 'head_branch', 'head_sha',
   'repository', 'head_repository']) {
   async function refuseUntrustedRun() {
     const run = runRecord();
@@ -85,3 +85,36 @@ async function realJobPasses() {
   }
 }
 test('only the job output with its exact checked bytes can approve the scanner', realJobPasses);
+
+for (const field of ['runId', 'revision', 'imageDigest']) {
+  async function mismatchedArtifactRefuses() {
+    const directory = await mkdtemp(join(tmpdir(), 'scanner-artifact-fixture-'));
+    try {
+      const image = `k3d-ocn-registry:5000/opencrane/scanner@${imageDigest}`;
+      const fixture = await scannerApprovalFixture(directory, { images: { scanner: image } });
+      fixture.approval[field] = 'wrong';
+      fixture.files['approval.json'] = JSON.stringify(fixture.approval);
+      setup(fixture.run, fixture.files);
+      await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+  test(`CI artifact must bind its ${field}`, mismatchedArtifactRefuses);
+}
+
+async function staleArtifactRefuses() {
+  const directory = await mkdtemp(join(tmpdir(), 'scanner-expiry-fixture-'));
+  try {
+    const image = `k3d-ocn-registry:5000/opencrane/scanner@${imageDigest}`;
+    const fixture = await scannerApprovalFixture(directory, { images: { scanner: image } });
+    setup(fixture.run, fixture.files);
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 86400000);
+    await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
+  } finally {
+    vi.useRealTimers();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('even authentic job outputs refuse after the checked databases expire', staleArtifactRefuses);
