@@ -21,17 +21,22 @@ function isOne(node) {
   return node !== undefined && ts.isNumericLiteral(node) && node.text === '1';
 }
 
+function isWholeStreamRead(node) {
+  const callee = node.expression;
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== 'readStream') return false;
+  const second = node.arguments[1];
+  if (node.arguments.length === 1 || isOne(second)) return true;
+  return second !== undefined && ts.isIdentifier(second) && second.text === 'undefined';
+}
+
 function isWholeStreamCall(node) {
   if (!ts.isCallExpression(node)) return false;
   const callee = node.expression;
-  const second = node.arguments[1];
   if (ts.isIdentifier(callee)) {
     if (callee.text === 'history') return true;
-    return callee.text === 'readEvents' && isOne(second);
+    return callee.text === 'readEvents' && isOne(node.arguments[1]);
   }
-  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== 'readStream') return false;
-  if (node.arguments.length === 1 || isOne(second)) return true;
-  return second !== undefined && ts.isIdentifier(second) && second.text === 'undefined';
+  return isWholeStreamRead(node);
 }
 
 function readLocations(file) {
@@ -71,6 +76,11 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isOneLineReason(reason) {
+  return typeof reason === 'string' && reason.trim() !== '' &&
+    !reason.includes('\n') && !reason.includes('\r');
+}
+
 function validateRebuild(entries, known) {
   const files = Object.keys(entries);
   if (files.length !== rebuildFiles.length) invalidBaseline('expected exactly three rebuild files');
@@ -79,8 +89,7 @@ function validateRebuild(entries, known) {
     if (!isRecord(entry)) invalidBaseline(`missing rebuild file: ${file}`);
     if (Object.hasOwn(known, file)) invalidBaseline(`file in both lists: ${file}`);
     if (!Number.isSafeInteger(entry.count) || entry.count < 0) invalidBaseline(file);
-    if (typeof entry.reason !== 'string' || entry.reason.trim() === '' ||
-        entry.reason.includes('\n') || entry.reason.includes('\r')) invalidBaseline(file);
+    if (!isOneLineReason(entry.reason)) invalidBaseline(file);
   }
 }
 

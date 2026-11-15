@@ -84,9 +84,7 @@ number, or decision, handoff or evidence code, that uses shorthand we made
 up or heavy words, or that a newcomer cannot follow. Raise one for a comment
 that does not say why. Give the plain rewrite in the finding.
 
-At most two independent passes per change. The second checks fixes and introduced risk,
-including batched disputed findings. If blockers remain, hold for the owner; do not
-spawn a verifier per sentence or restart the counter. If a finding survives its fix at
-the second pass, or repeats one from an earlier PR for the same issue, do not ask for
-another fix: state the assumption the fixes rest on, in one sentence, for the owner. End with the verdict, evidence
-and remaining conditions; distinguish source readiness from live capability completion.
+At most two independent passes: check fixes, introduced risk and batched disputes in pass two.
+Hold remaining blockers for the owner; never restart the count or spawn a verifier per finding.
+If a fix fails pass two or repeats an earlier PR's finding, stop and state its assumption
+for the owner. End with verdict, evidence and conditions; separate source readiness from live PASS.
