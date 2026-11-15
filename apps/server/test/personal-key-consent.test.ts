@@ -1,3 +1,4 @@
+import { connectMcpCatalogue } from '@opencrane/projections';
 import { decodeJwt } from 'jose';
 import { releaseTurnCredentials } from '../src/chat/turn-credentials.ts';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +17,8 @@ async function consentControlsTools() {
   const setup = await personalKeyFixture(runtime);
   const policy = await setup.publish();
   await setup.project();
+  const catalogue = connectMcpCatalogue(runtime.databaseUrl);
+  onTestFinished(catalogue.close);
   await setup.grant('alice');
   await setup.grant('bob');
   await setup.grant('assistant', 'assistant');
@@ -48,7 +51,7 @@ async function consentControlsTools() {
       assistantId, baseMessageBytes: 0, ...readers });
   }
   expect(await offered('assistant')).toHaveLength(1);
-  await assertIssuedSelections(runtime, setup.serverId, [{ serverId: setup.serverId,
+  await assertIssuedSelections(runtime, catalogue, [{ serverId: setup.serverId,
     profileId: 'personal', selectionRevision: initial.sequence }]);
   expect(await offered('other')).toEqual([]);
   const old = await history(setup.nats.store,
@@ -59,7 +62,7 @@ async function consentControlsTools() {
   });
   expect(disabled.sequence).toBeGreaterThan(initial.sequence);
   expect(await offered('assistant')).toEqual([]);
-  await assertIssuedSelections(runtime, setup.serverId, []);
+  await assertIssuedSelections(runtime, catalogue, []);
   expect(await personalConnectionNeeds(options, 'alice', 'assistant')).toEqual([{
     serverId: setup.serverId, name: 'OpenCrane demo', reason: 'assistant_not_allowed',
   }]);
@@ -84,12 +87,9 @@ it('offers tools only with owner consent, keeps old events and preserves the lis
   consentControlsTools, 120_000);
 
 async function assertIssuedSelections(runtime: Awaited<ReturnType<typeof fixture>>,
-  serverId: string, expected: unknown[]) {
-  async function rows() {
-    return [{ serverId }];
-  }
+  catalogue: ReturnType<typeof connectMcpCatalogue>, expected: unknown[]) {
   const options = { silo: 'test', store: runtime.nats.store, binding: runtime.binding,
-    keys: runtime.keys, catalogue: { rows } };
+    keys: runtime.keys, catalogue };
   const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
   const report = { conversationId: 'conversation', turnId: 'turn', threadId: 'thread' };
   const turn = { ...report, requesterId: 'alice', task: 'chat_turn' as const,

@@ -82,8 +82,10 @@ also failed, during a phone checkbox assertion; its
 [separate receipt](first-attempt/receipt.md) explains the collector correction.
 That attempt's incomplete conditions remain NOT RUN.
 
-Stopped after the two rework rounds. A corrected collector, a complete fresh journey
-and investigation of the profile-list 503 responses remain for the owner to authorise.
+The two attempts above happened inside the build task. They did not exhaust the
+delivery-rule rework allowance. The board counts the current repair as rework round
+1 of 2, authorised in the repair task. The earlier claim that owner authorisation
+was needed because two delivery rounds had been exhausted was incorrect.
 The cleanup trap ran `infra/dev-stack/down.sh` after each attempt, both with status 0.
 Both slots subsequently reported `free`. No stack remains claimed for this work.
 

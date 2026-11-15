@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { TestBed } from '@angular/core/testing';
 import { MyTools } from './my-tools';
 
@@ -457,8 +458,9 @@ async function consentDoesNotRefreshPausedProfiles() {
       return response(page([saved]));
     }
     if (options?.method === 'POST') {
-      const command = JSON.parse(String(options.body)) as {
-        expectedSequence: number; allowedAssistantIds: string[]; changeRef: string };
+      if (typeof options.body !== 'string') throw new Error('Expected JSON');
+      const command = z.object({ expectedSequence: z.number(),
+        allowedAssistantIds: z.array(z.string()), changeRef: z.string() }).parse(JSON.parse(options.body));
       expectedRevisions.push(command.expectedSequence);
       allowedAssistantIds = command.allowedAssistantIds;
       selectionRevision += 1;

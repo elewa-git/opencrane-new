@@ -196,7 +196,9 @@ async function safeFailureDiagnostic(operation: 'load' | 'save' | 'status') {
   fixture.componentRef.setInput('profileRevision', 3);
   fixture.componentRef.setInput('selected', true);
   fixture.detectChanges();
-  const element: HTMLElement = fixture.nativeElement as HTMLElement;
+  const rendered: unknown = fixture.nativeElement;
+  if (!(rendered instanceof HTMLElement)) throw new Error('Missing assistant choices');
+  const element = rendered;
   function loaded() {
     fixture.detectChanges();
     expect(element.querySelector('input')).not.toBeNull();
