@@ -180,6 +180,7 @@ Separate licence checks connect a regular-expression test library, a Valgrind
 client header and the WebAssembly C/C++ API to Node's signed source release and
 the exact binary in every saved image layer. They keep the full terms and explain
 why each bundled part is allowed.
+
 ## How to run or test it
 
 A qualification image build uses this Dockerfile with the computer Dockerfile from
