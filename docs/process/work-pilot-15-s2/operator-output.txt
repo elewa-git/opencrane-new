@@ -23,3 +23,12 @@ down.sh slot 1: exit 0
 NOT RUN: packaged upload/chat, scheduled backup completion, listing, manifest
 inspection, event/database/file contents and deliberately broken backup part.
 NOT RUN: packaged screenshots; the two saved pictures show Compose startup only.
+
+Documentation-only rebase onto main cc21e6d12 completed without conflict.
+Rebased attempt: f3f9431f54c67d1b9f881888805699ab4d1a6cfe
+claim.sh: slot 1
+run.sh package-prepare --id 1: exit 1
+Scanner CI approval refused: stage=metadata reason=malformed
+package-down slot 1: exit 0
+down.sh slot 1: exit 0
+NOT RUN: all packaged backup acceptance steps.

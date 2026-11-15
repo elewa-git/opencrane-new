@@ -2,7 +2,9 @@
 
 Journey on a fresh dev stack: **NOT RUN**.
 
-Date: 15 November 2026. Source: `06902fb9a0ff423f32e881bde136248c63d61a59`.
+Date: 15 November 2026. Startup source: `06902fb9a0ff423f32e881bde136248c63d61a59`.
+Rebased onto main `cc21e6d12` after its separate README repair landed. The
+collector, fixture, runner, source adapter and chart are byte-for-byte unchanged.
 Environment: freshly claimed secondary slot 1, local stand-in model, with the
 requested sign-in key-file setting and the fleet task marker retained.
 The packaged backup journey did not reach installation. No application image
@@ -20,13 +22,16 @@ or live backup is qualified by this receipt.
    exited one. The normal `fetchScannerApproval` guard refused this branch and
    source commit at `metadata`, with reason `malformed`. Installation requires a
    successful scanner-packaging workflow approval matching the exact checkout.
-   No older approval, local substitute or guard bypass was used.
+   The same preparation and guard refusal were observed again after rebasing,
+   at `f3f9431f54c67d1b9f881888805699ab4d1a6cfe`. No older approval, local
+   substitute or guard bypass was used.
 4. **NOT RUN:** packaged person upload and chat; triggering the scheduled backup;
    observing completion; listing it; reading its manifest and checking the event
    log, database and uploaded file; deliberately breaking a backup part and
    observing the failed Job. No packaged screenshots or successful backup exist.
 5. **PASS:** final `package-down` and `down.sh` both exited zero after the refusal.
-   The secondary slot and its prepared namespace were released.
+   Cleanup also passed after the rebased attempt. The secondary slot and its
+   prepared namespace were released.
 
 [Operator output](operator-output.txt) records the safe command results and guard
 classification. The inspected [1280 px screenshot](compose-startup-chat-1280.png)
@@ -42,7 +47,7 @@ merge until the required fresh packaged journey passes.
 
 - **PASS:** four new fault-injection cases first failed with a missing `.lock`
   while restart and marker write or sync both failed. The failing tests were
-  committed before the repair in `5e3ec90b4`.
+  committed before the repair in `cfb300852` (after rebasing).
 - **PASS:** final changed tests twice: 15 collector cases, three real-SDK storage
   cancellation cases and five existing credential cases; 23 cases per run.
   The final runs took 12.09 and 10.58 seconds.
@@ -53,12 +58,11 @@ merge until the required fresh packaged journey passes.
   own TypeScript project, with the existing rules and production size limits.
 - **PASS:** event catalogue, Knip and changelog checks. Knip reported two
   configuration hints. No event contract or dependency changed.
-- **PASS:** Markdown check across all 522 selected files before this receipt;
-  final documentation and public/privacy checks are recorded in the PR Evidence.
-- **FAIL:** the additional README guard reports inherited main-branch problems:
-  ClamAV has 154 lines without an allowance; dev-stack has 218 against 213 allowed.
-  Neither file was edited here. The changed package README remains within its
-  recorded allowance. No further edits were made to those three READMEs.
+- **PASS:** Markdown check across all 523 selected files after rebasing, plus
+  changelog and README checks. The separate main repair removed the inherited
+  ClamAV and dev-stack README failures. No further edits were made to those
+  READMEs or the package README. The package stays within its recorded allowance.
+- Final public/privacy checks are recorded in the PR Evidence.
 
 ## Repair and scope
 
