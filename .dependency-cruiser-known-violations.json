@@ -1,0 +1,212 @@
+[
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/bridge-conversation.ts",
+    "to": "apps/ops/src/lifecycle.ts",
+    "unresolvedTo": "../../../ops/src/lifecycle.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/bridge-opening.ts",
+    "to": "apps/ops/src/kubernetes.ts",
+    "unresolvedTo": "../../../ops/src/kubernetes.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/bridge-poll.ts",
+    "to": "apps/ops/src/lifecycle.ts",
+    "unresolvedTo": "../../../ops/src/lifecycle.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/bridge.ts",
+    "to": "apps/ops/src/kubernetes.ts",
+    "unresolvedTo": "../../../ops/src/kubernetes.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/close-cleanup.ts",
+    "to": "apps/ops/src/lifecycle.ts",
+    "unresolvedTo": "../../../ops/src/lifecycle.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/routine-wake.ts",
+    "to": "apps/ops/src/lifecycle.ts",
+    "unresolvedTo": "../../../ops/src/lifecycle.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/start.ts",
+    "to": "apps/ops/src/kubernetes.ts",
+    "unresolvedTo": "../../../ops/src/kubernetes.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "apps-do-not-import-other-apps"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/computer/src/bridge.ts",
+    "to": "scripts/private-memory-qualification/service-protection.ts",
+    "unresolvedTo": "../../../scripts/private-memory-qualification/service-protection.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/computer/src/entrypoint.ts",
+    "to": "scripts/private-memory-qualification/service-protection.ts",
+    "unresolvedTo": "../../../scripts/private-memory-qualification/service-protection.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/personal-memory-tools.ts",
+    "to": "scripts/private-memory-qualification/deployment.ts",
+    "unresolvedTo": "../../../../scripts/private-memory-qualification/deployment.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/chat/turns.ts",
+    "to": "scripts/private-memory-qualification/deployment.ts",
+    "unresolvedTo": "../../../../scripts/private-memory-qualification/deployment.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/main.ts",
+    "to": "scripts/private-memory-qualification/service-protection.ts",
+    "unresolvedTo": "../../../scripts/private-memory-qualification/service-protection.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/memory/initial-delivery.ts",
+    "to": "scripts/private-memory-qualification/deployment.ts",
+    "unresolvedTo": "../../../../scripts/private-memory-qualification/deployment.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/memory/mcp.ts",
+    "to": "scripts/private-memory-qualification/deployment.ts",
+    "unresolvedTo": "../../../../scripts/private-memory-qualification/deployment.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/server/src/models-main.ts",
+    "to": "scripts/private-memory-qualification/deployment.ts",
+    "unresolvedTo": "../../../scripts/private-memory-qualification/deployment.ts",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "product-source-does-not-import-scripts"
+    }
+  }
+]
