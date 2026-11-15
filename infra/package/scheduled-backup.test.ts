@@ -166,19 +166,21 @@ for (const failure of ['write', 'sync'] as const) {
         if (typeof originalWrite !== 'function' || typeof originalSync !== 'function') {
           throw new Error('Missing file handle implementations');
         }
+        const writeImplementation = originalWrite;
+        const syncImplementation = originalSync;
         let markerAttempted = false;
         async function writeMarker(this: FileHandle, ...args: Parameters<FileHandle['writeFile']>) {
           if (args[0] === '\nresume_failed\n') {
             markerAttempted = true;
             if (failure === 'write') throw new Error('private-volume-full-canary');
           }
-          await Reflect.apply(originalWrite, this, args);
+          await Reflect.apply(writeImplementation, this, args);
         }
         async function syncMarker(this: FileHandle) {
           if (markerAttempted && failure === 'sync') {
             throw new Error('private-volume-sync-canary');
           }
-          await Reflect.apply(originalSync, this, []);
+          await Reflect.apply(syncImplementation, this, []);
         }
         function restartFailure() {
           return Promise.reject(new Error('private-scale-failure-canary'));
