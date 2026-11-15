@@ -17,5 +17,5 @@ storage readiness entrypoint needed to start those services.
 Scanner configuration preserves its bundled database verification certificates,
 and packaged projection workers retain their required scanner import.
 
-Packaged browser qualification remains blocked by a model runtime import; this
-draft is not a qualified working installation.
+The fresh packaged browser journey now passes clean upload, an answer about the
+file and visible EICAR refusal at desktop and mobile widths with the stand-in model.

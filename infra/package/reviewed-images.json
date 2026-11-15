@@ -11,8 +11,8 @@
     "scanner"
   ],
   "images": {
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
     "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
     "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
     "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
@@ -24,10 +24,10 @@
     "approvedSha": "6cbd70a9814fb2860aa30dccc32d9e97b8efc990f355637c0231d867f70108ee"
   },
   "packageImage": {
-    "sourceRevision": "e0a528a7fb998ff50a3d51014e15febe8797170a",
-    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
-    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43",
-    "imageId": "sha256:b0f38725f0422d571be73a8518c5b1255f40a03a205e0a5d937a2e73f07f5eb0",
-    "scanSha256": "09750ecf16f315c063fe313e5619a8de60d0028f78cd7f1debae84379cab127d"
+    "sourceRevision": "bd73de7f728894c38b18e4dc5e171a2867a3acfb",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:d92d9c78c4d10e238fdf666b894163017d917056b5fadb88cef79707889ab844",
+    "imageId": "sha256:1075378221058a5ccb9654349cc28ffe12a514f8a147589e37081d137d578968",
+    "scanSha256": "d8c835086a1310eaf64d401b73176efe9a67e872c7040254deaf46067b818c39"
   }
 }
