@@ -7,9 +7,59 @@ failed during Zitadel setup, before the core or workspace runner. Every slice
 acceptance step is NOT RUN on this run. The previous PASS does not qualify this
 source.
 
+## Rebased head retest
+
+Rebased onto `origin/main` at `5b4456b1b66f5f41d458d821c837a1b773512b6d`.
+Rebased source head: `d1eb6a89e532e4cd9fa77e3da50c2466553f6382`.
+The manual template conflict resolution kept the organisation name and account
+details from main alongside this PR's role-gated Settings and shared Sign out.
+All other commits applied without conflicts.
+
+On 15 November 2026, the one-minute load was 5.63 before the secondary claim.
+`claim.sh` claimed secondary stack 1. `nice -n 10 infra/dev-stack/up.sh --fresh`
+failed at the Zitadel setup command:
+
+```text
+/usr/bin/node --experimental-strip-types infra/dev-stack/zitadel-setup.ts
+Zitadel credentials unavailable (ENOENT); set ZITADEL_KEY_FILE to an existing private key file; no request sent
+```
+
+`ZITADEL_KEY_FILE` pointed to this worktree's `.keys/.zitadel-key`, which was not
+readable. Private `failure.log` and `last-error.log` were copied outside the
+repository before cleanup. `down.sh` exited 0. The core journey and workspace
+runner were NOT RUN. This is a startup failure at Zitadel credential loading;
+the updated Zitadel setup code on main started but could not load the configured
+credential. No request was sent and no retry was made.
+
+| Step | 1280 px | 390 px |
+| --- | --- | --- |
+| Member has no Settings link | NOT RUN | NOT RUN |
+| Member types `/org/integrations` and sees refusal | NOT RUN | NOT RUN |
+| Member uses Sign out and reaches sign-in | NOT RUN | NOT RUN |
+| Admin sees Settings and opens it | NOT RUN | NOT RUN |
+| Owner sees Settings and opens it | NOT RUN | NOT RUN |
+| Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
+
+No screenshots were produced on this attempt. Existing screenshots remain
+historical evidence only.
+
+Changed tests on rebased head: **PASS**. The server chat HTTP test passed 1 test;
+the three changed web specs passed 143 tests. No other tests were run.
+
+## Rebased source checks
+
+- PASS: full typecheck.
+- PASS: `check:events`, 174 event types agree.
+- PASS: changed-code ESLint, no errors. The dev-stack workspace runner was ignored
+  by ESLint configuration and emitted one ignored-file warning.
+- PASS: Knip, with two existing configuration hints.
+- PASS: changelog lint and Markdownlint without file arguments, 514 files.
+- PASS: public privacy check and secret scan.
+- NOT RUN: full root test suite and full root lint.
+
 ## Integration
 
-Rebased onto `origin/main` at `7ec65e982f543f93b5829db39486cc8ca8eecfaa`.
+Rebased onto `origin/main` at `5b4456b1b66f5f41d458d821c837a1b773512b6d`.
 Kept the core-journey repair, approval deadline comparison and verified personal-key
 behaviour from main. Kept workspace Sign out, the caller's own role, owner-or-admin
 Settings links, computer wording and removal of the empty Projects block.
