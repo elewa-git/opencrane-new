@@ -59,3 +59,31 @@ function isEvidenceCopy(container) {
 
 test('packaged uploads have persistent storage and a private authenticated scanner',
   packageFilesRunInsideInstallation);
+
+function scannerConfigurationPreservesTrust() {
+  const values = { images: {}, secrets: {}, scanner: { approvedSha: 'a'.repeat(64) } };
+  for (const name of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
+    values.images[name] = `example.invalid/${name}@sha256:${'b'.repeat(64)}`;
+  }
+  for (const name of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap', 'objects', 'scanner']) {
+    values.secrets[name] = `fixture-${name.toLowerCase()}`;
+  }
+  const options = { encoding: 'utf8', input: JSON.stringify(values) };
+  const result = spawnSync('helm', ['template', 'trust', 'infra/package/chart', '-f', '-'], options);
+  assert.equal(result.status, 0, result.stderr);
+  for (const document of parseAllDocuments(result.stdout)) {
+    const resource = document.toJS();
+    if (resource.kind !== 'Deployment' || resource.metadata.name !== 'scanner') continue;
+    for (const container of resource.spec.template.spec.containers) {
+      if (container.name !== 'engine') continue;
+      for (const mount of container.volumeMounts) {
+        if (mount.name !== 'config') continue;
+        assert.equal(mount.mountPath, '/etc/clamav/package.conf',
+          'Keep the certificate directory from the reviewed scanner image visible');
+        assert.equal(mount.subPath, 'package.conf');
+      }
+    }
+  }
+}
+test('scanner configuration keeps the bundled database verification certificates visible',
+  scannerConfigurationPreservesTrust);
