@@ -1,0 +1,18 @@
+Fresh slice journey on rebased head eb7730775c1ae66a6dd936f2d3d222a09f940b94: PASS.
+On 15 November 2026, the one-minute host load was 6.31 before claiming secondary
+stack 2. `infra/dev-stack/up.sh --fresh` passed, including the full core journey.
+`workspace-journey.ts` passed at 1280 px and 390 px. The required Zitadel key path
+was available; setup sent requests only to the OpenCrane 2 Dev organisation.
+The owner stack was not used. `infra/dev-stack/down.sh` exited 0 and released the
+claimed slot.
+
+| Step | 1280 px | 390 px |
+| --- | --- | --- |
+| Member has no Settings link and sees the Integrations refusal | PASS — [workspace](screenshots/member-workspace-1280.png), [refusal](screenshots/member-refusal-1280.png) | PASS — [workspace](screenshots/member-workspace-390.png), [refusal](screenshots/member-refusal-390.png) |
+| Member uses Sign out and reaches sign-in | PASS — [screenshot](screenshots/member-signed-out-1280.png) | PASS — [screenshot](screenshots/member-signed-out-390.png) |
+| Admin sees Settings and opens it | PASS — [screenshot](screenshots/admin-settings-1280.png) | PASS — [screenshot](screenshots/admin-settings-390.png) |
+| Owner sees Settings and opens it | PASS — [screenshot](screenshots/owner-settings-1280.png) | PASS — [screenshot](screenshots/owner-settings-390.png) |
+| Separate owner browser remains signed in after member logout | PASS | PASS |
+
+Core startup journey: PASS. Approval journey: SKIP because it depends on issue 45
+rows 4, 5 and 14. This condition is outside #1045 acceptance.

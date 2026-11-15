@@ -40,7 +40,7 @@ export {
   welcomeListRowSchema,
   chatGroupsSchema,
   chatGroupSnapshotSchema,
-  chatContextSchema,
+  chatContextSchema, type ChatContext,
   computerStateSchema,
   memoryAdmissionSchema,
   type ComputerState,

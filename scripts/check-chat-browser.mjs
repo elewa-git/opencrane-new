@@ -120,7 +120,7 @@ try {
   assert((await racing.page.locator('.transcript').innerText()).includes('Send from the new draft'));
   await racing.page.close();
   const unreachable = await open('rail-offline', 1280);
-  await unreachable.page.getByText("Can't reach your pod", { exact: true }).waitFor({ timeout: 3000 });
+  await unreachable.page.getByText("Can't reach your computer", { exact: true }).waitFor({ timeout: 3000 });
   const countdown = await unreachable.page.locator('.retry-countdown').innerText();
   await unreachable.page.clock.runFor(1000);
   assert.notEqual(await unreachable.page.locator('.retry-countdown').innerText(), countdown);
