@@ -39,7 +39,11 @@ function failed(error: unknown) {
   }
   // Keep the stage, never SDK output, database text, private paths or credentials.
   const err = new Error('Backup failed', { cause: { kind: 'scheduled_backup', reason } });
-  logger.error({ err, reason }, 'Backup failed; inspect the Job and maintenance state');
+  let message = 'Backup failed; inspect the Job and maintenance state';
+  if (reason === 'resume' || reason === 'resume_marker') {
+    message = 'Backup failed; maintenance remains active and the lock is retained';
+  }
+  logger.error({ err, reason }, message);
   process.exitCode = 1;
 }
 

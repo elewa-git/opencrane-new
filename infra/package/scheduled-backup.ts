@@ -70,11 +70,17 @@ function drained(point: BackupPoint) {
 async function resume(source: BackupSource, lock: Awaited<ReturnType<typeof open>>) {
   try {
     await source.resume();
-    return true;
   } catch {
-    await lock.writeFile('\nresume_failed\n');
-    await lock.sync();
-    return false;
+    let reason = 'resume';
+    try {
+      await lock.writeFile('\nresume_failed\n');
+      await lock.sync();
+    } catch {
+      reason = 'resume_marker';
+    }
+    // Keep both failure stages without exposing dependency output or credentials.
+    const cause = { kind: 'scheduled_backup', reason };
+    throw new Error('Maintenance remains active; services could not restart', { cause });
   }
 }
 
@@ -126,8 +132,10 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
     if (!isDeepStrictEqual(point, await source.verify())) throw new Error('Point moved');
     stage = 'resume';
     paused = false;
-    resumed = await resume(source, lock);
-    if (!resumed) throw new Error('Resume failed');
+    // Retain the lock until restart succeeds, even if recording its failure also fails.
+    resumed = false;
+    await resume(source, lock);
+    resumed = true;
     const manifest = manifestSchema.parse({ version: 1, id: options.id, silo: options.silo,
       point, parts, startedAt, stoppedAt, completedAt: new Date().toISOString(),
       images: options.images, chartVersion: '0.1.0' });
@@ -136,13 +144,18 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
       { mode: 0o600, flag: 'wx', flush: true });
     await rename(temporary, join(options.directory, options.id));
     return manifest;
-  } catch {
+  } catch (error) {
+    if (!resumed) throw error;
     // Dependency output may contain credentials or file content. Keep only the failed stage.
     const cause = { kind: 'scheduled_backup', reason: stage };
     throw new Error('Scheduled backup failed', { cause });
   } finally {
     try {
-      if (paused) resumed = await resume(source, lock);
+      if (paused) {
+        resumed = false;
+        await resume(source, lock);
+        resumed = true;
+      }
     } finally {
       await lock.close();
       if (resumed) {

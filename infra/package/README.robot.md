@@ -1912,7 +1912,10 @@ directory rename publish the set. The catalogue ignores hidden interrupted sets
 and verifies every saved part against the manifest before listing or showing it.
 A failure publishes nothing, removes only this run's temporary output and restores
 saved replica counts. It attempts every saved restart even if one fails. A failed
-resume prevents publication and leaves a labelled maintenance lock and private set. Scheduled Jobs
+resume prevents publication and retains the maintenance lock and private set,
+even when writing or syncing the `resume_failed` marker also fails. The existing
+lock still identifies the run. The failed Job reports maintenance explicitly;
+`resume_marker` means that restart and marker storage both failed. Scheduled Jobs
 never retry automatically. The CronJob forbids overlap; an exclusive volume lock
 also refuses overlapping manually triggered Jobs. A hard kill leaves its lock
 and private partial set, possibly with writers stopped. An operator must inspect

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { captureScheduledBackup, listBackups, showBackup } from './scheduled-backup.ts';
+import type { BackupPoint } from './scheduled-backup.ts';
 
 const directories: string[] = [];
 afterEach(async function clean() {
@@ -15,7 +16,7 @@ async function fixture() {
   directories.push(directory);
   let stopped = false;
   let resumed = false;
-  const point = { sequence: 42, lsn: '0/123', checkpoints: { files: 42 } };
+  const point: BackupPoint = { sequence: 42, lsn: '0/123', checkpoints: { files: 42 } };
   const observations: string[] = [];
   function pause() {
     stopped = true;
@@ -189,6 +190,8 @@ for (const failure of ['write', 'sync'] as const) {
           expect(error).toBeInstanceOf(Error);
           expect((error as Error).message)
             .toBe('Maintenance remains active; services could not restart');
+          expect((error as Error).cause)
+            .toEqual({ kind: 'scheduled_backup', reason: 'resume_marker' });
           await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
         } finally {
           vi.restoreAllMocks();
@@ -201,7 +204,6 @@ it('attempts every saved restart even when the first scale command fails', async
   const { natsFixture } = await import('@opencrane/event-store/testing');
   const { packageBackupSource } = await import('./scheduled-backup-source.ts');
   const { chmod } = await import('node:fs/promises');
-  const { vi } = await import('vitest');
   const nats = await natsFixture();
   const test = await fixture();
   const command = join(test.directory, 'kubectl');
