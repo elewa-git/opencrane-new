@@ -31,7 +31,8 @@ import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fix
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 import { oauthSelectionFixture, selectPersonalFixture, refreshPersonalFixture }
   from './support/oauth-selection.ts';
-import { personalRequester } from './support/personal-requester.ts';
+import { personalPair } from './support/personal-dispatch.ts';
+import { delayReceiptReplies } from './support/dispatch-receipts.ts';
 import { projectionReplay } from './support/projection-replay.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
 
@@ -2527,8 +2528,10 @@ function holdTlsIdentityClock() {
   // Reach certificate verification without making this case a test of dispatch expiry.
   const elapsed = performance.now();
   const wall = Date.now();
-  vi.spyOn(performance, 'now').mockReturnValue(elapsed);
-  vi.spyOn(Date, 'now').mockReturnValue(wall);
+  const elapsedClock = vi.spyOn(performance, 'now');
+  elapsedClock.mockReturnValue(elapsed);
+  const wallClock = vi.spyOn(Date, 'now');
+  wallClock.mockReturnValue(wall);
   onTestFinished(restoreTlsIdentityClock);
 }
 
@@ -3138,25 +3141,9 @@ async function ignoresForgedProfileArgument() {
 it('treats a profile-shaped tool argument as data and keeps Alice’s selection',
   ignoresForgedProfileArgument, 60_000);
 
-async function personalPair() {
-  const context = await selectedPersonalFixture();
-  const { setup } = context;
-  const bob = await personalRequester(setup, body, context.headers);
-  const dispatch = setup.dispatchOptions.credentialDispatch!;
-  const readOriginal = dispatch.custody.readAccessMaterial;
-  const reads: string[] = [];
-  const readAccessMaterial: typeof readOriginal = async function readAccessMaterial(stage) {
-    reads.push(stage.userId);
-    if (stage.userId === 'bob') return 'bob-access';
-    return readOriginal(stage, { reference: 'alice-secret', uid: 'alice-uid',
-      resourceVersion: '1' });
-  };
-  dispatch.custody = { readAccessMaterial };
-  return { ...context, bob, reads };
-}
-
 async function concurrentPersonalTurns() {
-  const { setup, remote, headers, bob, reads } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers, bob, reads } = await personalPair(context, body);
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   const append = setup.nats.store.append.bind(setup.nats.store);
@@ -3204,22 +3191,6 @@ async function concurrentPersonalTurns() {
 it('races two personal assistants on one server without mixing credentials',
   concurrentPersonalTurns, 60_000);
 
-function delayReceiptReplies(setup: Fixture) {
-  const auth = memberAuthorisation(setup.binding);
-  const checkApplied = auth.checkApplied.bind(auth);
-  async function readApplied(eventId: string) {
-    const result = await checkApplied(eventId);
-    await pause(400);
-    return result;
-  }
-  function restoreChecks() {
-    vi.restoreAllMocks();
-  }
-  onTestFinished(restoreChecks);
-  const appliedCheck = vi.spyOn(auth, 'checkApplied');
-  appliedCheck.mockImplementation(readApplied);
-}
-
 async function noKeyReceiptWork() {
   const context = await publishedFixture();
   const { setup } = context;
@@ -3236,7 +3207,8 @@ it('prepares immutable receipt work for a tool that needs no personal key',
   noKeyReceiptWork, 60_000);
 
 async function concurrentReceiptWork() {
-  const { setup, remote, headers, bob } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers, bob } = await personalPair(context, body);
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   delayReceiptReplies(setup);
@@ -3256,7 +3228,8 @@ it('keeps concurrent credential releases within the access window with receipt s
   concurrentReceiptWork, 60_000);
 
 async function permissionChangedWhileQueued() {
-  const { setup, remote, headers, bob } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers, bob } = await personalPair(context, body);
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   const entered = Promise.withResolvers<void>();
@@ -3310,7 +3283,8 @@ it('refuses a permission removed while the personal dispatch waits in the budget
   permissionChangedWhileQueued, 60_000);
 
 async function receiptUnavailableOnNextRequest() {
-  const { setup, remote, headers } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers } = await personalPair(context, body);
   const first = await permit(setup, headers);
   const second = await permit(setup, headers);
   expect((await send(setup, first)).status).toBe(200);
@@ -3329,7 +3303,8 @@ it('does not reuse an earlier request’s receipt when the next request cannot c
   receiptUnavailableOnNextRequest, 60_000);
 
 async function foreignPersonalLease() {
-  const { setup, remote, headers, bob, reads } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers, bob, reads } = await personalPair(context, body);
   const alicePermit = await permit(setup, headers);
   expect((await send(setup, alicePermit, bob.body)).status).toBe(403);
   expect((await send(setup, alicePermit)).status).toBe(403);
@@ -3339,7 +3314,8 @@ async function foreignPersonalLease() {
 it('burns a personal lease used with another person’s request', foreignPersonalLease, 60_000);
 
 async function revokedDuringMaterialRead() {
-  const { setup, remote, headers, bob, saved } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers, bob, saved } = await personalPair(context, body);
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   const custody = setup.dispatchOptions.credentialDispatch!.custody;
@@ -3363,7 +3339,8 @@ it('refuses a key revoked during release while the other person can still call',
   revokedDuringMaterialRead, 60_000);
 
 async function unavailablePermissionDuringRelease() {
-  const { setup, remote, headers } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers } = await personalPair(context, body);
   const value = await permit(setup, headers);
   const auth = memberAuthorisation(setup.binding);
   const use = auth.use.bind(auth);
@@ -3394,7 +3371,8 @@ it('rechecks live permission availability after reading personal key material',
   unavailablePermissionDuringRelease, 60_000);
 
 async function anotherAccountArgument() {
-  const { setup, remote, headers } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers } = await personalPair(context, body);
   const raw = body.replace('"arguments":{',
     '"arguments":{"account":"bob","userId":"bob","profileId":"bob-profile",');
   const value = await permit(setup, headers, raw);
@@ -3406,7 +3384,8 @@ it('cannot select Bob’s existing key through Alice’s tool arguments',
   anotherAccountArgument, 60_000);
 
 async function noPersonalFallback() {
-  const { setup, remote, headers, bob } = await personalPair();
+  const context = await selectedPersonalFixture();
+  const { setup, remote, headers, bob } = await personalPair(context, body);
   const subject = 'connection-selection-bob-fixture';
   const expectedSequence = await setup.nats.store.head(subject);
   await setup.append(subject, 'connection.selected', {

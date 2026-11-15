@@ -8,3 +8,6 @@ keeping their original short permit and access deadline.
 Tool offers read independent member, assistant and selected-account checks together,
 keeping the one-second build deadline. The demo server permits both synthetic
 accounts, and attachment buttons reuse the shared minimum touch size.
+
+Prepared calls keep the saved owner and request even if caller data changes. A tool
+build that exceeds one second leaves that turn without tools, including later resends.

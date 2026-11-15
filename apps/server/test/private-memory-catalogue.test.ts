@@ -84,9 +84,12 @@ async function refusesGrant(denied: 'person' | 'assistant') {
   function canUse(_server: string, kind: 'person' | 'assistant') {
     return Promise.resolve(kind !== denied);
   }
-  input.canUse = vi.fn(canUse);
+  const permissionCheck = vi.fn(canUse);
+  input.canUse = permissionCheck;
   expect(await buildPrivateTurnMemoryTools(input)).toEqual([]);
-  expect(input.canUse).toHaveBeenCalledTimes(denied === 'person' ? 1 : 2);
+  expect(permissionCheck).toHaveBeenCalledTimes(2);
+  expect(permissionCheck).toHaveBeenCalledWith('memory', 'person', 'alice');
+  expect(permissionCheck).toHaveBeenCalledWith('memory', 'assistant', 'assistant');
 }
 it.each(['person', 'assistant'] as const)('offers nothing without the %s MCP grant', refusesGrant);
 

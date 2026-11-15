@@ -510,18 +510,79 @@ async function refusalSurvivesLaterFailures(laterFailure: string) {
 it.each(['audit', 'expiry', 'unlock'])(
   'preserves a permission refusal through a later %s failure', refusalSurvivesLaterFailures);
 
-async function callerCannotReplacePreparedRelease() {
+async function keepsPreparedRequestsBoundToTheirOwners() {
+  const secrets = new Map<string, string>();
+  const alice = await fixture({ serverId: 'shared', secrets, material: 'alice-access' });
+  const bob = await fixture({ serverId: 'shared', secrets, material: 'bob-access',
+    profileId: 'bob-oauth' });
+  const bobBroker = bob.broker();
+  await bobBroker.prepare();
+  const evidence = await credentialReleaseEvidence(nats.store, 'test', bob.decision.id,
+    bob.release, bob.loadConfiguration);
+  const replacement = { release: bob.release, evidence };
+  const context = { ...alice.context };
+  const aliceBroker = alice.broker(context);
+  const reached = Promise.withResolvers<void>();
+  const resume = Promise.withResolvers<void>();
+  const read = nats.store.readStream.bind(nats.store);
+  async function* heldDecision(subject: string, from?: number, deadline?: number) {
+    if (subject === `decision-${alice.userId}`) {
+      reached.resolve();
+      await resume.promise;
+    }
+    yield* read(subject, from, deadline);
+  }
+  const streamReader = vi.spyOn(nats.store, 'readStream');
+  streamReader.mockImplementation(heldDecision);
+  // Supply another owner's prepared data through JavaScript's extra arguments too.
+  const prepareAlice: (...extra: unknown[]) => Promise<void> = aliceBroker.prepare;
+  const preparing = prepareAlice(replacement);
+  try {
+    await reached.promise;
+    Object.assign(context, bob.context);
+  } finally {
+    resume.resolve();
+  }
+  await preparing;
+  expect(alice.sends).toEqual([]);
+  expect(bob.sends).toEqual([]);
+  const sendAlice: (...extra: unknown[]) => Promise<void> = aliceBroker.send;
+  await sendAlice(replacement);
+  await bobBroker.send();
+  const aliceRows = await history(nats.store, `credential-${alice.userId}`, 'test');
+  const bobRows = await history(nats.store, `credential-${bob.userId}`, 'test');
+  expect(aliceRows).toHaveLength(1);
+  expect(bobRows).toHaveLength(1);
+  expect(aliceRows[0]!.event.data).toEqual(alice.release);
+  expect(bobRows[0]!.event.data).toEqual(bob.release);
+  expect(alice.sends).toEqual(['alice-access']);
+  expect(bob.sends).toEqual(['bob-access']);
+}
+it('prepares two owners’ requests without accepting caller mutation or foreign prepared data',
+  keepsPreparedRequestsBoundToTheirOwners);
+
+async function refusesForeignPreparedContext(field: 'userId' | 'turnId') {
   const test = await fixture();
-  const evidence = await credentialReleaseEvidence(nats.store, 'test', test.decision.id,
-    test.release, test.loadConfiguration);
-  const replacement = { release: { ...test.release, ownerId: 'another-person' }, evidence };
+  const context = { ...test.context, [field]: 'foreign' };
+  const broker = test.broker(context);
+  await expect(broker.prepare()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+  expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+}
+it.each(['userId', 'turnId'] as const)(
+  'refuses preparation when %s differs from the saved request', refusesForeignPreparedContext);
+
+async function refusesPreparationAfterSending() {
+  const test = await fixture();
   const broker = test.broker();
-  // Exercise JavaScript callers too: extra arguments must not replace the bound request.
-  await Reflect.apply(broker.send, broker, [replacement]);
+  await broker.prepare();
+  await broker.send();
+  await expect(broker.prepare()).rejects.toThrow('Release unavailable');
+  await expect(broker.send()).rejects.toThrow('Release unavailable');
   const rows = await history(nats.store, `credential-${test.userId}`, 'test');
   expect(rows).toHaveLength(1);
   expect(rows[0]!.event.data).toEqual(test.release);
   expect(test.sends).toEqual(['synthetic-access']);
 }
-it('keeps its saved release binding when a caller supplies replacement prepared data',
-  callerCannotReplacePreparedRelease);
+it('refuses preparation after sending and never sends the saved request again',
+  refusesPreparationAfterSending);
