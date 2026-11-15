@@ -229,11 +229,14 @@ All three environment variables are required; a missing archive fails the test.
 The archive must identify the same image that the container checks exercise.
 The recursive import check compares the packaged TypeScript files with the source
 checkout. It follows runtime imports after removing TypeScript types, starting at
-both bootstrap programs. Removing a required imported file refuses even when
-`bootstrap.ts` remains. It also checks every shipped TypeScript module for runtime
-imports from test folders. The existing bootstrap source suite checks that every
-imported dev-stack file has an explicit Docker context exception and refuses test
-folder imports.
+both bootstrap programs and `infra/dev-stack/secondary-models.ts`, the chart’s
+model entry point. The package deliberately uses the secondary stack’s fake model
+for local install checks. Its bridge and tool-rehearsal helper ship through the same
+explicit `.dockerignore` exceptions as the launcher and stub. Removing a required
+imported file refuses even when the entry point remains. It also checks every
+shipped TypeScript module for runtime imports from test folders. The existing bootstrap source suite checks that every
+imported dev-stack file reachable from setup or the model has an explicit Docker
+context exception and refuses test folder imports.
 
 The container check runs the real bootstrap entry point and its owner subprocess.
 A read-only test loader first imports the real service packages, then supplies

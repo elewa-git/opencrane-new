@@ -561,10 +561,11 @@ async function refusesLatePlacementWithoutBackoff() {
 it('bootstrap refuses a late placement refusal without another wait or request',
   refusesLatePlacementWithoutBackoff);
 
-async function checksBootstrapContextImports() {
+async function checksPackagedContextImports() {
   const ignore = await readFile('.dockerignore', 'utf8');
   const rules = new Set(ignore.split('\n'));
-  const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts'];
+  const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts',
+    'infra/dev-stack/secondary-models.ts'];
   const visited = new Set<string>();
   while (pending.length > 0) {
     const file = pending.pop()!;
@@ -572,9 +573,10 @@ async function checksBootstrapContextImports() {
       continue;
     }
     visited.add(file);
-    assert.ok(!/(^|\/)tests?\//u.test(file), 'Bootstrap runtime must not import a test folder');
+    assert.ok(!/(^|\/)tests?\//u.test(file), 'Packaged runtime must not import a test folder');
     if (file.startsWith('infra/dev-stack/')) {
-      assert.ok(rules.has(`!${file}`), 'Bootstrap runtime import is outside the Docker context');
+      const message = `Packaged runtime import is outside the Docker context: ${file}`;
+      assert.ok(rules.has(`!${file}`), message);
     }
     const source = await readFile(file, 'utf8');
     const options = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ESNext,
@@ -589,8 +591,8 @@ async function checksBootstrapContextImports() {
   }
 }
 
-it('includes every relative bootstrap runtime import in the narrow Docker context',
-  checksBootstrapContextImports);
+it('includes every relative bootstrap and model runtime import in the narrow Docker context',
+  checksPackagedContextImports);
 
 async function waitsForDeletedSetupStreamToDisappear() {
   const cluster = await clusterFixture();

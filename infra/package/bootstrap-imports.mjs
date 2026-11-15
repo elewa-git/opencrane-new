@@ -27,7 +27,8 @@ function checkRuntimeSources(sources) {
 // Follow emitted imports so type-only dependencies do not become runtime requirements.
 function checkImports(sources) {
   checkRuntimeSources(sources);
-  const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts'];
+  const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts',
+    'infra/dev-stack/secondary-models.ts'];
   const visited = new Set();
   while (pending.length > 0) {
     const file = pending.pop();
@@ -45,13 +46,13 @@ function checkImports(sources) {
       }
     }
   }
-  console.log(`PASS ${visited.size} bootstrap modules match source and resolve relative imports`);
+  console.log(`PASS ${visited.size} packaged runtime modules match source and resolve relative imports`);
 }
 
 try {
   checkImports(JSON.parse(readFileSync(0, 'utf8')));
 } catch {
   // Withhold source contents, fixture values and host paths from failure output.
-  console.error('FAIL packaged bootstrap imports');
+  console.error('FAIL packaged runtime imports');
   process.exitCode = 1;
 }
