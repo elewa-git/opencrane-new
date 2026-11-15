@@ -7,11 +7,25 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 
 const checker = fileURLToPath(new URL('./check-folder-readmes.mjs', import.meta.url));
 let repository;
+const headings = [
+  'What this is', 'Where it fits', 'What it is responsible for',
+  'Processes it handles', 'How to run or test it', 'Where to read more',
+];
+
+function packageReadme() {
+  const lines = ['# Example', ''];
+  for (const heading of headings) {
+    lines.push(`## ${heading}`, '', 'Example package.', '');
+  }
+  return lines.join('\n');
+}
+const validReadme = packageReadme();
 
 function createRepository() {
   repository = mkdtempSync(join(tmpdir(), 'folder-readmes-'));
   const options = { cwd: repository, encoding: 'utf8' };
   execFileSync('git', ['init', '--quiet'], options);
+  writeFile('scripts/readme-baseline.json', '[]');
 }
 
 function removeRepository() {
@@ -44,7 +58,7 @@ afterEach(removeRepository);
 
 function reportsEveryMissingFolder() {
   const files = {
-    'apps/example/README.md': '# Example\n',
+    'apps/example/README.md': validReadme,
     'apps/example/src/chat/history/messages.ts': '',
     'apps/example/assets/icons/logo.svg': '',
   };
@@ -81,7 +95,7 @@ const excludedFolders = [
 
 function skipsExcludedFolder(folder) {
   const files = {
-    'libs/example/README.md': '# Example\n',
+    'libs/example/README.md': validReadme,
     [`libs/example/${folder}/nested/file.ts`]: '',
     [`libs/example/src/${folder}/nested/file.ts`]: '',
   };
@@ -111,7 +125,7 @@ test.each(excludedFolders)(
 
 function requiresTrackedReadmeOnDisk() {
   const files = {
-    'libs/example/README.md': '# Example\n',
+    'libs/example/README.md': validReadme,
     'libs/example/index.ts': '',
   };
   trackFiles(files);
@@ -127,7 +141,7 @@ test('reports a tracked README removed from disk as missing', requiresTrackedRea
 
 function allowsTopLevelSource() {
   const files = {
-    'libs/example/README.md': '# Example\n',
+    'libs/example/README.md': validReadme,
     'libs/example/src/index.ts': '',
   };
   trackFiles(files);
@@ -141,7 +155,7 @@ test('allows the top-level src folder without a README', allowsTopLevelSource);
 
 function requiresNestedSourceReadme() {
   const files = {
-    'libs/example/README.md': '# Example\n',
+    'libs/example/README.md': validReadme,
     'libs/example/model/README.md': '# Model\n',
     'libs/example/model/src/index.ts': '',
   };
@@ -159,7 +173,7 @@ const ticketReferences = ['#123', 'P3-5', 'phase 3', 'PR 12', 'Phase 3', 'pr 12'
 
 function rejectsTicketReference(reference) {
   const files = {
-    'infra/example/README.md': '# Example\n',
+    'infra/example/README.md': validReadme,
     'infra/example/settings/README.md': `# Settings\n\nAdded in ${reference}.\n`,
   };
   trackFiles(files);
@@ -191,7 +205,7 @@ test('also checks existing package and top-level src READMEs', checksExistingPac
 
 function usesOnlyTrackedFiles() {
   const files = {
-    'apps/example/README.md': '# Example\n',
+    'apps/example/README.md': validReadme,
     'apps/example/folder with spaces/README.md': '# Settings\n',
     'apps/example/folder with spaces/config.ts': '',
     'docs/notes/history.txt': '',
@@ -206,3 +220,68 @@ function usesOnlyTrackedFiles() {
 }
 
 test('checks tracked folders only and supports spaces in paths', usesOnlyTrackedFiles);
+
+function rejectsWrongHeadingOrder() {
+  const content = validReadme.replace('## Where it fits', '## Folders');
+  trackFiles({ 'libs/example/README.md': content });
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('libs/example/README.md: headings');
+}
+
+test('refuses a wrong package heading order', rejectsWrongHeadingOrder);
+
+function rejectsDifferentOpening() {
+  const files = {
+    'libs/example/README.md': validReadme,
+    'libs/example/package.json': JSON.stringify({ description: 'Another package.' }),
+  };
+  trackFiles(files);
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('libs/example/README.md: opening');
+}
+
+test('refuses an opening different from the package description', rejectsDifferentOpening);
+
+function readmeWithLines(count) {
+  const lines = validReadme.trimEnd().split('\n');
+  while (lines.length < count) lines.push('More detail.');
+  return `${lines.join('\n')}\n`;
+}
+
+function rejectsLongReadme() {
+  trackFiles({ 'libs/example/README.md': readmeWithLines(151) });
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('libs/example/README.md: length: 151');
+}
+
+test('refuses a package README with 151 lines', rejectsLongReadme);
+
+function summaryWithLines(count) {
+  const extra = 'Change note.\n'.repeat(count - 1);
+  return validReadme.replace('Example package.\n', `Example package.\n${extra}`);
+}
+
+function rejectsChangeNotes() {
+  trackFiles({ 'libs/example/README.md': summaryWithLines(11) });
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('libs/example/README.md: summary: 11');
+}
+
+test('refuses 11 non-blank lines under What this is', rejectsChangeNotes);
+
+function rejectsLongRobotReadme() {
+  const files = {
+    'libs/example/README.md': validReadme,
+    'libs/example/README.robot.md': 'Detail.\n'.repeat(1501),
+  };
+  trackFiles(files);
+  const result = runCheck();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('libs/example/README.robot.md: robot-length: 1501');
+}
+
+test('refuses a robot README with 1501 lines', rejectsLongRobotReadme);
