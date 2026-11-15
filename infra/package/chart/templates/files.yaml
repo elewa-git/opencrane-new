@@ -117,7 +117,8 @@ spec:
             capabilities: { drop: [ALL] }
           volumeMounts:
             - { name: databases, mountPath: /var/lib/clamav, readOnly: true }
-            - { name: config, mountPath: /etc/clamav, readOnly: true }
+            # Preserve the bundled certificates used to verify signature databases.
+            - { name: config, mountPath: /etc/clamav/package.conf, subPath: package.conf, readOnly: true }
             - { name: temporary, mountPath: /tmp }
           readinessProbe:
             exec:

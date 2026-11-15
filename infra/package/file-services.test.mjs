@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
 
-function packageFilesRunInsideInstallation() {
+function fileServiceValues() {
   const images = {};
   const secrets = {};
   for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
@@ -12,7 +12,11 @@ function packageFilesRunInsideInstallation() {
   for (const role of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap', 'objects', 'scanner']) {
     secrets[role] = `test-${role.toLowerCase()}`;
   }
-  const values = { images, secrets, scanner: { approvedSha: 'c'.repeat(64) } };
+  return { images, secrets, scanner: { approvedSha: 'c'.repeat(64) } };
+}
+
+function renderFileServices() {
+  const values = fileServiceValues();
   const options = { encoding: 'utf8', input: JSON.stringify(values) };
   const result = spawnSync('helm', ['template', 'files', 'infra/package/chart', '-f', '-'],
     options);
@@ -22,6 +26,11 @@ function packageFilesRunInsideInstallation() {
     const resource = document.toJS();
     resources.set(`${resource.kind}/${resource.metadata.name}`, resource);
   }
+  return resources;
+}
+
+function packageFilesRunInsideInstallation() {
+  const resources = renderFileServices();
   const storage = resources.get('StatefulSet/objects');
   assert.ok(storage, 'The package must run its own persistent object store');
   assert.ok(storage.spec.volumeClaimTemplates.length > 0);
@@ -60,30 +69,22 @@ function isEvidenceCopy(container) {
 test('packaged uploads have persistent storage and a private authenticated scanner',
   packageFilesRunInsideInstallation);
 
+function isEngine(container) {
+  return container.name === 'engine';
+}
+
+function isConfiguration(mount) {
+  return mount.name === 'config';
+}
+
 function scannerConfigurationPreservesTrust() {
-  const values = { images: {}, secrets: {}, scanner: { approvedSha: 'a'.repeat(64) } };
-  for (const name of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
-    values.images[name] = `example.invalid/${name}@sha256:${'b'.repeat(64)}`;
-  }
-  for (const name of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap', 'objects', 'scanner']) {
-    values.secrets[name] = `fixture-${name.toLowerCase()}`;
-  }
-  const options = { encoding: 'utf8', input: JSON.stringify(values) };
-  const result = spawnSync('helm', ['template', 'trust', 'infra/package/chart', '-f', '-'], options);
-  assert.equal(result.status, 0, result.stderr);
-  for (const document of parseAllDocuments(result.stdout)) {
-    const resource = document.toJS();
-    if (resource.kind !== 'Deployment' || resource.metadata.name !== 'scanner') continue;
-    for (const container of resource.spec.template.spec.containers) {
-      if (container.name !== 'engine') continue;
-      for (const mount of container.volumeMounts) {
-        if (mount.name !== 'config') continue;
-        assert.equal(mount.mountPath, '/etc/clamav/package.conf',
-          'Keep the certificate directory from the reviewed scanner image visible');
-        assert.equal(mount.subPath, 'package.conf');
-      }
-    }
-  }
+  const resources = renderFileServices();
+  const scanner = resources.get('Deployment/scanner');
+  const engine = scanner.spec.template.spec.containers.find(isEngine);
+  const mount = engine.volumeMounts.find(isConfiguration);
+  assert.equal(mount.mountPath, '/etc/clamav/package.conf',
+    'Keep the certificate directory from the reviewed scanner image visible');
+  assert.equal(mount.subPath, 'package.conf');
 }
 test('scanner configuration keeps the bundled database verification certificates visible',
   scannerConfigurationPreservesTrust);

@@ -13,3 +13,6 @@ for its exact source commit; local candidates cannot approve a scanner. Image
 publication supports the existing plain HTTP development registry without changing
 Docker settings. Packaged images include the shared scanner database reader and
 storage readiness entrypoint needed to start those services.
+
+Scanner configuration preserves its bundled database verification certificates,
+and packaged projection workers retain their required scanner import.

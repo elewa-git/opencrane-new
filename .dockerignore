@@ -31,6 +31,7 @@ infra/clamav
 !infra/clamav/
 infra/clamav/*
 !infra/clamav/image-client.mjs
+!infra/clamav/image-worker.mjs
 !infra/clamav/image-walk.mjs
 !infra/clamav/image-walk.py
 !infra/clamav/instream.mjs

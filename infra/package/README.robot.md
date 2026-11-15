@@ -179,7 +179,9 @@ Both production launch paths use the fixed settings in `chart/scanner.conf`.
 Both the engine and HTTPS wrapper mount that copy read-only. The engine listens
 only on Pod loopback, disables reloads and uses a 64 MiB memory-backed temporary
 folder. A network rule exposes only authenticated HTTPS on port 8443 to the server
-and dispatcher Pods. The Pod has no outbound network access or service-account token.
+and dispatcher Pods. Mount only the scanner config file so the image's bundled database verification
+certificates remain visible. The Pod has no outbound network access or
+service-account token.
 
 `scanner.mjs` reuses the existing HTTPS service and release validation.
 `packaged.mjs` verifies the approved manifest hash, release/image binding, database
@@ -315,6 +317,8 @@ imported file refuses even when the entry point remains. It also checks every
 shipped TypeScript module for runtime imports from test folders. The existing bootstrap source suite checks that every
 imported dev-stack file reachable from setup or the model has an explicit Docker
 context exception and refuses test folder imports.
+A separate real-image import check keeps the scanner module needed by every
+projection worker in the image.
 
 The container check runs the real bootstrap entry point and its owner subprocess.
 A read-only test loader first imports the real service packages, then supplies
