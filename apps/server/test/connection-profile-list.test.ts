@@ -229,18 +229,7 @@ it('marks only the member’s explicit saved choice', async () => {
   const digest = await server();
   await profile('alice', 'chosen', digest);
   await profile('alice', 'other', digest);
-  const revision = await nats.store.head('connection-alice-shared-chosen');
-  const subject = 'connection-selection-alice-shared';
-  const changeRef = 'choose-one';
-  const id = createHash('sha256').update(JSON.stringify(['test', subject, changeRef]))
-    .digest('hex');
-  const data = { userId: 'alice', serverId: 'shared', connectionId: 'installed',
-    expectedSequence: 0, action: 'select', profileId: 'chosen', profileRevision: revision };
-  const choice = envelope('test', subject, 'connection.selected', data, id);
-  choice.commandId = changeRef;
-  choice.source = 'opencrane-server';
-  choice.principal = { kind: 'human', id: 'alice' };
-  await nats.seed([choice]);
+  await saveChosenProfile();
   await runner.run(connectionProfiles);
   const response = await list('alice');
   expect(response.statusCode).toBe(200);
@@ -346,25 +335,10 @@ async function selectionDoesNotRequireInventoryProgress() {
   const digest = await server();
   await profile('alice', 'chosen', digest);
   await runner.run(connectionProfiles);
-  const revision = await nats.store.head('connection-alice-shared-chosen');
-  const subject = 'connection-selection-alice-shared';
   let previousSequence = 0;
   // Leave the profile projection paused through selection and both consent changes.
   for (const allowedAssistantIds of [['assistant'], [], ['assistant']]) {
-    const commandId = `consent-${previousSequence}`;
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify(['test', subject, commandId]));
-    const choice = envelope('test', subject, 'connection.selected', {
-      userId: 'alice', serverId: 'shared', connectionId: 'installed',
-      expectedSequence: previousSequence, action: 'select', profileId: 'chosen',
-      profileRevision: revision, allowedAssistantIds,
-    }, hash.digest('hex'));
-    choice.commandId = commandId;
-    choice.source = 'opencrane-server';
-    choice.principal = { kind: 'human', id: 'alice' };
-    const appended = await nats.store.append({ event: choice, expectedSequence: previousSequence });
-    expect(appended.status).toBe('appended');
-    previousSequence = await nats.store.head(subject);
+    previousSequence = await saveChosenProfile(allowedAssistantIds, previousSequence);
     const response = await list('alice');
     expect(response.statusCode).toBe(200);
     expect(response.json<Page>().rows).toMatchObject([{ profileId: 'chosen', selected: true }]);
@@ -384,3 +358,21 @@ async function unprojectedCreationStillRefusesIncompleteInventory() {
 }
 it('keeps an unprojected profile creation unavailable rather than returning an incomplete list',
   unprojectedCreationStillRefusesIncompleteInventory);
+
+async function saveChosenProfile(allowedAssistantIds?: string[], expectedSequence = 0) {
+  const subject = 'connection-selection-alice-shared';
+  const commandId = `consent-${expectedSequence}`;
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(['test', subject, commandId]));
+  const profileRevision = await nats.store.head('connection-alice-shared-chosen');
+  const data = { userId: 'alice', serverId: 'shared', connectionId: 'installed',
+    expectedSequence, action: 'select', profileId: 'chosen', profileRevision,
+    ...(allowedAssistantIds === undefined ? {} : { allowedAssistantIds }) };
+  const choice = envelope('test', subject, 'connection.selected', data, hash.digest('hex'));
+  choice.commandId = commandId;
+  choice.source = 'opencrane-server';
+  choice.principal = { kind: 'human', id: 'alice' };
+  const appended = await nats.store.append({ event: choice, expectedSequence });
+  expect(appended.status).toBe('appended');
+  return nats.store.head(subject);
+}
