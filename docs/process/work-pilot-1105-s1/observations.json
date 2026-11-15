@@ -2,31 +2,31 @@
   {
     "width": 1280,
     "disabled": {
-      "sequence": 500,
-      "observedAt": "2026-11-15T11:58:34.656Z"
+      "sequence": 503,
+      "observedAt": "2026-11-15T13:44:24.147Z"
     },
     "enabled": {
-      "sequence": 519,
-      "observedAt": "2026-11-15T11:58:46.221Z"
+      "sequence": 522,
+      "observedAt": "2026-11-15T13:44:33.831Z"
     },
-    "beforeConversation": "70368607-6e88-4fd5-8ac5-735162ff8add",
-    "refusedConversation": "d3fd5557-f792-462a-bf70-ade207f91edc",
-    "afterConversation": "cae4e03d-5d07-4ce3-a5cc-81fdb74910b4",
+    "beforeConversation": "ff7a594b-6468-4b22-a259-1512d601535e",
+    "refusedConversation": "853f50f2-dfa6-4579-a866-c406e013e239",
+    "afterConversation": "c487b694-b98b-46a7-b4e4-7745c0b47675",
     "verdict": "PASS"
   },
   {
     "width": 390,
     "disabled": {
-      "sequence": 589,
-      "observedAt": "2026-11-15T11:59:24.794Z"
+      "sequence": 592,
+      "observedAt": "2026-11-15T13:46:07.157Z"
     },
     "enabled": {
-      "sequence": 609,
-      "observedAt": "2026-11-15T11:59:36.715Z"
+      "sequence": 611,
+      "observedAt": "2026-11-15T13:46:48.774Z"
     },
-    "beforeConversation": "965544b5-2556-428e-969d-9f9cccd98176",
-    "refusedConversation": "3b489c89-76f0-47ca-ade1-519f2c087ce8",
-    "afterConversation": "e5908d39-be7b-49ba-b100-682daa3e31e6",
+    "beforeConversation": "6886fbdd-c3c4-45df-a6b6-7d71fc5a1bab",
+    "refusedConversation": "cd276a05-488a-4e4d-97a3-40e92cfc335e",
+    "afterConversation": "dd9b1ac8-9566-4f74-89f6-e8a5a505805a",
     "verdict": "PASS"
   }
 ]
