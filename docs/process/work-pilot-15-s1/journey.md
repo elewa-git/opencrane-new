@@ -9,8 +9,12 @@ The PR remains draft; this slice is not ready to merge.
 
 Tested source: `be18431aecc2b3755eea57a49d4fa1531880a71c`.
 Application image source: `e0a528a7fb998ff50a3d51014e15febe8797170a`.
-Fetched origin and completed the rebase onto `35e9f09e8`; that base is an ancestor
-of the tested source. The worktree is retained for review.
+The journey used base `35e9f09e8`. After qualification, fetched origin again and
+completed the requested rebase onto `117564913e9af280be4939949cd83b7ccbe23256`.
+That base is an ancestor of the final branch. The rebase finished with a clean
+worktree. The reviewed application image predates this final rebase. No image
+rebuild, packaging repair or journey followed the required stop. The worktree
+is retained for review.
 
 ## Required owner decision
 
@@ -122,6 +126,11 @@ image. No slot, namespace or temporary Pod remains claimed by this task.
 
 ## Own source checks
 
+The results below belong to the tested source before the final rebase.
+Post-rebase tests, typecheck, event checks, Knip and ESLint are **NOT RUN** after
+the required stop; the final head is not claimed source ready. Documentation
+checks and the mandatory pre-push privacy scans were repeated.
+
 All tests, lint, typecheck and builds used priority 10. Source gate scripts and journey phase boundaries waited for load to fall below
 10 before starting; no full root suite or fleet batch ran locally.
 The second fresh-stack process and its children inherited priority 10. The first
@@ -137,7 +146,7 @@ process tree was lowered to that priority before its browser qualification.
 | Startup-fix chart files | PASS twice; 280 cases per run |
 | Real rebuilt application image checks | PASS twice; 13 cases per run |
 | Deliberately removed CI/preflight guards in an isolated copy | PASS; all nine removals caused their intended test failures |
-| Workspace, package and dev-stack typecheck | PASS; no TypeScript source changed afterwards |
+| Workspace, package and dev-stack typecheck | PASS on tested source; final rebase not checked |
 | `check:events`, Knip, changelog lint, changed-file ESLint, Markdown | PASS |
 | Additional untyped infrastructure JavaScript ESLint | PASS; zero warnings |
 | Public privacy and secret scans before source pushes | PASS |
@@ -151,12 +160,12 @@ attempt to force typed ESLint over infrastructure excluded by the repository
 configuration reported 125 errors; no lint configuration or suppressions changed.
 That result is separate from the configured passing gates.
 
-Full CI passed on
-[e5a776ef0](https://github.com/elewa-git/opencrane-new/actions/runs/43700206933), before
-the last startup repairs. An earlier run failed one unchanged gateway publication
-setup case; that case passed in isolation without changing its five-second limit
-or assertion. CI for the tested startup-fix head and final receipt head is reported
-in the PR checks. Passing CI does not qualify this failed packaged journey.
+Full CI passed on the tested startup-fix head
+[be18431ae](https://github.com/elewa-git/opencrane-new/actions/runs/43703844066), including
+all nine jobs. An earlier run failed one unchanged gateway publication setup case;
+that case passed in isolation without changing its five-second limit or assertion.
+Final rebased-head CI is reported separately in the PR checks. Passing CI does not
+qualify this failed packaged journey.
 
 ## Historical records through 13 November 2026
 
