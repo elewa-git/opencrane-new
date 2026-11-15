@@ -92,7 +92,7 @@ To restructure code safely, first pin what it does with tests, then change the s
 | Parameters | At most five. A function that needs more is usually doing two jobs: split it first. Pass one named object with a named, exported type only for values that belong together; do not bundle unrelated values to pass the limit. | ESLint `max-params` error at five; existing violations use bulk suppressions. |
 | Complexity against tests | Every changed function scores under 10 on CRAP: complexity² × (1 − coverage)³ + complexity. A flat `switch` with one short branch per event type or state may stay whole when every branch is tested. ESLint `complexity` 15 stays the hard limit. | Not checked today. `crapper` on changed files once #1034 lands. |
 | File size | At most 500 counted lines. Never raise or switch off the limit inside a file. A file that needs more is doing two jobs: split it, or ask the owner. | ESLint error today. `lint:debt` refuses a new or raised per-file override. |
-| Module direction | One app never imports another app's source. Product source never imports from `scripts/`. Shared code moves to a library. | Review today; dependency-cruiser once #1032 lands. |
+| Module direction | One app never imports another app's source. Product source never imports from `scripts/`. Shared code moves to a library. | Dependency-cruiser; recorded violations can only shrink. |
 | Errors | Follow the Errors row under [Code](#code-strict-where-behaviour-depends-on-it). Keep the cause (`new Error(message, { cause })`) and log it through the structured logger, which hides credentials and private content, before returning the safe message. A refusal carries a `reason` from a named union type, as existing routes do, not only a sentence. | Review. |
 | Tests | Follow [Tests and evidence](#tests-and-evidence): check what the user of the code would see, use the shared test helpers, control time (pass it in, or use Vitest fake timers) instead of sleeping, and delete tests the change makes redundant. | Review and ESLint `max-lines` error at 1,500 counted lines for test files. |
 | Test strength | Tests of access checks, approvals and money must fail when the rule they protect is broken. | Today: when you add or change such a test, break the rule by hand once, see the test fail, restore the code and say so in your report. `mutator` on those packages, on a schedule, once #1034 lands. |
@@ -363,6 +363,7 @@ on type errors.
 
 Dependency-cruiser covers the six existing packages, public entrypoints, cycles,
 library-to-app direction, event independence and the OIDC/telemetry SDK adapters.
+Rules `apps-do-not-import-other-apps` and `product-source-does-not-import-scripts` use `.dependency-cruiser-known-violations.json` to record existing violations; the baseline check refuses stale entries, new violations and a rising count against the base commit.
 Knip discovers runtime entrypoints from package exports/scripts and its Angular plugin;
 explicit test globs cover root Vitest and Angular specs. Public package exports remain
 intentional API entrypoints; unused internal exports, files and dependencies are checked.
