@@ -1,7 +1,8 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { captureScheduledBackup, listBackups, showBackup } from './scheduled-backup.ts';
 
 const directories: string[] = [];
@@ -140,6 +141,61 @@ it('keeps a visible maintenance lock when admission cannot be restored', async f
   expect(await listBackups(test.directory)).toEqual([]);
   expect(await readFile(join(test.directory, '.lock'), 'utf8')).toContain('backup-one');
 });
+
+for (const failure of ['write', 'sync'] as const) {
+  for (const stage of ['parts', 'resume'] as const) {
+    it(`retains maintenance after restart and marker ${failure} fail during ${stage}`,
+      async function maintenanceStorageFailure() {
+        const test = await fixture();
+        const probe = await open(join(test.directory, 'probe'), 'wx');
+        const prototype = Object.getPrototypeOf(probe) as FileHandle;
+        await probe.close();
+        await rm(join(test.directory, 'probe'));
+        const originalWrite = prototype.writeFile;
+        const originalSync = prototype.sync;
+        let markerAttempted = false;
+        async function writeMarker(this: FileHandle, ...args: Parameters<FileHandle['writeFile']>) {
+          if (args[0] === '\nresume_failed\n') {
+            markerAttempted = true;
+            if (failure === 'write') throw new Error('private-volume-full-canary');
+          }
+          return originalWrite.apply(this, args);
+        }
+        function syncMarker(this: FileHandle) {
+          if (markerAttempted && failure === 'sync') {
+            return Promise.reject(new Error('private-volume-sync-canary'));
+          }
+          return originalSync.call(this);
+        }
+        function restartFailure() {
+          return Promise.reject(new Error('private-scale-failure-canary'));
+        }
+        function partFailure(): Promise<never> {
+          return Promise.reject(new Error('private-part-failure-canary'));
+        }
+        test.source.resume = restartFailure;
+        if (stage === 'parts') test.source.parts.files = partFailure;
+        vi.spyOn(prototype, 'writeFile').mockImplementation(writeMarker);
+        vi.spyOn(prototype, 'sync').mockImplementation(syncMarker);
+        function captureError(error: unknown) { return error; }
+        try {
+          const error = await captureScheduledBackup(test.options, test.source).catch(captureError);
+          expect(markerAttempted).toBe(true);
+          expect(test.wasResumed()).toBe(false);
+          expect(await listBackups(test.directory)).toEqual([]);
+          expect(await readFile(join(test.directory, '.lock'), 'utf8')).toContain('backup-one');
+          expect(await readFile(join(test.directory, '.backup-one', 'events'), 'utf8'))
+            .toBe('events at sequence 42');
+          expect(error).toBeInstanceOf(Error);
+          expect((error as Error).message)
+            .toBe('Maintenance remains active; services could not restart');
+          await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
+        } finally {
+          vi.restoreAllMocks();
+        }
+      });
+  }
+}
 
 it('attempts every saved restart even when the first scale command fails', async function resumesAll() {
   const { natsFixture } = await import('@opencrane/event-store/testing');
