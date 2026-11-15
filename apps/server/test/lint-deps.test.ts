@@ -8,6 +8,19 @@ import { expect, it } from 'vitest';
 const execute = promisify(execFile);
 const repository = resolve(import.meta.dirname, '../../..');
 
+async function recordFixtureBaseline(directory: string) {
+  const applications = [
+    'apps/demo-mcp/src', 'apps/odoo-mcp/src', 'apps/computer/src',
+    'apps/ops/src', 'apps/server/src', 'apps/web/src', 'libs',
+  ];
+  const args = [
+    ...applications, '--config', '.dependency-cruiser.cjs', '--output-type', 'baseline',
+  ];
+  const options = { cwd: directory, encoding: 'utf8' as const };
+  const result = await execute('node_modules/.bin/depcruise', args, options);
+  await writeFile(join(directory, '.dependency-cruiser-known-violations.json'), result.stdout);
+}
+
 async function rejectsCrossAppTestImport() {
   const directory = await mkdtemp(join(tmpdir(), 'lint-deps-'));
   try {
@@ -20,6 +33,15 @@ async function rejectsCrossAppTestImport() {
     for (const file of files) {
       await symlink(join(repository, file), join(directory, file));
     }
+    await writeFile(
+      join(directory, '.dependency-cruiser-known-violations.json'),
+      '[]\n',
+    );
+    await mkdir(join(directory, 'scripts'), { recursive: true });
+    await symlink(
+      join(repository, 'scripts/check-dependency-baseline.mjs'),
+      join(directory, 'scripts/check-dependency-baseline.mjs'),
+    );
     const applications = ['computer', 'demo-mcp', 'odoo-mcp', 'ops', 'server', 'web'];
     for (const app of applications) {
       const source = join(directory, 'apps', app, 'src');
@@ -48,6 +70,7 @@ async function rejectsCrossAppTestImport() {
     }
     const forbiddenSpecification = "import { fixture } from '../../computer/src/fixture.ts';\n";
     await writeFile(specification, forbiddenSpecification);
+    await recordFixtureBaseline(directory);
     const result = execute('npm', ['run', 'lint:deps'], options);
     const specificationPath = 'apps/server/src/fixture.spec.ts';
     await expect(result).rejects.toHaveProperty('stdout', expect.stringContaining(specificationPath));
