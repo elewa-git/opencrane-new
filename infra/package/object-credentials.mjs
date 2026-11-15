@@ -33,14 +33,18 @@ function leaseFailure(reason) {
   return new Error('Storage lease unavailable', { cause });
 }
 
-async function boundedCredentials(provider, signal) {
+export function storageTransport(protocol, signal) {
   let nativeRequest = httpRequest;
-  if (provider.stsEndpoint.protocol === 'https:') nativeRequest = httpsRequest;
+  if (protocol === 'https:') nativeRequest = httpsRequest;
   function request(options, callback) {
     return nativeRequest({ ...options, signal }, callback);
   }
+  return { request };
+}
+
+async function boundedCredentials(provider, signal) {
   // Keep the SDK's signing and parsing, but abort its socket and response body too.
-  provider.transport = { request };
+  provider.transport = storageTransport(provider.stsEndpoint.protocol, signal);
   signal.throwIfAborted();
   const credentials = await provider.getCredentials();
   signal.throwIfAborted();

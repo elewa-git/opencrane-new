@@ -140,3 +140,39 @@ it('keeps a visible maintenance lock when admission cannot be restored', async f
   expect(await listBackups(test.directory)).toEqual([]);
   expect(await readFile(join(test.directory, '.lock'), 'utf8')).toContain('backup-one');
 });
+
+it('attempts every saved restart even when the first scale command fails', async function resumesAll() {
+  const { natsFixture } = await import('@opencrane/event-store/testing');
+  const { packageBackupSource } = await import('./scheduled-backup-source.ts');
+  const { chmod } = await import('node:fs/promises');
+  const { vi } = await import('vitest');
+  const nats = await natsFixture();
+  const test = await fixture();
+  const command = join(test.directory, 'kubectl');
+  const calls = join(test.directory, 'calls');
+  const script = `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.BACKUP_TEST_CALLS, args.join(' ') + '\\n');
+if (args[0] === 'get') console.log(JSON.stringify({spec: {replicas: 1}}));
+if (args[0] === 'scale' && args[1] === 'deployment/worker-dispatcher' &&
+    args.includes('--replicas=0')) process.exit(1);
+if (args[0] === 'scale' && args[1] === 'deployment/server' &&
+    args.includes('--replicas=1')) process.exit(1);
+`;
+  await writeFile(command, script);
+  await chmod(command, 0o700);
+  for (const [name, value] of Object.entries(nats.env())) vi.stubEnv(name, value);
+  vi.stubEnv('PATH', `${test.directory}:${process.env['PATH']}`);
+  vi.stubEnv('BACKUP_TEST_CALLS', calls);
+  const runtime = await packageBackupSource(test.options);
+  try {
+    await expect(runtime.source.pause()).rejects.toThrow();
+    await expect(runtime.source.resume()).rejects.toThrow('Backup replicas remain stopped');
+    expect(await readFile(calls, 'utf8')).toContain('scale deployment/worker-dispatcher --replicas=1');
+  } finally {
+    await runtime.close();
+    await nats.close();
+    vi.unstubAllEnvs();
+  }
+});

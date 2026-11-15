@@ -4,12 +4,15 @@ import { expect, it } from 'vitest';
 import { Client } from 'minio';
 import { storageTransport } from '../infra/package/object-credentials.mjs';
 
-it('aborts a stalled object response before a maintenance window can reach a hard kill',
+for (const stage of ['listing', 'headers', 'body']) {
+it(`aborts stalled storage ${stage} before maintenance can reach a hard kill`,
   async function abortsObjectRead() {
     const connected = Promise.withResolvers();
     function stalled(_request, response) {
-      response.writeHead(200, { 'Content-Length': '12', 'Content-Type': 'application/octet-stream' });
-      response.write('one');
+      if (stage !== 'headers') {
+        response.writeHead(200, { 'Content-Length': '12', 'Content-Type': 'application/octet-stream' });
+        response.write('one');
+      }
       connected.resolve();
     }
     const server = createServer(stalled);
@@ -21,7 +24,9 @@ it('aborts a stalled object response before a maintenance window can reach a har
       transport: storageTransport('http:', controller.signal),
       retryOptions: { disableRetry: true } });
     async function readObject() {
-      const stream = await client.getObject('files', 'one');
+      let stream;
+      if (stage === 'listing') stream = client.listObjectsV2('files', '', true);
+      else stream = await client.getObject('files', 'one');
       for await (const _chunk of stream) { /* Wait for the stalled response body. */ }
     }
     try {
@@ -36,3 +41,4 @@ it('aborts a stalled object response before a maintenance window can reach a har
       await once(server, 'close');
     }
   });
+}

@@ -4,16 +4,17 @@ import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile 
 import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
+import { descriptorSchema } from './event-backup.ts';
 
-const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/u);
-const integer = z.number().int().nonnegative().safe();
+const identifier = descriptorSchema.shape.attempt;
+const integer = descriptorSchema.shape.lastSequence;
 const pointSchema = z.object({
   sequence: integer, lsn: z.string().regex(/^[A-F0-9]+\/[A-F0-9]+$/u),
   checkpoints: z.record(z.string(), integer),
 }).strict();
 const partSchema = z.object({
   backupId: identifier, sequence: integer, path: z.enum(['events', 'database', 'files']),
-  byteCount: integer, sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  byteCount: integer, sha256: descriptorSchema.shape.sha256,
   startedAt: z.iso.datetime(), finishedAt: z.iso.datetime(),
   details: z.record(z.string(), z.json()),
 }).strict();
@@ -49,9 +50,51 @@ async function fingerprint(path: string) {
     throw new Error('Backup part refused');
   }
   const bytes = await readFile(path);
+  return { byteCount: bytes.length, sha256: hashBackupBytes(bytes) };
+}
+
+export function hashBackupBytes(bytes: Buffer) {
   const hash = createHash('sha256');
   hash.update(bytes);
-  return { byteCount: bytes.length, sha256: hash.digest('hex') };
+  return hash.digest('hex');
+}
+
+function drained(point: BackupPoint) {
+  for (const [name, position] of Object.entries(point.checkpoints)) {
+    if (position > point.sequence || (name !== 'dispatcher' && position !== point.sequence)) {
+      throw new Error('Read table position differs');
+    }
+  }
+}
+
+async function resume(source: BackupSource, lock: Awaited<ReturnType<typeof open>>) {
+  try {
+    await source.resume();
+    return true;
+  } catch {
+    await lock.writeFile('\nresume_failed\n');
+    await lock.sync();
+    return false;
+  }
+}
+
+async function captureParts(source: BackupSource, directory: string, id: string, sequence: number) {
+  const parts: Partial<z.infer<typeof manifestSchema>['parts']> = {};
+  for (const name of ['events', 'database', 'files'] as const) {
+    const startedAt = new Date().toISOString();
+    const path = join(directory, name);
+    const details = await source.parts[name](path);
+    const file = await open(path, 'r');
+    try {
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    const bytes = await fingerprint(path);
+    parts[name] = { backupId: id, sequence, path: name, ...bytes, details,
+      startedAt, finishedAt: new Date().toISOString() };
+  }
+  return parts;
 }
 
 /** Publish only after all writers stayed stopped and every part was checked. */
@@ -63,29 +106,28 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
   const temporary = join(options.directory, `.${options.id}`);
   let stage = 'prepare';
   let paused = false;
+  let owned = false;
+  let resumed = true;
   try {
     const startedAt = new Date().toISOString();
+    await lock.writeFile(JSON.stringify({ backupId: options.id, startedAt }));
+    await lock.sync();
     await mkdir(temporary, { mode: 0o700 });
+    owned = true;
     stage = 'pause';
     paused = true;
     const point = pointSchema.parse(await source.pause());
+    drained(point);
     const stoppedAt = new Date().toISOString();
     if (!isDeepStrictEqual(point, await source.verify())) throw new Error('Point moved');
-    const parts = {} as z.infer<typeof manifestSchema>['parts'];
-    for (const name of ['events', 'database', 'files'] as const) {
-      stage = name;
-      const partStarted = new Date().toISOString();
-      const path = join(temporary, name);
-      const details = await source.parts[name](path);
-      const bytes = await fingerprint(path);
-      parts[name] = { backupId: options.id, sequence: point.sequence, path: name,
-        ...bytes, details, startedAt: partStarted, finishedAt: new Date().toISOString() };
-    }
+    stage = 'parts';
+    const parts = await captureParts(source, temporary, options.id, point.sequence);
     stage = 'verify';
     if (!isDeepStrictEqual(point, await source.verify())) throw new Error('Point moved');
     stage = 'resume';
-    await source.resume();
     paused = false;
+    resumed = await resume(source, lock);
+    if (!resumed) throw new Error('Resume failed');
     const manifest = manifestSchema.parse({ version: 1, id: options.id, silo: options.silo,
       point, parts, startedAt, stoppedAt, completedAt: new Date().toISOString(),
       images: options.images, chartVersion: '0.1.0' });
@@ -100,11 +142,13 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
     throw new Error('Scheduled backup failed', { cause });
   } finally {
     try {
-      if (paused) await source.resume();
+      if (paused) resumed = await resume(source, lock);
     } finally {
-      await rm(temporary, { recursive: true, force: true });
       await lock.close();
-      await rm(join(options.directory, '.lock'));
+      if (resumed) {
+        if (owned) await rm(temporary, { recursive: true, force: true });
+        await rm(join(options.directory, '.lock'));
+      }
     }
   }
 }
@@ -117,6 +161,7 @@ export async function showBackup(directory: string, id: string) {
   const bytes = await readFile(join(backup, 'manifest.json'), 'utf8');
   const manifest = manifestSchema.parse(JSON.parse(bytes));
   if (manifest.id !== id) throw new Error('Backup identity differs');
+  drained(manifest.point);
   for (const name of ['events', 'database', 'files'] as const) {
     const part = manifest.parts[name];
     const actual = await fingerprint(join(backup, name));

@@ -13,6 +13,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Lists the required program images and names of private settings.
 - Keeps public network access switched off in the default settings.
 - Groups the templates that start apps, services, workers and assistant computers.
+- Schedules one nightly pilot backup on a separate volume with a read-only catalogue.
 - Includes persistent file storage and a private virus scanner for chat attachments.
 
 ## Main files
@@ -34,7 +35,7 @@ combines those settings with the templates.
 
 ```mermaid
 flowchart LR
-  package["Local installation tools"] --> chart["chart<br/>installation, files, scanner and database previews"]
+  package["Local installation tools"] --> chart["chart<br/>installation, files, scanner, scheduled backups and database previews"]
   package --> prepare["Preparation and checks"]
   chart --> templates["templates<br/>programs and settings"]
 ```

@@ -1,0 +1,175 @@
+{{- if and (eq .Values.postgres.mode "standalone") (not .Values.natsCluster.enabled) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backups
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 5Gi }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: package-backup
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: package-backup
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
+      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments/scale]
+    resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
+      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    resourceNames: [postgres-0]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: package-backup
+subjects:
+  - { kind: ServiceAccount, name: package-backup }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: package-backup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pilot-backup
+spec:
+  schedule: "0 2 * * *"
+  timeZone: Etc/UTC
+  suspend: false
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 360
+      template:
+        metadata:
+          labels: { app: pilot-backup }
+        spec:
+          serviceAccountName: package-backup
+          restartPolicy: Never
+          securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
+          initContainers:
+            - name: kubeconfig
+              image: {{ .Values.images.server | quote }}
+              command: [node, infra/package/kubeconfig.mjs]
+              volumeMounts:
+                - { name: kubeconfig, mountPath: /run/kubeconfig }
+            - name: private-directories
+              image: {{ .Values.images.server | quote }}
+              command: [sh, -ec]
+              args:
+                - >-
+                  mkdir -p /backups/sets /run/opencrane/files &&
+                  cp /run/opencrane-source/* /run/opencrane/files/ &&
+                  chown 1000:1000 /backups/sets /run/opencrane/files/* &&
+                  chmod 0700 /backups/sets && chmod 0400 /run/opencrane/files/*
+              securityContext: { runAsUser: 0, allowPrivilegeEscalation: false }
+              volumeMounts:
+                - { name: backups, mountPath: /backups }
+                - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
+                - { name: runtime-files, mountPath: /run/opencrane/files }
+          containers:
+            - name: backup
+              image: {{ .Values.images.server | quote }}
+              command: [node, --experimental-strip-types, infra/package/scheduled-backup-run.ts, run]
+              envFrom:
+                - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
+                - secretRef: { name: {{ .Values.secrets.bootstrap | quote }} }
+              env:
+                - { name: KUBECONFIG, value: /run/kubeconfig/config.json }
+                - { name: BACKUP_IMAGES, value: {{ toJson .Values.images | quote }} }
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 500m, memory: 768Mi }
+              volumeMounts:
+                - { name: backups, mountPath: /backups }
+                - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
+                - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+                - { name: object-owner, mountPath: /run/object-owner, readOnly: true }
+                - { name: temporary, mountPath: /tmp }
+          volumes:
+            - name: backups
+              persistentVolumeClaim: { claimName: backups }
+            - name: kubeconfig
+              emptyDir: { medium: Memory }
+            - name: runtime-files
+              emptyDir: { medium: Memory }
+            - name: runtime-file-source
+              secret: { secretName: {{ .Values.secrets.runtimeFiles | quote }}, defaultMode: 256 }
+            - name: object-owner
+              secret: { secretName: {{ .Values.secrets.objects | quote }} }
+            - name: temporary
+              emptyDir: { medium: Memory, sizeLimit: 128Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backup-catalogue
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: backup-catalogue }
+  template:
+    metadata:
+      labels: { app: backup-catalogue }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
+      containers:
+        - name: catalogue
+          image: {{ .Values.images.server | quote }}
+          command: [sleep, infinity]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 512Mi }
+          volumeMounts:
+            - { name: backups, mountPath: /backups, readOnly: true }
+      volumes:
+        - name: backups
+          persistentVolumeClaim: { claimName: backups }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backup-catalogue
+spec:
+  podSelector:
+    matchLabels: { app: backup-catalogue }
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+{{- end }}
