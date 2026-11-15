@@ -17,6 +17,7 @@ async function consentControlsTools() {
   const setup = await personalKeyFixture(runtime);
   const policy = await setup.publish();
   await setup.project();
+  if (!runtime.databaseUrl) throw new Error('Missing fixture database URL');
   const catalogue = connectMcpCatalogue(runtime.databaseUrl);
   onTestFinished(catalogue.close);
   await setup.grant('alice');
