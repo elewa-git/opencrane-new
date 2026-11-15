@@ -1,4 +1,4 @@
-Packaged installations include persistent file storage and a private ClamAV service
+The package configuration adds persistent file storage and a private ClamAV service
 for chat attachments. Clean files use the existing upload and chat path; infected
 files are refused. The scanner checks approved signature bytes and refuses stale
 update evidence. The application receives rotating, short-lived storage credentials.
@@ -16,3 +16,6 @@ storage readiness entrypoint needed to start those services.
 
 Scanner configuration preserves its bundled database verification certificates,
 and packaged projection workers retain their required scanner import.
+
+Packaged browser qualification remains blocked by a model runtime import; this
+draft is not a qualified working installation.

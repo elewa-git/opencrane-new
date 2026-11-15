@@ -1,5 +1,165 @@
 # Packaged file uploads
 
+Journey on a fresh dev stack: **FAIL** — 15 November 2026. Both fresh Compose
+qualifications passed. The final packaged installation completed bootstrap and
+started its workers, storage service and authenticated scanner, but the model
+container could not import a required module. Packaged sign-in, clean upload with
+an answer, EICAR refusal and packaged screenshots at 1280 and 390 px are **NOT RUN**.
+The PR remains draft; this slice is not ready to merge.
+
+Tested source: `be18431aecc2b3755eea57a49d4fa1531880a71c`.
+Application image source: `e0a528a7fb998ff50a3d51014e15febe8797170a`.
+Fetched origin and completed the rebase onto `35e9f09e8`; that base is an ancestor
+of the tested source. The worktree is retained for review.
+
+## Required owner decision
+
+Stopped under the [engineering discipline](../standards.md#engineering-discipline-make-it-work-then-make-it-right):
+“When two fixes that rest on the same assumption fail the same check … stop.”
+
+The failed assumption is: **checking bootstrap and selected helper imports proves
+that every packaged runtime entrypoint has all its dependencies.**
+
+The first packaged startup exposed missing worker code and a hidden ClamAV
+certificate directory. After those repairs, the next fresh packaged startup
+still failed at the same installation gate: its model entrypoint imports
+`infra/dev-stack/connection-custody-bridge.ts`, which is absent from the image.
+An isolated read-only container reproduced `ERR_MODULE_NOT_FOUND` from the actual
+reviewed image, before the model process starts. No model import fix, broader
+context exception, retry, timeout increase or assertion relaxation was applied.
+
+The owner needs to choose the next packaging boundary before another fix. One
+option is to qualify every actual packaged entrypoint and repair the optional
+model custody dependency. Another is to replace the development model wrapper
+with a package-owned composition. Both retain the packaged browser journey as a
+merge condition in this PR; neither treats the current source checks as live acceptance.
+
+## Trusted packaging output
+
+The scheduled workflow runs on free standard GitHub runners every six hours,
+on manual dispatch after merge, and on pushes to this branch and main. It uses
+no new repository secret, paid runner, paid cache or repository/organisation setting.
+It reuses FreshClam, `database.mjs`, `release.mjs`, the flattened scanner recipe and
+the actual-image licence inventory checks. Its artifacts contain approval and
+an immutable OCI image. Local candidates and environment variables cannot approve.
+
+The final package preparation fetched the successful
+[scanner run 43703838673](https://github.com/elewa-git/opencrane-new/actions/runs/43703838673)
+for the tested head through the production reader:
+
+- Approved manifest SHA-256: `0a53411c2a458b63fdc3e4d16bc7db1442ecfb2ccbf529469ac5b66313c8772d`.
+- Scanner image digest: `sha256:8668214420c0e5ae11237ca5c3a580c508057a996b8b542214cb6d6d1dabaae2`.
+- Complete verified database check: `2026-11-15T10:23:53.859Z`.
+
+The reader independently checks the successful workflow, source repository,
+trigger, branch, commit and artifact bindings. Preflight fetches that output
+again before accepting values. The old checked-in scanner records confer no
+current approval. Both actual preparations used CI outputs; no approval steps
+were hand-run locally to create an approval.
+
+## Image publication and startup repairs
+
+The HTTP publisher verifies selected OCI manifests and blobs and uploads only
+those bytes to the existing registry's Docker-network address. No Docker daemon,
+container, bridge, route or iptables setting changed. The broken host loopback
+forward was not used. No protected container was removed.
+
+The application was rebuilt from committed source and checked through its real
+layers and containers. Its 580 scanned components match the existing review;
+all three signed Debian main indexes were re-authenticated. The source-bound
+promotion check passed before the image evidence was updated and published.
+Application digest: `sha256:f085934fd049fdf66c7890f9be07ff3801ae9a93dedeec540e865daceec74b43`.
+The existing reviewed object-store digest was published unchanged. Both registry
+manifest requests returned HTTP 200 with the appropriate OCI media types.
+
+The first installation exposed two causes, reproduced before their fixes:
+
+1. Mounting the whole ClamAV configuration directory hid its bundled verification
+   certificates. A failing rendered-chart test preceded the file-only mount fix.
+   Signature verification remains enabled. The final scanner had both containers
+   ready with zero restarts.
+2. Every projection worker imports `image-worker.mjs`, which the context omitted.
+   A real-image import test failed before adding that explicit context exception.
+   The rebuilt image passed the new check, and final bootstrap and workers started.
+
+Earlier real-image checks also exposed omitted shared database and storage
+readiness helpers. Their explicit context exceptions remain. These repairs do
+not establish that the still-failing model entrypoint is complete.
+
+This continuation adds **353 shipped lines** and removes 13: 366 changed lines,
+including workflow/configuration and excluding tests, documents and reviewed image
+data. It stays below the owner's approximately 600 additional-line stop point.
+
+## Fresh installation attempts and cleanup
+
+Both runs claimed secondary slot 1 through `claim.sh`, used `up.sh --fresh` with
+the free model, and kept `DEV_STACK_DIR` outside the repository. Compose was stopped
+before creating each fresh packaged namespace and claims. The package used
+`package-prepare`, private preparation and `package-up` for the claimed id.
+
+| Condition | Result |
+| --- | --- |
+| Fresh Compose qualification, including both widths | PASS twice |
+| Latest approved scanner output fetched from CI | PASS |
+| Reviewed application/object-store image publication | PASS |
+| Initial packaged startup | FAIL; scanner certificates and worker import |
+| Separate startup diagnostic | FAIL; causes captured before cleanup |
+| Final bootstrap, projection workers and scanner | PASS |
+| Final `package-up` | FAIL; model container cannot import custody bridge |
+| Final `package-check` | NOT RUN; installer did not complete |
+| Packaged signed-in clean upload and answer, 1280/390 px | NOT RUN |
+| Packaged EICAR refusal, 1280/390 px | NOT RUN |
+| Packaged screenshots before cleanup | NOT RUN; browser phase was unreachable |
+| `package-down` and `down.sh` | PASS for both attempts and the diagnostic |
+| Claimed namespace absent and slot ownership released | PASS |
+
+The built-in Compose pictures and observations were retained locally before
+cleanup; unrelated tracked evidence was restored. Those pictures are not packaged
+acceptance. The initial automatic cleanup finished before its Pod logs could be
+captured; the separate diagnostic captured the bootstrap and scanner causes before
+cleanup. The final model failure was reproduced directly against the reviewed
+image. No slot, namespace or temporary Pod remains claimed by this task.
+
+## Own source checks
+
+All tests, lint, typecheck and builds used priority 10. Source gate scripts and journey phase boundaries waited for load to fall below
+10 before starting; no full root suite or fleet batch ran locally.
+The second fresh-stack process and its children inherited priority 10. The first
+process tree was lowered to that priority before its browser qualification.
+
+| Check | Result |
+| --- | --- |
+| Focused scanner/storage/approval Vitest files | PASS twice; 48 cases per run |
+| Changed package Node files | PASS twice per file; final full batch 611/611 |
+| Corrected no-job preflight fixture | PASS twice; 44/44 per run |
+| Changed backup fixtures | PASS twice; 207 cases per run |
+| Licence checks, HTTP publisher and five historical image suites | PASS twice |
+| Startup-fix chart files | PASS twice; 280 cases per run |
+| Real rebuilt application image checks | PASS twice; 13 cases per run |
+| Deliberately removed CI/preflight guards in an isolated copy | PASS; all nine removals caused their intended test failures |
+| Workspace, package and dev-stack typecheck | PASS; no TypeScript source changed afterwards |
+| `check:events`, Knip, changelog lint, changed-file ESLint, Markdown | PASS |
+| Additional untyped infrastructure JavaScript ESLint | PASS; zero warnings |
+| Public privacy and secret scans before source pushes | PASS |
+| Actual packaged model entrypoint import | FAIL; custody bridge is absent |
+
+The first 611-case batch had one fixture failure: its no-job test consulted live
+GitHub state after the new workflow existed. It still refused the forged image.
+The test now uses explicit Git and GitHub fixtures, retains the exact assertion,
+and passes twice; the subsequent full batch passed all 611 cases. One exploratory
+attempt to force typed ESLint over infrastructure excluded by the repository
+configuration reported 125 errors; no lint configuration or suppressions changed.
+That result is separate from the configured passing gates.
+
+Full CI passed on
+[e5a776ef0](https://github.com/elewa-git/opencrane-new/actions/runs/43700206933), before
+the last startup repairs. An earlier run failed one unchanged gateway publication
+setup case; that case passed in isolation without changing its five-second limit
+or assertion. CI for the tested startup-fix head and final receipt head is reported
+in the PR checks. Passing CI does not qualify this failed packaged journey.
+
+## Historical records through 13 November 2026
+
 Journey on a fresh dev stack: NOT RUN — this attempt stopped at the scanner review
 boundary. The checked scanner release expired before the attempt began. A fresh
 manifest needs an independently supplied approval before installation. The previous
@@ -8,7 +168,7 @@ packaged installation remains FAIL; no passing packaged journey exists.
 Recorded on 13 November 2026 for issue #15, slice 1 of 3. Rebased source:
 `9932cac1b51a6b8ea5c99081cc9f9e388ee252b3`. Base: `1e8588842` (`origin/main`).
 
-## Current diagnosis and required approval
+### Diagnosis and required approval at that time
 
 Fetched `origin` and rebased onto the updated `origin/main`. The rebase completed.
 The image-layer test conflict retained both main's required `web-page.mjs` check
@@ -87,9 +247,9 @@ need proving after those inputs exist.
 | Packaged clean upload, answer and EICAR refusal at 1280 and 390 px | NOT RUN |
 | Packaged screenshots | NOT RUN; no browser journey |
 | New package/stack cleanup | NOT RUN; no slot or installation created |
-| Current source checks | PARTIAL; results below |
+| Source checks at that time | PARTIAL; results below |
 
-## Current source checks
+### Source checks at that time
 
 | Check | Result |
 | --- | --- |
@@ -122,12 +282,12 @@ The focused tests passed twice on this rebased source. This attempt introduced n
 production fix, so there is no new failing-test/fix commit pair or new guard-removal
 claim. Finding 1 remains open. No further review result is asserted here.
 
-## Earlier failed installation
+### Earlier failed installation
 
 The following attempt ran before this diagnosis, on rebased code
 `ba6d15abf23c0e003a38d9b18ef3d9c8495fbe10`, base `7ec65e982`.
 
-## Previous packaged journey
+### Previous packaged journey
 
 1. Fetched `origin` and rebased because `origin/main` had moved. The rebase
    completed without conflicts. The lockfile was unchanged, so `npm ci` was
@@ -174,7 +334,7 @@ Only the claimed secondary slot was used.
 Compose evidence does not satisfy packaged acceptance. The PR remains draft and
 its packaged merge condition is not met.
 
-## Checks on the rebased code
+### Checks on the rebased code
 
 | Check | Result |
 | --- | --- |
@@ -211,7 +371,7 @@ typecheck and startup ran under `nice -n 10`; no full root suite ran.
 
 CI for the pushed receipt commit is recorded in the PR Evidence and checks.
 
-## Earlier runs and source evidence
+### Earlier runs and source evidence
 
 The material below records earlier heads and attempts. Its passing source checks
 and Compose results do not replace the current packaged FAIL above.
@@ -241,7 +401,7 @@ cause is unknown. No package namespace or installation was created, and no
 packaged browser steps or screenshots were captured. `package-down --id 2` and
 `down.sh --id 2` completed; the slot reported free.
 
-### Earlier attempt (12 November 2026)
+#### Earlier attempt (12 November 2026)
 
 1. Checked `origin/main` and open pull requests before starting. This slice was
    neither merged nor open. Read the issue's owner decisions and Slices comment.
@@ -265,7 +425,7 @@ with **connection reset by peer** while Docker attempted HTTPS to
 changes no registry publication implementation. The reviewed images exist locally; their presence
 in the registry and their installation on Kubernetes have not been proved.
 
-### Packaged browser acceptance
+#### Packaged browser acceptance
 
 | Width | Packaged clean upload and answer | Packaged EICAR refusal | Screenshot |
 | --- | --- | --- | --- |
@@ -285,7 +445,7 @@ wait for Ready, and ask for a fact present only in that file. Save the chat answ
 Then choose the EICAR test file and save the visible
 **File refused: malware detected.** message. Always run package-down and down.
 
-### Own checks
+#### Own checks
 
 | Check | Result |
 | --- | --- |
@@ -318,7 +478,7 @@ and **infected** for EICAR. This was a component check, without a browser or cha
 Its disposable container was removed. The real MinIO fixture verified short-lived
 leases, renewal, object access and refusal of another bucket and bucket creation.
 
-### Image records
+#### Image records
 
 The application image was built from committed source
 `47258e903347daaaf2727da636d4bca3f0f53a36`. Later commits change chart delivery,
@@ -335,7 +495,7 @@ notices are recorded separately. Signed Debian main indexes cover every installe
 OS package. The image inventory also records the reviewed CC0 hashing library
 bundled inside AGPL MinIO, as allowed by the runtime-layer policy.
 
-### Work log and cleanup
+#### Work log and cleanup
 
 Started with failing tests for package services and source-bound image promotion.
 A real image check then exposed hidden shell files in the upstream scanner database
@@ -357,7 +517,7 @@ for the real storage test.
 The worktree is retained for review. The claimed slot and disposable test containers
 were released; the existing shared registry and test database were left in place.
 
-### Review repairs
+#### Review repairs
 
 Recorded on 13 November 2026. Own source checks: PASS. CI is recorded on the PR.
 Capability: NOT RUN, awaiting #1119 and the complete fresh packaged journey.
