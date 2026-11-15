@@ -36,7 +36,7 @@ function digest(value: unknown) {
 }
 
 async function fixture(settings: { serverId?: string; secrets?: Map<string, string>;
-  material?: string; profileId?: string } = {}) {
+  material?: string; profileId?: string; assistantKind?: 'personal' | 'team' } = {}) {
   counter += 1;
   const userId = `person${counter}`;
   const serverId = settings.serverId ?? `server${counter}`;
@@ -80,9 +80,13 @@ async function fixture(settings: { serverId?: string; secrets?: Map<string, stri
   const saved = await oauthSelectionFixture(nats, userId, serverId, profileId, stageMaterial);
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
   const selectionRevision = await selectPersonalFixture(nats, saved);
+  const assistantId = `${userId}-assistant`;
+  await nats.seed([envelope('test', `assistant-${assistantId}`, 'assistant.created', {
+    assistantId, ownerId: userId, kind: settings.assistantKind ?? 'personal',
+  })]);
   const issuedAt = Date.now();
   const release = { userId, ownerId: userId, serverId, ownerKind: 'personal' as const,
-    purpose: 'tool_call' as const, assistantId: 'assistant', computerId: 'computer',
+    purpose: 'tool_call' as const, assistantId, computerId: 'computer',
     computerGeneration: 1, conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
     toolName: 'read', generation: 1, argumentsDigest: 'a'.repeat(64),
     requestId: userId, permitId: userId, leaseId: userId, profileId,
@@ -586,3 +590,12 @@ async function refusesPreparationAfterSending() {
 }
 it('refuses preparation after sending and never sends the saved request again',
   refusesPreparationAfterSending);
+
+async function refusesAssistantWithoutConsent() {
+  const test = await fixture({ assistantKind: 'team' });
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+  expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+}
+it('refuses release to another assistant when an old choice has no assistant list',
+  refusesAssistantWithoutConsent);
