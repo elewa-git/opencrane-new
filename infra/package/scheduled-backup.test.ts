@@ -16,14 +16,14 @@ async function fixture() {
   let resumed = false;
   const point = { sequence: 42, lsn: '0/123', checkpoints: { files: 42 } };
   const observations: string[] = [];
-  async function pause() {
+  function pause() {
     stopped = true;
-    return point;
+    return Promise.resolve(point);
   }
-  async function verify() {
+  function verify() {
     expect(stopped).toBe(true);
     observations.push('verify');
-    return point;
+    return Promise.resolve(point);
   }
   async function capture(destination: string) {
     expect(stopped).toBe(true);
@@ -32,9 +32,10 @@ async function fixture() {
     await writeFile(destination, `${name} at sequence 42`);
     return { position: 42 };
   }
-  async function resume() {
+  function resume() {
     stopped = false;
     resumed = true;
+    return Promise.resolve();
   }
   function wasResumed() { return resumed; }
   const parts = { events: capture, database: capture, files: capture };
@@ -71,7 +72,9 @@ for (const part of ['events', 'database', 'files'] as const) {
   it(`fails the whole run visibly when ${part} fails and restores admission`,
     async function refusesFailedPart() {
       const test = await fixture();
-      async function broken(): Promise<never> { throw new Error('private-credential-canary'); }
+      function broken(): Promise<never> {
+        return Promise.reject(new Error('private-credential-canary'));
+      }
       test.source.parts[part] = broken;
       await expect(captureScheduledBackup(test.options, test.source))
         .rejects.toThrow('Scheduled backup failed');
@@ -84,10 +87,10 @@ for (const part of ['events', 'database', 'files'] as const) {
 it('refuses a changed position rather than publishing a mixed backup', async function movedPoint() {
   const test = await fixture();
   let reads = 0;
-  async function verify() {
+  function verify() {
     reads++;
-    if (reads === 2) return { ...test.point, sequence: 43 };
-    return test.point;
+    if (reads === 2) return Promise.resolve({ ...test.point, sequence: 43 });
+    return Promise.resolve(test.point);
   }
   test.source.verify = verify;
   await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
@@ -118,4 +121,22 @@ it('preserves an interrupted private directory if its id is reused', async funct
   await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
   expect(await readFile(join(test.directory, '.backup-one', 'kept'), 'utf8'))
     .toBe('interrupted bytes');
+});
+
+it('refuses a lagging secondary projection before any part is captured', async function laggingReadTable() {
+  const test = await fixture();
+  test.point.checkpoints = { files: 42, groups: 41 };
+  await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
+  expect(await listBackups(test.directory)).toEqual([]);
+  expect(test.observations).toEqual([]);
+  expect(test.wasResumed()).toBe(true);
+});
+
+it('keeps a visible maintenance lock when admission cannot be restored', async function resumeFailed() {
+  const test = await fixture();
+  function resume() { return Promise.reject(new Error('scale unavailable')); }
+  test.source.resume = resume;
+  await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
+  expect(await listBackups(test.directory)).toEqual([]);
+  expect(await readFile(join(test.directory, '.lock'), 'utf8')).toContain('backup-one');
 });
