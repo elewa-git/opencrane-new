@@ -11,4 +11,5 @@ A scheduled GitHub job now verifies and packages fresh scanner definitions on fr
 standard runners. Packaged preparation fetches approval from the successful job
 for its exact source commit; local candidates cannot approve a scanner. Image
 publication supports the existing plain HTTP development registry without changing
-Docker settings.
+Docker settings. Packaged images include the shared scanner database reader and
+storage readiness entrypoint needed to start those services.

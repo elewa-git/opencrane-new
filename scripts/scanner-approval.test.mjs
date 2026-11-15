@@ -81,6 +81,9 @@ async function realJobPasses() {
     const forged = JSON.parse(fixture.files['approval.json']);
     forged.approvedSha = 'f'.repeat(64);
     fixture.files['approval.json'] = JSON.stringify(forged);
+    const release = JSON.parse(fixture.files['release.json']);
+    release.manifestDigest = `sha256:${forged.approvedSha}`;
+    fixture.files['release.json'] = JSON.stringify(release);
     setup(fixture.run, fixture.files);
     await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
   } finally {

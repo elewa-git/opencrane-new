@@ -99,12 +99,12 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
     await prepareNatsFixture(fixture, directory);
     if (fixture.cluster) await prepareClusterFixture(fixture, directory, owner);
-    await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
     const privateDirectory = `${directory}/private-values`;
     await mkdir(privateDirectory, { mode: 0o700 });
     const bin = `${directory}/bin`;
     await scannerApprovalFixture(bin, fixture.review);
     fixture.values.scanner = { ...fixture.review.scanner };
+    await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
     const valuesFile = `${privateDirectory}/values.json`;
     await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
     await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
