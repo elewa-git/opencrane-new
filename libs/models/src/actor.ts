@@ -1,4 +1,5 @@
-import { BudgetWriter, withinBudgetDeadline } from './budget-writer.ts';
+import { BudgetWriter, withinBudgetDeadline, withinAdmissionDeadline, accessDeadline, knownAccessDeadline,
+  type DispatchQueueDeadline } from './budget-writer.ts';
 import { prepareCeilingChange, readQueuedCeilingReceipt } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -52,16 +53,21 @@ export class BudgetActor {
     if (!this.writer.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation', ...(defaultPayingGroupId ? { defaultPayingGroupId } : {}) });
     await this.append('budget.period_started', { periodStart: this.monthStart() });
   }
-  private serial<T>(work: () => Promise<T>, deadline = performance.now() + 2000): Promise<T> {
+  private serial<T>(work: () => Promise<T>, deadline = performance.now() + 2000,
+    startAccessAfterQueue = false): Promise<T> {
+    const admitted = Promise.withResolvers<number>();
     const run = async () => {
       if (performance.now() >= deadline) throw new Error('Budget append unavailable');
       await this.writer.recover(deadline);
-      this.commandDeadline = deadline;
+      this.commandDeadline = startAccessAfterQueue
+        ? Math.min(deadline, performance.now() + 2000) : deadline;
+      admitted.resolve(this.commandDeadline);
       return work();
     };
     const result = this.queue.then(run);
     function finished() {}
     this.queue = result.then(finished, finished);
+    if (startAccessAfterQueue) return withinAdmissionDeadline(result, admitted.promise, deadline);
     return withinBudgetDeadline(result, deadline);
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
@@ -200,8 +206,10 @@ export class BudgetActor {
     }
   }
   admitDispatch(raw: unknown, fresh: () => Promise<void>, admittedAt?: number,
-    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>, deadline?: number) {
+    rootTurn?: Pick<ModelCall, 'turnId' | 'threadId'>, deadline?: number | DispatchQueueDeadline) {
     const parsed = budgetCallDispatchAdmittedDataSchema.parse(raw);
+    const queueDeadline = typeof deadline === 'object' ? deadline.queueDeadline : undefined;
+    const originalDeadline = typeof deadline === 'number' ? deadline : undefined;
     const admit = async () => {
       const input = checkDispatchBinding(this.state, parsed);
       admittedAt = await checkRootDispatch(this.state, input, this.now(), fresh,
@@ -226,9 +234,12 @@ export class BudgetActor {
       }
       // Treat even a lost reply as a possible send. Never return this permission twice.
       const dispatchId = randomUUID();
-      await this.append('budget.call_dispatch_admitted', input, dispatchId, fresh, deadline);
+      await this.append('budget.call_dispatch_admitted', input, dispatchId, fresh,
+        originalDeadline);
     };
-    return this.serial(admit, accessDeadline(fresh, deadline));
+    // Bound queue waiting by the single-use permit; start live write checks when admitted.
+    const waitDeadline = queueDeadline ?? accessDeadline(fresh, originalDeadline);
+    return this.serial(admit, waitDeadline, queueDeadline !== undefined);
   }
   releaseUndispatched(id: string) {
     return this.serial(async () => {
@@ -509,17 +520,4 @@ export class BudgetActor {
 
 function redundantTimeout(type: string, reason: string, rows: Awaited<ReturnType<typeof history>>) {
   return type === 'effect.uncertain' && reason === 'settle_timeout' && rows.some(row => row.event.type === type);
-}
-
-function accessDeadline(checkAccess?: () => Promise<void>, deadline?: number) {
-  const original = deadline ?? knownAccessDeadline(checkAccess);
-  const fallback = performance.now() + 2000;
-  if (typeof original === 'number') return Math.min(original, fallback);
-  return fallback;
-}
-
-function knownAccessDeadline(checkAccess?: () => Promise<void>) {
-  const deadline: unknown = Reflect.get(checkAccess ?? {}, 'deadline');
-  if (typeof deadline === 'number') return deadline;
-  return undefined;
 }

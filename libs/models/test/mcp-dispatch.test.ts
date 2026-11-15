@@ -1,11 +1,11 @@
+import { body, catalogue, tool, prepare, permit, send, reviewRestoration,
+  publishRestoration, restorationDelivery, generationHeaders, publishedFixture,
+  selectedPersonalFixture, requestFromPermit } from './support/mcp-dispatch-fixture.ts';
 /* eslint max-lines: ["error", { max: 3622, skipBlankLines: true, skipComments: true }] */
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue, readPublication,
   rebuildMcpCatalogueProjection, memoryScopeId } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
@@ -15,10 +15,7 @@ import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
 import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
-import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
-import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import { freePort } from './gateway-delivery-fixture.ts';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
@@ -31,67 +28,15 @@ import { decideApproval, history, ingestUsage, priceTableId, readApproval, readT
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
-import { oauthSelectionFixture } from './support/oauth-selection.ts';
-import { createHash } from 'node:crypto';
+import { type oauthSelectionFixture, refreshPersonalFixture }
+  from './support/oauth-selection.ts';
+import { projectionReplay } from './support/projection-replay.ts';
+import { foldConnection } from '../src/bearer-connections.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-const review = { action: 'Write note', consequence: 'The order note changes.',
-  targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
-const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review });
-const catalogue = catalogueEvidence([tool]);
-const body = JSON.stringify(capture.body);
 
-async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote', remote = false,
-  declared = true, accountMode: 'none' | 'personal' = 'none') {
-  let locator = remote ? 'https://mcp.example.test/mcp' : 'https://fixture.example.test/mcp';
-  if (kind === 'hosted') locator = `registry.example.test/fixture@sha256:${'a'.repeat(64)}`;
-  const registration = { serverId: 'fixture', kind, locator, registeredBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
-  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode,
-    ...catalogue, ...(remote && declared ? { discoverResult: JSON.stringify({ capabilities:
-      { experimental: { 'io.opencrane/expectedRevision': {} } } }) } : {}) };
-  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
-  await reviewCatalogue(setup);
-  const publication = { serverId: 'fixture', publishedBy: 'alice' };
-  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
-    toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
-  await setup.append('mcp-fixture', 'mcp.server_published', publication);
-  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
-    const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
-      granteeId, granteeKind, grantedBy: 'alice' };
-    const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
-    await setup.auth.handler.handle(event, setup.db);
-  }
-  const thread = capture.body.params._meta.threadId;
-  const claims = { ...setup.t, thread };
-  const turn = { assistantId: 'assistant', computerId: 'computer',
-    conversationId: 'conversation', turnId: 'turn', threadId: thread,
-    requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
-  // Replace the fixture turn so its signed thread matches these captured bytes.
-  await setup.append('computer-assistant', 'computer.turn_started', { ...turn, turnId: 'dispatch' });
-  await setup.append('conversation-conversation', 'agent.turn_started',
-    { conversationId: 'conversation', assistantId: 'assistant', turnId: 'dispatch' });
-  const token = await setup.sign({ ...claims, turn: 'dispatch' }, 'decision-service');
-  return { ...setup.headers, ...capture.headers, 'session-id': thread, 'x-turn-token': token };
-}
 
-async function permit(setup: Fixture, headers: Record<string, string>, raw = body) {
-  const request = { method: 'POST', headers, body: raw };
-  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-    request);
-  expect(response.status, await response.text()).toBe(200);
-  const value = response.headers.get('x-opencrane-mcp-permit');
-  expect(value).toBeTruthy();
-  return value!;
-}
 
-async function send(setup: Fixture, value: string, changedBody = body,
-  path = '/dispatch/mcp/fixture/installed') {
-  const headers = { 'x-opencrane-mcp-permit': value, 'content-type': 'application/json' };
-  const request = { method: 'POST', headers, body: changedBody };
-  return fetch(`${setup.options.decisionUrl}${path}`, request);
-}
 
 const changes = ['catalogue', 'generation', 'expiry', 'backend', 'body', 'route', 'silo', 'permit expiry'] as const;
 async function refusesChangedCall(change: typeof changes[number]) {
@@ -1146,32 +1091,7 @@ async function budgetHandlerEndsApproval() {
 }
 it('ends a waiting approval through the saved budget turn stop', budgetHandlerEndsApproval);
 
-async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allow',
-  serverId = 'fixture') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
-  const catalogue = policy.catalogue!;
-  function choice(declaration: NonNullable<typeof catalogue.tools>[number]) {
-    return { name: declaration.name, revision: declaration.revision,
-      reviewDigest: toolReviewDigest(declaration), mode };
-  }
-  const command = { commandId, expectedSequence: policy.sequence,
-    policyRevision: policy.policyRevision, catalogueDigest: catalogue.schemaDigest,
-    connectionId: policy.connectionId, accountMode: policy.accountMode,
-    tools: catalogue.tools!.map(choice) };
-  const result = await reviewToolPolicy(setup.nats.store, setup.binding, 'alice',
-    serverId, command);
-  expect(result.status).toBe('appended');
-}
 
-async function publishRestoration(setup: Fixture, commandId: string, serverId = 'fixture') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
-  const command = { commandId, expectedSequence: policy.sequence,
-    reviewRevision: policy.reviewRevision };
-  const result = await publishToolPolicy(setup.nats.store, setup.binding, 'alice',
-    serverId, command);
-  expect(result.status).toBe('appended');
-  return prepareGatewayConfiguration(setup.nats.store, 'test', serverId, commandId);
-}
 
 const restorationCases = ['exact', 'legacy', 'review only', 'intent only', 'new intent',
   'unpublish', 'second drift', 'expired', 'failed check', 'older generation',
@@ -1218,33 +1138,6 @@ async function restorationFixture(expireApproval = false) {
   return Object.assign(context, { approvalId, changed });
 }
 
-async function restorationDelivery(setup: Fixture, preserveMemory = true) {
-  let settings: typeof setup.options & { memoryRoute?: typeof setup.options.mcpRoutes[number] } =
-    setup.options;
-  if (preserveMemory) {
-    settings = { ...settings,
-      memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
-  }
-  const options = { db: setup.db, mode: 'live' as const, store: setup.nats.store, silo: 'test',
-    child: setup.gatewayChild()!, configFile: setup.options.configFile,
-    controlPort: await freePort(), settings };
-  const delivery = gatewayDelivery(options);
-  setup.dispatchOptions.acknowledged = delivery.acknowledged;
-  async function waitForWitness(record: Awaited<ReturnType<typeof publishRestoration>>) {
-    const bytes = await readFile(options.configFile, 'utf8');
-    const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(bytes)![0];
-    const url = `http://127.0.0.1:${options.controlPort}${path}`;
-    async function servesWitness() {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
-      expect(response.status).toBe(200);
-      const identity: unknown = await response.json();
-      expect(identity).toMatchObject({ generation: record.generation,
-        recordDigest: record.recordDigest });
-    }
-    await expect.poll(servesWitness, { timeout: 5000 }).toBeUndefined();
-  }
-  return { ...delivery, waitForWitness, options };
-}
 
 async function restartRestoration(context: RestorationFixture) {
   context.watch.close();
@@ -1459,26 +1352,25 @@ async function verifyRestorationReplay(setup: Fixture, received = 1) {
   await setup.runner.run(mcpCatalogue);
   const before = await setup.db.query('SELECT policy FROM mcp_catalogue');
   const position = await setup.nats.store.head();
-  const execute = promisify(execFile);
   const env = { ...process.env, ...setup.nats.env('projection'),
     DATABASE_URL: setup.databaseUrl };
-  const result = await execute('npm', ['run', 'replay', '--', 'mcp-catalogue', '--verify'],
-    { env, timeout: 10_000 });
+  const verifyCatalogue = ['mcp-catalogue', '--verify'];
+  const result = await projectionReplay(env, verifyCatalogue);
   expect(result.stdout).toContain('rebuilt state matched the live projection');
   const after = await setup.db.query('SELECT policy FROM mcp_catalogue');
   expect(after.rows).toEqual(before.rows);
   await setup.runner.initialise(conversations);
   await setup.runner.run(conversations);
-  const unsupported = execute('npm', ['run', 'replay', '--', 'conversations', '--verify'],
-    { env, timeout: 10_000 });
+  const verifyConversations = ['conversations', '--verify'];
+  const unsupported = projectionReplay(env, verifyConversations);
   await expect(unsupported).rejects.toMatchObject({ code: 1 });
-  const rebuilt = await execute('npm', ['run', 'replay', '--', 'conversations',
-    '--confirm-conversations-stopped'], { env, timeout: 10_000 });
+  const rebuildConversations = ['conversations', '--confirm-conversations-stopped'];
+  const rebuilt = await projectionReplay(env, rebuildConversations);
   expect(rebuilt.stdout).toContain('PASS: conversations rebuilt');
   await setup.runner.initialise(auditTrail);
   await setup.runner.run(auditTrail);
-  const audit = await execute('npm', ['run', 'replay', '--', 'audit', '--verify'],
-    { env, timeout: 10_000 });
+  const verifyAudit = ['audit', '--verify'];
+  const audit = await projectionReplay(env, verifyAudit);
   expect(audit.stdout).toContain('rebuilt state matched the live projection');
   expect(await setup.nats.store.head()).toBe(position);
   expect(setup.received()).toBe(received);
@@ -1573,29 +1465,7 @@ async function stopsRootPermit(reason: 'requester_stop' | 'allowance_exhausted')
 it.each(['requester_stop', 'allowance_exhausted'] as const)(
   'refuses an old MCP permit and a new grant after its root stops: %s', stopsRootPermit);
 
-function generationHeaders(record: { generation: number; recordDigest: string;
-  members: { entry: { serverId: string; connectionId: string; reviewRevision: number } }[] }) {
-  const entry = record.members[0]!.entry;
-  return { 'x-opencrane-gateway-generation': String(record.generation),
-    'x-opencrane-record-digest': record.recordDigest, 'x-opencrane-server-id': entry.serverId,
-    'x-opencrane-connection-id': entry.connectionId,
-    'x-opencrane-review-revision': String(entry.reviewRevision) };
-}
 
-async function publishedFixture(mode = 'allow', remote = false, declared = true,
-  accountMode: 'none' | 'personal' = 'none') {
-  const setup = await fixture();
-  onTestFinished(setup.close.bind(setup));
-  const headers = await prepare(setup, 'remote', remote, declared, accountMode);
-  await reviewRestoration(setup, 'review-generation', mode);
-  const record = await publishRestoration(setup, 'publish-generation');
-  const delivery = await restorationDelivery(setup);
-  await delivery.deliver(record);
-  await delivery.waitForWitness(record);
-  expect(await delivery.observe()).not.toBeNull();
-  const constants = generationHeaders(record);
-  return { setup, headers, record, delivery, constants };
-}
 
 async function nextCarriedGeneration(context: Awaited<ReturnType<typeof publishedFixture>>) {
   const { recordDigest: _digest, ...previous } = context.record;
@@ -2519,6 +2389,21 @@ const remoteGuards = ['gateway', 'bytes', 'private', 'metadata', 'mixed', 'empty
   'untrusted', 'wrong_name', 'redirect', 'oversize', 'session', 'mime', 'reply_fields',
   'undeclared', 'revision', 'dns_timeout', 'permit_timeout', 'held_start', 'lost_start',
   'deadline', 'watch_admission', 'watch_final'] as const;
+function restoreTlsIdentityClock() {
+  vi.restoreAllMocks();
+}
+
+function holdTlsIdentityClock() {
+  // Reach certificate verification without making this case a test of dispatch expiry.
+  const elapsed = performance.now();
+  const wall = Date.now();
+  const elapsedClock = vi.spyOn(performance, 'now');
+  elapsedClock.mockReturnValue(elapsed);
+  const wallClock = vi.spyOn(Date, 'now');
+  wallClock.mockReturnValue(wall);
+  onTestFinished(restoreTlsIdentityClock);
+}
+
 async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
   const raw = body.replace('"arguments":{', '"arguments":{"number":1.0e3,');
   const context = await publishedFixture('allow', true, mode !== 'undeclared');
@@ -2600,6 +2485,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       'x-opencrane-mcp-permit': value };
     const request = { method: 'POST', headers: canaries, body: raw };
     const beforeSend = performance.now();
+    if (mode === 'wrong_name') holdTlsIdentityClock();
     const sending = fetch(`${setup.options.decisionUrl}/dispatch/mcp/fixture/installed`, request);
     try {
       if (mode === 'held_start') {
@@ -2686,57 +2572,6 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
 }
 it.each(remoteGuards)('guards published HTTPS tool calls: %s', guardsRemoteCall);
 
-async function selectedPersonalFixture(mode: 'allow' | 'ask' | 'block' = 'allow',
-  material = 'alice-access') {
-  const context = await publishedFixture(mode, true, true, 'personal');
-  const { setup } = context;
-  const remote = await remoteFixture();
-  onTestFinished(remote.close);
-  setup.dispatchOptions.routes.length = 0;
-  setup.dispatchOptions.remoteNetwork = remote.network;
-  remote.revision(catalogue.schemaDigest);
-  function stageMaterial() {
-    const staged = { status: 'staged' as const,
-      identity: { reference: 'alice-secret', uid: 'alice-uid', resourceVersion: '1' } };
-    return Promise.resolve(staged);
-  }
-  const saved = await oauthSelectionFixture(setup.nats, 'alice', 'fixture',
-    'alice-profile', stageMaterial, { locator: 'https://mcp.example.test/mcp',
-      grantedScopes: ['openid', 'write'] });
-  const subject = 'connection-selection-alice-fixture';
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(['test', subject, 'choice']));
-  const selected = envelope('test', subject, 'connection.selected', {
-    action: 'select', userId: 'alice', serverId: 'fixture',
-    connectionId: 'installed', profileId: 'alice-profile',
-    profileRevision: saved.revision, expectedSequence: 0,
-  }, hash.digest('hex'));
-  selected.source = 'opencrane-server';
-  selected.principal = { kind: 'human', id: 'alice' };
-  selected.commandId = 'choice';
-  await setup.nats.seed([selected]);
-  let materialReads = 0;
-  function readAccessMaterial() {
-    materialReads += 1;
-    return Promise.resolve(material);
-  }
-  function accessMaterialReadCount() {
-    return materialReads;
-  }
-  setup.dispatchOptions.credentialDispatch = {
-    db: setup.db, custody: { readAccessMaterial },
-    loadConfiguration: saved.loadConfiguration,
-  };
-  const selectionRevision = await setup.nats.store.head(subject);
-  const claims = { ...setup.t, thread: context.headers['session-id'], turn: 'dispatch',
-    personalSelections: [{ serverId: 'fixture', profileId: 'alice-profile',
-      selectionRevision }] };
-  const token = await setup.sign(claims, 'decision-service');
-  const rawClaims: unknown = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
-  expect(rawClaims).toMatchObject({ personalSelections: claims.personalSelections });
-  const headers = { ...context.headers, ...context.constants, 'x-turn-token': token };
-  return { setup, remote, headers, saved, accessMaterialReadCount };
-}
 
 async function refusesCredentialForBlockedPersonalTool() {
   const { setup, remote, headers, accessMaterialReadCount } =
@@ -2751,11 +2586,6 @@ async function refusesCredentialForBlockedPersonalTool() {
 it('does not release a personal credential without an approved tool rule',
   refusesCredentialForBlockedPersonalTool, 60_000);
 
-function requestFromPermit(value: string) {
-  const encoded = value.split('.')[0]!;
-  const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
-  return z.object({ requestId: z.string() }).parse(decoded).requestId;
-}
 
 async function selectedPersonalCall() {
   const { setup, remote, headers } = await selectedPersonalFixture();
@@ -2841,7 +2671,16 @@ async function refusesForgottenLoadedMemoryAfterPermit() {
 it('refuses a personal permit after loaded memory is forgotten',
   refusesForgottenLoadedMemoryAfterPermit, 60_000);
 
-const personalChanges = ['cleared choice', 'revoked profile', 'admin block',
+async function rotatePersonalFixture(setup: Fixture,
+  saved: Awaited<ReturnType<typeof oauthSelectionFixture>>) {
+  const revision = await refreshPersonalFixture(saved);
+  const rows = await history(setup.nats.store, saved.subject, 'test');
+  const current = foldConnection(rows);
+  expect(current).toMatchObject({ sequence: revision, lastGeneration: 2,
+    data: { activation: { generation: 2 } } });
+}
+
+const personalChanges = ['cleared choice', 'revoked profile', 'rotated profile', 'admin block',
   'changed review', 'expired permit', 'lost release audit', 'closed turn',
   'computer rotation', 'turn takeover', 'new Ask message'] as const;
 async function refusesChangedPersonalCall(change: typeof personalChanges[number]) {
@@ -2865,6 +2704,8 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
       userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
       revokedBy: 'alice', expectedSequence: saved.revision, reason: 'owner_requested',
     });
+  } else if (change === 'rotated profile') {
+    await rotatePersonalFixture(setup, saved);
   } else if (change === 'admin block') {
     await setup.append('connection-control-alice-fixture', 'connection.disabled', {
       userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
@@ -2876,8 +2717,11 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
       toolRevision: tool.revision, mode: 'block', setBy: 'alice',
     });
   } else if (change === 'expired permit') {
-    const current = Date.now();
-    vi.spyOn(Date, 'now').mockReturnValue(current + 31_000);
+    const encoded = value.split('.')[0]!;
+    const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
+    const lease = z.object({ expiresAt: z.number() }).parse(decoded);
+    expect(lease.expiresAt).toBeLessThanOrEqual(Date.now() + 30_000);
+    vi.spyOn(Date, 'now').mockReturnValue(lease.expiresAt);
   } else if (change === 'closed turn') {
     await setup.append('computer-assistant', 'computer.turn_closed', {
       assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',

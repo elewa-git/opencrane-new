@@ -272,17 +272,24 @@ async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][
   if (!hasComputerCompatibleFields(state)) return { omitted: true };
   const selected = reviewedDefinitions(state, input.approvalWaiting === true);
   if (!selected.definitions.length) return { omitted: false };
-  if (!await canUseServer(input, state.serverId)) return { omitted: false };
-  if (state.accountMode === 'personal') {
-    const selection = await input.readSelection?.(input.requesterId, state.serverId);
-    if (!selection) {
-      input.missingConnection?.(state);
-      return { omitted: false };
-    }
+  // Read independent eligibility facts together; every result is still required.
+  const permission = canUseServer(input, state.serverId);
+  const selection = selectedAccountAvailable(input, state);
+  const [permitted, connected] = await Promise.all([permission, selection]);
+  if (!permitted) return { omitted: false };
+  if (!connected) {
+    input.missingConnection?.(state);
+    return { omitted: false };
   }
   const entry = makeTurnToolServer(state, selected);
   if (!turnToolFits(entry, tools, keys, availableBytes)) return { omitted: true };
   return { entry, omitted: false };
+}
+
+async function selectedAccountAvailable(input: TurnToolInput, state: TurnToolServerState) {
+  if (state.accountMode !== 'personal') return true;
+  const selection = await input.readSelection?.(input.requesterId, state.serverId);
+  return selection !== undefined;
 }
 
 function turnToolFits(entry: TurnToolServer, tools: TurnToolServer[],
@@ -372,9 +379,12 @@ function hasValidDefinitionLength(tool: TurnToolServerState['discoveryTools'][nu
 }
 
 async function canUseServer(input: TurnToolInput, serverId: string) {
-  const requesterCanUse = await input.canUse(serverId, 'person', input.requesterId);
-  if (!requesterCanUse) return false;
-  return input.canUse(serverId, 'assistant', input.assistantId);
+  const permissionReads = [
+    input.canUse(serverId, 'person', input.requesterId),
+    input.canUse(serverId, 'assistant', input.assistantId),
+  ];
+  const [requesterCanUse, assistantCanUse] = await Promise.all(permissionReads);
+  return requesterCanUse && assistantCanUse;
 }
 
 function reviewedDefinitions(state: TurnToolServerState, approvalWaiting: boolean) {

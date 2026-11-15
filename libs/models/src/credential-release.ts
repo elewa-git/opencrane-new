@@ -233,6 +233,11 @@ async function prepareEvidence(store: EventStore, silo: string, requesterId: str
     return null;
   }
 }
+export interface PreparedCredentialRelease {
+  release: Release;
+  evidence: Awaited<ReturnType<typeof credentialReleaseEvidence>>;
+}
+
 async function confirm(store: EventStore, silo: string, requesterId: string,
   decisionId: string, raw: unknown, prepareAccess: () => Promise<Access>,
   action: 'append' | 'recover' | 'claim', loadConfiguration?: OAuthConfigurationLoader,
@@ -245,6 +250,12 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
   if (!prepared) {
     refuse();
   }
+  return confirmPreparedCredentialRelease(store, silo, prepared, access, action);
+}
+
+/** Recheck live access and positions against facts prepared for this one request. */
+export async function confirmPreparedCredentialRelease(store: EventStore, silo: string,
+  prepared: PreparedCredentialRelease, access: Access, action: 'append' | 'recover' | 'claim') {
   const { release, evidence } = prepared;
   const deadline = Math.min(access.deadline, performance.now() + 2000,
     performance.now() + release.expiresAt - Date.now());

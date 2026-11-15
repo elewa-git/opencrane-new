@@ -140,6 +140,23 @@ or finishes in another batch. Inactive assistants are refused before receipt che
 Confirmed membership or resource denials remain HTTP 403. Budget exhaustion remains HTTP 402. The same request can succeed
 after recovery only by passing the normal access and spending checks again.
 
+The ordinary MCP dispatch path prepares saved authority history and immutable
+projection receipts before joining the shared budget writer queue. Personal-key
+calls also prepare credential evidence there. Each preparation belongs to one
+single-use permit. A personal call bounds queue waiting by the unused permit
+lifetime, then starts the writer's two-second deadline after admission. A call
+requiring no personal key retains its original access deadline through preparation,
+queueing and sending; preparation never renews its permit.
+
+The live checks keep prepared access-stream positions, current IAM permissions,
+turn activity, memory, revocation, admin disable and conditional appends. Another
+person's admission can advance the server stream without changing those rights.
+The credential broker checks prepared positions again after private material reads.
+A permission outage or changed grant still refuses the send. No receipt or authority
+result is reused across requests. The dispatch tests retain real 400 ms receipt
+work for personal and no-key calls. A separate test revokes a grant during the
+budget queue wait.
+
 `decision-refusal.test.ts` injects failures at event-store reads and budget writes,
 and forwards real OpenFGA traffic through a local proxy that can return errors or
 delay selected permission checks. It checks 503, absent permits, unchanged spending,
@@ -5003,7 +5020,9 @@ Fresh-install and production Kubernetes qualification: NOT RUN.
 ## Private single-request credential broker (Part of #49)
 
 `credential-broker.ts` has no public export or route. It takes authenticated request
-context and reads the exact saved allowed decision. Ownership, selected profile,
+context and reads the exact saved allowed decision. Concurrent requests on one server
+keep separate personal selections, custody reads and release audits, including when
+their dispatch admissions overlap. Ownership, selected profile,
 verified account, generation and scopes come from saved records. The existing
 selection check validates current configuration and tool scopes. The personal broker
 still refuses company releases. The separate company audit check verifies its frozen
@@ -5030,7 +5049,10 @@ public API field; the separate company audit has its own strict release variant.
 context uses existing audited names and digests. Security rules and
 both authority test files remain unchanged. Tests use real NATS/PostgreSQL and the real
 custody adapter against a synthetic HTTP transport. A recording HTTPS fixture now also
-checks the governed personal path. The models process needs
+checks the governed personal path. Replay checks invoke the operator's Node entrypoint
+directly and retain their ten-second deadline. The hostname case holds the dispatch
+clock so that it reaches certificate verification; separate expiry cases check the limit.
+The models process needs
 `CONNECTION_CUSTODY_FILE`. OAuth also needs `MCP_OAUTH_CONFIGURATION_FILE`, a JSON
 object keyed by server id, reread on each use. Bearer selection instead checks the
 saved identity-tool revision and account evidence against the current reviewed policy.

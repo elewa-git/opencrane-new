@@ -627,7 +627,7 @@
   },
   "libs/models/src/credential-broker.ts": {
     "max-params": {
-      "count": 2
+      "count": 1
     }
   },
   "libs/models/src/credential-release.ts": {
@@ -795,11 +795,6 @@
   "libs/models/src/paying-group.ts": {
     "max-params": {
       "count": 3
-    }
-  },
-  "libs/models/src/personal-mcp-dispatch.ts": {
-    "max-params": {
-      "count": 1
     }
   },
   "libs/models/src/personal-tool-context.ts": {

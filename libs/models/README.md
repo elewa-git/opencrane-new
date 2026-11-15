@@ -139,7 +139,10 @@ For a personal API key, an admin names a reviewed read-only tool that checks the
 account. It refuses account replies that copy the key, including encoded text.
 The member can then verify and explicitly select their key in My tools.
 A changed account blocks the replacement. Every tool call still checks current access
-and records its credential release before forwarding.
+and records its credential release before forwarding. Concurrent personal assistants
+use their requesters' selected keys. Tool arguments cannot choose another account,
+and a revoked key is refused before the next release. Within one personal tool call it reuses
+confirmed projection receipts, while checking current permissions each time.
 The result stays unconfirmed until an explicit internal confirmation saves the first account
 generation. That save grants no tool access.
 Public routes remain unavailable.
@@ -158,9 +161,9 @@ flowchart LR
   server["apps/server, apps/ops and models process<br/>back end and workers"] -.->|checks owner Ask and release bindings and company tool scopes, public tool addresses, reads, hosted image status and check requests, original call status, calls, control, cost reviews, approval replies, takeover cancellation, memory and completed reply withdrawal, fixed positions before private replies, owners, providers, free reachability, spending and current effect pages, own and admin profile metadata and original change receipts, personal bearer and verified OAuth choices with current access and owner revocation from HTTP, admin company opt-in, explicit company choices after wake, original selection receipts, saved tool choices, reviews, publication receipts and call statuses| models["libs/models<br/>AI rules, personal accounts, image signature, licence and bound vulnerability checks, control, provider choice and spending"]
   server -->|asks for the saved first child start| models
   server -->|private image worker claims once and sends an image check| models
-  models -->|checks personal key identity, private sign-in, refresh, revocation and selected calls with current turn and loaded memory checks; refuses encoded key echoes in account identity and scans replies for full or long continuous credential echoes; checks remote HTTPS addresses, certificates, current revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
+  models -->|checks personal key identity, private sign-in, refresh, revocation and selected calls prepared before budget queueing, with current turn and loaded memory checks; refuses encoded key echoes in account identity and scans replies for full or long continuous credential echoes; checks remote HTTPS addresses, certificates, current revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models, checks private callers and reports live Ask holds| models
-  models -.->|checks receipts, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
+  models -.->|reuses confirmed projection receipts within one personal tool call, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|checks the saved company custody record version; prepares separate company sign-in attempts; stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, reads one exact personal access token for a private callback, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   models -->|checks one held Ask replacement permit| gateway
@@ -780,7 +783,12 @@ including after a lost reply or restart.
 Refresh and identity tokens stay private. Only reviewed, admin-approved tool servers
 receive personal credentials. Each call must also have a current Allow rule or an
 approved Ask decision. The gateway releases the selected access token for that call
-after saving its release record.
+after saving its release record. Saved authority facts, projection receipts and
+credential metadata load before the call waits for the budget writer. Each write
+checks current access within two seconds after admission. The broker checks access
+and revocation again before sending. Prepared facts never grant another request access.
+Calls to tools that need no personal key also load their saved checks before waiting
+for the writer. They keep their original access deadline.
 
 The reply scan is a best-effort extra check. It looks for the full credential and
 long continuous parts in reply fields, joined text and encoded text. A match returns

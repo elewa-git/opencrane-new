@@ -1,10 +1,10 @@
 import type { EventStore } from '@opencrane/event-store';
 import type { Db } from '@opencrane/projections';
-import { toolCredentialReleaseSchema } from '@opencrane/events';
+import type { toolCredentialReleaseSchema } from '@opencrane/events';
 import type { z } from 'zod';
 import type { connectionCustody } from './connection-custody.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
-import { credentialBroker } from './credential-broker.ts';
+import { credentialBroker, credentialBrokerContext } from './credential-broker.ts';
 
 export interface PersonalCredentialDispatch {
   db: Pick<Db, 'lock'>;
@@ -14,17 +14,19 @@ export interface PersonalCredentialDispatch {
 
 type Release = z.infer<typeof toolCredentialReleaseSchema>;
 
-/** Send one selected credential only after the broker saves its release. */
-export async function sendPersonalCredential(store: EventStore, silo: string,
-  dispatch: PersonalCredentialDispatch, decisionId: string, release: Release,
-  deadline: number, confirmAccess: () => Promise<void>,
-  sendAccess: (material: string) => Promise<void>) {
-  const context = toolCredentialReleaseSchema.pick({
-    requestId: true, permitId: true, userId: true, assistantId: true,
-    computerId: true, computerGeneration: true, conversationId: true,
-    turnId: true, threadId: true, serverId: true, toolName: true,
-    argumentsDigest: true, purpose: true,
-  }).strip().parse(release);
+export interface PersonalCredentialRequest {
+  decisionId: string;
+  release: Release;
+  deadline: number;
+  confirmAccess: () => Promise<void>;
+  sendAccess: (material: string) => Promise<void>;
+}
+
+/** Prepare this request's saved evidence before the shared budget queue. */
+export async function preparePersonalCredential(store: EventStore, silo: string,
+  dispatch: PersonalCredentialDispatch, request: PersonalCredentialRequest) {
+  const { decisionId, release, deadline, confirmAccess, sendAccess } = request;
+  const context = credentialBrokerContext(release);
   function prepareAccess() {
     const access = { deadline: Math.min(deadline, performance.now() + 2000),
       checkAccess: confirmAccess };
@@ -32,5 +34,6 @@ export async function sendPersonalCredential(store: EventStore, silo: string,
   }
   const broker = credentialBroker(store, dispatch.db, dispatch.custody, silo,
     decisionId, context, dispatch.loadConfiguration, prepareAccess, sendAccess);
-  await broker.send();
+  await broker.prepare();
+  return broker.send;
 }

@@ -1,0 +1,23 @@
+{
+  "verdict": "FAIL",
+  "stage": "Publication collector status check",
+  "reason": "Collector expected invented pending instead of the API contract applying status",
+  "applicationSource": "3c1ea9595a730cdb921b22e10cae441b3a2d3bca",
+  "audienceGrants": {
+    "count": 4,
+    "httpStatuses": [
+      200,
+      200,
+      200,
+      200
+    ]
+  },
+  "reviewWidths": [
+    1280,
+    390
+  ],
+  "publicationSubmittedOnce": true,
+  "concurrentCalls": "NOT RUN",
+  "revocation": "NOT RUN",
+  "cleanup": "PASS"
+}
