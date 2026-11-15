@@ -9,16 +9,16 @@ import { afterEach, expect, test, vi } from 'vitest';
 vi.mock('node:child_process', mockProcesses);
 vi.mock('@opencrane/observability', mockLogging);
 const logLines = [];
-function mockLogging(importOriginal) {
-  async function useActualLogger() {
-    const actual = await importOriginal();
-    function write(line) { logLines.push(line); }
-    function logger(name) {
-      return actual.createLogger(name, { level: 'error', destination: { write } });
-    }
-    return { ...actual, createLogger: vi.fn(logger) };
+async function mockLogging(importOriginal) {
+  const actual = await importOriginal();
+  function write(line) {
+    logLines.push(line);
   }
-  return useActualLogger();
+  function logger(name) {
+    const options = { level: 'error', destination: { write } };
+    return actual.createLogger(name, options);
+  }
+  return { ...actual, createLogger: vi.fn(logger) };
 }
 function clearTestState() {
   vi.unstubAllEnvs();

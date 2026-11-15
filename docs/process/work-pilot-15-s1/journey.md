@@ -34,6 +34,8 @@ downloads explicitly select github.com. Inherited enterprise settings refuse.
 
 Structured logger tests distinguish outage, expired and malformed failures. Their
 synthetic credential canary stays out of the public exception and real JSON logs.
+A real subprocess writes the canary to both stdout and stderr; neither reaches
+the captured public output, error cause or error stack.
 A named per-layer inspector preserves the forbidden-library and flattened-image
 checks. Synthetic archives cover forbidden libraries hidden by later layers,
 multiple populated layers, an empty image and one valid populated layer.
@@ -68,7 +70,11 @@ Cleaned the changed code against the engineering standard: shared release syntax
 small named functions, bounded nesting, separate statements, safe structured
 failure causes and no new dependency. No access, money, memory or event contract
 changed. Rebased onto `0a8bda6e8354d9d289795d8da9a20c556d8dbf1d`; the rebase completed.
-Source gates and the completed journey verdict are in the linked exact-head receipt.
+Source gates passed: workspace and infrastructure typecheck, event catalogue, Knip,
+changelog, changed-file ESLint, Markdown and public privacy/secret scans. The final
+changed suites passed twice (32 Vitest checks, including wrappers for ten Python
+cases). A further 54 release/scanner checks passed twice; 44 preflight cases passed.
+The image checks and completed journey verdict are in the linked exact-head receipt.
 No independent review result is claimed.
 
 ## Historical qualification
