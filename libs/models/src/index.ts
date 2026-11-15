@@ -64,7 +64,7 @@ export { mcpAdminInstanceStop, mcpAdminInstanceChange } from './mcp-instance.ts'
 
 export { admitDescendant, descendantId, readDescendantAgreement } from './descendant-admission.ts';
 
-export { mcpDispatchRouteSchema } from './mcp-dispatch.ts';
+export { mcpDispatchRouteSchema } from './mcp-dispatch-contract.ts';
 export { mcpInstanceWorkerRegistration, mcpInstanceObservation }
   from './mcp-instance-observation.ts';
 

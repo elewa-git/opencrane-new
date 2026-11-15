@@ -1,15 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { prepareRemote, type RemoteNetwork } from './remote-https.ts';
-import type { Permit, Route } from './mcp-dispatch.ts';
+import type { Permit, Route } from './mcp-dispatch-contract.ts';
 import type { PersonalCredentialDispatch } from './personal-mcp-dispatch.ts';
 
 export type RemoteTarget = Awaited<ReturnType<typeof prepareRemote>>;
-
-export interface McpAccessCheck {
-  (): Promise<void>;
-  prepare?: (deadline: number) => Promise<void>;
-}
 
 const callerCredentialHeaders = ['authorization', 'proxy-authorization', 'cookie',
   'x-api-key', 'x-opencrane-profile-id'];

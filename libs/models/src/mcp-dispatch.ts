@@ -1,5 +1,7 @@
+import type { BudgetBinding, McpAccessCheck, MemorySend, Permit, Route }
+  from './mcp-dispatch-contract.ts';
 import { consumePermit, dispatchRemoteTarget, dispatchDigest as digest,
-  type McpAccessCheck, type PersonalDispatchRequest, type RemoteTarget }
+  type PersonalDispatchRequest, type RemoteTarget }
   from './mcp-dispatch-request.ts';
 import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
 /* eslint max-lines: ["error", { max: 672, skipBlankLines: true, skipComments: true }] */
@@ -13,23 +15,13 @@ import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { z } from 'zod';
-import type { ModelCall } from './state.ts';
 import { toolCredentialReleaseSchema } from '@opencrane/events';
 import { requireOnlyAdmissions } from './mcp-position.ts';
 import { preparePersonalCredential, type PersonalCredentialDispatch }
   from './personal-mcp-dispatch.ts';
-import type { MemoryDispatch } from './memory-context.ts';
 import type { mcpPolicy } from './mcp.ts';
 import { envelope, type BudgetActor } from './actor.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
-export const mcpDispatchRouteSchema = z.strictObject({
-  serverId: identifier, connectionId: identifier,
-  upstream: z.string().regex(/^[\w.-]+:\d{1,5}$/u),
-  generation: identifier.optional(),
-  revisionHeader: z.literal('x-opencrane-mcp-revision').optional(),
-});
-export type Route = z.infer<typeof mcpDispatchRouteSchema> & { locator?: string };
 export interface McpDispatchOptions {
   routes: Route[];
   remoteNetwork?: RemoteNetwork;
@@ -39,38 +31,6 @@ export interface McpDispatchOptions {
   credentialDispatch?: PersonalCredentialDispatch;
 }
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
-interface MemorySend {
-  method: string;
-  sign: (dispatch: MemoryDispatch, expiresAt: number) => Promise<string>;
-}
-interface BudgetBinding {
-  confirmRoutine: () => Promise<void>;
-  rootId?: string;
-  modelCall: ModelCall;
-  decisionId: string;
-  admittedAt: number;
-}
-export interface Permit {
-  gatewayBinding?: NonNullable<Policy['gatewayBinding']>;
-  budget: BudgetBinding;
-  memory?: MemorySend;
-  memoryBinding: MemoryDispatch;
-  requestId: string;
-  silo: string;
-  route: Route;
-  policyRevision: number;
-  reviewRevision: number | undefined;
-  catalogueSequence: number;
-  schemaDigest: string;
-  toolRevision: string;
-  toolName: string;
-  bodyDigest: string;
-  expiresAt: number;
-  accessDeadline: number;
-  confirmAccess: McpAccessCheck;
-  release?: z.infer<typeof toolCredentialReleaseSchema>;
-  prepareCredential?: () => Promise<void>;
-}
 type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
   deadline?: number) => Promise<void>;
 const remoteErrorSchema = z.strictObject({
