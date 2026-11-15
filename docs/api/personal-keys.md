@@ -13,7 +13,8 @@ All routes require an authenticated member of the current organisation. Writes a
 require the exact Origin. Replies use `Cache-Control: no-store`.
 
 - `GET /api/my/tools/:serverId/connection` returns the current `connectionId`,
-  `identityTool` and `selectionRevision`. The server must be published, personal and
+  `identityTool`, `selectionRevision`, optional `selectedProfileId` and optional
+  `allowedAssistantIds`. Consent controls must match the selected profile before editing. The server must be published, personal and
   granted to that member.
 - `POST /api/my/tools/:serverId/profiles/:profileId/key` accepts `action` (`create`
   or `rotate`), `connectionId`, `changeRef`, `expectedSequence`, `expectedGeneration`
@@ -21,11 +22,20 @@ require the exact Origin. Replies use `Cache-Control: no-store`.
   The server sets the append deadline. The body limit is 8,192 bytes.
 - After verification, the member explicitly chooses **Use this key**. This calls the
   existing selection command. Connecting a key alone never selects it.
+- `POST /api/my/tools/:serverId/selection` accepts personal select fields
+  `connectionId`, `profileId`, `profileRevision`, `changeRef`, `expectedSequence`
+  and optional `allowedAssistantIds` (at most 100 ids). The body limit is 24,576 bytes. The authenticated caller
+  owns the choice. There is no admin override. Each list edit appends one
+  `connection.selected` and raises the choice revision. A pass for the old revision
+  is refused even if the same assistant remains allowed. Missing lists mean only
+  the owner’s personal assistant when read. An empty list allows nobody. Selecting
+  another key without a list preserves the saved consent.
 - Existing profile, original-change and selection-change GETs recover saved outcomes.
   An original verified bearer save reports `identityStatus: verified`. This does not
   prove current usability.
 - `GET /api/my/tools/needs?assistantId=<id>` returns names and ids for granted servers
-  whose tools the turn builder omits because the requester has no verified selection.
+  whose tools the turn builder omits because the requester has no verified selection
+  or has not allowed this assistant. The latter carries `reason: assistant_not_allowed`.
   It uses the same readers and builder as turn admission. Its failure does not close
   or refuse the conversation.
 
@@ -63,8 +73,14 @@ My tools clears the password input before waiting for a save reply, on access lo
 on a server change and on destruction. Browser storage contains only change references
 and profile ids. The verified account is shown after an own-profile read. The member
 must explicitly select the key before returning to chat; no earlier request is resent.
+My tools shows **Assistants that may use this key** under each saved key. The owner’s
+personal assistant starts on; usable shared assistants start off. A selected key’s
+checkboxes save through the same conditional selection command. Chat links to
+My tools when an assistant is refused, without naming the key’s account. The release
+check repeats consent and revision checks; grants alone never release a key.
 A definite selection conflict clears that refused reference and reloads the current
-revision. An uncertain selection still requires the original status read.
+revision and selected profile. A definite invalid-input or size refusal clears the
+unpublished reference; an uncertain selection still requires the original status read.
 
 ## Runtime settings
 

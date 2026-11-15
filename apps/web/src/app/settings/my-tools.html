@@ -63,6 +63,11 @@
             }
             <span class="open">Open details ›</span>
           </button>
+          @if (row.status !== 'unavailable' && !row.adminBlocked) {
+            <oc-key-assistants [serverId]="serverId()" [profileId]="row.profileId"
+              [profileRevision]="row.profileRevision" [selected]="row.selected" [refreshVersion]="choicesVersion()"
+              (changed)="refresh()" />
+          }
         </li>
       }
     </ul>

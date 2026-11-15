@@ -6,10 +6,17 @@ import type { z } from 'zod';
 @Component({
   selector: 'oc-personal-connection-notice',
   template: `@for (server of needs(); track server.serverId) {
+    @if (server.reason === 'assistant_not_allowed') {
+      <p role="status">Your key is not allowed for this assistant.
+        This server's tools are unavailable.
+        <a [href]="'/account/tools?serverId=' + server.serverId">Change this in My tools</a>.
+      </p>
+    } @else {
     <p role="status">{{ server.name }} needs your personal key.
       <a [href]="'/account/tools?serverId=' + server.serverId">Connect your key in My tools</a>.
       This server's tools are unavailable until you connect and choose a verified key.
     </p>
+    }
   }`,
   styles: `p { padding: .75rem; margin: .5rem 1rem; border: 1px solid var(--border, #ddd);
     border-radius: .5rem; overflow-wrap: anywhere; font-size: .875rem; }`,

@@ -255,9 +255,10 @@ export async function startDecision(
           }
           const boundSelection = turnToken.personalSelections?.find(matchesServer);
           if (!boundSelection) throw new Error('Personal tool unavailable');
+          const personalRequest = { assistantId: computer.assistant,
+            toolName: parsed.call.params.name, loadConfiguration: configuration, boundSelection };
           preparedPersonal = await personalToolContext(actor.store, binding,
-            turnToken.requester, match[1]!, parsed.call.params.name, configuration,
-            boundSelection);
+            turnToken.requester, match[1]!, personalRequest);
         }
       }
       const preparedMemory = await prepareMemoryDecision(memoryRoute, actor.store, binding,

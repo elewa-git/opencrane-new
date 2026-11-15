@@ -48,11 +48,11 @@ async function fixture(sharedServer?: string) {
   await auth.handler.handle(grant, pgDb(storage.queue));
   const saved = await oauthSelectionFixture(nats, userId, serverId);
   async function select(input: unknown = saved.command) {
-    return changeConnectionSelection(nats.store, binding, userId, input, saved.loadConfiguration);
+    return changeConnectionSelection(nats.store, binding, userId, input, { loadConfiguration: saved.loadConfiguration });
   }
   async function read(toolName?: string) {
     return readConnectionSelection(nats.store, binding, userId, serverId,
-      saved.loadConfiguration, toolName);
+      { loadConfiguration: saved.loadConfiguration, toolName });
   }
   return { ...saved, userId, serverId, select, read };
 }
@@ -201,7 +201,7 @@ async function racingCheck(kind: string) {
     return test.configuration;
   }
   const result = await readConnectionSelection(nats.store, binding, test.userId,
-    test.serverId, loadConfiguration, 'read');
+    test.serverId, { loadConfiguration, toolName: 'read' });
   expect(result.status).toBe('unavailable');
 }
 it.each(['refresh', 'clear', 'revoke'])('cannot return stale eligibility during %s', racingCheck);
@@ -245,7 +245,7 @@ async function unavailableConfiguration(removed: boolean) {
     return Promise.reject(new Error('private-canary'));
   }
   const pending = readConnectionSelection(nats.store, binding, test.userId,
-    test.serverId, failed, 'read');
+    test.serverId, { loadConfiguration: failed, toolName: 'read' });
   const message = removed ? 'Active silo membership required' : 'Selection configuration unavailable';
   await expect(pending).rejects.toThrow(message);
   await expect(pending).rejects.not.toHaveProperty('cause');

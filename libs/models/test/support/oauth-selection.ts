@@ -22,18 +22,23 @@ function choice(tool: ReturnType<typeof declaration>) {
 }
 
 export async function selectPersonalFixture(nats: Awaited<ReturnType<typeof natsFixture>>,
-  saved: Awaited<ReturnType<typeof oauthSelectionFixture>>) {
+  saved: Awaited<ReturnType<typeof oauthSelectionFixture>>,
+  consent: { allowedAssistantIds?: string[]; expectedSequence?: number } = {}) {
   const { userId, serverId, profile: profileId } = saved.fields;
   const subject = `connection-selection-${userId}-${serverId}`;
   const hash = createHash('sha256');
-  hash.update(JSON.stringify(['test', subject, 'choice']));
+  const expectedSequence = consent.expectedSequence ?? 0;
+  const commandId = `choice-${expectedSequence}`;
+  hash.update(JSON.stringify(['test', subject, commandId]));
   const selected = envelope('test', subject, 'connection.selected', {
     action: 'select', userId, serverId, connectionId: 'installed', profileId,
-    profileRevision: saved.revision, expectedSequence: 0,
+    profileRevision: saved.revision, expectedSequence,
+    ...(consent.allowedAssistantIds === undefined ? {}
+      : { allowedAssistantIds: consent.allowedAssistantIds }),
   }, hash.digest('hex'));
   selected.source = 'opencrane-server';
   selected.principal = { kind: 'human', id: userId };
-  selected.commandId = 'choice';
+  selected.commandId = commandId;
   await nats.seed([selected]);
   return nats.store.head(subject);
 }

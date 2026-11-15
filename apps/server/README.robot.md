@@ -53,6 +53,10 @@ store fixtures. The public close route now saves the same event.
 
 For people, read [README.md](README.md) first.
 
+The [personal-key API](../../docs/api/personal-keys.md) includes the owner’s
+assistant consent on the existing choice stream. The chat readers and final
+credential release share the models consent decision.
+
 ## Server process protection
 
 `src/main.ts` starts the image-owned native protection helper before opening
@@ -6225,7 +6229,8 @@ order using only fixed diagnostic labels, including TLS and custody transport co
 `POST /api/my/tools/:serverId/selection` uses the verified session member and exact Origin.
 The body accepts only `action`, `connectionId`, `changeRef`, `expectedSequence`, and,
 for select only, `profileId` and `profileRevision`. Queries and owner/silo/server overrides
-are refused. The 4096-byte limit and fixed parsing errors reuse the instance POST pattern.
+are refused. The 24,576-byte limit admits the full 100-assistant list. Fixed parsing errors reuse
+the instance POST pattern.
 All replies use no-store. Invalid input returns 400, oversized input 413, no session 401,
 refused access 403, stale or conflicting choices 409, and dependency failures 503.
 No dependency cause is returned or logged. New field names pass RISKY_FIELD_NAME unchanged.
@@ -6240,7 +6245,14 @@ missing evidence remains unknown and never permits a resend. Exact retries retai
 receipt after later choices and broker deduplication expiry. No provider, custody, release,
 wake, automatic selection or company fallback is added. HTTP tests use disposable services.
 Verified OAuth selection uses the optional trusted `memberReads.loadOAuthConfiguration`
-loader; without it OAuth selection refuses. Request bodies and receipt fields are unchanged.
+loader; without it OAuth selection refuses. Personal select bodies optionally include
+`allowedAssistantIds`, using the shared protocol selection schema. Settings reads return
+the selected profile id and the saved list when present. Only the authenticated owner can change it, with one
+conditional append on the existing choice stream. The shared models consent check
+applies when tools and signed selections are prepared, and again at final release.
+Older choices without a list allow only the owner’s personal assistant. An empty list
+allows nobody. The choice revision still invalidates old passes. Receipt fields are
+unchanged. See the [personal-key API](../../docs/api/personal-keys.md).
 The runtime reads `MCP_OAUTH_CONFIGURATION_FILE` as a JSON object keyed by server id.
 It rereads the current settings for each choice and personal tool offer. A missing or
 changed record refuses use. No secret enters the offer. Company dispatch and live

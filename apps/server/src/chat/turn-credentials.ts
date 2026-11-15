@@ -44,7 +44,7 @@ export async function releaseTurnCredentials(options: BridgeOptions,
       : await initialMemoryFor(options, context, binding, report.replay === true);
     // Finish recall history and deployment reads before starting the short credential check.
     await confirmRecall(recall);
-    const personalSelections = await selectedPersonalProfiles(options, binding.requesterId);
+    const personalSelections = await selectedPersonalProfiles(options, binding.requesterId, context.assistantId);
     const confirmMemory = await turnMemoryCheck(options, context, binding);
     await confirmMemory();
     await requireTurnMember(options.store, options.silo, binding.requesterId);
@@ -83,7 +83,8 @@ export async function releaseTurnCredentials(options: BridgeOptions,
   }
 }
 
-async function selectedPersonalProfiles(options: BridgeOptions, requesterId: string) {
+async function selectedPersonalProfiles(options: BridgeOptions, requesterId: string,
+  assistantId: string) {
   const selected: { serverId: string; profileId: string; selectionRevision: number }[] = [];
   if (!options.binding || !options.catalogue) {
     return selected;
@@ -93,8 +94,8 @@ async function selectedPersonalProfiles(options: BridgeOptions, requesterId: str
   for (const server of servers) {
     if (selected.length === 20) break;
     try {
-      const choice = await readers.readSelection(requesterId, server.serverId);
-      if (choice) {
+      const choice = await readers.readSelection(requesterId, server.serverId, assistantId);
+      if (choice?.assistantAllowed) {
         selected.push({ serverId: server.serverId, profileId: choice.profileId,
           selectionRevision: choice.selectionRevision });
       }

@@ -89,7 +89,7 @@ async function fixture() {
   const command = { ...personal.command, ownerKind: 'company', profileRevision: revision };
   async function select(input: unknown = command) {
     return changeConnectionSelection(nats.store, binding, userId, input,
-      personal.loadConfiguration, verifiedProfile);
+      { loadConfiguration: personal.loadConfiguration, readCompanyProfile: verifiedProfile });
   }
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
   async function rows() {
@@ -102,7 +102,7 @@ async function explicitChoice() {
   const test = await fixture();
   expect(foldConnectionSelection(await test.rows()).selected).toBeNull();
   const absent = await readConnectionSelection(nats.store, binding, test.userId, test.serverId,
-    test.personal.loadConfiguration, 'read');
+    { loadConfiguration: test.personal.loadConfiguration, toolName: 'read' });
   expect(absent).toEqual({ status: 'unavailable', sequence: 0 });
   test.evidence.scopes = ['openid', 'read'];
   const append = vi.spyOn(nats.store, 'append');
@@ -122,7 +122,7 @@ async function explicitChoice() {
   expect(foldConnectionSelection(foreign).selected).toBeNull();
   // Keep the existing personal dispatch reader closed to company choices.
   const read = await readConnectionSelection(nats.store, binding, test.userId, test.serverId,
-    test.personal.loadConfiguration, 'read');
+    { loadConfiguration: test.personal.loadConfiguration, toolName: 'read' });
   expect(read).toEqual({ status: 'unavailable', sequence: selected.sequence });
   const clear = { action: 'clear', serverId: test.serverId, connectionId: 'installed',
     expectedSequence: selected.sequence, changeRef: 'clear' };
@@ -151,7 +151,7 @@ it.each([
 async function refusesDefault() {
   const test = await fixture();
   await expect(changeConnectionSelection(nats.store, binding, test.userId,
-    test.command, test.personal.loadConfiguration)).rejects.toThrow();
+    test.command, { loadConfiguration: test.personal.loadConfiguration })).rejects.toThrow();
   const personalCommand = { ...test.personal.command, ownerKind: 'personal' };
   await test.select(personalCommand);
   const selected = foldConnectionSelection(await test.rows()).selected;
@@ -265,7 +265,8 @@ async function iamFailure() {
   const test = await fixture();
   const unavailable = { ...binding, apiUrl: 'http://127.0.0.1:1' };
   await expect(changeConnectionSelection(nats.store, unavailable, test.userId,
-    test.command, test.personal.loadConfiguration, test.verifiedProfile)).rejects.toThrow();
+    test.command, { loadConfiguration: test.personal.loadConfiguration,
+      readCompanyProfile: test.verifiedProfile })).rejects.toThrow();
   expect(await test.rows()).toHaveLength(0);
 }
 it('refuses unavailable IAM before append', iamFailure);

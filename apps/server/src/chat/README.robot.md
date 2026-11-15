@@ -1,5 +1,11 @@
 # Chat contracts
 
+Personal tool preparation and missing-key notices share `turnToolReaders`. Its selection
+reader checks `assistantMayUsePersonalKey` before an offer or signed selection. Missing
+lists allow only the owner’s personal assistant; explicit empty lists allow none.
+`assistant_not_allowed` notices contain a server id and safe server name, never an
+account name. Consent does not replace either requester or assistant server grants.
+
 `GET /api/conversations` includes one completed own welcome with `kind: welcome`,
 its welcome id, `/welcome` route, fixed title, completion time, zero unread count
 and archive position. It uses the same section, title search, limit and signed

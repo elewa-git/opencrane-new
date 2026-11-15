@@ -221,7 +221,7 @@ async function boundary() {
   for (const body of ['{', 'null', '[]']) {
     expect((await post(fixture.url, body, jsonHeaders)).statusCode).toBe(400);
   }
-  expect((await post(fixture.url, 'x'.repeat(4097), jsonHeaders)).statusCode).toBe(413);
+  expect((await post(fixture.url, 'x'.repeat(24 * 1024 + 1), jsonHeaders)).statusCode).toBe(413);
   await app.close();
   app = startApp(nats.store, 'foreign');
   expect((await post(fixture.url, input)).statusCode).toBe(403);
@@ -519,3 +519,45 @@ it.each([
   ['conflict', false], ['selection', false], ['server', false], ['profile', false],
 ])('checks current access before exposing %s history errors (removed: %s)',
   historyFailureAfterRemoval);
+
+async function ownerOnlyAssistantList() {
+  const fixture = await saved();
+  const input = { ...selection(fixture), allowedAssistantIds: [] };
+  const first = await post(fixture.url, input);
+  expect(first.statusCode).toBe(200);
+  const sequence = first.json<{ sequence: number }>().sequence;
+  const changed = { ...input, expectedSequence: sequence, changeRef: 'allow-own',
+    allowedAssistantIds: ['own-assistant'] };
+  const before = await nats.store.head();
+  expect((await post(fixture.url, changed, headers('admin'))).statusCode).toBe(403);
+  expect((await post(fixture.url, { ...changed, userId: 'alice' }, headers('admin'))).statusCode)
+    .toBe(400);
+  expect(await nats.store.head()).toBe(before);
+  const result = await post(fixture.url, changed);
+  expect(result.statusCode).toBe(200);
+  expect(result.json<{ sequence: number }>().sequence).toBeGreaterThan(sequence);
+  const rows = await history(nats.store, `connection-selection-alice-${fixture.serverId}`, 'test');
+  expect(rows).toHaveLength(2);
+  expect(rows[0]?.event.data).toMatchObject({ allowedAssistantIds: [] });
+  expect(rows[1]?.event.data).toMatchObject({ allowedAssistantIds: ['own-assistant'] });
+  expect((await post(fixture.url, { ...changed, changeRef: 'stale' })).statusCode).toBe(409);
+}
+it('only the signed-in owner can save the assistant list with one conditional append',
+  ownerOnlyAssistantList);
+
+function maximumAssistantId(_value: unknown, index: number) {
+  return `assistant-${index}`.padEnd(200, 'a');
+}
+async function maximumAssistantList() {
+  const fixture = await saved();
+  const allowedAssistantIds = Array.from({ length: 100 }, maximumAssistantId);
+  const input = { ...selection(fixture), allowedAssistantIds };
+  expect(Buffer.byteLength(JSON.stringify(input))).toBeGreaterThan(4096);
+  const response = await post(fixture.url, input);
+  expect(response.statusCode).toBe(200);
+  const rows = await history(nats.store, `connection-selection-alice-${fixture.serverId}`, 'test');
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.event.data).toMatchObject({ allowedAssistantIds });
+}
+it('accepts the advertised maximum assistant list through the bounded HTTP route',
+  maximumAssistantList);

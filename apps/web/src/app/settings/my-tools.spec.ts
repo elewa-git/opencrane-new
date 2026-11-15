@@ -62,7 +62,8 @@ describe('My tools', () => {
 
   it('loads page two and keeps loaded rows when refresh fails', async () => {
     let reads = 0;
-    vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
+      if (typeof url !== 'string' || !url.includes('/profiles?')) return response({}, 503);
       reads += 1;
       if (reads === 1) return response(page([saved], 'next'));
       if (reads === 2) {
@@ -407,3 +408,37 @@ describe('My tools', () => {
     expect(element.textContent).not.toContain('Connection revoked here');
   });
 });
+
+async function refreshRetriesAssistantChoices() {
+  let settingsReads = 0;
+  function read(input: string | URL | Request) {
+    const path = input instanceof Request ? input.url : input.toString();
+    if (path.endsWith('/connection')) {
+      settingsReads += 1;
+      if (settingsReads === 1) return response({}, 503);
+      return response({ serverId: 'odoo', connectionId: 'installed', identityTool: 'who_am_i',
+        selectionRevision: 8, selectedProfileId: 'alex' });
+    }
+    if (path === '/api/chat') return response({ memberId: 'alice', assistantId: 'own' });
+    if (path === '/api/assistants') return response({ rows: [] });
+    return response(page([saved]));
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(read);
+  const { fixture, element } = view();
+  function failed() {
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Assistant choices could not be loaded');
+  }
+  await vi.waitFor(failed);
+  element.querySelector<HTMLButtonElement>('[data-action="refresh"]')!.click();
+  function recovered() {
+    fixture.detectChanges();
+    expect(element.querySelector('input[type=checkbox]')).not.toBeNull();
+  }
+  await vi.waitFor(recovered);
+  expect(settingsReads).toBe(2);
+  fixture.destroy();
+  vi.restoreAllMocks();
+}
+it('refreshing My tools retries failed assistant choices in an existing profile row',
+  refreshRetriesAssistantChoices);

@@ -1,7 +1,7 @@
 import type { Binding } from '@opencrane/authz';
 import { memberAuthorisation } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
-import { history as modelHistory, readConnectionSelection } from '@opencrane/models';
+import { history as modelHistory, readConnectionSelection, assistantMayUsePersonalKey } from '@opencrane/models';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
 
 export interface TurnToolReaderOptions {
@@ -58,12 +58,17 @@ export function turnToolReaders(options: TurnToolReaderOptions) {
     const permission = await auth.use(subjectKind, subjectId, 'mcp_server', serverId);
     return permission.allowed;
   }
-  async function readSelection(requesterId: string, serverId: string) {
+  async function readSelection(requesterId: string, serverId: string, assistantId: string) {
     if (!options.binding) return undefined;
+    const readOptions = { loadConfiguration: options.loadOAuthConfiguration };
     const selection = await readConnectionSelection(options.store, options.binding,
-      requesterId, serverId, options.loadOAuthConfiguration);
+      requesterId, serverId, readOptions);
     if (selection.status !== 'verified') return undefined;
-    return { profileId: selection.profileId, profileRevision: selection.profileRevision,
+    const rows = await modelHistory(options.store, `assistant-${assistantId}`, options.silo,
+      performance.now() + 10_000);
+    const consent = { ...selection, userId: requesterId };
+    const assistantAllowed = assistantMayUsePersonalKey(consent, assistantId, rows);
+    return { assistantAllowed, profileId: selection.profileId, profileRevision: selection.profileRevision,
       selectionRevision: selection.sequence, generation: selection.generation };
   }
   return { readServer, canUse: canUseServer, readSelection };

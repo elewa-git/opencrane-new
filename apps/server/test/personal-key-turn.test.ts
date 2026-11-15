@@ -28,10 +28,10 @@ async function verifiedKeyIsAvailable() {
     changeRef: randomUUID(),
   });
   const selected = await readConnectionSelection(setup.nats.store, setup.binding, 'alice',
-    setup.serverId, undefined, 'read_fixture_quote');
+    setup.serverId, { toolName: 'read_fixture_quote' });
   expect(selected.status).toBe('verified');
   const missing = await readConnectionSelection(setup.nats.store, setup.binding, 'bob',
-    setup.serverId, undefined, 'read_fixture_quote');
+    setup.serverId, { toolName: 'read_fixture_quote' });
   expect(missing.status).toBe('unavailable');
   const rotation = { ...input, action: 'rotate', changeRef: randomUUID(),
     expectedSequence: saved.sequence, expectedGeneration: 1 };
@@ -39,7 +39,7 @@ async function verifiedKeyIsAvailable() {
     { custody, db: setup.db, network: setup.remote.network },
     { command: rotation, material: setup.accounts[1].key });
   const changed = await readConnectionSelection(setup.nats.store, setup.binding, 'alice',
-    setup.serverId, undefined, 'read_fixture_quote');
+    setup.serverId, { toolName: 'read_fixture_quote' });
   expect(changed.status).toBe('unavailable');
 }
 it('verifies a saved bearer through the reviewed identity tool for its own member only',

@@ -1,6 +1,7 @@
 /* eslint max-lines: ["error", { max: 1502, skipBlankLines: true, skipComments: true }] */
 import { createServer, type Socket } from 'node:net';
 import { once } from 'node:events';
+import { seedKeyAssistant, releaseDigest } from './support/connection-release.ts';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { jetstreamManager } from '@nats-io/jetstream';
@@ -1063,6 +1064,7 @@ it('finishes profile history before starting the two-second write access check',
 
 async function releaseFixture() {
   const test = await fixture();
+  await seedKeyAssistant(nats, test.userId);
   const selection = await test.select();
   const issuedAt = Date.now();
   const release = { requestId: `release-${test.userId}`, permitId: `permit-${test.userId}`,
@@ -1240,11 +1242,6 @@ async function forgedRelease(legacy: boolean) {
 }
 it.each([true, false])('legacy or forged saved audit cannot confirm: legacy=%s', forgedRelease);
 
-function releaseDigest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
 
 async function delayedReleaseHistory() {
   const test = await releaseFixture();
