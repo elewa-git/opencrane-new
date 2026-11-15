@@ -1,11 +1,41 @@
 # Workspace sign-out and Settings journey
 
-Journey on a fresh dev stack: FAIL — 13 November 2026, source head
-`314a574c624aaed5f991941b1239d285cd7d5c6f`. Startup diagnosis passed on both
-`origin/main` and this PR head at low load. The latest fresh `up.sh --fresh`
-failed during Zitadel setup, before the core or workspace runner. Every slice
-acceptance step is NOT RUN on this run. The previous PASS does not qualify this
-source.
+Journey on a fresh dev stack: **PASS** — 15 November 2026, source head
+`eb7730775c1ae66a6dd936f2d3d222a09f940b94`. Fresh startup and the full core
+journey passed on secondary stack 2. The workspace sign-out and Settings journey
+passed for members, admins and owners at 1280 px and 390 px. Screenshots and the
+step-by-step receipt are in [slice-journey.txt](slice-journey.txt). The stack was
+released with `down.sh` (exit 0).
+
+## Final fresh slice journey
+
+On 15 November 2026, the one-minute host load was 6.31 before the secondary
+claim. `claim.sh` returned stack 2. `up.sh --fresh` passed owner bootstrap,
+provider setup, website readiness, and the full core journey. Chromium completed
+the core desktop and phone chat, upload, live-view, audit, and spending journeys.
+The existing approval journey was skipped because it depends on issue 45 rows 4,
+5 and 14; this is outside #1045 acceptance. The core run replay-verified members
+and the MCP catalogue. The exact Zitadel credential path supplied for this run
+was available. Setup used only the OpenCrane 2 Dev organisation.
+
+`workspace-journey.ts` then passed every #1045 step at both widths. Members saw
+no Settings link and received the Integrations refusal. Admins and owners opened
+Settings. Member sign-out reached sign-in, while the separate owner browser stayed
+signed in after each logout. The runner saved all ten screenshots under
+[`screenshots/`](screenshots/). `down.sh` exited 0 and released the slot.
+
+Final push checks on the same source:
+
+- PASS: `nice -n 10 npx eslint apps/web/src/app/chat/workspace.spec.ts`.
+- PASS: `npm run lint:debt`; the workspace spec remains within its frozen 2,999
+  counted-line cap.
+- PASS: changed web test, 118 tests.
+- PASS: full `npm run typecheck` across workspaces, package and dev-stack code.
+- PASS: `npm run check:events`, 174 event types.
+- PASS: Knip; two existing configuration hints only.
+- PASS: `npm run lint:changelog` and `npx markdownlint-cli2` (514 files).
+- PASS: public privacy check and secret scan.
+- NOT RUN: full root lint and full root test suite.
 
 ## Rebased head retest
 

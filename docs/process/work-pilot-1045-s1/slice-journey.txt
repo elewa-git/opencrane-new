@@ -1,31 +1,18 @@
-Rebased head d1eb6a89e532e4cd9fa77e3da50c2466553f6382 fresh slice attempt: FAIL.
-The one-minute load before claim was 5.63. claim.sh claimed secondary stack 1.
-up.sh --fresh returned exit 1 during Zitadel credential loading. The exact failed
-setup command was /usr/bin/node --experimental-strip-types
-infra/dev-stack/zitadel-setup.ts.
-Setup reported ZITADEL_KEY_FILE unavailable (ENOENT); no request was sent.
-Private failure.log and last-error.log were retained before cleanup. down.sh
-returned exit 0 and released the slot.
-
-Rebased startup on this attempt: FAIL at Zitadel credential loading.
-Core journey: NOT RUN.
-Workspace slice journey: NOT RUN.
-Zitadel request: NOT SENT.
-Product code changed: NO.
+Fresh slice journey on rebased head eb7730775c1ae66a6dd936f2d3d222a09f940b94: PASS.
+On 15 November 2026, the one-minute host load was 6.31 before claiming secondary
+stack 2. `infra/dev-stack/up.sh --fresh` passed, including the full core journey.
+`workspace-journey.ts` passed at 1280 px and 390 px. The required Zitadel key path
+was available; setup sent requests only to the OpenCrane 2 Dev organisation.
+The owner stack was not used. `infra/dev-stack/down.sh` exited 0 and released the
+claimed slot.
 
 | Step | 1280 px | 390 px |
 | --- | --- | --- |
-| Member has no Settings link | NOT RUN | NOT RUN |
-| Member types `/org/integrations` and sees refusal | NOT RUN | NOT RUN |
-| Member uses Sign out and reaches sign-in | NOT RUN | NOT RUN |
-| Admin sees Settings and opens it | NOT RUN | NOT RUN |
-| Owner sees Settings and opens it | NOT RUN | NOT RUN |
-| Separate owner browser remains signed in after member logout | NOT RUN | NOT RUN |
+| Member has no Settings link and sees the Integrations refusal | PASS — [workspace](screenshots/member-workspace-1280.png), [refusal](screenshots/member-refusal-1280.png) | PASS — [workspace](screenshots/member-workspace-390.png), [refusal](screenshots/member-refusal-390.png) |
+| Member uses Sign out and reaches sign-in | PASS — [screenshot](screenshots/member-signed-out-1280.png) | PASS — [screenshot](screenshots/member-signed-out-390.png) |
+| Admin sees Settings and opens it | PASS — [screenshot](screenshots/admin-settings-1280.png) | PASS — [screenshot](screenshots/admin-settings-390.png) |
+| Owner sees Settings and opens it | PASS — [screenshot](screenshots/owner-settings-1280.png) | PASS — [screenshot](screenshots/owner-settings-390.png) |
+| Separate owner browser remains signed in after member logout | PASS | PASS |
 
-No browser console, workspace screenshot or budget-editor network-failure list
-was produced because startup stopped before the core journey. The earlier Spending
-failure did not recur. This PR does not change Zitadel setup or Spending editor paths.
-
-Changed tests on rebased head: PASS, 1 server test and 143 web tests. Previous
-source-check results remain historical; only the required rebased source checks
-were run.
+Core startup journey: PASS. Approval journey: SKIP because it depends on issue 45
+rows 4, 5 and 14. This condition is outside #1045 acceptance.
