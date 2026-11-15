@@ -31,7 +31,9 @@ current revision; it never sends an owner id. A lost reply keeps only its origin
 change reference under `key-assistants:<serverId>` and offers a status GET. A conflict
 reloads the saved list and selected profile before another edit. A stale row cannot
 select its old key by editing consent. Page Refresh reloads the consent panels as well
-as profile rows. Definite input and body-size refusals clear the unpublished change
+as profile rows. Confirmed consent saves update the selection revision locally;
+they do not refresh the profile inventory. Original receipt checks reload only consent.
+Definite input and body-size refusals clear the unpublished change
 reference; uncertain outcomes still require the original receipt.
 The Connect or choose a key action opens `personal-key.*` on the same page.
 It loads the reviewed connection settings, accepts a password input and clears it

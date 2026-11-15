@@ -151,7 +151,6 @@ export class KeyAssistants implements OnInit, OnDestroy, OnChanges {
       this.allowed.set(allowedAssistantIds);
       this.clearPending();
       this.message.set('Assistant choices saved. New calls use this list.');
-      this.changed.emit();
     } catch {
       this.message.set('Outcome unknown. Check the original change before changing this list again.');
     } finally {
@@ -194,7 +193,6 @@ export class KeyAssistants implements OnInit, OnDestroy, OnChanges {
       if (receipt.changeRef !== changeRef) throw new Error('Wrong assistant change');
       this.clearPending();
       await this.load();
-      this.changed.emit();
     } catch {
       this.message.set('Still unknown. Check the original change again later.');
     } finally {
