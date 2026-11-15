@@ -32,3 +32,45 @@ Scanner CI approval refused: stage=metadata reason=malformed
 package-down slot 1: exit 0
 down.sh slot 1: exit 0
 NOT RUN: all packaged backup acceptance steps.
+
+Exact-head CI-approved journey attempt, 15 November 2026
+Source: aa7ab5e76c1756286cf20b4be4e872e685649e75
+Initial CI: 43736252198, success (all nine jobs)
+Scanner workflow: 43736583996, workflow_dispatch on work/pilot-15-s2, success
+Approval revision: aa7ab5e76c1756286cf20b4be4e872e685649e75
+Scanner image digest: sha256:023b6a07dab41c599ee7c5fc55ea52ae20d9e0ad4b1e40ffbdd52f2238d1dc30
+Approval manifest SHA-256: c10bdff8d99c4f22cafc453529046ab25f69fcbdd6612e5b56a341f5da4610da
+Both GitHub artifacts present and unexpired.
+No local approval was created.
+
+Waited while the 1-minute load was above 10; final pre-claim load: 0.82.
+claim.sh: slot 1, exit 0
+DEV_STACK_DIR: the fixed private secondary-slot directory outside the repository.
+Sign-in key supplied by file reference; fleet task marker retained.
+run.sh package-prepare --id 1: exit 0
+prepare.ts with PACKAGE_SKIP_PROVIDER_SETUP=1: exit 0
+PASS private package secrets created from files in the claimed slot
+run.sh package-check --id 1: exit 0 (ownership check only)
+Application build with exact SOURCE_REVISION: exit 0
+Image configuration: sha256:02fa0a5dd46dcbe993d4f3fabda1891683683d447913b546529676870e08f242
+Image index: sha256:db9ce921810f7d5121a5f75058b1cd8aac825a9f4eb0fd1d95bb13717436bcc1
+Syft all-layer scan: exit 0
+Candidate licence check: exit 0; 580 checked components
+Saved-image layer/bootstrap suite: exit 1; 14 tests, 116.002 seconds, one failure
+FAIL test_development_files_stay_within_the_narrow_allowlist
+infra/package/image-layers.test.py:157
+AssertionError: scheduled-backup-run.ts is absent from the package_files allowlist.
+Package promotion check: exit 1
+FAIL package promotion: evidence is missing or does not match
+Diagnostic from the same checker: Package promotion covers a different source revision
+Reviewed source: 1429086ff5eb20db05f1dccceb7c0095940b2fe1
+Requested source: aa7ab5e76c1756286cf20b4be4e872e685649e75
+The reviewed source has no infra/package/scheduled-backup-run.ts.
+
+NOT RUN package-up: the new application image failed its layer and promotion gates.
+NOT RUN packaged upload/chat, backup completion, listing, manifest, broken part.
+NOT RUN packaged screenshots: no application installation was admitted.
+No application image was promoted or published. No product or test code changed.
+
+run.sh package-down --id 1: exit 0
+down.sh --id 1: exit 0

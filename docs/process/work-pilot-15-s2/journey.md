@@ -1,49 +1,88 @@
 # Scheduled pilot backup
 
-Journey on a fresh dev stack: **NOT RUN**.
+Journey on a fresh dev stack: **NOT RUN**. Preparation: **PARTIAL**.
+Application image qualification: **FAIL**. The draft must not merge.
 
-Date: 15 November 2026. Startup source: `06902fb9a0ff423f32e881bde136248c63d61a59`.
-Rebased onto main `cc21e6d12` after its separate README repair landed. The
-collector, fixture, runner, source adapter and chart are byte-for-byte unchanged.
-Environment: freshly claimed secondary slot 1, local stand-in model, with the
-requested sign-in key-file setting and the fleet task marker retained.
-The packaged backup journey did not reach installation. No application image
-or live backup is qualified by this receipt.
+Date: 15 November 2026. Tested source:
+`aa7ab5e76c1756286cf20b4be4e872e685649e75`, branch `work/pilot-15-s2`.
+This was a journey-only run, with no product, test or image-review changes.
+The scanner approval blocker is resolved for this exact source. The packaged
+application could not be admitted because its image checks failed.
 
 ## Live steps and observations
 
-1. **PASS:** claim slot 1, run `infra/dev-stack/up.sh --fresh`, then
-   `infra/dev-stack/status.sh`. Both commands exited zero. The launcher's built-in
-   browser journey completed with 37 passing observations and no reported failure.
-   This is Compose startup evidence, not the packaged backup acceptance journey.
-2. **PASS:** run `package-down` and `down.sh`, then claim slot 1 again. Preparing
-   the package requires the Compose installation to be stopped first.
-3. **NOT RUN:** fresh packaged installation. `run.sh package-prepare --id 1`
-   exited one. The normal `fetchScannerApproval` guard refused this branch and
-   source commit at `metadata`, with reason `malformed`. Installation requires a
-   successful scanner-packaging workflow approval matching the exact checkout.
-   The same preparation and guard refusal were observed again after rebasing,
-   at `f3f9431f54c67d1b9f881888805699ab4d1a6cfe`. No older approval, local
-   substitute or guard bypass was used.
-4. **NOT RUN:** packaged person upload and chat; triggering the scheduled backup;
-   observing completion; listing it; reading its manifest and checking the event
-   log, database and uploaded file; deliberately breaking a backup part and
-   observing the failed Job. No packaged screenshots or successful backup exist.
-5. **PASS:** final `package-down` and `down.sh` both exited zero after the refusal.
-   Cleanup also passed after the rebased attempt. The secondary slot and its
-   prepared namespace were released.
+| Step | Verdict | Observation |
+| --- | --- | --- |
+| Wait for source CI | PASS | [Run 43736252198](https://github.com/elewa-git/opencrane-new/actions/runs/43736252198) passed all nine jobs. |
+| Obtain exact-head scanner approval | PASS | No run existed, so the documented manual dispatch was used on this branch. [Run 43736583996](https://github.com/elewa-git/opencrane-new/actions/runs/43736583996) passed and uploaded both unexpired artifacts for the tested source. |
+| Wait for load and claim a fresh secondary slot | PASS | Waited while the 1-minute load exceeded 10. It was 0.82 immediately before `claim.sh`; slot 1 was claimed. |
+| `package-prepare --id 1` | PASS | Fetched the CI approval and scanner archive through the normal guard and published its unchanged scanner digest. No local approval or bypass was used. |
+| Private package settings | PASS | `prepare.ts` succeeded with the requested sign-in key-file setting. `PACKAGE_SKIP_PROVIDER_SETUP=1` reused the test sign-in setup in read-only mode. The fixed private stack directory was outside the repository. |
+| `package-check --id 1` | PASS | Verified namespace ownership only; this does not prove installation or readiness. |
+| Build and inspect this source's application image | PARTIAL | Build, Syft all-layer scan and candidate licence check passed. The candidate contained 580 checked components. The saved-image suite failed one of 14 tests; promotion also failed. See the blockers below. |
+| `package-up --id 1` | NOT RUN | The image did not pass the required pre-installation checks. |
+| A person uploads a file and chats | NOT RUN | No application installation was admitted. |
+| Operator triggers the scheduled backup and sees completion | NOT RUN | Requires the packaged application. |
+| Operator lists the backup and reads its event/database/file manifest | NOT RUN | No live backup was produced. |
+| Deliberately broken backup part fails visibly | NOT RUN | Requires the packaged application. |
+| Packaged screenshots at 1280 and 390 px | NOT RUN | No packaged browser was available. The existing pictures are earlier Compose startup evidence only. |
+| `package-down --id 1` and `down.sh --id 1` | PASS | Both exited zero and released the secondary namespace and slot. |
 
-[Operator output](operator-output.txt) records the safe command results and guard
-classification. The inspected [1280 px screenshot](compose-startup-chat-1280.png)
-and [390 px screenshot](compose-startup-chat-390.png) show only the built-in
-Compose startup chat. They do not qualify the packaged backup journey. Other
-screenshots generated by startup were restored to their previous repository state.
+The environment used the local stand-in model and retained the fleet task marker.
+The owner stack was not touched. [Operator output](operator-output.txt) was saved
+before cleanup and includes the scanner run id, hashes and safe gate diagnostics.
+It contains no Secret data, credentials or private host paths.
 
-Application image rebuild, source/layer/licence promotion, package installation
-and every backup-specific live condition remain **NOT RUN**. The draft must not
-merge until the required fresh packaged journey passes.
+## Application image blockers
 
-## Own source checks
+The source-bound build succeeded. Its configuration digest was
+`sha256:02fa0a5dd46dcbe993d4f3fabda1891683683d447913b546529676870e08f242`.
+The saved-image layer/bootstrap suite ran 14 tests in 116.002 seconds; 13 passed.
+`test_development_files_stay_within_the_narrow_allowlist` failed at
+`infra/package/image-layers.test.py:157`: the package-file allowlist does not
+include `scheduled-backup-run.ts`, which the new image contains.
+
+The documented promotion command exited one with
+`FAIL package promotion: evidence is missing or does not match`.
+Running the same checker with its fixed diagnostic exposed the precise cause:
+`Package promotion covers a different source revision`.
+The checked-in application review and inventory cover
+`1429086ff5eb20db05f1dccceb7c0095940b2fe1`; the requested source is
+`aa7ab5e76c1756286cf20b4be4e872e685649e75`. The reviewed source has no scheduled
+backup runner. Installing its older image cannot qualify this slice.
+
+No code, allowlist, image review, inventory or promotion rule was changed during
+this evidence-only run. No application image was published or promoted. Passing
+the candidate licence check does not grant image promotion. A build with the
+reviewed source, image and test expectations aligned is needed before the live
+journey can continue. Scanner approval must match that future checkout too.
+
+## Own checks in this run
+
+- **PASS:** root typecheck, including every workspace, package and dev stack.
+- **PASS:** Markdown check, event catalogue, Knip and changelog checks. Knip
+  reported its two existing configuration hints.
+- **PASS:** exact-head initial CI, scanner approval, package preparation, private
+  package settings, namespace ownership, application build and candidate licences.
+- **FAIL:** saved-image layer/bootstrap suite and exact-source image promotion.
+- **NOT RUN:** changed-file ESLint and source unit tests; no code changed.
+- Public privacy, secret scans and evidence-only follow-up CI are recorded in
+  the PR Evidence.
+
+## Earlier attempts
+
+Earlier fresh Compose startup checks reported 37 passing observations. Scanner
+approval was then refused at metadata with reason `malformed`, including after
+the documentation-only rebase. Those attempts were cleaned up. They did not
+qualify a packaged installation. The existing
+[1280 px picture](compose-startup-chat-1280.png) and
+[390 px picture](compose-startup-chat-390.png) remain supplementary Compose
+startup evidence and are not packaged screenshots.
+
+## Earlier builder source checks
+
+The following results were recorded during implementation before this journey
+run. No earlier live result is counted as acceptance for this attempt.
 
 - **PASS:** four new fault-injection cases first failed with a missing `.lock`
   while restart and marker write or sync both failed. The failing tests were
