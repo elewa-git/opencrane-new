@@ -1,0 +1,25 @@
+15 November 2026
+Source: 06902fb9a0ff423f32e881bde136248c63d61a59
+Fresh secondary slot: 1
+Model: local stand-in
+Fleet task marker retained; sign-in key supplied by file reference.
+
+claim.sh: slot 1
+up.sh --fresh: exit 0
+status.sh: exit 0
+Built-in Compose startup journey: 37 PASS observations, no reported FAIL.
+package-down slot 1: exit 0
+down.sh slot 1: exit 0
+
+claim.sh: slot 1
+run.sh package-prepare --id 1: exit 1
+Scanner CI approval refused
+stage=metadata reason=malformed
+NOT RUN packaged journey: the guard requires successful scanner CI approval
+matching this branch and exact source commit.
+package-down slot 1: exit 0
+down.sh slot 1: exit 0
+
+NOT RUN: packaged upload/chat, scheduled backup completion, listing, manifest
+inspection, event/database/file contents and deliberately broken backup part.
+NOT RUN: packaged screenshots; the two saved pictures show Compose startup only.
