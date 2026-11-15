@@ -1,5 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { scannerApprovalFixture } from '../infra/clamav/approval-fixture.mjs';
 import { join } from 'node:path';
 import { expect, test, vi } from 'vitest';
 
@@ -9,7 +12,6 @@ function mockProcesses() {
 }
 const revision = 'a'.repeat(40);
 const imageDigest = `sha256:${'b'.repeat(64)}`;
-const approvedSha = 'c'.repeat(64);
 
 function runRecord() {
   return { id: 42, status: 'completed', conclusion: 'success', event: 'push',
@@ -18,7 +20,7 @@ function runRecord() {
     head_repository: { full_name: 'elewa-git/opencrane-new' } };
 }
 
-function setup(run = runRecord()) {
+function setup(run = runRecord(), files = {}) {
   function execute(program, args) {
     if (program === 'git') {
       if (args.includes('HEAD')) return revision + '\n';
@@ -28,7 +30,9 @@ function setup(run = runRecord()) {
     if (args[0] === 'api') return JSON.stringify({ workflow_runs: [run] });
     expect(args.slice(0, 3)).toEqual(['run', 'download', '42']);
     const directory = args[args.indexOf('--dir') + 1];
-    execFileSync.approvalDirectory = directory;
+    for (const [name, bytes] of Object.entries(files)) {
+      writeFileSync(join(directory, name), bytes);
+    }
     return '';
   }
   vi.mocked(execFileSync).mockImplementation(execute);
@@ -60,3 +64,24 @@ async function noLocalApproval() {
   await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
 }
 test('a builder cannot approve without a successful GitHub job', noLocalApproval);
+
+async function realJobPasses() {
+  const directory = await mkdtemp(join(tmpdir(), 'scanner-approval-fixture-'));
+  try {
+    const image = `k3d-ocn-registry:5000/opencrane/scanner@${imageDigest}`;
+    const fixture = await scannerApprovalFixture(directory, { images: { scanner: image } });
+    setup(fixture.run, fixture.files);
+    const approval = await loadApproval();
+    expect(approval.image).toBe(image);
+    expect(approval.approvedSha).toBe(fixture.approval.approvedSha);
+    expect(approval.runId).toBe(42);
+    const forged = JSON.parse(fixture.files['approval.json']);
+    forged.approvedSha = 'f'.repeat(64);
+    fixture.files['approval.json'] = JSON.stringify(forged);
+    setup(fixture.run, fixture.files);
+    await expect(loadApproval()).rejects.toThrow('Scanner CI approval refused');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('only the job output with its exact checked bytes can approve the scanner', realJobPasses);

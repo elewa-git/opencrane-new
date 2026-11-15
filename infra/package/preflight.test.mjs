@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 
 const digest = 'sha256:' + 'a'.repeat(64);
 const reviewedImage = `registry.local/server@${digest}`;
@@ -20,13 +21,13 @@ function fixture() {
   return { directory, values, review };
 }
 
-function check(values, review, directory) {
+function check(values, review, directory, env = process.env) {
   const valuesFile = join(directory, 'values.json');
   const reviewFile = join(directory, 'review.json');
   writeFileSync(valuesFile, JSON.stringify(values));
   writeFileSync(reviewFile, JSON.stringify(review));
   return spawnSync('node', ['infra/package/preflight.mjs', valuesFile, reviewFile], {
-    encoding: 'utf8',
+    encoding: 'utf8', env,
   });
 }
 
@@ -297,3 +298,31 @@ function localScannerApprovalRefuses() {
 }
 test('preflight refuses builder-written scanner approval without a CI output',
   localScannerApprovalRefuses);
+
+async function jobOutputPasses() {
+  const { directory, values, review } = fixture();
+  try {
+    review.images.scanner = `k3d-ocn-registry:5000/opencrane/scanner@${digest}`;
+    const bin = join(directory, 'bin');
+    await scannerApprovalFixture(bin, review);
+    values.images.scanner = review.images.scanner;
+    values.scanner = { ...review.scanner };
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+    assert.equal(check(values, review, directory, env).status, 0);
+    values.scanner.approvedSha = 'f'.repeat(64);
+    review.scanner.approvedSha = values.scanner.approvedSha;
+    const forged = check(values, review, directory, env);
+    assert.notEqual(forged.status, 0);
+    assert.match(forged.stderr, /Scanner manifest is absent from the reviewed release/u);
+    values.scanner = { ...review.scanner };
+    values.images.scanner = `registry.local/scanner@${digest}`;
+    review.images.scanner = values.images.scanner;
+    const wrongImage = check(values, review, directory, env);
+    assert.notEqual(wrongImage.status, 0);
+    assert.match(wrongImage.stderr, /Image is absent from the reviewed list: scanner/u);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}
+test('preflight accepts the CI output and refuses matching locally replaced approvals',
+  jobOutputPasses);
