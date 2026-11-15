@@ -341,3 +341,46 @@ it('rebuilds the same safe list without saving another event', async () => {
   expect(replayed.json<Page>().rows).toEqual(first.json<Page>().rows);
   expect(append).not.toHaveBeenCalled();
 });
+
+async function selectionDoesNotRequireInventoryProgress() {
+  const digest = await server();
+  await profile('alice', 'chosen', digest);
+  await runner.run(connectionProfiles);
+  const revision = await nats.store.head('connection-alice-shared-chosen');
+  const subject = 'connection-selection-alice-shared';
+  let previousSequence = 0;
+  // Leave the profile projection paused through selection and both consent changes.
+  for (const allowedAssistantIds of [['assistant'], [], ['assistant']]) {
+    const commandId = `consent-${previousSequence}`;
+    const hash = createHash('sha256');
+    hash.update(JSON.stringify(['test', subject, commandId]));
+    const choice = envelope('test', subject, 'connection.selected', {
+      userId: 'alice', serverId: 'shared', connectionId: 'installed',
+      expectedSequence: previousSequence, action: 'select', profileId: 'chosen',
+      profileRevision: revision, allowedAssistantIds,
+    }, hash.digest('hex'));
+    choice.commandId = commandId;
+    choice.source = 'opencrane-server';
+    choice.principal = { kind: 'human', id: 'alice' };
+    const appended = await nats.store.append({ event: choice, expectedSequence: previousSequence });
+    expect(appended.status).toBe('appended');
+    previousSequence = await nats.store.head(subject);
+    const response = await list('alice');
+    expect(response.statusCode).toBe(200);
+    expect(response.json<Page>().rows).toMatchObject([{ profileId: 'chosen', selected: true }]);
+  }
+}
+it('lists the confirmed choice while selection and consent events await the paused projection',
+  selectionDoesNotRequireInventoryProgress);
+
+async function unprojectedCreationStillRefusesIncompleteInventory() {
+  const digest = await server();
+  await profile('alice', 'first', digest);
+  await runner.run(connectionProfiles);
+  await profile('alice', 'not-indexed', digest);
+  const response = await list('alice');
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+}
+it('keeps an unprojected profile creation unavailable rather than returning an incomplete list',
+  unprojectedCreationStillRefusesIncompleteInventory);
