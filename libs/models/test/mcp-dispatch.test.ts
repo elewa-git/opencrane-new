@@ -1,9 +1,11 @@
+import { body, catalogue, tool, prepare, permit, send, reviewRestoration,
+  publishRestoration, restorationDelivery, generationHeaders, publishedFixture,
+  selectedPersonalFixture, requestFromPermit } from './support/mcp-dispatch-fixture.ts';
 /* eslint max-lines: ["error", { max: 3622, skipBlankLines: true, skipComments: true }] */
 import { remoteFixture } from './support/remote-mcp.ts';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { readFile, writeFile } from 'node:fs/promises';
 import { losslessJson } from '@opencrane/events/lossless-json';
-import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { applyToolPolicy, mcpCatalogue, readPublication,
   rebuildMcpCatalogueProjection, memoryScopeId } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
@@ -13,10 +15,7 @@ import { publicationDigest } from '../src/publication.ts';
 import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
 import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
-import { reviewToolPolicy, publishToolPolicy } from '../src/tool-policy.ts';
-import { prepareGatewayConfiguration } from '../src/gateway-generation.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import { freePort } from './gateway-delivery-fixture.ts';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
@@ -24,76 +23,20 @@ import { expect, it, onTestFinished, vi } from 'vitest';
 import { mcpCatalogueWatch } from '../src/mcp-catalogue-watch.ts';
 import { auditTrail, conversations } from '@opencrane/projections';
 import { budgetStopHandler } from '../src/index.ts';
-import { grantStream, memberAuthorisation } from '@opencrane/authz';
+import { grantStream } from '@opencrane/authz';
 import { decideApproval, history, ingestUsage, priceTableId, readApproval, readToolPolicy,
   setToolPolicy } from '../src/index.ts';
 import { catalogueEvidence, fixture, reviewCatalogue, toolEvidence } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
-import { oauthSelectionFixture, selectPersonalFixture, refreshPersonalFixture }
+import { type oauthSelectionFixture, refreshPersonalFixture }
   from './support/oauth-selection.ts';
-import { personalPair } from './support/personal-dispatch.ts';
-import { delayReceiptReplies } from './support/dispatch-receipts.ts';
 import { projectionReplay } from './support/projection-replay.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-const review = { action: 'Write note', consequence: 'The order note changes.',
-  targetArgument: 'order', fields: ['order', 'note'], stepUp: false };
-const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0, review });
-const catalogue = catalogueEvidence([tool]);
-const body = JSON.stringify(capture.body);
 
-async function prepare(setup: Fixture, kind: 'remote' | 'hosted' = 'remote', remote = false,
-  declared = true, accountMode: 'none' | 'personal' = 'none') {
-  let locator = remote ? 'https://mcp.example.test/mcp' : 'https://fixture.example.test/mcp';
-  if (kind === 'hosted') locator = `registry.example.test/fixture@sha256:${'a'.repeat(64)}`;
-  const registration = { serverId: 'fixture', kind, locator, registeredBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.server_registered', registration);
-  const discovery = { serverId: 'fixture', connectionId: 'installed', accountMode,
-    ...catalogue, ...(remote && declared ? { discoverResult: JSON.stringify({ capabilities:
-      { experimental: { 'io.opencrane/expectedRevision': {} } } }) } : {}) };
-  await setup.append('mcp-fixture', 'mcp.server_discovered', discovery);
-  await reviewCatalogue(setup);
-  const publication = { serverId: 'fixture', publishedBy: 'alice' };
-  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
-    toolRevision: tool.revision, mode: 'allow', setBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
-  await setup.append('mcp-fixture', 'mcp.server_published', publication);
-  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
-    const grant = { resourceType: 'mcp_server', resourceId: 'fixture',
-      granteeId, granteeKind, grantedBy: 'alice' };
-    const event = await setup.append(grantStream('mcp_server', 'fixture'), 'grant.given', grant);
-    await setup.auth.handler.handle(event, setup.db);
-  }
-  const thread = capture.body.params._meta.threadId;
-  const claims = { ...setup.t, thread };
-  const turn = { assistantId: 'assistant', computerId: 'computer',
-    conversationId: 'conversation', turnId: 'turn', threadId: thread,
-    requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
-  // Replace the fixture turn so its signed thread matches these captured bytes.
-  await setup.append('computer-assistant', 'computer.turn_started', { ...turn, turnId: 'dispatch' });
-  await setup.append('conversation-conversation', 'agent.turn_started',
-    { conversationId: 'conversation', assistantId: 'assistant', turnId: 'dispatch' });
-  const token = await setup.sign({ ...claims, turn: 'dispatch' }, 'decision-service');
-  return { ...setup.headers, ...capture.headers, 'session-id': thread, 'x-turn-token': token };
-}
 
-async function permit(setup: Fixture, headers: Record<string, string>, raw = body) {
-  const request = { method: 'POST', headers, body: raw };
-  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-    request);
-  expect(response.status, await response.text()).toBe(200);
-  const value = response.headers.get('x-opencrane-mcp-permit');
-  expect(value).toBeTruthy();
-  return value!;
-}
 
-async function send(setup: Fixture, value: string, changedBody = body,
-  path = '/dispatch/mcp/fixture/installed') {
-  const headers = { 'x-opencrane-mcp-permit': value, 'content-type': 'application/json' };
-  const request = { method: 'POST', headers, body: changedBody };
-  return fetch(`${setup.options.decisionUrl}${path}`, request);
-}
 
 const changes = ['catalogue', 'generation', 'expiry', 'backend', 'body', 'route', 'silo', 'permit expiry'] as const;
 async function refusesChangedCall(change: typeof changes[number]) {
@@ -1148,32 +1091,7 @@ async function budgetHandlerEndsApproval() {
 }
 it('ends a waiting approval through the saved budget turn stop', budgetHandlerEndsApproval);
 
-async function reviewRestoration(setup: Fixture, commandId: string, mode = 'allow',
-  serverId = 'fixture') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
-  const catalogue = policy.catalogue!;
-  function choice(declaration: NonNullable<typeof catalogue.tools>[number]) {
-    return { name: declaration.name, revision: declaration.revision,
-      reviewDigest: toolReviewDigest(declaration), mode };
-  }
-  const command = { commandId, expectedSequence: policy.sequence,
-    policyRevision: policy.policyRevision, catalogueDigest: catalogue.schemaDigest,
-    connectionId: policy.connectionId, accountMode: policy.accountMode,
-    tools: catalogue.tools!.map(choice) };
-  const result = await reviewToolPolicy(setup.nats.store, setup.binding, 'alice',
-    serverId, command);
-  expect(result.status).toBe('appended');
-}
 
-async function publishRestoration(setup: Fixture, commandId: string, serverId = 'fixture') {
-  const policy = await readToolPolicy(setup.nats.store, 'test', serverId);
-  const command = { commandId, expectedSequence: policy.sequence,
-    reviewRevision: policy.reviewRevision };
-  const result = await publishToolPolicy(setup.nats.store, setup.binding, 'alice',
-    serverId, command);
-  expect(result.status).toBe('appended');
-  return prepareGatewayConfiguration(setup.nats.store, 'test', serverId, commandId);
-}
 
 const restorationCases = ['exact', 'legacy', 'review only', 'intent only', 'new intent',
   'unpublish', 'second drift', 'expired', 'failed check', 'older generation',
@@ -1220,33 +1138,6 @@ async function restorationFixture(expireApproval = false) {
   return Object.assign(context, { approvalId, changed });
 }
 
-async function restorationDelivery(setup: Fixture, preserveMemory = true) {
-  let settings: typeof setup.options & { memoryRoute?: typeof setup.options.mcpRoutes[number] } =
-    setup.options;
-  if (preserveMemory) {
-    settings = { ...settings,
-      memoryRoute: { serverId: 'memory', connectionId: 'internal', upstream: 'unused' } };
-  }
-  const options = { db: setup.db, mode: 'live' as const, store: setup.nats.store, silo: 'test',
-    child: setup.gatewayChild()!, configFile: setup.options.configFile,
-    controlPort: await freePort(), settings };
-  const delivery = gatewayDelivery(options);
-  setup.dispatchOptions.acknowledged = delivery.acknowledged;
-  async function waitForWitness(record: Awaited<ReturnType<typeof publishRestoration>>) {
-    const bytes = await readFile(options.configFile, 'utf8');
-    const path = /\/configuration\/\d+\/[a-f0-9-]+/u.exec(bytes)![0];
-    const url = `http://127.0.0.1:${options.controlPort}${path}`;
-    async function servesWitness() {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1000) });
-      expect(response.status).toBe(200);
-      const identity: unknown = await response.json();
-      expect(identity).toMatchObject({ generation: record.generation,
-        recordDigest: record.recordDigest });
-    }
-    await expect.poll(servesWitness, { timeout: 5000 }).toBeUndefined();
-  }
-  return { ...delivery, waitForWitness, options };
-}
 
 async function restartRestoration(context: RestorationFixture) {
   context.watch.close();
@@ -1574,29 +1465,7 @@ async function stopsRootPermit(reason: 'requester_stop' | 'allowance_exhausted')
 it.each(['requester_stop', 'allowance_exhausted'] as const)(
   'refuses an old MCP permit and a new grant after its root stops: %s', stopsRootPermit);
 
-function generationHeaders(record: { generation: number; recordDigest: string;
-  members: { entry: { serverId: string; connectionId: string; reviewRevision: number } }[] }) {
-  const entry = record.members[0]!.entry;
-  return { 'x-opencrane-gateway-generation': String(record.generation),
-    'x-opencrane-record-digest': record.recordDigest, 'x-opencrane-server-id': entry.serverId,
-    'x-opencrane-connection-id': entry.connectionId,
-    'x-opencrane-review-revision': String(entry.reviewRevision) };
-}
 
-async function publishedFixture(mode = 'allow', remote = false, declared = true,
-  accountMode: 'none' | 'personal' = 'none') {
-  const setup = await fixture();
-  onTestFinished(setup.close.bind(setup));
-  const headers = await prepare(setup, 'remote', remote, declared, accountMode);
-  await reviewRestoration(setup, 'review-generation', mode);
-  const record = await publishRestoration(setup, 'publish-generation');
-  const delivery = await restorationDelivery(setup);
-  await delivery.deliver(record);
-  await delivery.waitForWitness(record);
-  expect(await delivery.observe()).not.toBeNull();
-  const constants = generationHeaders(record);
-  return { setup, headers, record, delivery, constants };
-}
 
 async function nextCarriedGeneration(context: Awaited<ReturnType<typeof publishedFixture>>) {
   const { recordDigest: _digest, ...previous } = context.record;
@@ -2703,45 +2572,6 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
 }
 it.each(remoteGuards)('guards published HTTPS tool calls: %s', guardsRemoteCall);
 
-async function selectedPersonalFixture(mode: 'allow' | 'ask' | 'block' = 'allow',
-  material = 'alice-access') {
-  const context = await publishedFixture(mode, true, true, 'personal');
-  const { setup } = context;
-  const remote = await remoteFixture();
-  onTestFinished(remote.close);
-  setup.dispatchOptions.routes.length = 0;
-  setup.dispatchOptions.remoteNetwork = remote.network;
-  remote.revision(catalogue.schemaDigest);
-  function stageMaterial() {
-    const staged = { status: 'staged' as const,
-      identity: { reference: 'alice-secret', uid: 'alice-uid', resourceVersion: '1' } };
-    return Promise.resolve(staged);
-  }
-  const saved = await oauthSelectionFixture(setup.nats, 'alice', 'fixture',
-    'alice-profile', stageMaterial, { locator: 'https://mcp.example.test/mcp',
-      grantedScopes: ['openid', 'write'] });
-  const selectionRevision = await selectPersonalFixture(setup.nats, saved);
-  let materialReads = 0;
-  function readAccessMaterial() {
-    materialReads += 1;
-    return Promise.resolve(material);
-  }
-  function accessMaterialReadCount() {
-    return materialReads;
-  }
-  setup.dispatchOptions.credentialDispatch = {
-    db: setup.db, custody: { readAccessMaterial },
-    loadConfiguration: saved.loadConfiguration,
-  };
-  const claims = { ...setup.t, thread: context.headers['session-id'], turn: 'dispatch',
-    personalSelections: [{ serverId: 'fixture', profileId: 'alice-profile',
-      selectionRevision }] };
-  const token = await setup.sign(claims, 'decision-service');
-  const rawClaims: unknown = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
-  expect(rawClaims).toMatchObject({ personalSelections: claims.personalSelections });
-  const headers = { ...context.headers, ...context.constants, 'x-turn-token': token };
-  return { setup, remote, headers, saved, accessMaterialReadCount };
-}
 
 async function refusesCredentialForBlockedPersonalTool() {
   const { setup, remote, headers, accessMaterialReadCount } =
@@ -2756,11 +2586,6 @@ async function refusesCredentialForBlockedPersonalTool() {
 it('does not release a personal credential without an approved tool rule',
   refusesCredentialForBlockedPersonalTool, 60_000);
 
-function requestFromPermit(value: string) {
-  const encoded = value.split('.')[0]!;
-  const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
-  return z.object({ requestId: z.string() }).parse(decoded).requestId;
-}
 
 async function selectedPersonalCall() {
   const { setup, remote, headers } = await selectedPersonalFixture();
@@ -3140,271 +2965,6 @@ async function ignoresForgedProfileArgument() {
 }
 it('treats a profile-shaped tool argument as data and keeps Alice’s selection',
   ignoresForgedProfileArgument, 60_000);
-
-async function concurrentPersonalTurns() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob, reads } = await personalPair(context, body);
-  const alicePermit = await permit(setup, headers);
-  const bobPermit = await permit(setup, bob.headers, bob.body);
-  const append = setup.nats.store.append.bind(setup.nats.store);
-  const bothReady = Promise.withResolvers<void>();
-  let attempts = 0;
-  async function overlapAdmissions(command: AppendCommand) {
-    const event = z.object({ type: z.string() }).parse(command.event);
-    if (event.type === 'mcp.dispatch_admitted') {
-      attempts += 1;
-      if (attempts === 2) bothReady.resolve();
-      await bothReady.promise;
-    }
-    return append(command);
-  }
-  const delayed = vi.spyOn(setup.nats.store, 'append');
-  delayed.mockImplementation(overlapAdmissions);
-  try {
-    const responses = await Promise.all([
-      send(setup, alicePermit), send(setup, bobPermit, bob.body),
-    ]);
-    for (const response of responses) expect(response.status, await response.text()).toBe(200);
-    expect(reads.toSorted()).toEqual(['alice', 'bob']);
-    expect(remote.received).toHaveLength(2);
-    for (const received of remote.received) {
-      const raw = received.raw.toString();
-      const expected = raw === bob.body ? 'Bearer bob-access' : 'Bearer alice-access';
-      expect(received.headers.authorization).toBe(expected);
-    }
-    for (const [value, userId, assistantId] of [
-      [alicePermit, 'alice', 'assistant'], [bobPermit, 'bob', 'bob-assistant'],
-    ]) {
-      const requestId = requestFromPermit(value!);
-      const rows = await history(setup.nats.store, `credential-${requestId}`, 'test');
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.event.data).toMatchObject({ userId, ownerId: userId, assistantId });
-    }
-    expect((await send(setup, alicePermit)).status).toBe(403);
-    expect((await send(setup, bobPermit, bob.body)).status).toBe(403);
-    expect(remote.received).toHaveLength(2);
-  } finally {
-    bothReady.resolve();
-    delayed.mockRestore();
-  }
-}
-it('races two personal assistants on one server without mixing credentials',
-  concurrentPersonalTurns, 60_000);
-
-async function noKeyReceiptWork() {
-  const context = await publishedFixture();
-  const { setup } = context;
-  const headers = { ...context.headers, ...context.constants };
-  const value = await permit(setup, headers);
-  delayReceiptReplies(setup);
-  const started = performance.now();
-  const response = await send(setup, value);
-  const elapsedMs = Math.ceil(performance.now() - started);
-  expect(response.status, `Dispatch completed in ${elapsedMs} ms`).toBe(200);
-  expect(setup.received()).toBe(1);
-}
-it('prepares immutable receipt work for a tool that needs no personal key',
-  noKeyReceiptWork, 60_000);
-
-async function concurrentReceiptWork() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob } = await personalPair(context, body);
-  const alicePermit = await permit(setup, headers);
-  const bobPermit = await permit(setup, bob.headers, bob.body);
-  delayReceiptReplies(setup);
-  const responses = await Promise.all([
-    send(setup, alicePermit), send(setup, bobPermit, bob.body),
-  ]);
-  for (const response of responses) {
-    expect(response.status, await response.text()).toBe(200);
-  }
-  expect(remote.received).toHaveLength(2);
-  for (const received of remote.received) {
-    const expected = received.raw.toString() === bob.body ? 'Bearer bob-access' : 'Bearer alice-access';
-    expect(received.headers.authorization).toBe(expected);
-  }
-}
-it('keeps concurrent credential releases within the access window with receipt service work',
-  concurrentReceiptWork, 60_000);
-
-async function permissionChangedWhileQueued() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob } = await personalPair(context, body);
-  const alicePermit = await permit(setup, headers);
-  const bobPermit = await permit(setup, bob.headers, bob.body);
-  const entered = Promise.withResolvers<void>();
-  const released = Promise.withResolvers<void>();
-  const queued = Promise.withResolvers<void>();
-  const append = setup.nats.store.append.bind(setup.nats.store);
-  async function holdFirstAdmission(command: AppendCommand) {
-    const parsed = z.object({ type: z.string() }).parse(command.event);
-    if (parsed.type === 'budget.call_dispatch_admitted') {
-      entered.resolve();
-      await released.promise;
-    }
-    return append(command);
-  }
-  const admit = setup.actor.admitDispatch.bind(setup.actor);
-  let admissions = 0;
-  function observeAdmission(...args: Parameters<typeof admit>) {
-    admissions += 1;
-    const result = admit(...args);
-    if (admissions === 2) queued.resolve();
-    return result;
-  }
-  const writer = vi.spyOn(setup.nats.store, 'append');
-  writer.mockImplementation(holdFirstAdmission);
-  const admission = vi.spyOn(setup.actor, 'admitDispatch');
-  admission.mockImplementation(observeAdmission);
-  function restoreChecks() {
-    vi.restoreAllMocks();
-  }
-  onTestFinished(restoreChecks);
-  const alice = send(setup, alicePermit);
-  try {
-    await entered.promise;
-    const bobResponse = send(setup, bobPermit, bob.body);
-    await queued.promise;
-    await setup.append(grantStream('mcp_server', 'fixture'), 'grant.revoked', {
-      resourceType: 'mcp_server', resourceId: 'fixture',
-      granteeKind: 'member', granteeId: 'bob', revokedBy: 'alice',
-    });
-    released.resolve();
-    expect((await bobResponse).status).toBe(403);
-    expect((await alice).status).toBe(200);
-    expect(remote.received).toHaveLength(1);
-    expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
-  } finally {
-    released.resolve();
-    await alice;
-  }
-}
-it('refuses a permission removed while the personal dispatch waits in the budget queue',
-  permissionChangedWhileQueued, 60_000);
-
-async function receiptUnavailableOnNextRequest() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers } = await personalPair(context, body);
-  const first = await permit(setup, headers);
-  const second = await permit(setup, headers);
-  expect((await send(setup, first)).status).toBe(200);
-  const auth = memberAuthorisation(setup.binding);
-  function restoreChecks() {
-    vi.restoreAllMocks();
-  }
-  onTestFinished(restoreChecks);
-  const missingReceipt = { allowed: false, status: 'ok' as const };
-  const appliedCheck = vi.spyOn(auth, 'checkApplied');
-  appliedCheck.mockResolvedValue(missingReceipt);
-  expect((await send(setup, second)).status).toBe(403);
-  expect(remote.received).toHaveLength(1);
-}
-it('does not reuse an earlier request’s receipt when the next request cannot confirm it',
-  receiptUnavailableOnNextRequest, 60_000);
-
-async function foreignPersonalLease() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob, reads } = await personalPair(context, body);
-  const alicePermit = await permit(setup, headers);
-  expect((await send(setup, alicePermit, bob.body)).status).toBe(403);
-  expect((await send(setup, alicePermit)).status).toBe(403);
-  expect(reads).toEqual([]);
-  expect(remote.received).toHaveLength(0);
-}
-it('burns a personal lease used with another person’s request', foreignPersonalLease, 60_000);
-
-async function revokedDuringMaterialRead() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob, saved } = await personalPair(context, body);
-  const alicePermit = await permit(setup, headers);
-  const bobPermit = await permit(setup, bob.headers, bob.body);
-  const custody = setup.dispatchOptions.credentialDispatch!.custody;
-  const read = custody.readAccessMaterial;
-  const readAccessMaterial: typeof read = async function readAccessMaterial(stage, identity, format) {
-    if (stage.userId === 'alice') {
-      await setup.append(saved.subject, 'connection.revoked', {
-        userId: 'alice', serverId: 'fixture', profile: 'alice-profile',
-        revokedBy: 'alice', expectedSequence: saved.revision, reason: 'owner_requested',
-      });
-    }
-    return read(stage, identity, format);
-  };
-  custody.readAccessMaterial = readAccessMaterial;
-  expect((await send(setup, alicePermit)).status).toBe(403);
-  expect((await send(setup, bobPermit, bob.body)).status).toBe(200);
-  expect(remote.received).toHaveLength(1);
-  expect(remote.received[0]!.headers.authorization).toBe('Bearer bob-access');
-}
-it('refuses a key revoked during release while the other person can still call',
-  revokedDuringMaterialRead, 60_000);
-
-async function unavailablePermissionDuringRelease() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers } = await personalPair(context, body);
-  const value = await permit(setup, headers);
-  const auth = memberAuthorisation(setup.binding);
-  const use = auth.use.bind(auth);
-  let unavailable = false;
-  const custody = setup.dispatchOptions.credentialDispatch!.custody;
-  const read = custody.readAccessMaterial;
-  const readAccessMaterial: typeof read = async function readAccessMaterial(stage, identity, format) {
-    const material = await read(stage, identity, format);
-    unavailable = true;
-    return material;
-  };
-  const checkUse: typeof auth.use = async function checkUse(...args) {
-    if (unavailable) return { allowed: false, status: 'unavailable',
-      error: new Error('Permission service unavailable') };
-    return use(...args);
-  };
-  function restoreChecks() {
-    vi.restoreAllMocks();
-  }
-  onTestFinished(restoreChecks);
-  custody.readAccessMaterial = readAccessMaterial;
-  const permissionCheck = vi.spyOn(auth, 'use');
-  permissionCheck.mockImplementation(checkUse);
-  expect((await send(setup, value)).status).toBe(403);
-  expect(remote.received).toHaveLength(0);
-}
-it('rechecks live permission availability after reading personal key material',
-  unavailablePermissionDuringRelease, 60_000);
-
-async function anotherAccountArgument() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers } = await personalPair(context, body);
-  const raw = body.replace('"arguments":{',
-    '"arguments":{"account":"bob","userId":"bob","profileId":"bob-profile",');
-  const value = await permit(setup, headers, raw);
-  expect((await send(setup, value, raw)).status).toBe(200);
-  expect(remote.received).toHaveLength(1);
-  expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
-}
-it('cannot select Bob’s existing key through Alice’s tool arguments',
-  anotherAccountArgument, 60_000);
-
-async function noPersonalFallback() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob } = await personalPair(context, body);
-  const subject = 'connection-selection-bob-fixture';
-  const expectedSequence = await setup.nats.store.head(subject);
-  await setup.append(subject, 'connection.selected', {
-    action: 'clear', userId: 'bob', serverId: 'fixture', connectionId: 'installed',
-    expectedSequence,
-  });
-  const raw = bob.body.replace('"arguments":{',
-    '"arguments":{"account":"alice","profileId":"alice-profile",');
-  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-    { method: 'POST', headers: bob.headers, body: raw });
-  expect(response.status).toBe(403);
-  expect(remote.received).toHaveLength(0);
-  const value = await permit(setup, headers);
-  expect((await send(setup, value)).status).toBe(200);
-  expect(remote.received).toHaveLength(1);
-  expect(remote.received[0]!.headers.authorization).toBe('Bearer alice-access');
-}
-it('refuses a missing selection instead of falling back to another saved account',
-  noPersonalFallback, 60_000);
 
 async function remoteOutcomeFixture() {
   const context = await publishedFixture('allow', true);
