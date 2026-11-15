@@ -71,7 +71,7 @@ for (const part of ['events', 'database', 'files'] as const) {
   it(`fails the whole run visibly when ${part} fails and restores admission`,
     async function refusesFailedPart() {
       const test = await fixture();
-      async function broken() { throw new Error('private-credential-canary'); }
+      async function broken(): Promise<never> { throw new Error('private-credential-canary'); }
       test.source.parts[part] = broken;
       await expect(captureScheduledBackup(test.options, test.source))
         .rejects.toThrow('Scheduled backup failed');
@@ -108,4 +108,14 @@ it('leaves an interrupted capture alone and refuses overlapping work', async fun
   await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
   expect(await listBackups(test.directory)).toEqual([]);
   expect(await readFile(join(test.directory, '.lock'), 'utf8')).toBe('interrupted');
+});
+
+it('preserves an interrupted private directory if its id is reused', async function staleDirectory() {
+  const test = await fixture();
+  const { mkdir } = await import('node:fs/promises');
+  await mkdir(join(test.directory, '.backup-one'), { mode: 0o700 });
+  await writeFile(join(test.directory, '.backup-one', 'kept'), 'interrupted bytes');
+  await expect(captureScheduledBackup(test.options, test.source)).rejects.toThrow();
+  expect(await readFile(join(test.directory, '.backup-one', 'kept'), 'utf8'))
+    .toBe('interrupted bytes');
 });
