@@ -15,8 +15,8 @@ assistant computers run.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
-  infra --> devbox["infra/devbox<br/>machine setup"]
+  packaging["GitHub packaging job"] -->|supplies the approved scanner image| stack["infra/dev-stack<br/>local OpenCrane"]
+  stack -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
   stack -->|shares installation settings, memory, account custody and readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
@@ -185,7 +185,12 @@ prepares its survey and memory directories automatically. On repeat starts, the 
 checks changes to background work before starting apps. It applies changes with no matching
 events or only new event types while services are stopped. Changes that remove types with
 history need a manual upgrade. The stack reports ready only after the dispatcher starts
-reading events. Detailed recovery steps, real-provider choices and daily timer settings
+reading events. For packaged checks, preparation fetches the scanner image and
+approval from the successful GitHub packaging job for the current source commit. The
+[package guide](../package/README.robot.md#packaged-upload-services) describes the
+image review and publication steps.
+
+Detailed recovery steps, real-provider choices and daily timer settings
 are in the operator notes.
 The server reads the same private readiness marker. Chat can explain a long wait
 without showing members the operator's maintenance steps.

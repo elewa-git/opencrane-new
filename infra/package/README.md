@@ -18,13 +18,11 @@ A spare stack can own a separate three-node cluster for installation checks.
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> package["infra/package<br/>images, installation settings and evidence"]
-  infra --> stack["infra/dev-stack<br/>local OpenCrane"]
-  infra --> devbox["infra/devbox<br/>machine setup"]
-  stack -->|checks ownership, nodes, certificates and backup token references| package
-  package -->|uses local cluster| devbox
+  stack["infra/dev-stack<br/>local OpenCrane"] -->|checks ownership, nodes, certificates and backup token references| package["infra/package<br/>images, installation settings and evidence"]
+  package -->|uses local cluster| devbox["infra/devbox<br/>machine setup"]
   package -->|starts services and fake model; checks captured and restored bytes| apps["apps<br/>product services and replay"]
-  package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA and disposable MinIO"]
+  packaging["GitHub packaging job"] -->|supplies scanner approval and image| package
+  package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
   stack -->|keeps qualification image records in its spare slot| package
@@ -34,7 +32,14 @@ The install runs a fake AI model for testing and creates its first owner through
 saved [events](../../GLOSSARY.md#event). It reuses the spare stack’s model launcher
 and includes its imported helpers in the image. Workers start a computer when the owner
 first chats. Computers belong to assistants, including shared group assistants,
-and remain the same across chats. File storage and virus scanning are outside this package.
+and remain the same across chats. The installation includes persistent MinIO file storage
+and a private ClamAV scanner. Storage credentials rotate, and readiness checks
+their expiry. The server checks attachments before saving them,
+then uses the existing chat path to answer questions about clean files.
+Infected files are refused. Uploads stay unavailable when scanning cannot be proved
+or its last verified update check is more than 24 hours old. A scheduled GitHub job
+verifies and packages fresh definitions. Preparation fetches its approved output
+for the current source commit; a locally built candidate cannot grant approval.
 
 The dispatcher keeps its jobs in a separate database. It uses the server's read-only
 content connection to coordinate gateway configuration changes with delivery.
@@ -67,6 +72,7 @@ navigation show it, with their usual fallback words when it is empty.
 - Installs the website, server, workers and core services together with [Helm](../../GLOSSARY.md#helm).
 - Uses fixed, reviewed images and checks their licences before installation.
 - Builds the server image with a fixed Codex executable for private memory checks.
+- Stores clean chat attachments on a persistent volume and scans uploads through private HTTPS.
 - Includes the image scanner files loaded by the server's image evidence check.
 - Checks that a proposed server and website image matches its source and all shipped layers.
 - Checks that every relative import used by setup and the fake model is in the image.

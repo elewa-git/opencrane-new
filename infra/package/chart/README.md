@@ -13,12 +13,14 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Lists the required program images and names of private settings.
 - Keeps public network access switched off in the default settings.
 - Groups the templates that start apps, services, workers and assistant computers.
+- Includes persistent file storage and a private virus scanner for chat attachments.
 
 ## Main files
 
 | File or folder | What it does |
 | --- | --- |
 | `Chart.yaml` | Names the installation package and its version. |
+| `scanner.conf` | Shares the fixed production scan limits with the owned scanner launcher. |
 | `cluster.conf` | Keeps a tested copy of the shared authenticated NATS route configuration. |
 | `values.yaml` | Lists settings that installation preparation must supply. |
 | [templates](templates/README.md) | Describes the programs, storage and access rules to install. |
@@ -32,7 +34,7 @@ combines those settings with the templates.
 
 ```mermaid
 flowchart LR
-  package["Local installation tools"] --> chart["chart<br/>installation, database standby, backup and recovery previews"]
+  package["Local installation tools"] --> chart["chart<br/>installation, files, scanner and database previews"]
   package --> prepare["Preparation and checks"]
   chart --> templates["templates<br/>programs and settings"]
 ```
@@ -46,4 +48,5 @@ not prove a running standby. An optional render also describes three private NAT
 peers. It needs separate route trust and one certificate reference per peer.
 The installer checks prepared certificates, eligible nodes and reviewed images first.
 The shipped image still refuses this mode; the
-[operator notes](../README.robot.md#three-peer-nats-rendering) explain the remaining work. File storage and virus scanning are outside this package.
+[operator notes](../README.robot.md#three-peer-nats-rendering) explain the remaining work. File storage and virus scanning run inside the package;
+the scanner needs a reviewed, current signature release before uploads are available.

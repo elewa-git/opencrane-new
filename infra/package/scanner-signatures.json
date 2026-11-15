@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "toolImage": "clamav/clamav-debian:1.5.2@sha256:14e2e0805c6a5ff6728ea591c05565e0f0954d93e8701919012c3a8c44e20674",
+  "databaseUpdatedAt": "2026-11-12T20:25:13.766Z",
+  "updaterEvidence": {
+    "tool": "FreshClam",
+    "exitCode": 0,
+    "databases": [
+      {
+        "file": "main.cvd",
+        "version": 63,
+        "result": "up-to-date"
+      },
+      {
+        "file": "daily.cvd",
+        "version": 28181,
+        "result": "updated"
+      },
+      {
+        "file": "bytecode.cvd",
+        "version": 339,
+        "result": "up-to-date"
+      }
+    ]
+  },
+  "databases": [
+    {
+      "file": "main.cvd",
+      "sha256": "0b2182d229f46981ec8f535382222f7c9dfdd656b250ad47988b910a8d302365",
+      "version": 63,
+      "builtAt": "2025-12-16T23:18:22.000Z"
+    },
+    {
+      "file": "daily.cvd",
+      "sha256": "2691664c2a5df560f5ea7bc83ef6f23f0c24ec6bb60ebb852e1324f2555a30e1",
+      "version": 28181,
+      "builtAt": "2026-11-12T06:27:14.000Z"
+    },
+    {
+      "file": "bytecode.cvd",
+      "sha256": "6d4aa01f219e988060fc419f495d07f27e0cdf1a2cccc065971da922c76f7ffb",
+      "version": 339,
+      "builtAt": "2025-09-11T12:29:19.000Z"
+    }
+  ]
+}

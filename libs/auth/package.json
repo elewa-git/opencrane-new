@@ -8,6 +8,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./storage-lease": "./src/storage-lease.ts",
     "./testing": "./test/testing.ts"
   },
   "scripts": {

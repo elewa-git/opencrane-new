@@ -6,6 +6,7 @@
   "workspaces": {
     ".": {
       "ignoreUnresolved": ["./runner-protection.node"],
+      "ignoreBinaries": ["openssl"],
       "entry": [
         "scripts/private-memory-qualification/vitest.config.mjs",
         "scripts/private-memory-qualification/build-images.mjs",

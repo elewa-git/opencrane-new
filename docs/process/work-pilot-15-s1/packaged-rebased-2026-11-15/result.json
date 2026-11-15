@@ -1,0 +1,23 @@
+{
+  "stage": "390px EICAR refusal",
+  "results": [
+    {
+      "width": 1280,
+      "signIn": "PASS",
+      "cleanUpload": "PASS",
+      "answer": "PASS",
+      "eicar": "PASS"
+    },
+    {
+      "width": 390,
+      "signIn": "PASS",
+      "cleanUpload": "PASS",
+      "answer": "PASS",
+      "eicar": "PASS"
+    }
+  ],
+  "verdict": "PASS",
+  "testedSource": "bd73de7f728894c38b18e4dc5e171a2867a3acfb",
+  "base": "1170dc966146e25f950d7bdd33c2ec4283c8d300",
+  "scannerApprovalRunId": 43710911559
+}

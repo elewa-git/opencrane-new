@@ -28,6 +28,21 @@ checks remain in disposable test support and in the wrapper's owned scan operati
 is retained in `upstream/LICENCE`; no OpenCrane 1 contracts or other runtime code
 are imported.
 
+## Packaged scanner
+
+The [Helm package](../package/README.robot.md#packaged-upload-services) runs the
+same authenticated HTTPS wrapper with `packaged.mjs`. It reads the approved
+manifest and release, verifies the shared read-only database bytes and uses the
+private loopback INSTREAM transport. It has no Docker socket, updater or reload.
+The image preparation removes the database directory before copying the approved
+set, including the upstream image's hidden shell startup files. Only main, daily
+and bytecode reach the runtime directory. The wrapper refuses extra, missing,
+altered or symbolic-link files, stale evidence and an image/release mismatch.
+
+The development adapter shares `instream.mjs` but supplies development database
+facts. It cannot qualify a packaged release. The owned Docker launcher keeps its
+existing lifecycle and uses the same release reader as the packaged scanner.
+
 ## Refresh on the dev box
 
 Run `infra/clamav/refresh.sh /absolute/scratch/candidate-signatures`. FreshClam
@@ -80,17 +95,53 @@ successful cleanup allows one. It does not induce a real Docker connection failu
 
 ## Packaging evidence
 
-P5-6a PR 3 builds on PR 2's squash commit
-`b88276a8d76c8f8ce15613fad1012b77b82fdfed`. The trusted packaging job supplies a
-reviewed candidate manifest, its separately approved SHA-256 (64 lowercase hex
-characters) and a reviewed scanner image reference ending in `@sha256:…`.
-The approval must come from the job's review inputs, not a hash supplied alongside
-untrusted JSON. The image review still includes flattened UnRAR removal and the
-licence checks; database inspection does not replace either check.
+The [approved scanner workflow](../../.github/workflows/scanner-package.yml) runs
+on the free standard `ubuntu-latest` runner every six hours, on manual dispatch,
+and on pushes to `main` and `work/pilot-15-s1`. Schedules and manual dispatch become
+available from the default branch after merge; branch pushes qualify this draft.
+It uses no cache, new repository secret, repository setting or organisation setting.
+Only read access to repository contents is requested. Artifact upload uses GitHub's
+built-in job credentials. Standard runners in public repositories are
+[free](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+
+`package.sh` runs FreshClam against `database.clamav.net` through `refresh.mjs`.
+The shared database reader and ClamAV's `sigtool` verify all three regular files,
+size, hashes and upstream signatures. It builds `Scanner.Dockerfile` with only
+those databases. It checks every shipped layer for UnRAR and the unused static
+archive, requires one flattened filesystem, and checks the actual Syft inventory
+against the existing OS and bundled licence review. It then runs `release.mjs`
+against the pushed immutable image and approved manifest hash.
+
+Only a **successful workflow run** supplies approval. Its `scanner-approval`
+artifact contains `approval.json` (run id, source revision, manifest SHA-256 and
+image digest), `signatures.json` and `release.json`. Its `scanner-image` artifact
+contains the matching OCI archive. Both expire after one day. The job summary
+also prints the manifest SHA-256 and image digest. Local refresh, build, release
+records, environment variables and candidate hashes cannot grant approval.
+
+`approval.mjs` uses the existing authenticated `gh` CLI to download these outputs
+from github.com. API calls select `--hostname=github.com`; artifact downloads use
+the full github.com repository URL. Inherited `GH_HOST`, `GH_ENTERPRISE_TOKEN` or
+`GITHUB_ENTERPRISE_TOKEN` settings refuse before any CLI runs, and child environments
+remove those settings. The structured logger records only a fixed stage and safe
+reason (`outage`, `expired` or `malformed`). Raw CLI errors and output stay private.
+It checks GitHub's run metadata independently: this repository and source
+repository, workflow path, successful completion, allowed trigger, current branch
+and exact checkout commit. It checks the output's run id and source revision,
+then reuses `readApprovedRelease` for exact hashes, image binding and freshness.
+There is no local approval fallback. Missing, failed, expired or mismatched outputs
+refuse. Run `gh auth status` to check existing CLI access; no credential is stored
+in package files or passed in command arguments. GitHub's
+[artifact API](https://docs.github.com/en/rest/actions/artifacts) supplies the
+immutable run outputs. The dev stack fetches them during `package-prepare`, and
+preflight independently fetches them again before admitting the scanner values.
+
+The following verifier is called **inside the workflow**, after the licence and
+layer checks. Running it locally produces candidate evidence only:
 
 ```sh
-node infra/clamav/release.mjs /private/job/signatures.json "$APPROVED_MANIFEST_SHA256" \
-  "$REVIEWED_SCANNER_IMAGE" /private/job/new-release
+node infra/clamav/release.mjs "$JOB_DIR/signatures.json" "$APPROVED_MANIFEST_SHA256" \
+  "$REVIEWED_SCANNER_IMAGE" "$JOB_DIR/new-release"
 ```
 
 The parent directory is private to the packaging job. The destination is a new,
@@ -408,6 +459,14 @@ is checked before the one-scan claim. The production enable switch remains
 closed and image promotion remains
 closed. Fresh-install two-silo, deployed custody, signed-release and rotation
 qualification are NOT RUN.
+
+## Database files
+
+`database.mjs` owns the regular-file, 512-byte minimum, 512-MiB maximum and
+streamed SHA-256 checks shared by refresh and the packaged adapter. Refresh checks
+the returned hash against both tool observations and checks the verified header.
+The packaged adapter compares it with the approved manifest before serving scans.
+Neither caller follows database symlinks.
 
 ## Real upload consumer fixture
 

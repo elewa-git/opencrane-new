@@ -12,9 +12,9 @@ const deadlineMs = 15 * 60 * 1000;
 const maxAgeMs = 24 * 60 * 60 * 1000;
 const names = ['main', 'daily', 'bytecode'];
 
-function requireEvidence(condition) {
+function requireEvidence(condition, reason = 'malformed') {
   if (!condition) {
-    throw new Error(refusal);
+    throw new Error(refusal, { cause: reason });
   }
 }
 
@@ -28,7 +28,8 @@ function timestamp(value) {
 export function validateManifest(manifest, now) {
   requireEvidence(manifest.formatVersion === 1 && manifest.toolImage === toolImage);
   const updatedAt = timestamp(manifest.databaseUpdatedAt);
-  requireEvidence(updatedAt <= now && now - updatedAt < maxAgeMs);
+  requireEvidence(updatedAt <= now);
+  requireEvidence(now - updatedAt < maxAgeMs, 'expired');
   const evidence = manifest.updaterEvidence;
   requireEvidence(evidence.tool === 'FreshClam' && evidence.exitCode === 0 &&
     Array.isArray(evidence.databases) && Array.isArray(manifest.databases) &&
@@ -67,6 +68,23 @@ export async function readApprovedManifest(path, approvedSha) {
   hash.update(bytes);
   requireEvidence(hash.digest('hex') === approvedSha);
   return JSON.parse(bytes.toString('utf8'));
+}
+
+export async function readApprovedRelease(options, now) {
+  const { image, manifestPath, approvedSha, releasePath } = options;
+  const pattern = /^(?:[a-z0-9.-]+(?::[0-9]+)?\/)?[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/;
+  requireEvidence(pattern.test(image));
+  const manifest = await readApprovedManifest(manifestPath, approvedSha);
+  validateManifest(manifest, now);
+  const bytes = await readBoundedBytes(releasePath, 1024);
+  const record = JSON.parse(bytes.toString('utf8'));
+  const inspectedAt = Date.parse(record.inspectedAt);
+  requireEvidence(record.formatVersion === 1 &&
+    record.imageDigest === image.slice(image.indexOf('@') + 1) &&
+    record.manifestDigest === `sha256:${approvedSha}` &&
+    record.databaseUpdatedAt === manifest.databaseUpdatedAt &&
+    inspectedAt >= Date.parse(manifest.databaseUpdatedAt) && inspectedAt <= now);
+  return manifest;
 }
 
 export function docker(args, timeout = deadlineMs) {

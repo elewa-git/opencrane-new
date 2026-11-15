@@ -14,6 +14,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 ## What it is responsible for
 
 - Starts the apps, database, saved event log and permissions service.
+- Runs persistent file storage and an authenticated scanner with a private ClamAV listener.
 - Describes an optional database standby with its own storage on another node.
 - Gives background workers the settings and access needed for their jobs.
 - Prepares storage, database setup and the first owner.
@@ -24,6 +25,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 
 | File | What it does |
 | --- | --- |
+| `files.yaml` | Runs MinIO, the scanner and the rule that permits only its HTTPS port. |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
 | `data.yaml` | Describes the database, optional backup and recovery settings, event log and saved storage. |
@@ -46,7 +48,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs, database standby, backup and recovery previews"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, files, scanner and database previews"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

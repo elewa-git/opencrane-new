@@ -11,6 +11,7 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const reviewed = JSON.parse(readFileSync('infra/package/reviewed-images.json', 'utf8'));
@@ -18,7 +19,8 @@ const values = {
   chartVersion: reviewed.chartVersion,
   images: reviewed.images,
   secrets: { runtime: 'runtime', runtimeFiles: 'runtime-files', postgres: 'postgres',
-    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap' },
+    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap', objects: 'objects', scanner: 'scanner' },
+  scanner: reviewed.scanner,
   exposure: { ingress: false, loadBalancer: false, funnel: false },
 };
 
@@ -152,9 +154,21 @@ await issueCertificate(process.argv[1], 'server', '/CN=nats');`;
 test('certificate issuer passes absolute stack paths to OpenSSL',
   certificateIssuerUsesAbsolutePaths);
 
+async function scannerFixtureEnvironment(directory, mainValuesSource) {
+  const fixtureEnvironment = { ...process.env };
+  if (mainValuesSource) {
+    const bin = join(directory, 'bin');
+    await scannerApprovalFixture(bin, reviewed);
+    values.scanner = { ...reviewed.scanner };
+    fixtureEnvironment.PATH = `${bin}:${process.env.PATH}`;
+  }
+  return fixtureEnvironment;
+}
+
 async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
   packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
+  const fixtureEnvironment = await scannerFixtureEnvironment(directory, mainValuesSource);
   const settings = new Map();
   const secrets = new Map();
   const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
@@ -187,7 +201,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       'command.crt', 'command.key', 'command.seed',
       'projection.crt', 'projection.key', 'projection.seed', 'dispatcher.crt',
       'dispatcher.key', 'dispatcher.seed', 'token-signing-key.pem',
-      'zitadel-client-secret']) {
+      'zitadel-client-secret', 'scanner-ca.crt']) {
       writeFileSync(join(directory, name), `test-${name}`);
     }
   }
@@ -213,7 +227,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     }
     if (program === 'node') {
       if (args[0].endsWith('preflight.mjs')) {
-        execFileSync(process.execPath, args, { cwd: options.cwd });
+        execFileSync(process.execPath, args, { cwd: options.cwd, env: fixtureEnvironment });
       } else {
         assert.deepEqual(Array.from(args), ['--experimental-strip-types',
           'infra/dev-stack/zitadel-setup.ts', '--read-only']);
@@ -235,6 +249,11 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     secrets.set(name, secretFromDirectory(source));
     callback(null, { stdout: '', stderr: '' });
   }
+  async function prepareScannerFixture() {
+    for (const name of ['scanner-server.key', 'scanner-server.crt']) {
+      writeFileSync(join(directory, name), 'fixture-scanner-file');
+    }
+  }
   const replacements = {
     'node:child_process': { execFile: executeFixture },
     'node:crypto': { ...crypto, randomBytes: () => key },
@@ -248,15 +267,22 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     },
     '../dev-stack/identity.ts': { localOrigin: 'http://localhost:25106', stackId: 'test',
       secondary: true },
+    '../dev-stack/scanner-settings.ts': { prepareScannerFiles: prepareScannerFixture },
+    '../clamav/release.mjs': { readApprovedRelease: async () => undefined },
     '../dev-stack/packaged.ts': { verifyPackageOwner: recordedOwner,
       packageConnectionArgs: checkedConnection },
   };
   try {
     if (mainValuesSource) {
+      mkdirSync(join(directory, 'scanner-approval'));
+      const manifestFile = join(directory, 'scanner-approval/signatures.json');
+      const releaseFile = join(directory, 'scanner-approval/release.json');
+      writeFileSync(manifestFile, '{}');
+      writeFileSync(releaseFile, '{}');
       const valuesFile = join(directory, 'values.json');
       writeFileSync(valuesFile, JSON.stringify(values), { mode: 0o600 });
       const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts'],
-        env: { ...process.env, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined } };
+        env: { ...fixtureEnvironment, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined } };
       if (mainValuesSource === 'environment') {
         fixtureProcess.env.PACKAGE_VALUES_FILE = valuesFile;
       } else {
@@ -266,15 +292,15 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
         fixtureProcess);
       await main();
       assert.deepEqual(commands.map(commandProgram), ['node', 'node',
-        'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
-      assert.equal(secrets.size, 6);
+        'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
+      assert.equal(secrets.size, 8);
       return { key, settings, secrets };
     }
     const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',
       'prepareSettings', replacements);
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
-    await prepareSettings(packageValues);
+    await prepareSettings({ ...packageValues, scanner: values.scanner });
     await provisionSecrets(values.secrets, owner);
     return { key, settings, secrets };
   } finally {
@@ -304,6 +330,10 @@ async function preparationMainWithEnvironmentValues() {
 }
 test('journey preparation runs real preflight without private directories in child arguments',
   preparationMainWithEnvironmentValues);
+
+function needsPrivateFiles(container) {
+  return container.name !== 'storage-credentials';
+}
 
 function assertPrivateFileDelivery(podSpec) {
   const source = podSpec.volumes.find(privateFileSourceVolume);
@@ -471,6 +501,11 @@ test('a binary key stays in a mounted Secret and outside every environment impor
   const server = namedResource('Deployment', 'server');
   const containers = server.spec.template.spec.containers;
   for (const container of containers) {
+    if (!needsPrivateFiles(container)) {
+      assert.equal(container.envFrom, undefined);
+      assert.equal(container.volumeMounts.some(privateFileMount), false);
+      continue;
+    }
     assert.deepEqual(container.envFrom, [{ secretRef: { name: 'runtime' } }]);
     assert.ok(container.volumeMounts.some(privateFileMount));
     assert.ok(!container.envFrom.some(privateFileImport));
@@ -523,7 +558,8 @@ test('a binary key stays in a mounted Secret and outside every environment impor
         assert.notEqual(setting.value, key.toString('base64'));
       }
     }
-    for (const container of pod.containers) {
+    const privateFileContainers = pod.containers.filter(needsPrivateFiles);
+    for (const container of privateFileContainers) {
       assert.ok(container.volumeMounts.some(privateFileMount));
     }
   }
@@ -826,3 +862,15 @@ for (const cluster of [null, {}, { enabled: 'true' }, { enabled: true },
   test(`preparation refuses invalid replica choice ${JSON.stringify(cluster)}`,
     refusesInvalidReplicaChoice);
 }
+
+function credentialReadinessChecksLease() {
+  const server = namedResource('Deployment', 'server');
+  function isCredentialContainer(container) {
+    return container.name === 'storage-credentials';
+  }
+  const container = server.spec.template.spec.containers.find(isCredentialContainer);
+  assert.deepEqual(container.readinessProbe.exec.command,
+    ['node', 'infra/package/object-lease-ready.mjs']);
+  assert.equal(container.readinessProbe.timeoutSeconds, 5);
+}
+test('storage credential readiness checks the lease validity', credentialReadinessChecksLease);

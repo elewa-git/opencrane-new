@@ -1,0 +1,37 @@
+{
+  "approval": {
+    "runId": 43710911559,
+    "revision": "bd73de7f728894c38b18e4dc5e171a2867a3acfb",
+    "imageDigest": "sha256:9b8d235f61582cc4b1846d7cc22c196ed615b80db87d4bf0ce762c03c015327f",
+    "approvedSha": "79360722f29c77bd0d3ff1a25c66ea24edaaaf99ccefbe2dff696e57640a5d9d"
+  },
+  "installation": {
+    "slot": "1",
+    "namespace": "opencrane-package-1",
+    "namespaceUid": "af06984d-8b24-4711-beb9-e715b7fb7880",
+    "installId": "67fec1a4-5afb-4041-b709-3b09dec71adf"
+  },
+  "databaseUpdatedAt": "2026-11-15T11:51:45.470Z",
+  "claims": [
+    {
+      "name": "conversation-keys",
+      "uid": "5ab62fab-5912-4bc1-8fb5-5ffa6deb3413",
+      "phase": "Bound"
+    },
+    {
+      "name": "data-nats-0",
+      "uid": "c20e2a9d-138b-4f75-8581-eabc024e6c38",
+      "phase": "Bound"
+    },
+    {
+      "name": "data-objects-0",
+      "uid": "f8a4902d-8495-4480-84b9-bc4511ea9e4a",
+      "phase": "Bound"
+    },
+    {
+      "name": "data-postgres-0",
+      "uid": "d09e38cf-0c01-4690-9353-b7882ab9b1c2",
+      "phase": "Bound"
+    }
+  ]
+}

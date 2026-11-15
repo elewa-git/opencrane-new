@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
 import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { prepareNatsFixture } from './nats-install-fixture.mjs';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const source = resolve('.');
@@ -35,6 +36,9 @@ function validFixture() {
     HANDLER_DATABASE_URL: database('dispatcher', 'handlers'),
     OPENFGA_API_URL: 'http://openfga:8080', MODEL_DECISION_URL: 'http://server:43000',
     MODEL_UPSTREAM: '127.0.0.1:43003', OIDC_CLIENT_SECRET_ENV_VAR: 'CLIENT_SECRET',
+    MINIO_URL: 'http://objects:9000', MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
+    SCANNER_URL: 'https://scanner:8443/scan/upload',
+    SCANNER_CA_FILE: '/run/opencrane/files/scanner-ca.crt', SCANNER_MANIFEST_DIGEST: `sha256:${'c'.repeat(64)}`,
   };
   const fields = `SILO_ID OIDC_ISSUER_URL OIDC_CLIENT_ID OIDC_REDIRECT_URI OIDC_COOKIE_SECRET
     OIDC_EXPECTED_ORG_ID OPENFGA_STORE_ID OPENFGA_MODEL_ID OWNER_BOOTSTRAP_READY
@@ -44,10 +48,13 @@ function validFixture() {
   secrets.runtime = secret(runtime);
   const files = {};
   const fileNames = `conversation-wrap-key token-signing-key.pem zitadel-client-secret
-    model-jwks.json model-stub-key`;
+    model-jwks.json model-stub-key scanner-ca.crt`;
   for (const key of fileNames.split(/\s+/u)) files[key] = canary;
   secrets.runtimefiles = secret(files);
   secrets.nats = secret({});
+  secrets.objects = secret({ MINIO_ROOT_USER: canary, MINIO_ROOT_PASSWORD: canary });
+  secrets.scanner = secret({ 'signatures.json': canary, 'release.json': canary,
+    'server.key': canary, 'server.crt': canary, 'trust.json': canary });
   secrets.postgres = secret({ POSTGRES_PASSWORD: canary });
   secrets.openfga = secret({ OPENFGA_DATASTORE_ENGINE: 'postgres',
     OPENFGA_DATASTORE_URI: database('openfga', 'openfga') });
@@ -57,23 +64,37 @@ function validFixture() {
   secrets.superuser = secret({ username: 'postgres', password: generatedPassword }, 'kubernetes.io/basic-auth');
   secrets.application = secret({ username: 'projection', password: generatedPassword }, 'kubernetes.io/basic-auth');
   const images = {};
-  for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer']) {
+  for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
     images[role] = `example.invalid/${role}:17.6@sha256:${'a'.repeat(64)}`;
   }
   const references = { runtime: 'runtime', runtimeFiles: 'runtimefiles', postgres: 'postgres',
-    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap' };
+    nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap', objects: 'objects', scanner: 'scanner' };
   const values = { chartVersion: '0.1.0', images, secrets: references,
+    scanner: { approvedSha: 'c'.repeat(64) },
     exposure: { ingress: false, loadBalancer: false, funnel: false },
     postgres: { mode: 'cnpg', operatorContract: '1.30',
       superuserSecret: 'superuser', applicationSecret: 'application' } };
   const review = { chartVersion: '0.1.0', images, requiredSecrets: Object.keys(references),
-    cnpg: { operatorContract: '1.30', image: images.postgres } };
+    cnpg: { operatorContract: '1.30', image: images.postgres }, scanner: values.scanner };
   const api = { groupVersion: 'postgresql.cnpg.io/v1',
     resources: [{ name: 'clusters', kind: 'Cluster', namespaced: true, verbs: ['create'] }] };
   const manager = { name: 'manager', image: 'ghcr.io/cloudnative-pg/cloudnative-pg:1.30.0' };
   const operators = { items: [{ spec: { template: { spec: { containers: [manager] } } } }] };
   return { values, review, secrets, api, operators, canary };
 }
+async function fixtureInputFiles(directory, fixture) {
+  const privateDirectory = `${directory}/private-values`;
+  await mkdir(privateDirectory, { mode: 0o700 });
+  const bin = `${directory}/bin`;
+  await scannerApprovalFixture(bin, fixture.review);
+  fixture.values.scanner = { ...fixture.review.scanner };
+  await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
+  const valuesFile = `${privateDirectory}/values.json`;
+  await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
+  await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
+  return { valuesFile, bin, privateDirectory };
+}
+
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
   const directory = await mkdtemp(`${tmpdir()}/cnpg-install-`);
   try {
@@ -91,12 +112,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     await writeFile(`${directory}/package-owner.json`, JSON.stringify(owner));
     await prepareNatsFixture(fixture, directory);
     if (fixture.cluster) await prepareClusterFixture(fixture, directory, owner);
-    await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
-    const privateDirectory = `${directory}/private-values`;
-    await mkdir(privateDirectory, { mode: 0o700 });
-    const valuesFile = `${privateDirectory}/values.json`;
-    await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
-    await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
+    const { valuesFile, bin, privateDirectory } = await fixtureInputFiles(directory, fixture);
     let valuesArgument = JSON.stringify(valuesFile);
     if (environmentValues) {
       valuesArgument = 'process.env.PACKAGE_VALUES_FILE';
@@ -106,7 +122,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       catch (error) { console.error(error); process.exitCode = 1; }`;
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
-    const env = { ...process.env, DEV_STACK_ID: '1', PACKAGE_VALUES_FILE: undefined };
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1', PACKAGE_VALUES_FILE: undefined };
     if (environmentValues) {
       env.PACKAGE_VALUES_FILE = valuesFile;
     }

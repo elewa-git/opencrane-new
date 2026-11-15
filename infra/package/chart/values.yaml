@@ -8,6 +8,8 @@ images:
   nats: ""
   openfga: ""
   computer: ""
+  objects: ""
+  scanner: ""
 secrets:
   runtime: ""
   runtimeFiles: ""
@@ -15,6 +17,10 @@ secrets:
   nats: ""
   openfga: ""
   bootstrap: ""
+  objects: ""
+  scanner: ""
+scanner:
+  approvedSha: ""
 exposure:
   ingress: false
   loadBalancer: false

@@ -180,13 +180,14 @@ async function acceptsVerifiedRecord() {
   const input = fixture();
   const images: Record<string, string> = {};
   const secrets: Record<string, string> = {};
-  for (const name of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer']) {
+  for (const name of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
     images[name] = `example.invalid/${name}:17.6@sha256:${'a'.repeat(64)}`;
   }
-  for (const name of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap']) {
+  for (const name of ['runtime', 'runtimeFiles', 'postgres', 'nats', 'openfga', 'bootstrap', 'objects', 'scanner']) {
     secrets[name] = name.toLowerCase();
   }
   const values = { chartVersion: '0.1.0', images, secrets,
+    scanner: { approvedSha: 'c'.repeat(64) },
     postgres: { mode: 'cnpg', operatorContract: '1.30', superuserSecret: 'superuser',
       applicationSecret: 'application', backup: input.backup } };
   const args = ['template', 'backup-check', 'infra/package/chart',

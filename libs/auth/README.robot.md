@@ -34,6 +34,14 @@ Older sessions without a token and provider discovery failures yield `null`.
 The server requires the exact Origin and a valid, correctly pinned session before
 clearing its cookie. `/auth/me` exposes only public identity fields.
 
+## Storage credentials
+
+`readStorageLease(path)` (also exported through `@opencrane/auth/storage-lease`) reads the current JSON file on every call. It requires
+non-empty access key, secret key and session token strings and an integer expiry
+in milliseconds. Expired leases and leases more than 15 minutes into the future
+refuse. The package's readiness probe and server's storage client share this rule.
+It returns credentials only to the caller; never log the returned value.
+
 ## Configuration and verification
 
 The [configuration source](src/config.ts) owns variable names, required settings and defaults.

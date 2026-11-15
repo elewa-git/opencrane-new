@@ -149,7 +149,8 @@ class ImageLayerTests(unittest.TestCase):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
                    "secondary-models.ts", "zitadel.json"}
-        package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs"}
+        package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
+                         "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
             if path.startswith("app/infra/package/"):
@@ -157,6 +158,24 @@ class ImageLayerTests(unittest.TestCase):
             if path.startswith("app/infra/dev-stack/"):
                 self.assertIn(path.removeprefix("app/infra/dev-stack/"), allowed)
             self.assertFalse(path.startswith(("app/.keys/", "app/.tools/", "app/.git/")))
+
+    def test_scanner_imports_and_storage_readiness_entry_point_are_packaged(self):
+        required = ("app/infra/clamav/database.mjs", "app/infra/package/object-lease-ready.mjs")
+        for path in required:
+            with self.subTest(path=path):
+                self.assertTrue(path in self.paths, f"Missing packaged runtime helper: {path}")
+        command = ["docker", "run", "--rm", "--network", "none", "--read-only",
+                   self.inspection["Id"], "node", "--input-type=module", "-e",
+                   "await import('./infra/clamav/packaged.mjs')"]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, "Packaged scanner imports are incomplete")
+
+    def test_worker_scanner_import_is_packaged(self):
+        command = ["docker", "run", "--rm", "--network", "none", "--read-only",
+                   self.inspection["Id"], "node", "--experimental-strip-types",
+                   "--input-type=module", "-e", "await import('./infra/clamav/image-worker.mjs')"]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, "Packaged projection worker imports are incomplete")
 
     def test_real_bootstrap_entry_point_with_synthetic_services(self):
         image = self.inspection["Id"]

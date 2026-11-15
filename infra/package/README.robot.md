@@ -25,7 +25,8 @@ The root `.dockerignore` excludes repository test folders and test files from th
 package build. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
 The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
-It keeps the three image scanner files used by the server's image evidence import.
+It keeps the image scanner files used by the server's image evidence import,
+plus the packaged scanner's HTTPS and approved-database checks.
 `scripts/private-memory-qualification/memory-image.test.ts` builds this Dockerfile,
 checks the packaged source folders for tests, and runs both memory checks against
 disposable NATS. It does not qualify live memory delivery or enable admission.
@@ -62,7 +63,7 @@ only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
 cannot prepare a package while that slot's Compose processes or containers run. The
 slot lock keeps these checks and the following operation together. An operator
-then runs `prepare.ts` with the private values file. That command creates five
+then runs `prepare.ts` with the private values file. That command creates eight
 named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
@@ -87,12 +88,12 @@ would make its keys unreadable; a fresh install gets a fresh volume and Secret.
 The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
-database setup credentials. The installer checks all six names and required
+database setup credentials. The installer checks all eight names and required
 fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
-six secret names and all three exposure flags set to `false`:
+eight secret names and all three exposure flags set to `false`:
 
 Preflight and Helm run from the values file's directory and receive only its
 filename. The private directory remains in the child process's working directory,
@@ -167,7 +168,87 @@ is claimed per assistant, including shared group assistants, and starts when nee
 The installer reads the server Service ClusterIP and puts that IP in the computer ConfigMap. The computer policy permits only TCP
 port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and
-the scanner are outside this chart.
+the scanner run inside this chart. The file worker still projects events; object
+storage is content, and the upload command remains the only business write.
+
+## Packaged upload services
+
+`files.yaml` runs one MinIO StatefulSet with a 5 GiB claim and one scanner Pod.
+The scanner Pod copies exactly three databases from its pinned engine image.
+Both production launch paths use the fixed settings in `chart/scanner.conf`.
+Both the engine and HTTPS wrapper mount that copy read-only. The engine listens
+only on Pod loopback, disables reloads and uses a 64 MiB memory-backed temporary
+folder. A network rule exposes only authenticated HTTPS on port 8443 to the server
+and dispatcher Pods. Mount only the scanner config file so the image's bundled database verification
+certificates remain visible. The Pod has no outbound network access or
+service-account token.
+
+`scanner.mjs` reuses the existing HTTPS service and release validation.
+`packaged.mjs` verifies the approved manifest hash, release/image binding, database
+file count and actual hashes before serving scans. It checks the complete upstream
+update time before and after scanning and stops serving after 24 hours.
+A copy, file date or restart cannot renew this time. Stale or uncertain scans keep
+the existing typed upload-unavailable response. Infected bytes keep the existing
+refusal; neither case stores a file or appends `file.uploaded`.
+
+The `scanner` value has one field, `approvedSha`. Preflight fetches the approved
+manifest hash and scanner image digest directly from a successful github.com
+[packaging workflow](../clamav/README.robot.md#packaging-evidence) for the checkout's
+branch and exact commit. Matching local review and values files cannot approve a
+scanner. Other image roles retain the checked-in licence and source review.
+`run.sh package-prepare --id <slot>` downloads the approval and image, publishes the
+scanner digest and writes the private `package-values.json`. `prepare.ts` reads
+`scanner-approval/signatures.json` and `scanner-approval/release.json` from that
+slot. It rechecks the release before creating Secrets. A missing job output or
+expired database check refuses; copies and restarts cannot renew it. The checked-in
+scanner records describe the earlier review and grant no current approval.
+
+`publish-image.py ARCHIVE HTTP_ENDPOINT IMAGE@sha256:DIGEST` publishes an OCI archive
+with its exact existing digest, verifying each manifest and blob. Endpoints must
+use plain HTTP with a hostname and no user details, path, query or fragment. Use it after the
+normal image build, source/layer checks and licence review for application and
+object-store images, and inside scanner preparation for the CI-approved archive.
+For the local registry, read its existing `k3d-ocn` network address with
+`docker inspect k3d-ocn-registry` and use `http://<address>:5000`. This avoids
+Docker's HTTPS push negotiation and a broken host-port forward without changing
+Docker daemon, network or container settings. The cluster still uses
+`k3d-ocn-registry:5000` in its immutable image pins. No tag or digest is promoted
+by this publisher; it transfers only the selected bytes. A missing or changed
+blob refuses before its manifest can be published.
+
+Preparation creates separate `objects` and `scanner` Secrets. The scanner Secret
+contains its TLS key/certificate, public issuer trust, manifest and release.
+An init container copies those projected Secret entries into regular files on a
+memory-backed volume. The wrapper keeps strict symlink rejection when it reads them.
+The server receives only the CA and approved manifest digest alongside its existing
+trusted ES256 issuer. It uses `https://scanner:8443/scan/upload`, with normal CA and
+hostname verification, request bindings and a fresh short-lived pass per scan.
+
+Only the storage credential sidecar mounts the object-store provisioning identity.
+It creates the private `files` bucket and issues a fresh 15-minute STS credential
+every five minutes. The policy permits object reads, writes, deletion and listing
+only in that bucket. The server reads an atomic, memory-backed lease file and
+expires it locally after at most 14 minutes from issuance start, or one minute
+before the upstream expiry if earlier. STS issuance has a ten-second deadline;
+shutdown cancels its socket and response body. A failed renewal leaves the previous
+file intact. Readiness reads and validates that lease with the same rule as the
+server, and refuses after expiry. Restarting the sidecar can issue a new lease.
+Failures keep only a fixed message and structured cause classification; upstream
+messages, response bodies and cancellation reasons are discarded.
+The server receives no provisioning credential.
+The installer waits for the object store and scanner as well as the existing apps.
+
+`Objects.Dockerfile` copies only the static MinIO binary and reviewed source notices;
+no Alpine operating-system files enter the image. `object-notices.json` records each
+embedded Go component's source, notice hash and licence. Prepare the named `notices`
+build context with `python3 infra/package/prepare-object-notices.py NEW_DIRECTORY`.
+The collector checks archive and notice hashes before writing complete terms.
+The package inventory records the CC0 hashing part as a DFSG-free library bundled
+inside AGPL MinIO, separately from OSI application approval. The scanner's 112 OS
+packages match signed Debian main indexes in `scanner-debian-main.json`. Its engine
+and bundled parser review reuses `infra/clamav/LICENCES.md`; UnRAR is removed before
+flattening the final image.
+
 The licence inventory lists the components found by Syft in the pinned images.
 `osi-licences.json` contains the OSI-approved IDs from SPDX licence list 3.28.0
 (source JSON SHA-256
@@ -191,9 +272,9 @@ their integrity-checked lockfile, the exact executable and launcher hashes, and
 four OpenCrane AGPL helpers. The package source is the existing pinned spike
 lockfile. The Dockerfile checks the executable hash, launcher hash and CLI version
 before copying only those files. It does not copy the computer filesystem or
-download anything when the native check runs. The image's licence inventory and
-immutable promotion pin still need a new scan and review before deployment approval;
-the old reviewed image pin does not claim these new bytes.
+download anything when the native check runs. The current 580-component inventory
+includes those packages. The image layer check verifies their exact executable,
+launcher and helper hashes against the existing native inventory.
 
 ## Package image promotion
 
@@ -237,6 +318,8 @@ imported file refuses even when the entry point remains. It also checks every
 shipped TypeScript module for runtime imports from test folders. The existing bootstrap source suite checks that every
 imported dev-stack file reachable from setup or the model has an explicit Docker
 context exception and refuses test folder imports.
+A separate real-image import check keeps the scanner module needed by every
+projection worker in the image.
 
 The container check runs the real bootstrap entry point and its owner subprocess.
 A read-only test loader first imports the real service packages, then supplies
@@ -248,14 +331,15 @@ requires the final owner-ready update; a settings refusal cannot pass. Failures
 withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
-The existing `natsCluster` review binds `replicas: 3`, both role pins and
+The `packageImage` review binds both role pins and
 `sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
 from the Syft JSON bytes. Docker inspection may identify that configuration or the
 image index; both reports must name the same reviewed repository digest.
 The server inventory records the same `sourceRevision`; the website
 shares that inventory. These fields are reviewed evidence, not an automatic claim
-that bootstrap or a live installation passed. Preflight requires the source revision
-alongside the existing R3 role bindings. Synthetic records prove source checks only.
+that bootstrap or a live installation passed. A separate `natsCluster` review still
+requires three replicas and the existing role bindings before that option can run.
+Synthetic records prove source checks only.
 
 After inspecting bootstrap in the actual image, scan it with Syft's `--scope all-layers`.
 Save `docker image inspect <immutable-pin>` as JSON. Run the existing checker with
@@ -274,8 +358,10 @@ before changing the inventory and index pin together. Never change only the expe
 The command writes nothing and withholds input paths and dependency errors on failure.
 The preflight test suite also runs the Python licence and promotion refusal tests.
 
-The shipped image and inventory remain unchanged. The private registry is unavailable;
-R3 approval and release qualification remain blocked. Unknown licences or open
+The current image has a source-bound all-layer scan. Its 88 Debian package versions
+were checked again against authenticated main indexes; `package-debian-main.json`
+records their signed index hashes. The private registry is unavailable, so packaged
+release qualification remains blocked. R3 approval is separate. Unknown licences or open
 Critical/High findings also block qualification. The
 [first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
 The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local

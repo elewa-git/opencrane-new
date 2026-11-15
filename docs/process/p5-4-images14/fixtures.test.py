@@ -68,6 +68,9 @@ class NpmTests(unittest.TestCase):
         inherited = self.checker.pcre.candidate.checker
         reviewed = inherited.read_json(ROOT / "infra/package/reviewed-images.json")
         inventory = inherited.read_json(ROOT / "infra/package/licence-inventory.json")
+        inherited.check_package_review(reviewed, inventory)
+        # Keep the missing-review refusal independent of later image promotion.
+        reviewed["packageImage"]["sourceRevision"] = ""
         with self.assertRaisesRegex(ValueError, "exact source revision"):
             inherited.check_package_review(reviewed, inventory)
 

@@ -1,0 +1,41 @@
+name: Approved scanner package
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main, work/pilot-15-s1]
+
+concurrency:
+  group: scanner-package-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.repository == 'elewa-git/opencrane-new'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Download, verify and package the reviewed scanner
+        run: nice -n 10 bash infra/clamav/package.sh "$RUNNER_TEMP/scanner"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scanner-approval
+          path: ${{ runner.temp }}/scanner/output/
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scanner-image
+          path: ${{ runner.temp }}/scanner/scanner.tar
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error

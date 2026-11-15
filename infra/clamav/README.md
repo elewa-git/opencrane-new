@@ -12,15 +12,17 @@ or repeated. It does not admit the image for use.
 ## Where it fits
 
 This is infrastructure beside the development stack and event log settings.
+The Helm package runs the authenticated service with an approved signature set.
+It verifies the actual database bytes and stops accepting uploads when the verified
+upstream check reaches 24 hours. The development adapter remains separate.
 [apps/server](../../apps/server/README.md), the back end, checks uploads with this
 scanner before saving them in [MinIO](../../GLOSSARY.md#minio-file-storage).
 
 ```mermaid
 flowchart LR
-  infra["infra<br/>infrastructure"] --> clamav["infra/clamav<br/>virus scanner"]
-  infra --> stack["infra/dev-stack<br/>local OpenCrane"]
-  infra --> nats["infra/nats<br/>event log settings"]
-  stack -->|builds and starts the Linux amd64 image| clamav
+  packaging["GitHub packaging job<br/>github.com"] -->|approves current signature bytes and image| clamav["infra/clamav<br/>virus scanner"]
+  stack["infra/dev-stack<br/>local OpenCrane"] -->|fetches the approved package| clamav
+  package["infra/package<br/>packaged installation"] -->|checks approved bytes and starts the private service| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
   worker["apps/ops<br/>image worker"] -->|checks bounded files through HTTPS| launcher
   worker -->|claims the scan, then sends proof and checks| models["libs/models<br/>image result writer"]
@@ -50,8 +52,10 @@ flowchart LR
 3. **An operator updates the virus list.** The refresh script prepares a separate
    candidate and records when the complete virus list was checked successfully.
    The running scanner keeps its current list until a reviewed image replaces it.
-4. **A packaging job checks an image.** The release verifier inspects its virus
-   definitions without network access and records the image and manifest hashes.
+4. **The scheduled packaging job checks an image.** It downloads and verifies virus
+   definitions, checks the image and licences, then publishes approval in its output.
+   The package accepts approval only from a successful run on github.com for its source commit.
+   It refuses inherited settings that select another GitHub server.
 5. **The separate launcher starts a scanner.** It checks the approved files again,
    starts only that set, and stops it 24 hours after its verified update check.
 6. **A trusted process requests a scan.** The launcher copies the bounded bytes, checks

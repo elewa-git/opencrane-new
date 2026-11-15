@@ -9,6 +9,7 @@ import { isDeepStrictEqual, promisify } from 'node:util';
 import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 import { copyPackagedFixture } from './packaged-fixture.ts';
+import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const execute = promisify(execFile);
@@ -117,9 +118,11 @@ exec /usr/bin/openssl "$@"
   } };
   await writeFile(join(home, 'namespace.json'), JSON.stringify({ metadata }));
   const review = JSON.parse(await readFile('infra/package/reviewed-images.json', 'utf8'));
+  await scannerApprovalFixture(join(home, 'bin'), review);
   const secrets = {};
   for (const name of review.requiredSecrets) secrets[name] = `client-${name.toLowerCase()}`;
   const values = { chartVersion: review.chartVersion, images: review.images, secrets,
+    scanner: review.scanner,
     exposure: { ingress: false, loadBalancer: false, funnel: false },
     natsCluster: { enabled: true, renderOnly: true, routeCASecret: references[0],
       peerCertificateSecrets: references.slice(1) } };
@@ -143,6 +146,7 @@ async function run(prepared, fails = false) {
     result = error;
   }
   // Compare fixed output without printing a captured command error or credentials on failure.
+  assert.notEqual(result.killed, true, 'Preparation fixture exceeded its existing process deadline');
   assert.equal(Boolean(result.code), fails, 'Unexpected preparation exit status');
   const expectedOutput = fails ? '' : 'PASS private NATS route identities prepared\n';
   const expectedError = fails ? 'FAIL private NATS route preparation\n' : '';
