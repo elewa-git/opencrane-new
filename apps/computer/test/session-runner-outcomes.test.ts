@@ -14,13 +14,14 @@ async function countsHeldPreparation() {
   test.driver.privateSession = heldSession;
   const first = test.runner.start(test.input('first'));
   const second = test.runner.start(test.input('second'));
+  let third = Promise.resolve();
   try {
     expect(test.sessions).toHaveLength(2);
-    await test.runner.start(test.input('third'));
+    third = test.runner.start(test.input('third'));
     expect(test.sessions).toHaveLength(2);
     expect(test.reports).toEqual([]);
     release.resolve();
-    await Promise.all([first, second]);
+    await Promise.all([first, second, third]);
     test.finish();
     await test.runner.start(test.input('third'));
     expect(test.sessions).toHaveLength(3);
@@ -29,7 +30,7 @@ async function countsHeldPreparation() {
     }));
   } finally {
     release.resolve();
-    await Promise.all([first, second]);
+    await Promise.all([first, second, third]);
     test.close();
   }
 }
@@ -156,3 +157,33 @@ async function removesStoppedPrivateAccessOnce() {
 }
 it('does not remove a completed private Stop grant again at terminal release',
   removesStoppedPrivateAccessOnce);
+
+async function filtersPrivateCommandReports(executionMode: 'restricted' | 'memory_free') {
+  const test = sessionRunnerFixture();
+  try {
+    await test.runner.start(test.input('first', executionMode));
+    const item = { id: 'command', type: 'commandExecution',
+      command: 'pwd', exitCode: 0, status: 'completed' };
+    test.runner.complete({ method: 'item/completed', params: { threadId: 'thread-1', item } });
+    function commandOutcome() {
+      if (executionMode === 'memory_free') {
+        expect(test.reports).toContainEqual(expect.objectContaining({
+          type: 'agent.command_ran', turnId: 'first', exitCode: 0,
+        }));
+      } else {
+        expect(test.reports).toContainEqual(expect.objectContaining({
+          type: 'agent.turn_failed', turnId: 'first', reason: 'restricted_tool_refused',
+        }));
+        function isCommand(report: (typeof test.reports)[number]) {
+          return report.type === 'agent.command_ran';
+        }
+        expect(test.reports.filter(isCommand)).toEqual([]);
+      }
+    }
+    await vi.waitFor(commandOutcome);
+  } finally {
+    test.close();
+  }
+}
+it.each(['restricted', 'memory_free'] as const)(
+  'reports commands only for a turn with local tools enabled (%s)', filtersPrivateCommandReports);
