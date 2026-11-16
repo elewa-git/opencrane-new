@@ -16,6 +16,7 @@ import { BudgetActor, history, priceTableId, rootTotals, readRootStopEvidence }
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger, type Logger } from '@opencrane/observability';
+import { memorySink } from '@opencrane/observability/testing';
 import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler }
   from '../../ops/test/support/routine-handoff.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
@@ -38,7 +39,7 @@ let storage: Awaited<ReturnType<typeof database>>;
 let runner: ProjectionRunner;
 let databaseUrl: string;
 let leadershipLogger: Logger;
-let leadershipLogs: string[];
+let leadershipLogs: ReturnType<typeof memorySink>;
 let stop: AbortController;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
@@ -74,12 +75,8 @@ async function apply(events: EventEnvelope[]) {
   }
 }
 function fixtureLogger() {
-  leadershipLogs = [];
-  function write(line: string) {
-    leadershipLogs.push(line);
-  }
-  const destination = { write };
-  const leadershipLogOptions = { level: 'error', destination };
+  leadershipLogs = memorySink();
+  const leadershipLogOptions = { level: 'error', destination: leadershipLogs.stream };
   leadershipLogger = createLogger('routine-handoff-leadership', leadershipLogOptions);
   const logOptions = { level: 'silent' };
   return createLogger('routine-handoff-test', logOptions);
@@ -595,7 +592,7 @@ async function heldLeadershipRefusesBeforeRelease() {
     await expect(dispatch({ enabled: true }, false, handoff)).rejects.toThrow(
       /^Routine leadership unavailable$/u);
     expect(handedOff, 'Lock acquisition must refuse before handing off a due').toBe(false);
-    const logged: unknown = JSON.parse(leadershipLogs[0]!);
+    const logged = leadershipLogs.lines()[0];
     expect(logged).toMatchObject({ phase: 'acquire',
       err: { message: 'Database lock acquisition cancelled or expired' } });
     const rows = await history(nats.store, 'routine-orders', 'test');

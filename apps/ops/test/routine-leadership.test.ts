@@ -1,5 +1,6 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { createLogger, type Logger } from '@opencrane/observability';
+import { memorySink } from '@opencrane/observability/testing';
 import { connectProjectionDb, type Db } from '@opencrane/projections';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
 
@@ -455,17 +456,10 @@ async function holdsUntilCheckReturns() {
 it('holds the lock until an outstanding check returns after SQL has finished', holdsUntilCheckReturns);
 
 function capturedLogger() {
-  const lines: string[] = [];
-  function write(line: string) {
-    lines.push(line);
-  }
-  const destination = { write };
-  const options = { level: 'error', destination };
+  const sink = memorySink();
+  const options = { level: 'error', destination: sink.stream };
   const logger = createLogger('routine-leadership-test', options);
-  function firstRecord(): unknown {
-    return JSON.parse(lines[0]!);
-  }
-  return { logger, lines, firstRecord };
+  return { logger, sink };
 }
 
 async function logsUnderlyingFailure() {
@@ -481,7 +475,7 @@ async function logsUnderlyingFailure() {
   try {
     await expect(withRoutineLeadership(options, fail)).rejects.toThrow(
       /^Routine leadership unavailable$/u);
-    expect(captured.firstRecord()).toMatchObject({ phase: 'acquire',
+    expect(captured.sink.lines()[0]).toMatchObject({ phase: 'acquire',
       err: { message: cause.message }, msg: 'Routine leadership failed' });
   } finally {
     connectSpy.mockRestore();
@@ -500,9 +494,9 @@ async function logsPrivateCallbackSafely() {
   }
   await expect(withRoutineLeadership(options, fail)).rejects.toThrow(
     /^Routine leadership unavailable$/u);
-  expect(captured.firstRecord()).toMatchObject({ phase: 'work',
+  expect(captured.sink.lines()[0]).toMatchObject({ phase: 'work',
     err: { message: 'Unclassified error', code: 'ECONNRESET' } });
-  for (const line of captured.lines) expect(line).not.toContain('private-');
+  expect(captured.sink.text()).not.toContain('private-');
 }
 it('logs the callback error code without private text or adapter fields', logsPrivateCallbackSafely);
 
@@ -520,7 +514,7 @@ async function logsBlockedSession() {
   expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
   expect(first.lease.signal.aborted).toBe(false);
   expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(true);
-  expect(captured.firstRecord()).toMatchObject({ phase: 'probe',
+  expect(captured.sink.lines()[0]).toMatchObject({ phase: 'probe',
     err: { message: 'Query read timeout' } });
   await first.close();
 }
