@@ -396,3 +396,44 @@ async function authorisationRefusesDeniedAssistantAtCurrentRevision() {
 }
 it('refuses call authorisation for a denied assistant at the current selection revision',
   authorisationRefusesDeniedAssistantAtCurrentRevision);
+
+async function preservesLegacyConsentAfterAssistantActivity() {
+  const test = await fixture();
+  const assistantId = `${test.userId}-legacy`;
+  const assistant = envelope('test', `assistant-${assistantId}`, 'assistant.created', {
+    assistantId, ownerId: test.userId, kind: 'personal',
+  });
+  const otherId = `${test.userId}-other`;
+  const other = envelope('test', `assistant-${otherId}`, 'assistant.created', {
+    assistantId: otherId, ownerId: 'another-person', kind: 'personal',
+  });
+  const sharedId = `${test.userId}-shared`;
+  const shared = envelope('test', `assistant-${sharedId}`, 'assistant.created', {
+    assistantId: sharedId, ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
+  });
+  await nats.seed([assistant, other, shared]);
+  const selected = await test.select();
+  const request = { assistantId, toolName: 'read', loadConfiguration: test.loadConfiguration,
+    boundSelection: { profileId: 'oauth', selectionRevision: selected.sequence } };
+  const prepared = await personalToolContext(nats.store, binding, test.userId,
+    test.serverId, request);
+  const settings = envelope('test', `assistant-${assistantId}`, 'assistant.settings_changed', {
+    assistantId, changedBy: test.userId, changedFields: ['persona'],
+  });
+  await nats.seed([settings]);
+  expect(await personalToolContext(nats.store, binding, test.userId, test.serverId, request))
+    .toEqual(prepared);
+  for (const deniedId of [otherId, sharedId, 'missing-assistant']) {
+    const denied = { ...request, assistantId: deniedId };
+    await expect(personalToolContext(nats.store, binding, test.userId, test.serverId, denied))
+      .rejects.toThrow('Personal tool unavailable');
+  }
+  const allowed = await test.select({ ...test.command, expectedSequence: selected.sequence,
+    changeRef: 'allow-shared-assistant', allowedAssistantIds: [sharedId] });
+  const explicit = { ...request, assistantId: sharedId,
+    boundSelection: { profileId: 'oauth', selectionRevision: allowed.sequence } };
+  expect(await personalToolContext(nats.store, binding, test.userId, test.serverId, explicit))
+    .toMatchObject({ requesterId: test.userId, selectionRevision: allowed.sequence });
+}
+it('keeps legacy owner consent after assistant activity and requires explicit shared consent',
+  preservesLegacyConsentAfterAssistantActivity);
