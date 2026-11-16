@@ -17,7 +17,6 @@ import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memo
 import * as projections from '@opencrane/projections';
 import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
-import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy, reviewToolPolicy } from '@opencrane/models';
 import type { MemoryOptions } from '../src/memory/access.ts';
@@ -26,6 +25,7 @@ import { reconcileCommands } from '../src/memory/commands.ts';
 import * as memoryAdmission from '../src/memory/admission.ts';
 import { buildServer } from '../src/server.ts';
 import { memoryKeyFiles } from './support/memory-key-files.ts';
+import { previewRecallTool } from './support/memory-preview-tool.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 vi.mock('node:fs', { spy: true });
@@ -827,11 +827,7 @@ async function previewSetup() {
     requesterId: 'preview', task: 'chat_turn', executionMode: 'restricted' });
   await append('mcp-memory', 'mcp.server_registered', { serverId: 'memory', kind: 'hosted',
     locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`, registeredBy: 'owner' });
-  const definition = losslessJson('{"name":"recall","inputSchema":{"type":"object"}}');
-  const tool = { name: 'recall', revision: definition.digest, definition: definition.canonical,
-    reviewed: true, costCents: 0,
-    review: { action: 'Recall saved memory', consequence: 'Return facts to the requester',
-      targetArgument: 'scopeId', fields: ['scopeId'], stepUp: false } };
+  const tool = previewRecallTool();
   const tools = [tool];
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();

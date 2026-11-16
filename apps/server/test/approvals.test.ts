@@ -14,6 +14,7 @@ import { envelope, history, readApproval, readToolPolicy, decideApproval,
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
+import { datedApprovalEnds } from './support/approval-dates.ts';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
 async function approvalFixture(stepUp = false,
@@ -1546,18 +1547,6 @@ async function refusesTakeoverCancellationAfterRemoval(removal: 'member' | 'part
 it.each(['member', 'participant'] as const)(
   'saves no takeover cancellation after %s removal during approval history loading',
   refusesTakeoverCancellationAfterRemoval);
-
-const datedApprovalEnds = [
-  ['approval.decided', { decision: 'approved', decidedBy: 'alice' }, 'approved',
-    { decidedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.decided', { decision: 'rejected', decidedBy: 'alice' }, 'denied',
-    { decidedAt: '2026-10-12T10:01:00.000Z', endedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.expired', {}, 'expired', { endedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.cancelled', {}, 'cancelled', { endedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.used', { permitId: 'dated-permit' }, 'outcome_unknown',
-    { usedAt: '2026-10-12T10:01:00.000Z',
-      uses: [{ permitId: 'dated-permit', usedAt: '2026-10-12T10:01:00.000Z' }] }],
-] as const;
 
 async function preservesApprovalDates(type: string, details: object, state: string,
   dates: object) {

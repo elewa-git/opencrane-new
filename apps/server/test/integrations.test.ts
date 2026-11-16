@@ -21,7 +21,7 @@ import { encodeSession, tokenIssuer } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, parseEventByType, mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
+import { mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed,
   isToolPolicyAvailable, mcpCatalogue, members, pgDb, ProjectionRunner, type Query
@@ -32,6 +32,7 @@ import {
 } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { integrationEvent, seedStoredEvent } from './support/integration-events.ts';
 
 const config = { ...testAuthConfig(), expectedOrgId: 'org-acme' };
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -53,17 +54,9 @@ const streamSequences = new Map<string, number>();
 beforeAll(async () => { fga = await openfga(); }, 120_000);
 afterAll(async () => { await fga.close(); });
 
-function fixture(type: string, subject: string, data: Record<string, unknown>, silo = 'test'): EventEnvelope {
-  const definition = getEventDefinition(type);
-  if (!definition || typeof definition.example !== 'object' || definition.example === null) throw new Error('Bad fixture type');
-  const eventData = { ...definition.example, ...data } as Record<string, unknown>;
-  if (type === 'mcp.server_registered' && !Object.hasOwn(data, 'catalogueRef')) delete eventData['catalogueRef'];
-  if (type === 'mcp.server_discovered' && !Object.hasOwn(data, 'serverInfo')) delete eventData['serverInfo'];
-  const parsed = parseEventByType({ id: `integration-${++id}`, commandId: `integration-${id}`, type,
-    source: 'test', time: `2026-10-01T00:${String(id).padStart(2, '0')}:00Z`, subject, silo,
-    principal: { id: 'admin', kind: 'human' }, data: eventData });
-  if (!parsed.success) throw new Error(`Bad ${type} fixture: ${parsed.reason}`);
-  return parsed.event;
+function fixture(type: string, subject: string, data: Record<string, unknown>, silo = 'test') {
+  const eventNumber = ++id;
+  return integrationEvent(type, subject, data, eventNumber, silo);
 }
 
 async function append(event: EventEnvelope) {
@@ -85,11 +78,7 @@ async function member(memberId: string, role: 'owner' | 'admin' | 'member') {
 
 async function seedStoredCatalogue(serverId: string, data: Record<string, unknown>) {
   const stored = fixture('mcp.server_discovered', `mcp-${serverId}`, { serverId, ...data });
-  // Keep old incomplete snapshots in the read and rebuild tests, outside the new-write path.
-  await nats.seed([stored]);
-  const rows = await history(nats.store, stored.subject, stored.silo);
-  expect(rows.at(-1)?.event).toEqual(stored);
-  const sequence = await nats.store.head(stored.subject);
+  const sequence = await seedStoredEvent(nats, stored);
   streamSequences.set(stored.subject, sequence);
 }
 
