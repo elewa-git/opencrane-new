@@ -11,25 +11,16 @@ function historyReply(): Promise<Response> {
   const feed = { rows: [], position: 0, generation: 1, computerState: 'ready' };
   return Promise.resolve(new Response(JSON.stringify(feed)));
 }
-async function selectsServerConfiguration(executionMode: 'restricted' | 'memory_free') {
-  const rows = chatListSchema.parse({ rows: [{ conversationId: 'chat', assistantId: 'assistant',
-    createdBy: 'me', createdAt: '2026-11-16T00:00:00Z', assistantKind: 'team',
-    sessionConfiguration: { executionMode } }] }).rows;
-  vi.spyOn(globalThis, 'fetch').mockImplementation(historyReply);
-  const socketProvider = { provide: SOCKET_FACTORY, useValue: createSocket };
-  TestBed.configureTestingModule({ providers: [ChatSession, socketProvider] });
-  const chat = TestBed.inject(ChatSession);
-  try {
-    chat.conversations.set(rows);
-    await chat.select('chat');
-    expect(chat.executionMode()).toBe(executionMode);
-  } finally {
-    chat.ngOnDestroy();
-  }
+function rejectsUnusedServerConfiguration() {
+  const row = {
+    conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
+    createdAt: '2026-11-16T00:00:00Z', assistantKind: 'team',
+    sessionConfiguration: { executionMode: 'memory_free' },
+  };
+  const result = chatListSchema.safeParse({ rows: [row] });
+  expect(result.success).toBe(false);
 }
-it.each(['restricted', 'memory_free'] as const)(
-  'selects the server session configuration %s without deciding from the assistant kind',
-  selectsServerConfiguration);
+it('rejects the unused server session configuration field', rejectsUnusedServerConfiguration);
 
 async function selectsDefaultFromExistingFacts(assistantKind: 'personal' | 'team') {
   const rows = chatListSchema.parse({ rows: [{ conversationId: 'chat', assistantId: 'assistant',
