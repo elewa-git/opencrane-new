@@ -525,3 +525,32 @@ async function logsBlockedSession() {
   await first.close();
 }
 it('logs and cancels when the held database session blocks a probe', logsBlockedSession);
+
+async function keepsHolderAfterSlowProbe(freezeClock: boolean) {
+  const session = captureSession();
+  const first = await owner();
+  if (freezeClock) {
+    const fixedTime = performance.now();
+    function fixedClock() {
+      return fixedTime;
+    }
+    vi.spyOn(performance, 'now').mockImplementation(fixedClock);
+  }
+  const query = session().query.bind(session());
+  function delayedRoundTrip(_sql: string, _parameters?: unknown[],
+    options?: { deadline: number }) {
+    return query('SELECT pg_sleep(1.2)', [], options);
+  }
+  const querySpy = vi.spyOn(session(), 'query');
+  querySpy.mockImplementationOnce(delayedRoundTrip);
+  const started = Date.now();
+  expect(await first.lease.checkCurrent(performance.now() + 1000)).toBe(false);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(900);
+  expect(first.lease.signal.aborted, 'A read timeout does not prove session loss').toBe(false);
+  expect(await first.lease.checkCurrent(performance.now() + 1000)).toBe(true);
+  await first.close();
+  expect(await first.lease.checkCurrent(performance.now() + 1000)).toBe(false);
+}
+it.each([false, true])(
+  'refuses a slow real probe without cancelling its holder (clock frozen: %s)',
+  keepsHolderAfterSlowProbe);
