@@ -1,7 +1,12 @@
 # Scheduled pilot backup
 
-Journey on a fresh packaged stack: **PASS** on 16 November 2026.
-Application image qualification: **PASS**. The pull request remains a draft.
+Current review-fix journey: **PARTIAL**. Independent approval of the repaired
+application image is pending. See the [current receipt](review-1-fixes/receipt.md)
+for the qualification head, checks, fresh claims and cleanup. The PR remains draft.
+
+The earlier packaged journey below passed on its recorded source. It does not
+qualify the repaired runtime, and its builder image checks do not establish
+independent application-image approval.
 
 ## Fresh packaged journey on 16 November 2026
 
