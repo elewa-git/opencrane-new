@@ -56,8 +56,8 @@ The requester can save one retry only while that original call is still held. Th
 bridge wakes that call after the decision is saved, and the computer sends its
 original bytes through the gateway with fresh checks.
 
-The server sends saved assistant kinds. It accepts command labels and masked views from
-computer reports. It encrypts a view with the conversation message key before
+The server says whether an assistant is personal or shared. It accepts command labels
+and masked views from computer reports. It encrypts a view with the conversation message key before
 saving it. Current conversation members can expand it in chat. Older reports
 still show their labels.
 

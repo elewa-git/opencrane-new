@@ -1,0 +1,25 @@
+Own checks at source head 0562532c3714c58f16df64860c4b18f8a7115bfe
+Date: 16 November 2026
+
+PASS changed computer tests: 24 cases, twice; 30.10 s and 30.76 s.
+PASS browser configuration tests: 4 cases, twice; 5.91 s and 8.32 s.
+PASS unchanged exact-response test after reproducing its extra-field failure.
+PASS twelve individual guard removals rejected by their own new tests, then restored.
+PASS CI root shard 1: 152 files / 4110 tests, 0 failures, 0 skips; 3229.87 s.
+Command: nice -n 10 node scripts/ci/run-tests.mjs 1
+Used the supplied shared disposable PostgreSQL fixture.
+PASS production web build, with existing Mermaid/style/CommonJS warnings.
+PASS full workspace, package and dev-stack typecheck.
+PASS check:events: 174 types.
+PASS Knip, with its two existing configuration hints.
+PASS lint:changelog.
+PASS scoped ESLint on changed code files: 0 errors and 0 warnings.
+PASS markdownlint-cli2, with no file arguments.
+PASS dependency, README and whole-stream-read checks.
+PASS fresh claimed secondary CORE at 1280 px and 390 px.
+PASS status, capture retention and teardown; final slot status: free.
+
+First startup attempt: FAIL before provisioning due to an absent local credential path.
+Its journey: NOT RUN. Its teardown: PASS. Fixed only the runner's credential path reference.
+Approval, paid provider, live personal memory, routines and a separate live shared-child
+refusal journey: NOT RUN. Full root suite and full root lint: NOT RUN.

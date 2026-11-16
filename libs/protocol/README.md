@@ -51,7 +51,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.->|chat replies and composer defaults, masked views, file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
+  web["apps/web<br/>browser app"] -.->|chat replies and default modes, masked views, file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
   server["apps/server<br/>back end"] -.->|chat, personal key consent, status and calls| protocol
   projections["libs/projections<br/>read tables"] -.->|safe history and family filters| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
@@ -60,7 +60,8 @@ flowchart LR
 
 ## What it is responsible for
 
-- Define shared reply shapes and derive composer defaults from saved assistant kinds.
+- Define shared reply shapes.
+- Choose the default chat mode from whether its assistant is personal or shared.
 - Check the optional close permission in authorised conversation list rows.
 - Check the safe assistant service readiness field on chat history and live updates.
 - Reject unknown fields and invalid values before callers use a reply.

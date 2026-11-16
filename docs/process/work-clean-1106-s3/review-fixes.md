@@ -35,8 +35,8 @@ The computer's shipped code has no changes in this fix round.
 | Memory-free shell | The same test received `shell_tool = false`. |
 | Memory-free unified execution | The same test received `unified_exec = false`. |
 
-The positive personal-recall control loads the valid catalogue through native
-thread discovery. Command-report tests also cover a restricted command refusal
+The positive personal-recall control loads the valid catalogue through the existing
+thread-loader fixture. Command-report tests also cover a restricted command refusal
 and a memory-free success. The command-report filtering guard remains protected
 by the earlier item refusal; these tests do not claim an independent mutation
 failure for that later guard.
