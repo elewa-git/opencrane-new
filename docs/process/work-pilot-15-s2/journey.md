@@ -1,7 +1,53 @@
 # Scheduled pilot backup
 
-Journey on a fresh packaged stack: **NOT RUN** for the repaired source.
-Application image qualification: **PASS**. The draft still awaits its live journey.
+Journey on a fresh packaged stack: **PASS** on 16 November 2026.
+Application image qualification: **PASS**. The pull request remains a draft.
+
+## Fresh packaged journey on 16 November 2026
+
+Tested checkout: `936e4923ba2566c0310a5cccfb844066b0a60ebc`.
+Application image source: `8601e8b4351d65f324d07bcb04cedcf8441f4354`.
+The later commit changes only image-review bindings, checks and documentation;
+the application runtime is unchanged. The image build and promotion are below.
+
+| Step | Verdict | Observation |
+| --- | --- | --- |
+| Exact-head scanner CI | PASS | [Run 43832062285](https://github.com/elewa-git/opencrane-new/actions/runs/43832062285) completed successfully through the documented manual dispatch. Both approval and image artifacts were unexpired. |
+| Fresh Compose startup | PASS | Claimed secondary slot 1 at load 3.19 and ran `up.sh --id 1 --fresh`. All 37 startup observations passed. This is supplementary startup evidence. |
+| Compose teardown | PASS | Both `package-down --id 1` and `down.sh --id 1` exited zero before the packaged claim. |
+| Fresh packaged claim | PASS | Claimed slot 1 again at load 3.00. Its fixed private settings directory was outside the repository. The requested sign-in key was supplied by file reference and the fleet marker was retained. |
+| `package-prepare --id 1` | PASS | Downloaded and verified the exact-head scanner approval and published its unchanged digest. No local approval was made. |
+| Private settings | PASS | `prepare.ts` used `PACKAGE_SKIP_PROVIDER_SETUP=1` to check the existing test sign-in setup in read-only mode. |
+| `package-up --id 1` and `package-check --id 1` | PASS | Installed the reviewed source image and checked the owned namespace. The namespace and install identities are saved in [browser outcomes](packaged-2026-11-16/outcomes.json). |
+| Person uploads and chats at 1280 and 390 px | PASS | Real SSO, clean PDF upload HTTP 201, Ready attachment and an answer reading Willow-47 from the file all passed. Malware upload HTTP 422 and its visible refusal passed at both widths too. |
+| Operator triggers the installed CronJob | PASS | `backup-manual` completed in 34 seconds and logged `Backup complete` at event sequence 92. |
+| Operator lists the set and reads its manifest | PASS | `list` returned one complete set; `show` verified its saved bytes. The event archive, database dump and file copy share the backup id and sequence. |
+| Check backup contents | PASS | Native event bytes were non-empty. The dump contained handlers, openfga and projections without role passwords; the manifest also names postgres. Saved file bytes contained the uploaded PDF's Willow-47 text. |
+| Deliberately broken file part | PASS | A separate Job copied from the installed CronJob replaced only its object-owner mount with an empty volume. It reached Failed and logged `reason: parts`. It published no set; the checked catalogue before and after was identical. The server restarted successfully. |
+| Save evidence before cleanup | PASS | Captured the operator output as commands ran, saved the manifest and both catalogues, and saved and inspected the 1280/390 screenshots before teardown. |
+| `package-down --id 1` and `down.sh --id 1` | PASS | Both exited zero and released the secondary namespace and slot. The owner stack was not touched. |
+
+The complete backup is `b1c5f2f5-9e22-4b2d-ba42-3ab388b4594f`.
+Its event, database and file parts contain 18,396, 335,071 and 2,165 bytes.
+The file inventory contains two objects. Checksums, image pins, all read-table
+positions, database names and the stopped database position are in the
+[checked manifest](packaged-2026-11-16/manifest.json).
+
+Evidence: [operator output](packaged-2026-11-16/operator-output.txt),
+[catalogue before failure](packaged-2026-11-16/catalogue.json),
+[catalogue after failure](packaged-2026-11-16/catalogue-after-failure.json),
+[1280 px file answer](packaged-2026-11-16/file-answer-1280.png) and
+[390 px file answer](packaged-2026-11-16/file-answer-390.png).
+The same folder holds clean-attachment and malware-refusal pictures at both widths.
+Only the manifest and safe checks are public; native event bytes, SQL and file
+contents were kept as private operator data and removed with the secondary volume.
+
+The first runner stopped after successful Compose startup because it restored
+generated receipts while its `git diff` filename stream still held the index lock.
+That runner's cleanup passed. Saving the filename list before restoring the files
+removed the concurrent Git operations; no lock was deleted and no timeout changed.
+The packaged journey then used a fresh claim and namespace. No shipped runtime
+change or repeated packaged install was needed.
 
 ## Image repair on 16 November 2026
 
@@ -42,10 +88,8 @@ The all-layer Syft scan SHA-256 is
 - **PASS:** fetched `origin`; `origin/main` remained `cc21e6d12` and was already
   an ancestor. No rebase was needed and neither rebase state directory exists.
 
-The next step is exact-head scanner approval followed by a fresh secondary
-packaged installation. Upload/chat, backup completion, catalogue and manifest,
-deliberately broken part and packaged screenshots remain **NOT RUN** for this
-repair. No earlier Compose or packaged result counts as this attempt's acceptance.
+The fresh packaged result above supplies the live qualification for this repair.
+No earlier Compose or packaged result counts as this attempt's acceptance.
 The slice contains 708 added plus deleted shipped lines, including the Docker
 context exceptions and image-review bindings; tests and documents are excluded.
 

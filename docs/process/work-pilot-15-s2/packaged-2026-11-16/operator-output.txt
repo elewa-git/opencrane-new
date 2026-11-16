@@ -1,0 +1,44 @@
+16 November 2026
+Tested head: 936e4923ba2566c0310a5cccfb844066b0a60ebc
+Application source: 8601e8b4351d65f324d07bcb04cedcf8441f4354
+Scanner approval: run 43832062285, successful workflow_dispatch, both artifacts unexpired.
+Private settings and sign-in key used only by file reference.
+
+PASS pre-claim load 3.00
+STEP package-prepare --id 1
+PASS package-prepare with CI scanner approval
+PASS private settings using read-only test sign-in setup
+STEP package-up --id 1
+PASS package-up/check
+STEP packaged browser at 1280 and 390 px
+PASS 1280px real SSO session
+CHECK 1280px clean upload HTTP 201
+PASS 1280px clean PDF ready
+PASS 1280px answer reads Willow-47 from the PDF
+CHECK 1280px EICAR HTTP 422
+PASS 1280px visible malware refusal
+PASS 390px real SSO session
+CHECK 390px clean upload HTTP 201
+PASS 390px clean PDF ready
+PASS 390px answer reads Willow-47 from the PDF
+CHECK 390px EICAR HTTP 422
+PASS 390px visible malware refusal
+STEP trigger backup from the installed CronJob
+job.batch/backup-manual created
+job.batch/backup-manual condition met
+{"level":30,"time":1794819109434,"pid":1,"hostname":"backup-manual-xqlgm","name":"package-backup","backupId":"b1c5f2f5-9e22-4b2d-ba42-3ab388b4594f","sequence":92,"msg":"Backup complete"}
+PASS operator listed and read manifest for b1c5f2f5-9e22-4b2d-ba42-3ab388b4594f
+PASS non-empty native event archive, all database dumps without role passwords, uploaded PDF bytes and one shared sequence
+deployment "server" successfully rolled out
+STEP deliberately break only file capture in a manual Job
+job.batch/backup-broken created
+job.batch/backup-broken condition met
+{"level":50,"time":1794819230211,"pid":1,"hostname":"backup-broken-wm2d9","name":"package-backup","err":{"type":"Error","message":"Backup failed","stack":"Error: Backup failed\n    at failed (file:///app/infra/package/scheduled-backup-run.ts:41:15)\n    at async file:///app/infra/package/scheduled-backup-run.ts:51:3"},"reason":"parts","msg":"Backup failed; inspect the Job and maintenance state"}
+PASS failed file part published no backup; original checked catalogue unchanged
+deployment "server" successfully rolled out
+NAME            STATUS     COMPLETIONS   DURATION   AGE
+backup-broken   Failed     0/1           75s        75s
+backup-manual   Complete   1/1           34s        3m18s
+bootstrap       Complete   1/1           60s        6m23s
+PASS packaged upload/chat, coordinated backup, list/show, manifest contents and visible broken file part
+CLEANUP package-down=0 down=0
