@@ -9,8 +9,9 @@ returned exit code 0. `infra/dev-stack/status.sh` returned 0 with every checked
 endpoint healthy. `infra/dev-stack/down.sh` returned 0 and released the slot.
 A subsequent status check reported `free`.
 
-The later receipt commit changes documents and screenshots only. No later head is
-claimed as executed. The source, dependencies and runner remain those of the tested head.
+Later commits change tests, documents and screenshots only. No later head is
+claimed as executed. The shipped source, dependencies and runner remain those of
+the tested head, so this CORE result still qualifies the review fix.
 
 [CORE results](core-results.txt) retain the runner's results, including its expected
 upload transport failures, built-in upload retries and explicit approval skip.
@@ -65,7 +66,7 @@ Paid providers and live personal memory qualification were NOT RUN.
   Tests, typecheck and lint ran under `nice -n 10`; database tests used the shared
   disposable test database. No full root suite ran. Web and computer code is unchanged.
 - PASS: public privacy and complete commit-range secret checks before push.
-- NOT RUN: independent review. The orchestrator owns review; hosted CI is not awaited.
+- NOT RUN: hosted CI for the review fix. The orchestrator owns the second review pass.
 
 ## Cleanup
 
@@ -85,3 +86,34 @@ issue #1106; no ownership decision was made here.
 
 Shipped code: 162 added plus 86 deleted lines, 248 in total, including the two
 smaller script baselines. Tests, documents and these receipts are excluded.
+
+## Tool refusal test evidence
+
+The first review found that the old shared-child tool requests could be refused
+for malformed MCP metadata and an unknown memory tool before proving either
+shared-class guard. PASS: the original test still passed with the ordinary MCP
+route's shared-class check bypassed, reproducing the missing protection.
+
+Test commit `a22169c63` adds otherwise-valid `read` and `remember` requests to the
+HTTP authorisation routes. Both include protocolVersion and clientCapabilities
+metadata. Each test first obtains and dispatches a private-turn permit to the
+recording tool backend. The memory control signs and verifies a real memory pass.
+These controls qualify gateway authorisation, not live personal memory writes.
+
+PASS: bypassing only the ordinary MCP route's shared-class check made its new
+test fail with HTTP 200 instead of 403 and a non-null permit for both initial and
+renewed turn passes. The memory case passed with its check still in place.
+PASS: restoring MCP and bypassing only memory made the memory case fail in the
+same way, while the ordinary MCP case passed. Both checks were restored.
+
+The refusal cases assert no permit, no memory context header or signing, no new
+backend call and an unchanged budget state, including reservations, settlements
+and dispatches. No existing assertion, shipped code, ownership rule, timeout or
+retry was changed. The existing 1,500-event history-loading limitation is outside
+this test fix. No new dev stack was needed or claimed.
+
+Own review-fix gates: PASS for all three changed-file tests twice (22.82 seconds
+and 23.51 seconds), event catalogue agreement for 174 types, Knip, changelog and
+scoped ESLint with zero warnings, full workspace and infrastructure typecheck,
+Markdown, public privacy and staged secret scanning. Tests, typecheck and lint ran
+under `nice -n 10`; database fixtures used the shared disposable PostgreSQL database.

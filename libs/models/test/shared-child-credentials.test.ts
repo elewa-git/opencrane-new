@@ -86,7 +86,6 @@ async function signsAndRenewsSharedPass() {
 it('signs and renews shared child passes for model calls while refusing MCP and memory',
   signsAndRenewsSharedPass, 60_000);
 
-
 type ToolFixture = Awaited<ReturnType<typeof fixture>>;
 
 const personalScopeId = memoryScopeId('test', 'person', 'alice');
