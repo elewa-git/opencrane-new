@@ -4,6 +4,7 @@ import { memorySink } from '@opencrane/observability/testing';
 import { connectProjectionDb } from '@opencrane/projections';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
 import { captureSession } from './support/routine-leadership.ts';
+import { withRoutineFixtureClock } from './support/routine-clock.ts';
 
 import * as projections from '@opencrane/projections';
 import * as models from '@opencrane/models';
@@ -523,3 +524,29 @@ async function keepsHolderAfterSlowProbe(freezeClock: boolean) {
 it.each([false, true])(
   'refuses a slow real probe without cancelling its holder (clock frozen: %s)',
   keepsHolderAfterSlowProbe);
+
+async function controlsRealProbeTimer() {
+  const session = captureSession();
+  let current: boolean | undefined;
+  let elapsed: number | undefined;
+  async function checked(lease: Leadership) {
+    const query = session().query.bind(session());
+    function delayedRoundTrip(_sql: string, _parameters?: unknown[],
+      options?: { deadline: number }) {
+      return query('SELECT pg_sleep(1.2)', [], options);
+    }
+    vi.spyOn(session(), 'query').mockImplementationOnce(delayedRoundTrip);
+    const started = performance.now();
+    current = await lease.checkCurrent(started + 1000);
+    elapsed = performance.now() - started;
+  }
+  function run() {
+    const options = { databaseUrl, silo: 'test', signal: new AbortController().signal };
+    return withRoutineLeadership(options, checked);
+  }
+  await withRoutineFixtureClock(run);
+  expect(elapsed).toBe(0);
+  expect(current, 'The fixture clock must also control the real probe timer').toBe(true);
+}
+it('holds the fixture clock through the real lock and a delayed PostgreSQL probe',
+  controlsRealProbeTimer);

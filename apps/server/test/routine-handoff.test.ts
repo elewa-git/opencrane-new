@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, onTestFailed, vi } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -19,6 +19,8 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { memorySink } from '@opencrane/observability/testing';
 import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler, captureSession }
   from '../../ops/test/support/routine-handoff.ts';
+import { observeDispatch, reportDispatchFailure, traceRoutineAppends, waitForDispatchHandler,
+  type RoutineDispatchObservation } from './support/routine-dispatch-observation.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -40,7 +42,7 @@ let runner: ProjectionRunner;
 let databaseUrl: string;
 let leadershipLogger: Logger;
 let leadershipLogs: ReturnType<typeof memorySink>;
-let dispatchPhase: string;
+let dispatchObservation: RoutineDispatchObservation;
 let stop: AbortController;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
@@ -77,11 +79,13 @@ async function apply(events: EventEnvelope[]) {
 }
 function fixtureLogger() {
   leadershipLogs = memorySink();
+  dispatchObservation = { phase: 'setup', outcome: 'not started', leadership: leadershipLogs };
   const leadershipLogOptions = { level: 'error', destination: leadershipLogs.stream };
   leadershipLogger = createLogger('routine-handoff-leadership', leadershipLogOptions);
   const logOptions = { level: 'silent' };
   return createLogger('routine-handoff-test', logOptions);
 }
+
 async function setup() {
   storage = await database('pg');
   const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
@@ -90,6 +94,8 @@ async function setup() {
   databaseUrl = address.href;
   nats = await shortDuplicateWindowFixture();
   const logger = fixtureLogger();
+  const reportFailure = reportDispatchFailure.bind(undefined, dispatchObservation);
+  onTestFailed(reportFailure);
   runner = new ProjectionRunner(storage.db, nats.reader, logger);
   await runner.initialise(routines);
   stop = new AbortController();
@@ -163,6 +169,7 @@ async function setup() {
   }
   const sessionSpy = vi.spyOn(routineSession, 'prepareRoutineSession');
   sessionSpy.mockImplementation(projectSession);
+  traceRoutineAppends(dispatchObservation, nats.store);
 }
 async function startComputer() {
   const server = createServer();
@@ -448,9 +455,9 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
     custodyRecordVersion: '1', confirmCurrent, confirmCredentialUse };
   return Promise.resolve(company);
 }
-async function dispatch(options: Options = { enabled: true }, continuation = false,
+async function dispatchWork(options: Options = { enabled: true }, continuation = false,
   onHandoff?: () => void) {
-  dispatchPhase = 'projection';
+  dispatchObservation.phase = 'projection';
   await runner.run(routines);
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
@@ -458,7 +465,7 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
   const production = createRoutineDelivery(nats.store, keys, identity, actor, wake,
     budgetOwner, companyPreflight);
   const receive: Handoff = async function receive(due, lease) {
-    dispatchPhase = 'handoff';
+    dispatchObservation.phase = 'handoff';
     onHandoff?.();
     expect(lease.signal).toBe(leaseSignal);
     if (options.enabled === true && options.replay !== true) {
@@ -480,19 +487,25 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
     return invocation.send(wake);
   };
   async function work(lease: Lease) {
-    dispatchPhase = 'scan';
+    dispatchObservation.phase = 'scan';
     leaseSignal = lease.signal;
     const worker = { ...lease, silo: 'test', binding, now: clock };
     progress = await dispatchRoutineCandidates(storage.db, nats.store, worker, receive);
   }
   const leadership = { databaseUrl, silo: 'test', signal: stop.signal, logger: leadershipLogger };
-  dispatchPhase = 'acquire';
+  dispatchObservation.phase = 'acquire';
   await withRoutineLeadership(leadership, work);
   if (continuation) {
     expect(progress).toMatchObject({ examined: 1, continuation: { afterRoutineId: 'orders' } });
   }
   return progress;
 }
+
+function dispatch(...args: Parameters<typeof dispatchWork>) {
+  const pending = dispatchWork(...args);
+  return observeDispatch(dispatchObservation, pending);
+}
+
 async function projectionReaderReady() {
   try {
     await nats.reader.head();
@@ -584,20 +597,6 @@ async function resumesOneSavedDueAfterDeliveryWasDisabled() {
 it('resumes the saved checked due once after disabled delivery and a broker restart',
   resumesOneSavedDueAfterDeliveryWasDisabled);
 
-async function waitForTurnStart(entered: Promise<void>, pending: Promise<unknown>) {
-  function diagnostic(outcome: string) {
-    const records = JSON.stringify(leadershipLogs.lines());
-    return `Dispatch ${outcome} before turn start; phase=${dispatchPhase}; leadership=${records}`;
-  }
-  function completedEarly(): never {
-    throw new Error(diagnostic('completed'));
-  }
-  function refusedEarly(cause: unknown): never {
-    throw new Error(diagnostic('rejected'), { cause });
-  }
-  const settled = pending.then(completedEarly, refusedEarly);
-  await Promise.race([entered, settled]);
-}
 
 async function heldLeadershipRefusesBeforeRelease(freezeClock: boolean) {
   if (freezeClock) holdFixtureClock();
@@ -608,7 +607,7 @@ async function heldLeadershipRefusesBeforeRelease(freezeClock: boolean) {
     }
     const entered = Promise.withResolvers<void>();
     const pending = dispatch({ enabled: true }, false, handoff);
-    await expect(waitForTurnStart(entered.promise, pending)).rejects.toThrow(
+    await expect(waitForDispatchHandler(dispatchObservation, entered.promise, pending)).rejects.toThrow(
       /Dispatch rejected before turn start; phase=acquire;.*acquire/u);
     await expect(pending).rejects.toThrow(/^Routine leadership unavailable$/u);
     expect(handedOff, 'Lock acquisition must refuse before handing off a due').toBe(false);
@@ -920,17 +919,25 @@ it('conflicts when another call reserves shared capacity after the release check
   reservationAfterReleaseCheckConflicts);
 
 async function productionDeliveryUsesCheckedDue() {
+  dispatchObservation.phase = 'projection';
   await runner.run(routines);
   const workerIdentity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
-  const handoff = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake,
+  const production = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake,
     budgetOwner, syntheticCompanyPreflight);
+  function handoff(...args: Parameters<typeof production>) {
+    dispatchObservation.phase = 'handoff';
+    return production(...args);
+  }
   async function work(lease: Lease) {
+    dispatchObservation.phase = 'scan';
     const worker = { ...lease, silo: 'test', binding, now: clock };
     const delivery = { db: storage.db, store: nats.store, worker, handoff };
     await runRoutineScheduler({ enabled: true }, delivery);
   }
   const leadership = { databaseUrl, silo: 'test', signal: stop.signal, logger: leadershipLogger };
-  await withRoutineLeadership(leadership, work);
+  dispatchObservation.phase = 'acquire';
+  const pending = withRoutineLeadership(leadership, work);
+  await observeDispatch(dispatchObservation, pending);
   await until(preparedComputer.executed);
   await assertSingleRun();
   expect(preparedComputer.nativeStarts).toBe(1);
@@ -1082,8 +1089,8 @@ async function cancelsWake(shutdown: boolean) {
   const pending = dispatch();
   void pending.then(finished, finished);
   const rejected = expect(pending).rejects.toThrow('Routine leadership unavailable');
-  await entered.promise;
   try {
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending, 'computer wake');
     if (shutdown) {
       stop.abort();
     } else {
@@ -1207,7 +1214,7 @@ async function waitsForStart(stage: string) {
   const pending = dispatch();
   void pending.then(finished, finished);
   try {
-    await entered.promise;
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending, 'durable start handler');
     await delay(50);
     expect(completed).toBe(false);
     expect(preparedComputer.executedThreads).toEqual([]);
@@ -1237,7 +1244,7 @@ async function interruptsPendingStart(kind: string) {
   const pending = dispatch();
   const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
   try {
-    await waitForTurnStart(entered.promise, pending);
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending);
     if (kind === 'shutdown') {
       stop.abort();
     }
@@ -1253,6 +1260,7 @@ async function interruptsPendingStart(kind: string) {
   } finally {
     release.resolve();
     await preparedComputer.link.settled();
+    await refused;
   }
   const original = await assertSingleRun();
   if (kind !== 'shutdown') {
@@ -1415,7 +1423,7 @@ async function cancelsAcknowledgement(kind: string) {
   const pending = dispatch();
   const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
   try {
-    await entered.promise;
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending, 'credential acknowledgement');
     if (kind === 'shutdown') {
       stop.abort();
     } else if (kind === 'lease loss') {
@@ -1427,6 +1435,7 @@ async function cancelsAcknowledgement(kind: string) {
   } finally {
     release.resolve();
     await preparedComputer.link.settled();
+    await refused;
   }
   await assertSingleRun();
   function credentialFrame(frame: Record<string, unknown>) {
@@ -1518,12 +1527,13 @@ async function cancelsDuringOwnershipCheck() {
   const pending = dispatch();
   const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
   try {
-    await entered.promise;
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending, 'ownership check');
     stop.abort();
     await refused;
   } finally {
     release.resolve();
     await preparedComputer.link.settled();
+    await refused;
   }
   function credentialFrame(frame: Record<string, unknown>) {
     return frame['type'] === 'ack' && frame['token'] !== undefined;
