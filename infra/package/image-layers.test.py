@@ -80,7 +80,7 @@ class ImageLayerTests(unittest.TestCase):
                             if member.issym():
                                 cls.symlinks[path] = member.linkname
                             if member.isfile() and path.startswith("app/"):
-                                if path.endswith(".ts") and "/node_modules/" not in path:
+                                if path.endswith((".ts", ".mjs")) and "/node_modules/" not in path:
                                     contents = layer.extractfile(member).read()
                                     cls.sources[path[4:]] = contents.decode()
                                     if path in cls.native_review["files"]:
@@ -116,9 +116,9 @@ class ImageLayerTests(unittest.TestCase):
             input=json.dumps(sources), capture_output=True, text=True, timeout=90)
         return result
 
-    def test_bootstrap_and_model_runtime_imports_match_source_recursively(self):
+    def test_bootstrap_model_and_backup_runtime_imports_match_source_recursively(self):
         result = self.check_imports(self.sources)
-        self.assertEqual(result.returncode, 0, "Packaged bootstrap or model imports failed")
+        self.assertEqual(result.returncode, 0, "Packaged bootstrap, model or backup imports failed")
 
     def test_missing_transitive_import_refuses_even_with_bootstrap_present(self):
         required = ("infra/dev-stack/config.ts", "infra/dev-stack/identity.ts",
@@ -145,12 +145,27 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
+    def test_missing_backup_import_refuses_even_with_entry_point_present(self):
+        required = ("infra/package/scheduled-backup.ts",
+                    "infra/package/scheduled-backup-source.ts", "infra/package/event-backup.ts",
+                    "infra/package/object-credentials.mjs", "infra/package/backup-bytes.ts")
+        for module in required:
+            with self.subTest(module=module):
+                sources = dict(self.sources)
+                sources.pop(module, None)
+                self.assertIn("infra/package/scheduled-backup-run.ts", sources)
+                result = self.check_imports(sources)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
+
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
                    "secondary-models.ts", "zitadel.json"}
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
-                         "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs"}
+                         "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs",
+                         "scheduled-backup-run.ts", "scheduled-backup.ts",
+                         "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
             if path.startswith("app/infra/package/"):

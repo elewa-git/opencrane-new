@@ -13,6 +13,10 @@ function runtimeImports(source) {
 
 function checkRuntimeSources(sources) {
   for (const [file, source] of Object.entries(sources)) {
+    // Check every shipped TypeScript module, even outside the entry-point import trees.
+    if (!file.endsWith('.ts')) {
+      continue;
+    }
     assert.doesNotMatch(file, /(^|\/)tests?\//u);
     for (const imported of runtimeImports(source)) {
       if (!imported.fileName.startsWith('.')) {
@@ -28,7 +32,7 @@ function checkRuntimeSources(sources) {
 function checkImports(sources) {
   checkRuntimeSources(sources);
   const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts',
-    'infra/dev-stack/secondary-models.ts'];
+    'infra/dev-stack/secondary-models.ts', 'infra/package/scheduled-backup-run.ts'];
   const visited = new Set();
   while (pending.length > 0) {
     const file = pending.pop();

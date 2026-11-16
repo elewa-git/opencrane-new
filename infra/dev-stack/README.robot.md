@@ -11,17 +11,19 @@ For a fresh packaged upload journey, claim a secondary slot and use
 `run.sh package-prepare`, the package's private `prepare.ts`, `run.sh package-up`
 with its values file, then `run.sh package-check` and the package forwarder.
 Start with a new owned namespace and claims; an existing release is refused.
-`package-prepare` fetches the latest successful approved scanner output for the
+`package-prepare` fetches successful scanner and application approvals for the
 checkout's branch and exact commit with the existing authenticated `gh` CLI.
-It verifies the GitHub run identity and the manifest/release bindings, downloads
-the scanner OCI archive and publishes its unchanged digest to the existing registry
-over explicit HTTP. It saves the approval under `$DEV_STACK_DIR/scanner-approval`
+It verifies each GitHub run and its source, image and release bindings, downloads
+the checked OCI archives and publishes unchanged digests to the existing registry
+over explicit HTTP. It saves approvals under `scanner-approval` and `application-approval`
 and writes `$DEV_STACK_DIR/package-values.json`. Do not replace those files with a
-local candidate. Preflight fetches the job output independently before installation.
+local candidate. Preflight fetches both outputs again before installation. The rendered
+image check uses those checked pins and retains the fixed review for every other role.
 See [packaging evidence](../clamav/README.robot.md#packaging-evidence) for the schedule,
 manual run, authentication and refusal rules. Use that private values file with
 `prepare.ts` and `package-up`; private scanner paths no longer come from environment
-variables. The other image roles still require their source-bound review and
+variables. Application approval requires the signed-index and licence checks;
+the other image roles retain their existing review and
 publication described in the [package notes](../package/README.robot.md#packaged-upload-services).
 Do not run Compose in the same slot. Always run `run.sh package-down` and `down.sh`
 for that id afterwards, including when preparation, installation or the browser fails.

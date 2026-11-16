@@ -1,0 +1,9 @@
+pre-claim load 9.17
+scanner approval run 43846555934 PASS for code head 85173744c3139f3eb00e3a6fe903b14daaf769ec
+fresh packaged slot 1
+PASS package-prepare with exact-head CI scanner approval
+PASS private settings with read-only test sign-in setup
+PASS package-check ownership (no application installed)
+Pinned application source: 8601e8b4351d65f324d07bcb04cedcf8441f4354
+NOT RUN package-up, packaged upload/chat and backup operator steps: independent approval of the repaired application image is pending. No approval pin changed.
+cleanup package-down=0 down=0

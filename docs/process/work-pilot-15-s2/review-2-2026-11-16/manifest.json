@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "id": "bcfca17d-597f-4ee4-a10f-7dcc80d2cebe",
+  "silo": "dev",
+  "point": {
+    "sequence": 92,
+    "lsn": "0/25416D0",
+    "checkpoints": {
+      "conversations": 92,
+      "child-requests-v4": 92,
+      "members": 92,
+      "personal-settings": 92,
+      "groups": 92,
+      "providers": 92,
+      "files": 92,
+      "mcp catalogue": 92,
+      "connection-profiles": 92,
+      "model-budgets": 92,
+      "model-access": 92,
+      "egress-policy": 92,
+      "audit": 92,
+      "computers": 92,
+      "dispatcher": 92
+    }
+  },
+  "startedAt": "2026-11-16T17:34:11.069Z",
+  "stoppedAt": "2026-11-16T17:34:20.948Z",
+  "completedAt": "2026-11-16T17:35:08.957Z",
+  "images": {
+    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+    "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+    "objects": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c",
+    "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+    "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+    "scanner": "k3d-ocn-registry:5000/opencrane/scanner@sha256:eeba86adc21b7b97beac601b43d8984fbef46ffa9b5ab245321822b528d2d458",
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:91b5ce8f1adb2cd864a50190d993436d348e720074f3b173201ec37b31b22afc",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:91b5ce8f1adb2cd864a50190d993436d348e720074f3b173201ec37b31b22afc"
+  },
+  "chartVersion": "0.1.0",
+  "parts": {
+    "events": {
+      "backupId": "bcfca17d-597f-4ee4-a10f-7dcc80d2cebe",
+      "sequence": 92,
+      "path": "events",
+      "byteCount": 18424,
+      "sha256": "e22449d2bb97ef1a8f388ebcf25b98d78345a700d3c4c375798eef4d2eec4fd5",
+      "startedAt": "2026-11-16T17:34:24.125Z",
+      "finishedAt": "2026-11-16T17:34:24.909Z",
+      "details": {
+        "version": 1,
+        "kind": "event-bytes-only",
+        "silo": "dev",
+        "attempt": "bcfca17d-597f-4ee4-a10f-7dcc80d2cebe",
+        "created": "2026-11-16T17:21:49.173441511Z",
+        "config": {
+          "name": "EVENTS",
+          "subjects": [
+            "ev.>"
+          ],
+          "storage": "file",
+          "retention": "limits",
+          "num_replicas": 1,
+          "consumer_limits": {},
+          "discard": "old",
+          "compression": "none",
+          "max_consumers": -1,
+          "max_msgs": -1,
+          "max_bytes": -1,
+          "max_age": 0,
+          "max_msgs_per_subject": -1,
+          "max_msg_size": -1,
+          "duplicate_window": 120000000000,
+          "allow_direct": false,
+          "mirror_direct": false,
+          "sealed": false,
+          "deny_delete": true,
+          "deny_purge": true,
+          "allow_rollup_hdrs": false,
+          "allow_msg_ttl": false
+        },
+        "firstSequence": 1,
+        "lastSequence": 92,
+        "eventCount": 92,
+        "subjectPositions": {
+          "ev.member.jente-rosseel": 2,
+          "ev.grant.WyJtb2RlbCIsImdwdC02LWFzdHJhIl0": 16,
+          "ev.grant.WyJtb2RlbCIsImdwdC02LjEtc29sIl0": 17,
+          "ev.grant.WyJtb2RlbCIsImdwdC02LWx1bmEiXQ": 18,
+          "ev.grant.WyJtb2RlbCIsImdwdC02LXNvbCJd": 19,
+          "ev.assistant.personal-f0ac5d35853f86e28f6fad1090da3787": 7,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjYtc29sIl0": 20,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjYtdGVycmEiXQ": 21,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjYtbHVuYSJd": 22,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjUiXQ": 23,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjUtcHJvIl0": 24,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjQiXQ": 25,
+          "ev.grant.WyJtb2RlbCIsImdwdC01LjQtcHJvIl0": 26,
+          "ev.computer.personal-f0ac5d35853f86e28f6fad1090da3787": 91,
+          "ev.budget.dev": 89,
+          "ev.ownership.dev": 29,
+          "ev.conversation.e8405565-d74a-4fd0-899e-92343b0be8a5": 43,
+          "ev.decision.45f5c079-c6c9-413d-9b45-0295e6dd5076": 36,
+          "ev.effect.b5802cfd-bb0a-4dc9-b4bd-805df385b055": 42,
+          "ev.conversation.6413436d-ca66-4099-8c44-75b0fb600efc": 61,
+          "ev.decision.ed704fb4-f51f-41fd-874b-c33d30cb63dc": 53,
+          "ev.effect.2170a12e-6a01-4d9e-8051-cb7b3fbcdd20": 57,
+          "ev.conversation.9218b800-a604-41db-b559-24ed196cc5bc": 74,
+          "ev.decision.924d2c64-c79c-47e5-92ac-8977dee7b14d": 67,
+          "ev.effect.ae40f12b-d721-4454-87b8-a5f1ba050502": 73,
+          "ev.conversation.3d6f47b7-0e7d-4a7f-90b9-4dafd680e25a": 92,
+          "ev.decision.0caaedc7-83a9-4447-a11c-b0f18e9bbcd4": 84,
+          "ev.effect.954a5320-1a39-4b23-a901-b3102bb03ea7": 87
+        },
+        "identityDigest": "1de1f6c205735b9743134f74157ba8e66af35f85b22f8c5f7555a253318d8d5b",
+        "byteCount": 18424,
+        "sha256": "e22449d2bb97ef1a8f388ebcf25b98d78345a700d3c4c375798eef4d2eec4fd5"
+      }
+    },
+    "database": {
+      "backupId": "bcfca17d-597f-4ee4-a10f-7dcc80d2cebe",
+      "sequence": 92,
+      "path": "database",
+      "byteCount": 335670,
+      "sha256": "cefd726e98bccefbb7d4fd4b383bacf5d923f12bacb80b6f0c9448980c2a5d15",
+      "startedAt": "2026-11-16T17:34:24.909Z",
+      "finishedAt": "2026-11-16T17:34:27.201Z",
+      "details": {
+        "databases": [
+          "handlers",
+          "openfga",
+          "postgres",
+          "projections"
+        ],
+        "lsn": "0/25416D0"
+      }
+    },
+    "files": {
+      "backupId": "bcfca17d-597f-4ee4-a10f-7dcc80d2cebe",
+      "sequence": 92,
+      "path": "files",
+      "byteCount": 2165,
+      "sha256": "5e8d622a814bd7a4ae491cc10649926a7b60ccd8df9287893b4c1c242a18cd30",
+      "startedAt": "2026-11-16T17:34:27.201Z",
+      "finishedAt": "2026-11-16T17:34:27.347Z",
+      "details": {
+        "bucket": "files",
+        "objects": [
+          {
+            "key": "dev/3d6f47b7-0e7d-4a7f-90b9-4dafd680e25a/b8f19cceb9d8a55c8b28ee82c565bc82680a116e209acb2a3a0bb755e86effd2/eb3438135ba6ee8ea550139ea57513dabf60535b0ef9d7860920bfa941c342fb",
+            "byteCount": 598,
+            "sha256": "eb3438135ba6ee8ea550139ea57513dabf60535b0ef9d7860920bfa941c342fb"
+          },
+          {
+            "key": "dev/6413436d-ca66-4099-8c44-75b0fb600efc/794a6c80520f39573c60b68b59f1cdf6e7176bedaf0e26e392a2cd0cdcaf9fda/eb3438135ba6ee8ea550139ea57513dabf60535b0ef9d7860920bfa941c342fb",
+            "byteCount": 598,
+            "sha256": "eb3438135ba6ee8ea550139ea57513dabf60535b0ef9d7860920bfa941c342fb"
+          }
+        ]
+      }
+    }
+  }
+}

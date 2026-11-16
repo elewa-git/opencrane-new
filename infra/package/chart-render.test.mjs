@@ -752,3 +752,45 @@ function rendersOrganisationName() {
 }
 
 test('the installation name reaches the web container', rendersOrganisationName);
+
+function scheduledPilotBackup() {
+  const values = chartValues();
+  const result = spawnSync('helm', ['template', 'chart-test', 'infra/package/chart', '--values', '-'],
+    { encoding: 'utf8', input: JSON.stringify(values) });
+  assert.equal(result.status, 0, result.stderr);
+  const documents = parseAllDocuments(result.stdout);
+  const resources = [];
+  for (const document of documents) resources.push(document.toJS());
+  function backupSchedule(resource) {
+    return resource.kind === 'CronJob' && resource.metadata.name === 'pilot-backup';
+  }
+  const cron = resources.find(backupSchedule);
+  assert.ok(cron, 'The ordinary single-server package must schedule its coordinated backup.');
+  assert.equal(cron.spec.concurrencyPolicy, 'Forbid');
+  assert.equal(cron.spec.suspend, false);
+  assert.equal(cron.spec.jobTemplate.spec.backoffLimit, 0);
+  const job = cron.spec.jobTemplate.spec.template.spec;
+  assert.equal(job.serviceAccountName, 'package-backup');
+  const container = job.containers[0];
+  assert.equal(container.image, values.images.server);
+  assert.deepEqual(container.command,
+    ['node', '--experimental-strip-types', 'infra/package/scheduled-backup-run.ts', 'run']);
+  function backupVolume(volume) { return volume.name === 'backups'; }
+  const volume = job.volumes.find(backupVolume);
+  assert.equal(volume.persistentVolumeClaim.claimName, 'backups');
+  assert.notEqual(volume.persistentVolumeClaim.claimName, 'data-objects-0');
+  function backupRole(resource) {
+    return resource.kind === 'Role' && resource.metadata.name === 'package-backup';
+  }
+  const role = resources.find(backupRole);
+  function deploymentRead(rule) { return rule.resources.includes('deployments'); }
+  const readiness = role.rules.find(deploymentRead);
+  assert.deepEqual(readiness.verbs, ['get', 'list', 'watch']);
+  assert.deepEqual(readiness.resourceNames, ['server', 'openfga', 'worker-dispatcher',
+    'worker-members', 'worker-mcp-catalogue', 'worker-computers', 'worker-conversations',
+    'worker-files', 'worker-budgets', 'worker-audit']);
+  for (const rule of role.rules) assert.ok(!rule.resources.includes('secrets'));
+}
+
+test('the single-server package schedules a coordinated backup on separate storage',
+  scheduledPilotBackup);

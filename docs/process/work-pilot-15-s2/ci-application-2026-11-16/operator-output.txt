@@ -1,0 +1,61 @@
+PASS pre-claim load 5.46
+STEP package-prepare --id 1
+PASS package-prepare with exact-source scanner and application CI approvals
+PASS private settings using read-only test sign-in setup
+STEP package-up --id 1
+PASS package-up/check
+PASS exact-source scanner run 43874985247 and application run 43874985191
+PASS installed application k3d-ocn-registry:5000/opencrane/package@sha256:ae79458fc20b3b56da24692c72043926b4f762538f6f78abdcc9cdbb4ede6f22
+WAIT load 17.79 exceeds 10
+WAIT load 16.17 exceeds 10
+WAIT load 15.81 exceeds 10
+WAIT load 15.54 exceeds 10
+WAIT load 14.29 exceeds 10
+WAIT load 13.61 exceeds 10
+WAIT load 12.86 exceeds 10
+WAIT load 11.68 exceeds 10
+WAIT load 10.21 exceeds 10
+WAIT load 10.17 exceeds 10
+STEP packaged browser at 1280 and 390 px
+PASS 1280px real SSO session
+CHECK 1280px clean upload HTTP 201
+PASS 1280px clean PDF ready
+PASS 1280px answer reads Willow-47 from the PDF
+CHECK 1280px EICAR HTTP 422
+PASS 1280px visible malware refusal
+PASS 390px real SSO session
+CHECK 390px clean upload HTTP 201
+PASS 390px clean PDF ready
+PASS 390px answer reads Willow-47 from the PDF
+CHECK 390px EICAR HTTP 422
+PASS 390px visible malware refusal
+STEP trigger backup from the installed CronJob
+WAIT load 11.29 exceeds 10 before operator command
+WAIT load 10.19 exceeds 10 before operator command
+job.batch/backup-manual created
+job.batch/backup-manual condition met
+{"level":30,"time":1794838457306,"pid":1,"hostname":"backup-manual-5m5pf","name":"package-backup","backupId":"1affe6ef-0ab8-4266-bbff-034a0da7e2ce","sequence":92,"msg":"Backup complete"}
+PASS operator listed and read manifest for 1affe6ef-0ab8-4266-bbff-034a0da7e2ce
+PASS non-empty native event archive, all database dumps without role passwords, uploaded PDF bytes and one shared sequence
+deployment "server" successfully rolled out
+STEP deliberately break only file capture in a manual Job
+job.batch/backup-broken created
+job.batch/backup-broken condition met
+WAIT load 12.39 exceeds 10 before operator command
+WAIT load 10.52 exceeds 10 before operator command
+WAIT load 11.15 exceeds 10 before operator command
+WAIT load 10.07 exceeds 10 before operator command
+{"level":50,"time":1794838629199,"pid":1,"hostname":"backup-broken-8pfkn","name":"package-backup","err":{"type":"Error","message":"Backup failed","stack":"Error: Backup failed\n    at failed (file:///app/infra/package/scheduled-backup-run.ts:41:15)\n    at async file:///app/infra/package/scheduled-backup-run.ts:51:3"},"reason":"parts","msg":"Backup failed; inspect the Job and maintenance state"}
+WAIT load 11.49 exceeds 10 before operator command
+WAIT load 11.66 exceeds 10 before operator command
+WAIT load 11.07 exceeds 10 before operator command
+WAIT load 10.37 exceeds 10 before operator command
+PASS failed file part published no backup; original checked catalogue unchanged
+WAIT load 10.32 exceeds 10 before operator command
+deployment "server" successfully rolled out
+NAME            STATUS     COMPLETIONS   DURATION   AGE
+backup-broken   Failed     0/1           4m19s      4m19s
+backup-manual   Complete   1/1           62s        7m5s
+bootstrap       Complete   1/1           58s        13m
+PASS packaged upload/chat, coordinated backup, list/show, manifest contents and visible broken file part
+CLEANUP package-down=0 down=0

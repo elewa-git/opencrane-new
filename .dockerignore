@@ -51,6 +51,11 @@ infra/package/*
 !infra/package/scanner.mjs
 !infra/package/object-credentials.mjs
 !infra/package/object-lease-ready.mjs
+!infra/package/scheduled-backup.ts
+!infra/package/scheduled-backup-source.ts
+!infra/package/scheduled-backup-run.ts
+!infra/package/event-backup.ts
+!infra/package/backup-bytes.ts
 **/test
 **/tests
 **/*.spec.*

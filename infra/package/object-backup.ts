@@ -1,3 +1,4 @@
+import { hashBackupBytes as sha256 } from './backup-bytes.ts';
 import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync,
   renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
@@ -33,12 +34,6 @@ const maximumBytes = 64 * 1024 * 1024;
 
 function refusal() {
   return new Error('Object backup refused');
-}
-
-function sha256(bytes: string | Buffer) {
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  return hash.digest('hex');
 }
 
 function boundedLimit(value: number | undefined, maximum: number) {

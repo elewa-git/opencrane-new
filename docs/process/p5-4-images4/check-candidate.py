@@ -20,14 +20,15 @@ specification = importlib.util.spec_from_file_location(
     "package_licences", ROOT / "infra/package/check-licences.py")
 checker = importlib.util.module_from_spec(specification)
 specification.loader.exec_module(checker)
+debian_specification = importlib.util.spec_from_file_location(
+    "debian_main", ROOT / "infra/package/debian-main.py")
+debian = importlib.util.module_from_spec(debian_specification)
+debian_specification.loader.exec_module(debian)
+main_packages = debian.main_packages
 OSI = set(checker.read_json(ROOT / "infra/package/osi-licences.json"))
 
 
-def checked_bytes(path, expected):
-    contents = Path(path).read_bytes()
-    if hashlib.sha256(contents).hexdigest() != expected:
-        raise ValueError("Evidence bytes changed")
-    return contents
+checked_bytes = checker.checked_bytes
 
 
 def inventory(record):
@@ -69,33 +70,6 @@ def check_identity(record, scan, inspection):
     scope = scan["descriptor"]["configuration"]["search"]["scope"]
     if scope != "all-layers":
         raise ValueError("Candidate scan must include every shipped layer")
-
-
-def main_packages(release, index):
-    checksum = hashlib.sha256(index).hexdigest()
-    expected = f"{checksum} {len(index)} main/binary-amd64/Packages.xz"
-    sha256_section = release.split("SHA256:\n", 1)[1]
-    lines = sha256_section.splitlines()
-    records = set()
-    for line in lines:
-        if line and not line.startswith(" "):
-            break
-        records.add(" ".join(line.split()))
-    if expected not in records:
-        raise ValueError("Debian main index differs from the signed release")
-    packages = set()
-    index_bytes = lzma.decompress(index)
-    index_text = index_bytes.decode()
-    paragraphs = index_text.split("\n\n")
-    for paragraph in paragraphs:
-        fields = {}
-        for line in paragraph.splitlines():
-            if line.startswith(("Package: ", "Version: ")):
-                name, value = line.split(": ", 1)
-                fields[name] = value
-        if "Package" in fields and "Version" in fields:
-            packages.add((fields["Package"], fields["Version"]))
-    return packages
 
 
 def check_installed(installed, packages, scanned):

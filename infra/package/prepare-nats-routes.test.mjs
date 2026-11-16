@@ -10,6 +10,7 @@ import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 import { copyPackagedFixture } from './packaged-fixture.ts';
 import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
+import { applicationApprovalFixture } from './application-approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const execute = promisify(execFile);
@@ -52,26 +53,33 @@ if (args.includes('nodes')) {
 } else process.exit(32);
 `;
 
-const docker = `#!/usr/bin/env node
-const fs = require('node:fs');
-const home = process.env.HOME;
-const args = process.argv.slice(2);
-const record = JSON.parse(fs.readFileSync(
-  home + '/.config/opencrane/dev-stack-1/target-owner.json'));
-const labels = { 'opencrane.dev/target-id': record.id };
-if (args[0] === 'ps') {
-  process.stdout.write(record.containers.join('\\n'));
-} else if (args[0] === 'network' && args[1] === 'ls') {
-  process.stdout.write(record.network);
-} else if (args[0] === 'network' && args[1] === 'inspect') {
-  process.stdout.write(JSON.stringify([{ Id: record.network, Labels: labels }]));
-} else if (args[0] === 'inspect') {
-  const containers = [];
-  for (const container of record.containers) {
-    containers.push({ Id: container, Config: { Labels: labels }, Mounts: [] });
-  }
-  process.stdout.write(JSON.stringify(containers));
-} else process.exit(33);
+// Keep repeated fixture process startup from consuming the preparation deadline.
+const docker = `#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+
+args = sys.argv[1:]
+path = Path(os.environ['HOME']) / '.config/opencrane/dev-stack-1/target-owner.json'
+record = json.loads(path.read_text())
+labels = {'opencrane.dev/target-id': record['id']}
+if args[0] == 'ps':
+    sys.stdout.write('\\n'.join(record['containers']))
+elif args[:2] == ['network', 'ls']:
+    sys.stdout.write(record['network'])
+elif args[:2] == ['network', 'inspect']:
+    network = {'Id': record['network'], 'Labels': labels}
+    networks = [network]
+    sys.stdout.write(json.dumps(networks))
+elif args[0] == 'inspect':
+    containers = []
+    for identifier in record['containers']:
+        container = {'Id': identifier, 'Config': {'Labels': labels}, 'Mounts': []}
+        containers.append(container)
+    sys.stdout.write(json.dumps(containers))
+else:
+    sys.exit(33)
 `;
 
 async function recordTarget(prepared) {
@@ -119,6 +127,8 @@ exec /usr/bin/openssl "$@"
   await writeFile(join(home, 'namespace.json'), JSON.stringify({ metadata }));
   const review = JSON.parse(await readFile('infra/package/reviewed-images.json', 'utf8'));
   await scannerApprovalFixture(join(home, 'bin'), review);
+  const application = applicationApprovalFixture(home, review.images.server, { scanner: true });
+  const bin = application.bin;
   const secrets = {};
   for (const name of review.requiredSecrets) secrets[name] = `client-${name.toLowerCase()}`;
   const values = { chartVersion: review.chartVersion, images: review.images, secrets,
@@ -127,16 +137,16 @@ exec /usr/bin/openssl "$@"
     natsCluster: { enabled: true, renderOnly: true, routeCASecret: references[0],
       peerCertificateSecrets: references.slice(1) } };
   await sharedCertificates(slot);
-  const prepared = { home, worktree, slot, owner, values };
+  const prepared = { home, worktree, slot, owner, values, bin };
   if (isolatedTarget) await recordTarget(prepared);
   return prepared;
 }
 
 async function run(prepared, fails = false) {
-  const { home, worktree, values } = prepared;
+  const { home, worktree, values, bin } = prepared;
   await writeFile(join(home, 'values.json'), JSON.stringify(values));
   const env = { ...process.env, HOME: home, DEV_STACK_ID: '1', DEV_STACK_DIR: undefined,
-    PATH: `${home}/bin:${process.env.PATH}`, NODE_NO_WARNINGS: '1' };
+    PATH: `${bin}:${home}/bin:${process.env.PATH}`, NODE_NO_WARNINGS: '1' };
   const args = ['--experimental-strip-types', 'infra/package/prepare-nats-routes.ts',
     join(home, 'values.json')];
   let result;

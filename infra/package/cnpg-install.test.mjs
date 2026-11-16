@@ -7,10 +7,12 @@ import { test } from 'node:test';
 import { parseAllDocuments } from 'yaml';
 import { certificates, issueCertificate } from '../../libs/event-store/test/certificates.ts';
 import { prepareNatsFixture } from './nats-install-fixture.mjs';
+import { applicationApprovalFixture } from './application-approval-fixture.mjs';
 import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const source = resolve('.');
+const applicationImage = 'k3d-ocn-registry:5000/opencrane/package@sha256:' + 'a'.repeat(64);
 const canary = 'private-canary:%/?@';
 const generatedPassword = 'a'.repeat(64);
 const refusal = 'CNPG installation inputs are incomplete or incompatible';
@@ -67,6 +69,9 @@ function validFixture() {
   for (const role of ['server', 'web', 'postgres', 'nats', 'openfga', 'computer', 'objects', 'scanner']) {
     images[role] = `example.invalid/${role}:17.6@sha256:${'a'.repeat(64)}`;
   }
+  images.scanner = 'k3d-ocn-registry:5000/opencrane/scanner@sha256:' + 'a'.repeat(64);
+  images.server = applicationImage;
+  images.web = applicationImage;
   const references = { runtime: 'runtime', runtimeFiles: 'runtimefiles', postgres: 'postgres',
     nats: 'nats', openfga: 'openfga', bootstrap: 'bootstrap', objects: 'objects', scanner: 'scanner' };
   const values = { chartVersion: '0.1.0', images, secrets: references,
@@ -92,7 +97,9 @@ async function fixtureInputFiles(directory, fixture) {
   const valuesFile = `${privateDirectory}/values.json`;
   await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
   await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
-  return { valuesFile, bin, privateDirectory };
+  const approved = fixture.applicationImage ?? applicationImage;
+  const application = applicationApprovalFixture(directory, approved, { scanner: true });
+  return { valuesFile, bin: application.bin, privateDirectory };
 }
 
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
@@ -705,3 +712,23 @@ for (const property of ['backup', 'recovery']) {
       refusesClosedGate);
   }
 }
+
+async function ciApplicationReachesRendering() {
+  const fixture = validFixture();
+  const approved = applicationImage.replace('a'.repeat(64), 'b'.repeat(64));
+  fixture.applicationImage = approved;
+  fixture.values.images = { ...fixture.values.images, server: approved, web: approved };
+  await runFixture(fixture, nextStep, true);
+}
+test('an application approved by CI reaches rendering with historical baseline pins',
+  ciApplicationReachesRendering);
+
+async function localApplicationCannotReachRendering() {
+  const fixture = validFixture();
+  const forged = applicationImage.replace('a'.repeat(64), 'b'.repeat(64));
+  fixture.review.images.server = forged;
+  fixture.review.images.web = forged;
+  await runFixture(fixture, 'Package command failed');
+}
+test('matching builder-written application pins refuse before Helm rendering',
+  localApplicationCannotReachRendering);

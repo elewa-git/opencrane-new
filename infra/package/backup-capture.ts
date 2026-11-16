@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hashBackupBytes as digest } from './backup-bytes.ts';
 import { lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -15,11 +15,6 @@ type Options = Omit<ExportArguments[2], 'directory'>;
 const maximumBytes = 64 * 1024 * 1024;
 function refusal() {
   return new Error('Backup capture refused; completion unknown; keep targets isolated');
-}
-function digest(bytes: Buffer) {
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  return hash.digest('hex');
 }
 function description(directory: string) {
   return readPrivateFile(join(directory, 'descriptor.json'), 1024 * 1024);

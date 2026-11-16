@@ -16,11 +16,11 @@ APPLICATION_TYPES = {"npm", "go-module", "binary"}
 INDEX_IMAGE_PINS = {
     "server": (
         "k3d-ocn-registry:5000/opencrane/package@sha256:"
-        "829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3"
+        "80c2433e8644f5fd01f5deaf912ecab9ca93ed2475187c1f4467196a4def8c17"
     ),
     "web": (
         "k3d-ocn-registry:5000/opencrane/package@sha256:"
-        "829ccb4a15dafe09f763f35578a81191045adf7deffaeee10a90bc5f50f3aea3"
+        "80c2433e8644f5fd01f5deaf912ecab9ca93ed2475187c1f4467196a4def8c17"
     ),
     "postgres": (
         "postgres:17@sha256:"
@@ -264,6 +264,13 @@ zstd 1.5.7+dfsg-1
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def checked_bytes(path, expected):
+    contents = Path(path).read_bytes()
+    if hashlib.sha256(contents).hexdigest() != expected:
+        raise ValueError("Evidence bytes changed")
+    return contents
 
 
 def parse_debian_main_packages(index_text):

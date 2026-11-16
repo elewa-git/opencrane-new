@@ -310,8 +310,10 @@ All three environment variables are required; a missing archive fails the test.
 The archive must identify the same image that the container checks exercise.
 The recursive import check compares the packaged TypeScript files with the source
 checkout. It follows runtime imports after removing TypeScript types, starting at
-both bootstrap programs and `infra/dev-stack/secondary-models.ts`, the chart’s
-model entry point. The package deliberately uses the secondary stack’s fake model
+both bootstrap programs, `scheduled-backup-run.ts` and `infra/dev-stack/secondary-models.ts`,
+the chart’s model entry point. The backup runner, collector, source adapter and event
+collector have explicit Docker context exceptions and image-file allowlist entries.
+The package deliberately uses the secondary stack’s fake model
 for local install checks. Its bridge and tool-rehearsal helper ship through the same
 explicit `.dockerignore` exceptions as the launcher and stub. Removing a required
 imported file refuses even when the entry point remains. It also checks every
@@ -331,37 +333,45 @@ requires the final owner-ready update; a settings refusal cannot pass. Failures
 withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
-The `packageImage` review binds both role pins and
-`sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
-from the Syft JSON bytes. Docker inspection may identify that configuration or the
-image index; both reports must name the same reviewed repository digest.
-The server inventory records the same `sourceRevision`; the website
-shares that inventory. These fields are reviewed evidence, not an automatic claim
-that bootstrap or a live installation passed. A separate `natsCluster` review still
-requires three replicas and the existing role bindings before that option can run.
-Synthetic records prove source checks only.
+The `packageImage` record and role pins in `reviewed-images.json` are the historical
+licence baseline. They grant no application approval. `ci-approval.mjs` fixes the
+repository to `elewa-git/opencrane-new` and the application workflow to
+`.github/workflows/application-package.yml`. These are not review-file settings.
+The shared transport accepts successful push, schedule or manual runs; this workflow
+produces push and manual runs. Only output for the exact checkout revision and branch
+grants approval. Preflight fetches it again from github.com and requires both application
+roles to match its digest.
+Local files, replacement pins and inherited enterprise GitHub routing cannot approve images.
+A separate `natsCluster` review still requires three replicas and matching role bindings.
 
-After inspecting bootstrap in the actual image, scan it with Syft's `--scope all-layers`.
-Save `docker image inspect <immutable-pin>` as JSON. Run the existing checker with
-the expected commit, that inspection and the scans:
+The application workflow uses standard Ubuntu runners, `contents: read` and GitHub's
+built-in artifact token. It has no secret, paid cache, registry credential or fork trigger.
+It checks out `github.sha` without persisted credentials and builds the package Dockerfile
+with that source label. It inspects the immutable image, runs the saved-layer/bootstrap
+checks and scans every shipped layer using the pinned Syft downloader. The existing
+`check-licences.py` inventory and `check_package_promotion` rules must pass unchanged.
+Changed components require a reviewed inventory; CI never invents licence decisions.
 
-```sh
-nice -n 10 python3 infra/package/check-licences.py \
-  --promotion <commit> <inspection.json> server <scan.json> web <scan.json>
-```
+`check-application.py` authenticates all three snapshot indexes named in
+`package-debian-main.json`. It reads the keyring from the pinned image and requires its
+reviewed SHA-256. For each index it downloads InRelease, checks its recorded checksum,
+verifies it with `gpgv`, then downloads `main/binary-amd64/Packages.xz`. Both its recorded
+checksum and its SHA-256 and byte count in the signed release must match. Every reviewed
+and scanned Debian package/version must occur in authenticated main. It reuses the
+compressed-index check used by the earlier candidate checker.
 
-This checks image identity, the exact scan checksum, every inventoried component,
-application licences and the existing signed-index package lists. It still requires
-a new Debian-main review when the image changes. It does not fetch or authenticate
-a new index itself. An operator must verify the signed index and record its hashes
-before changing the inventory and index pin together. Never change only the expected pin.
-The command writes nothing and withholds input paths and dependency errors on failure.
-The preflight test suite also runs the Python licence and promotion refusal tests.
+Only then does CI write `application-approval/approval.json`, binding `runId`, `revision`,
+`imageDigest`, `imageId` and `scanSha256`. The artifact also retains inspection and scan
+bytes. The separate `application-image` artifact holds the checked OCI archive. Outputs
+expire after one day. Run the workflow again if output expired; local candidates do not
+substitute. Package preparation downloads both exact-source approvals and images through
+the shared scanner fetch path, pinned to github.com, and publishes their exact digests
+only to the existing development registry. No public image is published.
 
 The current image has a source-bound all-layer scan. Its 88 Debian package versions
 were checked again against authenticated main indexes; `package-debian-main.json`
-records their signed index hashes. The private registry is unavailable, so packaged
-release qualification remains blocked. R3 approval is separate. Unknown licences or open
+records their signed index hashes. Publication uses the existing local registry;
+fresh-install qualification remains separate. R3 approval is separate. Unknown licences or open
 Critical/High findings also block qualification. The
 [first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
 The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local
@@ -1876,3 +1886,87 @@ terms and attribution. The Git tree has no built module, and the published npm
 module differs from the retained bundle range. The build change is unproved, so
 this grant stays BLOCKED. The [receipt](../../docs/process/p5-4-images16/receipt.md)
 records the boundary. `scripts/p5-4-images16.test.mjs` runs the refusal fixtures.
+
+## Scheduled pilot backup
+
+The ordinary standalone package schedules `pilot-backup` at 02:00 UTC daily. It
+uses one NATS server and PostgreSQL's existing `pg_dumpall`, including every
+non-template database (`projections`, `handlers`, `openfga` and `postgres`). The
+separate `backups` PVC holds private mode-0700 sets under `/backups/sets`. It is
+never the live `files` bucket or its volume. This local copy does not protect
+against losing the developer machine. Restore and computer homes are excluded.
+The CNPG and three-peer previews do not emit this pilot schedule.
+
+The Job stops the server (including the model gateway) and dispatcher and waits
+for their Pods to disappear. Computers can reach only that stopped gateway. It
+lets all installed primary and secondary projections reach the recorded event sequence, then
+stops them and OpenFGA. It refuses remaining database clients or restarted writers.
+The manifest records the dispatcher checkpoint; queued effects remain held while
+the dispatcher is stopped. Operators must not change workloads, write directly to
+stores or run Helm concurrently with this maintenance window.
+
+While writers stay stopped, the Job calls `collectEventBackup`, dumps databases
+without role passwords, and copies every object in `files` through the existing
+short-lived storage lease. It checks the stream identity, retained range and
+checkpoints again before resuming through normal service startup. PostgreSQL's
+LSN identifies the start of this stopped interval; background WAL maintenance can
+continue, so it is not a promise that the physical WAL bytes remain unchanged.
+`backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
+object capture. All three parts share the backup id and event sequence. Their manifest includes
+integer byte counts, SHA-256, capture timestamps, image pins, chart version,
+event stream configuration and positions, database names and LSN, and an object
+inventory with each key, size and checksum. The `files` part is UTF-8 JSON lines;
+each line adds base64 `data` to that object's inventory entry.
+
+Only after all parts succeed and every restored deployment is ready does an atomic
+directory rename publish the set. The catalogue ignores hidden interrupted sets
+and verifies every saved part against the manifest before listing or showing it.
+A failure publishes nothing, removes only this run's temporary output and restores
+saved replica counts. It attempts every saved restart even if one fails. Scaling each
+deployment has a five-second limit. After all scale attempts, it checks every
+deployment with a 60-second rollout wait, concurrently, with a 65-second process
+limit. Recovery is separate from the capture deadline and takes at most 115 seconds
+for the ten services, including after a failed part or expired capture. A failed
+resume prevents publication and retains the maintenance lock and private set,
+even when writing or syncing the `resume_failed` marker also fails. The existing
+lock still identifies the run. The failed Job reports maintenance explicitly;
+`resume_marker` means that restart and marker storage both failed. Scheduled Jobs
+never retry automatically. The CronJob forbids overlap; an exclusive volume lock
+also refuses overlapping manually triggered Jobs. A hard kill leaves its lock
+and private partial set, possibly with writers stopped. An operator must inspect
+the Job, restore the ten saved service replicas to one, and remove only the failed
+run's hidden set and lock before scheduling again. Never treat partial bytes as a
+complete backup. The Job has a six-minute Kubernetes deadline; collection uses
+four minutes, with existing event snapshot limits of 60 seconds and 64 MiB.
+Storage listing, requests and response bodies share an abort deadline. File content
+is limited to 64 MiB, and each saved part to 128 MiB. Larger pilots
+need a separate storage design before these limits change.
+
+Use the slot's recorded Kubernetes context and private connection file, then run:
+
+```sh
+namespace="opencrane-package-$DEV_STACK_ID"
+kubectl -n "$namespace" create job --from=cronjob/pilot-backup backup-manual
+kubectl -n "$namespace" wait --for=condition=complete job/backup-manual --timeout=360s
+kubectl -n "$namespace" logs job/backup-manual -c backup
+kubectl -n "$namespace" exec deployment/backup-catalogue -- \
+  node --experimental-strip-types infra/package/scheduled-backup-run.ts list
+kubectl -n "$namespace" exec deployment/backup-catalogue -- \
+  node --experimental-strip-types infra/package/scheduled-backup-run.ts show BACKUP_ID
+kubectl -n "$namespace" get jobs
+```
+
+`list` and `show` return the checked manifest JSON. Failed commands log only a safe
+stage classification. Neither manifest nor logs include credentials, database role
+passwords or Secret contents. Connection settings and object-owner credentials
+come from existing Kubernetes Secret references; the backup volume needs no key.
+Treat backup bytes as private operator data, including the uploaded file content.
+
+No image or runtime dependency is added. The existing licence inventory covers
+the application image (Node: MIT with reviewed bundled notices; kubectl:
+Apache-2.0; MinIO SDK: Apache-2.0; pg: MIT), PostgreSQL image and its dump tool
+(PostgreSQL License, reviewed PGDG helpers and Debian main), NATS image
+(Apache-2.0) and MinIO image (AGPL-3.0, with reviewed Go notices and Debian main).
+See `licence-inventory.json`, `package-debian-main.json` and
+`object-notices.json`. Every changed application image still needs the usual
+source, layer, licence and promotion checks before installation.

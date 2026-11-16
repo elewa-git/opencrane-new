@@ -1,0 +1,23 @@
+{
+  "verdict": "PASS",
+  "codeHead": "d5d7df6c4dbb92121f801dc909d3640c73122686",
+  "date": "2026-11-16T14:12:45.779Z",
+  "installId": "11bf26a5-7e46-4214-b481-ed46937704c4",
+  "namespaceUid": "cb4a00e0-9428-49fd-9a63-fabb8001eb7a",
+  "outcomes": [
+    {
+      "width": 1280,
+      "signedIn": true,
+      "cleanReady": true,
+      "fileAnswer": true,
+      "eicarRefused": true
+    },
+    {
+      "width": 390,
+      "signedIn": true,
+      "cleanReady": true,
+      "fileAnswer": true,
+      "eicarRefused": true
+    }
+  ]
+}

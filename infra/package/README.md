@@ -20,8 +20,8 @@ A spare stack can own a separate three-node cluster for installation checks.
 flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|checks ownership, nodes, certificates and backup token references| package["infra/package<br/>images, installation settings and evidence"]
   package -->|uses local cluster| devbox["infra/devbox<br/>machine setup"]
-  package -->|starts services and fake model; checks captured and restored bytes| apps["apps<br/>product services and replay"]
-  packaging["GitHub packaging job"] -->|supplies scanner approval and image| package
+  package -->|starts services and fake model; saves backups after services recover| apps["apps<br/>product services and replay"]
+  packaging["GitHub packaging job"] -->|supplies application and scanner approvals and images| package
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -39,7 +39,17 @@ then uses the existing chat path to answer questions about clean files.
 Infected files are refused. Uploads stay unavailable when scanning cannot be proved
 or its last verified update check is more than 24 hours old. A scheduled GitHub job
 verifies and packages fresh definitions. Preparation fetches its approved output
-for the current source commit; a locally built candidate cannot grant approval.
+for the current source commit. A separate job builds, checks and approves the application image.
+Preparation and installation fetch both approvals; locally written pins cannot approve either image.
+
+A nightly scheduled job saves the single-server event log, all databases and uploaded
+files together on a separate private volume. It briefly stops chat and background
+writes, drains the read tables, then records one shared position and checksums.
+An operator can trigger the job, list complete backups and read their manifests.
+Publication waits for every stopped service to become ready again. A failed
+restart keeps maintenance active and publishes nothing.
+Failed runs appear as failed Kubernetes Jobs. See the
+[scheduled backup guide](README.robot.md#scheduled-pilot-backup).
 
 The dispatcher keeps its jobs in a separate database. It uses the server's read-only
 content connection to coordinate gateway configuration changes with delivery.
@@ -101,8 +111,8 @@ and [computer home restoration](README.robot.md#raw-computer-home-restoration-fi
 
 ## Processes it handles
 
-Before a new server and website image is approved, its source label, fixed image
-digest and licence inventory must agree with the recorded review. The scan includes
+CI approves a server and website image only when its source label, fixed digest and
+licence inventory agree. It authenticates the Debian main package indexes. The scan includes
 files hidden by later image layers. The build copies the cleaned filesystem into
 one filesystem layer, so removed npm and computer files are absent from the saved image.
 The image also carries the four small helpers used to start and check private
@@ -113,8 +123,8 @@ finishes the fixture; a running installation needs its own checks.
 The image also contains a small Linux helper that protects and measures the memory
 check runner itself. Its compiler stays in a separate build stage. This prerequisite
 check cannot qualify other processes or enable memory.
-A separate candidate record checks the proposed package list, saved image bytes
-and Debian main package versions. It keeps checksums for the shipped notices.
+The CI job checks the proposed package list, saved image bytes and signed Debian
+main package versions. Historical candidate records retain shipped notice checksums.
 A separate check reads kubectl's saved build information and retains the Go project
 and runtime terms. It verifies the Go source archive's signature with Google's
 published key. Reported module names do not prove their source.
@@ -166,33 +176,13 @@ An internal capture helper saves events, their files and every required computer
 in sequence. The caller keeps writers stopped and supplies trusted readers. It returns
 partial evidence only after comparing every saved archive with its original output
 and checking that encrypted files and homes open with their saved descriptions.
-These checks share the capture time limit. Database backups and a complete-system
-backup still need work. Live checks of stopped writers and mounted home files remain untested.
+These helpers share a time limit and exclude the database. The scheduled pilot backup
+saves events, databases and files together. Mounted home capture still needs live checks.
 
 Separate licence checks connect a regular-expression test library, a Valgrind
 client header and the WebAssembly C/C++ API to Node's signed source release and
 the exact binary in every saved image layer. They keep the full terms and explain
 why each bundled part is allowed.
-A separate Corepack inventory compares its files, launcher link and bundled code
-with signed Node inputs and every saved layer. Separate reviews check two dependencies'
-source, bundled code and full MIT terms. Those terms must accompany image distribution.
-The other dependencies’ licences still need review.
-The saved Corepack bundle also contains typanion. Its upstream source has full
-MIT terms, but the exact change from that source to the shipped module is still
-unproved. Its grant remains blocked.
-A separate npm inventory compares its package details, files and launcher links
-with the signed Node source, official download and every saved image layer.
-It records the source files omitted from the official download and refuses the
-candidate’s missing npm tree. Licence labels, missing details and copied code need review.
-They do not claim that this code is absent. The
-[operator notes](README.robot.md#package-image-promotion) explain the saved files
-needed to repeat these checks. Other licence reviews and installation approval
-remain outstanding.
-A separate check confirms that the 184 npm test files in Node source are absent
-from its official download and the saved candidate layers. It confirms that the
-two npm launcher links appear in the official download and are absent from those
-layers. The candidate still lacks the whole npm tree, so this check cannot approve
-the image or say whether other copied code is present.
 
 ## How to run or test it
 
@@ -245,7 +235,8 @@ The operator event-copy command saves native NATS bytes and a private descriptio
 of their source, positions and checksums. It refuses a log that changes during
 capture or a snapshot that NATS reports as failed, and removes partial output.
 Stable positions do not prove that writers stopped. This is only the
-event part of recovery; database and computer-volume backups still need work.
+event part of recovery. The scheduled backup adds databases and uploaded files;
+computer-volume backups still need work.
 The [operator notes](README.robot.md#event-byte-export) describe its limits.
 
 The object-copy helper saves files named by the checked event archive, including

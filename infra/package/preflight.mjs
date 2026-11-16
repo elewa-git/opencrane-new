@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fetchApplicationApproval } from './application-approval.mjs';
 import { fetchScannerApproval } from '../clamav/approval.mjs';
 
 function readJson(path) {
@@ -126,7 +127,9 @@ async function check(values, review) {
   }
   if (!values.images || !review.images) throw new Error('Image pins are missing');
   for (const [name, image] of Object.entries(review.images)) {
-    if (name !== 'scanner') requireImage(name, values.images[name], image);
+    if (!['scanner', 'server', 'web'].includes(name)) {
+      requireImage(name, values.images[name], image);
+    }
   }
   for (const name of Object.keys(values.images)) {
     if (!(name in review.images)) throw new Error('Unreviewed image role');
@@ -138,6 +141,9 @@ async function check(values, review) {
   }
   for (const name of Object.keys(values.secrets)) {
     if (!requiredSecrets.includes(name)) throw new Error('Unsupported secret setting');
+  }
+  for (const role of ['server', 'web']) {
+    if (role in review.images) requireImage(role, values.images[role], values.images[role]);
   }
   checkPostgres(values, review);
   checkNatsCluster(values, review);
@@ -154,6 +160,10 @@ async function check(values, review) {
   }
   if (review.chartVersion && values.chartVersion !== review.chartVersion) {
     throw new Error('Chart version differs from the reviewed version');
+  }
+  const application = await fetchApplicationApproval();
+  for (const role of ['server', 'web']) {
+    if (role in review.images) requireImage(role, values.images[role], application.image);
   }
 }
 

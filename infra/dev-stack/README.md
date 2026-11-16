@@ -15,7 +15,7 @@ assistant computers run.
 
 ```mermaid
 flowchart LR
-  packaging["GitHub packaging job"] -->|supplies the approved scanner image| stack["infra/dev-stack<br/>local OpenCrane"]
+  packaging["GitHub packaging job"] -->|supplies approved scanner and application images| stack["infra/dev-stack<br/>local OpenCrane"]
   stack -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
   stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
@@ -79,6 +79,7 @@ the claimed secondary slot before it starts a native attempt.
   text after a reload. Uses separate messages and invitations for each screen width and
   attempt, and saves step pictures before recording success. It records failed browser
   reads privately so the request can be checked after a stopped run.
+- Checks CI-approved application and scanner pins again before reviewing the rendered install.
 - Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
   Checks password format and conflicting database connections before installation.
   Checks backup Service ownership, named Secret entries and the endpoint certificate internally.
@@ -118,8 +119,7 @@ the claimed secondary slot before it starts a native attempt.
 - Keeps package commands on their recorded cluster. A missing target stops the command
   before it can connect to the shared cluster. Ownership checks and forwarding keep the private
   connection filename in the child environment rather than its command arguments.
-- Runs preflight and Helm from the private values file's folder so its path stays out
-  of child command arguments.
+- Runs preflight and Helm beside the values file to keep private paths out of arguments.
 - Provides demo preparation and screen measurements, while refusing automated coding
   jobs that try to run the owner's commands. Coding jobs can run fresh journeys on
   claimed spare stacks with the free stand-in model; real providers are refused.

@@ -1,0 +1,75 @@
+PASS pre-claim load 4.82
+STEP package-prepare --id 1
+PASS package-prepare with exact-source scanner and application CI approvals
+PASS private settings using read-only test sign-in setup
+STEP package-up --id 1
+PASS package-up/check
+PASS exact-source scanner run 43911114776 and application run 43911114619
+PASS installed application k3d-ocn-registry:5000/opencrane/package@sha256:91b5ce8f1adb2cd864a50190d993436d348e720074f3b173201ec37b31b22afc
+WAIT load 15.29 exceeds 10
+WAIT load 15.16 exceeds 10
+WAIT load 15.68 exceeds 10
+WAIT load 14.13 exceeds 10
+WAIT load 13.20 exceeds 10
+WAIT load 13.88 exceeds 10
+WAIT load 13.61 exceeds 10
+WAIT load 12.37 exceeds 10
+WAIT load 12.18 exceeds 10
+WAIT load 10.93 exceeds 10
+WAIT load 10.20 exceeds 10
+WAIT load 10.08 exceeds 10
+WAIT load 10.71 exceeds 10
+WAIT load 11.62 exceeds 10
+WAIT load 12.05 exceeds 10
+WAIT load 15.50 exceeds 10
+WAIT load 16.36 exceeds 10
+WAIT load 15.61 exceeds 10
+WAIT load 14.81 exceeds 10
+WAIT load 15.31 exceeds 10
+WAIT load 16.54 exceeds 10
+WAIT load 16.70 exceeds 10
+WAIT load 15.66 exceeds 10
+WAIT load 14.92 exceeds 10
+WAIT load 14.23 exceeds 10
+WAIT load 13.72 exceeds 10
+WAIT load 13.72 exceeds 10
+WAIT load 14.11 exceeds 10
+WAIT load 12.08 exceeds 10
+WAIT load 10.66 exceeds 10
+STEP packaged browser at 1280 and 390 px
+PASS 1280px real SSO session
+CHECK 1280px clean upload HTTP 201
+PASS 1280px clean PDF ready
+PASS 1280px answer reads Willow-47 from the PDF
+CHECK 1280px EICAR HTTP 422
+PASS 1280px visible malware refusal
+PASS 390px real SSO session
+CHECK 390px clean upload HTTP 201
+PASS 390px clean PDF ready
+PASS 390px answer reads Willow-47 from the PDF
+CHECK 390px EICAR HTTP 422
+PASS 390px visible malware refusal
+STEP trigger backup from the installed CronJob
+WAIT load 12.32 exceeds 10 before operator command
+WAIT load 12.4 exceeds 10 before operator command
+WAIT load 11.35 exceeds 10 before operator command
+WAIT load 11.23 exceeds 10 before operator command
+WAIT load 10.1 exceeds 10 before operator command
+job.batch/backup-manual created
+job.batch/backup-manual condition met
+{"level":30,"time":1794850508988,"pid":1,"hostname":"backup-manual-kpf77","name":"package-backup","backupId":"bcfca17d-597f-4ee4-a10f-7dcc80d2cebe","sequence":92,"msg":"Backup complete"}
+PASS operator listed and read manifest for bcfca17d-597f-4ee4-a10f-7dcc80d2cebe
+PASS non-empty native event archive, all database dumps without role passwords, uploaded PDF bytes and one shared sequence
+deployment "server" successfully rolled out
+STEP deliberately break only file capture in a manual Job
+job.batch/backup-broken created
+job.batch/backup-broken condition met
+{"level":50,"time":1794850667330,"pid":1,"hostname":"backup-broken-6jqlh","name":"package-backup","err":{"type":"Error","message":"Backup failed","stack":"Error: Backup failed\n    at failed (file:///app/infra/package/scheduled-backup-run.ts:41:15)\n    at async file:///app/infra/package/scheduled-backup-run.ts:51:3"},"reason":"parts","msg":"Backup failed; inspect the Job and maintenance state"}
+PASS failed file part published no backup; original checked catalogue unchanged
+deployment "server" successfully rolled out
+NAME            STATUS     COMPLETIONS   DURATION   AGE
+backup-broken   Failed     0/1           113s       113s
+backup-manual   Complete   1/1           71s        4m37s
+bootstrap       Complete   1/1           77s        17m
+PASS packaged upload/chat, coordinated backup, list/show, manifest contents and visible broken file part
+CLEANUP package-down=0 down=0

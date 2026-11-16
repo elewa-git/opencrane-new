@@ -17,6 +17,7 @@ const execute = promisify(execFile);
 const namespace = `opencrane-package-${stackId}`;
 const release = `opencrane-package-${stackId}`;
 const recordFile = `${directory}/package-owner.json`;
+const chartDirectory = resolve(root, 'infra/package/chart');
 const installIdLabel = 'opencrane.dev/install-id';
 const secretKeys: Record<string, string[]> = {
   runtime: ['NATS_URL', 'DATABASE_URL', 'SILO_ID', 'OIDC_ISSUER_URL',
@@ -249,9 +250,11 @@ async function readReviewedValues(valuesFile: string) {
     location.name, reviewFile], 120_000, location.directory);
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as PackageValues;
   const review = JSON.parse(await readFile(reviewFile, 'utf8')) as PackageReview;
-  // Preflight has checked this scanner against the successful CI job, separately
-  // from the fixed application and object-store image review.
-  review.images['scanner'] = values.images['scanner']!;
+  // Use only pins that preflight has checked against successful exact-source CI output.
+  // Keep all other roles bound to their fixed reviewed images during rendering.
+  for (const role of ['scanner', 'server', 'web']) {
+    review.images[role] = values.images[role]!;
+  }
   const chart = await readFile('infra/package/chart/Chart.yaml', 'utf8');
   const version = chart.match(/^version:\s*["']?([^"'\s]+)["']?\s*$/mu)?.[1];
   if (version !== review.chartVersion) throw new Error('Chart version is not reviewed');
@@ -368,7 +371,6 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
 
 async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
   const location = valuesLocation(valuesFile);
-  const chartDirectory = resolve(root, 'infra/package/chart');
   const rendered = await command('helm', ['template', release, chartDirectory,
     '--namespace', namespace, '--values', location.name], 120_000, location.directory);
   const reviewedImages = new Set(Object.values(review.images));
@@ -471,7 +473,6 @@ async function configureComputerGateway(owner: PackageOwner) {
 export async function installPackage(valuesFile: string) {
   const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
-  const context = owner.context;
   function checkedKubectl(args: string[], timeoutMs?: number, signal?: AbortSignal,
     deadline?: number) {
     return ownedKubectl(owner, args, timeoutMs, signal, deadline);
@@ -491,10 +492,9 @@ export async function installPackage(valuesFile: string) {
   await saveOwner(owner);
   try {
     const location = valuesLocation(valuesFile);
-    const chartDirectory = resolve(root, 'infra/package/chart');
     await packageConnectionArgs(owner);
     await command('helm', ['install', release, chartDirectory,
-      '--kube-context', context, '--namespace', namespace, '--values', location.name,
+      '--kube-context', owner.context, '--namespace', namespace, '--values', location.name,
       '--labels', `${installIdLabel}=${owner.installId}`,
       '--wait=false'], 180_000, location.directory);
   } catch (error) {
