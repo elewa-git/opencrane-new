@@ -1,6 +1,32 @@
 # Ordinary third-party tool server journey
 
-## Rework round 5, 16 November 2026
+## Rework round 5 continued, 16 November 2026
+
+Result: PARTIAL. Source checks are in progress. Fresh-stack journey: NOT RUN.
+This continues round 5 within the owner's existing limits.
+
+Fetched origin and completed the rebase onto repaired main `e5463218c`.
+README conflicts retained both current behaviour and ordinary-tool review rules.
+No rebase remains. The whole-stream read gate now passes with unchanged limits.
+
+Before extracting the handler, all 242 tests in the six dispatch files passed
+in 682.99 seconds. Their assertions remain unchanged. Scoped ESLint reproduced
+`handle` complexity 20 against 15. Commit `74a902d16` separates remote preparation
+and personal sending, retaining the shared deadline and admission order. It removes
+obsolete suppressions, including the deleted Odoo source entry; none was raised.
+The complete post-change run is in progress.
+
+The changed-file lint stage also reproduced three slice test-size failures:
+`approvals.test.ts` has 1,692 counted lines against 1,686; `integrations.test.ts`
+has 2,198 against 2,189; `memory.test.ts` has 4,127 against 4,126.
+The affected behavioural paths are being run before moving or reusing their
+fixture helpers. No assertion or size cap will be loosened.
+
+No secondary stack has been claimed during this continuation. Earlier attempts
+below remain historical evidence.
+
+### Earlier checkpoint within round 5
+
 
 Result: PARTIAL. Required source gate: FAIL. Fresh-stack journey: NOT RUN at both widths.
 No head was pushed in this round. The PR remains draft.
