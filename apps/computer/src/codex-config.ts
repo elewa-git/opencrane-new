@@ -1,11 +1,17 @@
 import { sessionConfiguration } from '@opencrane/events/session-configuration';
 import type { Turn } from './turn-frame.ts';
 
-export function computerSessionConfiguration(
-  turn: Pick<Partial<Turn>, 'executionMode' | 'sharingClass' | 'senderAttemptId'>,
-) {
+export type ComputerSessionFacts = {
+  executionMode?: Turn['executionMode'] | undefined;
+  sharingClass?: Turn['sharingClass'] | undefined;
+  senderAttemptId?: string | undefined;
+};
+
+export function computerSessionConfiguration(turn: ComputerSessionFacts) {
   // Derive settings from admitted turn facts, never a supplied configuration.
-  const conversation = turn.senderAttemptId ? { routinePreparation: {} } : {};
+  // Keep shared-input refusals even when a frame also carries routine identifiers.
+  const routine = turn.senderAttemptId && !turn.sharingClass;
+  const conversation = routine ? { routinePreparation: {} } : {};
   return sessionConfiguration({ conversation, sharingClass: turn.sharingClass,
     requestedMode: turn.executionMode ?? 'memory_free',
     memoryEnabled: turn.executionMode === 'restricted' });

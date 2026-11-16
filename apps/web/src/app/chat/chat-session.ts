@@ -226,8 +226,9 @@ export class ChatSession implements OnDestroy {
     this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
     const conversation = this.conversations().find(row => row.conversationId === id);
     this.readMarker.setRow(conversation);
-    const isTeam = isTeamConversation(conversation);
-    this.executionMode.set(isTeam ? 'restricted' : 'memory_free');
+    const configuration = conversation?.mode === 'agent_session'
+      ? conversation.sessionConfiguration : undefined;
+    this.executionMode.set(configuration?.executionMode ?? 'restricted');
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
     this.computerRecovered.set(false);
     this.computerLostAt.set('');

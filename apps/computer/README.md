@@ -4,7 +4,7 @@
 
 This package builds the private cloud computer where an assistant works, with an AI
 agent, a browser and a desktop. Each assistant has one computer across its chats,
-including a group's shared assistant, whose members share that computer.
+including a group's shared assistant. The bridge reads shared session settings.
 
 ## Where it fits
 
@@ -22,7 +22,7 @@ flowchart LR
   server -->|messages, routine preparation and retry, turns, files and Stops| computer
   server -->|saved Ask retry wake| computer
   computer -->|preparation replies, command labels and masked views, progress, results and changed files| server
-  computer -->|results and process reports| server
+  settings["libs/events<br/>session settings"] -.-> computer
   server -->|qualified private input and four permitted memory tools| computer
   computer -->|reports private thread and memory discovery| server
   computer -->|checks commands and command ownership| executor["socket-denied executor"]

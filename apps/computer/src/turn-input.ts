@@ -1,3 +1,4 @@
+import { computerSessionConfiguration } from './codex-config.ts';
 import type { MemoryContext } from '@opencrane/models';
 import { parseTools, type Turn } from './turn-frame.ts';
 import { workspaceProcess } from './files.ts';
@@ -154,7 +155,8 @@ export function privateTurnInput(text: string, context: unknown, sharingClass?: 
 function privateContextInput(context: unknown, sharingClass?: 'shared_only') {
   let input = PRIVATE_TURN_NOTE;
   let preamble = CONTEXT_PREAMBLE;
-  if (sharingClass === 'shared_only') {
+  const configuration = computerSessionConfiguration({ executionMode: 'restricted', sharingClass });
+  if (configuration.context === 'shared_exchanges') {
     input = SHARED_TURN_NOTE;
     preamble = SHARED_CONTEXT_PREAMBLE;
   }
@@ -205,7 +207,9 @@ export function initialMemoryInput(turn: Turn, context: unknown, block: string,
 }
 
 function requirePersonalInput(turn: Turn, identity: MemoryIdentity, block: string) {
-  if (turn.executionMode !== 'restricted' || turn.sharingClass !== undefined ||
+  const configuration = computerSessionConfiguration(turn);
+  if (configuration.process !== 'fresh_isolated'
+      || configuration.context === 'shared_exchanges' ||
       turn.requesterId !== identity.requester || turn.assistantId !== identity.assistant ||
       turn.conversationId !== identity.conversation || turn.id !== identity.turn ||
       turn.threadId !== identity.thread || Buffer.byteLength(block) > 16384 ||
@@ -213,4 +217,25 @@ function requirePersonalInput(turn: Turn, identity: MemoryIdentity, block: strin
         (!Array.isArray(turn.attachments) || turn.attachments.length !== 0))) {
     throw new Error();
   }
+}
+
+export function grantedTurnInput(input: Turn, context: unknown, initialInput: unknown) {
+  const configuration = computerSessionConfiguration(input);
+  if (initialInput !== undefined) {
+    if (configuration.process !== 'fresh_isolated'
+      || configuration.context === 'shared_exchanges' || context !== undefined ||
+        typeof initialInput !== 'string' || Buffer.byteLength(initialInput) > 120 * 1024) {
+      throw new Error('memory_context_unavailable');
+    }
+    return initialInput;
+  }
+  if (configuration.context !== 'thread') {
+    if (!configuration.attachments && ((input.attachments !== undefined
+      && (!Array.isArray(input.attachments) || input.attachments.length > 0))
+      || input.omittedAttachments > 0)) throw new Error('Private attachments refused');
+    return privateTurnInput(input.text, context, configuration.sharingClass);
+  }
+  if (context !== undefined) throw new Error('Private context on memory-free turn');
+  return turnInput(input.text, input.conversationId, input.attachments,
+    undefined, input.omittedAttachments);
 }

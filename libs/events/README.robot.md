@@ -194,6 +194,10 @@ qualification.
 It never reads a stream, checks access, writes an event or accepts a remote policy.
 Callers with partial saved facts use only fields independent of the missing facts;
 for example, sharing class depends only on conversation creation or the signed turn class.
+The computer imports the independent `@opencrane/events/session-configuration`
+entry point for settings derived from admitted turn mode and saved sharing facts.
+The server sends the browser a default-mode view through `libs/protocol`, so the
+browser does not import the event library or repeat the decision.
 The gateway first matches signed claims to the saved computer start. It derives its
 own configuration and ignores any configuration supplied by another process.
 Memory admission uses the explicitly saved execution mode, treating a missing or

@@ -34,8 +34,10 @@ function refusesPersonalInputWithBothRoutineAndSharingFacts() {
     text: 'Hello', token: 'pass', expiresAt: Date.now() + 60_000,
     executionMode: 'restricted', sharingClass: 'shared_only', senderAttemptId: 'attempt',
     threadId: 'thread', messageId: 'message', rootId: 'root' });
-  expect(() => grantedTurnInput(turn, undefined, 'Personal memory input'))
-    .toThrow('memory_context_unavailable');
+  function preparePersonalInput() {
+    return grantedTurnInput(turn, undefined, 'Personal memory input');
+  }
+  expect(preparePersonalInput).toThrow('memory_context_unavailable');
 }
 it('keeps personal initial input refused when routine and sharing facts are both present',
   refusesPersonalInputWithBothRoutineAndSharingFacts);

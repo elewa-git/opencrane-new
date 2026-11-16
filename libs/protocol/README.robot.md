@@ -71,7 +71,11 @@ role (`owner`, `admin` or `member`), and personal assistant id. The role reuses
 `memberHeaderSchema`; older replies may omit it. `ChatContext` is the shared reply type. Chat feed and live reply schemas type the computer state
 as ready, starting, recovering or not applicable. They may include the time of
 the latest computer loss. `sessionSlug` formats the first message consistently for
-the server list, rail and header. Conversation list status distinguishes `stopped` from
+the server list, rail and header. Assistant conversation rows may carry the strict optional view
+`sessionConfiguration: { executionMode: restricted | memory_free }`. The server
+computes it with the shared event-library configuration; the browser only reads it.
+Older replies may omit it. No authority or turn configuration is accepted from the browser.
+Conversation list status distinguishes `stopped` from
 `done`; both are derived from events, never a separate stored status.
 
 Use `safeParse` when rejected input is expected, or handle the Zod error from `parse`.

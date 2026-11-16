@@ -251,6 +251,15 @@ it('refuses cross-member reads and resumption even with a conversation participa
   refusesAnotherMembersPrivateSession);
 
 
+async function returnsSharedSessionConfiguration() {
+  const response = await request('GET', '/api/conversations', undefined, 'bob');
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ rows: [{ conversationId: 'bob',
+    sessionConfiguration: { executionMode: 'restricted' } }] });
+}
+it('returns the default shared session configuration to the browser',
+  returnsSharedSessionConfiguration);
+
 async function refusesPrivateWebSocketRead() {
   if (!chat) throw new Error('Missing chat fixture');
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);

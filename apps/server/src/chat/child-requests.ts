@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { childRetryInputSchema } from '@opencrane/protocol';
 import { authorityFence, groupMembership } from '@opencrane/models';
 import { readEventAt, type StoredEvent } from '@opencrane/event-store';
-import { chatIdSchema, childRequestedDataSchema, childRequestedEventSchema,
+import { chatIdSchema, sessionAssistantSchema, sessionConfiguration,
+  childRequestedDataSchema, childRequestedEventSchema,
   childRetryRequestedEventSchema, childRetryRequestedDataSchema,
   conversationCreatedDataSchema, messagePostedDataSchema, type ChildRequest }
   from '@opencrane/events';
@@ -28,7 +29,10 @@ const inputSchema = z.strictObject({
   allowanceBoundCents: childRequestedDataSchema.shape.allowanceBoundCents.default(1000),
 });
 type Input = z.infer<typeof inputSchema>;
-const assistantSchema = z.object({ kind: z.literal('team'), payingGroupId: z.string() });
+const assistantPayer = sessionAssistantSchema.pick({ kind: true, payingGroupId: true });
+const assistantSchema = assistantPayer.extend({
+  kind: z.literal('team'), payingGroupId: z.string(),
+});
 export function stageId(options: Options, input: Input, stage: string) {
   const identity = JSON.stringify([options.silo, input.conversationId, input.sourceMessageId]);
   const hash = createHash('sha256');
@@ -90,7 +94,10 @@ async function check(options: Options, memberId: string, loaded: Loaded,
   const assistantEvent = await creationEvent(options.store, options.silo,
     `assistant-${input.assistantId}`, 'assistant.created', deadline);
   const assistant = assistantSchema.safeParse(assistantEvent.data);
-  if (!assistant.success || assistant.data.payingGroupId !== input.payingGroupId) refused();
+  if (!assistant.success) refused();
+  const configuration = sessionConfiguration({ conversation: input, assistantKind: assistant.data.kind,
+    assistantPayingGroupId: assistant.data.payingGroupId, memoryEnabled: false });
+  if (!configuration.payerMatchesAssistant) refused();
   if (fresh) {
     await sharedAssistantAuthority(options, memberId, input.assistantId, input.payingGroupId, fresh);
   } else {

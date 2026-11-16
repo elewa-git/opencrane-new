@@ -12,14 +12,14 @@ rail or phone menu. Owners and admins also see Settings there.
 
 This is OpenCrane's browser app layer. [apps/server](../server/README.md) handles its
 requests and live updates. [libs/protocol](../../libs/protocol/README.md) supplies
-shared rules for checking messages before the website shows them.
+rules for checking messages and the default session mode sent by the server.
 
 ```mermaid
 flowchart LR
   system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
   browser["Person's browser<br/>pages with the installation name and file drops where Attach is available"] -->|requests and tab sign-out| web
   web -->|messages, settings and personal key consent| server["apps/server<br/>the back end"]
-  server -->|saved chats, command labels and masked views, persona versions, files and live updates| web
+  server -->|saved chats, session settings, command labels and masked views, persona versions, files and live updates| web
   web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
   web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
   web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]

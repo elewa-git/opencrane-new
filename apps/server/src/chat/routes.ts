@@ -1,11 +1,12 @@
+import { assistantCreationDetails } from './session-creation.ts';
 import { chatHistoryReply } from './history.ts';
 import { isPublicChatId } from './public-id.ts';
 import { chatDisplayData } from './display.ts';
 import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
-import { creationEvent, privateSessionReader, sharedAssistantAuthority,
+import { privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
-import { summary } from './list-summary.ts';
+import { summary, sessionDefaults } from './list-summary.ts';
 import { childOrigin } from './origin.ts';
 import { conversationListQuery, conversationListCursor, newestListMatch,
   ConversationListChanged,
@@ -24,7 +25,6 @@ import {
   writeChatAccess,
   activeChatMember,
   isChatRefused,
-  ChatRefused,
   ChatAccessApplying,
   conversationParticipationReader,
   type ChatOptions,
@@ -41,9 +41,6 @@ import { welcomeListChoice } from './list-welcome.ts';
 export type { ChatOptions } from './access.ts';
 type Fresh = Awaited<ReturnType<typeof writeChatAccess>>;
 const id = idSchema;
-const assistantDetails = z.object({
-  kind: z.string(), payingGroupId: z.string().optional(),
-});
 class InvalidChatRequest extends Error {}
 const publicChatId = id.refine(isPublicChatId, 'Reserved routine session prefix');
 const parameters = z.object({
@@ -277,7 +274,7 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
       }
       const { conversationId, mode, assistantId, payingGroupId, createdBy, assistantKind } = row;
       return { conversationId, mode, assistantId, payingGroupId, createdBy, assistantKind,
-        createdAt, ...details };
+        sessionConfiguration: sessionDefaults(assistantKind), createdAt, ...details };
     } catch (error) {
       if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;
@@ -471,21 +468,6 @@ async function assistantCreation(
   await sharedAssistantAuthority(options, memberId, input.assistantId,
     z.string().parse(details.payingGroupId), fresh);
   return fresh;
-}
-
-async function assistantCreationDetails(options: ChatOptions, memberId: string,
-  input: { assistantId: string; payingGroupId?: string | undefined }, deadline?: number) {
-  const auth = memberAuthorisation(options.binding);
-  const permission = await auth.actsFor(memberId, input.assistantId);
-  if (!permission.allowed) throw new ChatRefused('Assistant refused');
-  const assistant = await creationEvent(options.store, options.silo,
-    `assistant-${input.assistantId}`, 'assistant.created', deadline);
-  const details = assistantDetails.parse(assistant.data);
-  if (details.kind === 'team' &&
-      (!details.payingGroupId || input.payingGroupId !== details.payingGroupId)) {
-    throw new PayingGroupRefused('Paying group must match the assistant');
-  }
-  return details;
 }
 
 function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {

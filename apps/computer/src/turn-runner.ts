@@ -13,7 +13,7 @@ export { parseTurn } from './turn-frame.ts';
 export type { Turn } from './turn-frame.ts';
 import { itemReport } from './item-reports.ts';
 import { redactCommand } from './command-redaction.ts';
-import { turnInput, privateTurnInput } from './turn-input.ts';
+import { grantedTurnInput } from './turn-input.ts';
 import { threadLoads, unload, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
 import { revokeTurnAccess } from './turn-stop.ts';
 import { routineThreads, startPrivateThread, type PrivateSession } from './routine-threads.ts';
@@ -248,11 +248,12 @@ class TurnRunner {
 
   private recover() {
     for (const report of [...this.journal.reports]) {
+      const configuration = computerSessionConfiguration(report);
       // Fail unfinished work because its old process died with the bridge.
       // Re-running it would start new work without the member asking.
       // Keep a saved but undelivered Stop from disguising a restart as a stopped reply.
       if (this.isStarted(report)
-        && (computerSessionConfiguration(report).process === 'fresh_isolated' || this.mayHaveExecuted(report))
+        && (configuration.process === 'fresh_isolated' || this.mayHaveExecuted(report))
         && !this.isFinished(report.turnId)) {
         this.journal.append(report, 'agent.turn_failed', { reason: 'bridge_restarted' });
       }
@@ -435,7 +436,8 @@ class TurnRunner {
   }
 
   private rpcFor(turn: Turn) {
-    if (computerSessionConfiguration(turn).process !== 'fresh_isolated') return this.driver.rpc.bind(this.driver);
+    const configuration = computerSessionConfiguration(turn);
+    if (configuration.process !== 'fresh_isolated') return this.driver.rpc.bind(this.driver);
     const session = this.state.sessions.get(turn.id);
     if (!session) throw new Error('Missing private session');
     return session.rpc;
@@ -474,7 +476,8 @@ class TurnRunner {
   private releaseTurnAccess(threadId: string, turn: Turn) {
     // Keep a separate removal while Stop is pending, as the thread may be reused.
     // A completed private Stop has already removed that private grant.
-    if (computerSessionConfiguration(turn).process === 'fresh_isolated' && this.stoppedAccessRemoved.has(turn)) return;
+    const configuration = computerSessionConfiguration(turn);
+    if (configuration.process === 'fresh_isolated' && this.stoppedAccessRemoved.has(turn)) return;
     void this.gate.track(this.dropAccess(threadId, turn));
   }
 
@@ -582,14 +585,18 @@ class TurnRunner {
   }
 
   private async prepareAndRun(input: Turn) {
+    const configuration = computerSessionConfiguration(input);
     let response: Record<string, unknown>;
-    if (computerSessionConfiguration(input).process === 'fresh_isolated') response = await this.preparePrivateThread(input);
-    else response = await this.prepareMemoryFreeThread(input);
+    if (configuration.process === 'fresh_isolated') {
+      response = await this.preparePrivateThread(input);
+    } else {
+      response = await this.prepareMemoryFreeThread(input);
+    }
     if (!this.isActiveTurn(input.id)) return;
     const threadValue = record(response['thread'])['id'];
     if (typeof threadValue !== 'string') throw new Error('Missing thread');
     const activeTurn = this.state.running.get(threadValue);
-    if (activeTurn && (computerSessionConfiguration(input).process === 'fresh_isolated'
+    if (activeTurn && (configuration.process === 'fresh_isolated'
       || computerSessionConfiguration(activeTurn).process === 'fresh_isolated')) {
       throw new Error('Private thread is already active');
     }
@@ -599,7 +606,7 @@ class TurnRunner {
       this.failTurn(input);
       return;
     }
-    if (computerSessionConfiguration(input).process === 'persistent_thread' && this.driver.artifactSnapshot) {
+    if (configuration.process === 'persistent_thread' && this.driver.artifactSnapshot) {
       const snapshot = await this.driver.artifactSnapshot();
       this.artifactStarts.set(input.id, snapshot);
     }
@@ -655,7 +662,7 @@ class TurnRunner {
       && !this.recalls.get(input.id)?.ready) throw new Error('Private recall unavailable');
     // Keep the server's admitted model for every call and renewal in this turn.
     const model = grant.model ?? modelForTask(input.taskKind);
-    const inputText = await this.inputFor(input, grant.context, grant.initialInput);
+    const inputText = await grantedTurnInput(input, grant.context, grant.initialInput);
     const frame = { ...input, text: inputText, token: grant.token,
       expiresAt: grant.expiresAt, model };
     if (Buffer.byteLength(JSON.stringify(frame)) > 120 * 1024) {
@@ -665,26 +672,6 @@ class TurnRunner {
       || this.state.cancelled.has(input.id)) throw new Error('Turn ended');
     this.turnModels.set(input.id, model);
     return { model, inputText };
-  }
-
-  private async inputFor(input: Turn, context: unknown, initialInput: unknown) {
-    const configuration = computerSessionConfiguration(input);
-    if (initialInput !== undefined) {
-      if (configuration.process !== 'fresh_isolated' || configuration.context === 'shared_exchanges' || context !== undefined ||
-          typeof initialInput !== 'string' || Buffer.byteLength(initialInput) > 120 * 1024) {
-        throw new Error('memory_context_unavailable');
-      }
-      return initialInput;
-    }
-    if (computerSessionConfiguration(input).process === 'fresh_isolated') {
-      if (!configuration.attachments && ((input.attachments !== undefined
-        && (!Array.isArray(input.attachments) || input.attachments.length > 0))
-        || input.omittedAttachments > 0)) throw new Error('Private attachments refused');
-      return privateTurnInput(input.text, context, configuration.sharingClass);
-    }
-    if (context !== undefined) throw new Error('Private context on memory-free turn');
-    return turnInput(input.text, input.conversationId, input.attachments,
-      undefined, input.omittedAttachments);
   }
 
   private async rememberTurn(input: Turn, threadId: string, result: Record<string, unknown>) {
@@ -813,7 +800,10 @@ class TurnRunner {
 
   private confirmPrivateClearance(turnId: string, cleared: (() => void) | undefined) {
     const started = this.lastStartedReport(turnId);
-    if (started && computerSessionConfiguration(started).process === 'fresh_isolated' && computerSessionConfiguration(started).context !== 'shared_exchanges') cleared?.();
+    if (!started) return;
+    const configuration = computerSessionConfiguration(started);
+    if (configuration.process === 'fresh_isolated'
+      && configuration.context !== 'shared_exchanges') cleared?.();
   }
 
   private removeStoppedAccess(input: Turn, threadId: string | undefined) {
@@ -955,7 +945,7 @@ class TurnRunner {
 
   private refuseUnpermittedItem(input: Turn, threadId: string,
     event: Record<string, unknown>, params: Record<string, unknown>): boolean {
-    if (computerSessionConfiguration(input).process !== 'fresh_isolated'
+    if (computerSessionConfiguration(input).localTools
       || !['item/started', 'item/completed'].includes(String(event['method']))) return false;
     const item = record(params['item']);
     if (this.permitsPrivateItem(input, item)) return false;
@@ -965,7 +955,8 @@ class TurnRunner {
 
   private finishStoppedPrivateTurn(input: Turn, threadId: string, method: unknown,
     params: Record<string, unknown>) {
-    if (computerSessionConfiguration(input).process !== 'fresh_isolated' || !this.state.cancelled.has(input.id)) {
+    const configuration = computerSessionConfiguration(input);
+    if (configuration.process !== 'fresh_isolated' || !this.state.cancelled.has(input.id)) {
       return false;
     }
     if (method === 'turn/completed') {
@@ -980,7 +971,7 @@ class TurnRunner {
     const item = record(params['item'] ?? {});
     const command = item['command'];
     if (event['method'] === 'item/completed' && item['type'] === 'commandExecution'
-      && computerSessionConfiguration(input).process !== 'fresh_isolated' && typeof command === 'string'
+      && computerSessionConfiguration(input).localTools && typeof command === 'string'
       && typeof item['exitCode'] === 'number') {
       const threadId = String(params['threadId']);
       const commandText = command;
