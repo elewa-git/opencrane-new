@@ -3,7 +3,7 @@ import type { FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { captureScheduledBackup, listBackups, showBackup } from './scheduled-backup.ts';
+import { captureScheduledBackup, hashBackupBytes, listBackups, showBackup } from './scheduled-backup.ts';
 import type { BackupPoint } from './scheduled-backup.ts';
 
 const directories: string[] = [];
@@ -248,4 +248,11 @@ if (args[0] === 'scale' && args[1] === 'deployment/server' &&
     await nats.close();
     vi.unstubAllEnvs();
   }
+});
+
+it('hashes known bytes without changing their encoding', function knownBytes() {
+  expect(hashBackupBytes(Buffer.from('abc')))
+    .toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  expect(hashBackupBytes(Buffer.alloc(0)))
+    .toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
 });
