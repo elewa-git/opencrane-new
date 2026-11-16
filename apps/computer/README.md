@@ -15,11 +15,9 @@ workers, starts and pauses computers in [Kubernetes](../../GLOSSARY.md#kubernete
 
 ```mermaid
 flowchart LR
-  apps["apps<br/>applications"] --> computer["apps/computer<br/>bridge and command preparation"]
-  apps --> ops["apps/ops<br/>background workers"]
-  apps --> server["apps/server<br/>back end"]
-  ops -->|starts and pauses| computer
-  server -->|messages, routine preparation and retry, turns, files and Stops| computer
+  computer["apps/computer<br/>bridge and command preparation"]
+  ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
+  server["apps/server<br/>back end"] -->|messages, routine preparation and retry, turns, files and Stops| computer
   server -->|saved Ask retry wake| computer
   computer -->|preparation replies, command labels and masked views, progress, results and changed files| server
   settings["libs/events<br/>session settings"] -.-> computer
