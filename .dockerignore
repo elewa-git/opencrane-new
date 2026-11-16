@@ -55,6 +55,7 @@ infra/package/*
 !infra/package/scheduled-backup-source.ts
 !infra/package/scheduled-backup-run.ts
 !infra/package/event-backup.ts
+!infra/package/backup-bytes.ts
 **/test
 **/tests
 **/*.spec.*

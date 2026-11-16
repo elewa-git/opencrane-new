@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hashBackupBytes } from './backup-bytes.ts';
 import { lstatSync, mkdirSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -16,11 +16,6 @@ const maximumBytes = 64 * 1024 * 1024;
 function refusal() {
   return new Error('Backup capture refused; completion unknown; keep targets isolated');
 }
-function digest(bytes: Buffer) {
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  return hash.digest('hex');
-}
 function description(directory: string) {
   return readPrivateFile(join(directory, 'descriptor.json'), 1024 * 1024);
 }
@@ -29,7 +24,7 @@ function fingerprints(directory: string) {
   const names = readdirSync(directory);
   for (const name of names) {
     const bytes = readPrivateFile(join(directory, name), maximumBytes + 28);
-    result[name] = digest(bytes);
+    result[name] = hashBackupBytes(bytes);
   }
   return result;
 }
@@ -81,7 +76,8 @@ export async function collectBackupCapture(source: ExportArguments[0],
     await collectEventBackup(source, eventOptions);
     const eventBytes = description(eventDirectory);
     const events = descriptorSchema.parse(JSON.parse(eventBytes.toString('utf8')));
-    const eventFiles = { 'events.snapshot': events.sha256, 'descriptor.json': digest(eventBytes) };
+    const eventFiles = { 'events.snapshot': events.sha256,
+      'descriptor.json': hashBackupBytes(eventBytes) };
     const objectFiles: Record<string, string> = {};
     const homeFiles: Record<string, string> = {};
     // Keep hashes from encryption; reading them after a later copy could accept changed bytes.
@@ -97,16 +93,16 @@ export async function collectBackupCapture(source: ExportArguments[0],
     const objectSchema = z.object({ kind: z.literal('event-referenced-objects-only'),
       silo: z.literal(settings.silo), attempt: z.literal(settings.attempt),
       eventArchiveSha256: z.literal(events.sha256),
-      eventDescriptorSha256: z.literal(digest(eventBytes)), objects: z.array(z.unknown()),
+      eventDescriptorSha256: z.literal(hashBackupBytes(eventBytes)), objects: z.array(z.unknown()),
     });
     const objectProof = objectSchema.parse(JSON.parse(objectBytes.toString('utf8')));
-    objectFiles['descriptor.json'] = digest(objectBytes);
+    objectFiles['descriptor.json'] = hashBackupBytes(objectBytes);
     const homeOptions = { ...settings, destination: homeDirectory, timeoutMs: remaining(),
       get writersStopped() { return options.writersStopped; } };
     const homes = await collectComputerVolumeExport(source, homeTarget, homeOptions,
       readExport, readKubernetes, homeWritten);
     const homeBytes = description(homeDirectory);
-    homeFiles['descriptor.json'] = digest(homeBytes);
+    homeFiles['descriptor.json'] = hashBackupBytes(homeBytes);
     const objectCheckOptions = { ...settings, directory: objectDirectory, eventDirectory,
       targetSilo: settings.silo, stopped: true, exclusive: true, timeoutMs: remaining() };
     await checkObjectBackup(source, objectCheckOptions);
@@ -117,18 +113,19 @@ export async function collectBackupCapture(source: ExportArguments[0],
     if (events.silo !== settings.silo || events.attempt !== settings.attempt ||
         homes.binding.silo !== settings.silo || homes.binding.attempt !== settings.attempt ||
         homes.binding.eventArchiveSha256 !== events.sha256 ||
-        homes.binding.eventDescriptorSha256 !== digest(eventBytes) ||
+        homes.binding.eventDescriptorSha256 !== hashBackupBytes(eventBytes) ||
         !isDeepStrictEqual(eventFiles, fingerprints(eventDirectory)) ||
         !isDeepStrictEqual(objectFiles, fingerprints(objectDirectory)) ||
         !isDeepStrictEqual(homeFiles, fingerprints(homeDirectory))) throw refusal();
     remaining();
     // Return component evidence only. Do not publish a complete-system manifest or resume work.
     return { kind: 'capture-components-only' as const, silo: settings.silo, attempt: settings.attempt,
-      eventArchiveSha256: events.sha256, eventDescriptorSha256: digest(eventBytes),
+      eventArchiveSha256: events.sha256, eventDescriptorSha256: hashBackupBytes(eventBytes),
       events: { kind: events.kind, count: events.eventCount },
       objects: { kind: objectProof.kind, count: objectProof.objects.length,
-        descriptorSha256: digest(objectBytes) },
-      homes: { kind: homes.kind, count: homes.exports.length, descriptorSha256: digest(homeBytes) } };
+        descriptorSha256: hashBackupBytes(objectBytes) },
+      homes: { kind: homes.kind, count: homes.exports.length,
+        descriptorSha256: hashBackupBytes(homeBytes) } };
   } catch {
     // Never erase or resend to a target: a lost reply may hide a completed restore.
     throw refusal();

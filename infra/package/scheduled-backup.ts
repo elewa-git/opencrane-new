@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hashBackupBytes } from './backup-bytes.ts';
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile }
   from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -51,12 +51,6 @@ async function fingerprint(path: string) {
   }
   const bytes = await readFile(path);
   return { byteCount: bytes.length, sha256: hashBackupBytes(bytes) };
-}
-
-export function hashBackupBytes(bytes: Buffer) {
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  return hash.digest('hex');
 }
 
 function drained(point: BackupPoint) {
@@ -136,9 +130,10 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
     resumed = false;
     await resume(source, lock);
     resumed = true;
-    const manifest = manifestSchema.parse({ version: 1, id: options.id, silo: options.silo,
+    const manifestValue = { version: 1, id: options.id, silo: options.silo,
       point, parts, startedAt, stoppedAt, completedAt: new Date().toISOString(),
-      images: options.images, chartVersion: '0.1.0' });
+      images: options.images, chartVersion: '0.1.0' };
+    const manifest = manifestSchema.parse(manifestValue);
     stage = 'publish';
     await writeFile(join(temporary, 'manifest.json'), JSON.stringify(manifest, null, 2),
       { mode: 0o600, flag: 'wx', flush: true });

@@ -1,3 +1,4 @@
+import { hashBackupBytes } from './backup-bytes.ts';
 import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync,
   renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
@@ -35,12 +36,6 @@ function refusal() {
   return new Error('Object backup refused');
 }
 
-function sha256(bytes: string | Buffer) {
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  return hash.digest('hex');
-}
-
 function boundedLimit(value: number | undefined, maximum: number) {
   const limit = value ?? maximum;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > maximum) throw refusal();
@@ -62,7 +57,7 @@ function objectReferences(silo: string, maxObjects: number, maxBytes: number) {
     const address = `${silo}/${file.conversationId}/${file.fileId}/${file.sha256}`;
     if (event.silo !== silo || event.subject !== `conversation-${file.conversationId}` ||
         file.objectKey !== address) throw refusal();
-    const identity = sha256(JSON.stringify([silo, file.conversationId, file.fileId]));
+    const identity = hashBackupBytes(JSON.stringify([silo, file.conversationId, file.fileId]));
     const reference = { identity, byteCount: file.size, sha256: file.sha256, address };
     const previous = references.get(identity);
     if (previous) {
@@ -193,19 +188,19 @@ export async function collectObjectBackup(source: NatsConnection, target: NatsCo
     const current = descriptorSchema.parse(JSON.parse(saved.toString('utf8')));
     const archive = readPrivateFile(join(options.directory, 'events.snapshot'), maximumBytes);
     if (!isDeepStrictEqual(current, descriptor) || archive.length !== descriptor.byteCount ||
-        sha256(archive) !== descriptor.sha256) throw refusal();
+        hashBackupBytes(archive) !== descriptor.sha256) throw refusal();
     // Retain the hash from encryption so a later copy cannot establish a corrupt baseline.
     for (const entry of entries) {
       bounds.check();
       const path = join(options.destination, entry.identity);
       const savedObject = readPrivateFile(path, entry.byteCount + 28);
       if (savedObject.length !== entry.byteCount + 28 ||
-          sha256(savedObject) !== archiveHashes.get(entry.identity)) throw refusal();
+          hashBackupBytes(savedObject) !== archiveHashes.get(entry.identity)) throw refusal();
     }
     const result = { version: 2, encryption: 'aes-256-gcm',
       kind: 'event-referenced-objects-only', silo: descriptor.silo,
       attempt: descriptor.attempt, eventArchiveSha256: descriptor.sha256,
-      eventDescriptorSha256: sha256(saved), objects: entries };
+      eventDescriptorSha256: hashBackupBytes(saved), objects: entries };
     bounds.check();
     writeFileSync(join(options.destination, 'descriptor.partial'), JSON.stringify(result),
       { flag: 'wx', mode: 0o600, flush: true });

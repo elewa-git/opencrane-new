@@ -148,7 +148,7 @@ class ImageLayerTests(unittest.TestCase):
     def test_missing_backup_import_refuses_even_with_entry_point_present(self):
         required = ("infra/package/scheduled-backup.ts",
                     "infra/package/scheduled-backup-source.ts", "infra/package/event-backup.ts",
-                    "infra/package/object-credentials.mjs")
+                    "infra/package/object-credentials.mjs", "infra/package/backup-bytes.ts")
         for module in required:
             with self.subTest(module=module):
                 sources = dict(self.sources)
@@ -165,7 +165,7 @@ class ImageLayerTests(unittest.TestCase):
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
                          "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs",
                          "scheduled-backup-run.ts", "scheduled-backup.ts",
-                         "scheduled-backup-source.ts", "event-backup.ts"}
+                         "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
             if path.startswith("app/infra/package/"):

@@ -22,7 +22,7 @@ rules:
     resources: [deployments]
     resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
       worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit]
-    verbs: [get]
+    verbs: [get, list, watch]
   - apiGroups: [apps]
     resources: [deployments/scale]
     resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,

@@ -11,13 +11,22 @@ import { packageBackupSource } from './scheduled-backup-source.ts';
 import { captureScheduledBackup, listBackups } from './scheduled-backup.ts';
 
 const database = vi.hoisted(function databaseState() {
-  return { behind: '', clients: '0' };
+  return { behind: '', clients: '0', names: [] as string[] };
 });
 vi.mock('pg', function databaseBoundary() {
   class Pool {
     query(sql: string) {
       if (sql.includes('pg_stat_activity')) return { rows: [{ count: database.clients }] };
       if (sql.includes('pg_current_wal_lsn')) return { rows: [{ lsn: '0/123' }] };
+      if (sql.includes('projection_checkpoints')) {
+        const rows = [];
+        for (const name of database.names) {
+          const sequence = database.behind === name ? '0' : '1';
+          rows.push({ name, sequence });
+        }
+        return { rows };
+      }
+      if (sql.includes('handler_dispatcher')) return { rows: [{ sequence: '1' }] };
       throw new Error('Unexpected database query');
     }
     end() { return Promise.resolve(); }
@@ -47,6 +56,7 @@ afterEach(function reset() {
 });
 
 async function fixture(ready = true) {
+  database.names = projectionNames;
   const directory = await mkdtemp(join(tmpdir(), 'backup-adapter-'));
   const nats = await natsFixture();
   await nats.seed([event('backup-event')]);
@@ -66,29 +76,24 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   vi.stubEnv('BACKUP_TEST_READY', ready ? 'yes' : 'no');
   const backupDirectory = join(directory, 'sets');
   await mkdir(backupDirectory, { mode: 0o700 });
-  const options = { directory: backupDirectory, id: 'adapter-backup', silo: 'test', images: { server: 'test' } };
+  const options = { directory: backupDirectory, id: 'adapter-backup',
+    silo: 'test', images: { server: 'test' } };
   const runtime = await packageBackupSource(options);
   const replicas = new Map<string, number>();
-  async function kube(args: string[]) {
+  function kube(args: string[]) {
     if (args[0] === 'scale') {
       replicas.set(args[1]!.replace('deployment/', ''), 0);
-      return '';
+      return Promise.resolve('');
     }
-    if (args[1] === 'pods') return JSON.stringify({ items: [] });
-    if (args[4] === 'json') return JSON.stringify({ spec: { replicas: 1 } });
-    return String(replicas.get(args[2]!));
-  }
-  async function checkpoints() {
-    const positions: Record<string, number> = { dispatcher: 1 };
-    for (const name of projectionNames) positions[name] = database.behind === name ? 0 : 1;
-    return positions;
+    if (args[1] === 'pods') return Promise.resolve(JSON.stringify({ items: [] }));
+    if (args[4] === 'json') return Promise.resolve(JSON.stringify({ spec: { replicas: 1 } }));
+    return Promise.resolve(String(replicas.get(args[2]!)));
   }
   async function part(destination: string) {
     await writeFile(destination, 'fixture bytes');
     return {};
   }
   vi.spyOn(runtime.source, 'kube').mockImplementation(kube);
-  vi.spyOn(runtime.source, 'checkpoints').mockImplementation(checkpoints);
   runtime.source.parts.database = part;
   runtime.source.parts.files = part;
   async function close() {
@@ -115,7 +120,7 @@ for (const brokenPart of [false, true]) {
   it(`retains maintenance after accepted scales with unavailable replacements (part=${brokenPart})`,
     async function unavailableReplacements() {
       const test = await fixture(false);
-      async function failPart() { throw new Error('broken part'); }
+      function failPart() { return Promise.reject(new Error('broken part')); }
       if (brokenPart) test.source.parts.files = failPart;
       await expect(captureScheduledBackup(test.options, test.source))
         .rejects.toThrow('Maintenance remains active; services could not restart');
@@ -157,7 +162,7 @@ for (const violation of violations) {
       }
       if (projectionNames.includes(violation)) database.behind = violation;
       if (violation === 'clients') database.clients = '1';
-      vi.spyOn(test.source, 'kube').mockImplementation(kube);
+      const kubeProbe = vi.spyOn(test.source, 'kube').mockImplementation(kube);
       vi.spyOn(test.source, 'eventInfo').mockImplementation(eventInfo);
       if (violation === 'descriptor') {
         const capture = test.source.parts.events;
@@ -175,7 +180,7 @@ for (const violation of violations) {
         cause: { kind: 'scheduled_backup', reason: stage },
       });
       if (projectionNames.includes(violation)) {
-        expect(vi.mocked(test.source.kube).mock.calls).not.toContainEqual(
+        expect(kubeProbe.mock.calls).not.toContainEqual(
           [['scale', 'deployment/worker-members', '--replicas=0', '--current-replicas=1']]);
       }
       expect(await listBackups(test.directory)).toEqual([]);

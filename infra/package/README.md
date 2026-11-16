@@ -20,7 +20,7 @@ A spare stack can own a separate three-node cluster for installation checks.
 flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|checks ownership, nodes, certificates and backup token references| package["infra/package<br/>images, installation settings and evidence"]
   package -->|uses local cluster| devbox["infra/devbox<br/>machine setup"]
-  package -->|starts services and fake model; saves scheduled backups| apps["apps<br/>product services and replay"]
+  package -->|starts services and fake model; saves backups after services recover| apps["apps<br/>product services and replay"]
   packaging["GitHub packaging job"] -->|supplies scanner approval and image| package
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
@@ -45,6 +45,8 @@ A nightly scheduled job saves the single-server event log, all databases and upl
 files together on a separate private volume. It briefly stops chat and background
 writes, drains the read tables, then records one shared position and checksums.
 An operator can trigger the job, list complete backups and read their manifests.
+Publication waits for every stopped service to become ready again. A failed
+restart keeps maintenance active and publishes nothing.
 Failed runs appear as failed Kubernetes Jobs. See the
 [scheduled backup guide](README.robot.md#scheduled-pilot-backup).
 

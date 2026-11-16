@@ -1,9 +1,10 @@
+import { hashBackupBytes } from './backup-bytes.ts';
 import { mkdtemp, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { captureScheduledBackup, hashBackupBytes, listBackups, showBackup } from './scheduled-backup.ts';
+import { captureScheduledBackup, listBackups, showBackup } from './scheduled-backup.ts';
 import type { BackupPoint } from './scheduled-backup.ts';
 
 const directories: string[] = [];

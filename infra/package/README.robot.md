@@ -1903,17 +1903,22 @@ short-lived storage lease. It checks the stream identity, retained range and
 checkpoints again before resuming through normal service startup. PostgreSQL's
 LSN identifies the start of this stopped interval; background WAL maintenance can
 continue, so it is not a promise that the physical WAL bytes remain unchanged.
-All three parts share the backup id and event sequence. Their manifest includes
+`backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
+object capture. All three parts share the backup id and event sequence. Their manifest includes
 integer byte counts, SHA-256, capture timestamps, image pins, chart version,
 event stream configuration and positions, database names and LSN, and an object
 inventory with each key, size and checksum. The `files` part is UTF-8 JSON lines;
 each line adds base64 `data` to that object's inventory entry.
 
-Only after all parts succeed and service replicas are restored does an atomic
+Only after all parts succeed and every restored deployment is ready does an atomic
 directory rename publish the set. The catalogue ignores hidden interrupted sets
 and verifies every saved part against the manifest before listing or showing it.
 A failure publishes nothing, removes only this run's temporary output and restores
-saved replica counts. It attempts every saved restart even if one fails. A failed
+saved replica counts. It attempts every saved restart even if one fails. Scaling each
+deployment has a five-second limit. After all scale attempts, it checks every
+deployment with a 60-second rollout wait, concurrently, with a 65-second process
+limit. Recovery is separate from the capture deadline and takes at most 115 seconds
+for the ten services, including after a failed part or expired capture. A failed
 resume prevents publication and retains the maintenance lock and private set,
 even when writing or syncing the `resume_failed` marker also fails. The existing
 lock still identifies the run. The failed Job reports maintenance explicitly;

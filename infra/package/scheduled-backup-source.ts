@@ -10,7 +10,7 @@ import { budgets } from '@opencrane/models';
 import { members, mcpCatalogue, computers, conversations, files, auditTrail,
   personalSettings, groups, providers, modelAccess, egressPolicy, connectionProfiles,
   childRequests } from '@opencrane/projections';
-import { hashBackupBytes } from './scheduled-backup.ts';
+import { hashBackupBytes } from './backup-bytes.ts';
 import { readStorageLease } from '@opencrane/auth';
 import { z } from 'zod';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
@@ -146,20 +146,34 @@ class PilotBackupSource implements BackupSource {
     return { ...this.point, checkpoints: positions };
   }
   async resume() {
-    const failed: string[] = [];
+    const failed = new Set<string>();
     for (const [name, replicas] of this.saved) {
       try {
         await execute('kubectl', ['scale', `deployment/${name}`, `--replicas=${replicas}`],
           { timeout: 5000 });
-        this.saved.delete(name);
       } catch {
-        failed.push(name);
+        failed.add(name);
       }
     }
-    if (failed.length > 0) {
-      const cause = { kind: 'backup_resume', deployments: failed };
+    // Start all replacements before waiting, so dependent services can become ready together.
+    const names = [...this.saved.keys()];
+    const waitReady = this.waitReady.bind(this);
+    const readiness = names.map(waitReady);
+    const results = await Promise.allSettled(readiness);
+    for (const [index, result] of results.entries()) {
+      const name = names[index]!;
+      if (result.status === 'rejected') failed.add(name);
+      if (!failed.has(name)) this.saved.delete(name);
+    }
+    if (failed.size > 0) {
+      const cause = { kind: 'backup_resume', deployments: [...failed] };
       throw new Error('Backup replicas remain stopped', { cause });
     }
+  }
+  private async waitReady(name: string) {
+    // Bound recovery separately from capture, including when its deadline has expired.
+    await execute('kubectl', ['rollout', 'status', `deployment/${name}`, '--timeout=60s'],
+      { timeout: 65_000 });
   }
   async events(destination: string) {
     const capture = `${destination}-capture`;
@@ -192,10 +206,11 @@ class PilotBackupSource implements BackupSource {
     const leaseFile = '/tmp/backup-storage/lease.json';
     await issueObjectLease({ accessKey, secretKey }, leaseFile, 'http://objects:9000');
     const lease = await readStorageLease(leaseFile);
-    const client = new Client({ endPoint: 'objects', port: 9000, useSSL: false,
+    const storageOptions = { endPoint: 'objects', port: 9000, useSSL: false,
       accessKey: lease.accessKey, secretKey: lease.secretKey, sessionToken: lease.sessionToken,
       transport: storageTransport('http:', AbortSignal.timeout(this.remaining())),
-      retryOptions: { disableRetry: true } });
+      retryOptions: { disableRetry: true } };
+    const client = new Client(storageOptions);
     const objects: { key: string; byteCount: number; sha256: string }[] = [];
     const lines: string[] = [];
     let total = 0;
@@ -217,7 +232,9 @@ class PilotBackupSource implements BackupSource {
       const bytes = Buffer.concat(chunks);
       const entry = { key: objectEntry.name, byteCount: bytes.length, sha256: hashBackupBytes(bytes) };
       objects.push(entry);
-      lines.push(JSON.stringify({ ...entry, data: bytes.toString('base64') }));
+      const archivedObject = { ...entry, data: bytes.toString('base64') };
+      const serialisedObject = JSON.stringify(archivedObject);
+      lines.push(serialisedObject);
     }
     await writeFile(destination, lines.join('\n'), { mode: 0o600, flag: 'wx', flush: true });
     return { bucket: 'files', objects };
