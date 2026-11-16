@@ -66,7 +66,6 @@ class ApplicationTests(unittest.TestCase):
                             self.assertEqual(output['runId'], 123)
                             self.assertEqual(output['scanSha256'], hashlib.sha256(scan_path.read_bytes()).hexdigest())
                         else:
-                            expected = ValueError
                             if change in ('bundled', 'manual'):
                                 expected = self.assertRaisesRegex(ValueError, 'licence')
                             else:
@@ -163,6 +162,52 @@ class ApplicationTests(unittest.TestCase):
             path.write_bytes(b'changed bytes')
             with self.assertRaisesRegex(ValueError, 'Evidence bytes changed'):
                 application.licences.checked_bytes(path, checksum)
+
+    def test_authenticates_three_distinct_indexes_and_refuses_damage_in_each(self):
+        for damaged in (None, 'bookworm', 'updates', 'security'):
+            with self.subTest(damaged=damaged), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                keyring = b'reviewed keyring'
+                (directory / 'debian-archive-keyring.gpg').write_bytes(keyring)
+                evidence = {'keyringSha256': hashlib.sha256(keyring).hexdigest(), 'indexes': []}
+                downloads = {}
+                releases = {}
+                artifacts = []
+                for suite in ('bookworm', 'updates', 'security'):
+                    url = f'https://snapshot.debian.org/archive/debian/date/dists/{suite}/InRelease'
+                    compressed = lzma.compress(f'Package: {suite}\nVersion: 1\n\n'.encode())
+                    checksum = hashlib.sha256(compressed).hexdigest()
+                    signed = f'signed release for {suite}'.encode()
+                    releases[signed] = f'SHA256:\n {checksum} {len(compressed)} main/binary-amd64/Packages.xz\n'
+                    evidence['indexes'].append({'url': url, 'packages': [[suite, '1']],
+                        'inReleaseSha256': hashlib.sha256(signed).hexdigest(),
+                        'packagesSha256': checksum})
+                    downloads[url] = signed
+                    if suite == damaged:
+                        compressed += b'changed'
+                    downloads[url.removesuffix('InRelease') + 'main/binary-amd64/Packages.xz'] = compressed
+                    artifacts.append({'type': 'deb', 'name': suite, 'version': '1'})
+
+                def fetch(url, path):
+                    path.write_bytes(downloads[url])
+
+                def verify_signature(arguments, **options):
+                    self.assertEqual(arguments[:3], ['gpgv', '--keyring',
+                        str(directory / 'debian-archive-keyring.gpg')])
+                    self.assertTrue(options['check'])
+                    release = Path(arguments[-1]).read_bytes()
+                    return subprocess.CompletedProcess(arguments, 0, stdout=releases[release].encode())
+
+                with patch.object(application.licences, 'read_json', return_value=evidence), \
+                        patch.object(application, 'fetch', side_effect=fetch) as download, \
+                        patch.object(application.subprocess, 'run', side_effect=verify_signature) as verify:
+                    if damaged is None:
+                        application.authenticate_debian(directory, {'artifacts': artifacts})
+                        self.assertEqual(verify.call_count, 3)
+                        self.assertEqual([call.args[0] for call in download.call_args_list], list(downloads))
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'Evidence bytes changed'):
+                            application.authenticate_debian(directory, {'artifacts': artifacts})
 
 
 if __name__ == '__main__':
