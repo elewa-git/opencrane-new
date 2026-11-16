@@ -27,7 +27,7 @@ The reference carries only the event id and position; readers verify the history
 An Ask for a company routine can name its run, account and tool details with digests
 where private values would be unsafe. The later account release must name that Ask.
 
-An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including encrypted command views, and still accepts older events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates without starting work.
+An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including encrypted command views, and still accepts older events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates and work out session settings without starting work.
 
 A saved message can name the clean files sent with it. Older messages without file ids
 remain readable. Message text stays encrypted.
@@ -79,7 +79,7 @@ Allow, Ask or Block choice for a tool.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>events and checked account references"]
+  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>events, session settings and checked account references"]
   server["apps/server<br/>back end"] -.->|checks message file ids, assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send and final access records with OAuth digests, retries and writer closure| events
   store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
   projections["libs/projections<br/>read tables and retired choices"] -.-> events

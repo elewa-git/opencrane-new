@@ -1653,6 +1653,10 @@ server closure, recovered by the watcher if the server stops between those comma
 
 ## Tools offered with a chat turn
 
+Turn building reads `sessionConfiguration` from `@opencrane/events`; see
+[the session contract](../../libs/events/README.robot.md#session-configuration).
+Current grants, spending checks and the short write access checks still run locally.
+
 The bridge reads server ids from the MCP catalogue projection. It considers only
 published rows, then reads each server's `mcp-<id>` stream once. It builds the current
 policy and finds the latest discovery from those same saved events. It keeps a server

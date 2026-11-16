@@ -21,6 +21,20 @@ events before its short write access check and saves one `message.posted` event.
 The bridge uses only that message's files. Older messages without file ids keep
 their earlier delivery behaviour. A retry compares the ids as well as the text.
 
+## Session settings
+
+`turns.ts`, `child-turn.ts`, `bridge-conversation.ts`, `turn-tools.ts` and
+`turn-credentials.ts` read `sessionConfiguration` from the events library.
+`private-session.ts` shares its assistant schema and payer comparison.
+`turn-threads.ts` keeps the existing requester binding and fresh-process reuse
+checks, using the configuration's process field for new admission.
+Deployment qualification stays outside the pure function. Explicit memory-free
+requests retain their separate offer suppression. Initial memory still excludes
+turns with a spending root. All current authority checks keep their original order.
+Ownership remains local: private-session reads and writes require the creator for
+shared assistants, while `sessionPayer` exempts shared subchats. The configuration
+has no audience field and makes neither ownership decision.
+
 ## Closing a conversation
 
 Authorised conversation list rows include `canClose`. It is false once the first close

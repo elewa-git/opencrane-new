@@ -1,6 +1,8 @@
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import {
   getEventDefinition,
+  sessionAssistantSchema,
+  sessionConfiguration,
   conversationCreatedDataSchema,
   fileDeliveredDataSchema,
   fileUploadedDataSchema,
@@ -15,6 +17,8 @@ import {
 import { chatHistory } from '../chat/commands.ts';
 import { FileRefusal, parseFileInput } from './refusals.ts';
 
+const assistantFields = sessionAssistantSchema.pick({ kind: true, ownerId: true });
+const fileAssistantSchema = assistantFields.extend({ kind: z.string() });
 const memberDetails = z.object({ memberId: z.string() });
 const fileContext = z.object({
   conversationId: z.string(),
@@ -38,10 +42,12 @@ export async function ownConversation(
   }
   const event = await creationEvent(store, silo, `assistant-${data.assistantId}`,
     'assistant.created');
-  const assistant = z.object({ kind: z.string(), ownerId: z.string() }).parse(event.data);
+  const assistant = fileAssistantSchema.parse(event.data);
+  const configuration = sessionConfiguration({ conversation: data, assistantKind: assistant.kind,
+    memoryEnabled: false });
   if (assistant.kind === 'team') {
     await requireTeamSession(store, silo, assistant.ownerId, data.createdBy, memberId);
-    if (uploading) throw new FileRefusal('team_files_refused');
+    if (uploading && !configuration.uploads) throw new FileRefusal('team_files_refused');
     allowParticipant = false;
   }
   try {

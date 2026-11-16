@@ -94,7 +94,9 @@ Ordinary messages do not delay delivery. Browser support is still planned.
 
 **Live updates.** Open chat pages keep checking access when installation or group membership changes. Removing someone from a group closes their private session with its assistant within two seconds. If another permission update takes too long, the page reconnects after five seconds and resumes from saved messages. The server checks each open chat's feed position every 100 ms and loads content only when it changes. Computer status comes from a small read-table record updated by background workers. A sleeping or waking computer shows Starting; recovery lasts until a new ready record appears.
 
-**Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent. Personal memory starts require the deployment’s own passing checks. An admitted personal turn can use four reviewed memory tools. Browser display of private replies remains unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
+**Private and shared work.** Turn building uses shared session settings from the
+events library for mode, context, tools, files and paying groups.
+ Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent. Personal memory starts require the deployment’s own passing checks. An admitted personal turn can use four reviewed memory tools. Browser display of private replies remains unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
 
 Personal memory-free turns can receive a short list of reviewed, free tools available to both the person and assistant. Ask tools also need reviewed approval details. A server needing a personal key also needs the person’s consent for that assistant.
 Chat explains a consent refusal with a My tools link and no account details.
@@ -147,7 +149,7 @@ If the native turn completes before Stop reaches it, the routine still finishes 
 | [access.ts](access.ts), [participation.ts](participation.ts), [participants.ts](participants.ts), [private-session.ts](private-session.ts) | Check current access, latest joins and participant changes. |
 | [history.ts](history.ts), [display.ts](display.ts), [public-id.ts](public-id.ts), [realtime.ts](realtime.ts), [list-summary.ts](list-summary.ts), [list-cursor.ts](list-cursor.ts), [state.ts](state.ts) | Return visible messages, live updates, lists and personal choices. |
 | [bridge.ts](bridge.ts), [bridge-poll.ts](bridge-poll.ts), [bridge-conversation.ts](bridge-conversation.ts), [start.ts](start.ts) | Connect computers and deliver pending work with the message's files. |
-| [reports.ts](reports.ts), [chat-summary.ts](chat-summary.ts), [turns.ts](turns.ts), [write-priority.ts](write-priority.ts) | Check and save reports and turns, with priority for stop requests. |
+| [reports.ts](reports.ts), [chat-summary.ts](chat-summary.ts), [turns.ts](turns.ts), [turn-threads.ts](turn-threads.ts), [write-priority.ts](write-priority.ts) | Check and save reports and turns, with priority for stop requests. |
 | [turn-tools.ts](turn-tools.ts), [turn-credentials.ts](turn-credentials.ts), [private-context.ts](private-context.ts), [shared-context.ts](shared-context.ts), [memory-admission.ts](memory-admission.ts), [keys.ts](keys.ts) | Prepare tools, passes, permitted earlier messages and encryption. |
 | [approvals.ts](approvals.ts), [bridge-approvals.ts](bridge-approvals.ts), [budget-stops.ts](budget-stops.ts), [budget-refusal.ts](budget-refusal.ts), [bridge-budget-stops.ts](bridge-budget-stops.ts) | Handle approval waits, spending notices and stop delivery. |
 | [child-routes.ts](child-routes.ts), [child-requests.ts](child-requests.ts), [child-recovery.ts](child-recovery.ts), [child-failure.ts](child-failure.ts), [child-hold.ts](child-hold.ts), [child-access.ts](child-access.ts), [origin.ts](origin.ts), [publications.ts](publications.ts) | Prepare side conversations, recover their requests and share reviewed text. |
@@ -159,15 +161,13 @@ The [server](../../README.md) registers chat requests and live connections for t
 
 ```mermaid
 flowchart LR
-  server[Server] --> chat[Chat]
-  reader[Signed-in member] -->|sends messages with files, closes and reads| chat
+  reader[Signed-in member] -->|sends messages with files, closes and reads| chat[Chat]
+  chat -.->|shared session settings| events[libs/events]
   chat -->|saved events| store[Event store]
   chat -->|ends work in closed chats| computer[Assistant computer]
   chat -->|wakes a checked Ask replacement| computer
   chat -->|checks access, personal key consent and spending| models[Models process]
   chat -->|checks remembered facts| memory[Memory]
-  files[Files] -->|checks chat access| chat
-  server --> memory[Memory]
   chat -->|selects and checks input| memory
   chat -->|four memory definitions and one-use private input| computer[Assistant computer]
   chat -->|asks to start an activated child| models

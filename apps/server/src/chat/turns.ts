@@ -3,7 +3,8 @@ import { readDeploymentQualification } from
 import { computerSummary, type ComputerSummary, type TurnSummary,
   type ThreadSummary } from '@opencrane/auth';
 import type { Binding } from '@opencrane/authz';
-import { optionalProviderTurnBindingSchema, type EventEnvelope } from '@opencrane/events';
+import { optionalProviderTurnBindingSchema, sessionAssistantSchema, sessionConfiguration,
+  type SessionAssistant, type EventEnvelope } from '@opencrane/events';
 import {
   authorityFence,
   turnBudgetStop,
@@ -24,6 +25,7 @@ export { BudgetAdmissionRejected, requireTurnMember, TurnAdmissionRejected }
   from './turn-authority.ts';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
+import { requireThreadOwner, requireFreshPrivateThread } from './turn-threads.ts';
 import { agentSessionData, ReportRejected } from './reports.ts';
 import { admitChildTurn, type ChildStartAdmission } from './child-turn.ts';
 
@@ -34,10 +36,6 @@ const bindingFields = optionalProviderTurnBindingSchema.safeExtend({
   model: z.string().optional(), sharingClass: z.literal('shared_only').optional(),
 });
 const binding = bindingFields.strip();
-const assistantDetails = z.object({
-  kind: z.enum(['personal', 'team']), ownerId: z.string(),
-  payingGroupId: z.string().optional(),
-});
 const sessionDetails = z.object({
   createdBy: z.string(), payingGroupId: z.string().optional(),
   contextKind: z.literal('shared_child').optional(),
@@ -48,14 +46,18 @@ export type ExecutionMode = 'restricted' | 'memory_free';
 export type ContextClass = 'shared_only';
 export async function requiredExecutionMode(assistantKind: string, requested: unknown,
   silo: string): Promise<ExecutionMode> {
-  if (requested === 'memory_free') return 'memory_free';
-  if (assistantKind === 'team') return 'restricted';
+  const input = { conversation: {}, assistantKind, requestedMode: requested, memoryEnabled: false };
+  if (requested === 'memory_free' || assistantKind === 'team') {
+    return sessionConfiguration(input).executionMode;
+  }
   try {
     await readDeploymentQualification(silo);
-    return 'restricted';
+    input.memoryEnabled = true;
   } catch {
-    return 'memory_free';
+    // Keep personal turns memory-free until this installation passes qualification.
+    input.memoryEnabled = false;
   }
+  return sessionConfiguration(input).executionMode;
 }
 
 type TurnInput = {
@@ -91,7 +93,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   let confirmBudget: ((saved: StoredEvent | undefined) => Promise<void>) | undefined;
   let status = input.status;
   let refusal: TurnAdmissionRejected | undefined;
-  requireThreadOwner(facts, data);
+  requireThreadOwner(facts.threads, data);
   let executionMode = facts.turn?.lastStartExecutionMode;
   // Check current membership on repeats before returning the saved turn.
   if (input.status === 'started') {
@@ -166,7 +168,10 @@ function startExecutionMode(facts: ComputerFacts, input: TurnInput) {
 async function startAuthority(store: EventStore, context: TurnContext, conversation: ChatFacts,
   facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode,
   input: TurnInput) {
-  if (conversation.created?.['routinePreparation'] !== undefined) {
+  const configuration = sessionConfiguration({
+    conversation: agentSessionData(conversation.created), memoryEnabled: false,
+  });
+  if (configuration.kind === 'routine') {
     return admitRoutineTurn(context, facts, data, input);
   }
   if (context.childStart) {
@@ -307,9 +312,8 @@ function requestedTurn(conversation: ChatFacts, assistantId: string) {
   }
   const details = z.object({ authorId: z.string(), executionMode: z.literal('memory_free').optional() })
     .parse(conversation.message);
-  const sharingClass: ContextClass | undefined =
-    'contextKind' in created && created.contextKind === 'shared_child'
-    ? 'shared_only' : undefined;
+  const configuration = sessionConfiguration({ conversation: created, memoryEnabled: false });
+  const sharingClass = configuration.sharingClass;
   return { requesterId: details.authorId, executionMode: details.executionMode, sharingClass };
 }
 function checkStart(facts: ComputerFacts, conversation: ChatFacts, computerId: string) {
@@ -396,13 +400,15 @@ function verifyBinding(saved: StoredEvent | undefined, expected: TurnBinding) {
 async function assistantDetailsFor(store: EventStore, context: TurnContext) {
   const assistant = await creationEvent(store, context.silo,
     `assistant-${context.assistantId}`, 'assistant.created');
-  return assistantDetails.parse(assistant.data);
+  return sessionAssistantSchema.parse(assistant.data);
 }
 
 async function payingGroup(store: EventStore, context: TurnContext,
-  conversation: ChatFacts, requesterId: string, details: z.infer<typeof assistantDetails>,
+  conversation: ChatFacts, requesterId: string, details: SessionAssistant,
   defaultPayingGroupId: string | undefined) {
-  if (details.kind === 'team') {
+  const configuration = sessionConfiguration({ conversation: {}, assistantKind: details.kind,
+    memoryEnabled: false });
+  if (configuration.assistantPayerRequired) {
     if (!context.binding) throw new ReportRejected('IAM binding required for a new team turn');
     const group = sessionPayer(conversation, requesterId, details.payingGroupId);
     const subjects = [`member-${requesterId}`, `assistant-${context.assistantId}`,
@@ -432,24 +438,12 @@ function sessionPayer(conversation: ChatFacts, requesterId: string,
   }
   const group = created.payingGroupId;
   if (!group) throw new ReportRejected('Paying group unavailable for shared work');
-  if (!assistantPayer || group !== assistantPayer) {
+  const configuration = sessionConfiguration({ conversation: created, assistantKind: 'team',
+    assistantPayingGroupId: assistantPayer, memoryEnabled: false });
+  if (!configuration.payerMatchesAssistant) {
     throw new ReportRejected('Paying group does not match the assistant');
   }
   return group;
-}
-function requireThreadOwner(facts: ComputerFacts, input: TurnBinding) {
-  if (input.threadId === undefined) return;
-  const thread = facts.threads.get(input.threadId);
-  const owner = JSON.stringify([input.requesterId, input.conversationId]);
-  if (thread && hasOtherValue(thread.owners, owner)) {
-    throw new ReportRejected('Thread belongs to another requester or conversation');
-  }
-}
-function hasOtherValue(values: Set<string>, current: string) {
-  for (const value of values) {
-    if (value !== current) return true;
-  }
-  return false;
 }
 
 function isFinalAdmissionRefusal(error: unknown): error is Error {
@@ -460,27 +454,19 @@ function isFinalAdmissionRefusal(error: unknown): error is Error {
 }
 
 
-function requireFreshPrivateThread(facts: ComputerFacts, input: TurnBinding, mode: ExecutionMode) {
-  if (input.threadId === undefined) return;
-  const thread = facts.threads.get(input.threadId);
-  if (!thread) return;
-  const otherStarted = hasOtherValue(thread.startedTurnIds, input.turnId);
-  const otherRestricted = hasOtherValue(thread.restrictedTurnIds, input.turnId);
-  if ((mode === 'restricted' && otherStarted) || otherRestricted) {
-    throw new TurnAdmissionRejected('Private thread reused');
-  }
-}
-
 async function admitTurn(store: EventStore, context: TurnContext, conversation: ChatFacts,
   facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {
   const details = await assistantDetailsFor(store, context);
   const required = await requiredExecutionMode(details.kind, requested, context.silo);
   if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
-  requireFreshPrivateThread(facts, data, mode);
+  const created = agentSessionData(conversation.created);
+  const configuration = sessionConfiguration({ conversation: created, assistantKind: details.kind,
+    assistantPayingGroupId: details.payingGroupId, requestedMode: mode,
+    memoryEnabled: mode === 'restricted' });
+  requireFreshPrivateThread(facts.threads, data, configuration);
   const queued = { conversationId: data.conversationId, turnId: data.turnId,
     position: conversation.message!.position,
-    payingGroupId: details.kind === 'team'
-      ? sessionDetails.parse(conversation.created).payingGroupId : undefined };
+    payingGroupId: configuration.assistantPayerRequired ? created.payingGroupId : undefined };
   // Read provider and budget history before starting the short access check.
   const admission = await providerTurnAdmission(store, context.silo,
     context.assistantId, performance.now() + 10_000, queued);
@@ -507,7 +493,6 @@ async function admitTurn(store: EventStore, context: TurnContext, conversation: 
   // Keep provider switch-on refusal at its existing send gate after a start was saved.
   return { payer: payer.payer, fresh: confirmAdmission, confirmBudget: confirmSavedBudget };
 }
-
 
 function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'completed' | 'failed' },
   status: TurnInput['status'], executionMode: ExecutionMode | undefined) {

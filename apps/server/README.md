@@ -5,7 +5,7 @@
 The back end for OpenCrane sign-in, conversations and organisation settings.
 It runs as a Node.js service. The website sends it requests to sign in, chat, upload
 files and manage the organisation.
-It checks that files named by a message were scanned clean and uploaded by its sender.
+The events library supplies session settings; message file ids must name the sender's clean uploads.
 Conversation reads can start with the newest messages and page back through older ones.
 In the packaged image, the service disables its own process dumps before it starts
 handling private work. It answers a local live protection check for the qualification
@@ -240,7 +240,7 @@ event log remains the permanent record of what happened.
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|messages, settings, personal keys and checked changes| server["apps/server<br/>the back end"]
-  server -.->|checks saved membership, records and rechecks the company custody record version, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
+  server -.->|reads shared session settings, checks saved membership, records and rechecks the company custody record version, company choices and routine admission; prepares allowances; applies Stop, Pause and Retire; verifies termination and settled cost; shares checks and chat keys| libs["libs/* and private-memory-qualification<br/>shared checks and chat keys"]
   server -->|reads and saves opt-in, metadata, receipts, invitation joins, memory changes, account choices, pauses, retirements, paused ownership changes, writer closure and retries, routine sessions, inputs, send and final access checks with OAuth digests, cancellations, confirmed results, checked finishes and hand-offs| nats["NATS<br/>the event log"]
   nats -->|saved changes| ops["apps/ops<br/>background workers"]
   ops -->|updates read tables| postgres["PostgreSQL<br/>read tables"]

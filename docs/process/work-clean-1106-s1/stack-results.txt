@@ -1,0 +1,34 @@
+members: running (2200161)
+mcp-catalogue: running (2200162)
+computers: running (2200168)
+conversations: running (2200175)
+files: running (2200181)
+budgets: running (2200188)
+audit: running (2200207)
+routines: running (2200226)
+minio-tokens: running (2198775)
+dispatcher: running (2203164)
+server: running (2204024)
+web: running (2208438)
+connection-custody: running (2201845)
+memory: running (2200219)
+NAME                         IMAGE                                                                                                               COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+opencrane-dev-1-clamav-1     opencrane-clamav:1.5.2-no-unrar                                                                                     "/usr/sbin/clamd --c…"   clamav     16 minutes ago   Up 16 minutes (healthy)   127.0.0.1:25111->3310/tcp
+opencrane-dev-1-minio-1      alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4   "minio server /data …"   minio      16 minutes ago   Up 16 minutes             127.0.0.1:25103->9000/tcp, 127.0.0.1:25104->9001/tcp
+opencrane-dev-1-models-1     node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3                  "docker-entrypoint.s…"   models     14 minutes ago   Up 14 minutes
+opencrane-dev-1-nats-1       nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4                          "docker-entrypoint.s…"   nats       16 minutes ago   Up 16 minutes             6222/tcp, 8222/tcp, 127.0.0.1:25107-25110->25107-25110/tcp, 127.0.0.1:25101->4222/tcp
+opencrane-dev-1-openfga-1    openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55                     "/openfga run --http…"   openfga    16 minutes ago   Up 16 minutes             127.0.0.1:25102->8080/tcp
+opencrane-dev-1-postgres-1   postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f                                 "docker-entrypoint.s…"   postgres   16 minutes ago   Up 16 minutes (healthy)   127.0.0.1:25100->5432/tcp
+opencrane-dev-1-scanner-1    node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3                  "docker-entrypoint.s…"   scanner    15 minutes ago   Up 15 minutes             127.0.0.1:25113->8443/tcp
+
+healthy: http://127.0.0.1:25105/healthz
+healthy: http://127.0.0.1:25102/healthz
+healthy: http://127.0.0.1:25103/minio/health/live
+healthy: http://127.0.0.1:25106/org/integrations
+healthy: http://127.0.0.1:25109/healthz/ready
+
+Stack status exit code: 0
+
+Teardown output:
+
+Teardown exit code: 0
