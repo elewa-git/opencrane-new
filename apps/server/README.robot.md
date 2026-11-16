@@ -1422,7 +1422,15 @@ still causes `inviter_authority_ended` before this recovery. No second join is s
 `test/member-joined.test.ts` holds two accepts at this check and saves one join
 before the other reads the changed member stream.
 
-`test/routine-handoff.test.ts` uses separate NATS connections for commands and
+`test/routine-handoff.test.ts` retains real PostgreSQL leadership for final-release
+checks. Normal dispatch fixtures hold access-check time while real services reply.
+The release matrix and scheduler success case also control native acquisition and
+probe timers with Vitest; the deadline case advances that clock explicitly.
+Real-latency and contention cases retain native timers and compare both monotonic
+clock modes. A real 1.2-second monitor query must not cancel its holder before release.
+Every injected release change must finish and the final append must return the expected status. Pending-start tests race handler entry against dispatch completion
+and report its outcome, phase and safe leadership logs on an early refusal.
+It uses separate NATS connections for commands and
 projection reads. After its NATS restart, it waits until the projection connection
 can read the saved stream before dispatching again. The lost-reply case still checks
 the original occurrence, identifiers and start deadline, one send and one saved run.
@@ -7459,7 +7467,11 @@ scheduling therefore cannot expire the access period before either fault is inje
 It restarts NATS, enables the internal test delivery, then checks that one session,
 input, root and native start use the same occurrence. It checks that missed and skipped
 receipts never enter the callback. The final release cases change a ceiling, save Stop,
-revoke a grant or end leadership before the append. Each refuses the turn and leaves
+revoke a grant or end leadership before the append. They use a controlled leadership
+check, retaining real events, projections, permissions, budgets and socket delivery.
+Each must finish its injected change and receive refusal from the release append. A separate case holds the real
+PostgreSQL leadership lock beyond one second and checks acquisition-phase refusal
+before hand-off, with no due, release event or turn sent. Each release refusal leaves
 the scan without completed progress. The existing held-start, uncertain transport and
 fourteen-second wake cases remain in that suite. These are fixture checks, not a
 fresh-install or paid company call qualification. Production delivery stays off.

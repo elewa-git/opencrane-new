@@ -1,6 +1,10 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { connectProjectionDb, type Db } from '@opencrane/projections';
+import { createLogger, type Logger } from '@opencrane/observability';
+import { memorySink } from '@opencrane/observability/testing';
+import { connectProjectionDb } from '@opencrane/projections';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
+import { captureSession } from './support/routine-leadership.ts';
+import { withRoutineFixtureClock } from './support/routine-clock.ts';
 
 import * as projections from '@opencrane/projections';
 import * as models from '@opencrane/models';
@@ -17,7 +21,8 @@ import { SandboxClient } from '../src/kubernetes.ts';
 const databaseUrl = process.env['PG_TEST_URL']!;
 type Leadership = Parameters<Parameters<typeof withRoutineLeadership>[1]>[0];
 
-async function owner(silo = 'test') {
+async function owner(silo = 'test',
+  logger: Logger = createLogger('routine-leadership-test')) {
   const ready = Promise.withResolvers<Leadership>();
   const finish = Promise.withResolvers<void>();
   const stop = new AbortController();
@@ -25,7 +30,7 @@ async function owner(silo = 'test') {
     ready.resolve(lease);
     await finish.promise;
   }
-  const options = { databaseUrl, silo, signal: stop.signal };
+  const options = { databaseUrl, silo, signal: stop.signal, logger };
   const done = withRoutineLeadership(options, work);
   void done.catch(ready.reject);
   async function close() {
@@ -142,33 +147,7 @@ async function releasesThrownCallback() {
 }
 it('releases after a thrown callback without exposing its error', releasesThrownCallback);
 
-function captureSession() {
-  let session: Db;
-  const connect = projections.connectProjectionDb;
-  function observed(...args: Parameters<typeof connect>) {
-    const database = connect(...args);
-    const lock = database.db.lock!.bind(database.db);
-    async function observe<Result>(name: string, work: (db: Db) => Promise<Result>,
-      options?: { timeoutMs: number; signal?: AbortSignal }) {
-      function held(locked: Db) {
-        session = locked;
-        return work(locked);
-      }
-      return lock(name, held, options);
-    }
-    database.db.lock = observe;
-    return database;
-  }
-  const connectSpy = vi.spyOn(projections, 'connectProjectionDb');
-  connectSpy.mockImplementationOnce(observed);
-  function restore() {
-    vi.restoreAllMocks();
-  }
-  onTestFinished(restore);
-  return function current() {
-    return session;
-  };
-}
+
 async function drainsCheck(expire: boolean) {
   const session = captureSession();
   const first = await owner();
@@ -451,3 +430,123 @@ async function holdsUntilCheckReturns() {
   await expect(first.done).resolves.toBeUndefined();
 }
 it('holds the lock until an outstanding check returns after SQL has finished', holdsUntilCheckReturns);
+
+function capturedLogger() {
+  const sink = memorySink();
+  const options = { level: 'error', destination: sink.stream };
+  const logger = createLogger('routine-leadership-test', options);
+  return { logger, sink };
+}
+
+async function logsUnderlyingFailure() {
+  const captured = capturedLogger();
+  const options = { databaseUrl, silo: 'test', signal: new AbortController().signal,
+    logger: captured.logger };
+  const cause = new Error('Database lock acquisition cancelled or expired');
+  function fail(): never {
+    throw cause;
+  }
+  const connectSpy = vi.spyOn(projections, 'connectProjectionDb');
+  connectSpy.mockImplementationOnce(fail);
+  try {
+    await expect(withRoutineLeadership(options, fail)).rejects.toThrow(
+      /^Routine leadership unavailable$/u);
+    expect(captured.sink.lines()[0]).toMatchObject({ phase: 'acquire',
+      err: { message: cause.message }, msg: 'Routine leadership failed' });
+  } finally {
+    connectSpy.mockRestore();
+  }
+}
+it('logs the underlying acquisition error before returning a safe refusal', logsUnderlyingFailure);
+
+async function logsPrivateCallbackSafely() {
+  const captured = capturedLogger();
+  const options = { databaseUrl, silo: 'private-silo-canary',
+    signal: new AbortController().signal, logger: captured.logger };
+  const error = new Error('private-callback-canary');
+  Object.assign(error, { code: 'ECONNRESET', detail: 'private-query-canary' });
+  function fail() {
+    return Promise.reject(error);
+  }
+  await expect(withRoutineLeadership(options, fail)).rejects.toThrow(
+    /^Routine leadership unavailable$/u);
+  expect(captured.sink.lines()[0]).toMatchObject({ phase: 'work',
+    err: { message: 'Unclassified error', code: 'ECONNRESET' } });
+  expect(captured.sink.text()).not.toContain('private-');
+}
+it('logs the callback error code without private text or adapter fields', logsPrivateCallbackSafely);
+
+async function logsBlockedSession() {
+  const session = captureSession();
+  const captured = capturedLogger();
+  const first = await owner('test', captured.logger);
+  const query = session().query.bind(session());
+  function blockedProbe(_sql: string, _parameters?: unknown[], options?: { deadline: number }) {
+    return query('SELECT pg_sleep(1.2)', [], options);
+  }
+  const querySpy = vi.spyOn(session(), 'query');
+  querySpy.mockImplementationOnce(blockedProbe);
+  // Run real database work beyond the unchanged one-second probe deadline.
+  expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
+  expect(first.lease.signal.aborted).toBe(false);
+  expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(true);
+  expect(captured.sink.lines()[0]).toMatchObject({ phase: 'probe',
+    err: { message: 'Query read timeout' } });
+  await first.close();
+}
+it('logs and refuses a blocked probe until a fresh session check succeeds', logsBlockedSession);
+
+async function keepsHolderAfterSlowProbe(freezeClock: boolean) {
+  const session = captureSession();
+  const first = await owner();
+  if (freezeClock) {
+    const fixedTime = performance.now();
+    function fixedClock() {
+      return fixedTime;
+    }
+    vi.spyOn(performance, 'now').mockImplementation(fixedClock);
+  }
+  const query = session().query.bind(session());
+  function delayedRoundTrip(_sql: string, _parameters?: unknown[],
+    options?: { deadline: number }) {
+    return query('SELECT pg_sleep(1.2)', [], options);
+  }
+  const querySpy = vi.spyOn(session(), 'query');
+  querySpy.mockImplementationOnce(delayedRoundTrip);
+  const started = Date.now();
+  expect(await first.lease.checkCurrent(performance.now() + 1000)).toBe(false);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(900);
+  expect(first.lease.signal.aborted, 'A read timeout does not prove session loss').toBe(false);
+  expect(await first.lease.checkCurrent(performance.now() + 1000)).toBe(true);
+  await first.close();
+  expect(await first.lease.checkCurrent(performance.now() + 1000)).toBe(false);
+}
+it.each([false, true])(
+  'refuses a slow real probe without cancelling its holder (clock frozen: %s)',
+  keepsHolderAfterSlowProbe);
+
+async function controlsRealProbeTimer() {
+  const session = captureSession();
+  let current: boolean | undefined;
+  let elapsed: number | undefined;
+  async function checked(lease: Leadership) {
+    const query = session().query.bind(session());
+    function delayedRoundTrip(_sql: string, _parameters?: unknown[],
+      options?: { deadline: number }) {
+      return query('SELECT pg_sleep(1.2)', [], options);
+    }
+    vi.spyOn(session(), 'query').mockImplementationOnce(delayedRoundTrip);
+    const started = performance.now();
+    current = await lease.checkCurrent(started + 1000);
+    elapsed = performance.now() - started;
+  }
+  function run() {
+    const options = { databaseUrl, silo: 'test', signal: new AbortController().signal };
+    return withRoutineLeadership(options, checked);
+  }
+  await withRoutineFixtureClock(run);
+  expect(elapsed).toBe(0);
+  expect(current, 'The fixture clock must also control the real probe timer').toBe(true);
+}
+it('holds the fixture clock through the real lock and a delayed PostgreSQL probe',
+  controlsRealProbeTimer);
