@@ -362,8 +362,8 @@ The preflight test suite also runs the Python licence and promotion refusal test
 
 The current image has a source-bound all-layer scan. Its 88 Debian package versions
 were checked again against authenticated main indexes; `package-debian-main.json`
-records their signed index hashes. The private registry is unavailable, so packaged
-release qualification remains blocked. R3 approval is separate. Unknown licences or open
+records their signed index hashes. Publication uses the existing local registry;
+fresh-install qualification remains separate. R3 approval is separate. Unknown licences or open
 Critical/High findings also block qualification. The
 [first image receipt](../../docs/process/p5-4-images1/receipt.md) records the original refusals.
 The [layer receipt](../../docs/process/p5-4-images2/receipt.md) records the flattened local

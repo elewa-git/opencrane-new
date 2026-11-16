@@ -1,5 +1,56 @@
 # Scheduled pilot backup
 
+Journey on a fresh packaged stack: **NOT RUN** for the repaired source.
+Application image qualification: **PASS**. The draft still awaits its live journey.
+
+## Image repair on 16 November 2026
+
+The application image was built from committed source
+`8601e8b4351d65f324d07bcb04cedcf8441f4354` with the documented Dockerfile and
+`SOURCE_REVISION` label. Its configuration digest is
+`sha256:af6c226d04f253a459f28e5bf8367a3293cb77cc218d11f99597b20347eaa0c2`.
+Its immutable registry digest is
+`sha256:80c2433e8644f5fd01f5deaf912ecab9ca93ed2475187c1f4467196a4def8c17`.
+The all-layer Syft scan SHA-256 is
+`14de07996a41106f2c327445f30b329e082cb37a31ac9abef56c816cff94746e`.
+
+- **PASS:** reproduced the missing allowlist entry and committed the failing
+  import regression first in `5b5e8e96b`. Removing any of the three backup modules
+  was wrongly accepted. The runner now starts recursive coverage, including its
+  `.mjs` storage helper. All four backup modules have explicit allowlist entries.
+- **PASS:** the recursive checker resolves 66 runtime modules. The saved-image
+  suite checks setup, model and backup imports, missing transitive files, native
+  helpers, scanner workers and real bootstrap execution with synthetic services.
+  All 15 cases passed twice against the exact-source image in 154.768 and
+  151.905 seconds.
+- **PASS:** reproduced `Package promotion covers a different source revision`
+  with the new image and old review before replacing any image records.
+- **PASS:** the new all-layer scan has the same 580 components as the existing
+  inventory. Candidate licence checking passed. Re-fetched all three Debian-main
+  indexes, verified their signatures with the recorded keyring, checked compressed
+  index hashes and sizes, and confirmed all recorded package versions. The 88 base
+  package versions and three security-index rows remain covered.
+- **PASS:** updated the source revision, server/web pins, configuration digest,
+  scan checksum and Debian-main image bindings together after those checks.
+  The documented `check-licences.py --promotion` command passed for both roles.
+  `publish-image.py` published the selected unchanged image digest over HTTP.
+  No preflight rule was changed and no local scanner approval was created.
+- **PASS:** 23 focused collector, storage cancellation and credential tests twice;
+  251 chart-render cases twice; 82 licence cases twice and 44 preflight cases.
+- **PASS:** root typecheck, changed-code ESLint, event catalogue, Knip, changelog,
+  Markdown and README checks. Knip retained its two existing configuration hints.
+- **PASS:** fetched `origin`; `origin/main` remained `cc21e6d12` and was already
+  an ancestor. No rebase was needed and neither rebase state directory exists.
+
+The next step is exact-head scanner approval followed by a fresh secondary
+packaged installation. Upload/chat, backup completion, catalogue and manifest,
+deliberately broken part and packaged screenshots remain **NOT RUN** for this
+repair. No earlier Compose or packaged result counts as this attempt's acceptance.
+The slice contains 708 added plus deleted shipped lines, including the Docker
+context exceptions and image-review bindings; tests and documents are excluded.
+
+## Previous packaged attempt on 15 November 2026
+
 Journey on a fresh dev stack: **NOT RUN**. Preparation: **PARTIAL**.
 Application image qualification: **FAIL**. The draft must not merge.
 
