@@ -1056,9 +1056,9 @@ async function fourteenSecondWake() {
   const other = { ...created, id: 'second', commandId: 'second', subject: 'routine-second',
     data: { ...foldRoutine(undefined, created).definition!, routineId: 'second' } };
   await apply([other]);
-  const monotonic = performance.now.bind(performance);
+  const fixedTime = performance.now();
   function later() {
-    return monotonic() + 14_000;
+    return fixedTime + 14_000;
   }
   async function delayed(assistantId: string) {
     now += 14_000;
