@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import { commitBase } from './test/support/git-repository.mjs';
 
 const checker = fileURLToPath(new URL('./check-whole-stream-reads.mjs', import.meta.url));
 const sourceFile = 'apps/server/src/example.ts';
@@ -116,19 +117,10 @@ function refusesChangedCount(actual) {
 
 test.each([0, 2])('refuses a stale baseline when the source contains %s reads', refusesChangedCount);
 
-function commitBase() {
-  const options = { cwd: repository, encoding: 'utf8' };
-  execFileSync('git', ['add', '--all'], options);
-  const args = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture',
-    'commit', '--quiet', '--no-gpg-sign', '-m', 'Fixture base'];
-  execFileSync('git', args, options);
-  return execFileSync('git', ['rev-parse', 'HEAD'], options).trim();
-}
-
 function refusesBaselineGrowth(initialCount) {
   writeFile(sourceFile, 'history();\n'.repeat(initialCount));
   if (initialCount > 0) writeBaseline({ [sourceFile]: initialCount });
-  const base = commitBase();
+  const base = commitBase(repository);
   writeFile(sourceFile, 'history();\nhistory();\n');
   writeBaseline({ [sourceFile]: 2 });
   const result = runCheck(base);
@@ -143,7 +135,7 @@ test.each([0, 1])('refuses baseline growth from %s against the base', refusesBas
 function allowsBaselineReduction() {
   writeFile(sourceFile, 'history();');
   writeBaseline({ [sourceFile]: 1 });
-  const base = commitBase();
+  const base = commitBase(repository);
   rmSync(join(repository, sourceFile));
   writeBaseline();
   const result = runCheck(base);
