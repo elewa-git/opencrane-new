@@ -570,6 +570,16 @@ async function resumesOneSavedDueAfterDeliveryWasDisabled() {
 it('resumes the saved checked due once after disabled delivery and a broker restart',
   resumesOneSavedDueAfterDeliveryWasDisabled);
 
+async function heldLeadershipRefusesBeforeRelease() {
+  async function holdLock() {
+    await changeBeforeFinalRelease('reserved');
+  }
+  // Keep a real competing session locked until dispatch has exceeded its one-second limit.
+  await storage.db.lock!('routine-leader:test', holdLock);
+}
+it('distinguishes lock acquisition refusal from the final release',
+  heldLeadershipRefusesBeforeRelease);
+
 type ReleaseChange = 'ceiling' | 'payer_ceiling' | 'assistant_ceiling' |
   'reserved' | 'settled' | 'exhausted' | 'exhausted_global_reason' |
   'exhausted_payer_reason' | 'exhausted_assistant_reason' | 'exhausted_other_reason' |
