@@ -254,7 +254,10 @@ it('refuses cross-member reads and resumption even with a conversation participa
 async function listsSharedAssistantKindWithoutConfiguration() {
   const response = await request('GET', '/api/conversations', undefined, 'bob');
   expect(response.statusCode).toBe(200);
-  const row = response.json().rows[0];
+  const listResponse = z.object({
+    rows: z.array(z.record(z.string(), z.unknown())),
+  }).parse(response.json());
+  const row = listResponse.rows[0];
   expect(row).toMatchObject({ conversationId: 'bob', assistantKind: 'team' });
   expect(row).not.toHaveProperty('sessionConfiguration');
 }
