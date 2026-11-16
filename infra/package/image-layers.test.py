@@ -145,6 +145,18 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
+    def test_missing_backup_import_refuses_even_with_entry_point_present(self):
+        required = ("infra/package/scheduled-backup.ts",
+                    "infra/package/scheduled-backup-source.ts", "infra/package/event-backup.ts")
+        for module in required:
+            with self.subTest(module=module):
+                sources = dict(self.sources)
+                sources.pop(module, None)
+                self.assertIn("infra/package/scheduled-backup-run.ts", sources)
+                result = self.check_imports(sources)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
+
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
