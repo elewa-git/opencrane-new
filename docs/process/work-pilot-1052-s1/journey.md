@@ -2,20 +2,76 @@
 
 ## Rework round 5, 16 November 2026
 
-Own source gate reproduction: FAIL before refactoring. Scoped ESLint reports
-`handle` complexity 20 against 15, and 3,694 counted test lines against the frozen
-3,622 cap. These are structural failures, reproduced by the existing lint checks;
-no runtime failure or new behavioural counterexample is claimed for them.
+Result: PARTIAL. Required source gate: FAIL. Fresh-stack journey: NOT RUN at both widths.
+No head was pushed in this round. The PR remains draft.
 
-Fetched main and completed the rebase onto `29d0d2cb7`. Preserved the uncommitted
-receipt and shared fixture reconciliation in a separate commit before rebasing.
-Kept current personal-key consent fields, dependency checks and reviewed image
-inventory while resolving the rebase conflicts. The working branch has no
-unfinished rebase. Existing dispatch behaviour is being pinned before extraction.
+Local source/test checkpoint: `70117732d`. Fetched main and completed the rebase onto
+`29d0d2cb7`. Preserved the earlier uncommitted receipt and shared fixture reconciliation
+before rebasing. Retained current consent fields, dependency checks and the reviewed
+image inventory. Neither rebase state remains.
 
 Authorised limits: slice 1 of 2; ticket limit 20 agent-hours; rework round 5 of 5.
-Final gates and fresh-stack qualification: NOT RUN at this test-first checkpoint.
 
+### Findings and retained work
+
+Scoped ESLint reproduced both requested structural failures before extraction:
+`handle` complexity 20 against 15, and 3,694 counted test lines against 3,622.
+The test-first receipt commit is `e1a2765eb`.
+
+`21b2724f5` splits the tests into permit/budget, catalogue/watch, publication/admission,
+HTTPS outcomes, personal credentials and ordinary tools. Shared helpers live under
+`test/support`. An AST comparison confirms that all 210 declarations and registrations
+retain identical bodies, including every assertion. All six files fit the standard
+1,500-line test cap. `70117732d` removes the obsolete test size exception; no cap or
+suppression was raised. CI timing registration remains unfinished.
+
+`a9353e49b` rewrites the affected README passages within their frozen lengths and
+removes the deleted adapter's stale opening exception. It retains the ordinary-server
+contract and current consent behaviour. The README gate passes.
+
+The handler extraction is NOT RUN. Knip also identifies the existing unused
+`dispatchRemoteTarget` helper and `RemoteTarget` type left by reconciliation.
+Their reuse was planned with the handler extraction; no production change was applied.
+
+### Inherited main failure requiring owner direction
+
+`lint:reads` fails identically here and in a separate clean checkout of `origin/main`
+at `29d0d2cb7`:
+
+- `libs/models/src/decision.ts`: recorded 2 whole-stream reads, found 1.
+- `libs/models/src/personal-tool-context.ts`: recorded 2, found 4 at lines 43, 49, 51 and 93.
+
+The personal-account source is byte-for-byte identical to main. The checker forbids
+raising recorded counts. Passing it requires a separate repair of main or an authorised
+personal-account history refactor that removes reads. Neither is assumed in this last
+round. No access, identity, money or memory guard was changed, and no helper was renamed
+to evade the checker. Work stopped for owner direction under the explicit last-round rule.
+The [PR comment](https://github.com/elewa-git/opencrane-new/pull/1122#issuecomment-6916869654)
+records the findings and the pending decision.
+
+### Own checks
+
+| Check | Verdict |
+| --- | --- |
+| Fetch and rebase onto current fetched main | PASS. Rebase completed. |
+| Original structural lint failures | FAIL, reproduced before extraction. |
+| Assertion-preserving test split | PASS: 210 identical declarations and registrations. |
+| Scoped ESLint on all split test files and shared support | PASS, no warnings. |
+| Workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types. |
+| Dependency checks | PASS. |
+| README gate | PASS with unchanged caps. |
+| Lint debt after obsolete test exception removal | PASS. |
+| Whole-stream read gate | FAIL on both branch and clean main, as above. |
+| Knip | FAIL: the existing unused remote-target helper and type remain. |
+| Existing dispatch baseline before handler changes | PARTIAL: interrupted with exit 130 after the inherited blocker was confirmed; no completed-suite PASS is claimed. |
+| Changed tests twice and final full source gates | NOT RUN after the stop. |
+| Admin/member journey at 1280 px | NOT RUN. |
+| Admin/member journey at 390 px | NOT RUN. |
+| Push and final-head CI watch | NOT RUN. Remote remains `1608c8776`. |
+
+No secondary stack was claimed. No screenshots were taken. All earlier journeys below
+remain historical evidence and do not qualify this rebased source.
 
 ## Rebase qualification, 15 November 2026
 
@@ -46,7 +102,6 @@ The owner authorised qualification with no further code fixes. Resolving these
 lint failures requires code changes, so work stopped without weakening either
 limit. No secondary stack was claimed. No new screenshots were taken.
 The earlier runs below do not qualify this rebased source.
-
 
 Date: 13 November 2026.
 Checked source: `ec790fbe9625a5cfdc548931b929976b0c17bd53`.
