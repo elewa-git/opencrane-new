@@ -1,5 +1,9 @@
 # Scheduled backup review fixes
 
+Historical review-fix attempt. The [current receipt](../ci-application-2026-11-16/receipt.md)
+records CI application approval and the final fresh packaged journey **PASS**.
+The observations below describe the earlier attempt only.
+
 Date: 16 November 2026. Fresh packaged journey: **PARTIAL**.
 Application-image approval: **NOT RUN**, pending the owner's decision on #15.
 The pull request remains a draft. This receipt records the builder's own checks.

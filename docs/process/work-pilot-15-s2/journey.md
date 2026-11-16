@@ -1,8 +1,11 @@
 # Scheduled pilot backup
 
-Current review-fix journey: **PARTIAL**. Independent approval of the repaired
-application image is pending. See the [current receipt](review-1-fixes/receipt.md)
-for the qualification head, checks, fresh claims and cleanup. The PR remains draft.
+Current packaged journey: **PASS** on source
+`d5d7df6c4dbb92121f801dc909d3640c73122686`, after exact-source scanner and
+application CI approvals. See the [current receipt](ci-application-2026-11-16/receipt.md)
+for both run ids, 1280/390 pictures, operator output, earlier failed/partial attempts
+and cleanup. Source CI still fails on main's unchanged whole-stream-read mismatches;
+the PR remains a draft.
 
 The earlier packaged journey below passed on its recorded source. It does not
 qualify the repaired runtime, and its builder image checks do not establish

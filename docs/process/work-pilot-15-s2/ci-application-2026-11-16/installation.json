@@ -1,0 +1,17 @@
+{
+  "source": "d5d7df6c4dbb92121f801dc909d3640c73122686",
+  "scanner": {
+    "runId": 43874985247,
+    "revision": "d5d7df6c4dbb92121f801dc909d3640c73122686",
+    "imageDigest": "sha256:085b74a3afd25aa7b77bc1780f96341f0f3e943fac8638c98ab8df624e6c859b",
+    "approvedSha": "c0d8bda212af20c36cbcd2a96d5f1ac507026a12df77d86b7be5ae38e0650c2c"
+  },
+  "application": {
+    "runId": 43874985191,
+    "revision": "d5d7df6c4dbb92121f801dc909d3640c73122686",
+    "imageDigest": "sha256:ae79458fc20b3b56da24692c72043926b4f762538f6f78abdcc9cdbb4ede6f22",
+    "imageId": "sha256:6ca6141946b82dce0a7df46ca02c45eb12a160b5cb2b33f60b1441ea4d11a300",
+    "scanSha256": "5f9fcde75030ee7bee1352c9a809d2ccb25c7c1f650ea7ceb1f59a5df9f95f16"
+  },
+  "image": "k3d-ocn-registry:5000/opencrane/package@sha256:ae79458fc20b3b56da24692c72043926b4f762538f6f78abdcc9cdbb4ede6f22"
+}
