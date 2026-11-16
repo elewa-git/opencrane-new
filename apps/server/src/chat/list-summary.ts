@@ -1,4 +1,3 @@
-import { sessionConfiguration } from '@opencrane/events';
 import { z } from 'zod';
 import { sessionSlug } from '@opencrane/protocol';
 import type { ChatOptions } from './access.ts';
@@ -62,11 +61,4 @@ export async function summary(options: ChatOptions, conversationId: string, mode
   let status = conversationStatus(result.rows, last, mode);
   if (saved.rows[0]?.closed) status = 'closed';
   return { title, status };
-}
-
-export function sessionDefaults(assistantKind: string | undefined) {
-  // Keep the composer's default separate from deployment-qualified turn admission.
-  const configuration = sessionConfiguration({ conversation: {}, assistantKind,
-    memoryEnabled: false });
-  return { executionMode: configuration.executionMode };
 }

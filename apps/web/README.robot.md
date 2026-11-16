@@ -489,11 +489,13 @@ Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-host
 DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
 
-Authorised assistant conversation rows may include `sessionConfiguration.executionMode`.
-`ChatSession.select` reads that view instead of choosing from the assistant kind.
-A reply without the view falls back to restricted mode. The server keeps the
-existing personal and shared-assistant composer defaults; turn admission still
-checks deployment qualification and the requested mode separately.
+`ChatSession.select` derives the composer default from the authorised row's
+`assistantKind` through `sessionDefaults` in `libs/protocol`. That helper calls the
+shared event-library configuration with memory disabled. Personal sessions default
+to memory-free; shared assistant sessions default to restricted. An explicit optional
+`sessionConfiguration.executionMode` view still parses and takes precedence, but
+the existing server replies do not add it. Turn admission checks deployment
+qualification and the requested mode separately.
 
 The member picker lives at `/workspace/shared`. It lists only assistant rows with
 `canStartSession` and asks the member to confirm the assistant's fixed paying group.

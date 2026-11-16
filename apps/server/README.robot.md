@@ -2,12 +2,11 @@
 
 ## Session defaults for the browser
 
-Authorised assistant conversation list rows include
-`sessionConfiguration.executionMode`. `list-summary.ts` derives that small view
-from `libs/events` using the saved assistant kind and memory disabled. This keeps
-the existing composer defaults: personal sessions start memory-free and shared
-assistant sessions start restricted. Turn admission separately checks memory
-qualification and any requested override. The view grants no access.
+Authorised conversation list replies keep their existing fields. The browser derives
+its composer default from the saved assistant kind through `sessionDefaults` in
+`libs/protocol`. Personal sessions start memory-free and shared assistant sessions
+start restricted. Turn admission separately checks memory qualification and any
+requested override. The browser default grants no access.
 Session creation and subchat request review use the shared payer comparison and
 select their assistant fields from `sessionAssistantSchema`, keeping their earlier validation.
 

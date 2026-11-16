@@ -72,9 +72,10 @@ role (`owner`, `admin` or `member`), and personal assistant id. The role reuses
 as ready, starting, recovering or not applicable. They may include the time of
 the latest computer loss. `sessionSlug` formats the first message consistently for
 the server list, rail and header. Assistant conversation rows may carry the strict optional view
-`sessionConfiguration: { executionMode: restricted | memory_free }`. The server
-computes it with the shared event-library configuration; the browser only reads it.
-Older replies may omit it. No authority or turn configuration is accepted from the browser.
+`sessionConfiguration: { executionMode: restricted | memory_free }`. Existing server replies omit it. The browser derives its fallback with
+`sessionDefaults(assistantKind)`, which calls the shared event-library configuration
+with memory disabled. Personal sessions default to memory-free; team sessions
+default to restricted. An explicit optional view still takes precedence. No authority or turn configuration is accepted from the browser.
 Conversation list status distinguishes `stopped` from
 `done`; both are derived from events, never a separate stored status.
 

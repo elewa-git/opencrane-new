@@ -6,7 +6,8 @@ import { UploadBatch } from './upload-batch';
 import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
-import { chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
+import { sessionDefaults, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema,
+  type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ChatContext, ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
@@ -227,8 +228,9 @@ export class ChatSession implements OnDestroy {
     const conversation = this.conversations().find(row => row.conversationId === id);
     this.readMarker.setRow(conversation);
     const configuration = conversation?.mode === 'agent_session'
-      ? conversation.sessionConfiguration : undefined;
-    this.executionMode.set(configuration?.executionMode ?? 'restricted');
+      ? conversation.sessionConfiguration ?? sessionDefaults(conversation.assistantKind)
+      : sessionDefaults(undefined);
+    this.executionMode.set(configuration.executionMode);
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
     this.computerRecovered.set(false);
     this.computerLostAt.set('');

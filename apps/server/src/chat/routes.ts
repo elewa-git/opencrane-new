@@ -6,7 +6,7 @@ import { participantCommand, participantList } from './participants.ts';
 import { PayingGroupRefused, isAuthorityChanged } from '@opencrane/models';
 import { privateSessionReader, sharedAssistantAuthority,
   writePrivateSession } from './private-session.ts';
-import { summary, sessionDefaults } from './list-summary.ts';
+import { summary } from './list-summary.ts';
 import { childOrigin } from './origin.ts';
 import { conversationListQuery, conversationListCursor, newestListMatch,
   ConversationListChanged,
@@ -274,7 +274,7 @@ async function visibleListMatches(options: ChatOptions, memberId: string,
       }
       const { conversationId, mode, assistantId, payingGroupId, createdBy, assistantKind } = row;
       return { conversationId, mode, assistantId, payingGroupId, createdBy, assistantKind,
-        sessionConfiguration: sessionDefaults(assistantKind), createdAt, ...details };
+        createdAt, ...details };
     } catch (error) {
       if (isChatRefused(error) || error instanceof ChatAccessApplying) return undefined;
       throw error;
