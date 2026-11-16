@@ -94,11 +94,6 @@
     "rule": "complexity"
   },
   {
-    "file": "libs/models/src/decision.ts",
-    "rule": "max-lines",
-    "max": 565
-  },
-  {
     "file": "libs/models/src/mcp-dispatch.ts",
     "rule": "max-lines",
     "max": 672

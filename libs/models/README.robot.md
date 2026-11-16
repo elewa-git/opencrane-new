@@ -911,8 +911,14 @@ read current policy. The slow-read regression keeps the original two-second life
 The turn pass may carry `sharingClass: shared_only` only when the server saved that
 class on the matching `computer.turn_started`. The pass keeps this separate from
 `executionMode`. Model calls use the sender and the child assistant's recorded payer.
-MCP and memory routes refuse the class before reading tool policy or issuing a memory
-pass. A private turn cannot claim the class, and a shared child cannot omit it.
+MCP and memory routes share one refusal check using `sessionConfiguration` derived
+from the checked signed class. They refuse before issuing a permit or memory pass.
+`decision-context.ts` checks the shared assistant payer using the configuration
+from saved assistant and conversation facts. It also requires the saved start payer
+to match. It reuses the bounded authority reader for assistant facts.
+The gateway keeps its creator check and subchat exemption. Memory admission derives
+the execution configuration from the saved mode and refuses missing or invalid modes.
+A private turn cannot claim the class, and a shared child cannot omit it.
 
 ## Internal descendant admission
 

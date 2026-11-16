@@ -6,6 +6,7 @@ export type SessionConfigurationInput = {
   };
   assistantKind?: string | undefined;
   assistantPayingGroupId?: string | undefined;
+  sharingClass?: 'shared_only' | undefined;
   requestedMode?: unknown;
   memoryEnabled: boolean;
 };
@@ -58,7 +59,9 @@ export function sessionConfiguration(input: SessionConfigurationInput): SessionC
 
 function sessionKind(input: SessionConfigurationInput): SessionConfiguration['kind'] {
   if (input.conversation.routinePreparation !== undefined) return 'routine';
-  if (input.conversation.contextKind === 'shared_child') return 'shared_child';
+  if (input.conversation.contextKind === 'shared_child' || input.sharingClass === 'shared_only') {
+    return 'shared_child';
+  }
   if (input.assistantKind === 'team') return 'team_private';
   return 'personal';
 }

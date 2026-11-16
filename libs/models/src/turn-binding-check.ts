@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sessionConfiguration } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 
 type SignedTurn = {
@@ -53,5 +54,9 @@ export function requireCurrentComputer(computer: StoredEvent | undefined, sequen
 }
 
 export function requireSharedTurnTools(sharingClass: 'shared_only' | undefined) {
-  if (sharingClass === 'shared_only') throw new Error('Shared turns have no tools');
+  const configuration = sessionConfiguration({ conversation: {}, sharingClass,
+    memoryEnabled: false });
+  if (configuration.sharingClass !== undefined) {
+    throw new Error('Shared turns have no tools');
+  }
 }

@@ -1,4 +1,4 @@
-/* eslint max-lines: ["error", { max: 565, skipBlankLines: true, skipComments: true }] */
+import { decisionContext, decisionIdentity, digestContext } from './decision-context.ts';
 import { personalToolAccess, toolAccessWithinDeadline } from './tool-authority.ts';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
@@ -16,21 +16,18 @@ import { mcpDispatch, type McpDispatchOptions } from './mcp-dispatch.ts';
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
-import { groupMembership } from './paying-group.ts';
 import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { readBody } from './decision-request-body.ts';
-import { AuthorityRefused, authorityFence, decisionAuthorityFence, currentAuthority,
-  authorityHistoryReader }
-  from './authority.ts';
-import { readDecisionGrants, type DecisionGrants } from './decision-grants.ts';
+import { AuthorityRefused, decisionAuthorityFence } from './authority.ts';
+import { readDecisionGrants } from './decision-grants.ts';
 import { confirmDecisionAccess, decisionActivity, decisionHistoryDeadline,
   requireActiveConversationTurn }
   from './decision-activity.ts';
 import { requireCurrentComputer, requireRecordedActiveTurn, requireSharedTurnTools }
   from './turn-binding-check.ts';
-import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims,
+import { legacyTurnSchema, requireManagedTurnClaims,
   requireModelRoute, knownDecisionRoute }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
@@ -46,67 +43,13 @@ import { computerCredentials, tokenVerifier, type tokenIssuer } from '@opencrane
 import type { ChildStartHandler } from './decision-child-start.ts';
 import { maintenanceOrChildRoute, type MaintenancePrepare } from './decision-maintenance.ts';
 import { z } from 'zod';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import type { Binding } from '@opencrane/authz';
 import type { StoredEvent } from '@opencrane/event-store';
-import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
-import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId, type ModelCall } from './state.ts';
+import { BudgetActor, BudgetRefused, envelope } from './actor.ts';
+import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId } from './state.ts';
 
-const id = z.string().regex(/^[\w-]+$/u).max(200);
-const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
-const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
-async function context(actor: BudgetActor, binding: Binding,
-  computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof legacyTurnSchema>,
-  liveSequence: number, resourceType: string, resourceId: string,
-  fresh: Awaited<ReturnType<typeof authorityFence>>, conversation: StoredEvent[],
-  turn: StoredEvent, grants?: DecisionGrants,
-  readAuthorityHistory?: ReturnType<typeof authorityHistoryReader>): Promise<ModelCall> {
-  const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
-  if (binding.silo !== actor.silo) throw new AuthorityRefused('Membership unavailable or refused');
-  if (permission.status === 'unavailable') throw new Error('Current authority unavailable');
-  if (!permission.allowed) throw new AuthorityRefused('Membership unavailable or refused');
-  const assistantRead = history(
-    actor.store, `assistant-${computer.assistant}`, actor.silo, fresh.deadline);
-  const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
-    computer.assistant, turnToken.conversation, resourceType, resourceId, fresh, conversation,
-    grants, undefined, readAuthorityHistory);
-  const [assistants, authority] = await Promise.all([assistantRead, authorityRead]);
-  const assistant = assistants.find(r => r.event.type === 'assistant.created');
-  if (!assistant) throw new Error('Assistant refused');
-  const created = conversation.find(r => r.event.type === 'conversation.created');
-  if (!created || data(created.event)['assistantId'] !== computer.assistant ||
-      conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Conversation refused');
-  const payingGroupId = data(turn.event)['payingGroupId'];
-  if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
-  if (data(assistant.event)['kind'] === 'team') {
-    const createdData = data(created.event);
-    const sharedChild = createdData['contextKind'] === 'shared_child';
-    if (!sharedChild && createdData['createdBy'] !== turnToken.requester) {
-      throw new Error('Private requester refused');
-    }
-    if (createdData['payingGroupId'] !== payingGroupId ||
-        data(assistant.event)['payingGroupId'] !== payingGroupId) {
-      throw new RequestRefused('Shared payer binding mismatch');
-    }
-    fresh.include(`team-${payingGroupId}`);
-    await groupMembership(
-      actor.store, actor.silo, turnToken.requester, payingGroupId, binding, fresh.deadline);
-  }
-  const facts = [computer, turnToken, assistant.sequence, liveSequence,
-    turn.sequence, permission.allowed, authority, payingGroupId];
-  const contextDigest = digestContext(facts);
-  return { model: turnToken.model, payingGroupId, priceTableId,
-    computerId: computer.computer, generation: computer.generation,
-    assistantId: computer.assistant,
-    requesterId: turnToken.requester, conversationId: turnToken.conversation,
-    turnId: turnToken.turn, threadId: turnToken.thread, contextDigest };
-}
+const id = legacyTurnSchema.shape.assistant;
 
-function digestContext(facts: unknown) {
-  const encoded = JSON.stringify(facts);
-  const digest = createHash('sha256');
-  digest.update(encoded);
-  return digest.digest('hex');
-}
 function activeTurn(turnToken: z.infer<typeof legacyTurnSchema>,
   facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
@@ -208,8 +151,8 @@ export async function startDecision(
       }
       const decisionDeadline = started + 2000;
       const checked = await credentials.check(req.headers, undefined, decisionDeadline);
-      const computer = computerSchema.parse(checked.computer);
-      const turnToken = parseTurnToken(checked.turn);
+      const callIdentity = decisionIdentity(checked);
+      const { computer, turnToken } = callIdentity;
       stage = 'turn_claims';
       await checkNativeCall(actor.store, binding, computer, turnToken,
         checked.sequence, started, decisionDeadline);
@@ -272,7 +215,6 @@ export async function startDecision(
       contextDigest = digestContext([computer, turnToken]);
       stage = 'request';
       async function memoryDecision() {
-        requireSharedTurnTools(turnToken.sharingClass);
         if (!identity.memory) throw new Error('Memory signing unavailable');
         const claims = { silo: actor.silo, requester: turnToken.requester,
           assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
@@ -299,12 +241,12 @@ export async function startDecision(
         res.end('{}');
       }
       stage = 'access_and_budget';
+      if (route === 'mcp') requireSharedTurnTools(turnToken.sharingClass);
       if (req.url === '/authorize/mcp/memory/server') {
         await memoryDecision();
         return;
       }
       if (route === 'mcp') {
-        requireSharedTurnTools(turnToken.sharingClass);
         const parsed = parseMcpCall(raw);
         callId = parsed.call.params._meta.callId;
         requireMcpThread(parsed.call, turnToken.thread);
@@ -320,9 +262,9 @@ export async function startDecision(
           policy.name, policy.args.canonical, policy.revision]);
         toolFacts = { logicalRequestId, serverId: match[1]!, toolName: policy.name };
         needsApproval = policy.outcome === 'ask';
-        const readAuthorityHistory = authorityHistoryReader(actor.store, fresh);
-        const call = await context(actor, binding, computer, turnToken, checked.sequence,
-          'mcp_server', match[1]!, fresh, conversation, turn, undefined, readAuthorityHistory);
+        const contextAccess = { resourceType: 'mcp_server', resourceId: match[1]!,
+          fresh, conversation, turn };
+        const call = await decisionContext(actor, binding, callIdentity, contextAccess);
         contextDigest = digestContext([call.contextDigest, policy]);
         // Check stops before opening or consuming an approval. Zero-cost calls hold no money.
         const modelCall = { ...call, requestId, model: 'mcp-zero-cost' };
@@ -381,8 +323,9 @@ export async function startDecision(
       const body = parsed.data;
       if (body.model !== turnToken.model) throw new Error('Model does not match turn grant');
       const amountCents = requestReservationCents(body);
-      const call = await context(actor, binding, computer, turnToken, checked.sequence,
-        'model', body.model, fresh, conversation, turn, grants);
+      const contextAccess = { resourceType: 'model', resourceId: body.model,
+        fresh, conversation, turn, grants };
+      const call = await decisionContext(actor, binding, callIdentity, contextAccess);
       contextDigest = call.contextDigest;
       const { credential, modelCall } = await modelPermission(
         call, requestId, turnToken, activity, fresh.deadline, providers);

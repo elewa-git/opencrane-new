@@ -27,7 +27,7 @@ The reference carries only the event id and position; readers verify the history
 An Ask for a company routine can name its run, account and tool details with digests
 where private values would be unsafe. The later account release must name that Ask.
 
-An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including encrypted command views, and still accepts older events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates and work out session settings without starting work.
+An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including encrypted command views, and still accepts older events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates and work out session settings from saved facts and signed turn claims without starting work.
 
 A saved message can name the clean files sent with it. Older messages without file ids
 remain readable. Message text stays encrypted.
@@ -86,7 +86,7 @@ flowchart LR
   workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
   models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal assistant consent, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
   computer["apps/computer<br/>personal computers"] -.->|reads event and command label shapes| events
-  models -.->|checks OAuth settings change records| events
+  models -.->|checks OAuth settings and derives session settings| events
 ```
 
 ## What it is responsible for

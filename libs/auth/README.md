@@ -17,6 +17,7 @@ end, [apps/ops](../../apps/ops/README.md), the background workers, and
 [libs/models](../models/README.md), the AI access library.
 It checks identity; [libs/authz](../authz/README.md) decides what a signed-in person
 may do. It reads saved computer records to check computer and chat passes.
+It uses the shared session settings when signing a chat pass.
 
 ```mermaid
 flowchart LR
@@ -26,7 +27,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
   auth -.->|reads computer control, closure and requested end reasons| store["libs/event-store<br/>saved event log"]
-  auth -.-> events["libs/events<br/>event formats"]
+  auth -.->|reads session settings| events["libs/events<br/>event formats and session settings"]
 ```
 
 ## What it is responsible for
