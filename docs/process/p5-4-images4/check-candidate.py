@@ -28,11 +28,7 @@ main_packages = debian.main_packages
 OSI = set(checker.read_json(ROOT / "infra/package/osi-licences.json"))
 
 
-def checked_bytes(path, expected):
-    contents = Path(path).read_bytes()
-    if hashlib.sha256(contents).hexdigest() != expected:
-        raise ValueError("Evidence bytes changed")
-    return contents
+checked_bytes = checker.checked_bytes
 
 
 def inventory(record):

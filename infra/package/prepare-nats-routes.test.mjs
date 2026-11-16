@@ -10,6 +10,7 @@ import { parseAllDocuments } from 'yaml';
 import { issueCertificate, sharedCertificates } from '../../libs/event-store/test/certificates.ts';
 import { copyPackagedFixture } from './packaged-fixture.ts';
 import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
+import { applicationApprovalFixture } from './application-approval-fixture.mjs';
 import { expireCertificate } from './expired-certificate-fixture.mjs';
 
 const execute = promisify(execFile);
@@ -119,6 +120,8 @@ exec /usr/bin/openssl "$@"
   await writeFile(join(home, 'namespace.json'), JSON.stringify({ metadata }));
   const review = JSON.parse(await readFile('infra/package/reviewed-images.json', 'utf8'));
   await scannerApprovalFixture(join(home, 'bin'), review);
+  const application = applicationApprovalFixture(home, review.images.server, { scanner: true });
+  const bin = application.bin;
   const secrets = {};
   for (const name of review.requiredSecrets) secrets[name] = `client-${name.toLowerCase()}`;
   const values = { chartVersion: review.chartVersion, images: review.images, secrets,
@@ -127,16 +130,16 @@ exec /usr/bin/openssl "$@"
     natsCluster: { enabled: true, renderOnly: true, routeCASecret: references[0],
       peerCertificateSecrets: references.slice(1) } };
   await sharedCertificates(slot);
-  const prepared = { home, worktree, slot, owner, values };
+  const prepared = { home, worktree, slot, owner, values, bin };
   if (isolatedTarget) await recordTarget(prepared);
   return prepared;
 }
 
 async function run(prepared, fails = false) {
-  const { home, worktree, values } = prepared;
+  const { home, worktree, values, bin } = prepared;
   await writeFile(join(home, 'values.json'), JSON.stringify(values));
   const env = { ...process.env, HOME: home, DEV_STACK_ID: '1', DEV_STACK_DIR: undefined,
-    PATH: `${home}/bin:${process.env.PATH}`, NODE_NO_WARNINGS: '1' };
+    PATH: `${bin}:${home}/bin:${process.env.PATH}`, NODE_NO_WARNINGS: '1' };
   const args = ['--experimental-strip-types', 'infra/package/prepare-nats-routes.ts',
     join(home, 'values.json')];
   let result;

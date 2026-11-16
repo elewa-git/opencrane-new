@@ -175,18 +175,22 @@ class ApplicationTests(unittest.TestCase):
                 artifacts = []
                 for suite in ('bookworm', 'updates', 'security'):
                     url = f'https://snapshot.debian.org/archive/debian/date/dists/{suite}/InRelease'
+                    packages_url = url.removesuffix('InRelease') + 'main/binary-amd64/Packages.xz'
                     compressed = lzma.compress(f'Package: {suite}\nVersion: 1\n\n'.encode())
                     checksum = hashlib.sha256(compressed).hexdigest()
                     signed = f'signed release for {suite}'.encode()
-                    releases[signed] = f'SHA256:\n {checksum} {len(compressed)} main/binary-amd64/Packages.xz\n'
-                    evidence['indexes'].append({'url': url, 'packages': [[suite, '1']],
+                    releases[signed] = (f'SHA256:\n {checksum} {len(compressed)} '
+                                        'main/binary-amd64/Packages.xz\n')
+                    index = {'url': url, 'packages': [[suite, '1']],
                         'inReleaseSha256': hashlib.sha256(signed).hexdigest(),
-                        'packagesSha256': checksum})
+                        'packagesSha256': checksum}
+                    evidence['indexes'].append(index)
                     downloads[url] = signed
                     if suite == damaged:
                         compressed += b'changed'
-                    downloads[url.removesuffix('InRelease') + 'main/binary-amd64/Packages.xz'] = compressed
-                    artifacts.append({'type': 'deb', 'name': suite, 'version': '1'})
+                    downloads[packages_url] = compressed
+                    artifact = {'type': 'deb', 'name': suite, 'version': '1'}
+                    artifacts.append(artifact)
 
                 def fetch(url, path):
                     path.write_bytes(downloads[url])

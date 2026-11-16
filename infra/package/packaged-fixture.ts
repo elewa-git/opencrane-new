@@ -5,6 +5,7 @@ import { preProcessFile } from 'typescript';
 
 const files = [
   'infra/clamav/approval.mjs',
+  'infra/clamav/ci-approval.mjs',
   'infra/clamav/release.mjs',
   'infra/clamav/refresh.mjs',
   'infra/clamav/database.mjs',

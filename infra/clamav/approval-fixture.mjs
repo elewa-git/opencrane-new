@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { toolImage } from './refresh.mjs';
+import { checkoutIdentity, writeCheckoutShim } from './checkout-fixture.mjs';
 
 // Simulate only GitHub's authenticated boundary; consumers still validate all files.
 export async function scannerApprovalFixture(bin, review) {
   await mkdir(bin, { recursive: true });
-  const revision = 'a'.repeat(40);
-  const branch = 'work/pilot-15-s1';
+  const { revision, branch } = checkoutIdentity;
   const updatedAt = new Date().toISOString();
   const databases = [];
   const checks = [];
@@ -44,15 +44,8 @@ else {
   }
 }
 `;
-  const git = `#!/bin/sh
-case "$*" in
-  'rev-parse HEAD') printf '%s' '${revision}' ;;
-  'branch --show-current') printf '%s' '${branch}' ;;
-  *) exit 1 ;;
-esac
-`;
   await writeFile(join(bin, 'gh'), github, { mode: 0o700 });
-  await writeFile(join(bin, 'git'), git, { mode: 0o700 });
+  writeCheckoutShim(bin);
   review.scanner = { approvedSha };
   return { run, files, approval };
 }

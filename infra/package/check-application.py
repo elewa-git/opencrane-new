@@ -18,11 +18,7 @@ debian = importlib.util.module_from_spec(debian_specification)
 debian_specification.loader.exec_module(debian)
 
 
-def checked_bytes(path, checksum):
-    contents = path.read_bytes()
-    if hashlib.sha256(contents).hexdigest() != checksum:
-        raise ValueError('Debian evidence bytes changed')
-    return contents
+checked_bytes = licences.checked_bytes
 
 
 def fetch(url, destination):

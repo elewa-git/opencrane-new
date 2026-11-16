@@ -266,6 +266,13 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def checked_bytes(path, expected):
+    contents = Path(path).read_bytes()
+    if hashlib.sha256(contents).hexdigest() != expected:
+        raise ValueError("Evidence bytes changed")
+    return contents
+
+
 def parse_debian_main_packages(index_text):
     packages = set()
     for line in index_text.splitlines():

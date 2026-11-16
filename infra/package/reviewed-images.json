@@ -23,9 +23,6 @@
   "scanner": {
     "approvedSha": "6cbd70a9814fb2860aa30dccc32d9e97b8efc990f355637c0231d867f70108ee"
   },
-  "applicationApproval": {
-    "workflow": ".github/workflows/application-package.yml"
-  },
   "packageImage": {
     "sourceRevision": "8601e8b4351d65f324d07bcb04cedcf8441f4354",
     "server": "k3d-ocn-registry:5000/opencrane/package@sha256:80c2433e8644f5fd01f5deaf912ecab9ca93ed2475187c1f4467196a4def8c17",

@@ -334,10 +334,13 @@ withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
 The `packageImage` record and role pins in `reviewed-images.json` are the historical
-licence baseline. They grant no application approval. The application policy names
-`.github/workflows/application-package.yml`; only successful same-repository push or
-manual output for the exact checkout revision and branch grants approval. Preflight
-fetches it again from github.com and requires both application roles to match its digest.
+licence baseline. They grant no application approval. `ci-approval.mjs` fixes the
+repository to `elewa-git/opencrane-new` and the application workflow to
+`.github/workflows/application-package.yml`. These are not review-file settings.
+The shared transport accepts successful push, schedule or manual runs; this workflow
+produces push and manual runs. Only output for the exact checkout revision and branch
+grants approval. Preflight fetches it again from github.com and requires both application
+roles to match its digest.
 Local files, replacement pins and inherited enterprise GitHub routing cannot approve images.
 A separate `natsCluster` review still requires three replicas and matching role bindings.
 

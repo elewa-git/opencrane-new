@@ -11,3 +11,8 @@ The application image checks include the backup runner and all its imported modu
 Application images now require exact-source CI approval after saved-layer checks,
 all-layer scanning, licence checks and authenticated Debian main indexes. Local
 builder pins cannot approve an image for package preparation or installation.
+
+Approval regression checks cover each application role separately, configuration
+digests, all three authenticated Debian indexes and bundled or manual licence
+refusals. Fork, local and mismatched-checkout producers stop before Docker or
+publication. The workflow policy is fixed in code rather than a review setting.

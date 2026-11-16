@@ -1,12 +1,12 @@
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkoutIdentity, writeCheckoutShim } from '../clamav/checkout-fixture.mjs';
 
 // Replace only the authenticated GitHub boundary; run the real approval consumer.
 export function applicationApprovalFixture(directory, image, options = {}) {
   const bin = join(directory, 'application-bin');
   mkdirSync(bin, { recursive: true });
-  const revision = 'a'.repeat(40);
-  const branch = 'work/pilot-15-s1';
+  const { revision, branch } = checkoutIdentity;
   const run = { id: 43, status: 'completed', conclusion: 'success', event: 'push',
     path: '.github/workflows/application-package.yml', head_branch: branch, head_sha: revision,
     repository: { full_name: 'elewa-git/opencrane-new' },
@@ -19,7 +19,10 @@ export function applicationApprovalFixture(directory, image, options = {}) {
 const fs = require('node:fs');
 const cp = require('node:child_process');
 const args = process.argv.slice(2);
-const application = args.some(value => value.includes('application-package.yml')) ||
+function namesApplicationWorkflow(value) {
+  return value.includes('application-package.yml');
+}
+const application = args.some(namesApplicationWorkflow) ||
   args[args.indexOf('--name') + 1] === 'application-approval' ||
   args[args.indexOf('--name') + 1] === 'application-image';
 if (!application) {
@@ -35,14 +38,7 @@ if (args[0] === 'api') {
   fs.writeFileSync(destination + '/approval.json', ${JSON.stringify(JSON.stringify(approval))});
 }
 `;
-  const git = `#!/bin/sh
-case "$*" in
-  'rev-parse HEAD') printf '%s' '${revision}' ;;
-  'branch --show-current') printf '%s' '${branch}' ;;
-  *) exit 1 ;;
-esac
-`;
   writeFileSync(join(bin, 'gh'), github, { mode: 0o700 });
-  writeFileSync(join(bin, 'git'), git, { mode: 0o700 });
+  writeCheckoutShim(bin);
   return { bin, env: { ...process.env, ...options.environment, PATH: `${bin}:${process.env.PATH}` }, approval };
 }
