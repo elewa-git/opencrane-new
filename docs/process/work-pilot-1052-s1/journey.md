@@ -1,5 +1,22 @@
 # Ordinary third-party tool server journey
 
+## Rework round 5, 16 November 2026
+
+Own source gate reproduction: FAIL before refactoring. Scoped ESLint reports
+`handle` complexity 20 against 15, and 3,694 counted test lines against the frozen
+3,622 cap. These are structural failures, reproduced by the existing lint checks;
+no runtime failure or new behavioural counterexample is claimed for them.
+
+Fetched main and completed the rebase onto `29d0d2cb7`. Preserved the uncommitted
+receipt and shared fixture reconciliation in a separate commit before rebasing.
+Kept current personal-key consent fields, dependency checks and reviewed image
+inventory while resolving the rebase conflicts. The working branch has no
+unfinished rebase. Existing dispatch behaviour is being pinned before extraction.
+
+Authorised limits: slice 1 of 2; ticket limit 20 agent-hours; rework round 5 of 5.
+Final gates and fresh-stack qualification: NOT RUN at this test-first checkpoint.
+
+
 ## Rebase qualification, 15 November 2026
 
 Result: FAIL at the source gate. Fresh-stack journey: NOT RUN at both widths.
