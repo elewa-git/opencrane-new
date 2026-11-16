@@ -17,9 +17,11 @@ import { conversationKeys, ProjectionRunner, routines } from '@opencrane/project
 import { database } from '@opencrane/projections/testing';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { memorySink } from '@opencrane/observability/testing';
-import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler, captureSession }
+import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler, captureSession,
+  holdFixtureClock, withRoutineFixtureClock }
   from '../../ops/test/support/routine-handoff.ts';
-import { observeDispatch, reportDispatchFailure, traceRoutineAppends, waitForDispatchHandler,
+import { dispatchForRelease, observeDispatch, reportDispatchFailure, traceRoutineAppends,
+  waitForDispatchHandler,
   type RoutineDispatchObservation } from './support/routine-dispatch-observation.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
@@ -59,10 +61,7 @@ const frameSchema = z.record(z.string(), z.unknown());
 function clock() {
   return now;
 }
-function holdFixtureClock() {
-  const fixedTime = performance.now();
-  vi.spyOn(performance, 'now').mockImplementation(() => fixedTime);
-}
+
 function record(id: string, subject: string, type: string, data: unknown): EventEnvelope {
   return { ...event(id, subject, type), source: 'opencrane-server', commandId: id, data };
 }
@@ -256,6 +255,7 @@ async function startComputer() {
     } };
 }
 async function cleanup() {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   await preparedComputer?.close();
   await fga?.close();
@@ -501,9 +501,15 @@ async function dispatchWork(options: Options = { enabled: true }, continuation =
   return progress;
 }
 
-function dispatch(...args: Parameters<typeof dispatchWork>) {
+function dispatchWithExistingClock(...args: Parameters<typeof dispatchWork>) {
   const pending = dispatchWork(...args);
   return observeDispatch(dispatchObservation, pending);
+}
+
+function dispatch(...args: Parameters<typeof dispatchWork>) {
+  // Control access-check time while real fixture services reply.
+  if (!vi.isFakeTimers()) holdFixtureClock();
+  return dispatchWithExistingClock(...args);
 }
 
 async function projectionReaderReady() {
@@ -606,10 +612,12 @@ async function heldLeadershipRefusesBeforeRelease(freezeClock: boolean) {
       handedOff = true;
     }
     const entered = Promise.withResolvers<void>();
-    const pending = dispatch({ enabled: true }, false, handoff);
+    const pending = dispatchWithExistingClock({ enabled: true }, false, handoff);
     await expect(waitForDispatchHandler(dispatchObservation, entered.promise, pending)).rejects.toThrow(
       /Dispatch rejected before turn start; phase=acquire;.*acquire/u);
     await expect(pending).rejects.toThrow(/^Routine leadership unavailable$/u);
+    expect(dispatchObservation.outcome).toBe('rejected');
+    expect(dispatchObservation.phase).toBe('acquire');
     expect(handedOff, 'Lock acquisition must refuse before handing off a due').toBe(false);
     const logged = leadershipLogs.lines()[0];
     expect(logged).toMatchObject({ phase: 'acquire',
@@ -663,10 +671,6 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
   if (kind === 'settled') {
     earlierReservation = await actor.reserve(otherBudgetCall(), 1);
   }
-  const fixedTime = performance.now();
-  let elapsed = 0;
-  const clockSpy = vi.spyOn(performance, 'now');
-  clockSpy.mockImplementation(() => fixedTime + elapsed);
   const append = nats.store.append.bind(nats.store);
   let changed = false;
   let releaseResult: Awaited<ReturnType<typeof append>> | undefined;
@@ -719,7 +723,7 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
           grantStream('model', 'gpt-6.1-sol'), 'grant.revoked', data);
         await nats.seed([revoked]);
       } else if (kind === 'deadline') {
-        elapsed = 2001;
+        await vi.advanceTimersByTimeAsync(2001);
       } else {
         stop.abort();
       }
@@ -731,13 +735,8 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(interruptRelease);
   const shouldRefuse = kind !== 'exhausted_other_reason';
-  const pending = dispatch();
-  if (shouldRefuse) {
-    await expect(pending).rejects.toThrow(/^Routine leadership unavailable$/u);
-  } else {
-    expect(await pending).toMatchObject({ examined: 1 });
-    await until(preparedComputer.executed);
-  }
+  await dispatchForRelease(dispatch, shouldRefuse);
+  if (!shouldRefuse) await until(preparedComputer.executed);
   expect(changed, 'The final release change must finish before refusing').toBe(true);
   const expectedStatus = shouldRefuse ? 'unavailable' : 'appended';
   expect(releaseResult, 'Refusal must come from the final release append')
@@ -817,7 +816,7 @@ async function reachesReleaseAfterSlowMonitor(freezeClock: boolean) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(reserveBeforeRelease);
   const options = { enabled: true, companyPreflight: preflight };
-  await expect(dispatch(options)).rejects.toThrow(/^Routine leadership unavailable$/u);
+  await expect(dispatchWithExistingClock(options)).rejects.toThrow(/^Routine leadership unavailable$/u);
   expect(delayed, 'The real monitor must encounter the delayed database response').toBe(true);
   expect(heldAfterLatency, 'The holder must survive the delayed monitor').toBe(true);
   expect(preparationFailure).toBeUndefined();
@@ -936,7 +935,10 @@ async function productionDeliveryUsesCheckedDue() {
   }
   const leadership = { databaseUrl, silo: 'test', signal: stop.signal, logger: leadershipLogger };
   dispatchObservation.phase = 'acquire';
-  const pending = withRoutineLeadership(leadership, work);
+  function run() {
+    return withRoutineLeadership(leadership, work);
+  }
+  const pending = withRoutineFixtureClock(run);
   await observeDispatch(dispatchObservation, pending);
   await until(preparedComputer.executed);
   await assertSingleRun();
@@ -1049,6 +1051,7 @@ async function disabled(options: Options) {
 const disabledOptions = [{}, { enabled: true, replay: true }];
 it.each(disabledOptions)('keeps execution disabled: %j', disabled);
 async function fourteenSecondWake() {
+  holdFixtureClock();
   const created = routine('routine.created');
   const other = { ...created, id: 'second', commandId: 'second', subject: 'routine-second',
     data: { ...foldRoutine(undefined, created).definition!, routineId: 'second' } };
@@ -1214,7 +1217,8 @@ async function waitsForStart(stage: string) {
   const pending = dispatch();
   void pending.then(finished, finished);
   try {
-    await waitForDispatchHandler(dispatchObservation, entered.promise, pending, 'durable start handler');
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending,
+      'durable start handler');
     await delay(50);
     expect(completed).toBe(false);
     expect(preparedComputer.executedThreads).toEqual([]);
@@ -1423,7 +1427,8 @@ async function cancelsAcknowledgement(kind: string) {
   const pending = dispatch();
   const refused = expect(pending).rejects.toThrow('Routine leadership unavailable');
   try {
-    await waitForDispatchHandler(dispatchObservation, entered.promise, pending, 'credential acknowledgement');
+    await waitForDispatchHandler(dispatchObservation, entered.promise, pending,
+      'credential acknowledgement');
     if (kind === 'shutdown') {
       stop.abort();
     } else if (kind === 'lease loss') {

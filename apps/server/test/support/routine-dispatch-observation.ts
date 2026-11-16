@@ -1,9 +1,10 @@
-import { vi } from 'vitest';
+import { expect } from 'vitest';
 import { z } from 'zod';
 import { eventEnvelopeSchema } from '@opencrane/events';
 import type { EventStore } from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import type { memorySink } from '@opencrane/observability/testing';
+import { withRoutineFixtureClock } from '../../../ops/test/support/routine-handoff.ts';
 
 export interface RoutineDispatchObservation {
   phase: string;
@@ -66,9 +67,24 @@ export function traceRoutineAppends(observation: RoutineDispatchObservation, sto
     const attempt = { phase: 'append', eventType, remainingMs };
     logger.error(attempt, 'Routine handoff append started');
     const result = await append(...args);
-    const finished = { ...attempt, status: result.status };
+    let finishedRemainingMs: number | undefined;
+    if (command.deadline !== undefined) {
+      finishedRemainingMs = command.deadline - performance.now();
+    }
+    const finished = { phase: 'append', eventType, remainingMs: finishedRemainingMs,
+      status: result.status };
     logger.error(finished, 'Routine handoff append finished');
     return result;
   }
-  vi.spyOn(store, 'append').mockImplementation(observed);
+  // Keep a real append function for the later injection spies to bind.
+  store.append = observed;
+}
+
+export async function dispatchForRelease(work: () => Promise<unknown>, shouldRefuse: boolean) {
+  const pending = withRoutineFixtureClock(work);
+  if (shouldRefuse) {
+    await expect(pending).rejects.toThrow(/^Routine leadership unavailable$/u);
+  } else {
+    expect(await pending).toMatchObject({ examined: 1 });
+  }
 }

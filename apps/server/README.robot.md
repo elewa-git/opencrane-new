@@ -1423,9 +1423,12 @@ still causes `inviter_authority_ended` before this recovery. No second join is s
 before the other reads the changed member stream.
 
 `test/routine-handoff.test.ts` retains real PostgreSQL leadership for final-release
-checks. A real 1.2-second PostgreSQL monitor query must not cancel preparation before
-the release, with real time and a frozen fixture clock. Every injected release
-change must finish and the final append must return the expected status. Pending-start tests race handler entry against dispatch completion
+checks. Normal dispatch fixtures hold access-check time while real services reply.
+The release matrix and scheduler success case also control native acquisition and
+probe timers with Vitest; the deadline case advances that clock explicitly.
+Real-latency and contention cases retain native timers and compare both monotonic
+clock modes. A real 1.2-second monitor query must not cancel its holder before release.
+Every injected release change must finish and the final append must return the expected status. Pending-start tests race handler entry against dispatch completion
 and report its outcome, phase and safe leadership logs on an early refusal.
 It uses separate NATS connections for commands and
 projection reads. After its NATS restart, it waits until the projection connection

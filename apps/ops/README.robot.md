@@ -1068,7 +1068,9 @@ database address or callback error details. No routine history enters this check
 `test/routine-leadership.test.ts` uses real PostgreSQL, NATS and OpenFGA. It covers
 competing sessions, other silos and budgets, terminated sessions during preparation,
 replacement sessions, shutdown, callback failure, deadline expiry and draining a
-pending check. Logging tests block the held session beyond the probe deadline and
+pending check. A controlled-clock test sends a real query beyond one second while
+fixture time stays frozen, checking that both the real lock and probe remain in use.
+The real-latency tests keep native timers. Logging tests block the held session beyond the probe deadline and
 check that callback canaries do not reach logs. Takeover tests pause the member-stream
 read inside append's access
 check and pause after that check returns. Both terminate the old session, verify a
