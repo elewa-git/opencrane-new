@@ -1,5 +1,36 @@
 # Ordinary third-party tool server journey
 
+## Rebase qualification, 15 November 2026
+
+Result: FAIL at the source gate. Fresh-stack journey: NOT RUN at both widths.
+
+Local rebased head: `8389e7ef723b7e791683617abdb352f9ae553b1e`.
+Base: `117564913`, including the secondary sign-in setup repair and concurrent
+personal-key release. The rebase completed. No new head was pushed.
+
+Conflict resolution retains the shared dispatch contract, credential preparation
+before budget queueing, ordinary-tool catalogue checks, reply costs and both sets
+of test assertions. The shared test-fixture reconciliation remains uncommitted.
+No behavioural contradiction was established.
+
+| Own check | Verdict |
+| --- | --- |
+| Rebase onto the requested main head | PASS. |
+| Source and test dependency boundaries | PASS: both dependency-cruiser checks. |
+| Scoped ESLint on reconciled files | FAIL: dispatch `handle` complexity is 20 against 15; the dispatch test has 3,694 counted lines against 3,622. |
+| Changed Vitest files from the slice and concurrent-key change | PARTIAL: started once with two workers, then interrupted after the lint blockers; no completed-suite PASS is claimed. |
+| Sign-in setup tests and changed website tests | NOT RUN after the stop. |
+| Remaining typecheck, event, unused-code and documentation gates | NOT RUN after the stop. |
+| Every admin and member journey step at 1280 px | NOT RUN. |
+| Every admin and member journey step at 390 px | NOT RUN. |
+| Push and CI for the local rebased head | NOT RUN. |
+
+The owner authorised qualification with no further code fixes. Resolving these
+lint failures requires code changes, so work stopped without weakening either
+limit. No secondary stack was claimed. No new screenshots were taken.
+The earlier runs below do not qualify this rebased source.
+
+
 Date: 13 November 2026.
 Checked source: `ec790fbe9625a5cfdc548931b929976b0c17bd53`.
 Base: `1e85888428e91cec9a39bfada3b7f99649b61766`, including personal keys and installation naming.
