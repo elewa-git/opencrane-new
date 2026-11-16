@@ -1,7 +1,7 @@
 import type { BudgetBinding, McpAccessCheck, MemorySend, Permit, Route }
   from './mcp-dispatch-contract.ts';
-import { consumePermit, dispatchDigest as digest,
-  type PersonalDispatchRequest } from './mcp-dispatch-request.ts';
+import { consumePermit, dispatchDigest as digest, dispatchRemoteTarget,
+  type PersonalDispatchRequest, type RemoteTarget } from './mcp-dispatch-request.ts';
 /* eslint max-lines: ["error", { max: 672, skipBlankLines: true, skipComments: true }] */
 import { credentialPatterns } from './credential-patterns.ts';
 import { containsCredential, replyContainsCredential } from './mcp-credential-echo.ts';
@@ -10,7 +10,7 @@ import { currentRemoteCatalogue, toolServerBody, changedToolListReply } from './
 import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
-import { prepareRemote, exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
+import { exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
@@ -212,17 +212,13 @@ class McpDispatcher {
     const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
     // Prepare immutable history and receipts before entering the shared budget queue.
     await permit.confirmAccess.prepare?.(deadline);
-    let target: Awaited<ReturnType<typeof prepareRemote>> | undefined;
-    if (route.locator) {
-      const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
-      const signal = AbortSignal.timeout(duration);
-      target = await prepareRemote(route.locator, this.options?.remoteNetwork ?? {}, signal);
-      if (route.standard && !await this.checkStandardCatalogue(target, permit, signal)) {
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(changedToolListReply(body));
-        return;
-      }
+    const remote = await this.prepareRemoteCall(permit, deadline);
+    if (remote.catalogueChanged) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(changedToolListReply(body));
+      return;
     }
+    const target = remote.target;
     await requireGatewayPosition(this.actor.store, this.actor.silo, permit.gatewayBinding,
       this.acknowledged, deadline);
     const position = await this.actor.store.head(`mcp-${route.serverId}`, deadline);
@@ -240,12 +236,7 @@ class McpDispatcher {
     const attempt = { req, res, permit, position, deadline, startedAt };
     const observe = await this.admitCall(attempt);
     if (personal) {
-      try {
-        await personal.send(observe!);
-      } catch (error) {
-        await this.reportRefusal(permit, observe, startedAt, 'credential_release', error);
-        throw error;
-      }
+      await this.sendPersonalCall(personal, observe, attempt);
       return;
     }
     if (target) {
@@ -258,7 +249,32 @@ class McpDispatcher {
     forward(route, permit, permit.memory ? body : toolServerBody(body), res, memoryContext);
   }
 
-  async checkStandardCatalogue(target: Awaited<ReturnType<typeof prepareRemote>>,
+  async prepareRemoteCall(permit: Permit, deadline: number) {
+    const route = permit.route;
+    const network = this.options?.remoteNetwork ?? {};
+    const remote = await dispatchRemoteTarget(route, deadline, network);
+    if (!remote) {
+      return { target: undefined, catalogueChanged: false };
+    }
+    const { target, signal } = remote;
+    if (route.standard && !await this.checkStandardCatalogue(target, permit, signal)) {
+      return { target, catalogueChanged: true };
+    }
+    return { target, catalogueChanged: false };
+  }
+
+  async sendPersonalCall(personal: NonNullable<ReturnType<typeof personalDispatch>>,
+    observe: RemoteObserver | undefined, attempt: DispatchAttempt) {
+    try {
+      await personal.send(observe!);
+    } catch (error) {
+      await this.reportRefusal(attempt.permit, observe, attempt.startedAt,
+        'credential_release', error);
+      throw error;
+    }
+  }
+
+  async checkStandardCatalogue(target: RemoteTarget,
     permit: Permit, signal: AbortSignal) {
     const current = await currentRemoteCatalogue(target, this.options?.remoteNetwork ?? {}, signal);
     if (current === permit.schemaDigest) return true;
@@ -551,7 +567,7 @@ interface CheckedRemoteReply {
 }
 
 interface RemoteToolCall {
-  target: Awaited<ReturnType<typeof prepareRemote>>;
+  target: RemoteTarget;
   raw: string;
   res: ServerResponse;
   network: RemoteNetwork;
