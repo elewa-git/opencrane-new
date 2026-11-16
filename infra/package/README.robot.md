@@ -310,8 +310,10 @@ All three environment variables are required; a missing archive fails the test.
 The archive must identify the same image that the container checks exercise.
 The recursive import check compares the packaged TypeScript files with the source
 checkout. It follows runtime imports after removing TypeScript types, starting at
-both bootstrap programs and `infra/dev-stack/secondary-models.ts`, the chart’s
-model entry point. The package deliberately uses the secondary stack’s fake model
+both bootstrap programs, `scheduled-backup-run.ts` and `infra/dev-stack/secondary-models.ts`,
+the chart’s model entry point. The backup runner, collector, source adapter and event
+collector have explicit Docker context exceptions and image-file allowlist entries.
+The package deliberately uses the secondary stack’s fake model
 for local install checks. Its bridge and tool-rehearsal helper ship through the same
 explicit `.dockerignore` exceptions as the launcher and stub. Removing a required
 imported file refuses even when the entry point remains. It also checks every
