@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { commitBase } from './test/support/git-repository.mjs';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 const checker = fileURLToPath(new URL('./check-folder-readmes.mjs', import.meta.url));
@@ -327,18 +328,9 @@ function refusesPassingEntry() {
 
 test('requires removal of an entry whose file now passes', refusesPassingEntry);
 
-function commitBase() {
-  const options = { cwd: repository, encoding: 'utf8' };
-  execFileSync('git', ['add', '--all'], options);
-  const args = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture',
-    'commit', '--quiet', '--no-gpg-sign', '-m', 'Fixture base'];
-  execFileSync('git', args, options);
-  return execFileSync('git', ['rev-parse', 'HEAD'], options).trim();
-}
-
 function refusesNewBaselineEntry() {
   trackFiles({ 'libs/example/README.md': validReadme });
-  const base = commitBase();
+  const base = commitBase(repository);
   writeFile('libs/example/README.md', readmeWithLines(151));
   writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 151 }]);
   const result = runCheck(base);
@@ -351,7 +343,7 @@ test('refuses a new entry against the base commit', refusesNewBaselineEntry);
 function refusesRaisedCount() {
   trackFiles({ 'libs/example/README.md': readmeWithLines(151) });
   writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 151 }]);
-  const base = commitBase();
+  const base = commitBase(repository);
   writeBaseline([{ file: 'libs/example/README.md', rule: 'length', count: 152 }]);
   const result = runCheck(base);
   expect(result.status).toBe(1);
