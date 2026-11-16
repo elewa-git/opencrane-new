@@ -7,3 +7,7 @@ separate local volume. Failed runs appear as failed Kubernetes Jobs and never as
 complete backups. Restore remains a separate slice.
 
 The application image checks include the backup runner and all its imported modules.
+
+Application images now require exact-source CI approval after saved-layer checks,
+all-layer scanning, licence checks and authenticated Debian main indexes. Local
+builder pins cannot approve an image for package preparation or installation.

@@ -491,3 +491,10 @@ The negative replay cases keep all current upload bindings except one changed
 field: silo, request, bytes, file id, purpose, manifest digest or expiry. The
 replacement release changes the approved manifest for later requests; a saved
 response from the first release remains unusable.
+
+## CI approval transport
+
+`ci-approval.mjs` supplies the shared GitHub download boundary for scanner and
+application packaging. It accepts only a successful same-repository workflow for
+the current revision and branch, pins github.com and refuses enterprise routing.
+Each consumer still validates its own release or image and scan bindings.

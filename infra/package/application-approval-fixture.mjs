@@ -44,5 +44,5 @@ esac
 `;
   writeFileSync(join(bin, 'gh'), github, { mode: 0o700 });
   writeFileSync(join(bin, 'git'), git, { mode: 0o700 });
-  return { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, approval };
+  return { env: { ...process.env, ...options.environment, PATH: `${bin}:${process.env.PATH}` }, approval };
 }

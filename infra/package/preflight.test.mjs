@@ -4,10 +4,11 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { applicationApprovalFixture } from './application-approval-fixture.mjs';
 import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 
 const digest = 'sha256:' + 'a'.repeat(64);
-const reviewedImage = `registry.local/server@${digest}`;
+const reviewedImage = `k3d-ocn-registry:5000/opencrane/package@${digest}`;
 
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'package-preflight-'));
@@ -21,7 +22,11 @@ function fixture() {
   return { directory, values, review };
 }
 
-function check(values, review, directory, env = process.env) {
+function check(values, review, directory, env) {
+  if (!env) {
+    const approvedImage = `k3d-ocn-registry:5000/opencrane/package@${digest}`;
+    env = applicationApprovalFixture(directory, approvedImage).env;
+  }
   const valuesFile = join(directory, 'values.json');
   const reviewFile = join(directory, 'review.json');
   writeFileSync(valuesFile, JSON.stringify(values));
@@ -294,7 +299,7 @@ async function localScannerApprovalRefuses() {
 printf '%s' '{"workflow_runs":[]}'
 `;
     writeFileSync(join(bin, 'gh'), noJob, { mode: 0o700 });
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+    const env = applicationApprovalFixture(directory, reviewedImage, { scanner: true }).env;
     const result = check(values, review, directory, env);
     assert.notEqual(result.status, 0,
       'Matching builder-written review and values must never approve a scanner');
@@ -314,7 +319,7 @@ async function jobOutputPasses() {
     await scannerApprovalFixture(bin, review);
     values.images.scanner = review.images.scanner;
     values.scanner = { ...review.scanner };
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+    const env = applicationApprovalFixture(directory, reviewedImage, { scanner: true }).env;
     assert.equal(check(values, review, directory, env).status, 0);
     values.scanner.approvedSha = 'f'.repeat(64);
     review.scanner.approvedSha = values.scanner.approvedSha;

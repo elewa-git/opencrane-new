@@ -11,6 +11,7 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
+import { applicationApprovalFixture } from './application-approval-fixture.mjs';
 import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -160,7 +161,10 @@ async function scannerFixtureEnvironment(directory, mainValuesSource) {
     const bin = join(directory, 'bin');
     await scannerApprovalFixture(bin, reviewed);
     values.scanner = { ...reviewed.scanner };
-    fixtureEnvironment.PATH = `${bin}:${process.env.PATH}`;
+    const application = applicationApprovalFixture(directory, reviewed.images.server, { scanner: true });
+    values.images.server = reviewed.images.server;
+    values.images.web = reviewed.images.web;
+    fixtureEnvironment.PATH = application.env.PATH;
   }
   return fixtureEnvironment;
 }

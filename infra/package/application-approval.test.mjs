@@ -47,6 +47,7 @@ function refusesReplacement() {
 test('application preflight refuses matching locally replaced image pins', refusesReplacement);
 
 const refusals = [
+  ['enterprise routing', { environment: { GH_HOST: 'enterprise.invalid' } }],
   ['different source', { approval: { revision: 'b'.repeat(40) } }],
   ['different run', { approval: { runId: 99 } }],
   ['mutable digest', { approval: { imageDigest: 'latest' } }],
@@ -66,3 +67,30 @@ for (const [name, options] of refusals) {
   }
   test(`application preflight refuses ${name}`, refusesInvalidOutput);
 }
+
+function preparationUsesCiOnly() {
+  for (const noJob of [false, true]) {
+    const directory = mkdtempSync(join(tmpdir(), 'application-preparation-'));
+    try {
+      const fixture = applicationApprovalFixture(directory, image, { noJob });
+      const program = `import { fetchApplicationApproval } from './infra/package/application-approval.mjs';
+const approved = await fetchApplicationApproval(process.argv[1], true);
+process.stdout.write(JSON.stringify(approved));`;
+      const result = spawnSync('node', ['--input-type=module', '-e', program, directory],
+        { env: fixture.env, encoding: 'utf8' });
+      if (noJob) {
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /Application CI approval refused/u);
+      } else {
+        assert.equal(result.status, 0, result.stderr);
+        const approved = JSON.parse(result.stdout);
+        assert.equal(approved.image, image);
+        assert.equal(approved.runId, 43);
+        assert.equal(approved.revision, 'a'.repeat(40));
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+}
+test('preparation fetches only successful exact-source application output', preparationUsesCiOnly);

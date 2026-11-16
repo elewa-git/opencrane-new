@@ -333,32 +333,37 @@ requires the final owner-ready update; a settings refusal cannot pass. Failures
 withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
-The `packageImage` review binds both role pins and
-`sourceRevision` to `imageId`, Syft's image configuration digest, and `scanSha256`
-from the Syft JSON bytes. Docker inspection may identify that configuration or the
-image index; both reports must name the same reviewed repository digest.
-The server inventory records the same `sourceRevision`; the website
-shares that inventory. These fields are reviewed evidence, not an automatic claim
-that bootstrap or a live installation passed. A separate `natsCluster` review still
-requires three replicas and the existing role bindings before that option can run.
-Synthetic records prove source checks only.
+The `packageImage` record and role pins in `reviewed-images.json` are the historical
+licence baseline. They grant no application approval. The application policy names
+`.github/workflows/application-package.yml`; only successful same-repository push or
+manual output for the exact checkout revision and branch grants approval. Preflight
+fetches it again from github.com and requires both application roles to match its digest.
+Local files, replacement pins and inherited enterprise GitHub routing cannot approve images.
+A separate `natsCluster` review still requires three replicas and matching role bindings.
 
-After inspecting bootstrap in the actual image, scan it with Syft's `--scope all-layers`.
-Save `docker image inspect <immutable-pin>` as JSON. Run the existing checker with
-the expected commit, that inspection and the scans:
+The application workflow uses standard Ubuntu runners, `contents: read` and GitHub's
+built-in artifact token. It has no secret, paid cache, registry credential or fork trigger.
+It checks out `github.sha` without persisted credentials and builds the package Dockerfile
+with that source label. It inspects the immutable image, runs the saved-layer/bootstrap
+checks and scans every shipped layer using the pinned Syft downloader. The existing
+`check-licences.py` inventory and `check_package_promotion` rules must pass unchanged.
+Changed components require a reviewed inventory; CI never invents licence decisions.
 
-```sh
-nice -n 10 python3 infra/package/check-licences.py \
-  --promotion <commit> <inspection.json> server <scan.json> web <scan.json>
-```
+`check-application.py` authenticates all three snapshot indexes named in
+`package-debian-main.json`. It reads the keyring from the pinned image and requires its
+reviewed SHA-256. For each index it downloads InRelease, checks its recorded checksum,
+verifies it with `gpgv`, then downloads `main/binary-amd64/Packages.xz`. Both its recorded
+checksum and its SHA-256 and byte count in the signed release must match. Every reviewed
+and scanned Debian package/version must occur in authenticated main. It reuses the
+compressed-index check used by the earlier candidate checker.
 
-This checks image identity, the exact scan checksum, every inventoried component,
-application licences and the existing signed-index package lists. It still requires
-a new Debian-main review when the image changes. It does not fetch or authenticate
-a new index itself. An operator must verify the signed index and record its hashes
-before changing the inventory and index pin together. Never change only the expected pin.
-The command writes nothing and withholds input paths and dependency errors on failure.
-The preflight test suite also runs the Python licence and promotion refusal tests.
+Only then does CI write `application-approval/approval.json`, binding `runId`, `revision`,
+`imageDigest`, `imageId` and `scanSha256`. The artifact also retains inspection and scan
+bytes. The separate `application-image` artifact holds the checked OCI archive. Outputs
+expire after one day. Run the workflow again if output expired; local candidates do not
+substitute. Package preparation downloads both exact-source approvals and images through
+the shared scanner fetch path, pinned to github.com, and publishes their exact digests
+only to the existing development registry. No public image is published.
 
 The current image has a source-bound all-layer scan. Its 88 Debian package versions
 were checked again against authenticated main indexes; `package-debian-main.json`

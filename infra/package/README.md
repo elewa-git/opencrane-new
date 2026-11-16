@@ -21,7 +21,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|checks ownership, nodes, certificates and backup token references| package["infra/package<br/>images, installation settings and evidence"]
   package -->|uses local cluster| devbox["infra/devbox<br/>machine setup"]
   package -->|starts services and fake model; saves backups after services recover| apps["apps<br/>product services and replay"]
-  packaging["GitHub packaging job"] -->|supplies scanner approval and image| package
+  packaging["GitHub packaging job"] -->|supplies application and scanner approvals and images| package
   package -->|waits for NATS, placement, setup, recovery, fresh browser journeys and database backup and recovery descriptions| services["Core services<br/>NATS, PostgreSQL, OpenFGA, MinIO and ClamAV"]
   package -->|starts on demand| computer["apps/computer<br/>assistant computer"]
   package -->|rebuilds spending tables| models["libs/models<br/>budgets"]
@@ -39,7 +39,8 @@ then uses the existing chat path to answer questions about clean files.
 Infected files are refused. Uploads stay unavailable when scanning cannot be proved
 or its last verified update check is more than 24 hours old. A scheduled GitHub job
 verifies and packages fresh definitions. Preparation fetches its approved output
-for the current source commit; a locally built candidate cannot grant approval.
+for the current source commit. A separate job builds, checks and approves the application image.
+Preparation and installation fetch both approvals; locally written pins cannot approve either image.
 
 A nightly scheduled job saves the single-server event log, all databases and uploaded
 files together on a separate private volume. It briefly stops chat and background
@@ -110,8 +111,8 @@ and [computer home restoration](README.robot.md#raw-computer-home-restoration-fi
 
 ## Processes it handles
 
-Before a new server and website image is approved, its source label, fixed image
-digest and licence inventory must agree with the recorded review. The scan includes
+CI approves a server and website image only when its source label, fixed digest and
+licence inventory agree. It authenticates the Debian main package indexes. The scan includes
 files hidden by later image layers. The build copies the cleaned filesystem into
 one filesystem layer, so removed npm and computer files are absent from the saved image.
 The image also carries the four small helpers used to start and check private
@@ -122,8 +123,8 @@ finishes the fixture; a running installation needs its own checks.
 The image also contains a small Linux helper that protects and measures the memory
 check runner itself. Its compiler stays in a separate build stage. This prerequisite
 check cannot qualify other processes or enable memory.
-A separate candidate record checks the proposed package list, saved image bytes
-and Debian main package versions. It keeps checksums for the shipped notices.
+The CI job checks the proposed package list, saved image bytes and signed Debian
+main package versions. Historical candidate records retain shipped notice checksums.
 A separate check reads kubectl's saved build information and retains the Go project
 and runtime terms. It verifies the Go source archive's signature with Google's
 published key. Reported module names do not prove their source.
