@@ -279,7 +279,10 @@ admin-only tool explanation shape.
 
 ToolPolicy optionally carries reviewRevision, the admin-chosen `identityTool` and
 the strict publication intent. `personal-connections.ts` shares the key-save input,
-safe profile metadata, reviewed connection settings and missing-key notice shapes.
+safe profile metadata, reviewed connection settings, selection commands and missing-key
+notice shapes. Personal selection and connection settings optionally carry
+`allowedAssistantIds`. The notice reason `assistant_not_allowed` distinguishes a
+consent refusal from a missing key without including any account identity.
 The key-save input is a private HTTP command, never an event. Chat context optionally
 advertises `personalConnections` for the notice reader.
 These are saved facts, with no gateway readiness claim. Older policy replies still parse.

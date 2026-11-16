@@ -1,3 +1,4 @@
+import { personalToolContext } from '../src/personal-tool-context.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -48,11 +49,11 @@ async function fixture(sharedServer?: string) {
   await auth.handler.handle(grant, pgDb(storage.queue));
   const saved = await oauthSelectionFixture(nats, userId, serverId);
   async function select(input: unknown = saved.command) {
-    return changeConnectionSelection(nats.store, binding, userId, input, saved.loadConfiguration);
+    return changeConnectionSelection(nats.store, binding, userId, input, { loadConfiguration: saved.loadConfiguration });
   }
   async function read(toolName?: string) {
     return readConnectionSelection(nats.store, binding, userId, serverId,
-      saved.loadConfiguration, toolName);
+      { loadConfiguration: saved.loadConfiguration, toolName });
   }
   return { ...saved, userId, serverId, select, read };
 }
@@ -201,7 +202,7 @@ async function racingCheck(kind: string) {
     return test.configuration;
   }
   const result = await readConnectionSelection(nats.store, binding, test.userId,
-    test.serverId, loadConfiguration, 'read');
+    test.serverId, { loadConfiguration, toolName: 'read' });
   expect(result.status).toBe('unavailable');
 }
 it.each(['refresh', 'clear', 'revoke'])('cannot return stale eligibility during %s', racingCheck);
@@ -245,7 +246,7 @@ async function unavailableConfiguration(removed: boolean) {
     return Promise.reject(new Error('private-canary'));
   }
   const pending = readConnectionSelection(nats.store, binding, test.userId,
-    test.serverId, failed, 'read');
+    test.serverId, { loadConfiguration: failed, toolName: 'read' });
   const message = removed ? 'Active silo membership required' : 'Selection configuration unavailable';
   await expect(pending).rejects.toThrow(message);
   await expect(pending).rejects.not.toHaveProperty('cause');
@@ -370,3 +371,28 @@ const refusalCases = [
 ];
 it.each(refusalCases)(
   'preserves saved %s refusal with failed %s preparation on %s', savedRefusalWithFailure);
+
+async function authorisationRefusesDeniedAssistantAtCurrentRevision() {
+  const test = await fixture();
+  const assistantId = `${test.userId}-assistant`;
+  const assistant = envelope('test', `assistant-${assistantId}`, 'assistant.created', {
+    assistantId, ownerId: test.userId, kind: 'personal',
+  });
+  await nats.seed([assistant]);
+  const initial = await test.select();
+  const request = { assistantId, toolName: 'read', loadConfiguration: test.loadConfiguration,
+    boundSelection: { profileId: 'oauth', selectionRevision: initial.sequence } };
+  const prepared = await personalToolContext(nats.store, binding, test.userId,
+    test.serverId, request);
+  expect(prepared).toMatchObject({ selectionRevision: initial.sequence, profileId: 'oauth',
+    requesterId: test.userId, serverId: test.serverId, generation: 1 });
+  const denied = await test.select({ ...test.command, expectedSequence: initial.sequence,
+    changeRef: 'deny-assistant', allowedAssistantIds: [] });
+  expect((await test.read('read')).status).toBe('verified');
+  const current = { ...request,
+    boundSelection: { profileId: 'oauth', selectionRevision: denied.sequence } };
+  await expect(personalToolContext(nats.store, binding, test.userId, test.serverId, current))
+    .rejects.toThrow('Personal tool unavailable');
+}
+it('refuses call authorisation for a denied assistant at the current selection revision',
+  authorisationRefusesDeniedAssistantAtCurrentRevision);

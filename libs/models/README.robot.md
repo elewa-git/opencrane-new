@@ -4199,6 +4199,18 @@ Base dependency #523 landed as `e3f593bf6d41ae465e3c49cb43f7444c4120c968`.
 `changeConnectionSelection(store, binding, userId, input)` takes the authenticated user
 separately. Strict input has action (select/clear), serverId, connectionId, changeRef and
 expectedSequence. Select also requires profileId and the checked profileRevision.
+Personal selection accepts `allowedAssistantIds` (at most 100). Each change uses the
+same conditional append and raises the selection revision. Omitted lists preserve
+the existing consent on a new selection; original retries preserve their saved fields.
+`assistantMayUsePersonalKey` interprets an absent list as the owner’s own personal
+assistant only, using its saved creation event. An empty list allows nobody.
+Tool preparation, personal call preparation and final release share that decision.
+`personal-tool-context.ts` prepares the route, policy and signed selection before
+the decision starts its short access check. The shared call-context type lives
+with personal account facts, so MCP parsing does not import its caller.
+Release still checks the exact selection revision before and after custody reads.
+The command takes optional `SelectionDependencies` as its fifth argument.
+The reader takes optional `PersonalSelectionRead` settings as its fifth argument.
 Clear has no profile fields. It names the saved connection when a choice exists,
 even after re-registration clears the current installation. With no saved choice,
 it names the current installation. Select requires the current installation and an
@@ -4944,7 +4956,8 @@ not a complete authorisation service, and its receipt cannot authorise forwardin
 
 The saved decision must include the identical `release` binding. Existing decision
 writers do not populate it. Legacy decisions and release records cannot confirm.
-The helper checks exact selected personal profile, generation, owner, installation,
+The helper checks the owner’s assistant consent, exact selected personal profile,
+generation, owner, installation,
 profile/selection/policy positions, endpoint and account/scope fingerprints. Legacy
 bearer profiles without checked identity evidence remain saved_unverified. Their synthetic audit tests do not qualify
 account identity or make credentialed tools available. Production OAuth/company use stays closed.

@@ -1,3 +1,4 @@
+import { savedAssistantConsent } from '@opencrane/models';
 import { invalidBody } from './instance-routes.ts';
 import { personalConnectionRefusal, logPersonalConnectionFailure }
   from './personal-connection-failure.ts';
@@ -87,7 +88,9 @@ async function readSettings(options: GroupOptions, memberId: string, serverId: s
       !policy.connectionId) throw new Error('Connection server unavailable');
   const selected = foldConnectionSelection(rows);
   return { serverId, connectionId: policy.connectionId, identityTool: policy.identityTool,
-    selectionRevision: selected.sequence };
+    selectionRevision: selected.sequence,
+    ...(selected.selected ? { selectedProfileId: selected.selected.profileId } : {}),
+    ...savedAssistantConsent(selected.selected) };
 }
 
 function invalidKeyBody(error: Error & { statusCode?: number }, _request: FastifyRequest,

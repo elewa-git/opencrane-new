@@ -21,9 +21,10 @@ export async function personalConnectionNeeds(options: PersonalConnectionNeedsOp
       const row = serverRow.parse(raw);
       rows.push({ serverId: row.server_id });
     }
-    const needs: { serverId: string; name: string }[] = [];
-    function missingConnection(server: TurnToolServerState) {
-      needs.push({ serverId: server.serverId, name: server.serverInfo?.name ?? server.serverId });
+    const needs: { serverId: string; name: string; reason?: 'assistant_not_allowed' }[] = [];
+    function missingConnection(server: TurnToolServerState, reason?: 'assistant_not_allowed') {
+      needs.push({ serverId: server.serverId, name: server.serverInfo?.name ?? server.serverId,
+        ...(reason ? { reason } : {}) });
     }
     const readers = turnToolReaders(options);
     await buildTurnTools({ rows, requesterId, assistantId, ...readers,

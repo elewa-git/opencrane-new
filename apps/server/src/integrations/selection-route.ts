@@ -3,6 +3,7 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { changeConnectionSelection, MemberAccessRefused, SelectionInputInvalid,
   SelectionConflict } from '@opencrane/models';
 import { z } from 'zod';
+import { connectionSelectionBodySchema as bodySchema } from '@opencrane/protocol';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { sameOrigin } from '../members/guard.ts';
@@ -11,16 +12,10 @@ import { invalidBody } from './instance-routes.ts';
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const parameters = z.strictObject({ serverId: id });
 const emptyQuery = z.strictObject({});
-const fields = { connectionId: id, changeRef: id, expectedSequence: z.int().nonnegative() };
-const bodySchema = z.discriminatedUnion('action', [
-  z.strictObject({ ...fields, action: z.literal('select'), profileId: id,
-    profileRevision: z.int().positive(), ownerKind: z.enum(['personal', 'company']).optional() }),
-  z.strictObject({ ...fields, action: z.literal('clear') }),
-]);
 
 export function registerConnectionSelection(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
-  const postOptions = { bodyLimit: 4096, errorHandler: invalidBody };
+  const postOptions = { bodyLimit: 24 * 1024, errorHandler: invalidBody };
   app.post('/api/my/tools/:serverId/selection', postOptions, handler);
   async function handler(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
@@ -47,7 +42,7 @@ export function registerConnectionSelection(app: FastifyInstance, config: AuthCo
       }
       const input = { ...body, ...reference };
       const receipt = await changeConnectionSelection(options.store, options.binding, memberId,
-        input, options.loadOAuthConfiguration);
+        input, { loadConfiguration: options.loadOAuthConfiguration });
       return reply.send(receipt);
     } catch (error) {
       if (error instanceof MemberAccessRefused) {

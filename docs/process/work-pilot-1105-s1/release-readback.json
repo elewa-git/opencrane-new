@@ -1,0 +1,233 @@
+{
+  "releases": [
+    {
+      "sequence": 491,
+      "requestId": "0b3c08ab-bdfb-466a-a111-b08ea20977b8",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "ff7a594b-6468-4b22-a259-1512d601535e",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 460,
+      "lifetimeMs": 30000
+    },
+    {
+      "sequence": 537,
+      "requestId": "0302d8e0-44bf-4d55-b9f8-cfddfc9aa24c",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "c487b694-b98b-46a7-b4e4-7745c0b47675",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 522,
+      "lifetimeMs": 30000
+    },
+    {
+      "sequence": 580,
+      "requestId": "ea56be21-231d-477f-868d-ab52abb6d34a",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "6886fbdd-c3c4-45df-a6b6-7d71fc5a1bab",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 550,
+      "lifetimeMs": 30000
+    },
+    {
+      "sequence": 626,
+      "requestId": "10d8db8c-5b78-425a-91ac-72e9a2bc0b4a",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "dd9b1ac8-9566-4f74-89f6-e8a5a505805a",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 611,
+      "lifetimeMs": 30000
+    }
+  ],
+  "choices": [
+    {
+      "sequence": 460,
+      "expectedSequence": 0,
+      "userId": "zitadel-member",
+      "profileId": "1effbcd2-07cd-4c26-b8d9-8f4ae808bac0"
+    },
+    {
+      "sequence": 503,
+      "expectedSequence": 460,
+      "userId": "zitadel-member",
+      "profileId": "1effbcd2-07cd-4c26-b8d9-8f4ae808bac0",
+      "allowedAssistantIds": []
+    },
+    {
+      "sequence": 522,
+      "expectedSequence": 503,
+      "userId": "zitadel-member",
+      "profileId": "1effbcd2-07cd-4c26-b8d9-8f4ae808bac0",
+      "allowedAssistantIds": [
+        "personal-73d770dde01f8ce0aee9d9309ea3167d"
+      ]
+    },
+    {
+      "sequence": 550,
+      "expectedSequence": 522,
+      "userId": "zitadel-member",
+      "profileId": "88950651-9592-4754-8d0b-22f9d7c276de",
+      "allowedAssistantIds": [
+        "personal-73d770dde01f8ce0aee9d9309ea3167d"
+      ]
+    },
+    {
+      "sequence": 592,
+      "expectedSequence": 550,
+      "userId": "zitadel-member",
+      "profileId": "88950651-9592-4754-8d0b-22f9d7c276de",
+      "allowedAssistantIds": []
+    },
+    {
+      "sequence": 611,
+      "expectedSequence": 592,
+      "userId": "zitadel-member",
+      "profileId": "88950651-9592-4754-8d0b-22f9d7c276de",
+      "allowedAssistantIds": [
+        "personal-73d770dde01f8ce0aee9d9309ea3167d"
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "width": 1280,
+      "disabled": {
+        "sequence": 503,
+        "observedAt": "2026-11-15T13:44:24.147Z"
+      },
+      "enabled": {
+        "sequence": 522,
+        "observedAt": "2026-11-15T13:44:33.831Z"
+      },
+      "beforeConversation": "ff7a594b-6468-4b22-a259-1512d601535e",
+      "refusedConversation": "853f50f2-dfa6-4579-a866-c406e013e239",
+      "afterConversation": "c487b694-b98b-46a7-b4e4-7745c0b47675",
+      "verdict": "PASS",
+      "offReleaseCount": 0,
+      "offDispatchCount": 0,
+      "restoredReleaseLifetimesMs": [
+        30000
+      ]
+    },
+    {
+      "width": 390,
+      "disabled": {
+        "sequence": 592,
+        "observedAt": "2026-11-15T13:46:07.157Z"
+      },
+      "enabled": {
+        "sequence": 611,
+        "observedAt": "2026-11-15T13:46:48.774Z"
+      },
+      "beforeConversation": "6886fbdd-c3c4-45df-a6b6-7d71fc5a1bab",
+      "refusedConversation": "cd276a05-488a-4e4d-97a3-40e92cfc335e",
+      "afterConversation": "dd9b1ac8-9566-4f74-89f6-e8a5a505805a",
+      "verdict": "PASS",
+      "offReleaseCount": 0,
+      "offDispatchCount": 0,
+      "restoredReleaseLifetimesMs": [
+        30000
+      ]
+    }
+  ],
+  "profileResponses": [
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "hostLoads": [
+    {
+      "step": "sign in",
+      "load": 7.86,
+      "observedAt": "2026-11-15T13:43:58.160Z"
+    },
+    {
+      "step": "warm personal assistant at 1280px",
+      "load": 8.19,
+      "observedAt": "2026-11-15T13:44:01.476Z"
+    },
+    {
+      "step": "live tool before disabling at 1280px",
+      "load": 7.7,
+      "observedAt": "2026-11-15T13:44:12.934Z"
+    },
+    {
+      "step": "switch own assistant off at 1280px",
+      "load": 8.24,
+      "observedAt": "2026-11-15T13:44:22.743Z"
+    },
+    {
+      "step": "completed turn refused with link at 1280px",
+      "load": 8.24,
+      "observedAt": "2026-11-15T13:44:24.399Z"
+    },
+    {
+      "step": "switch own assistant on at 1280px",
+      "load": 8.53,
+      "observedAt": "2026-11-15T13:44:33.395Z"
+    },
+    {
+      "step": "live tool restored at 1280px",
+      "load": 8.53,
+      "observedAt": "2026-11-15T13:44:34.007Z"
+    },
+    {
+      "step": "live tool restored at 1280px",
+      "load": 8.69,
+      "observedAt": "2026-11-15T13:44:44.017Z"
+    },
+    {
+      "step": "warm personal assistant at 390px",
+      "load": 8.39,
+      "observedAt": "2026-11-15T13:44:47.526Z"
+    },
+    {
+      "step": "live tool before disabling at 390px",
+      "load": 8.2,
+      "observedAt": "2026-11-15T13:44:54.268Z"
+    },
+    {
+      "step": "switch own assistant off at 390px",
+      "load": 9.37,
+      "observedAt": "2026-11-15T13:46:06.564Z"
+    },
+    {
+      "step": "completed turn refused with link at 390px",
+      "load": 9.37,
+      "observedAt": "2026-11-15T13:46:07.384Z"
+    },
+    {
+      "step": "switch own assistant on at 390px",
+      "load": 8.45,
+      "observedAt": "2026-11-15T13:46:48.368Z"
+    },
+    {
+      "step": "live tool restored at 390px",
+      "load": 8.45,
+      "observedAt": "2026-11-15T13:46:49.008Z"
+    },
+    {
+      "step": "check release and dispatch records",
+      "load": 8.98,
+      "observedAt": "2026-11-15T13:47:00.672Z"
+    }
+  ],
+  "refusedConversations": [
+    "853f50f2-dfa6-4579-a866-c406e013e239",
+    "cd276a05-488a-4e4d-97a3-40e92cfc335e"
+  ],
+  "noRefusedDispatch": true
+}

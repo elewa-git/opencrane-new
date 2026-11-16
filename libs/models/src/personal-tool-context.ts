@@ -1,10 +1,15 @@
+import type { z } from 'zod';
+import type { legacyTurnSchema } from './decision-turn-token.ts';
+import { parseMcpCall } from './mcp.ts';
 import { createHash } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { readConnectionSelection } from './connection-selection.ts';
-import { selectedPersonalAccount } from './personal-account.ts';
+import { selectedPersonalAccount, type PersonalToolContext } from './personal-account.ts';
+export type { PersonalToolContext } from './personal-account.ts';
+import { assistantMayUsePersonalKey } from './personal-key-consent.ts';
 import { connectionAccount } from './connection-account.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
@@ -16,18 +21,30 @@ function digest(value: unknown) {
 }
 
 /** Bind one verified choice to the authenticated requester before the short access check. */
+export interface PersonalToolRequest {
+  assistantId: string;
+  toolName: string;
+  loadConfiguration: OAuthConfigurationLoader;
+  boundSelection: { profileId: string; selectionRevision: number };
+}
+
 export async function personalToolContext(store: EventStore, binding: Binding,
-  requesterId: string, serverId: string, toolName: string,
-  loadConfiguration: OAuthConfigurationLoader,
-  boundSelection: { profileId: string; selectionRevision: number }) {
-  const selected = await readConnectionSelection(store, binding, requesterId,
-    serverId, loadConfiguration, toolName);
+  requesterId: string, serverId: string,
+  request: PersonalToolRequest): Promise<PersonalToolContext> {
+  const { assistantId, toolName, loadConfiguration, boundSelection } = request;
+  const readOptions = { loadConfiguration, toolName };
+  const selected = await readConnectionSelection(store, binding, requesterId, serverId, readOptions);
   if (selected.status !== 'verified' ||
       selected.profileId !== boundSelection.profileId ||
       selected.sequence !== boundSelection.selectionRevision) {
     throw new Error('Personal tool unavailable');
   }
   const deadline = performance.now() + 10_000;
+  const assistantRows = await history(store, `assistant-${assistantId}`, binding.silo, deadline);
+  const consent = { ...selected, userId: requesterId };
+  if (!assistantMayUsePersonalKey(consent, assistantId, assistantRows)) {
+    throw new Error('Personal tool unavailable');
+  }
   const profileSubject = `connection-${requesterId}-${serverId}-${selected.profileId}`;
   const profileRows = await history(store, profileSubject, binding.silo, deadline);
   const profile = foldConnection(profileRows);
@@ -60,4 +77,30 @@ export async function personalToolContext(store: EventStore, binding: Binding,
   };
 }
 
-export type PersonalToolContext = Awaited<ReturnType<typeof personalToolContext>>;
+export interface PersonalCallRequest {
+  assistantId: string;
+  url: string | undefined;
+  body: string;
+  loadConfiguration: OAuthConfigurationLoader | undefined;
+}
+
+/** Prepare personal account history before the decision's short access check starts. */
+export async function preparePersonalCall(store: EventStore, binding: Binding,
+  turn: z.infer<typeof legacyTurnSchema>, request: PersonalCallRequest) {
+  const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(request.url ?? '');
+  if (!match) throw new Error('Unknown MCP route');
+  const serverId = match[1]!;
+  const rows = await history(store, `mcp-${serverId}`, binding.silo, performance.now() + 10_000);
+  const policy = toolPolicyFromRows(rows);
+  if (policy.accountMode !== 'personal') return undefined;
+  if (!request.loadConfiguration) throw new Error('Personal tool unavailable');
+  const parsed = parseMcpCall(request.body);
+  function matchesServer(selection: NonNullable<typeof turn.personalSelections>[number]) {
+    return selection.serverId === serverId;
+  }
+  const boundSelection = turn.personalSelections?.find(matchesServer);
+  if (!boundSelection) throw new Error('Personal tool unavailable');
+  const personalRequest = { assistantId: request.assistantId, toolName: parsed.call.params.name,
+    loadConfiguration: request.loadConfiguration, boundSelection };
+  return personalToolContext(store, binding, turn.requester, serverId, personalRequest);
+}

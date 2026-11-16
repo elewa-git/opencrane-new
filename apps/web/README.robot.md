@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+My tools uses the [personal settings contracts](src/app/settings/README.robot.md)
+for assistant consent. Chat’s personal-connection notice handles `assistant_not_allowed`
+with a plain refusal and a My tools link, without displaying account details.
+
 `/account/tools?serverId=<id>` reads the signed-in person's bounded profiles for
 one integration, then the exact safe profile detail before a local revoke.
 Unknown revoke replies retain their original change reference in session storage

@@ -96,7 +96,9 @@ Ordinary messages do not delay delivery. Browser support is still planned.
 
 **Private and shared work.** Each assistant has one [computer](../../../../GLOSSARY.md#computer); a group shares its assistant's computer. Each member gets a separate private session and a [private turn](../../../../GLOSSARY.md#private-turn) by default. That turn gets earlier completed replies from the same member and starts a fresh [Codex](../../../../GLOSSARY.md#codex), the AI agent. Personal memory starts require the deployment’s own passing checks. An admitted personal turn can use four reviewed memory tools. Browser display of private replies remains unavailable. A [memory-free turn](../../../../GLOSSARY.md#memory-free-turn) can use the shared disk and browser but receives no earlier private context. Losing spending access does not remove the right to read or stop existing work.
 
-Personal memory-free turns can receive a short list of reviewed, free tools available to both the person and assistant. Ask tools also need reviewed approval details. The gateway checks rights again for each call. The computer and gateway keep the reviewed Allow mode, so changing a tool to Ask refuses an old automatic call. The server checks whether a computer supports approval messages first; older computers get Allow tools only. Private turns with a group assistant stay restricted and receive no tools. [Memory](../memory/README.md) explains fact references and the extra checks before renewing a pass. Invalid older memory records do not prevent ordinary messages or stop requests.
+Personal memory-free turns can receive a short list of reviewed, free tools available to both the person and assistant. Ask tools also need reviewed approval details. A server needing a personal key also needs the person’s consent for that assistant.
+Chat explains a consent refusal with a My tools link and no account details.
+The gateway checks rights again for each call. The computer and gateway keep the reviewed Allow mode, so changing a tool to Ask refuses an old automatic call. The server checks whether a computer supports approval messages first; older computers get Allow tools only. Private turns with a group assistant stay restricted and receive no tools. [Memory](../memory/README.md) explains fact references and the extra checks before renewing a pass. Invalid older memory records do not prevent ordinary messages or stop requests.
 
 **A person stops a reply.** The server gives a stop request priority over progress waiting to be saved. It uses the same saved chat summary as reports, rather than reloading every piece of a long reply. A separate check sends saved stop requests without waiting for normal turn or file delivery. A stop request records intent; the computer's later result says how the turn ended.
 
@@ -162,7 +164,7 @@ flowchart LR
   chat -->|saved events| store[Event store]
   chat -->|ends work in closed chats| computer[Assistant computer]
   chat -->|wakes a checked Ask replacement| computer
-  chat -->|checks access and spending| models[Models process]
+  chat -->|checks access, personal key consent and spending| models[Models process]
   chat -->|checks remembered facts| memory[Memory]
   files[Files] -->|checks chat access| chat
   server --> memory[Memory]

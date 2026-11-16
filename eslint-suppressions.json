@@ -235,11 +235,6 @@
       "count": 2
     }
   },
-  "apps/server/src/chat/turn-tools.ts": {
-    "max-params": {
-      "count": 1
-    }
-  },
   "apps/server/src/chat/turns.ts": {
     "max-params": {
       "count": 5
@@ -615,11 +610,6 @@
       "count": 1
     }
   },
-  "libs/models/src/connection-selection.ts": {
-    "max-params": {
-      "count": 4
-    }
-  },
   "libs/models/src/connection-stage-journal.ts": {
     "max-lines-per-function": {
       "count": 1
@@ -795,11 +785,6 @@
   "libs/models/src/paying-group.ts": {
     "max-params": {
       "count": 3
-    }
-  },
-  "libs/models/src/personal-tool-context.ts": {
-    "max-params": {
-      "count": 1
     }
   },
   "libs/models/src/provider-bindings.ts": {

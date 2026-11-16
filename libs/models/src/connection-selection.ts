@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { connectionSelectionCommandSchema as inputSchema } from '@opencrane/protocol';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { connectionSelectedDataSchema, type EventEnvelope } from '@opencrane/events';
@@ -12,19 +13,13 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 import { companySelectionFacts, type CompanyProfileReader } from './company-selection.ts';
 import { data } from './state.ts';
 import { selectedPersonalAccount } from './personal-account.ts';
+import { savedAssistantConsent } from './personal-key-consent.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 
 export class SelectionInputInvalid extends Error {}
 export class SelectionConflict extends Error {}
 
 const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
-const fields = { serverId: id, connectionId: id, changeRef: id,
-  expectedSequence: z.int().nonnegative() };
-const inputSchema = z.discriminatedUnion('action', [
-  z.strictObject({ ...fields, action: z.literal('select'), profileId: id,
-    profileRevision: z.int().positive(), ownerKind: z.enum(['personal', 'company']).optional() }),
-  z.strictObject({ ...fields, action: z.literal('clear') }),
-]);
 type Selection = z.infer<typeof connectionSelectedDataSchema>;
 function digest(value: unknown) {
   const hash = createHash('sha256');
@@ -268,10 +263,9 @@ function requireCurrentSelection(selection: Selection, rows: StoredEvent[],
 
 /** Save one choice for the authenticated caller; never accept an owner from the request. */
 export async function changeConnectionSelection(store: EventStore, binding: Binding,
-  userId: string, raw: unknown, loadConfiguration?: OAuthConfigurationLoader,
-  readCompanyProfile?: CompanyProfileReader) {
+  userId: string, raw: unknown, dependencies: SelectionDependencies = {}) {
   try {
-    return await saveSelection(store, binding, userId, raw, loadConfiguration, readCompanyProfile);
+    return await saveSelection(store, binding, userId, raw, dependencies);
   } catch (error) {
     if (error instanceof SelectionInputInvalid || error instanceof SelectionConflict ||
         error instanceof MemberAccessRefused) {
@@ -289,7 +283,7 @@ export async function changeConnectionSelection(store: EventStore, binding: Bind
   }
 }
 async function saveSelection(store: EventStore, binding: Binding, userId: string, raw: unknown,
-  loadConfiguration?: OAuthConfigurationLoader, readCompanyProfile?: CompanyProfileReader) {
+  dependencies: SelectionDependencies) {
   const parsed = inputSchema.safeParse(raw);
   if (!parsed.success || !id.safeParse(userId).success) {
     throw new SelectionInputInvalid('Selection input invalid');
@@ -301,7 +295,7 @@ async function saveSelection(store: EventStore, binding: Binding, userId: string
     return row.event.id === operationId || row.event.commandId === changeRef;
   }
   const loaded = await prepareSelection(store, binding.silo, userId, parsed.data,
-    loadConfiguration, readCompanyProfile);
+    dependencies);
   // Check current access before exposing history errors, even when a saved retry conflicts.
   const fresh = await access(store, binding, userId, input.serverId, true);
   if (!fresh) {
@@ -352,8 +346,8 @@ async function saveSelection(store: EventStore, binding: Binding, userId: string
 }
 
 async function prepareSelection(store: EventStore, silo: string, userId: string,
-  command: z.infer<typeof inputSchema>, loadConfiguration?: OAuthConfigurationLoader,
-  readCompanyProfile?: CompanyProfileReader) {
+  command: z.infer<typeof inputSchema>, dependencies: SelectionDependencies) {
+  const { loadConfiguration, readCompanyProfile } = dependencies;
   const { changeRef, ...input } = command;
   const payload = { ...input, userId };
   const subject = selectionSubject(userId, input.serverId);
@@ -380,7 +374,8 @@ async function prepareSelection(store: EventStore, silo: string, userId: string,
         companyBinding = company.binding;
       }
     }
-    const selected = connectionSelectedDataSchema.parse({ ...payload, ...companyBinding });
+    const consent = preservedConsent(command, rows, original);
+    const selected = connectionSelectedDataSchema.parse({ ...payload, ...companyBinding, ...consent });
     const event = { ...envelope(silo, subject, 'connection.selected', selected, operationId),
       commandId: changeRef, source: 'opencrane-server',
       principal: { kind: 'human' as const, id: userId } };
@@ -404,7 +399,8 @@ async function prepareSelection(store: EventStore, silo: string, userId: string,
 }
 
 export async function readConnectionSelection(store: EventStore, binding: Binding,
-  userId: string, serverId: string, loadConfiguration?: OAuthConfigurationLoader, toolName?: string) {
+  userId: string, serverId: string, options: PersonalSelectionRead = {}) {
+  const { loadConfiguration, toolName } = options;
   if (!id.safeParse(userId).success || !id.safeParse(serverId).success) {
     throw new SelectionInputInvalid('Selection input invalid');
   }
@@ -459,7 +455,7 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
     }
     return { status: 'verified' as const, sequence: state.sequence,
       profileId: state.selected.profileId, profileRevision: checked.oauth.profileRevision,
-      generation: checked.oauth.generation };
+      generation: checked.oauth.generation, ...savedAssistantConsent(state.selected) };
   }
   return { status: 'saved_unverified' as const, sequence: state.sequence,
     profileId: state.selected.profileId, profileRevision: state.selected.profileRevision };
@@ -469,4 +465,26 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
 export async function requirePersonalConnectionAccess(store: EventStore, binding: Binding,
   userId: string, serverId: string, writing = false) {
   return access(store, binding, userId, serverId, writing);
+}
+
+export interface SelectionDependencies {
+  loadConfiguration?: OAuthConfigurationLoader | undefined;
+  readCompanyProfile?: CompanyProfileReader | undefined;
+}
+
+function preservedConsent(command: z.infer<typeof inputSchema>, rows: StoredEvent[],
+  original: StoredEvent | undefined) {
+  if (command.action !== 'select' || command.ownerKind === 'company') return {};
+  if (command.allowedAssistantIds !== undefined) {
+    return { allowedAssistantIds: command.allowedAssistantIds };
+  }
+  // Keep consent when choosing another key. A retry keeps its original event's fields.
+  let choice: Selection | null = foldConnectionSelection(rows).selected;
+  if (original) choice = connectionSelectedDataSchema.parse(original.event.data);
+  return savedAssistantConsent(choice);
+}
+
+export interface PersonalSelectionRead {
+  loadConfiguration?: OAuthConfigurationLoader | undefined;
+  toolName?: string | undefined;
 }

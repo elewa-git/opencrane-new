@@ -34,8 +34,7 @@ import { legacyTurnSchema, parseTurnToken, requireManagedTurnClaims,
   requireModelRoute, knownDecisionRoute }
   from './decision-turn-token.ts';
 import { mcpPolicy, parseMcpCall, requireMcpThread } from './mcp.ts';
-import { personalToolContext, type PersonalToolContext } from './personal-tool-context.ts';
-import { toolPolicyFromRows } from './tool-policy.ts';
+import { preparePersonalCall, type PersonalToolContext } from './personal-tool-context.ts';
 import type { toolCredentialReleaseSchema } from '@opencrane/events';
 import type { z as Zod } from 'zod';
 import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
@@ -241,24 +240,9 @@ export async function startDecision(
       const raw = await readBody(req);
       let preparedPersonal: PersonalToolContext | undefined;
       if (route === 'mcp' && !memoryRoute) {
-        const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
-        if (!match) throw new Error('Unknown MCP route');
-        const policyRows = await history(actor.store, `mcp-${match[1]}`, actor.silo,
-          performance.now() + 10_000);
-        const preliminary = toolPolicyFromRows(policyRows);
-        if (preliminary.accountMode === 'personal') {
-          const configuration = dispatchOptions?.credentialDispatch?.loadConfiguration;
-          if (!configuration) throw new Error('Personal tool unavailable');
-          const parsed = parseMcpCall(raw);
-          function matchesServer(selection: NonNullable<typeof turnToken.personalSelections>[number]) {
-            return selection.serverId === match![1];
-          }
-          const boundSelection = turnToken.personalSelections?.find(matchesServer);
-          if (!boundSelection) throw new Error('Personal tool unavailable');
-          preparedPersonal = await personalToolContext(actor.store, binding,
-            turnToken.requester, match[1]!, parsed.call.params.name, configuration,
-            boundSelection);
-        }
+        const personalRequest = { assistantId: computer.assistant, url: req.url, body: raw,
+          loadConfiguration: dispatchOptions?.credentialDispatch?.loadConfiguration };
+        preparedPersonal = await preparePersonalCall(actor.store, binding, turnToken, personalRequest);
       }
       const preparedMemory = await prepareMemoryDecision(memoryRoute, actor.store, binding,
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);

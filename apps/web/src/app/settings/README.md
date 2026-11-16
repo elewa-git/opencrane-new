@@ -9,12 +9,12 @@ survey. The Assistant page links to saved persona review.
 ## Where it fits
 
 These pages are part of the website. They read identity and progress from the
-server, save and choose verified personal keys, and use the shared menu controls.
+server, save and choose verified personal keys and their allowed assistants, and use the shared menu controls.
 
 ```mermaid
 flowchart LR
   web["apps/web<br/>personal screens"] -->|opens| settings["settings<br/>account and menu"]
-  settings -->|reads identity, checks and saves keys| server["apps/server<br/>session and progress"]
+  settings -->|reads identity, saves keys and assistant choices| server["apps/server<br/>session and progress"]
   settings -->|links to| welcome["welcome<br/>survey and persona"]
   settings -.->|uses| ui["ui<br/>shared controls"]
 ```
@@ -28,6 +28,8 @@ flowchart LR
 - Link Assistant to saved persona review.
 - Save a personal key only after the reviewed server verifies its account, then choose it for use.
 - List saved personal profiles for a chosen integration and explain their safe status.
+- Let the person choose which assistants may use their selected key and keep confirmed
+  choices usable while the profile list is catching up.
 - Review the effects before revoking a saved personal connection.
 - Account editing and preferences are not available yet.
 
@@ -38,7 +40,8 @@ flowchart LR
 2. **Navigation.** The shell keeps Account, Preferences, Assistant and My tools
    in one menu. Assistant offers a link to the separate persona review screen.
 3. **Connections.** My tools checks a key with the reviewed identity tool before saving
-   it. The person then chooses the verified key. My tools reads saved profiles and opens
+   it. The person then chooses the verified key and the assistants that may use it.
+   Their own assistant is allowed by default; shared assistants start switched off. My tools reads saved profiles and opens
    safe details for the last chosen profile. Its review names the profile and
    integration. If a revoke reply is lost, a return visit can check the original
    request before another attempt.

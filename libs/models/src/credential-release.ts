@@ -10,6 +10,7 @@ import { foldConnectionSelection } from './connection-selection.ts';
 import { connectionServer } from './connection-server.ts';
 import { MemberAccessRefused } from './member-authority.ts';
 import { selectedPersonalAccount } from './personal-account.ts';
+import { assistantMayUsePersonalKey } from './personal-key-consent.ts';
 import { connectionAccount } from './connection-account.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { routineCompanyAskFacts, routineCompanyReleaseFacts }
@@ -121,6 +122,10 @@ export async function credentialReleaseEvidence(store: EventStore, silo: string,
     }
   }
   requireSelection(selection, controlPosition, release, oauth?.profileRevision);
+  const assistantRows = await read(`assistant-${release.assistantId}`);
+  if (!assistantMayUsePersonalKey(selection.selected!, release.assistantId, assistantRows)) {
+    refuse();
+  }
   requireProfile(profile, server, release, oauth !== null);
   const receipts = await read(`credential-${release.requestId}`);
   return { decision, positions, receipts, profile: profile.data!, oauth,

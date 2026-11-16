@@ -1,0 +1,17 @@
+[
+  {
+    "width": 1280,
+    "disabled": {
+      "sequence": 500,
+      "observedAt": "2026-11-15T11:36:45.278Z"
+    },
+    "enabled": {
+      "sequence": 519,
+      "observedAt": "2026-11-15T11:36:56.808Z"
+    },
+    "beforeConversation": "92a383a9-a849-4856-a5da-8a33bd79a434",
+    "refusedConversation": "4d92b41d-c434-425d-8b6e-ea6d2eb79875",
+    "afterConversation": "315f16b1-c08a-45d6-810a-caeac6f4d58a",
+    "verdict": "PASS"
+  }
+]

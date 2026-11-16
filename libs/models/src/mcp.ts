@@ -10,7 +10,7 @@ import { mcpServerDiscoveredDataSchema, memoryTextSchema,
 import { history } from './actor.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { toolPolicyFromRows } from './tool-policy.ts';
-import type { PersonalToolContext } from './personal-tool-context.ts';
+import type { PersonalToolContext } from './personal-account.ts';
 
 const version = '2026-07-28';
 const boundedText = z.string().max(200);

@@ -1,3 +1,4 @@
+import { personalConnectionCreation } from '@opencrane/events';
 import { z } from 'zod';
 import { foldConnectionSelection, history, loadPersonalProfileMetadata,
   readActiveMember } from '@opencrane/models';
@@ -41,6 +42,18 @@ async function profileRows(options: GroupOptions, memberId: string, serverId: st
   return rows;
 }
 
+async function requireIndexedCreations(options: GroupOptions, checkpoint: number,
+  position: number, deadline: number) {
+  if (checkpoint >= position) return;
+  // Only creations add inventory rows. Read current consent and status from exact histories.
+  for await (const row of options.store.readStream('connection-*', checkpoint + 1, deadline)) {
+    if (row.sequence > position) break;
+    if (row.event.silo === options.silo && personalConnectionCreation(row.event)) {
+      throw new Error('Profile list unavailable');
+    }
+  }
+}
+
 async function loadPage(options: GroupOptions, memberId: string, serverId: string,
   query: Query, secret: string) {
   const deadline = performance.now() + 10_000;
@@ -49,7 +62,7 @@ async function loadPage(options: GroupOptions, memberId: string, serverId: strin
     FROM projection_checkpoints JOIN projection_generations USING (name)
     WHERE name = 'connection-profiles'`, [], { deadline });
   const checkpoint = progressSchema.parse(progress.rows[0]);
-  if (checkpoint.sequence < position) throw new Error('Profile list unavailable');
+  await requireIndexedCreations(options, checkpoint.sequence, position, deadline);
   const identity = ['connection-profile-list', options.silo, memberId, serverId,
     query.limit, query.status, position];
   const cursor = conversationListCursor(secret, identity, query.cursor);

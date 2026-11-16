@@ -356,7 +356,8 @@ key, the server checks the admin-chosen read-only identity tool before saving ve
 account evidence. It refuses account identifiers that copy the key, including encoded
 text. My tools lets the member explicitly choose that key for use.
 The list shows the same safe facts for each saved personal profile, including a revoked
-or blocked one. It marks the person's explicit choice. A changed list asks the screen
+or blocked one. It marks the person's explicit choice. Selection and consent changes
+remain readable while the profile list is catching up. A changed list asks the screen
 to start paging again.
 Current owners and admins can inspect one member’s personal profile metadata.
 They also see the saved admin block revision, without reading credentials.
@@ -426,7 +427,9 @@ The reply confirms the saved choice without claiming the account can be used.
 Verified bearer choices require the reviewed account check. Verified OAuth choices
 require current operator settings supplied by the server.
 For a chat turn, the server offers a personal tool only when the requester still has
-a verified choice for that server. The signed turn pass holds the chosen profile and
+a verified choice for that server and has allowed this assistant to use it. Missing
+assistant lists allow only the person’s own personal assistant. My tools lets the
+owner change the list; an admin cannot change it for them. The signed turn pass holds the chosen profile and
 choice revision. The computer sees the usual tool fields, and the models process checks
 the current choice again before sending a call. Account choices load before the short
 access check for the turn starts. Tool offers read independent grant checks and

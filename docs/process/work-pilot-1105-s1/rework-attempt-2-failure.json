@@ -1,0 +1,100 @@
+{
+  "step": "live tool restored at 390px",
+  "name": "TimeoutError",
+  "recentResponses": [
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/1c069fb1-bb79-4eb1-921c-260601972b8f/approvals",
+      "status": 200
+    }
+  ],
+  "profileResponses": [
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "profileFailures": [],
+  "verdict": "FAIL"
+}

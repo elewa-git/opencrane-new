@@ -139,7 +139,8 @@ const selectionFields = { userId: connectionId, serverId: connectionId, connecti
 export const connectionSelectedDataSchema = z.union([
   z.strictObject({ ...selectionFields, action: z.literal('select'),
     profileId: connectionId, profileRevision: z.int().positive(),
-    ownerKind: z.literal('personal').optional() }),
+    ownerKind: z.literal('personal').optional(),
+    allowedAssistantIds: z.array(connectionId).max(100).optional() }),
   z.strictObject({ ...selectionFields, action: z.literal('select'),
     profileId: connectionId, profileRevision: z.int().positive(), ownerKind: z.literal('company'),
     siloId: connectionId, generation: z.int().positive(), accountDigest: digestSchema }),

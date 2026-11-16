@@ -44,8 +44,9 @@ interface TurnToolInput {
   readServer: (serverId: string) => Promise<TurnToolServerState | undefined>;
   canUse: (serverId: string, kind: 'person' | 'assistant', subject: string) =>
     Promise<boolean>;
-  missingConnection?: (server: TurnToolServerState) => void;
-  readSelection?: (requesterId: string, serverId: string) => Promise<{
+  missingConnection?: (server: TurnToolServerState, reason?: 'assistant_not_allowed') => void;
+  readSelection?: (requesterId: string, serverId: string, assistantId: string) => Promise<{
+    assistantAllowed?: boolean;
     profileId: string; profileRevision: number; selectionRevision: number;
     generation: number;
   } | undefined>;
@@ -248,9 +249,12 @@ async function assembleTurnTools(input: TurnToolInput, memoryTools?: readonly Me
   const keys = new Set<string>();
   let omittedServers = 0;
   for (const row of input.rows) {
-    const prepared = await prepareTurnTool(input, row, memoryTools, tools, keys,
-      availableBytes);
+    const prepared = await prepareTurnTool(input, row, memoryTools);
     if (prepared.omitted) omittedServers += 1;
+    if (prepared.entry && !turnToolFits(prepared.entry, tools, keys, availableBytes)) {
+      omittedServers += 1;
+      continue;
+    }
     if (prepared.entry) {
       tools.push(prepared.entry);
       keys.add(prepared.entry.key);
@@ -262,8 +266,7 @@ async function assembleTurnTools(input: TurnToolInput, memoryTools?: readonly Me
 }
 
 async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][number],
-  memoryTools: readonly MemoryTool[] | undefined, tools: TurnToolServer[],
-  keys: Set<string>, availableBytes: number) {
+  memoryTools: readonly MemoryTool[] | undefined) {
   // Keep ordinary turns separate from the restricted memory catalogue.
   if (row.serverId === 'memory' && !memoryTools) return { omitted: false };
   let state = await input.readServer(row.serverId);
@@ -277,18 +280,19 @@ async function prepareTurnTool(input: TurnToolInput, row: TurnToolInput['rows'][
   const selection = selectedAccountAvailable(input, state);
   const [permitted, connected] = await Promise.all([permission, selection]);
   if (!permitted) return { omitted: false };
-  if (!connected) {
-    input.missingConnection?.(state);
+  if (connected !== true) {
+    const reason = connected === 'assistant_not_allowed' ? connected : undefined;
+    input.missingConnection?.(state, reason);
     return { omitted: false };
   }
   const entry = makeTurnToolServer(state, selected);
-  if (!turnToolFits(entry, tools, keys, availableBytes)) return { omitted: true };
   return { entry, omitted: false };
 }
 
 async function selectedAccountAvailable(input: TurnToolInput, state: TurnToolServerState) {
   if (state.accountMode !== 'personal') return true;
-  const selection = await input.readSelection?.(input.requesterId, state.serverId);
+  const selection = await input.readSelection?.(input.requesterId, state.serverId, input.assistantId);
+  if (selection?.assistantAllowed === false) return 'assistant_not_allowed' as const;
   return selection !== undefined;
 }
 

@@ -886,7 +886,9 @@ It caches no payloads, permissions or validation results.
 
 `connection.selected` is a strict select/clear union on the connection category.
 Both variants bind userId, serverId, connectionId and expectedSequence. Select requires
-profileId and positive profileRevision; clear omits both. The envelope supplies the human
+profileId and positive profileRevision; clear omits both. Personal select may carry up to
+100 `allowedAssistantIds`. An empty list allows no assistant. Missing lists mean only
+the owner’s personal assistant when read; replay never rewrites an older event. The envelope supplies the human
 actor and stable commandId. The models fold checks the subject, actor and deterministic
 id (SHA-256 of JSON `[silo, subject, changeRef]`). No handler subscribes to this event.
 Activation schemas still accept only personal ownerKind and purpose.

@@ -1,3 +1,4 @@
+import { KeyAssistants } from './key-assistants';
 import { PersonalKey } from './personal-key';
 import { personalProfileMetadataSchema,
   type PersonalProfileMetadata } from '@opencrane/protocol';
@@ -39,7 +40,7 @@ type LoadState = 'loading' | 'ready' | 'failed' | 'access';
 
 @Component({
   selector: 'oc-my-tools',
-  imports: [PersonalKey],
+  imports: [PersonalKey, KeyAssistants],
   templateUrl: './my-tools.html',
   styleUrl: './my-tools.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -48,6 +49,7 @@ export class MyTools implements OnInit, OnDestroy {
   readonly serverId = input('');
   @ViewChild('review') private review?: ElementRef<HTMLDialogElement>;
   @ViewChild('reviewHeading') private reviewHeading?: ElementRef<HTMLHeadingElement>;
+  protected readonly choicesVersion = signal(0);
   protected readonly showKeyForm = signal(false);
   protected readonly rows = signal<Row[]>([]);
   protected readonly next = signal<string | null>(null);
@@ -129,6 +131,7 @@ export class MyTools implements OnInit, OnDestroy {
       const page = listSchema.parse(body);
       if (more) this.rows.set([...this.rows(), ...page.rows]);
       else this.rows.set(page.rows);
+      this.choicesVersion.set(this.choicesVersion() + 1);
       this.next.set(page.next);
       this.loadState.set('ready');
       this.announcement.set('Your saved connections loaded.');

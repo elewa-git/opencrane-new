@@ -1,0 +1,16 @@
+[
+  {
+    "httpStatus": 200,
+    "status": "appended",
+    "kind": "Person",
+    "granteeId": "zitadel-member",
+    "expectedSequence": 0
+  },
+  {
+    "httpStatus": 200,
+    "status": "appended",
+    "kind": "Assistant",
+    "granteeId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+    "expectedSequence": 452
+  }
+]

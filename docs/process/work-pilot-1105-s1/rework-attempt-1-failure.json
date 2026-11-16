@@ -1,0 +1,87 @@
+{
+  "step": "live tool restored at 390px",
+  "name": "AssertionError",
+  "recentResponses": [
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/profiles",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/connection",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/connection",
+      "status": 200
+    },
+    {
+      "path": "/api/assistants",
+      "status": 200
+    },
+    {
+      "path": "/api/assistants",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/467b516bda7d518de391ffd5d528825b3b72bead7cf266878f70f3555ad20b61/selection",
+      "status": 200
+    },
+    {
+      "path": "/api/chat",
+      "status": 200
+    },
+    {
+      "path": "/api/my/tools/needs",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/4b0441bf-09fe-4353-acb6-5a3861f3e103/messages",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/4b0441bf-09fe-4353-acb6-5a3861f3e103/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/9c19305a-a11a-4c5d-8daa-8de96920f664/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/9c19305a-a11a-4c5d-8daa-8de96920f664/messages",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/9c19305a-a11a-4c5d-8daa-8de96920f664/approvals",
+      "status": 200
+    },
+    {
+      "path": "/api/conversations/9c19305a-a11a-4c5d-8daa-8de96920f664/approvals",
+      "status": 200
+    }
+  ],
+  "verdict": "FAIL"
+}

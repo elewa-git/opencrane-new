@@ -22,6 +22,21 @@ before POST, under `my-tools-revoke:<serverId>`. A return visit restores them.
 A lost reply keeps that reference and only checks its original status. A 404
 stays unknown and does not unlock another revoke. A refused read
 clears rows, detail, review and pending reference before late replies can render.
+`key-assistants.*` shows labelled checkboxes below each saved key. It reads the
+current selection settings, the person’s assistant from `/api/chat` and shared
+assistants from `/api/assistants`, keeping only those with `canStartSession`. With
+no saved list it checks only the personal assistant. Editing requires the selected
+key. It sends one ordinary selection command with `allowedAssistantIds` and the
+current revision; it never sends an owner id. A lost reply keeps only its original
+change reference under `key-assistants:<serverId>` and offers a status GET. A conflict
+reloads the saved list and selected profile before another edit. A stale row cannot
+select its old key by editing consent. Page Refresh reloads the consent panels as well
+as profile rows. Confirmed consent saves update the selection revision locally;
+they do not refresh the profile inventory. Original receipt checks reload only consent.
+Definite input and body-size refusals clear the unpublished change
+reference; uncertain outcomes still require the original receipt. Failed reads, writes
+and receipt checks report only fixed operation and cause categories to the browser
+console. They never log exception messages, account fields or response bodies.
 The Connect or choose a key action opens `personal-key.*` on the same page.
 It loads the reviewed connection settings, accepts a password input and clears it
 before waiting for POST. A successful own-profile read shows the verified account.

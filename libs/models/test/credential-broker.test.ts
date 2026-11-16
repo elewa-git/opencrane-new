@@ -1,3 +1,4 @@
+import { seedKeyAssistant } from './support/connection-release.ts';
 import { credentialReleaseEvidence } from '../src/credential-release.ts';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -36,7 +37,7 @@ function digest(value: unknown) {
 }
 
 async function fixture(settings: { serverId?: string; secrets?: Map<string, string>;
-  material?: string; profileId?: string } = {}) {
+  material?: string; profileId?: string; assistantKind?: 'personal' | 'team'; consent?: 'allow' | 'deny' } = {}) {
   counter += 1;
   const userId = `person${counter}`;
   const serverId = settings.serverId ?? `server${counter}`;
@@ -79,10 +80,15 @@ async function fixture(settings: { serverId?: string; secrets?: Map<string, stri
   }
   const saved = await oauthSelectionFixture(nats, userId, serverId, profileId, stageMaterial);
   const selectionSubject = `connection-selection-${userId}-${serverId}`;
-  const selectionRevision = await selectPersonalFixture(nats, saved);
+  const assistantId = `${userId}-assistant`;
+  let allowedAssistantIds: string[] | undefined;
+  if (settings.consent === 'allow') allowedAssistantIds = [assistantId];
+  if (settings.consent === 'deny') allowedAssistantIds = [];
+  const selectionRevision = await selectPersonalFixture(nats, saved, allowedAssistantIds === undefined ? {} : { allowedAssistantIds });
+  await seedKeyAssistant(nats, userId, assistantId, settings.assistantKind);
   const issuedAt = Date.now();
   const release = { userId, ownerId: userId, serverId, ownerKind: 'personal' as const,
-    purpose: 'tool_call' as const, assistantId: 'assistant', computerId: 'computer',
+    purpose: 'tool_call' as const, assistantId, computerId: 'computer',
     computerGeneration: 1, conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
     toolName: 'read', generation: 1, argumentsDigest: 'a'.repeat(64),
     requestId: userId, permitId: userId, leaseId: userId, profileId,
@@ -586,3 +592,40 @@ async function refusesPreparationAfterSending() {
 }
 it('refuses preparation after sending and never sends the saved request again',
   refusesPreparationAfterSending);
+
+async function refusesAssistantWithoutConsent() {
+  const test = await fixture({ assistantKind: 'team' });
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+  expect(await nats.store.head(`credential-${test.userId}`)).toBe(0);
+}
+it('refuses release to another assistant when an old choice has no assistant list',
+  refusesAssistantWithoutConsent);
+
+async function explicitlyAllowedSharedAssistant() {
+  const test = await fixture({ assistantKind: 'team', consent: 'allow' });
+  await test.broker().send();
+  expect(test.sends).toEqual(['synthetic-access']);
+}
+it('releases a key to a shared assistant only after its owner explicitly allows it',
+  explicitlyAllowedSharedAssistant);
+
+async function ownerCanDisableOwnAssistant() {
+  const test = await fixture({ consent: 'deny' });
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+}
+it('an empty assistant list refuses even the owner’s own personal assistant',
+  ownerCanDisableOwnAssistant);
+
+async function changedConsentInvalidatesPass() {
+  const test = await fixture();
+  await selectPersonalFixture(nats, test, {
+    allowedAssistantIds: [test.release.assistantId],
+    expectedSequence: test.release.selectionRevision,
+  });
+  await expect(test.broker().send()).rejects.toThrow('Release unavailable');
+  expect(test.sends).toEqual([]);
+}
+it('refuses an old revision pass after the list changes even if the assistant stays allowed',
+  changedConsentInvalidatesPass);
