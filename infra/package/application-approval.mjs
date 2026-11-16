@@ -11,6 +11,7 @@ function validateApplication(approval) {
 }
 
 export async function fetchApplicationApproval(destination, includeImage = false) {
-  return fetchCiApproval({ name: 'application', destination, includeImage,
-    validate: validateApplication });
+  const approvalOptions = { name: 'application', destination, includeImage,
+    validate: validateApplication };
+  return fetchCiApproval(approvalOptions);
 }
