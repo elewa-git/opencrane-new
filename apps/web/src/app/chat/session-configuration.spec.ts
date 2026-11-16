@@ -30,3 +30,23 @@ async function selectsServerConfiguration(executionMode: 'restricted' | 'memory_
 it.each(['restricted', 'memory_free'] as const)(
   'selects the server session configuration %s without deciding from the assistant kind',
   selectsServerConfiguration);
+
+async function selectsDefaultFromExistingFacts(assistantKind: 'personal' | 'team') {
+  const rows = chatListSchema.parse({ rows: [{ conversationId: 'chat', assistantId: 'assistant',
+    createdBy: 'me', createdAt: '2026-11-16T00:00:00Z', assistantKind }] }).rows;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(historyReply);
+  const socketProvider = { provide: SOCKET_FACTORY, useValue: createSocket };
+  TestBed.configureTestingModule({ providers: [ChatSession, socketProvider] });
+  const chat = TestBed.inject(ChatSession);
+  try {
+    chat.conversations.set(rows);
+    await chat.select('chat');
+    const expectedMode = assistantKind === 'personal' ? 'memory_free' : 'restricted';
+    expect(chat.executionMode()).toBe(expectedMode);
+  } finally {
+    chat.ngOnDestroy();
+  }
+}
+it.each(['personal', 'team'] as const)(
+  'selects the existing %s composer default without adding response fields',
+  selectsDefaultFromExistingFacts);
