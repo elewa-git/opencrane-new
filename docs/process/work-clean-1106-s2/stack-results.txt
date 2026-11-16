@@ -1,0 +1,29 @@
+up_exit=0
+status_exit=0
+screenshot_1280=copied
+screenshot_390=copied
+down_exit=0
+
+Status before teardown:
+members: running (2533984)
+mcp-catalogue: running (2533985)
+computers: running (2533991)
+conversations: running (2534002)
+files: running (2534004)
+budgets: running (2534012)
+audit: running (2534019)
+routines: running (2534033)
+minio-tokens: running (2533587)
+dispatcher: running (2535092)
+server: running (2535422)
+web: running (2538398)
+connection-custody: running (2534673)
+memory: running (2534025)
+healthy: http://127.0.0.1:25105/healthz
+healthy: http://127.0.0.1:25102/healthz
+healthy: http://127.0.0.1:25103/minio/health/live
+healthy: http://127.0.0.1:25106/org/integrations
+healthy: http://127.0.0.1:25109/healthz/ready
+
+Status after teardown:
+free

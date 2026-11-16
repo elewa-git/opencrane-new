@@ -183,3 +183,16 @@ async function refusesMemoryDuringControl() {
     .rejects.toThrow('Computer control is pending');
 }
 it('refuses memory calls while the computer has pending control', refusesMemoryDuringControl);
+
+const refusedExecutionModes = [undefined, 'memory_free', 'unexpected'] as const;
+async function refusesUnsavedRestrictedMode(mode: typeof refusedExecutionModes[number]) {
+  const start = activity.computer.firstStart;
+  if (!start) throw new Error('Missing test turn');
+  const fields = data(start.event);
+  Object.assign(fields, { executionMode: mode });
+  start.event.data = fields;
+  await expect(memoryRights(nats.store, binding, claims, parsed, performance.now() + 2000))
+    .rejects.toThrow('Memory execution mode refused');
+}
+it.each(refusedExecutionModes)('refuses memory without a saved restricted mode (%s)',
+  refusesUnsavedRestrictedMode);

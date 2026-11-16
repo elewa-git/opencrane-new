@@ -101,3 +101,10 @@ function acceptsSharedContextWithTools() {
   expect(sharedWithTools.tools).toBe('reviewed_mcp');
 }
 it('keeps context and tools independent in the configuration type', acceptsSharedContextWithTools);
+
+function derivesSharedSessionFromSignedClaims() {
+  const input = { ...teamInput, sharingClass: 'shared_only' as const };
+  expect(sessionConfiguration(input)).toEqual(child);
+}
+it('derives the same subchat configuration from signed turn claims',
+  derivesSharedSessionFromSignedClaims);

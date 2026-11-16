@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { grantStream, type Binding } from '@opencrane/authz';
 import { memoryScopeId } from '@opencrane/projections';
-import { assistantCreatedDataSchema, type MemoryIdentity } from '@opencrane/events';
+import { assistantCreatedDataSchema, computerTurnStartedDataSchema, sessionConfiguration,
+  type MemoryIdentity } from '@opencrane/events';
 import { type AuthorityPermissions, type authorityFence, authorityHistoryReader, decisionAuthorityFence,
   currentAuthority, AuthorityRefused } from './authority.ts';
 import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
@@ -17,6 +18,9 @@ type PreparedMemoryReads = {
   activity: Awaited<ReturnType<typeof decisionActivity>>;
   applied: (eventId: string) => Promise<boolean>;
 };
+
+const savedExecutionModeSchema = computerTurnStartedDataSchema.options[0].shape.executionMode
+  .catch('memory_free');
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -290,7 +294,12 @@ export async function prepareMemoryActivity(store: EventStore, binding: Binding,
     threadId: identifier, executionMode: z.string().optional() }).parse(start.event.data);
   if (recorded.requesterId !== claims.requester || recorded.conversationId !== claims.conversation ||
       recorded.threadId !== claims.thread) throw new Error('Memory turn refused');
-  if (recorded.executionMode !== 'restricted') {
+  // Refuse legacy starts without an explicit restricted mode. Creation defaults grant nothing here.
+  const executionMode = savedExecutionModeSchema.parse(recorded.executionMode);
+  const configuration = sessionConfiguration({ conversation: {},
+    requestedMode: executionMode ?? 'memory_free',
+    memoryEnabled: true });
+  if (configuration.executionMode !== 'restricted') {
     throw new Error('Memory execution mode refused');
   }
   function ended(row: (typeof activity.conversation)[number]) {

@@ -189,10 +189,15 @@ and credentials appear only as secret references.
 
 `sessionConfiguration` is pure. It reads the conversation's saved `contextKind`,
 `routinePreparation` and `payingGroupId`, the assistant kind and payer, the requested
-turn mode, and whether personal memory has passed installation qualification.
+turn mode, signed `sharingClass`, and whether personal memory has passed installation
+qualification.
 It never reads a stream, checks access, writes an event or accepts a remote policy.
 Callers with partial saved facts use only fields independent of the missing facts;
-for example, sharing class depends only on conversation creation.
+for example, sharing class depends only on conversation creation or the signed turn class.
+The gateway first matches signed claims to the saved computer start. It derives its
+own configuration and ignores any configuration supplied by another process.
+Memory admission uses the explicitly saved execution mode, treating a missing or
+invalid mode as memory-free; creation defaults cannot grant memory access.
 
 `SessionConfiguration` keeps execution mode, process isolation, context, tools,
 credentials, memory, upload permission and turn attachments separate. An explicit

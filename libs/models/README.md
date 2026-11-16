@@ -146,8 +146,8 @@ One personal call reuses confirmed projection receipts and checks current permis
 The result stays unconfirmed until an explicit internal confirmation saves the first account
 generation. That save grants no tool access.
 Public routes remain unavailable.
-It checks passes with `libs/auth`, permissions with `libs/authz`, and starts agentgateway
-to handle AI calls.
+It checks passes with `libs/auth`, permissions with `libs/authz`, and runs agentgateway.
+Saved records and checked claims provide shared session settings for calls.
 
 The server and computer also share the private caller checks. These keep a short-lived
 caller tied to one turn and thread. The server uses them while preparing a private
@@ -163,7 +163,7 @@ flowchart LR
   server -->|private image worker claims once and sends an image check| models
   models -->|checks personal key identity, private sign-in, refresh, revocation and selected calls prepared before budget queueing, with current turn and loaded memory checks; refuses encoded key echoes in account identity and scans replies for full or long continuous credential echoes; checks remote HTTPS addresses, certificates, current revisions and catalogue recovery; prepares memory calls and loaded access receipts, rechecks loaded memory and corrected revisions, retains reply withdrawal after expiry or access loss; checks memory targets, reloads, spending, expiry, holds, root stops, saved routine prohibitions and write grants| mcp["MCP server and sign-in provider<br/>checks calls and sign-in codes"]
   computer["apps/computer<br/>personal computers"] -.->|chooses chat models, checks private callers and reports live Ask holds| models
-  models -.->|reuses confirmed projection receipts within one personal tool call, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, outside-connection checks and permissions; rechecks IAM before tool sends"]
+  models -.->|reuses confirmed projection receipts within one personal tool call, checks each initial memory permission once, and preserves confirmed refusals during permission outages or invalid company saves| auth["libs/auth + libs/authz<br/>passes, session settings, outside-connection checks and permissions; rechecks IAM before tool sends"]
   models -->|checks the saved company custody record version; prepares separate company sign-in attempts; stages credentials, callback codes and replies, confirms first accounts, starts, joins, claims and sends refresh attempts, saves replacements, retains old access tokens until expiry and removes revoked tokens even after member removal, recovers replies and checks signed accounts, reads one exact personal access token for a private callback, shares a database lock for personal and company saves and rotations, and personal cleanup, scans this silo at startup and every 15 minutes, and checks exact removal| custody["Kubernetes<br/>private credentials"]
   models <-->|checks model requests after custom tools finish; checks its lock connection before replacement; stops expired preparation; keeps managed call mode through configuration reloads; delivers, probes, renews restart receipts and checks calls against the current configuration; checks calls, spending, holds, stops and managed model calls; loads managed provider history before checking access; tests per-call model keys, private CONNECT routing and relay outage closure| gateway["agentgateway<br/>AI gateway and reply checks"]
   models -->|checks one held Ask replacement permit| gateway

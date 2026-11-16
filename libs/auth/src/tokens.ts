@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { egressDestinationSchema, optionalProviderTurnBindingSchema } from '@opencrane/events';
+import { egressDestinationSchema, optionalProviderTurnBindingSchema,
+  sessionConfiguration } from '@opencrane/events';
 import { readFile } from 'node:fs/promises';
 import { createPublicKey, randomUUID } from 'node:crypto';
 import { createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify, SignJWT, type JSONWebKeySet, type JWTPayload } from 'jose';
@@ -242,8 +243,10 @@ export async function tokenIssuer(options: TokenOptions) {
       const claims = { providerId: input.providerId, bindingSequence: input.bindingSequence,
         sharingClass: input.sharingClass, personalSelections: input.personalSelections };
       const checkedClaims = turnClaimsSchema.parse(claims);
+      const configuration = sessionConfiguration({ conversation: {},
+        sharingClass: checkedClaims.sharingClass, memoryEnabled: false });
       const payload = {
-        ...checkedClaims, typ: 'turn', silo: input.silo,
+        ...checkedClaims, sharingClass: configuration.sharingClass, typ: 'turn', silo: input.silo,
         conversation: input.conversationId, thread: input.threadId,
         task: input.task, model: input.model, computerTokenId: input.computerTokenId,
         turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,

@@ -645,7 +645,7 @@
       "count": 2
     },
     "max-params": {
-      "count": 4
+      "count": 3
     }
   },
   "libs/models/src/descendant-admission.ts": {
