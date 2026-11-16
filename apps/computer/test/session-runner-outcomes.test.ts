@@ -165,6 +165,7 @@ async function filtersPrivateCommandReports(executionMode: 'restricted' | 'memor
     const item = { id: 'command', type: 'commandExecution',
       command: 'pwd', exitCode: 0, status: 'completed' };
     test.runner.complete({ method: 'item/completed', params: { threadId: 'thread-1', item } });
+    if (executionMode === 'restricted') test.finish();
     function commandOutcome() {
       if (executionMode === 'memory_free') {
         expect(test.reports).toContainEqual(expect.objectContaining({
