@@ -251,14 +251,15 @@ it('refuses cross-member reads and resumption even with a conversation participa
   refusesAnotherMembersPrivateSession);
 
 
-async function returnsSharedSessionConfiguration() {
+async function listsSharedAssistantKindWithoutConfiguration() {
   const response = await request('GET', '/api/conversations', undefined, 'bob');
   expect(response.statusCode).toBe(200);
-  expect(response.json()).toMatchObject({ rows: [{ conversationId: 'bob',
-    sessionConfiguration: { executionMode: 'restricted' } }] });
+  const row = response.json().rows[0];
+  expect(row).toMatchObject({ conversationId: 'bob', assistantKind: 'team' });
+  expect(row).not.toHaveProperty('sessionConfiguration');
 }
-it('returns the default shared session configuration to the browser',
-  returnsSharedSessionConfiguration);
+it('lists the shared assistant kind without a session configuration',
+  listsSharedAssistantKindWithoutConfiguration);
 
 async function refusesPrivateWebSocketRead() {
   if (!chat) throw new Error('Missing chat fixture');
