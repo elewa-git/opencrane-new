@@ -27,7 +27,6 @@ below remain historical evidence.
 
 ### Earlier checkpoint within round 5
 
-
 Result: PARTIAL. Required source gate: FAIL. Fresh-stack journey: NOT RUN at both widths.
 No head was pushed in this round. The PR remains draft.
 
