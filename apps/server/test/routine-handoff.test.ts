@@ -601,7 +601,7 @@ async function heldLeadershipRefusesBeforeRelease() {
     const rows = await history(nats.store, 'routine-orders', 'test');
     const eventTypes: string[] = [];
     for (const row of rows) eventTypes.push(row.event.type);
-    expect(eventTypes).not.toContain('routine.run_due');
+    expect(eventTypes).not.toContain('routine.due');
     expect(eventTypes).not.toContain('routine.run_send_release_authorised');
     expect(preparedComputer.frames).toEqual([]);
   }
