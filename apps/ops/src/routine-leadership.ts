@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { connectProjectionDb, type Db } from '@opencrane/projections';
+import { connectProjectionDb, QueryDeadlineExceeded, type Db } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 
 interface Options {
@@ -33,6 +33,11 @@ function logFailure(logger: Logger, error: unknown, phase: string) {
   }
   const err = { message, code };
   logger.error({ phase, err }, 'Routine leadership failed');
+}
+
+function isReadTimeout(error: unknown) {
+  if (error instanceof QueryDeadlineExceeded) return true;
+  return error instanceof Error && error.message === 'Query read timeout';
 }
 
 function leadershipRefused(logger: Logger, error: unknown, phase: string) {
@@ -69,7 +74,9 @@ export async function withRoutineLeadership(options: Options,
         return !stop.signal.aborted && performance.now() < deadline;
       } catch (error) {
         logFailure(logger, error, 'probe');
-        cancel();
+        // Refuse this operation on expiry. Only a session failure ends ownership:
+        // PostgreSQL keeps its session lock while a delayed query is still running.
+        if (!isReadTimeout(error)) cancel();
         return false;
       }
     }

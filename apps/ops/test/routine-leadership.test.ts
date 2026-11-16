@@ -518,13 +518,13 @@ async function logsBlockedSession() {
   querySpy.mockImplementationOnce(blockedProbe);
   // Run real database work beyond the unchanged one-second probe deadline.
   expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
-  expect(first.lease.signal.aborted).toBe(true);
-  expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
+  expect(first.lease.signal.aborted).toBe(false);
+  expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(true);
   expect(captured.firstRecord()).toMatchObject({ phase: 'probe',
     err: { message: 'Query read timeout' } });
   await first.close();
 }
-it('logs and cancels when the held database session blocks a probe', logsBlockedSession);
+it('logs and refuses a blocked probe until a fresh session check succeeds', logsBlockedSession);
 
 async function keepsHolderAfterSlowProbe(freezeClock: boolean) {
   const session = captureSession();
