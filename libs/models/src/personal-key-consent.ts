@@ -1,10 +1,37 @@
 import type { z } from 'zod';
-import type { StoredEvent } from '@opencrane/event-store';
+import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
+  from '@opencrane/event-store';
 import { assistantCreatedDataSchema, type connectionSelectedDataSchema } from '@opencrane/events';
 
 export interface PersonalKeyConsent {
   userId: string;
   allowedAssistantIds?: string[] | undefined;
+}
+
+function emptyAssistantCreation(): StoredEvent[] {
+  return [];
+}
+
+function addAssistantCreation(rows: StoredEvent[], row: StoredEvent) {
+  if (rows.length === 0 && row.event.type === 'assistant.created') {
+    rows.push(row);
+  }
+}
+
+function copyAssistantCreation(rows: StoredEvent[]) {
+  return rows.slice();
+}
+
+const assistantCreation: SummaryKind<StoredEvent[]> = {
+  name: 'personal-key-assistant-creation', keep: 64,
+  empty: emptyAssistantCreation, add: addAssistantCreation,
+};
+
+/** Keep the first creation event; later settings cannot change legacy key consent. */
+export function readPersonalKeyAssistant(store: EventStore, silo: string,
+  assistantId: string, deadline: number) {
+  return readStreamSummary(store, silo, `assistant-${assistantId}`,
+    assistantCreation, deadline, copyAssistantCreation);
 }
 
 /** Interpret older choices without changing their saved events. */
