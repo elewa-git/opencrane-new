@@ -161,16 +161,13 @@ The [server](../../README.md) registers chat requests and live connections for t
 
 ```mermaid
 flowchart LR
-  server[Server] --> chat[Chat]
-  reader[Signed-in member] -->|sends messages with files, closes and reads| chat
-  chat -->|reads session settings| events[Events]
+  reader[Signed-in member] -->|sends messages with files, closes and reads| chat[Chat]
+  chat -.->|shared session settings| events[libs/events]
   chat -->|saved events| store[Event store]
   chat -->|ends work in closed chats| computer[Assistant computer]
   chat -->|wakes a checked Ask replacement| computer
   chat -->|checks access, personal key consent and spending| models[Models process]
   chat -->|checks remembered facts| memory[Memory]
-  files[Files] -->|checks chat access| chat
-  server --> memory[Memory]
   chat -->|selects and checks input| memory
   chat -->|four memory definitions and one-use private input| computer[Assistant computer]
   chat -->|asks to start an activated child| models

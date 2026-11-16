@@ -50,7 +50,7 @@ async function suppressesHistoricalDelivery(mode: ExecutionMode) {
   const message = await saveInput(fixture, conversationId, mode);
   const lifecycle = await history(fixture.nats.store, 'computer-helper', 'test');
   const assistant = assistantSnapshot(lifecycle, 'team', 'test');
-  const socket = new WebSocket(null, undefined, {});
+  const socket = vi.mockObject(WebSocket.prototype);
   const send = vi.spyOn(socket, 'send');
   send.mockImplementation(recordFrame);
   const frames: unknown[] = [];
@@ -58,16 +58,17 @@ async function suppressesHistoricalDelivery(mode: ExecutionMode) {
     frames.push(JSON.parse(String(data)));
   }
   const delivered: string[] = [];
-  async function deliver(file: typeof upload.file) {
+  function deliver(file: typeof upload.file) {
     delivered.push(file.fileId);
+    return Promise.resolve();
   }
   const link = { connectionId: 1, socket, delivered: new Set<string>(),
     sentTurns: new Map(), sentStops: new Map(), deliver };
-  async function connection() {
-    return link;
+  function connection() {
+    return Promise.resolve(link);
   }
-  async function readObject() {
-    return Readable.from([upload.bytes]);
+  function readObject() {
+    return Promise.resolve(Readable.from([upload.bytes]));
   }
   const objectRead = vi.spyOn(fixture.objects, 'getObject');
   objectRead.mockImplementation(readObject);

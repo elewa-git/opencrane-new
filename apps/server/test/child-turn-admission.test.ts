@@ -6,8 +6,8 @@ async function refusesWrongChildMode() {
   const child = { rootId: 'root', requesterId: 'alice', conversationId: 'child',
     turnId: 'input', threadId: 'thread', computerId: 'computer', assistantId: 'helper',
     payingGroupId: 'payer', deadline: performance.now() + 2000, fresh };
-  async function childStart() {
-    return child;
+  function childStart() {
+    return Promise.resolve(child);
   }
   const start = vi.fn(childStart);
   const context = { computerId: 'computer', assistantId: 'helper', childStart: start };

@@ -1,0 +1,385 @@
+Manual guard-removal results, 16 November 2026.
+Test commit: 4ec06b0e3. Each guard was removed alone, then restored.
+Expected failures below prove test strength; they are not final gate failures.
+Host workspace paths have been replaced with <workspace>.
+
+=== payer-write ===
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/saved-session-guards.test.ts -t mismatch on write --maxWorkers=2
+
+ RUN  v5.0.3 <workspace>
+
+ ❯ apps/server/test/saved-session-guards.test.ts (6 tests | 3 failed | 3 skipped) 5078ms
+   × refuses a saved payer mismatch on write: restricted child=false 580ms
+   × refuses a saved payer mismatch on write: memory_free child=false 355ms
+   × refuses a saved payer mismatch on write: restricted child=true 405ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/saved-session-guards.test.ts > refuses a saved payer mismatch on write: restricted child=false
+AssertionError: {"status":"appended","sequence":19}: expected 200 to be 403 // Object.is equality
+
+- Expected
++ Received
+
+- 403
++ 200
+
+ ❯ refusesSavedPayerWrite apps/server/test/saved-session-guards.test.ts:35:46
+     33|     ...(testCase.mode === 'memory_free' ? { executionMode: testCase.mo…
+     34|   const response = await fixture.request(conversationId, 'messages', p…
+     35|   expect(response.statusCode, response.body).toBe(403);
+       |                                              ^
+     36|   expect(response.json()).toMatchObject({ status: 'refused' });
+     37|   expect(await chatHistory(fixture.nats.store, 'test', conversationId)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  apps/server/test/saved-session-guards.test.ts > refuses a saved payer mismatch on write: memory_free child=false
+AssertionError: {"status":"appended","sequence":21}: expected 200 to be 403 // Object.is equality
+
+- Expected
++ Received
+
+- 403
++ 200
+
+ ❯ refusesSavedPayerWrite apps/server/test/saved-session-guards.test.ts:35:46
+     33|     ...(testCase.mode === 'memory_free' ? { executionMode: testCase.mo…
+     34|   const response = await fixture.request(conversationId, 'messages', p…
+     35|   expect(response.statusCode, response.body).toBe(403);
+       |                                              ^
+     36|   expect(response.json()).toMatchObject({ status: 'refused' });
+     37|   expect(await chatHistory(fixture.nats.store, 'test', conversationId)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  apps/server/test/saved-session-guards.test.ts > refuses a saved payer mismatch on write: restricted child=true
+AssertionError: {"status":"appended","sequence":24}: expected 200 to be 403 // Object.is equality
+
+- Expected
++ Received
+
+- 403
++ 200
+
+ ❯ refusesSavedPayerWrite apps/server/test/saved-session-guards.test.ts:35:46
+     33|     ...(testCase.mode === 'memory_free' ? { executionMode: testCase.mo…
+     34|   const response = await fixture.request(conversationId, 'messages', p…
+     35|   expect(response.statusCode, response.body).toBe(403);
+       |                                              ^
+     36|   expect(response.json()).toMatchObject({ status: 'refused' });
+     37|   expect(await chatHistory(fixture.nats.store, 'test', conversationId)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 3 skipped (6)
+   Start at  18:15:38
+   Duration  16.62s (transform 50%, tests 31%, import 18%)
+
+  Transform  transforming modules took 8.23s · 50% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+=== payer-start ===
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/saved-session-guards.test.ts -t mismatch on start --maxWorkers=2
+
+ RUN  v5.0.3 <workspace>
+
+ ❯ apps/server/test/saved-session-guards.test.ts (6 tests | 3 failed | 3 skipped) 4478ms
+   × refuses a saved payer mismatch on start: restricted child=false 232ms
+   × refuses a saved payer mismatch on start: memory_free child=false 180ms
+   × refuses a saved payer mismatch on start: restricted child=true 191ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/saved-session-guards.test.ts > refuses a saved payer mismatch on start: restricted child=false
+AssertionError: promise resolved "{ …(8) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "conversationId": "start-restricted-false",
++   "executionMode": "restricted",
++   "payingGroupId": "other-payer",
++   "requesterId": "alice",
++   "sharingClass": undefined,
++   "task": "chat_turn",
++   "threadId": "start-restricted-false",
++   "turnId": "74f3335d-caa9-4ea5-af79-ab11a4f7233e",
+  }
+
+ ❯ refusesSavedPayerStart apps/server/test/saved-session-guards.test.ts:51:63
+     49|     status: 'started' as const, executionMode: testCase.mode };
+     50|   const before = await history(fixture.nats.store, 'computer-helper', …
+     51|   await expect(turnCommand(fixture.nats.store, context, input))
+       |                                                               ^
+     52|     .rejects.toThrow('Paying group does not match the assistant');
+     53|   expect(await history(fixture.nats.store, 'computer-helper', 'test'))…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  apps/server/test/saved-session-guards.test.ts > refuses a saved payer mismatch on start: memory_free child=false
+AssertionError: promise resolved "{ …(8) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "conversationId": "start-memory_free-false",
++   "executionMode": "memory_free",
++   "payingGroupId": "other-payer",
++   "requesterId": "alice",
++   "sharingClass": undefined,
++   "task": "chat_turn",
++   "threadId": "start-memory_free-false",
++   "turnId": "cfead01b-d24c-430c-8fc0-03cebf9ab28e",
+  }
+
+ ❯ refusesSavedPayerStart apps/server/test/saved-session-guards.test.ts:51:63
+     49|     status: 'started' as const, executionMode: testCase.mode };
+     50|   const before = await history(fixture.nats.store, 'computer-helper', …
+     51|   await expect(turnCommand(fixture.nats.store, context, input))
+       |                                                               ^
+     52|     .rejects.toThrow('Paying group does not match the assistant');
+     53|   expect(await history(fixture.nats.store, 'computer-helper', 'test'))…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  apps/server/test/saved-session-guards.test.ts > refuses a saved payer mismatch on start: restricted child=true
+AssertionError: promise resolved "{ …(8) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "conversationId": "start-restricted-true",
++   "executionMode": "restricted",
++   "payingGroupId": "other-payer",
++   "requesterId": "alice",
++   "sharingClass": "shared_only",
++   "task": "chat_turn",
++   "threadId": "start-restricted-true",
++   "turnId": "7773fe55-5e04-48c6-837a-4cbcebde2237",
+  }
+
+ ❯ refusesSavedPayerStart apps/server/test/saved-session-guards.test.ts:51:63
+     49|     status: 'started' as const, executionMode: testCase.mode };
+     50|   const before = await history(fixture.nats.store, 'computer-helper', …
+     51|   await expect(turnCommand(fixture.nats.store, context, input))
+       |                                                               ^
+     52|     .rejects.toThrow('Paying group does not match the assistant');
+     53|   expect(await history(fixture.nats.store, 'computer-helper', 'test'))…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 3 skipped (6)
+   Start at  18:15:56
+   Duration  14.89s (transform 50%, tests 31%, import 20%)
+
+  Transform  transforming modules took 7.29s · 50% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+=== restricted-attachments ===
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/saved-upload-guards.test.ts -t excludes saved --maxWorkers=2
+
+ RUN  v5.0.3 <workspace>
+
+ ❯ apps/server/test/saved-upload-guards.test.ts (3 tests | 1 failed | 2 skipped) 3710ms
+   × excludes saved clean uploads from restricted input 57ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/saved-upload-guards.test.ts > excludes saved clean uploads from restricted input
+AssertionError: expected [ { …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "fileId": "file-restricted-attachments",
++     "mime": "text/plain",
++     "name": "notes.txt",
++   },
++ ]
+
+ ❯ excludesRestrictedAttachments apps/server/test/saved-upload-guards.test.ts:41:34
+     39|   const restricted = turnMessage(fixture.options, conversation, rows, …
+     40|     'restricted');
+     41|   expect(restricted.attachments).toEqual([]);
+       |                                  ^
+     42|   expect(restricted.omittedAttachments).toBe(0);
+     43| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  18:16:13
+   Duration  14.65s (transform 54%, tests 26%, import 20%)
+
+  Transform  transforming modules took 7.83s · 54% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+=== historical-upload ===
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/saved-upload-guards.test.ts -t historical shared-assistant --maxWorkers=2
+
+ RUN  v5.0.3 <workspace>
+
+ ❯ apps/server/test/saved-upload-guards.test.ts (3 tests | 2 failed | 1 skipped) 3667ms
+   × keeps historical shared-assistant uploads off the computer in restricted mode 124ms
+   × keeps historical shared-assistant uploads off the computer in memory_free mode 78ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/saved-upload-guards.test.ts > keeps historical shared-assistant uploads off the computer in restricted mode
+AssertionError: expected [ 'file-historical-restricted' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "file-historical-restricted",
++ ]
+
+ ❯ suppressesHistoricalDelivery apps/server/test/saved-upload-guards.test.ts:80:21
+     78|   expect(frames).toContainEqual(expect.objectContaining({ type: 'turn'…
+     79|     executionMode: mode, attachments: [] }));
+     80|   expect(delivered).toEqual([]);
+       |                     ^
+     81|   expect(objectRead).not.toHaveBeenCalled();
+     82|   const rows = await chatHistory(fixture.nats.store, 'test', conversat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/server/test/saved-upload-guards.test.ts > keeps historical shared-assistant uploads off the computer in memory_free mode
+AssertionError: expected [ { type: 'turn', …(10) } ] to deep equally contain ObjectContaining{…}
+
+- Expected:
+ObjectContaining {
+  "attachments": [],
+  "executionMode": "memory_free",
+  "id": "087dcdca-e277-4580-8e16-23eb8c8b0e64",
+  "type": "turn",
+}
+
++ Received:
+[
+  {
+    "assistantId": "helper",
+    "attachments": [
+      {
+        "fileId": "file-historical-memory_free",
+        "mime": "text/plain",
+        "name": "notes.txt",
+      },
+    ],
+    "conversationId": "historical-memory_free",
+    "executionMode": "memory_free",
+    "expiresAt": 1794853123472,
+    "id": "087dcdca-e277-4580-8e16-23eb8c8b0e64",
+    "omittedAttachments": 0,
+    "requesterId": "alice",
+    "text": "Saved question",
+    "token": "preparing",
+    "type": "turn",
+  },
+]
+
+ ❯ suppressesHistoricalDelivery apps/server/test/saved-upload-guards.test.ts:78:18
+     76|   await processConversation(options, fixture.tokens, conversation, ass…
+     77|     connection);
+     78|   expect(frames).toContainEqual(expect.objectContaining({ type: 'turn'…
+       |                  ^
+     79|     executionMode: mode, attachments: [] }));
+     80|   expect(delivered).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 skipped (3)
+   Start at  18:16:29
+   Duration  14.62s (transform 54%, tests 26%, import 20%)
+
+  Transform  transforming modules took 7.77s · 54% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+=== child-mode ===
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/child-turn-admission.test.ts -t refuses memory-free --maxWorkers=2
+
+ RUN  v5.0.3 <workspace>
+
+ ❯ apps/server/test/child-turn-admission.test.ts (1 test | 1 failed) 23ms
+   × refuses memory-free child admission before requesting a spending root 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/child-turn-admission.test.ts > refuses memory-free child admission before requesting a spending root
+AssertionError: promise resolved "{ payer: 'payer', …(3) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "confirmBudget": [Function fresh],
++   "deadline": 9744.296552,
++   "fresh": [Function fresh],
++   "payer": "payer",
+  }
+
+ ❯ refusesWrongChildMode apps/server/test/child-turn-admission.test.ts:16:75
+     14|   const data = { requesterId: 'alice', conversationId: 'child', turnId…
+     15|     threadId: 'thread' };
+     16|   await expect(admitChildTurn(context, data, 'memory_free', undefined,…
+       |                                                                           ^
+     17|     .rejects.toThrow('Child start binding changed');
+     18|   expect(start).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:16:45
+   Duration  7.82s (transform 73%, import 26%)
+
+  Transform  transforming modules took 5.53s · 73% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+PASS payer-write: 3 targeted tests fail with only this guard removed
+PASS payer-start: 3 targeted tests fail with only this guard removed
+PASS restricted-attachments: 1 targeted tests fail with only this guard removed
+PASS historical-upload: 2 targeted tests fail with only this guard removed
+PASS child-mode: 1 targeted tests fail with only this guard removed
+PASS all production guards restored

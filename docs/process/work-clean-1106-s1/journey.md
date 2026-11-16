@@ -1,6 +1,6 @@
 # Server session configuration journey
 
-Journey on a fresh dev stack: PASS
+Journey on a fresh dev stack: PASS for the observed CORE steps; approval: NOT RUN
 
 On 16 November 2026, secondary slot 1 ran `infra/dev-stack/up.sh --fresh`
 against implementation commit `382a79cfe`. The first claim found both slots busy;
@@ -8,6 +8,18 @@ the next claim succeeded after the required wait. Managed calls were switched on
 against the stand-in provider. Startup and the CORE journey returned exit code 0.
 `infra/dev-stack/status.sh` then returned 0 with all checked endpoints healthy.
 `infra/dev-stack/down.sh` completed with exit code 0 and released the slot.
+
+The actual tested head remains `382a79cfe`. The reviewed head `65ebbdef7`
+adds only this receipt and its two screenshots: `git diff --stat 382a79cfe 65ebbdef7`
+contains no application, library, dependency or runner change. The tested source
+is therefore equivalent for this journey. The review fixes add only tests and
+documents, so they do not require a new execution. No later head is claimed as run.
+
+The retained [CORE runner results](core-results.txt) include upload, access,
+private-history, organisation, expired-session and spending refusals at both widths.
+The [stack status and teardown results](stack-results.txt) record the healthy
+endpoints and released secondary slot. Only the owner account label and screenshot
+host paths were sanitised in the CORE results; outcomes and timing remain intact.
 
 ## Browser steps and observed results
 
@@ -65,6 +77,29 @@ The first upload test attempt failed because the existing disposable computer
 image lacked a module required by current source. A separate fixture image was
 built from the current Dockerfile; the final upload tests passed against it.
 No computer source or Docker configuration was changed.
+
+## Review-fix proof
+
+The test-first commit `4ec06b0e3` adds ten behaviour cases without editing an
+existing assertion. The saved session uses payer B while its assistant uses payer A;
+Alice has current membership and authority for both. HTTP writes and turn starts
+refuse both private modes and the restricted shared-child path without saving a
+message or successful start. Non-empty clean uploads are excluded from restricted
+input and from shared-assistant delivery in both modes. Child admission directly
+refuses memory-free mode before requesting its spending root.
+
+The [guard-removal results](guard-probes.txt) show each test failing when only its
+own guard is removed: three write refusals, three start refusals, one restricted
+attachment case, two historical delivery cases and one child mode case. All five
+guards were restored. No shipped TypeScript or existing assertion changed in this
+round. The README diagram now has eight boxes and a dotted `libs/events` dependency.
+
+Own final fix checks: PASS — 21 focused tests twice (18.61 s and 19.73 s),
+full workspace/package/dev-stack typecheck, changed-file ESLint with no warnings,
+Knip, event catalogue (174 types), changelog, Markdown, README, privacy and secret
+checks. An initial typecheck caught the fixture's unsupported socket constructor;
+using a typed socket mock fixed it before the final checks. Source grouping places
+all three new test files in the automatic root test group. No full root suite ran.
 
 ## Scope held for the owner
 
