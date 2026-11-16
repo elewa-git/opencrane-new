@@ -783,6 +783,12 @@ function scheduledPilotBackup() {
     return resource.kind === 'Role' && resource.metadata.name === 'package-backup';
   }
   const role = resources.find(backupRole);
+  function deploymentRead(rule) { return rule.resources.includes('deployments'); }
+  const readiness = role.rules.find(deploymentRead);
+  assert.deepEqual(readiness.verbs, ['get', 'list', 'watch']);
+  assert.deepEqual(readiness.resourceNames, ['server', 'openfga', 'worker-dispatcher',
+    'worker-members', 'worker-mcp-catalogue', 'worker-computers', 'worker-conversations',
+    'worker-files', 'worker-budgets', 'worker-audit']);
   for (const rule of role.rules) assert.ok(!rule.resources.includes('secrets'));
 }
 
