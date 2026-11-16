@@ -1038,10 +1038,15 @@ deployment and fresh-install execution qualification remain later work.
 
 `src/routine-leadership.ts` provides `withRoutineLeadership(options, work)` for
 P4-24 PR 8b, the first worker part of row 8. Options name the database URL, silo
-and shutdown signal. It creates its own `connectProjectionDb` connection pool.
+and shutdown signal, with an optional structured logger. It creates its own
+`connectProjectionDb` connection pool.
 `Db.lock` holds `routine-leader:<silo>` on one checked-out PostgreSQL session.
 It never takes `budget-leader:<silo>`. Acquisition waits at most one second.
 Contention or failure returns the fixed error `Routine leadership unavailable`.
+Before returning that error, it logs the acquisition, callback or release phase.
+Session failures and failed probes are logged before cancellation. Records keep
+only recognised adapter messages and error codes; arbitrary text, SQL, addresses,
+stacks and adapter fields are excluded. Unrecognised errors use `Unclassified error`.
 
 The callback receives `signal` and `checkCurrent(deadline)`. Pass both to
 `claimRoutineDue` with the trusted silo and IAM binding. Each check queries the
@@ -1061,7 +1066,9 @@ database address or callback error details. No routine history enters this check
 `test/routine-leadership.test.ts` uses real PostgreSQL, NATS and OpenFGA. It covers
 competing sessions, other silos and budgets, terminated sessions during preparation,
 replacement sessions, shutdown, callback failure, deadline expiry and draining a
-pending check. Takeover tests pause the member-stream read inside append's access
+pending check. Logging tests block the held session beyond the probe deadline and
+check that callback canaries do not reach logs. Takeover tests pause the member-stream
+read inside append's access
 check and pause after that check returns. Both terminate the old session, verify a
 replacement, then resume and confirm that the event count has not changed.
 Real due commands cover withheld appends and receipts, lost replies,

@@ -7459,7 +7459,11 @@ scheduling therefore cannot expire the access period before either fault is inje
 It restarts NATS, enables the internal test delivery, then checks that one session,
 input, root and native start use the same occurrence. It checks that missed and skipped
 receipts never enter the callback. The final release cases change a ceiling, save Stop,
-revoke a grant or end leadership before the append. Each refuses the turn and leaves
+revoke a grant or end leadership before the append. They use a controlled leadership
+check, retaining real events, projections, permissions, budgets and socket delivery.
+Each must finish its injected change and receive refusal from the release append. A separate case holds the real
+PostgreSQL leadership lock beyond one second and checks acquisition-phase refusal
+before hand-off, with no due, release event or turn sent. Each release refusal leaves
 the scan without completed progress. The existing held-start, uncertain transport and
 fourteen-second wake cases remain in that suite. These are fixture checks, not a
 fresh-install or paid company call qualification. Production delivery stays off.

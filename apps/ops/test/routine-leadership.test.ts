@@ -1,4 +1,5 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
+import { createLogger, type Logger } from '@opencrane/observability';
 import { connectProjectionDb, type Db } from '@opencrane/projections';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
 
@@ -17,7 +18,8 @@ import { SandboxClient } from '../src/kubernetes.ts';
 const databaseUrl = process.env['PG_TEST_URL']!;
 type Leadership = Parameters<Parameters<typeof withRoutineLeadership>[1]>[0];
 
-async function owner(silo = 'test') {
+async function owner(silo = 'test',
+  logger: Logger = createLogger('routine-leadership-test')) {
   const ready = Promise.withResolvers<Leadership>();
   const finish = Promise.withResolvers<void>();
   const stop = new AbortController();
@@ -25,7 +27,7 @@ async function owner(silo = 'test') {
     ready.resolve(lease);
     await finish.promise;
   }
-  const options = { databaseUrl, silo, signal: stop.signal };
+  const options = { databaseUrl, silo, signal: stop.signal, logger };
   const done = withRoutineLeadership(options, work);
   void done.catch(ready.reject);
   async function close() {
@@ -451,3 +453,75 @@ async function holdsUntilCheckReturns() {
   await expect(first.done).resolves.toBeUndefined();
 }
 it('holds the lock until an outstanding check returns after SQL has finished', holdsUntilCheckReturns);
+
+function capturedLogger() {
+  const lines: string[] = [];
+  function write(line: string) {
+    lines.push(line);
+  }
+  const destination = { write };
+  const options = { level: 'error', destination };
+  const logger = createLogger('routine-leadership-test', options);
+  function firstRecord(): unknown {
+    return JSON.parse(lines[0]!);
+  }
+  return { logger, lines, firstRecord };
+}
+
+async function logsUnderlyingFailure() {
+  const captured = capturedLogger();
+  const options = { databaseUrl, silo: 'test', signal: new AbortController().signal,
+    logger: captured.logger };
+  const cause = new Error('Database lock acquisition cancelled or expired');
+  function fail(): never {
+    throw cause;
+  }
+  const connectSpy = vi.spyOn(projections, 'connectProjectionDb');
+  connectSpy.mockImplementationOnce(fail);
+  try {
+    await expect(withRoutineLeadership(options, fail)).rejects.toThrow(
+      /^Routine leadership unavailable$/u);
+    expect(captured.firstRecord()).toMatchObject({ phase: 'acquire',
+      err: { message: cause.message }, msg: 'Routine leadership failed' });
+  } finally {
+    connectSpy.mockRestore();
+  }
+}
+it('logs the underlying acquisition error before returning a safe refusal', logsUnderlyingFailure);
+
+async function logsPrivateCallbackSafely() {
+  const captured = capturedLogger();
+  const options = { databaseUrl, silo: 'private-silo-canary',
+    signal: new AbortController().signal, logger: captured.logger };
+  const error = new Error('private-callback-canary');
+  Object.assign(error, { code: 'ECONNRESET', detail: 'private-query-canary' });
+  function fail() {
+    return Promise.reject(error);
+  }
+  await expect(withRoutineLeadership(options, fail)).rejects.toThrow(
+    /^Routine leadership unavailable$/u);
+  expect(captured.firstRecord()).toMatchObject({ phase: 'work',
+    err: { message: 'Unclassified error', code: 'ECONNRESET' } });
+  for (const line of captured.lines) expect(line).not.toContain('private-');
+}
+it('logs the callback error code without private text or adapter fields', logsPrivateCallbackSafely);
+
+async function logsBlockedSession() {
+  const session = captureSession();
+  const captured = capturedLogger();
+  const first = await owner('test', captured.logger);
+  const query = session().query.bind(session());
+  function blockedProbe(_sql: string, _parameters?: unknown[], options?: { deadline: number }) {
+    return query('SELECT pg_sleep(1.2)', [], options);
+  }
+  const querySpy = vi.spyOn(session(), 'query');
+  querySpy.mockImplementationOnce(blockedProbe);
+  // Run real database work beyond the unchanged one-second probe deadline.
+  expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
+  expect(first.lease.signal.aborted).toBe(true);
+  expect(await first.lease.checkCurrent(performance.now() + 2000)).toBe(false);
+  expect(captured.firstRecord()).toMatchObject({ phase: 'probe',
+    err: { message: 'Query read timeout' } });
+  await first.close();
+}
+it('logs and cancels when the held database session blocks a probe', logsBlockedSession);

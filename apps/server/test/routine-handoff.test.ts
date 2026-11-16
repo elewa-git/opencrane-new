@@ -15,7 +15,7 @@ import { BudgetActor, history, priceTableId, rootTotals, readRootStopEvidence }
   from '@opencrane/models';
 import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
-import { createLogger } from '@opencrane/observability';
+import { createLogger, type Logger } from '@opencrane/observability';
 import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler }
   from '../../ops/test/support/routine-handoff.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
@@ -37,6 +37,8 @@ let nats: Awaited<ReturnType<typeof shortDuplicateWindowFixture>>;
 let storage: Awaited<ReturnType<typeof database>>;
 let runner: ProjectionRunner;
 let databaseUrl: string;
+let leadershipLogger: Logger;
+let leadershipLogs: string[];
 let stop: AbortController;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
@@ -71,6 +73,17 @@ async function apply(events: EventEnvelope[]) {
     await auth.handler.handle(saved, db);
   }
 }
+function fixtureLogger() {
+  leadershipLogs = [];
+  function write(line: string) {
+    leadershipLogs.push(line);
+  }
+  const destination = { write };
+  const leadershipLogOptions = { level: 'error', destination };
+  leadershipLogger = createLogger('routine-handoff-leadership', leadershipLogOptions);
+  const logOptions = { level: 'silent' };
+  return createLogger('routine-handoff-test', logOptions);
+}
 async function setup() {
   storage = await database('pg');
   const current = await storage.db.query<{ name: string }>('SELECT current_database() AS name');
@@ -78,8 +91,7 @@ async function setup() {
   address.pathname = `/${current.rows[0]!.name}`;
   databaseUrl = address.href;
   nats = await shortDuplicateWindowFixture();
-  const logOptions = { level: 'silent' };
-  const logger = createLogger('routine-handoff-test', logOptions);
+  const logger = fixtureLogger();
   runner = new ProjectionRunner(storage.db, nats.reader, logger);
   await runner.initialise(routines);
   stop = new AbortController();
@@ -439,7 +451,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
   return Promise.resolve(company);
 }
 async function dispatch(options: Options = { enabled: true }, continuation = false,
-  onHandoff?: () => void) {
+  onHandoff?: () => void, controlledLease?: Lease) {
   await runner.run(routines);
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
@@ -472,8 +484,12 @@ async function dispatch(options: Options = { enabled: true }, continuation = fal
     const worker = { ...lease, silo: 'test', binding, now: clock };
     progress = await dispatchRoutineCandidates(storage.db, nats.store, worker, receive);
   }
-  const leadership = { databaseUrl, silo: 'test', signal: stop.signal };
-  await withRoutineLeadership(leadership, work);
+  const leadership = { databaseUrl, silo: 'test', signal: stop.signal, logger: leadershipLogger };
+  if (controlledLease) {
+    await work(controlledLease);
+  } else {
+    await withRoutineLeadership(leadership, work);
+  }
   if (continuation) {
     expect(progress).toMatchObject({ examined: 1, continuation: { afterRoutineId: 'orders' } });
   }
@@ -572,7 +588,22 @@ it('resumes the saved checked due once after disabled delivery and a broker rest
 
 async function heldLeadershipRefusesBeforeRelease() {
   async function holdLock() {
-    await changeBeforeFinalRelease('reserved');
+    let handedOff = false;
+    function handoff() {
+      handedOff = true;
+    }
+    await expect(dispatch({ enabled: true }, false, handoff)).rejects.toThrow(
+      /^Routine leadership unavailable$/u);
+    expect(handedOff, 'Lock acquisition must refuse before handing off a due').toBe(false);
+    const logged: unknown = JSON.parse(leadershipLogs[0]!);
+    expect(logged).toMatchObject({ phase: 'acquire',
+      err: { message: 'Database lock acquisition cancelled or expired' } });
+    const rows = await history(nats.store, 'routine-orders', 'test');
+    const eventTypes: string[] = [];
+    for (const row of rows) eventTypes.push(row.event.type);
+    expect(eventTypes).not.toContain('routine.run_due');
+    expect(eventTypes).not.toContain('routine.run_send_release_authorised');
+    expect(preparedComputer.frames).toEqual([]);
   }
   // Keep a real competing session locked until dispatch has exceeded its one-second limit.
   await storage.db.lock!('routine-leader:test', holdLock);
@@ -609,6 +640,14 @@ function otherBudgetCall() {
     computerId: 'other-computer', payingGroupId: 'other-group', model: 'gpt-6-luna',
     priceTableId, contextDigest: '0'.repeat(64) };
 }
+function releaseTestLease(): Lease {
+  function checkCurrent(deadline: number) {
+    const current = !stop.signal.aborted && performance.now() < deadline;
+    return Promise.resolve(current);
+  }
+  return { signal: stop.signal, checkCurrent };
+}
+
 async function changeBeforeFinalRelease(kind: ReleaseChange) {
   let earlierReservation: string | undefined;
   if (kind === 'settled') {
@@ -620,10 +659,10 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
   clockSpy.mockImplementation(() => fixedTime + elapsed);
   const append = nats.store.append.bind(nats.store);
   let changed = false;
+  let releaseResult: Awaited<ReturnType<typeof append>> | undefined;
   async function interruptRelease(...supplied: Parameters<typeof append>) {
     const proposed = proposedEvent.parse(supplied[0].event);
     if (proposed.type === 'routine.run_send_release_authorised' && !changed) {
-      changed = true;
       if (kind === 'ceiling') {
         const limit = { scope: 'global' as const, ceilingCents: 0,
           dailyCeilingCents: 0, setBy: 'admin' };
@@ -674,17 +713,29 @@ async function changeBeforeFinalRelease(kind: ReleaseChange) {
       } else {
         stop.abort();
       }
+      changed = true;
     }
-    return append(...supplied);
+    const result = await append(...supplied);
+    if (proposed.type === 'routine.run_send_release_authorised') releaseResult = result;
+    return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(interruptRelease);
   const shouldRefuse = kind !== 'exhausted_other_reason';
+  // Test the release guard independently of real database acquisition and probe deadlines.
+  const pending = dispatch({ enabled: true }, false, undefined, releaseTestLease());
   if (shouldRefuse) {
-    await expect(dispatch()).rejects.toThrow('Routine leadership unavailable');
+    await expect(pending).rejects.toThrow('Routine scan unavailable');
   } else {
-    expect(await dispatch()).toMatchObject({ examined: 1 });
+    expect(await pending).toMatchObject({ examined: 1 });
+    await until(preparedComputer.executed);
   }
-  expect(changed).toBe(true);
+  expect(changed, 'The final release change must finish before refusing').toBe(true);
+  const expectedStatus = shouldRefuse ? 'unavailable' : 'appended';
+  expect(releaseResult, 'Refusal must come from the final release append')
+    .toMatchObject({ status: expectedStatus });
+  await assertReleaseEffects(kind, shouldRefuse);
+}
+async function assertReleaseEffects(kind: ReleaseChange, shouldRefuse: boolean) {
   function isTurn(frame: Record<string, unknown>) {
     return frame['type'] === 'turn';
   }
@@ -795,7 +846,7 @@ async function productionDeliveryUsesCheckedDue() {
     const delivery = { db: storage.db, store: nats.store, worker, handoff };
     await runRoutineScheduler({ enabled: true }, delivery);
   }
-  const leadership = { databaseUrl, silo: 'test', signal: stop.signal };
+  const leadership = { databaseUrl, silo: 'test', signal: stop.signal, logger: leadershipLogger };
   await withRoutineLeadership(leadership, work);
   await until(preparedComputer.executed);
   await assertSingleRun();
