@@ -228,7 +228,7 @@ export class ChatSession implements OnDestroy {
     const conversation = this.conversations().find(row => row.conversationId === id);
     this.readMarker.setRow(conversation);
     const configuration = conversation?.mode === 'agent_session'
-      ? conversation.sessionConfiguration ?? sessionDefaults(conversation.assistantKind)
+      ? sessionDefaults(conversation.assistantKind)
       : sessionDefaults(undefined);
     this.executionMode.set(configuration.executionMode);
     this.error.set(''); this.loading.set(true); this.computer.set('ready');

@@ -5,8 +5,10 @@ Journey on a fresh dev stack: PASS
 On 16 November 2026, claimed secondary slot 1 ran `infra/dev-stack/up.sh --fresh`
 at head `0562532c3714c58f16df64860c4b18f8a7115bfe`. Managed stand-in calls were
 enabled. This run replaces the earlier receipt at `5eb6df9e1` because the review
-fix changes the browser's default-mode reader. Later receipt changes do not alter
-the shipped code tested here.
+fix changes the browser's default-mode reader. The later cleanup removes an unused
+optional response field and its browser branch. The server never sent that field,
+so the browser still uses `sessionDefaults` with the same assistant kind. Related
+contract wording and the PR's new spec now match.
 
 The unchanged pinned computer image was
 `sha256:ca3c13f72783b68a48aaaae7e8c469393dc2618221b6dd8e91e56397365f59e0`,
@@ -95,6 +97,28 @@ shared event-library configuration. Existing responses stay identical; personal
 and shared assistant defaults remain memory-free and restricted respectively.
 Kept every creator-only check and the open ownership question unchanged.
 
-Shipped code and runtime manifests across this slice: 158 added plus 84 deleted
-lines, 242 total. Tests, documents and receipts are excluded. New functions fit the
+Shipped code and runtime manifests across this slice: 155 added plus 84 deleted
+lines, 239 total. Tests, documents and receipts are excluded. New functions fit the
 existing size limits. No dependency, permission, event or suppression was added.
+
+## Second cleanup round
+
+Journey rerun: NOT RUN (not needed). This cleanup preserves the behaviour covered
+by the fresh CORE run at `0562532c3714c58f16df64860c4b18f8a7115bfe`, recorded
+above at 1280 px and 390 px. No new stack was claimed.
+
+PASS: the new rejection test failed because the chat schema accepted the unused
+`sessionConfiguration` field; both existing composer-default cases still passed.
+Test-first commit: `4ff1f4045`. Removed the schema field and the dead override
+branch, retaining `sessionDefaults` as the browser's only default reader. Removed
+the two obsolete override cases from this PR's new spec. No assertion from main
+was edited. Corrected the events, protocol and web contract wording.
+
+PASS: changed browser spec twice (three cases each, 4.77 and 3.30 seconds), full
+Angular web suite (85 files, 1,592 tests, zero failures or skips, 47.64 seconds)
+and production web build. The build retains its existing Mermaid, style-budget
+and CommonJS warnings. Scoped ESLint has zero warnings. Event catalogue agreement
+covers 174 types. Knip passes with its two existing configuration hints. Changelog,
+README and Markdown checks pass. Tests, build and lint ran under `nice -n 10`.
+
+PASS: full workspace and infrastructure typecheck under `nice -n 10`.

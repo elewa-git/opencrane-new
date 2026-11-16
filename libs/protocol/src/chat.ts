@@ -154,9 +154,6 @@ const chatConversationSchema = z.union([
   z.object({
     ...conversationDisplay, assistantId: z.string(), payingGroupId: z.string().optional(),
     assistantKind: z.enum(['personal', 'team']).optional(),
-    sessionConfiguration: z.strictObject({
-      executionMode: z.enum(['restricted', 'memory_free']),
-    }).optional(),
     mode: z.literal('agent_session').default('agent_session'),
   }).strict(),
   z.object({
