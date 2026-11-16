@@ -5,10 +5,6 @@
     "count": 2049
   },
   {
-    "file": "apps/odoo-mcp/README.md",
-    "rule": "opening"
-  },
-  {
     "file": "apps/server/README.robot.md",
     "rule": "robot-length",
     "count": 7454

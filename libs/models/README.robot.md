@@ -884,7 +884,7 @@ Tool lists carry check and expiry dates; undated lists cannot authorise calls.
 not the latest MCP stream position. Unchanged checks keep waiting approvals valid.
 Failed checks advance that revision, so a later successful check cannot revive an
 unread pending approval. Saved drift stays held through discovery, review and legacy
-publication. `test/mcp-dispatch.test.ts` checks zero fixture calls after gateway restart;
+publication. `test/mcp-dispatch-publication.test.ts` checks zero fixture calls after gateway restart;
 this is not a watch-worker restart test. The remaining work is listed in the
 [durable hold contract](../projections/README.robot.md#durable-drift-holds-48-pr-3-first-part).
 The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
@@ -3314,7 +3314,7 @@ that read, rejects the refresh. The existing failure path saves a failed check b
 returning; the watch stays held until a later successful check. A hold raised again
 while recovery was already held also rejects the refresh.
 
-`mcp-dispatch.test.ts` uses product review/publication commands, a real gateway witness,
+`mcp-dispatch-publication.test.ts` uses product review/publication commands, a real gateway witness,
 NATS, PostgreSQL, OpenFGA and a recording upstream. Restoration sends once; pending,
 stale, withdrawn and failed attempts send zero requests. The replay CLI compares the
 live catalogue with its rebuild without sending or appending events. Pre-drift approvals
@@ -3879,7 +3879,7 @@ credentials and addresses never enter this evidence. Missing observations after 
 remain unknown; replay never sends. A lost start reply also stays unknown. Crash
 reconciliation remains separate work. Fresh-install qualification: NOT RUN.
 
-`mcp-dispatch.test.ts` uses the recording TLS server, real gateway, NATS and PostgreSQL.
+`mcp-dispatch-remote.test.ts` uses the recording TLS server, real gateway, NATS and PostgreSQL.
 It checks exact bindings, lost saves, store outages, changed history, forged external
 observations, earlier/later gateway evidence and restart without another send.
 Direct recorder tests seed a saved start without sending a request. They check that
@@ -4445,7 +4445,7 @@ The live gateway acknowledgement is still required for every published call.
 A gateway restart renews the member receipt after its exact live observation. Status
 then reports Ready for the new process, before and after catalogue replay.
 
-`mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
+`mcp-dispatch-catalogue.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.
 
 ## Current effect accounting (P4-26 PR 8f; Part of #108)
