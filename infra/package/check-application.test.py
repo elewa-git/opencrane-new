@@ -20,7 +20,8 @@ licence_spec.loader.exec_module(fixtures)
 
 class ApplicationTests(unittest.TestCase):
     def test_only_matching_source_full_scan_and_inventory_produce_output(self):
-        for change in ('none', 'source', 'scope', 'image', 'inventory', 'licence', 'debian'):
+        for change in ('none', 'source', 'scope', 'image', 'inventory', 'licence', 'debian',
+                       'bundled', 'manual'):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
                 (directory / 'output').mkdir()
@@ -36,13 +37,26 @@ class ApplicationTests(unittest.TestCase):
                     scan['artifacts'].pop()
                 elif change == 'licence':
                     scan['artifacts'][0]['licenses'] = [{'value': 'BUSL-1.1', 'spdxExpression': 'BUSL-1.1'}]
+                baseline = application.licences.read_json(application.PACKAGE / 'licence-inventory.json')
+                if change == 'bundled':
+                    baseline['images']['server']['bundled'][0][1] = ['BUSL-1.1']
+                elif change == 'manual':
+                    baseline['images']['server']['manual'][0][2] = 'BUSL-1.1'
                 scan_path.write_text(json.dumps(scan))
                 (directory / 'inspect.json').write_text(json.dumps(inspection))
                 pin = reviewed['images']['server']
                 refusal = None
                 if change == 'debian':
                     refusal = ValueError('unauthenticated Debian packages')
-                with patch.object(application, 'authenticate_debian', side_effect=refusal):
+                read_json = application.licences.read_json
+
+                def read_inventory(path):
+                    if Path(path) == application.PACKAGE / 'licence-inventory.json':
+                        return baseline
+                    return read_json(path)
+
+                with patch.object(application.licences, 'read_json', side_effect=read_inventory), \
+                        patch.object(application, 'authenticate_debian', side_effect=refusal):
                     with patch.dict(os.environ, {'GITHUB_RUN_ID': '123'}):
                         if change == 'none':
                             application.approve(directory, revision, pin)
@@ -52,7 +66,12 @@ class ApplicationTests(unittest.TestCase):
                             self.assertEqual(output['runId'], 123)
                             self.assertEqual(output['scanSha256'], hashlib.sha256(scan_path.read_bytes()).hexdigest())
                         else:
-                            with self.assertRaises(ValueError):
+                            expected = ValueError
+                            if change in ('bundled', 'manual'):
+                                expected = self.assertRaisesRegex(ValueError, 'licence')
+                            else:
+                                expected = self.assertRaises(ValueError)
+                            with expected:
                                 application.approve(directory, revision, pin)
                             self.assertFalse((directory / 'output/approval.json').exists())
 
@@ -60,7 +79,8 @@ class ApplicationTests(unittest.TestCase):
         compressed = lzma.compress(b'Package: example\nVersion: 1\n\n')
         checksum = hashlib.sha256(compressed).hexdigest()
         release = f'SHA256:\n {checksum} {len(compressed)} main/binary-amd64/Packages.xz\n'
-        for change in ('none', 'signature', 'release', 'compressed', 'size', 'component', 'package'):
+        for change in ('none', 'signature', 'release', 'compressed', 'size', 'component',
+                       'package', 'url'):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
                 index = {'url': 'https://snapshot.debian.org/archive/debian/date/dists/bookworm/InRelease',
@@ -73,6 +93,8 @@ class ApplicationTests(unittest.TestCase):
                     signed = signed.replace('main/', 'contrib/')
                 elif change == 'package':
                     index['packages'] = [['example', '2']]
+                elif change == 'url':
+                    index['url'] = 'https://unapproved.invalid/archive/debian/date/dists/bookworm/InRelease'
 
                 def fetch(url, path):
                     contents = compressed
@@ -88,7 +110,7 @@ class ApplicationTests(unittest.TestCase):
                 failure = None
                 if change == 'signature':
                     failure = subprocess.CalledProcessError(1, 'gpgv')
-                with patch.object(application, 'fetch', side_effect=fetch):
+                with patch.object(application, 'fetch', side_effect=fetch) as download:
                     with patch.object(application.subprocess, 'run', return_value=result, side_effect=failure) as verify:
                         if change == 'none':
                             packages = application.authenticate_index(directory, index, directory / 'keyring')
@@ -98,31 +120,49 @@ class ApplicationTests(unittest.TestCase):
                         else:
                             with self.assertRaises((ValueError, subprocess.CalledProcessError)):
                                 application.authenticate_index(directory, index, directory / 'keyring')
+                            if change == 'url':
+                                download.assert_not_called()
 
     def test_requires_the_reviewed_keyring_and_every_scanned_debian_version(self):
         for change in ('none', 'keyring', 'unlisted', 'empty'):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
                 directory = Path(temporary)
                 keyring = b'reviewed keyring'
-                evidence = {'keyringSha256': hashlib.sha256(keyring).hexdigest(), 'indexes': [{}]}
+                indexes = [{'suite': suite} for suite in ('bookworm', 'updates', 'security')]
+                evidence = {'keyringSha256': hashlib.sha256(keyring).hexdigest(), 'indexes': indexes}
                 if change == 'keyring':
                     keyring += b'changed'
                 (directory / 'debian-archive-keyring.gpg').write_bytes(keyring)
-                artifacts = [{'type': 'deb', 'name': 'example', 'version': '1'}]
+                artifacts = [{'type': 'deb', 'name': suite, 'version': '1'}
+                             for suite in ('bookworm', 'updates', 'security')]
                 if change == 'unlisted':
                     artifacts[0]['version'] = '2'
                 elif change == 'empty':
                     artifacts = []
+                def authenticate_index(directory, index, keyring):
+                    return {(index['suite'], '1')}
+
                 with patch.object(application.licences, 'read_json', return_value=evidence):
-                    with patch.object(application, 'authenticate_index', return_value={('example', '1')}) as index:
+                    with patch.object(application, 'authenticate_index', side_effect=authenticate_index) as index:
                         if change == 'none':
                             application.authenticate_debian(directory, {'artifacts': artifacts})
-                            self.assertEqual(index.call_count, 1)
+                            self.assertEqual(index.call_count, 3)
+                            self.assertEqual([call.args[1] for call in index.call_args_list], indexes)
                         else:
                             with self.assertRaises(ValueError):
                                 application.authenticate_debian(directory, {'artifacts': artifacts})
                             if change == 'keyring':
                                 index.assert_not_called()
+
+    def test_shared_checksum_rule_refuses_changed_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'evidence'
+            path.write_bytes(b'reviewed bytes')
+            checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(application.licences.checked_bytes(path, checksum), b'reviewed bytes')
+            path.write_bytes(b'changed bytes')
+            with self.assertRaisesRegex(ValueError, 'Evidence bytes changed'):
+                application.licences.checked_bytes(path, checksum)
 
 
 if __name__ == '__main__':
