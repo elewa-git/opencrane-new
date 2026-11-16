@@ -1,3 +1,16 @@
+import { sessionConfiguration } from '@opencrane/events/session-configuration';
+import type { Turn } from './turn-frame.ts';
+
+export function computerSessionConfiguration(
+  turn: Pick<Partial<Turn>, 'executionMode' | 'sharingClass' | 'senderAttemptId'>,
+) {
+  // Derive settings from admitted turn facts, never a supplied configuration.
+  const conversation = turn.senderAttemptId ? { routinePreparation: {} } : {};
+  return sessionConfiguration({ conversation, sharingClass: turn.sharingClass,
+    requestedMode: turn.executionMode ?? 'memory_free',
+    memoryEnabled: turn.executionMode === 'restricted' });
+}
+
 export function memoryFreeEnvironments() {
   return `default = "tools"
 include_local = false
@@ -13,6 +26,7 @@ cwd = "/workspace"
 }
 
 export function memoryFreeConfig(model: string) {
+  const configuration = computerSessionConfiguration({ executionMode: 'memory_free' });
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
 thread_unload_delay_secs = 0
@@ -44,9 +58,9 @@ memories = false
 apps = false
 plugins = false
 remote_plugin = false
-code_mode_host = true
-shell_tool = true
-unified_exec = true
+code_mode_host = ${configuration.localTools}
+shell_tool = ${configuration.localTools}
+unified_exec = ${configuration.localTools}
 shell_snapshot = false
 [skills]
 include_instructions = false
@@ -54,6 +68,7 @@ include_instructions = false
 }
 
 export function privateConfig(model: string) {
+  const configuration = computerSessionConfiguration({ executionMode: 'restricted' });
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
 thread_unload_delay_secs = 0
@@ -82,9 +97,9 @@ memories = false
 apps = false
 plugins = false
 remote_plugin = false
-code_mode_host = false
-shell_tool = false
-unified_exec = false
+code_mode_host = ${configuration.localTools}
+shell_tool = ${configuration.localTools}
+unified_exec = ${configuration.localTools}
 shell_snapshot = false
 `;
 }
