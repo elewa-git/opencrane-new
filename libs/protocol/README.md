@@ -10,8 +10,7 @@ They show safe profile status and connection needs without returning a key.
 
 Chat replies can name the files attached to a saved message. Older replies still work.
 Conversation lists can also carry one completed welcome with its own kind and route.
-Command activity replies may carry a masked view for a current chat member.
-Older activity keeps its plain label.
+Activity replies can show masked views to current chat members; older activity keeps its plain label.
 
 Control refusal history explains when someone was not the requester or their attempt
 conflicted with saved control. It contains no private computer or turn details.
