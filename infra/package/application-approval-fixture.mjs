@@ -1,0 +1,48 @@
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// Replace only the authenticated GitHub boundary; run the real approval consumer.
+export function applicationApprovalFixture(directory, image, options = {}) {
+  const bin = join(directory, 'application-bin');
+  mkdirSync(bin, { recursive: true });
+  const revision = 'a'.repeat(40);
+  const branch = 'work/pilot-15-s1';
+  const run = { id: 43, status: 'completed', conclusion: 'success', event: 'push',
+    path: '.github/workflows/application-package.yml', head_branch: branch, head_sha: revision,
+    repository: { full_name: 'elewa-git/opencrane-new' },
+    head_repository: { full_name: 'elewa-git/opencrane-new' }, ...options.run };
+  const approval = { runId: 43, revision, imageDigest: image.split('@')[1],
+    imageId: 'sha256:' + 'c'.repeat(64), scanSha256: 'd'.repeat(64), ...options.approval };
+  const scanner = join(directory, 'bin', 'gh');
+  if (options.scanner) copyFileSync(scanner, join(bin, 'scanner-gh'));
+  const github = `#!/usr/bin/env node
+const fs = require('node:fs');
+const cp = require('node:child_process');
+const args = process.argv.slice(2);
+const application = args.some(value => value.includes('application-package.yml')) ||
+  args[args.indexOf('--name') + 1] === 'application-approval' ||
+  args[args.indexOf('--name') + 1] === 'application-image';
+if (!application) {
+  const child = cp.spawnSync(${JSON.stringify(join(bin, 'scanner-gh'))}, args, {stdio: 'inherit'});
+  process.exit(child.status ?? 1);
+}
+if (args[0] === 'api') {
+  if (!args.includes('--hostname=github.com')) process.exit(2);
+  process.stdout.write(${JSON.stringify(JSON.stringify({ workflow_runs: options.noJob ? [] : [run] }))});
+} else {
+  if (!args.includes('https://github.com/elewa-git/opencrane-new')) process.exit(2);
+  const destination = args[args.indexOf('--dir') + 1];
+  fs.writeFileSync(destination + '/approval.json', ${JSON.stringify(JSON.stringify(approval))});
+}
+`;
+  const git = `#!/bin/sh
+case "$*" in
+  'rev-parse HEAD') printf '%s' '${revision}' ;;
+  'branch --show-current') printf '%s' '${branch}' ;;
+  *) exit 1 ;;
+esac
+`;
+  writeFileSync(join(bin, 'gh'), github, { mode: 0o700 });
+  writeFileSync(join(bin, 'git'), git, { mode: 0o700 });
+  return { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, approval };
+}
