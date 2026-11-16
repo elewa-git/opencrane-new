@@ -2,30 +2,115 @@
 
 ## Rework round 5 continued, 16 November 2026
 
-Result: PARTIAL. Source checks are in progress. Fresh-stack journey: NOT RUN.
-This continues round 5 within the owner's existing limits.
+Result: PARTIAL. Source gates: PASS. Fresh-stack journey: FAIL during shared startup.
+Every ordinary-server slice action is NOT RUN at both requested widths. The PR stays draft.
+Authorised limits remain two slices, 20 agent-hours and five rework rounds.
+This continues round 5 of 5. No further round or attempt is assumed.
 
-Fetched origin and completed the rebase onto repaired main `e5463218c`.
-README conflicts retained both current behaviour and ordinary-tool review rules.
-No rebase remains. The whole-stream read gate now passes with unchanged limits.
+### Source and rebase
 
-Before extracting the handler, all 242 tests in the six dispatch files passed
-in 682.99 seconds. Their assertions remain unchanged. Scoped ESLint reproduced
-`handle` complexity 20 against 15. Commit `74a902d16` separates remote preparation
-and personal sending, retaining the shared deadline and admission order. It removes
-obsolete suppressions, including the deleted Odoo source entry; none was raised.
-The complete post-change run is in progress.
+Journey source: `2d5734fb2de59da3fa26fa140e143af8d4593164`.
+Base: `1a278fd0bca3730f186efe8d077c4e03420eb332`.
+Fetched origin and completed both rebases: first onto repaired main `e5463218c`, then
+onto `1a278fd0b`. README conflicts retained both current behaviour and ordinary-tool
+review rules. The second rebase had no conflicts. The final fetch found the same main;
+`git rebase origin/main` reported the branch up to date. Neither rebase state remains.
 
-The changed-file lint stage also reproduced three slice test-size failures:
-`approvals.test.ts` has 1,692 counted lines against 1,686; `integrations.test.ts`
-has 2,198 against 2,189; `memory.test.ts` has 4,127 against 4,126.
-The affected behavioural paths are being run before moving or reusing their
-fixture helpers. No assertion or size cap will be loosened.
+The slice changes 1,360 application and library source lines, including the Odoo source
+deletion. Tests and documents are excluded. No dependency, event type, access stream,
+money check, memory check, timeout or lint cap was added or loosened.
 
-No secondary stack has been claimed during this continuation. Earlier attempts
-below remain historical evidence.
+### Structural findings and fixes
 
-### Earlier checkpoint within round 5
+Scoped ESLint reproduced `handle` complexity 20 against 15 before extraction.
+All 242 tests in the six dispatch files then passed before the handler changed
+(682.99 seconds). `98384d664` separates remote destination and catalogue preparation
+from personal sending. Both remote preparation steps retain one abort signal and the
+original deadline; credential preparation still precedes budget admission. Final scoped
+ESLint passes with zero warnings. Obsolete suppressions were removed, never raised.
+
+The six focused files from the earlier checkpoint are retained with identical assertions.
+Their original AST comparison covered 210 declarations and registrations. The continuation
+changes none of those test files. `003cdaea8` registers their measured durations in CI's
+grouping data. A list-only check assigns all 638 discovered test files exactly once,
+including all six dispatch files; this is selection evidence, not 638 executed suites.
+
+Changed-file lint also reproduced three slice fixture overruns: approvals 1,692 against
+1,686; integrations 2,198 against 2,189; memory 4,127 against 4,126. Test-first receipt
+`286f976e8` records those failures. Six affected paths passed before extraction.
+`72ed9bd1d` moves date cases, event setup and the memory preview fixture into test support.
+An AST comparison preserves every expect call and matcher in all three files. Sixteen
+selected paths passed twice afterwards; the remaining 408 cases in those files were not
+selected in this continuation. All three files now pass their unchanged caps.
+
+The earlier round-5 README rewrites remain within their frozen sizes. Main's read-ledger
+repair removes the inherited blocker; no whole-stream read baseline was raised here.
+
+### Fresh-stack attempt
+
+A separately claimed secondary slot 2 used `claim.sh`, `up.sh --fresh` and `down.sh`.
+`ZITADEL_KEY_FILE` referenced the operator-managed key file by path. The runner waited
+for one-minute load at most 8 before claiming. Development owner/access setup, managed
+calls and website readiness completed. The shared startup journey then failed at
+`infra/dev-stack/upload-journey.ts:21`, called from `journey.ts:578`, with:
+
+> File list did not finish applying
+
+That assertion is inside the HTTP 425 branch after the existing 120,000 ms deadline.
+The upload driver, shared journey and file-list route source are identical to main.
+A connection to ordinary MCP dispatch has not been established. Load subsequently rose
+to an observed 40.90; that observation alone does not establish the failure's cause.
+
+The launcher buffers the shared journey output, so quiet startup logs do not identify
+its current browser step. The failed result, rather than missing output, identifies
+this checkpoint. The ordinary-server collector never started.
+
+[Safe startup diagnostic](run-2026-11-16-r5/startup-failure.json).
+Private launcher logs and failure records were retained before cleanup. The shared
+journey also generated six existing live-view artefacts; private copies were kept and
+only those generated working-tree changes were restored. Teardown exited 0 and released
+slot 2. No secondary claim remains for this worktree. No current slice screenshots exist.
+
+| Required journey action | 1280 px | 390 px |
+| --- | --- | --- |
+| Fresh shared startup | FAIL: upload file list remained applying. | NOT RUN. |
+| Admin installs and discovers the ordinary standard server | NOT RUN. | NOT RUN. |
+| Admin saves Allow/Ask and audience access | NOT RUN. | NOT RUN. |
+| Admin reviews and publishes | NOT RUN. | NOT RUN. |
+| Member's live read returns the tool's result | NOT RUN. | NOT RUN. |
+| Member approves exactly one Ask write | NOT RUN. | NOT RUN. |
+| Changed tool list blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
+| Teardown and claim release | PASS. | NOT RUN: no claim. |
+
+Further investigation or another fresh attempt needs owner direction within this final
+round. No upload, projection, access or timeout change was made, and no attempt was
+repeated. Earlier successful journeys below do not qualify this source.
+
+### Own source checks
+
+All tests, typechecks and lint ran under `nice -n 10`. Database tests used the supplied
+shared disposable PostgreSQL database. No full root suite or fleet batch ran locally.
+
+| Check | Verdict |
+| --- | --- |
+| Dispatch/member/gateway batch | PASS twice: 251 tests, 684.44 and 795.07 seconds. |
+| Affected server fixture/date/preview paths | PASS twice: 16 selected cases, 103.26 and 89.40 seconds. Other cases were not selected. |
+| Assertion preservation | PASS: six dispatch files unchanged; all expect calls and matchers preserved in the three server extractions. |
+| CI grouping selection | PASS: 638 files assigned exactly once, six dispatch timings registered. |
+| Scoped lint:code | PASS with zero warnings; infrastructure remains excluded by repository configuration. |
+| lint:debt, lint:deps, lint:reads and lint:readmes | PASS with unchanged caps and read baselines. |
+| Knip and changelog | PASS. |
+| Workspace and infrastructure typecheck | PASS on the latest rebased source. |
+| Event catalogue | PASS: 174 types agree. |
+| Markdown, process evidence and qualification index | PASS after the final evidence update. |
+| Hosted CI for the evidence head | NOT RUN before push; final-head results are recorded in PR Evidence. |
+
+The two 251-case runs preceded the second rebase. A byte comparison confirms the tested
+dispatcher, its fixtures, member-call tests and library source dependencies are unchanged
+by that rebase. Final scoped lint, dependency checks, typecheck and catalogue checks ran
+afterwards. The fresh startup used the source and base named above.
+
+## Earlier checkpoint within round 5
 
 Result: PARTIAL. Required source gate: FAIL. Fresh-stack journey: NOT RUN at both widths.
 No head was pushed in this round. The PR remains draft.
