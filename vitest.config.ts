@@ -10,6 +10,7 @@ export default defineConfig({
       'infra/package/backup-capture.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
+    coverage: { provider: 'v8' },
     sequence: { sequencer: DurationSequencer },
     passWithNoTests: false,
     // Disposable service fixtures need room under load; authority tests assert their own deadlines.

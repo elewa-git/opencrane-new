@@ -1,0 +1,5 @@
+pip==25.1.1
+setuptools==80.9.0
+wheel==0.45.1
+tree-sitter==0.25.2
+tree-sitter-language-pack==1.25.2
