@@ -149,9 +149,8 @@ It grants no access and starts no background work.
 A saved reply can include receipts for several small pieces of text. Each receipt
 keeps its original number and digest so a repeated piece can be checked.
 
-A personal account choice records either one checked profile revision or an explicit clear.
-It can also record which assistants the person allows to use their chosen key.
-These records grant no access and contain no account label or credential.
+Personal account choices record a checked profile revision or explicit clear and may name
+allowed assistants. They grant no access and contain no account label or credential.
 
 Saved personal connection revocations and replacements name the background cleanup
 reaction. Replaying those records never deletes stored credentials.

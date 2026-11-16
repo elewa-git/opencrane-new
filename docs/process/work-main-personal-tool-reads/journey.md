@@ -48,7 +48,7 @@ The failed core journey holds this draft from landing.
   whole-stream read sites, down from four, against an unchanged baseline of two.
   The stale decision baseline decreases from two to one. Total known reads: 311.
 - PASS: typecheck, event catalogue check, changed-file ESLint without warnings,
-  knip, Markdown lint and changelog validation. All ran under `nice -n 10`.
+  knip, Markdown lint, README size checks and changelog validation. All ran under `nice -n 10`.
 
 The existing consent and personal-key tests were kept unchanged. The added test
 pins legacy owner consent after assistant activity, refusals for foreign, shared

@@ -135,16 +135,14 @@ After a restart it can recover a saved reply, but cannot send the code again.
 The worker can verify the account in that saved reply using an operator-provided public key.
 It checks the provider's signature and ties the identity to the original sign-in request.
 The identity result contains only the verified issuer and account identifier.
-For a personal API key, an admin names a reviewed read-only tool that checks the
-account. It refuses account replies that copy the key, including encoded text.
-The member can then verify and explicitly select their key in My tools.
-They choose which assistants may use it. Only their own personal assistant is allowed
-until they change the list. Switching it off stops tool offers and new releases.
-A changed account blocks the replacement. Every tool call still checks current access
-and records its credential release before forwarding. Concurrent personal assistants
-use their requesters' selected keys. Tool arguments cannot choose another account,
-and a revoked key is refused before the next release. Within one personal tool call it reuses
-confirmed projection receipts, while checking current permissions each time.
+An admin chooses a reviewed read-only tool to check a personal key's account.
+Replies containing the key, including encoded text, are refused. Members verify and choose
+their key and allowed assistants in My tools. Only their own personal assistant is allowed
+by default. Disabling it stops tool offers and new releases.
+A changed account blocks replacement. Each call checks current access and records its release
+before forwarding. Concurrent personal assistants use their requesters' selected keys.
+Tool arguments cannot choose another account. A revoked key is refused before its next release.
+One personal call reuses confirmed projection receipts and checks current permissions each time.
 The result stays unconfirmed until an explicit internal confirmation saves the first account
 generation. That save grants no tool access.
 Public routes remain unavailable.
