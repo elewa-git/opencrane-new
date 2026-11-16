@@ -422,17 +422,14 @@ Member departure reviews check whether any routine exists without opening routin
 instructions or reading every routine. Any saved routine still blocks removal.
 The server checks current admin access after preparing the review, even if preparation fails.
 
-Members can explicitly save or clear their own personal account choice through the server.
-The reply confirms the saved choice without claiming the account can be used.
-Verified bearer choices require the reviewed account check. Verified OAuth choices
-require current operator settings supplied by the server.
-For a chat turn, the server offers a personal tool only when the requester still has
-a verified choice for that server and has allowed this assistant to use it. Missing
-assistant lists allow only the person’s own personal assistant. My tools lets the
-owner change the list; an admin cannot change it for them. The signed turn pass holds the chosen profile and
-choice revision. The computer sees the usual tool fields, and the models process checks
-the current choice again before sending a call. Account choices load before the short
-access check for the turn starts. Tool offers read independent grant checks and
+Members save or clear their own account choice. Its receipt does not grant tool access.
+Verified bearer choices need the reviewed account check. Verified OAuth choices need
+current operator settings supplied by the server.
+A chat offers personal tools only with a verified choice and consent for that assistant.
+An absent list allows only the person’s own personal assistant. Only the owner can change it
+in My tools. The signed turn pass holds the profile and choice revision; the computer sees
+normal tool fields. The models process rechecks the choice before sending. Choices load before the
+turn's short access check. Tool offers read independent grant checks and
 selected-account facts together, so slow reads do not add their waiting times.
 Every check must still allow the offer within the existing build deadline.
 Members can recover their own original account selection or clear receipt by its

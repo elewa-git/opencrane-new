@@ -1,0 +1,259 @@
+{
+  "releases": [
+    {
+      "sequence": 502,
+      "requestId": "bc3107a8-0032-4a09-a995-4180ac370e6f",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "3d8f5ce5-769b-4ac7-85f1-af955b7ddd74",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 471,
+      "lifetimeMs": 30000
+    },
+    {
+      "sequence": 548,
+      "requestId": "f9f4faf6-aa22-4374-a38c-d7d90bb2942b",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "b1ad4095-7473-4fa0-a52e-237cb80f9b8d",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 533,
+      "lifetimeMs": 30000
+    },
+    {
+      "sequence": 592,
+      "requestId": "baea677b-6151-4419-99a3-ff9ffcd38715",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "a37a75fd-bee9-44e6-bf1a-f89cb3641e3e",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 561,
+      "lifetimeMs": 30000
+    },
+    {
+      "sequence": 639,
+      "requestId": "95f1f545-8221-48a3-97d0-9c269d8ebd99",
+      "argumentsDigest": "71c400a63cc10b3eb867b635d8b6200a3c2fce7402be9c8db2f181f00c8f31c0",
+      "conversationId": "0276d395-813a-4383-b7e8-42ccb2481c56",
+      "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+      "requesterId": "zitadel-member",
+      "toolName": "read_fixture_quote",
+      "selectionRevision": 624,
+      "lifetimeMs": 30000
+    }
+  ],
+  "dispatches": [
+    {
+      "sequence": 499,
+      "type": "tool.dispatch_started",
+      "requestId": "bc3107a8-0032-4a09-a995-4180ac370e6f",
+      "conversationId": "3d8f5ce5-769b-4ac7-85f1-af955b7ddd74"
+    },
+    {
+      "sequence": 545,
+      "type": "tool.dispatch_started",
+      "requestId": "f9f4faf6-aa22-4374-a38c-d7d90bb2942b",
+      "conversationId": "b1ad4095-7473-4fa0-a52e-237cb80f9b8d"
+    },
+    {
+      "sequence": 589,
+      "type": "tool.dispatch_started",
+      "requestId": "baea677b-6151-4419-99a3-ff9ffcd38715",
+      "conversationId": "a37a75fd-bee9-44e6-bf1a-f89cb3641e3e"
+    },
+    {
+      "sequence": 636,
+      "type": "tool.dispatch_started",
+      "requestId": "95f1f545-8221-48a3-97d0-9c269d8ebd99",
+      "conversationId": "0276d395-813a-4383-b7e8-42ccb2481c56"
+    }
+  ],
+  "choices": [
+    {
+      "sequence": 471,
+      "expectedSequence": 0,
+      "userId": "zitadel-member",
+      "profileId": "e6351ae3-ee1b-4357-958e-f7c54ae3d3d7"
+    },
+    {
+      "sequence": 514,
+      "expectedSequence": 471,
+      "userId": "zitadel-member",
+      "profileId": "e6351ae3-ee1b-4357-958e-f7c54ae3d3d7",
+      "allowedAssistantIds": []
+    },
+    {
+      "sequence": 533,
+      "expectedSequence": 514,
+      "userId": "zitadel-member",
+      "profileId": "e6351ae3-ee1b-4357-958e-f7c54ae3d3d7",
+      "allowedAssistantIds": [
+        "personal-73d770dde01f8ce0aee9d9309ea3167d"
+      ]
+    },
+    {
+      "sequence": 561,
+      "expectedSequence": 533,
+      "userId": "zitadel-member",
+      "profileId": "aa619156-7b17-48ad-b480-328677f6e5cb",
+      "allowedAssistantIds": [
+        "personal-73d770dde01f8ce0aee9d9309ea3167d"
+      ]
+    },
+    {
+      "sequence": 605,
+      "expectedSequence": 561,
+      "userId": "zitadel-member",
+      "profileId": "aa619156-7b17-48ad-b480-328677f6e5cb",
+      "allowedAssistantIds": []
+    },
+    {
+      "sequence": 624,
+      "expectedSequence": 605,
+      "userId": "zitadel-member",
+      "profileId": "aa619156-7b17-48ad-b480-328677f6e5cb",
+      "allowedAssistantIds": [
+        "personal-73d770dde01f8ce0aee9d9309ea3167d"
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "width": 1280,
+      "disabled": {
+        "sequence": 514,
+        "observedAt": "2026-11-16T15:50:41.122Z"
+      },
+      "enabled": {
+        "sequence": 533,
+        "observedAt": "2026-11-16T15:50:54.907Z"
+      },
+      "beforeConversation": "3d8f5ce5-769b-4ac7-85f1-af955b7ddd74",
+      "refusedConversation": "40790898-b18b-43b4-a582-fedd8832d1bb",
+      "afterConversation": "b1ad4095-7473-4fa0-a52e-237cb80f9b8d",
+      "verdict": "PASS",
+      "offReleaseCount": 0,
+      "offDispatchCount": 0,
+      "restoredReleaseLifetimesMs": [
+        30000
+      ]
+    },
+    {
+      "width": 390,
+      "disabled": {
+        "sequence": 605,
+        "observedAt": "2026-11-16T15:52:40.876Z"
+      },
+      "enabled": {
+        "sequence": 624,
+        "observedAt": "2026-11-16T15:52:53.182Z"
+      },
+      "beforeConversation": "a37a75fd-bee9-44e6-bf1a-f89cb3641e3e",
+      "refusedConversation": "bfcafd92-eac6-4d36-9d6b-d1db9fed44c5",
+      "afterConversation": "0276d395-813a-4383-b7e8-42ccb2481c56",
+      "verdict": "PASS",
+      "offReleaseCount": 0,
+      "offDispatchCount": 0,
+      "restoredReleaseLifetimesMs": [
+        30000
+      ]
+    }
+  ],
+  "profileResponses": [
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "hostLoads": [
+    {
+      "step": "sign in",
+      "load": 7.27,
+      "observedAt": "2026-11-16T15:48:31.005Z"
+    },
+    {
+      "step": "warm personal assistant at 1280px",
+      "load": 7.01,
+      "observedAt": "2026-11-16T15:48:37.083Z"
+    },
+    {
+      "step": "live tool before disabling at 1280px",
+      "load": 7.65,
+      "observedAt": "2026-11-16T15:48:52.203Z"
+    },
+    {
+      "step": "switch own assistant off at 1280px",
+      "load": 6.81,
+      "observedAt": "2026-11-16T15:50:40.661Z"
+    },
+    {
+      "step": "completed turn refused with link at 1280px",
+      "load": 6.81,
+      "observedAt": "2026-11-16T15:50:41.361Z"
+    },
+    {
+      "step": "switch own assistant on at 1280px",
+      "load": 7.32,
+      "observedAt": "2026-11-16T15:50:53.494Z"
+    },
+    {
+      "step": "live tool restored at 1280px",
+      "load": 7.69,
+      "observedAt": "2026-11-16T15:50:55.213Z"
+    },
+    {
+      "step": "live tool restored at 1280px",
+      "load": 6.35,
+      "observedAt": "2026-11-16T15:52:11.949Z"
+    },
+    {
+      "step": "warm personal assistant at 390px",
+      "load": 6.48,
+      "observedAt": "2026-11-16T15:52:17.377Z"
+    },
+    {
+      "step": "live tool before disabling at 390px",
+      "load": 6.6,
+      "observedAt": "2026-11-16T15:52:26.534Z"
+    },
+    {
+      "step": "switch own assistant off at 390px",
+      "load": 6.43,
+      "observedAt": "2026-11-16T15:52:38.838Z"
+    },
+    {
+      "step": "completed turn refused with link at 390px",
+      "load": 6.43,
+      "observedAt": "2026-11-16T15:52:41.085Z"
+    },
+    {
+      "step": "switch own assistant on at 390px",
+      "load": 6.99,
+      "observedAt": "2026-11-16T15:52:51.976Z"
+    },
+    {
+      "step": "live tool restored at 390px",
+      "load": 6.99,
+      "observedAt": "2026-11-16T15:52:53.396Z"
+    },
+    {
+      "step": "check release and dispatch records",
+      "load": 7.19,
+      "observedAt": "2026-11-16T15:53:05.361Z"
+    }
+  ],
+  "refusedConversations": [
+    "40790898-b18b-43b4-a582-fedd8832d1bb",
+    "bfcafd92-eac6-4d36-9d6b-d1db9fed44c5"
+  ],
+  "noRefusedDispatch": true
+}

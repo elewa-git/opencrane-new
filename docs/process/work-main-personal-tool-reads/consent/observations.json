@@ -1,0 +1,32 @@
+[
+  {
+    "width": 1280,
+    "disabled": {
+      "sequence": 514,
+      "observedAt": "2026-11-16T15:50:41.122Z"
+    },
+    "enabled": {
+      "sequence": 533,
+      "observedAt": "2026-11-16T15:50:54.907Z"
+    },
+    "beforeConversation": "3d8f5ce5-769b-4ac7-85f1-af955b7ddd74",
+    "refusedConversation": "40790898-b18b-43b4-a582-fedd8832d1bb",
+    "afterConversation": "b1ad4095-7473-4fa0-a52e-237cb80f9b8d",
+    "verdict": "PASS"
+  },
+  {
+    "width": 390,
+    "disabled": {
+      "sequence": 605,
+      "observedAt": "2026-11-16T15:52:40.876Z"
+    },
+    "enabled": {
+      "sequence": 624,
+      "observedAt": "2026-11-16T15:52:53.182Z"
+    },
+    "beforeConversation": "a37a75fd-bee9-44e6-bf1a-f89cb3641e3e",
+    "refusedConversation": "bfcafd92-eac6-4d36-9d6b-d1db9fed44c5",
+    "afterConversation": "0276d395-813a-4383-b7e8-42ccb2481c56",
+    "verdict": "PASS"
+  }
+]

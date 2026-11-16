@@ -3,13 +3,13 @@ import type { legacyTurnSchema } from './decision-turn-token.ts';
 import { parseMcpCall } from './mcp.ts';
 import { createHash } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { history } from './actor.ts';
 import { foldConnection } from './bearer-connections.ts';
 import { readConnectionSelection } from './connection-selection.ts';
 import { selectedPersonalAccount, type PersonalToolContext } from './personal-account.ts';
 export type { PersonalToolContext } from './personal-account.ts';
-import { assistantMayUsePersonalKey } from './personal-key-consent.ts';
+import { assistantMayUsePersonalKey, readPersonalKeyAssistant } from './personal-key-consent.ts';
 import { connectionAccount } from './connection-account.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
@@ -26,6 +26,7 @@ export interface PersonalToolRequest {
   toolName: string;
   loadConfiguration: OAuthConfigurationLoader;
   boundSelection: { profileId: string; selectionRevision: number };
+  serverRows?: StoredEvent[];
 }
 
 export async function personalToolContext(store: EventStore, binding: Binding,
@@ -40,7 +41,7 @@ export async function personalToolContext(store: EventStore, binding: Binding,
     throw new Error('Personal tool unavailable');
   }
   const deadline = performance.now() + 10_000;
-  const assistantRows = await history(store, `assistant-${assistantId}`, binding.silo, deadline);
+  const assistantRows = await readPersonalKeyAssistant(store, binding.silo, assistantId, deadline);
   const consent = { ...selected, userId: requesterId };
   if (!assistantMayUsePersonalKey(consent, assistantId, assistantRows)) {
     throw new Error('Personal tool unavailable');
@@ -48,7 +49,8 @@ export async function personalToolContext(store: EventStore, binding: Binding,
   const profileSubject = `connection-${requesterId}-${serverId}-${selected.profileId}`;
   const profileRows = await history(store, profileSubject, binding.silo, deadline);
   const profile = foldConnection(profileRows);
-  const serverRows = await history(store, `mcp-${serverId}`, binding.silo, deadline);
+  const serverRows = request.serverRows ?? await readServerRows(
+    store, binding.silo, serverId, deadline);
   const policy = toolPolicyFromRows(serverRows);
   const saved = profile.data;
   if (!saved || profile.sequence !== selected.profileRevision ||
@@ -77,6 +79,10 @@ export async function personalToolContext(store: EventStore, binding: Binding,
   };
 }
 
+async function readServerRows(store: EventStore, silo: string, serverId: string, deadline: number) {
+  return history(store, `mcp-${serverId}`, silo, deadline);
+}
+
 export interface PersonalCallRequest {
   assistantId: string;
   url: string | undefined;
@@ -90,7 +96,7 @@ export async function preparePersonalCall(store: EventStore, binding: Binding,
   const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(request.url ?? '');
   if (!match) throw new Error('Unknown MCP route');
   const serverId = match[1]!;
-  const rows = await history(store, `mcp-${serverId}`, binding.silo, performance.now() + 10_000);
+  const rows = await readServerRows(store, binding.silo, serverId, performance.now() + 10_000);
   const policy = toolPolicyFromRows(rows);
   if (policy.accountMode !== 'personal') return undefined;
   if (!request.loadConfiguration) throw new Error('Personal tool unavailable');
@@ -101,6 +107,6 @@ export async function preparePersonalCall(store: EventStore, binding: Binding,
   const boundSelection = turn.personalSelections?.find(matchesServer);
   if (!boundSelection) throw new Error('Personal tool unavailable');
   const personalRequest = { assistantId: request.assistantId, toolName: parsed.call.params.name,
-    loadConfiguration: request.loadConfiguration, boundSelection };
+    loadConfiguration: request.loadConfiguration, boundSelection, serverRows: rows };
   return personalToolContext(store, binding, turn.requester, serverId, personalRequest);
 }
