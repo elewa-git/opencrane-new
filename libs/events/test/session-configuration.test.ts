@@ -10,6 +10,7 @@ type ConfigurationCase = {
 
 const personal: SessionConfiguration = {
   kind: 'personal', payer: 'installation_default', payerMatchesAssistant: false,
+  assistantPayerRequired: false,
   executionMode: 'memory_free', process: 'persistent_thread', context: 'thread',
   tools: 'reviewed_mcp', credentials: { personal: true, company: 'never' },
   memory: 'none', uploads: true, attachments: true, localTools: true,
@@ -17,6 +18,7 @@ const personal: SessionConfiguration = {
 };
 const privatePersonal: SessionConfiguration = {
   kind: 'personal', payer: 'installation_default', payerMatchesAssistant: false,
+  assistantPayerRequired: false,
   executionMode: 'restricted', process: 'fresh_isolated', context: 'own_exchanges',
   tools: 'memory_only', credentials: { personal: false, company: 'never' },
   memory: 'personal', uploads: true, attachments: false, localTools: false,
@@ -24,6 +26,7 @@ const privatePersonal: SessionConfiguration = {
 };
 const teamPrivate: SessionConfiguration = {
   kind: 'team_private', payer: 'assistant_group', payerMatchesAssistant: true,
+  assistantPayerRequired: true,
   executionMode: 'restricted', process: 'fresh_isolated', context: 'own_exchanges',
   tools: 'none', credentials: { personal: false, company: 'never' },
   memory: 'none', uploads: false, attachments: false, localTools: false,
@@ -31,6 +34,7 @@ const teamPrivate: SessionConfiguration = {
 };
 const teamMemoryFree: SessionConfiguration = {
   kind: 'team_private', payer: 'assistant_group', payerMatchesAssistant: true,
+  assistantPayerRequired: true,
   executionMode: 'memory_free', process: 'persistent_thread', context: 'thread',
   tools: 'none', credentials: { personal: false, company: 'never' },
   memory: 'none', uploads: false, attachments: true, localTools: true,
@@ -38,6 +42,7 @@ const teamMemoryFree: SessionConfiguration = {
 };
 const child: SessionConfiguration = {
   kind: 'shared_child', payer: 'root_allowance', payerMatchesAssistant: true,
+  assistantPayerRequired: true,
   executionMode: 'restricted', process: 'fresh_isolated', context: 'shared_exchanges',
   tools: 'none', credentials: { personal: false, company: 'never' },
   memory: 'none', uploads: false, attachments: false, localTools: false,
@@ -45,6 +50,7 @@ const child: SessionConfiguration = {
 };
 const routine: SessionConfiguration = {
   kind: 'routine', payer: 'root_allowance', payerMatchesAssistant: true,
+  assistantPayerRequired: true,
   executionMode: 'restricted', process: 'fresh_isolated', context: 'routine_input',
   tools: 'reviewed_mcp', credentials: { personal: false, company: 'routine_ask' },
   memory: 'none', uploads: false, attachments: false, localTools: false,
@@ -73,7 +79,7 @@ const cases: ConfigurationCase[] = [
     expected: child },
   { name: 'subchat with a personal assistant', input: { ...personalInput,
     conversation: { contextKind: 'shared_child' } },
-    expected: { ...child, payerMatchesAssistant: false, uploads: true } },
+    expected: { ...child, payerMatchesAssistant: false, assistantPayerRequired: false, uploads: true } },
   { name: 'routine run', input: { ...teamInput,
     conversation: { payingGroupId: 'group', routinePreparation: {} } }, expected: routine },
   { name: 'shared assistant with a different payer', input: { ...teamInput,
@@ -89,8 +95,9 @@ function matchesFullConfiguration(test: ConfigurationCase) {
 }
 it.each(cases)('$name', matchesFullConfiguration);
 
-it('keeps context and tools independent in the configuration type', () => {
+function acceptsSharedContextWithTools() {
   const sharedWithTools: SessionConfiguration = { ...child, tools: 'reviewed_mcp' };
   expect(sharedWithTools.context).toBe('shared_exchanges');
   expect(sharedWithTools.tools).toBe('reviewed_mcp');
-});
+}
+it('keeps context and tools independent in the configuration type', acceptsSharedContextWithTools);

@@ -151,3 +151,7 @@ export { toolCredentialReleaseSchema } from './credential-release.ts';
 export { companyCredentialReleaseSchema, credentialReleaseSchema } from './credential-release.ts';
 
 export { artifactListSchema } from './file-events.ts';
+
+export { sessionConfiguration, type SessionConfiguration,
+  type SessionConfigurationInput } from './session-configuration.ts';
+export { sessionAssistantSchema, type SessionAssistant } from './session-assistant.ts';

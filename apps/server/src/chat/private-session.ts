@@ -1,3 +1,4 @@
+import { sessionAssistantSchema, sessionConfiguration } from '@opencrane/events';
 import { z } from 'zod';
 import {
   authorityFence, AuthorityApplying, groupMembership,
@@ -10,11 +11,6 @@ type SessionAuthorityOptions = { silo: string; store: EventStore; binding: Bindi
 const sessionSchema = z.object({
   assistantId: z.string(), createdBy: z.string(), payingGroupId: z.string().optional(),
 });
-const assistantSchema = z.object({
-  kind: z.enum(['personal', 'team']), ownerId: z.string(),
-  payingGroupId: z.string().optional(),
-});
-
 // Read only the creation event. Later messages cannot change the session's owner or payer.
 export async function creationEvent(store: Pick<EventStore, 'readStream'>, silo: string,
   subject: string, type: string, deadline = performance.now() + 10_000) {
@@ -49,7 +45,7 @@ export function privateSessionReader(options: SessionAuthorityOptions, memberId:
       assistants.set(created.assistantId, assistantRead);
     }
     const assistantEvent = await assistantRead;
-    const assistant = assistantSchema.parse(assistantEvent.data);
+    const assistant = sessionAssistantSchema.parse(assistantEvent.data);
     if (assistant.kind !== 'team') return;
     if (created.createdBy !== memberId) {
       throw new GroupRefused('Private session belongs to another requester');
@@ -71,7 +67,7 @@ export async function privateSessionCreation(options: SessionAuthorityOptions,
   const created = sessionSchema.parse(event.data);
   const assistantEvent = await creationEvent(options.store, options.silo,
     `assistant-${created.assistantId}`, 'assistant.created');
-  const assistant = assistantSchema.parse(assistantEvent.data);
+  const assistant = sessionAssistantSchema.parse(assistantEvent.data);
   return { created, assistantEvent, assistant };
 }
 
@@ -102,7 +98,10 @@ export async function writePrivateSession(options: SessionAuthorityOptions,
     await requirePrivateReader(options, memberId, session);
   } else {
     const payer = session.created.payingGroupId;
-    if (!payer || payer !== session.assistant.payingGroupId) {
+    const configuration = sessionConfiguration({ conversation: session.created,
+      assistantKind: session.assistant.kind,
+      assistantPayingGroupId: session.assistant.payingGroupId, memoryEnabled: false });
+    if (!payer || !configuration.payerMatchesAssistant) {
       throw new GroupRefused('Paying group must match the assistant');
     }
     await sharedAssistantAuthority(options, memberId, session.created.assistantId, payer, fresh);
@@ -115,7 +114,7 @@ export async function sharedAssistantRead(options: SessionAuthorityOptions, memb
   assistantId: string, event?: Awaited<ReturnType<typeof creationEvent>>) {
   const created = event ?? await creationEvent(options.store, options.silo,
     `assistant-${assistantId}`, 'assistant.created');
-  const assistant = assistantSchema.parse(created.data);
+  const assistant = sessionAssistantSchema.parse(created.data);
   await groupMembership(options.store, options.silo, memberId, assistant.ownerId, options.binding);
   const auth = memberAuthorisation(options.binding);
   if (!await auth.applied(created.id)) {
@@ -134,7 +133,7 @@ export async function sharedAssistantAuthority(options: SessionAuthorityOptions,
   fresh.include(`member-${memberId}`, `assistant-${assistantId}`);
   const event = await creationEvent(options.store, options.silo,
     `assistant-${assistantId}`, 'assistant.created', fresh.deadline);
-  const assistant = assistantSchema.parse(event.data);
+  const assistant = sessionAssistantSchema.parse(event.data);
   fresh.include(`team-${assistant.ownerId}`, `team-${payingGroupId}`);
   // Check active membership and its receipts with each group; ownership is not required.
   for (const groupId of new Set([assistant.ownerId, payingGroupId])) {

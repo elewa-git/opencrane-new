@@ -185,6 +185,34 @@ which projection or reaction follows each event. Change that catalogue and this 
 together. Money is safe integer EUR cents; sensitive payloads use ciphertext/key ids,
 and credentials appear only as secret references.
 
+## Session configuration
+
+`sessionConfiguration` is pure. It reads the conversation's saved `contextKind`,
+`routinePreparation` and `payingGroupId`, the assistant kind and payer, the requested
+turn mode, and whether personal memory has passed installation qualification.
+It never reads a stream, checks access, writes an event or accepts a remote policy.
+Callers with partial saved facts use only fields independent of the missing facts;
+for example, sharing class depends only on conversation creation.
+
+`SessionConfiguration` keeps execution mode, process isolation, context, tools,
+credentials, memory, upload permission and turn attachments separate. An explicit
+memory-free request wins over the personal memory setting. Shared assistants default
+to restricted mode without personal memory qualification. Subchats and routine runs
+use a spending root; `assistantPayerRequired` separately keeps a shared assistant's
+saved paying group binding. A personal subchat retains its existing upload permission.
+Restricted turns receive no attachments, including when uploads remain permitted.
+The bridge still suppresses offers for explicitly requested memory-free turns.
+The configuration describes eligibility; live grants, policy, deployment checks and
+routine Ask approval remain mandatory. Routine execution remains disabled.
+It deliberately has no audience field. Callers retain their current ownership checks.
+
+`sessionAssistantSchema` selects the assistant fields from the full event schema
+once. It keeps the earlier partial readers’ string validation. File and memory
+readers select their smaller shapes and retain their previous kind validation.
+The event schema and its saved field order stay unchanged.
+`test/session-configuration.test.ts` names each current session kind and compares
+its full configuration, including the two shared-assistant modes and payer mismatches.
+
 ## Verification and dependencies
 
 `member.invited` and `member.joined` accept optional

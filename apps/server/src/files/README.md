@@ -5,6 +5,7 @@ This folder handles files people attach to conversations. It checks the file's c
 ## What it is responsible for
 
 - Checks the signed-in member, current conversation access and the website making a write.
+- Reads upload permission from the shared session settings in the events library.
 - Checks file names and supported document, image and text formats against their contents.
 - Accepts well-formed SVG as an image, including files with an XML declaration.
   It refuses document type and entity declarations.
@@ -57,6 +58,7 @@ The [server](../../README.md) registers file requests. [Members](../members/READ
 flowchart LR
   server[Server] --> files[Files]
   chat[Chat] -->|current access| files
+  files -->|reads upload permission| events[Events and session settings]
   files -->|scans uploads| scanner[Scanner]
   files -->|stores clean bytes| storage[File storage]
   computer[Assistant computer] -->|sends saved files| files

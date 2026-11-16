@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { TurnSummary } from '@opencrane/auth';
-import { computerTurnStartedDataSchema } from '@opencrane/events';
+import { computerTurnStartedDataSchema, sessionConfiguration } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import type { privateCallers } from '@opencrane/models';
@@ -355,7 +355,9 @@ export async function toolsForMessage(
 
 export function mayOfferTurnTools(assistantKind: string, executionMode: string,
   hasBinding: boolean) {
-  return assistantKind === 'personal' && executionMode === 'memory_free' && hasBinding;
+  const configuration = sessionConfiguration({ conversation: {}, assistantKind,
+    requestedMode: executionMode, memoryEnabled: executionMode !== 'memory_free' });
+  return configuration.tools === 'reviewed_mcp' && hasBinding;
 }
 
 function logOmittedServers(omittedServers: number) {

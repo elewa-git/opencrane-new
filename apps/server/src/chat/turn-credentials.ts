@@ -1,3 +1,4 @@
+import { sessionConfiguration, sessionAssistantSchema } from '@opencrane/events';
 import { turnToolReaders } from './turn-tool-readers.ts';
 import type { recallBridge } from './recall-bridge.ts';
 import type { WebSocket } from 'ws';
@@ -17,6 +18,9 @@ import { creationEvent } from './private-session.ts';
 import { agentSessionData } from './reports.ts';
 import { requireTurnMember, TurnAdmissionRejected, turnCommand } from './turns.ts';
 import type { ChatOptions } from './routes.ts';
+
+const assistantKind = sessionAssistantSchema.pick({ kind: true });
+const savedAssistantKind = assistantKind.extend({ kind: z.string() });
 
 type BridgeOptions = { recall?: ReturnType<typeof recallBridge> } &
   Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
@@ -168,12 +172,14 @@ async function turnContextFor(options: BridgeOptions,
     const event = await creationEvent(options.store, options.silo,
       `conversation-${report.conversationId}`, 'conversation.created');
     const created = agentSessionData(event.data);
-    const shared = 'contextKind' in created && created.contextKind === 'shared_child';
+    const configuration = sessionConfiguration({ conversation: created,
+      requestedMode: binding.executionMode, memoryEnabled: binding.executionMode === 'restricted' });
+    const shared = configuration.context === 'shared_exchanges';
     if (shared !== (binding.sharingClass === 'shared_only')
       || (shared && binding.executionMode !== 'restricted')) {
       throw new TurnContextUnavailable('Turn context mismatch');
     }
-    if (binding.executionMode !== 'restricted') return undefined;
+    if (configuration.process !== 'fresh_isolated') return undefined;
     // Read history after admission, outside the two-second access check.
     const rows = await chatHistory(options.store, options.silo, report.conversationId);
     const message = rows.find(isMessage);
@@ -210,12 +216,17 @@ function canRenewTurnStart(rows: ChatRows, report: Report, initialLoaded: boolea
 async function initialMemoryFor(options: BridgeOptions,
   context: Parameters<typeof turnCommand>[1],
   turn: NonNullable<Awaited<ReturnType<typeof turnCommand>>>, replay: boolean) {
-  if (turn.executionMode !== 'restricted' || turn.sharingClass || turn.rootId !== undefined) {
-    return undefined;
-  }
+  const conversation = { contextKind: turn.sharingClass ? 'shared_child' as const : undefined };
+  const input = { conversation, requestedMode: turn.executionMode,
+    memoryEnabled: turn.executionMode === 'restricted' };
+  const configuration = sessionConfiguration(input);
+  if (configuration.process !== 'fresh_isolated' || configuration.sharingClass
+    || turn.rootId !== undefined) return undefined;
   const assistant = await creationEvent(options.store, options.silo,
     `assistant-${context.assistantId}`, 'assistant.created');
-  if (z.object({ kind: z.string() }).parse(assistant.data).kind !== 'personal') return undefined;
+  const details = savedAssistantKind.parse(assistant.data);
+  const personal = sessionConfiguration({ ...input, assistantKind: details.kind });
+  if (personal.memory !== 'personal') return undefined;
   if (replay || !options.db || !options.binding || !options.feed) throw new LoadedMemoryRefused();
   const activity = await approvalActivity(options.store, options.silo, context.assistantId,
     turn.conversationId, turn.turnId, performance.now() + 10_000);

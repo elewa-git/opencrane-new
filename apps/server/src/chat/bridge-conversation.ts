@@ -8,7 +8,7 @@ import { chatMembership } from './participation.ts';
 import { isComputerLifecycle, readComputerControl } from '@opencrane/auth';
 import type { Client } from 'minio/dist/esm/minio.mjs';
 import { agentTurnStopRequestedDataSchema, fileDeliveredDataSchema, fileUploadedDataSchema,
-  messagePostedDataSchema }
+  messagePostedDataSchema, sessionConfiguration, type SessionConfiguration }
   from '@opencrane/events';
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
@@ -121,16 +121,18 @@ function attachmentsBefore(
 export function turnMessage(options: WatchOptions, conversation: AgentSession,
   rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
   const posted = messagePostedDataSchema.parse(message.event.data);
-  const attachments = executionMode === 'restricted'
-    ? [] : attachmentsBefore(rows, uploads, message.sequence, posted.attachmentIds);
+  const configuration = sessionConfiguration({ conversation, requestedMode: executionMode,
+    assistantKind: conversation.assistantKind, memoryEnabled: executionMode === 'restricted' });
+  const attachments = configuration.attachments
+    ? attachmentsBefore(rows, uploads, message.sequence, posted.attachmentIds) : [];
   const requester = z.object({ authorId: z.string() }).parse(message.event.data);
   const text = options.keys.decrypt(options.silo, conversation.conversationId, message.event.data);
   const turn = { type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
     requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
     attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
     token: 'preparing', expiresAt: Date.now() + 120_000 };
-  if ('contextKind' in conversation && conversation.contextKind === 'shared_child') {
-    return { ...turn, sharingClass: 'shared_only' as const };
+  if (configuration.sharingClass) {
+    return { ...turn, sharingClass: configuration.sharingClass };
   }
   return turn;
 }
@@ -207,7 +209,8 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
 }
 
 function isRoutinePreparation(created: ReturnType<typeof agentSession>) {
-  return 'routinePreparation' in created && created.routinePreparation !== undefined;
+  const configuration = sessionConfiguration({ conversation: created, memoryEnabled: false });
+  return configuration.kind === 'routine';
 }
 
 function computerUnavailable(type: string, computerId: string, refused: Set<string>) {
@@ -263,7 +266,9 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
     conversation.conversationId, rows, assistant.closed, assistant.started,
     assistant.turnComputers, assistant.lostTurns, assistant.privateStarted);
-  const allUploads = conversationUploads(rows, assistant.kind);
+  const configuration = sessionConfiguration({ conversation: created, assistantKind: assistant.kind,
+    memoryEnabled: false });
+  const allUploads = conversationUploads(rows, configuration.uploads);
   const uploads = pendingUploads(rows, allUploads, computer.computerId);
   const pendingDeliveries = uploads.length + stops.length;
   if (!message && pendingDeliveries === 0) return { pending: false, retry: false };
@@ -416,7 +421,11 @@ function emptyTools() {
 
 async function toolsForTurn(options: WatchOptions, turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode,
   approvalWaiting: boolean) {
-  const recall = kind === 'personal' && mode === 'restricted' && !('sharingClass' in turn);
+  const contextKind = 'sharingClass' in turn ? 'shared_child' as const : undefined;
+  const conversation = { contextKind };
+  const configuration = sessionConfiguration({ conversation, assistantKind: kind,
+    requestedMode: mode, memoryEnabled: mode === 'restricted' });
+  const recall = configuration.tools === 'memory_only';
   if (!options.binding || typeof turn.requesterId !== 'string') {
     return [];
   }
@@ -452,9 +461,9 @@ function isPublishedServer(
   return row.status.kind === 'ready';
 }
 
-function conversationUploads(rows: ChatRows, assistantKind: string) {
+function conversationUploads(rows: ChatRows, uploadsAllowed: SessionConfiguration['uploads']) {
   // Keep old team uploads off the shared disk and out of every new turn's input.
-  if (assistantKind === 'team') return [];
+  if (!uploadsAllowed) return [];
   const uploads = rows.filter(isUpload);
   function isUpload(row: typeof rows[number]) {
     return row.event.type === 'file.uploaded' && !fileUploadedDataSchema.parse(row.event.data).turnId;

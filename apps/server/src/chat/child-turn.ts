@@ -1,3 +1,4 @@
+import { sessionConfiguration } from '@opencrane/events';
 import { ReportRejected } from './reports.ts';
 
 export type ChildStartAdmission = {
@@ -19,8 +20,11 @@ type Input = { messageId?: string | undefined; rootId?: string | undefined;
 
 export async function admitChildTurn(context: Context, data: Data,
   mode: 'restricted' | 'memory_free', requested: unknown, input: Input) {
+  const configuration = sessionConfiguration({
+    conversation: { contextKind: 'shared_child' }, memoryEnabled: false,
+  });
   if (input.messageId !== undefined || input.rootId !== undefined ||
-      input.senderAttemptId !== undefined || mode !== 'restricted' ||
+      input.senderAttemptId !== undefined || mode !== configuration.executionMode ||
       requested !== undefined) {
     throw new ReportRejected('Child start binding changed');
   }
@@ -36,7 +40,7 @@ export async function admitChildTurn(context: Context, data: Data,
   data.model = child.model;
   data.providerId = child.providerId;
   data.bindingSequence = child.bindingSequence;
-  data.sharingClass = 'shared_only';
+  data.sharingClass = configuration.sharingClass;
   return { payer: child.payingGroupId, fresh: child.fresh,
     confirmBudget: child.fresh, deadline: child.deadline };
 }
