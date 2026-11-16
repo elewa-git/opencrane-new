@@ -323,6 +323,9 @@ for (const targetName of ['objectTarget', 'homeTarget'] as const) {
 async function originalDeadline() {
   const setup = await fixture();
   setup.options.timeoutMs = 1_000;
+  // Use the controlled clock for expiry while real fixture requests are in flight.
+  const expiry = new AbortController();
+  vi.spyOn(AbortSignal, 'timeout').mockReturnValue(expiry.signal);
   const clock = vi.spyOn(performance, 'now').mockReturnValue(0);
   const get = storage.client.getObjectBounded.bind(storage.client);
   async function spendTime(...args: Parameters<typeof get>) {
