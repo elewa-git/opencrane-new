@@ -89,13 +89,17 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
     if (args[4] === 'json') return Promise.resolve(JSON.stringify({ spec: { replicas: 1 } }));
     return Promise.resolve(String(replicas.get(args[2]!)));
   }
-  async function part(destination: string) {
-    await writeFile(destination, 'fixture bytes');
-    return {};
+  async function databasePart(destination: string) {
+    await writeFile(destination, 'fixture database');
+    return { databases: ['postgres'], lsn: '0/123' };
+  }
+  async function filesPart(destination: string) {
+    await writeFile(destination, 'fixture files');
+    return { bucket: 'files', objects: [] };
   }
   vi.spyOn(runtime.source, 'kube').mockImplementation(kube);
-  runtime.source.parts.database = part;
-  runtime.source.parts.files = part;
+  runtime.source.parts.database = databasePart;
+  runtime.source.parts.files = filesPart;
   async function close() {
     await runtime.close();
     await nats.close();
