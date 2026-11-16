@@ -8,7 +8,6 @@ import { readBoundedBytes } from './release.mjs';
 const repository = 'elewa-git/opencrane-new';
 const root = resolve(import.meta.dirname, '../..');
 const refusal = 'CI approval refused';
-const logger = createLogger('image-approval');
 const enterpriseSettings = ['GH_HOST', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
 
 function run(program, args) {
@@ -55,6 +54,7 @@ function download(runId, name, directory) {
 // Read only successful GitHub output. Local records cannot establish its producer.
 export async function fetchCiApproval(options) {
   const { name, destination, includeImage, validate } = options;
+  const logger = createLogger(`${name}-approval`);
   const temporary = await mkdtemp(join(tmpdir(), `${name}-ci-`));
   const directory = destination ?? temporary;
   let stage = 'environment';
@@ -73,6 +73,7 @@ export async function fetchCiApproval(options) {
     const bytes = await readBoundedBytes(join(directory, 'approval.json'), 1024);
     const approval = JSON.parse(bytes.toString('utf8'));
     requireApproval(approval.runId === job.id && approval.revision === revision);
+    stage = options.validationStage ?? 'approval';
     const result = await validate(approval, directory);
     stage = 'image_download';
     if (includeImage) download(job.id, `${name}-image`, directory);

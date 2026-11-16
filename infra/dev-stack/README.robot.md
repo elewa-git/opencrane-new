@@ -17,7 +17,8 @@ It verifies each GitHub run and its source, image and release bindings, download
 the checked OCI archives and publishes unchanged digests to the existing registry
 over explicit HTTP. It saves approvals under `scanner-approval` and `application-approval`
 and writes `$DEV_STACK_DIR/package-values.json`. Do not replace those files with a
-local candidate. Preflight fetches the job output independently before installation.
+local candidate. Preflight fetches both outputs again before installation. The rendered
+image check uses those checked pins and retains the fixed review for every other role.
 See [packaging evidence](../clamav/README.robot.md#packaging-evidence) for the schedule,
 manual run, authentication and refusal rules. Use that private values file with
 `prepare.ts` and `package-up`; private scanner paths no longer come from environment

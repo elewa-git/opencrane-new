@@ -32,6 +32,7 @@ jobs:
         run: |
           nice -n 10 node --test infra/package/application-approval.test.mjs
           nice -n 10 python3 infra/package/check-application.test.py
+          nice -n 10 npx vitest run scripts/scanner-approval.test.mjs scripts/scanner-approval-host.test.mjs --maxWorkers=2
       - name: Build, inspect, scan and authenticate the application
         run: nice -n 10 bash infra/package/approve-application.sh "$RUNNER_TEMP/application"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

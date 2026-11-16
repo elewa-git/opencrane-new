@@ -12,5 +12,6 @@ async function validateScanner(approval, directory) {
 }
 
 export async function fetchScannerApproval(destination, includeImage = false) {
-  return fetchCiApproval({ name: 'scanner', destination, includeImage, validate: validateScanner });
+  return fetchCiApproval({ name: 'scanner', destination, includeImage, validate: validateScanner,
+    validationStage: 'release' });
 }
