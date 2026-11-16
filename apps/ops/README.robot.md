@@ -1044,8 +1044,8 @@ and shutdown signal, with an optional structured logger. It creates its own
 It never takes `budget-leader:<silo>`. Acquisition waits at most one second.
 Contention or failure returns the fixed error `Routine leadership unavailable`.
 Before returning that error, it logs the acquisition, callback or release phase.
-Session failures and failed probes are logged. Only session failures cancel ownership. Records keep
-only recognised adapter messages and error codes; arbitrary text, SQL, addresses,
+Session failures and failed probes are logged. Read timeouts do not cancel ownership.
+Records keep only recognised adapter messages and error codes; arbitrary text, SQL, addresses,
 stacks and adapter fields are excluded. Unrecognised errors use `Unclassified error`.
 
 The callback receives `signal` and `checkCurrent(deadline)`. Pass both to

@@ -1,8 +1,9 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { memorySink } from '@opencrane/observability/testing';
-import { connectProjectionDb, type Db } from '@opencrane/projections';
+import { connectProjectionDb } from '@opencrane/projections';
 import { withRoutineLeadership } from '../src/routine-leadership.ts';
+import { captureSession } from './support/routine-leadership.ts';
 
 import * as projections from '@opencrane/projections';
 import * as models from '@opencrane/models';
@@ -145,33 +146,7 @@ async function releasesThrownCallback() {
 }
 it('releases after a thrown callback without exposing its error', releasesThrownCallback);
 
-function captureSession() {
-  let session: Db;
-  const connect = projections.connectProjectionDb;
-  function observed(...args: Parameters<typeof connect>) {
-    const database = connect(...args);
-    const lock = database.db.lock!.bind(database.db);
-    async function observe<Result>(name: string, work: (db: Db) => Promise<Result>,
-      options?: { timeoutMs: number; signal?: AbortSignal }) {
-      function held(locked: Db) {
-        session = locked;
-        return work(locked);
-      }
-      return lock(name, held, options);
-    }
-    database.db.lock = observe;
-    return database;
-  }
-  const connectSpy = vi.spyOn(projections, 'connectProjectionDb');
-  connectSpy.mockImplementationOnce(observed);
-  function restore() {
-    vi.restoreAllMocks();
-  }
-  onTestFinished(restore);
-  return function current() {
-    return session;
-  };
-}
+
 async function drainsCheck(expire: boolean) {
   const session = captureSession();
   const first = await owner();

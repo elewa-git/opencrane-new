@@ -27,7 +27,7 @@ flowchart LR
 
 ## What it is responsible for
 
-- Write logs in a consistent format and remove sensitive fields and web address queries.
+- Write consistent, safe logs, with a shared test helper for inspecting the output.
 - Hide member and conversation ids in selected web addresses, such as a
   conversation's history page.
 - Carry safe request ids into later work so related log lines can be found together.

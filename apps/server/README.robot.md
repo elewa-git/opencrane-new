@@ -1422,7 +1422,12 @@ still causes `inviter_authority_ended` before this recovery. No second join is s
 `test/member-joined.test.ts` holds two accepts at this check and saves one join
 before the other reads the changed member stream.
 
-`test/routine-handoff.test.ts` uses separate NATS connections for commands and
+`test/routine-handoff.test.ts` retains real PostgreSQL leadership for final-release
+checks. A real 1.2-second PostgreSQL monitor query must not cancel preparation before
+the release, with real time and a frozen fixture clock. Every injected release
+change must finish and the final append must return the expected status. Pending-start tests race handler entry against dispatch completion
+and report its outcome, phase and safe leadership logs on an early refusal.
+It uses separate NATS connections for commands and
 projection reads. After its NATS restart, it waits until the projection connection
 can read the saved stream before dispatching again. The lost-reply case still checks
 the original occurrence, identifiers and start deadline, one send and one saved run.

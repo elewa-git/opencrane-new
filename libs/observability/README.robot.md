@@ -16,6 +16,9 @@ From the repository root:
 node --experimental-strip-types --input-type=module -e "import { createLogger } from '@opencrane/observability'; createLogger('example').info({operation: 'startup'}, 'ready')"
 ```
 
+Tests import `memorySink` from `@opencrane/observability/testing`. It collects the
+actual log bytes and parses records for assertions; it adds no runtime dependency.
+
 This emits a JSON log line. `LOG_LEVEL` defaults to `info`.
 Use `runWithContext` for safe request/entity identifiers, and `runHandler` to record
 handler start/completion/failure and duration. Handler failures are rethrown; callers
