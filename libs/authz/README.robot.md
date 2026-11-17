@@ -73,6 +73,10 @@ mid-stream. Rebuild does not run other reactions or mutate the old store.
 
 ## Real-service tests and licences
 
+`@opencrane/authz/testing` exports `permissionStore(fga, silo)`. It creates the
+OpenFGA store and model through `createStore`, then returns `{ binding, auth }`
+with the matching `memberAuthorisation` handler. It applies no events itself.
+
 Run `npm test -- libs/authz/test/projection.test.ts` on Linux with Docker and Node
 22. `pretest` installs pinned NATS. Tests own OpenFGA containers (memory by default),
 a real NATS process and disposable pg-boss databases. Without `PG_TEST_URL`, they

@@ -75,6 +75,9 @@ flowchart LR
 
 ## How to run or test it
 
+Tests can create a store and its permission handler together with `permissionStore`
+from `@opencrane/authz/testing`.
+
 ```sh
 nice -n 10 npm test -- libs/authz
 nice -n 10 npm run typecheck -w libs/authz

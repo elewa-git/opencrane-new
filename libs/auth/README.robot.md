@@ -13,7 +13,11 @@ current library keeps the sign-in and pass functions used by the server and work
 ## Public contract
 
 Import `@opencrane/auth`; [src/index.ts](src/index.ts) is the public entrypoint.
-`@opencrane/auth/testing` exposes the loopback provider used by server contract tests.
+`@opencrane/auth/testing` exposes the loopback provider used by server contract tests
+and `sessionCookie(config, overrides?)`. The cookie builder returns request headers
+`{ cookie }`. Defaults are `sub: 'owner'`, `orgId: 'org-acme'`, `roles: []`,
+`authTime` in current Unix seconds and `exp: 2000000000`. Named overrides accept
+any `SessionData` field. The configured cookie name and session codec are reused.
 From the repository root, this example demonstrates same-origin return-path handling:
 
 ```sh

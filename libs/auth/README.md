@@ -69,6 +69,8 @@ flowchart LR
 ## How to run or test it
 
 Sign-in tests use the same patched Fastify HTTP server as the back end.
+Tests can build signed-in request headers with `sessionCookie` from
+`@opencrane/auth/testing`, using named overrides for the person's details.
 
 ```sh
 nice -n 10 npm test -- libs/auth

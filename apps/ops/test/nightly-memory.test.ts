@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PgBoss, TestClock, type Db } from 'pg-boss';
 import { scheduleNightly } from '../../../libs/handlers/src/queue.ts';
-import { event } from '@opencrane/event-store/testing';
+import { appendEvent, event } from '@opencrane/event-store/testing';
 import { memoryMaintenanceRecordedDataSchema } from '@opencrane/events';
 import { memoryWrittenExample } from '../../../libs/events/src/memory.ts';
 import { memoryProjection, memoryScopeId, ProjectionRunner } from '@opencrane/projections';
@@ -43,17 +43,21 @@ it('finishes a night without dispatch when memory is off and never prepared',
     expect(log.info).toHaveBeenCalledExactlyOnceWith('Nightly memory is off');
     expect(await services.nats.store.head()).toBe(before);
   });
-async function append(type: string, data: unknown, time = '2026-10-12T01:00:00Z') {
+interface NightlyEventOptions {
+  type: string;
+  data: unknown;
+  time?: string;
+}
+
+async function nightlyEvent({ type, data,
+  time = '2026-10-12T01:00:00Z' }: NightlyEventOptions) {
   const position = await services.nats.store.head();
   const eventName = type.replaceAll('.', '-');
   const id = `${eventName}-${position}`;
   const base = event(id, `scope-${scopeId}`, type);
-  const record = { ...base, silo: 'test', source: 'opencrane-server', time, data,
-    commandId: id, principal: { kind: 'human' as const, id: 'alice' } };
-  const expectedSequence = await services.nats.store.head(record.subject);
-  const command = { event: record, expectedSequence, historyChecked: true as const };
-  const result = await services.nats.store.append(command);
-  expect(result.status).toBe('appended');
+  return { ...base, silo: 'test', source: 'opencrane-server', time, data,
+    commandId: id, principal: { kind: 'human' as const, id: 'alice' },
+    historyChecked: true as const };
 }
 function written(memoryId = memoryWrittenExample.memoryId) {
   const fields = ['test', scopeId, 'person', 'alice', memoryId, 1];
@@ -68,10 +72,16 @@ async function setup(dirty = true) {
   const binding = { scopeId, scopeKind: 'person', ownerId: 'alice', memberId: 'alice',
     assistantId: 'assistant', payingGroupId: 'sales', enabled: true,
     acceptedCapCents: 100, revision: 1 };
-  await append('memory.maintenance_bound', binding);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.maintenance_bound',
+    data: binding,
+  }));
   if (dirty) {
     const fact = written();
-    await append('memory.written', fact);
+    await appendEvent(services.nats.store, await nightlyEvent({
+      type: 'memory.written',
+      data: fact,
+    }));
   }
   const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
   await runner.initialise(projection);
@@ -143,7 +153,10 @@ async function boundary() {
     expect(firstNight.publicReference).toMatch(/^[a-f0-9]{32}$/u);
     expect(firstNight.publicReference).not.toBe(firstNight.nightId);
     const laterFact = written('later');
-    await append('memory.written', laterFact);
+    await appendEvent(services.nats.store, await nightlyEvent({
+      type: 'memory.written',
+      data: laterFact,
+    }));
     await scan('2026-10-12T02:01:00Z');
     const duplicate = await records();
     expect(duplicate).toEqual(first);
@@ -199,10 +212,16 @@ async function forgottenOnly() {
   await setup();
   const dependent = { ...written('dependent'),
     dependsOn: [{ scopeId, memoryId: 'memory_1', revision: 1 }] };
-  await append('memory.written', dependent);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: dependent,
+  }));
   const forgotten = { schemaVersion: 1, scopeId, scopeKind: 'person', ownerId: 'alice',
     memoryId: 'memory_1', revision: 2, expectedRevision: 1 };
-  await append('memory.forgotten', forgotten);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.forgotten',
+    data: forgotten,
+  }));
   await scan('2026-10-12T02:00:00Z');
   const first = await records();
   expect(first).toMatchObject([{ action: 'no_changes', reason: null, inputRefs: [] }]);
@@ -216,9 +235,15 @@ async function expiredDependency() {
   const source = { ...written('source'), expiresAt: '2026-10-12T01:59:00.000Z' };
   const dependent = { ...written('dependent'), expiresAt: null,
     dependsOn: [{ scopeId, memoryId: 'source', revision: 1 }] };
-  await append('memory.written', source);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: source,
+  }));
   const sourcePosition = await services.nats.store.head();
-  await append('memory.written', dependent);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: dependent,
+  }));
   await scan('2026-10-12T02:10:00Z');
   const saved = await records();
   expect(saved).toHaveLength(1);
@@ -235,9 +260,15 @@ async function dependencyExpiresAfterBoundary() {
   const source = { ...written('source'), expiresAt: '2026-10-12T02:05:00.000Z' };
   const dependent = { ...written('dependent'), expiresAt: null,
     dependsOn: [{ scopeId, memoryId: 'source', revision: 1 }] };
-  await append('memory.written', source);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: source,
+  }));
   const sourcePosition = await services.nats.store.head();
-  await append('memory.written', dependent);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: dependent,
+  }));
   const dependentPosition = await services.nats.store.head();
   await scan('2026-10-12T02:10:00Z');
   const saved = await records();
@@ -256,9 +287,15 @@ async function repeatedExpiredPin() {
   await setup(false);
   const original = { ...written('pinned'), pinned: true,
     expiresAt: '2026-10-12T01:59:00.000Z' };
-  await append('memory.written', original);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: original,
+  }));
   const repeated = { ...original, expiresAt: null };
-  await append('memory.written', repeated);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: repeated,
+  }));
   await scan('2026-10-12T02:00:00Z');
   expect(await records()).toEqual([]);
 }
@@ -267,14 +304,23 @@ it('keeps a repeated expired pin out of nightly selection', repeatedExpiredPin, 
 async function repeatedReviewedFact() {
   await setup(false);
   const original = written('reviewed');
-  await append('memory.written', original);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: original,
+  }));
   await scan('2026-10-12T02:00:00Z');
   const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
   const reviewed = { ...first, action: 'no_changes', reason: null,
     reviewedPosition: first.inputRefs[0]!.position };
-  await append('memory.maintenance_recorded', reviewed);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.maintenance_recorded',
+    data: reviewed,
+  }));
   const before = await records();
-  await append('memory.written', original);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: original,
+  }));
   await scan('2026-10-13T02:00:00Z');
   expect(await records()).toEqual(before);
 }
@@ -284,7 +330,10 @@ async function boundedPrefix() {
   await setup(false);
   for (let index = 0; index < 33; index++) {
     const fact = written(`fact_${String(index).padStart(2, '0')}`);
-    await append('memory.written', fact);
+    await appendEvent(services.nats.store, await nightlyEvent({
+      type: 'memory.written',
+      data: fact,
+    }));
   }
   await scan('2026-10-12T02:00:00Z');
   const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
@@ -292,7 +341,10 @@ async function boundedPrefix() {
   expect(first.inputRefs).toHaveLength(32);
   const reviewed = { ...first, action: 'no_changes', reason: null,
     reviewedPosition: first.inputRefs.at(-1)!.position };
-  await append('memory.maintenance_recorded', reviewed);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.maintenance_recorded',
+    data: reviewed,
+  }));
   await scan('2026-10-13T02:00:00Z');
   const saved = await records();
   expect(saved).toHaveLength(3);
@@ -307,7 +359,10 @@ async function replayNoChanges() {
   const first = memoryMaintenanceRecordedDataSchema.parse((await records())[0]);
   const reviewed = { ...first, action: 'no_changes', reason: null,
     reviewedPosition: first.inputRefs[0]!.position };
-  await append('memory.maintenance_recorded', reviewed);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.maintenance_recorded',
+    data: reviewed,
+  }));
   const runner = new ProjectionRunner(services.db, services.nats.reader, logger);
   await runner.run(projection);
   const sql = `SELECT data FROM memory_maintenance_runs WHERE scope_id=$1 ORDER BY position`;
@@ -351,7 +406,11 @@ async function overlap() {
   const recorded = memoryMaintenanceRecordedDataSchema.parse(first);
   const unresolved = { ...recorded, action: 'prepared', reason: null,
     rootId: 'a'.repeat(64), model: 'gpt-6-luna', providerId: 'primary' };
-  await append('memory.maintenance_recorded', unresolved, '2026-10-12T02:01:00Z');
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.maintenance_recorded',
+    data: unresolved,
+    time: '2026-10-12T02:01:00Z',
+  }));
   await scan('2026-10-13T02:00:00Z');
   const expected = { action: 'missed', reason: 'overlap' };
   const overlapNight: unknown = expect.objectContaining(expected);
@@ -449,7 +508,10 @@ async function exhaustedTrigger() {
   const before = await services.db.query<Record<string, unknown>>('SELECT * FROM memory_facts');
   // Leave the worker paused with a new event waiting before the night begins.
   const pausedFact = written('paused-fact');
-  await append('memory.written', pausedFact);
+  await appendEvent(services.nats.store, await nightlyEvent({
+    type: 'memory.written',
+    data: pausedFact,
+  }));
   const clock = new TestClock('2026-10-12T02:00:00Z');
   let sessionStatements: string[] = [];
   function setSessionStatements(statements: string[]) {

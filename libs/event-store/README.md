@@ -70,6 +70,9 @@ flowchart LR
 
 ## How to run or test it
 
+Tests can save an event with named fields through `appendEvent` from
+`@opencrane/event-store/testing`. The calling test applies any read tables afterwards.
+
 Tests share a helper that chooses unused listening ports outside the ranges used
 by outgoing connections and the secondary dev stacks. Each fixture starts its own
 NATS server and keeps its own event history. Cluster fixtures keep their ports
