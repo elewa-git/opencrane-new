@@ -46,6 +46,15 @@ Both concurrency tests failed at the complete body/credential-pair assertion, in
 The second full run passed all 11 tests in 95.45 seconds.
 No mutation is committed. No timeout, retry or assertion was loosened.
 
+### Approval listing after the rebase
+
+The first complete typecheck failed at three new ordinary-test calls to
+`approvalCards`: main now requires discovered approval rows as its sixth argument.
+The selected target/object/array refusal cases reproduced the resulting missing-options
+exception: 3 failed, 14 unselected, in 22.16 seconds. This is a test caller mismatch;
+main deliberately removed the production silo-scan fallback. That fallback must stay
+removed. Reuse the existing full candidate discovery helper from the Codex tests.
+
 ## Rework round 5 continued, 16 November 2026
 
 Result: PARTIAL. Source gates: PASS. Fresh-stack journey: FAIL during shared startup.
