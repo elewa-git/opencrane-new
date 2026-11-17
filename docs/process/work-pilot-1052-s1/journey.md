@@ -3,7 +3,8 @@
 ## Rework round 6, 17 November 2026
 
 Owner-authorised limits: two slices, 23 agent-hours and six rework rounds.
-This is the final round. The PR remains draft.
+This is the final round. Result: PARTIAL. Source gates: PASS. Fresh journey: FAIL.
+All ordinary-server slice steps are NOT RUN at both widths. The PR remains draft.
 
 ### Reproduction before fixes
 
@@ -75,11 +76,48 @@ four-file run passed twice after the approval API adjustment.
 | `lint:debt`, `lint:deps`, `lint:reads`, `lint:readmes` | PASS. |
 | Full workspace, package and dev-stack typecheck | PASS after correcting the approval test callers. |
 | `check:events`, Knip, `lint:changelog`, Markdown | PASS. |
-| Fresh-stack journey at both widths | NOT RUN yet; waiting for one-minute load below 6. |
-| Hosted CI on the final push | NOT RUN yet; see the PR Evidence for the final result. |
+| Fresh-stack journey | FAIL at shared chat completion; ordinary slice steps NOT RUN at both widths. |
 
+The PR Evidence records the hosted CI result for the final pushed head.
 Local ESLint follows the requested changed-file scope. CI runs the complete
 `lint:code` command. No lint cap, suppression allowance or read baseline was raised.
+
+### Fresh qualification result
+
+Journey source: `f8eb968821ff120deab1f68301640b2b3e63989d`.
+Base: `f5af2162b2fef5f52592de099c5819c137162e0a`.
+The last fetch found main unchanged. The rebase is complete.
+
+The runner waited for one-minute load strictly below 6 before `claim.sh` returned
+secondary slot 1. The last recorded pre-start sample was 5.52 at 08:59:30 UTC;
+startup began at 08:59:34 UTC. `up.sh --fresh` used the operator-managed
+`ZITADEL_KEY_FILE` path. Owner/access bootstrap, managed provider setup and website
+readiness passed. The built-in journey generated its desktop and phone live-view
+artefacts, then failed before the upload checkpoint and ordinary-server collector.
+
+The failure is `Chat journey timeout` at `chat-journey.ts:25`, while waiting for
+`agent.turn_completed` at line 34, called from `journey.ts:575`. Its original
+60-second assertion is unchanged. The shared chat, upload and journey drivers are
+byte-for-byte equal to current main. A cause or connection to ordinary dispatch
+has not been established. Observed load later peaked at 28.77; that alone does not
+establish causation. The earlier upload failure was not reached in this attempt.
+
+[Safe startup diagnostic](run-2026-11-17-r6/startup-failure.json).
+Private startup logs and failure records were retained before `down.sh` exited 0.
+The claim status then returned `free`. Six generated live-view files were copied
+privately and restored. No owner stack was touched. No 390 px stack was claimed.
+
+| Required action | 1280 px | 390 px |
+| --- | --- | --- |
+| Fresh shared startup | FAIL at member chat completion. | NOT RUN. |
+| Admin installs, reviews and publishes the ordinary server | NOT RUN. | NOT RUN. |
+| Member’s live tool call and Ask approval | NOT RUN. | NOT RUN. |
+| Tool-list change blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
+| Teardown and claim release | PASS. | NOT RUN: no claim. |
+
+No retry, longer timeout or further fresh attempt was made. The final round has
+not qualified the capability. Further shared-startup investigation or live
+qualification needs owner direction; the PR stays draft.
 
 ## Rework round 5 continued, 16 November 2026
 

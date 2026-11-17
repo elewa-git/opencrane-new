@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-17",
+  "source": "f8eb968821ff120deab1f68301640b2b3e63989d",
+  "base": "f5af2162b2fef5f52592de099c5819c137162e0a",
+  "fresh": true,
+  "secondarySlot": 1,
+  "requestedWidth": 1280,
+  "verdict": "FAIL",
+  "lastQuietSample": {
+    "time": "2026-11-17T08:59:30Z",
+    "oneMinuteLoad": 5.52
+  },
+  "maximumObservedLoad": 28.77,
+  "passed": [
+    "Dev owner and access bootstrap",
+    "Managed provider setup",
+    "Website readiness"
+  ],
+  "websiteReadyMs": 70032,
+  "failedStep": "Shared member chat completion before upload",
+  "failure": {
+    "message": "Chat journey timeout",
+    "assertion": "infra/dev-stack/chat-journey.ts:25",
+    "waitingFor": "agent.turn_completed",
+    "caller": "infra/dev-stack/chat-journey.ts:34",
+    "journeyCaller": "infra/dev-stack/journey.ts:575",
+    "existingDeadlineMs": 60000
+  },
+  "ordinarySliceAt1280": "NOT RUN",
+  "ordinarySliceAt390": "NOT RUN",
+  "secondary390Claimed": false,
+  "teardown": "PASS",
+  "claimStatusAfterTeardown": "free",
+  "cause": "Not established; later high load alone does not establish causation."
+}
