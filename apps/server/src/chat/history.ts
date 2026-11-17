@@ -6,7 +6,7 @@ import { requireMember, MemberRefusal } from '../members/guard.ts';
 import { sessionFor } from '../members/routes.ts';
 import { legacyParticipation, participation } from './participation.ts';
 import { ChatRefused, type ChatOptions } from './access.ts';
-import { chatDisplayData, hasDisplayText } from './display.ts';
+import { chatDisplayData } from './display.ts';
 import { isPublicChatId } from './public-id.ts';
 
 type History = Awaited<ReturnType<typeof readConversation>>;
@@ -43,18 +43,11 @@ async function displayHistory(options: ChatOptions, conversationId: string,
   const computer = await conversationComputerState(options, conversationId, mode);
   const dispatcherReady = mode === 'agent_session'
     ? await options.dispatcherReady?.() ?? true : true;
-  function decryptRow(row: (typeof result.rows)[number]) {
+  function displayRow(row: (typeof result.rows)[number]) {
     const data = chatDisplayData(row.type, row.data);
-    const saved = z.record(z.string(), z.unknown()).parse(row.data);
-    if (row.type === 'agent.command_ran' && saved['view']) {
-      const preview = options.keys.decrypt(options.silo, conversationId, saved['view']);
-      return { ...row, data: { ...data, preview } };
-    }
-    if (!hasDisplayText(row.type) || !('ciphertext' in saved)) return { ...row, data };
-    const text = options.keys.decrypt(options.silo, conversationId, saved);
-    return { ...row, data: { ...data, text } };
+    return { ...row, data };
   }
-  const rows = result.rows.map(decryptRow);
+  const rows = result.rows.map(displayRow);
   return { ...result, ...computer, dispatcherReady, rows };
 }
 
@@ -108,7 +101,7 @@ export async function chatHistoryReply(request: FastifyRequest, reply: FastifyRe
   } catch (error) {
     loadingError = new Error('Conversation history unavailable', { cause: error });
   }
-  // Check current access once, after loading and before decrypting any text.
+  // Check current access once, after loading and before returning any prose.
   const checks = { write: false, conversationId };
   const { access } = await requireMember(request, reply, config, options, checks);
   if (loadingError) throw loadingError;

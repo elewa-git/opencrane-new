@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { turnToolReaders } from './turn-tool-readers.ts';
 /* eslint max-lines: ["error", { max: 520, skipBlankLines: true, skipComments: true }] */
 import type { ArtifactPublication } from '../files/artifacts.ts';
@@ -27,7 +28,7 @@ import { cleanClosedConversation, recoverTerminalTurns,
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
-export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
+export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'db'> &
   Partial<Pick<ChatOptions, 'binding' | 'feed'>> & {
     keyDirectory?: string;
     childStartUrl?: string;
@@ -126,7 +127,7 @@ export function turnMessage(options: WatchOptions, conversation: AgentSession,
   const attachments = configuration.attachments
     ? attachmentsBefore(rows, uploads, message.sequence, posted.attachmentIds) : [];
   const requester = z.object({ authorId: z.string() }).parse(message.event.data);
-  const text = options.keys.decrypt(options.silo, conversation.conversationId, message.event.data);
+  const text = readConversationProse(message.event.data);
   const turn = { type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
     requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
     attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),

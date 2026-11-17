@@ -1,5 +1,6 @@
 import { sha256Hex } from '@opencrane/events/digest';
 import { randomUUID } from 'node:crypto';
+import type { OnboardingOptions } from './options.ts';
 import { z } from 'zod';
 import { memberJoinedDataSchema, siloOwnerBootstrappedDataSchema,
   assistantCreatedDataSchema, parseEventByType,
@@ -7,7 +8,7 @@ import { memberJoinedDataSchema, siloOwnerBootstrappedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { currentMembership, isAuthorityChanged } from '@opencrane/models';
-import { chatAccess, isChatRefused, writeChatAccess, type ChatOptions }
+import { chatAccess, isChatRefused, writeChatAccess }
   from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
 import { surveyHistory, savedCommand, surveyReceipt } from './history.ts';
@@ -33,7 +34,7 @@ function assignedAssistantId(silo: string, memberId: string) {
   return `personal-${digest.slice(0, 32)}`;
 }
 
-async function admissionChoice(options: ChatOptions, memberId: string, deadline: number) {
+async function admissionChoice(options: OnboardingOptions, memberId: string, deadline: number) {
   const member = await currentMembership(options.store, options.silo, memberId,
     undefined, deadline);
   function isJoin(row: typeof member.facts[number]) {
@@ -51,13 +52,13 @@ async function admissionChoice(options: ChatOptions, memberId: string, deadline:
   return choice.data.personalAssistant ?? 'provision';
 }
 
-async function firstAssistantEvent(options: ChatOptions, subject: string, deadline: number) {
+async function firstAssistantEvent(options: OnboardingOptions, subject: string, deadline: number) {
   for await (const row of options.store.readStream(subject, 1, deadline)) return row;
   return undefined;
 }
 
 function checkedAssistant(creation: StoredEvent | undefined,
-  options: ChatOptions, memberId: string, assistantId: string, position: number) {
+  options: OnboardingOptions, memberId: string, assistantId: string, position: number) {
   if (!position) return false;
   if (!creation || creation.event.type !== 'assistant.created' ||
       creation.event.silo !== options.silo ||
@@ -73,7 +74,7 @@ function checkedAssistant(creation: StoredEvent | undefined,
   return true;
 }
 
-async function assistantAssignment(options: ChatOptions, memberId: string) {
+async function assistantAssignment(options: OnboardingOptions, memberId: string) {
   const assistantId = assignedAssistantId(options.silo, memberId);
   const subject = `assistant-${assistantId}`;
   const deadline = performance.now() + 10_000;
@@ -85,7 +86,7 @@ async function assistantAssignment(options: ChatOptions, memberId: string) {
   return { assistantId, subject, position, assigned, choice };
 }
 
-export async function welcomeAssistantAssigned(options: ChatOptions, memberId: string) {
+export async function welcomeAssistantAssigned(options: OnboardingOptions, memberId: string) {
   const assignment = await assistantAssignment(options, memberId);
   return assignment.assigned;
 }
@@ -134,14 +135,14 @@ function checkInput(input: Input, history: History) {
   else checkAnswer(input, history);
 }
 
-function encryptedAnswer(options: ChatOptions, memberId: string, value: string) {
+function encryptedAnswer(options: OnboardingOptions, memberId: string, value: string) {
   const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
   const bytes = Buffer.from(encrypted.ciphertext, 'base64');
   const encryptedDigest = sha256Hex(bytes);
   return { encrypted: encrypted.ciphertext, encryptedDigest, keyRef: encrypted.keyId };
 }
 
-function buildEvent(options: ChatOptions, memberId: string, input: Input,
+function buildEvent(options: OnboardingOptions, memberId: string, input: Input,
   assignment: Awaited<ReturnType<typeof assistantAssignment>> | null) {
   const id = randomUUID();
   let type = 'onboarding.welcome_answer_recorded';
@@ -193,7 +194,7 @@ function matchesStart(input: z.infer<typeof start>, saved: Saved) {
     data.data.revisionId === (input.revisionId ?? null);
 }
 
-function matchesAnswer(options: ChatOptions, memberId: string,
+function matchesAnswer(options: OnboardingOptions, memberId: string,
   input: z.infer<typeof answer>, saved: Saved) {
   const event = saved.row.event;
   const data = welcomeAnswerRecordedDataSchema.safeParse(event.data);
@@ -208,7 +209,7 @@ function matchesAnswer(options: ChatOptions, memberId: string,
   return savedAnswer === input.answer;
 }
 
-async function checkedReceipt(options: ChatOptions, memberId: string, input: Input,
+async function checkedReceipt(options: OnboardingOptions, memberId: string, input: Input,
   saved: Saved) {
   // Check membership after the point read, before opening a saved answer.
   await chatAccess(options, { memberId });
@@ -220,7 +221,7 @@ async function checkedReceipt(options: ChatOptions, memberId: string, input: Inp
   return receipt(saved.row);
 }
 
-async function appendWelcome(options: ChatOptions, memberId: string, input: Input,
+async function appendWelcome(options: OnboardingOptions, memberId: string, input: Input,
   history: History, event: EventEnvelope, deadline: number) {
   try {
     const result = await options.store.append({ event, expectedSequence: history.sequence,
@@ -239,7 +240,7 @@ async function appendWelcome(options: ChatOptions, memberId: string, input: Inpu
   }
 }
 
-export async function welcomeCommand(options: ChatOptions, memberId: string, body: unknown) {
+export async function welcomeCommand(options: OnboardingOptions, memberId: string, body: unknown) {
   const input = inputSchema.parse(body);
   if (Buffer.byteLength(JSON.stringify(body)) > 16384) throw new z.ZodError([]);
   const history = await surveyHistory(options, memberId);

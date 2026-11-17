@@ -469,8 +469,8 @@ async function retainsOnlyCounts() {
   });
   await append('conversation-private', 'message.posted', {
     conversationId: 'private', authorId: 'bob', authorKind: 'human',
-    ciphertext: Buffer.from('PRIVATE CONTENT').toString('base64'),
-    keyId: 'key:private', contentType: 'text',
+    utterance: 'Saved conversation prose',
+    contentType: 'text',
   });
   await project();
   const spy = vi.spyOn(nats.store, 'readStream');

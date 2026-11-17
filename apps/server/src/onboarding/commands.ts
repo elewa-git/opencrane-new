@@ -1,12 +1,13 @@
 import { sha256Hex } from '@opencrane/events/digest';
 import { randomUUID } from 'node:crypto';
+import type { OnboardingOptions } from './options.ts';
 import { z } from 'zod';
 import type { AppendCommand } from '@opencrane/event-store';
 import { surveyAnswersSchema, parseEventByType, personaRevisedDataSchema,
   personaApprovedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { isAuthorityChanged, groupMembership } from '@opencrane/models';
-import { chatAccess, isChatRefused, writeChatAccess, type ChatOptions }
+import { chatAccess, isChatRefused, writeChatAccess }
   from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
@@ -26,11 +27,11 @@ const commandSchema = z.discriminatedUnion('operation', [save, restart, revise, 
 export class SurveyConflict extends Error {}
 export class SurveyUnknown extends Error {}
 
-function encrypt(options: ChatOptions, memberId: string, value: string) {
+function encrypt(options: OnboardingOptions, memberId: string, value: string) {
   const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
   return { ...encrypted, ciphertextDigest: sha256Hex(Buffer.from(encrypted.ciphertext, 'base64')) };
 }
-function eventData(options: ChatOptions, memberId: string, input: z.infer<typeof commandSchema>,
+function eventData(options: OnboardingOptions, memberId: string, input: z.infer<typeof commandSchema>,
   history: Awaited<ReturnType<typeof surveyHistory>>) {
   const identity = { schemaVersion: 1, memberId, generation: input.generation };
   if (input.operation === 'restart') return { ...identity, generation: input.generation + 1 };
@@ -48,7 +49,7 @@ function eventData(options: ChatOptions, memberId: string, input: z.infer<typeof
   return { ...identity, step: input.answers.step,
     ...encrypt(options, memberId, JSON.stringify(input.answers)) };
 }
-function personaValue(options: ChatOptions, memberId: string,
+function personaValue(options: OnboardingOptions, memberId: string,
   input: z.infer<typeof revise>, history: Awaited<ReturnType<typeof surveyHistory>>) {
   if (input.mode === 'generate') {
     if (input.replacement !== undefined) throw new z.ZodError([]);
@@ -76,7 +77,7 @@ function checkProgress(input: z.infer<typeof commandSchema>,
     }
   }
 }
-async function selectedGroupPositions(options: ChatOptions, memberId: string,
+async function selectedGroupPositions(options: OnboardingOptions, memberId: string,
   input: z.infer<typeof commandSchema>) {
   const groups = new Map<string, number>();
   if (input.operation !== 'save_step' || input.answers.step !== 2) return groups;
@@ -96,7 +97,7 @@ function eventType(input: z.infer<typeof commandSchema>) {
   if (input.operation === 'approve') return 'onboarding.persona_approved';
   return 'onboarding.survey_restarted';
 }
-export async function surveyCommand(options: ChatOptions, memberId: string, body: unknown,
+export async function surveyCommand(options: OnboardingOptions, memberId: string, body: unknown,
   route: 'survey' | 'persona' = 'survey') {
   const input = commandSchema.parse(body);
   const personaOperation = input.operation === 'revise' || input.operation === 'approve';
@@ -132,7 +133,7 @@ export async function surveyCommand(options: ChatOptions, memberId: string, body
   return appendSurvey(options, memberId, input, append);
 }
 
-async function appendSurvey(options: ChatOptions, memberId: string,
+async function appendSurvey(options: OnboardingOptions, memberId: string,
   input: z.infer<typeof commandSchema>, command: AppendCommand) {
   try {
     const result = await options.store.append(command);
@@ -151,7 +152,7 @@ async function appendSurvey(options: ChatOptions, memberId: string,
   }
 }
 
-function matchesSavedCommand(options: ChatOptions, memberId: string,
+function matchesSavedCommand(options: OnboardingOptions, memberId: string,
   input: z.infer<typeof commandSchema>, row: NonNullable<Awaited<ReturnType<typeof savedCommand>>>['row']) {
   if (input.operation === 'save_step') {
     return row.event.type === 'onboarding.survey_step_saved' &&
@@ -175,7 +176,7 @@ function matchesSavedCommand(options: ChatOptions, memberId: string,
   return row.event.type === 'onboarding.survey_restarted';
 }
 
-async function checkedReceipt(options: ChatOptions, memberId: string,
+async function checkedReceipt(options: OnboardingOptions, memberId: string,
   input: z.infer<typeof commandSchema>,
   previous: NonNullable<Awaited<ReturnType<typeof savedCommand>>>) {
   // Check current membership after the saved record loads, before opening private text.

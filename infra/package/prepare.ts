@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -107,7 +107,6 @@ async function prepareSettings(values: { natsCluster?: unknown; scanner: { appro
     issuer: `${localOrigin}/` });
   await writeFile(`${directory}/model-jwks.json`, JSON.stringify(issuer.jwks), { mode: 0o600 });
   await writeFile(`${directory}/model-stub-key`, 'dev-stack-stub-only', { mode: 0o600 });
-  await writeFile(`${directory}/conversation-wrap-key`, randomBytes(32), { mode: 0o600 });
   const commandSettings = {
     NATS_URL: 'tls://nats:4222', NATS_CA_FILE: '/run/opencrane/files/ca.crt',
     NATS_CERT_FILE: '/run/opencrane/files/command.crt',
@@ -133,8 +132,6 @@ async function prepareSettings(values: { natsCluster?: unknown; scanner: { appro
     TOKEN_SIGNING_KEY_FILE: '/run/opencrane/files/token-signing-key.pem',
     TOKEN_ISSUER: `${localOrigin}/`,
     PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
-    CONVERSATION_KEYS_DIR: '/var/lib/opencrane/conversation-keys',
-    CONVERSATION_WRAP_KEY_FILE: '/run/opencrane/files/conversation-wrap-key',
     ...modelRuntimeSettings(),
     MINIO_URL: 'http://objects:9000',
     MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
@@ -180,7 +177,6 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
     'zitadel-client-secret': `${directory}/zitadel-client-secret`,
     'model-jwks.json': `${directory}/model-jwks.json`,
     'model-stub-key': `${directory}/model-stub-key`,
-    'conversation-wrap-key': `${directory}/conversation-wrap-key`,
     'scanner-ca.crt': `${directory}/scanner-ca.crt`,
   });
 }

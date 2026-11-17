@@ -79,22 +79,16 @@ describe('parseEventByType', () => {
       conversationId: 'conv_1',
       authorId: 'alice',
       authorKind: 'human',
-      ciphertext: 'YmFzZTY0LWxvb2tpbmctdGV4dA==',
-      keyId: 'key:1',
+      utterance: 'A saved message',
       contentType: 'text',
     };
 
-    it('accepts a message carrying encrypted ciphertext and its key id', () => {
+    it('accepts readable conversation prose', () => {
       const result = parseEventByType(baseEnvelope('message.posted', validMessageData));
       expect(result.success).toBe(true);
     });
 
-    // events.md rule 5: "no secrets and no plaintext history in events" —
-    // message text must never travel as a plain `text` field, even next to
-    // an otherwise valid ciphertext. Starting from the valid data and
-    // adding only `text` means this can only fail for that one reason (see
-    // security-rules.test.ts for the same check on every risky type).
-    it('rejects plaintext text next to otherwise valid data', () => {
+    it('rejects an unnamed duplicate prose field', () => {
       const result = parseEventByType(
         baseEnvelope('message.posted', { ...validMessageData, text: 'this should have been encrypted' }),
       );
@@ -244,7 +238,7 @@ it('keeps every report receipt ordered and confines batches to text deltas', () 
     preceding: [receipt] };
   const event = { ...baseEnvelope('agent.message_delta', { conversationId: 'chat',
     turnId: 'turn', messageId: 'reply', contentType: 'text',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test' }), report };
+    utterance: 'Saved reply' }), report };
   expect(parseEventByType(event).success).toBe(true);
   for (const preceding of [[receipt, receipt], [{ ...receipt, sequence: 2 }],
     Array.from({ length: 64 }, makeReceipt)]) {
@@ -270,7 +264,7 @@ const invalidEarlierReceipts = [
 ];
 function rejectsInvalidEarlierReceipt(test: typeof invalidEarlierReceipts[number]) {
   const data = { conversationId: 'chat', turnId: 'turn', messageId: 'reply',
-    contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test' };
+    contentType: 'text', utterance: 'Saved reply' };
   const valid = { computerId: 'computer', sequence: 65, digest: 'b'.repeat(64),
     preceding: Array.from({ length: 63 }, makeReceipt) };
   const event = { ...baseEnvelope('agent.message_delta', data), report: valid };

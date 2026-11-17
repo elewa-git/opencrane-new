@@ -1,7 +1,8 @@
+import { conversationProseSchema } from './conversation-prose.ts';
 // Keep these four example event schemas together. They share the field shapes in data.ts,
 // and each other event type has its own strict schema there too.
 import { z } from 'zod';
-import { centsSchema, ciphertextSchema, keyIdSchema } from './data.ts';
+import { centsSchema } from './data.ts';
 import { fileUploadedDataSchema } from './file-events.ts';
 
 // member.joined — an invitation was accepted and someone became a member.
@@ -21,19 +22,13 @@ export const memberJoinedDataSchema = z
 
 export type MemberJoinedData = z.infer<typeof memberJoinedDataSchema>;
 
-// message.posted — someone (or a routine) posted a message into a
-// conversation. The body is never stored in plain text in the event log
-// (see events.md rule 5), so this carries the encrypted ciphertext plus
-// the id of the key that encrypted it — the same pair agent.message_
-// completed carries for the assistant's own messages — not the message
-// itself.
+// Retain readable message prose in the conversation event.
 export const messagePostedDataSchema = z
   .object({
     conversationId: z.string().min(1),
     authorId: z.string().min(1),
     authorKind: z.enum(['human', 'agent', 'system']),
-    ciphertext: ciphertextSchema,
-    keyId: keyIdSchema,
+    utterance: conversationProseSchema,
     contentType: z.enum(['text', 'markdown']),
     attachmentIds: z.array(fileUploadedDataSchema.shape.fileId).max(100).optional(),
     executionMode: z.literal('memory_free').optional(),

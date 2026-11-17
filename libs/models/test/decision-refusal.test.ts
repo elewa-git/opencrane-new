@@ -36,7 +36,7 @@ async function resumesWithPrivateDiagnostics() {
     await recovered.start();
     const port = Number(new URL(setup.options.decisionUrl).port);
     restarted = await startDecision(recovered, setup.identity, setup.binding, port,
-      undefined, undefined, undefined, undefined, logger);
+      undefined, undefined, undefined, logger);
 
     const allowed = await setup.call(current);
     expect(allowed.status, allowed.text).toBe(200);

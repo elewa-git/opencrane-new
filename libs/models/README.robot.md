@@ -1549,7 +1549,7 @@ P3-2 adds event-backed single-use approvals at the MCP decision seam. The
 ambiguous keys and malformed Unicode. The original HTTP body is forwarded unchanged.
 A reviewed tool's `review` descriptor declares its action, consequence, target field
 and complete list of safe scalar fields; missing, extra or nested fields refuse.
-Reviews use the conversation's encrypted-content/key-reference convention. Neither
+Reviews use bounded plaintext `review` and the existing digest. Neither
 the model nor browser supplies approval authority or replacement review text.
 
 `approvalCards` includes the saved `turnId` in each card. The browser uses it to
@@ -1572,8 +1572,8 @@ The P3-1 credential-free connection is the supported fixture here (`profile: non
 No credential or tool-charge stage is invented: P3-8 owns those, and must reserve
 before consumption and audit credential release before forwarding. P3-5 owns native
 Codex waiting, grant renewal, notification and continuation; this slice never
-redispatches from replay. `CONVERSATION_KEYS_DIR` must identify the same secret-store
-adapter for the server and decision process; unavailable keys refuse Ask admission.
+redispatches from replay. Ask admission needs no conversation key. Malformed reviews and mismatched digests
+still refuse reads and decisions.
 The shared gateway fixture is exported as `@opencrane/models/testing` for API tests.
 
 P3-15 adds `readEffect`, `listEffects` and `resolveEffect` for monetary uncertainty.

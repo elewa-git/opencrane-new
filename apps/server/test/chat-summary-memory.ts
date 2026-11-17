@@ -35,7 +35,7 @@ async function* readStream(subject: string, from = 1) {
   for (let turn = 0; turn < turns; turn++) {
     const turnId = randomUUID();
     const message = { conversationId: subject, authorId, executionMode: 'restricted',
-      authorKind: 'human', contentType: 'text', ciphertext: 'x'.repeat(32000), keyId: 'key:1' };
+      authorKind: 'human', contentType: 'text', utterance: 'Saved conversation prose' };
     sequence++;
     if (sequence >= from) yield row(subject, sequence, 'message.posted', message);
     for (let chunk = 0; chunk < chunks + 1; chunk++) {
@@ -47,7 +47,7 @@ async function* readStream(subject: string, from = 1) {
       let data: Record<string, unknown> = { conversationId: subject, turnId };
       if (chunk < chunks) {
         data = { ...data, messageId: turnId, contentType: 'text',
-          ciphertext: 'x'.repeat(128), keyId: 'key:1' };
+          utterance: 'x'.repeat(128) };
       }
       const stored = row(subject, sequence, type, data);
       stored.event.report = { computerId: assistantId, sequence: reportSequence,

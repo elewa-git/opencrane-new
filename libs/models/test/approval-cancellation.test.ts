@@ -14,7 +14,7 @@ const request = toolApprovalRequestedDataSchema.parse({
   toolRevision: digest, schemaDigest: digest, connectionId: 'connection',
   profile: 'none', policySequence: 1, digestVersion: 'lossless-json-v1',
   argumentsDigest: digest, expiresAt: '2026-10-12T10:00:00.000Z', stepUp: false,
-  ciphertext: 'YWJjZGVmZ2hpamtsbW5vcA==', keyId: 'key:test', reviewDigest: digest,
+  review: 'Saved conversation prose', reviewDigest: digest,
 });
 const subject = grantStream('mcp_server', request.serverId);
 const revocation = { resourceType: 'mcp_server', resourceId: request.serverId,

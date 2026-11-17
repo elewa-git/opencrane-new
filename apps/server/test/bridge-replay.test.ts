@@ -18,7 +18,7 @@ import { expect, it, vi } from 'vitest';
 import { countReads, event, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { databases, until } from '@opencrane/authz/testing';
 import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
@@ -44,7 +44,7 @@ async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'persona
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-replay-`);
   await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
   await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind }) });
-  const keys = conversationKeys(directory), server = createServer(), wss = new WebSocketServer({ server });
+  const server = createServer(), wss = new WebSocketServer({ server });
   const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
   for (const conversationId of conversationIds) {
     const joined = envelope('test', `member-${conversationId}`, 'member.joined', {
@@ -52,7 +52,7 @@ async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'persona
       displayName: conversationId, role: 'member', invitationId: `invite-${conversationId}`,
     });
     await nats.seed([joined]);
-    keys.provision('test', conversationId);
+
     if (kind === 'team') {
       const created = { conversationId, assistantId: 'assistant', createdBy: conversationId,
         mode: 'agent_session', payingGroupId: 'personal-default' };
@@ -61,10 +61,10 @@ async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'persona
     } else {
       const owner = { silo: 'test', memberId: conversationId };
       const creation = { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' };
-      await chatCommand(nats.store, keys, owner, creation);
+      await chatCommand(nats.store, owner, creation);
     }
     if (kind === 'team') {
-      const encrypted = keys.encrypt('test', conversationId, 'Hello');
+      const encrypted = ({ utterance: 'Hello' });
       const data = { conversationId, authorId: conversationId, authorKind: 'human',
         contentType: 'text', ...encrypted };
       const message = envelope('test', `conversation-${conversationId}`, 'message.posted', data);
@@ -73,17 +73,17 @@ async function replayFixture(conversationIds = ['alice', 'bob'], kind = 'persona
     } else {
       const owner = { silo: 'test', memberId: conversationId };
       const message = { id: `message-${conversationId}`, conversationId, text: 'Hello' };
-      await chatCommand(nats.store, keys, owner, message);
+      await chatCommand(nats.store, owner, message);
     }
   }
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   const messages: unknown[] = [];
   wss.on('connection', socket => socket.on('message', raw => messages.push(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown)));
-  return { ...nats, keys, context, messages, wss, directory, url: `http://127.0.0.1:${address.port}`,
+  return { ...nats, context, messages, wss, directory, url: `http://127.0.0.1:${address.port}`,
     async connect(tokens?: Awaited<ReturnType<typeof tokenIssuer>>) {
       const connected = new Promise<import('ws').WebSocket>(resolve => wss.once('connection', resolve));
-      const link = await connectBridge({ silo: 'test', store: nats.store, keys }, { ...context, url: `ws://127.0.0.1:${address.port}`, bearer: 'test' }, tokens);
+      const link = await connectBridge({ silo: 'test', store: nats.store }, { ...context, url: `ws://127.0.0.1:${address.port}`, bearer: 'test' }, tokens);
       return { ...link, peer: await connected };
     },
     async close() {
@@ -101,8 +101,8 @@ it.each([true, false])('acknowledges completed-start duplicates and keeps other 
   const completed = { ...start, sequence: 3, previousSequence: 2, type: 'agent.turn_completed' };
   let link: Awaited<ReturnType<typeof fixture.connect>> | undefined;
   try {
-    await recordReport(fixture.store, fixture.keys, fixture.context, start);
-    await recordReport(fixture.store, fixture.keys, fixture.context, completed);
+    await recordReport(fixture.store, fixture.context, start);
+    await recordReport(fixture.store, fixture.context, completed);
     if (closed) await turnCommand(fixture.store, fixture.context, { ...completed, status: 'completed' });
     link = await fixture.connect();
     await until(() => fixture.messages.length > 0, 1000);
@@ -140,7 +140,7 @@ it('replays an older Alice/Bob journal in its global computer sequence', async (
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
-  const connect = () => connectBridge({ silo: 'test', store: fixture.store, keys: fixture.keys },
+  const connect = () => connectBridge({ silo: 'test', store: fixture.store },
     { ...fixture.context, url: `ws://127.0.0.1:${address.port}/bridge`, bearer: 'test' });
   let link = await connect();
   try {
@@ -206,7 +206,7 @@ it('reconnects after credential expiry and delivers the pending message once', a
     credentials.push({ value: token.value, expiresAt: Date.now() + (credentials.length ? 60_000 : 150) });
     return Promise.resolve();
   });
-  const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db }, tokens, kube, `http://127.0.0.1:${address.port}`, stop.signal, logger);
+  const work = watchBridges({ silo: 'test', store: fixture.store, db }, tokens, kube, `http://127.0.0.1:${address.port}`, stop.signal, logger);
   try {
     const expiryClose = await expired;
     expect(delivered).toEqual([]);
@@ -256,7 +256,7 @@ it('surfaces a permanent report rejection and stops automatic reconnect attempts
   });
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
-  const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db }, tokens, kube, fixture.url, stop.signal, logger);
+  const work = watchBridges({ silo: 'test', store: fixture.store, db }, tokens, kube, fixture.url, stop.signal, logger);
   try {
     await until(() => closed.length > 0, 2000);
     expect(closed[0]).toEqual({ code: 1008, reason: 'Report sequence gap' });
@@ -284,8 +284,8 @@ it('wakes another conversation without rereading the archive of an already close
   const ready = (await history(fixture.store, 'computer-assistant')).at(-1)!.event;
   const started = { sequence: 1, previousSequence: 0, conversationId: 'alice', turnId: 'message-alice', assistantId: 'assistant', type: 'agent.turn_started', threadId: 'alice-thread' };
   const completed = { ...started, sequence: 2, previousSequence: 1, type: 'agent.turn_completed' };
-  await recordReport(fixture.store, fixture.keys, fixture.context, started);
-  await recordReport(fixture.store, fixture.keys, fixture.context, completed);
+  await recordReport(fixture.store, fixture.context, started);
+  await recordReport(fixture.store, fixture.context, completed);
   await turnCommand(fixture.store, fixture.context, { ...completed, status: 'completed' });
   await suspendComputer(fixture.store, { ...fixture.context, latest: ready, ready });
   let release!: () => void;
@@ -302,7 +302,7 @@ it('wakes another conversation without rereading the archive of an already close
   });
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
-  const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db }, tokens, kube, fixture.url, stop.signal);
+  const work = watchBridges({ silo: 'test', store: fixture.store, db }, tokens, kube, fixture.url, stop.signal);
   try {
     await until(async () => (await history(fixture.store, 'computer-assistant')).at(-1)?.event.type === 'computer.resumed', 3000);
     const result = await fixture.store.append({ expectedSequence: (await history(fixture.store, 'computer-assistant')).at(-1)!.sequence,
@@ -338,7 +338,7 @@ async function deliversNewMessagesAfterIdle() {
     sequence: 1, previousSequence: 0, conversationId: 'alice', turnId: 'message-alice',
     assistantId: 'assistant', type: 'agent.turn_failed',
   };
-  await recordReport(fixture.store, fixture.keys, fixture.context, terminal);
+  await recordReport(fixture.store, fixture.context, terminal);
   await turnCommand(fixture.store, fixture.context, { ...terminal, status: 'failed' });
   await runner.run(conversations);
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
@@ -355,7 +355,7 @@ async function deliversNewMessagesAfterIdle() {
     const polls = heads.mock.calls.filter(isMainPoll);
     return polls.length;
   }
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   try {
     function initialHistoryWasRead() {
@@ -378,7 +378,7 @@ async function deliversNewMessagesAfterIdle() {
     expect(mode).not.toHaveBeenCalled();
     expect(state).not.toHaveBeenCalled();
     const command = { id: 'next-message', conversationId: 'alice', text: 'New work' };
-    await chatCommand(fixture.store, fixture.keys, { silo: 'test', memberId: 'alice' }, command);
+    await chatCommand(fixture.store, { silo: 'test', memberId: 'alice' }, command);
     function receivedNextMessage(message: unknown) {
       return typeof message === 'object' && message !== null &&
         Reflect.get(message, 'id') === 'next-message';
@@ -410,7 +410,7 @@ async function waitsQuietlyForAnUnclaimedComputer() {
   await runner.run(conversations);
   const queries = vi.spyOn(db, 'query');
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   function conversationQueryCount() {
     function isConversationQuery(call: typeof queries.mock.calls[number]) {
@@ -454,7 +454,7 @@ async function deliversAfterTableCatchesUp() {
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   vi.spyOn(kube, 'credentials').mockResolvedValue();
   const queries = vi.spyOn(db, 'query');
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   function queriedConversations(call: typeof queries.mock.calls[number]) {
     return typeof call[0] === 'string' && call[0].includes("type IN ('conversation.created'");
@@ -527,7 +527,7 @@ async function deliversAfterTemporaryFailure(failureKind: TemporaryFailure) {
   }
   const loggerOptions = { level: 'error', destination: { write: logLine } };
   const logger = createLogger('bridge-retry', loggerOptions);
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal, logger);
   let failure: unknown;
   function recordFailure(error: unknown) {
@@ -590,7 +590,7 @@ async function finishedChatFixture(count: number) {
       sequence: index + 1, previousSequence: 0, conversationId,
       turnId: `message-${conversationId}`, assistantId: 'assistant', type: 'agent.turn_failed',
     };
-    await recordReport(fixture.store, fixture.keys, fixture.context, report);
+    await recordReport(fixture.store, fixture.context, report);
     const closeTurn = { ...report, status: 'failed' as const };
     await turnCommand(fixture.store, fixture.context, closeTurn);
   }
@@ -614,7 +614,7 @@ async function retriesIgnoredTurn() {
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   const credentials = vi.spyOn(kube, 'credentials');
   credentials.mockResolvedValue();
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   function turnArrived() {
     return fixture.messages.some(isFreshTurn);
@@ -665,7 +665,7 @@ async function avoidsRepeatedPendingReads() {
     sequence: 31, previousSequence: 0, conversationId: 'fresh', turnId: 'message-fresh',
     assistantId: 'assistant', type: 'agent.turn_started', threadId: 'thread-fresh',
   };
-  await recordReport(fixture.store, fixture.keys, fixture.context, report);
+  await recordReport(fixture.store, fixture.context, report);
   const start = { ...report, status: 'started' as const };
   await turnCommand(fixture.store, fixture.context, start);
   const dbs = await databases();
@@ -701,7 +701,7 @@ async function avoidsRepeatedPendingReads() {
   }
   const reading = vi.spyOn(fixture.store, 'readStream');
   reading.mockImplementation(countRead);
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   try {
     await work;
@@ -747,13 +747,13 @@ async function routesAndCachesAssistants() {
     const created = envelope('test', `assistant-${assistantId}`, 'assistant.created', assistantData);
     const creation = { expectedSequence: 0, event: created };
     await fixture.store.append(creation);
-    fixture.keys.provision('test', assistantId);
+
     const member = { silo: 'test', memberId: 'alice' };
     const create = { id: `create-${assistantId}`, conversationId: assistantId, assistantId };
-    await chatCommand(fixture.store, fixture.keys, member, create);
+    await chatCommand(fixture.store, member, create);
     if (assistantId === 'team') {
       const message = { id: 'message-team', conversationId: assistantId, text: 'Private work' };
-      await chatCommand(fixture.store, fixture.keys, member, message);
+      await chatCommand(fixture.store, member, message);
       const computer = { computerId: 'team-computer', assistantId, generation: 1 };
       const claimData = { ...computer, tokenId: 'token:team' };
       const claim = envelope('test', 'computer-team', 'computer.claimed', claimData);
@@ -806,7 +806,7 @@ async function routesAndCachesAssistants() {
   }
   const reading = vi.spyOn(fixture.store, 'readStream');
   reading.mockImplementation(countRead);
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   try {
     await watchBridges(options, tokens, kube, fixture.url, stop.signal);
     for (const assistantId of ['assistant', 'team', 'unclaimed']) {
@@ -864,7 +864,7 @@ async function waitsSafelyForAssistantHistory(source: string, waiting: boolean) 
       sequence: 1, previousSequence: 0, conversationId: 'fresh', turnId: 'message-fresh',
       assistantId: 'assistant', type: 'agent.turn_failed',
     };
-    await recordReport(fixture.store, fixture.keys, fixture.context, terminal);
+    await recordReport(fixture.store, fixture.context, terminal);
     const closeTurn = { ...terminal, status: 'failed' as const };
     await turnCommand(fixture.store, fixture.context, closeTurn);
   }
@@ -899,7 +899,7 @@ async function waitsSafelyForAssistantHistory(source: string, waiting: boolean) 
   function isPass(call: typeof queries.mock.calls[number]) {
     return typeof call[0] === 'string' && call[0].includes("type IN ('conversation.created'");
   }
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal, logger);
   try {
     await until(enoughPolls);
@@ -939,7 +939,7 @@ async function checksRecentTurnClose() {
     sequence: 1, previousSequence: 0, conversationId: 'fresh', turnId: 'message-fresh',
     assistantId: 'assistant', type: 'agent.turn_failed',
   };
-  await recordReport(fixture.store, fixture.keys, fixture.context, terminal);
+  await recordReport(fixture.store, fixture.context, terminal);
   const db = pgDb(dbs.queue);
   const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-recent-close'));
   await runner.initialise(conversations);
@@ -973,7 +973,7 @@ async function checksRecentTurnClose() {
   function isChatRead(subject: string) {
     return subject === 'conversation-fresh';
   }
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   try {
     await until(enoughPolls);
@@ -1003,7 +1003,7 @@ async function sendsPromptlyWithFinishedChats() {
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   const credentials = vi.spyOn(kube, 'credentials');
   credentials.mockResolvedValue();
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const heads = vi.spyOn(fixture.store, 'head');
   const savedRead = fixture.store.readStream.bind(fixture.store);
   const finishedOldHistories = new Set<string>();
@@ -1033,7 +1033,7 @@ async function sendsPromptlyWithFinishedChats() {
       sequence: 91, previousSequence: 0, conversationId: 'fresh', turnId: 'message-fresh',
       assistantId: 'assistant', type: 'agent.turn_failed',
     };
-    await recordReport(fixture.store, fixture.keys, fixture.context, terminal);
+    await recordReport(fixture.store, fixture.context, terminal);
     const closeTurn = { ...terminal, status: 'failed' as const };
     await turnCommand(fixture.store, fixture.context, closeTurn);
     await runner.run(conversations);
@@ -1050,7 +1050,7 @@ async function sendsPromptlyWithFinishedChats() {
     const command = { id: 'next-message', conversationId: 'fresh', text: 'New work' };
     reads.mockClear();
     const member = { silo: 'test', memberId: 'fresh' };
-    await chatCommand(fixture.store, fixture.keys, member, command);
+    await chatCommand(fixture.store, member, command);
     await until(nextTurnArrived, 60_000);
     function isFinishedChatRead(call: typeof reads.mock.calls[number]) {
       return call[0].startsWith('conversation-old-');
@@ -1123,7 +1123,7 @@ async function stopsAndReconnectsAcceptedTurn() {
   function readFreshChat(call: typeof reads.mock.calls[number]) {
     return call[0] === 'conversation-fresh';
   }
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   try {
     await until(turnArrived);
@@ -1142,7 +1142,7 @@ async function stopsAndReconnectsAcceptedTurn() {
     expect(fixture.messages.filter(isFreshTurn)).toHaveLength(acceptedDeliveries);
     const request = { id: 'stop-fresh', conversationId: 'fresh', stopTurnId: 'message-fresh' };
     const member = { silo: 'test', memberId: 'fresh' };
-    await chatCommand(fixture.store, fixture.keys, member, request);
+    await chatCommand(fixture.store, member, request);
     await until(stopArrived);
     peer.terminate();
     await until(resentAfterReconnect);
@@ -1198,12 +1198,12 @@ async function approvalWatcherFixture() {
     if (assistantId === 'other-assistant') {
       const assistant = { assistantId, ownerId: 'alice', kind: 'personal' };
       await append(`assistant-${assistantId}`, 'assistant.created', assistant);
-      fixture.keys.provision('test', 'other');
+
       const command = { id: 'create-other', conversationId: 'other', assistantId };
       const member = { silo: 'test', memberId: 'alice' };
-      await chatCommand(fixture.store, fixture.keys, member, command);
+      await chatCommand(fixture.store, member, command);
       const message = { id: 'message-other', conversationId: 'other', text: 'Hello' };
-      await chatCommand(fixture.store, fixture.keys, member, message);
+      await chatCommand(fixture.store, member, message);
     }
     const claimed = { assistantId, computerId, generation: 1, tokenId: `token:${computerId}` };
     await append(`computer-${assistantId}`, 'computer.claimed', claimed);
@@ -1231,7 +1231,7 @@ async function approvalWatcherFixture() {
     policySequence: await fixture.store.head('mcp-fixture'),
     digestVersion: 'lossless-json-v1', argumentsDigest: approvalId,
     expiresAt: '2099-01-01T00:00:00.000Z', stepUp: false,
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAA==', keyId: 'key:fixture', reviewDigest: approvalId,
+    review: 'Saved conversation prose', reviewDigest: approvalId,
   };
   await append(`approval-${approvalId}`, 'tool.approval_requested', request);
   await runner.initialise(conversations);
@@ -1239,7 +1239,7 @@ async function approvalWatcherFixture() {
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   const credentials = vi.spyOn(kube, 'credentials');
   credentials.mockResolvedValue();
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   return { fixture, dbs, stop, sockets, frames, work, append };
 }
@@ -1347,7 +1347,7 @@ async function wakesApprovalsThroughWatcher() {
     await until(completionAcknowledged, 1000);
     const command = { id: 'next-bob', conversationId: 'bob', text: 'Continue' };
     const member = { silo: 'test', memberId: 'bob' };
-    await chatCommand(fixture.store, fixture.keys, member, command);
+    await chatCommand(fixture.store, member, command);
     await until(newTurnArrived, 1000);
     expect(blockedReads).toBe(1);
   } finally {
@@ -1653,7 +1653,7 @@ async function deliversSavedModelToComputer(mode: 'memory_free' | 'restricted') 
       ...fixture.context, bearer: 'computer-pass',
       url: `ws://127.0.0.1:${address.port}/bridge`,
     };
-    const options = { silo: 'test', store: fixture.store, keys: fixture.keys };
+    const options = { silo: 'test', store: fixture.store };
     link = await connectBridge(options, connection, tokens);
     const turn = {
       type: 'turn', id: 'message-alice', conversationId: 'alice', assistantId: 'assistant',
@@ -1725,7 +1725,7 @@ async function prepareCloseRace(fixture: ReplayFixture, test: CloseCase) {
   })]);
   const member = { silo: 'test', memberId: 'alice' };
   const message = { id: 'current-alice', conversationId: 'alice', text: 'Continue' };
-  await chatCommand(fixture.store, fixture.keys, member, message);
+  await chatCommand(fixture.store, member, message);
   const start = { sequence: 1, previousSequence: 0, conversationId: 'alice',
     turnId: 'current-alice', assistantId: 'assistant', type: 'agent.turn_started',
     threadId: 'thread-alice' };
@@ -1927,7 +1927,7 @@ async function recordsBudgetAdmissionRefusal(failure: 'none' | 'before' | 'after
     await fixture.seed([ready]);
     const member = { silo: 'test', memberId: 'alice' };
     const message = { id: 'over-budget', conversationId: 'alice', text: 'Continue' };
-    await chatCommand(fixture.store, fixture.keys, member, message);
+    await chatCommand(fixture.store, member, message);
     const start = { sequence: 1, previousSequence: 0, conversationId: 'alice',
       turnId: 'over-budget', assistantId: 'assistant', type: 'agent.turn_started',
       threadId: 'thread-alice' };
@@ -2056,7 +2056,7 @@ async function cancelsPrivateWorkBeforeShutdownWaits() {
     return Promise.resolve();
   }
   vi.spyOn(kube, 'credentials').mockImplementation(installCredential);
-  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const options = { silo: 'test', store: fixture.store, db };
   const work = watchBridges(options, tokens, kube, proxyUrl, stop.signal);
   let replay: WebSocket | undefined;
   try {

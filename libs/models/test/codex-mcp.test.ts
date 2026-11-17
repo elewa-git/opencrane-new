@@ -1,5 +1,6 @@
+import { substituteStoredContent } from '@opencrane/event-store/testing';
 import { setTimeout as pause } from 'node:timers/promises';
-import { expect, it, vi } from 'vitest';
+import { expect, it } from 'vitest';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { conversations, readConversation, readEvents } from '@opencrane/projections';
@@ -489,7 +490,7 @@ async function bindsHeldApproval(change: string) {
       const approvalRows = await discoverApprovalRequests(setup);
       const listOptions = { approvalRows };
       const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
-        'alice', setup.keys, listOptions);
+        'alice', listOptions);
       expect(cards).toHaveLength(1);
       expect(cards[0]?.approvalId).toBe(decision.approvalId);
     }
@@ -512,20 +513,20 @@ it('keeps requester identity and the stored review digest when reading an approv
     const approvalRows = await discoverApprovalRequests(setup);
     const listOptions = { approvalRows };
     const cardsForRequester = await approvalCards(setup.nats.store, 'test', 'conversation',
-      'alice', setup.keys, listOptions);
+      'alice', listOptions);
     expect(cardsForRequester).toMatchObject([{ requesterId: 'alice', state: 'requested',
       canDecide: true }]);
 
     const cardsForAnotherMember = await approvalCards(setup.nats.store, 'test', 'conversation',
-      'bob', setup.keys, listOptions);
+      'bob', listOptions);
     expect(cardsForAnotherMember).toMatchObject([{ requesterId: 'alice', state: 'requested',
       canDecide: false }]);
 
-    const changedReview = vi.spyOn(setup.keys, 'decrypt')
-      .mockReturnValue('{"action":"Changed after storage"}');
+    const changedReview = substituteStoredContent(setup.nats.store, 'tool.approval_requested',
+      { review: '{"action":"Changed after storage"}' });
     try {
       await expect(approvalCards(setup.nats.store, 'test', 'conversation', 'alice',
-        setup.keys, listOptions))
+        listOptions))
         .rejects.toThrow('Review digest mismatch');
     } finally {
       changedReview.mockRestore();

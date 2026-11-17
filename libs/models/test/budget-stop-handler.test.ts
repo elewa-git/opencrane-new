@@ -81,7 +81,7 @@ it('retries while the conversation index has not passed the stop', waitsForIndex
 async function queuesAndRecovers() {
   const queued = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   const event = await stop();
   await setup.actor.configure({ scope: 'paying_group', scopeId: 'personal-default',
     ceilingCents: 20000, setBy: 'alice' });
@@ -172,20 +172,20 @@ it('refuses a source event that does not exist in saved budget history', refuses
 async function selectsOnlyEarlierHumanMessages() {
   const human = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'agent', authorId: 'assistant',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   const event = await stop();
   await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   await setup.append('conversation-later', 'conversation.created', {
     conversationId: 'later', assistantId: 'not-created', createdBy: 'alice',
     mode: 'agent_session' });
   await setup.append('conversation-later', 'message.posted', {
     conversationId: 'later', authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   await deliver(event);
   expect(await records('later')).toEqual([]);
   const saved = await records();
@@ -203,7 +203,7 @@ it('selects only human messages saved before the stop', selectsOnlyEarlierHumanM
 async function keepsQueuedPayerBeforeDefaultChange() {
   const queued = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   await setup.actor.configure({ scope: 'global', ceilingCents: 20000,
     dailyCeilingCents: 2000, defaultPayingGroupId: 'other', setBy: 'alice' });
   const event = await stop();

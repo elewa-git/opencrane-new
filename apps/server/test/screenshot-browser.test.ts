@@ -20,8 +20,8 @@ it.runIf(process.env['SCREENSHOT_BROWSER'] === '1')('captures real desktop pixel
   const bound = reservation.address(); if (!bound || typeof bound === 'string') throw new Error('No port');
   const port = bound.port; await new Promise<void>(resolve => reservation.close(() => resolve()));
   const fixture = await viewFixture(desktop.open, `http://127.0.0.1:${port}/auth/callback`);
-  const { config, nats, db, binding, feed, keys, runner } = fixture;
-  const options = { silo: 'test', store: nats.store, db, binding, feed, keys };
+  const { config, nats, db, binding, feed, runner } = fixture;
+  const options = { silo: 'test', store: nats.store, db, binding, feed };
   let release: (() => void) | undefined, scanning = false;
   let failScan = false, infected = false;
   const app = buildServer(config, { chat: options, liveView: { ...options, open: desktop.open }, files: { ...options, objects: services.objects, async scan(bytes) {

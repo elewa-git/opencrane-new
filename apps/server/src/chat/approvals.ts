@@ -131,8 +131,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         const readOptions = { deadline, approvalRows,
           requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
-          configured.store, configured.silo, conversationId, memberId, configured.keys,
-          readOptions);
+          configured.store, configured.silo, conversationId, memberId, readOptions);
         return reply.send({ cards, csrf });
       }
       if (!isApprovalCsrfValid(req, csrf)) {
@@ -231,7 +230,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     return reply.code(403).send({ status: 'refused' });
   }
   if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
-  const text = options.keys.decrypt(options.silo, conversationId, request);
+  const text = request.review;
   approvalReviewSchema.parse(JSON.parse(text));
   const reviewDigest = sha256Hex(text);
   if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');

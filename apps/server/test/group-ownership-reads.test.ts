@@ -233,8 +233,7 @@ async function chatDuringRead(route: ReadCase) {
       subject: 'conversation-unrelated', type: 'message.posted',
       data: {
         conversationId: 'unrelated', authorId: 'owner', authorKind: 'human',
-        ciphertext: Buffer.from('unrelated chat').toString('base64'),
-        keyId: 'key:test', contentType: 'text',
+        utterance: 'Saved conversation prose', contentType: 'text',
       },
       apply: false,
     });

@@ -11,10 +11,7 @@ import { approvalRecord } from './approval-record.ts';
 import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
 
-export interface ReviewKeys {
-  encrypt(silo: string, conversation: string, text: string): { ciphertext: string; keyId: string };
-  decrypt(silo: string, conversation: string, value: unknown): string;
-}
+
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
@@ -105,24 +102,21 @@ function reviewTarget(args: Map<string, JsonValue>, targetArgument: string, miss
 
 // Reuse the same request so a retry cannot reopen an ended approval.
 async function askApproval(store: EventStore, silo: string, bound: Binding,
-  policy: Policy, keys: ReviewKeys,
-  now: Date, deadline: number, prepared: ReturnType<typeof prepareApproval>,
+  policy: Policy, now: Date, deadline: number, prepared: ReturnType<typeof prepareApproval>,
   conversationRows?: StoredEvent[]) {
   const { binding, text, reviewDigest, approvalId, stepUp, missingFields } = prepared;
   const subject = `approval-${approvalId}`;
   if (!(await history(store, subject, silo, deadline)).length) {
     const lifetime = approvalLifetime(policy.waitLimited);
     const expiresAt = new Date(now.getTime() + lifetime).toISOString();
-    const encrypted = keys.encrypt(silo, bound.conversationId, text);
     const request = { ...binding, approvalId, missingFields, expiresAt, stepUp,
-      ...encrypted, reviewDigest };
+      review: text, reviewDigest };
     const result = await store.append({ event: envelope(silo, subject, 'tool.approval_requested', request, `request-${approvalId}`), expectedSequence: 0 });
     if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Approval persistence unavailable');
   }
   const readOptions = { now, deadline, conversationRows };
   const current = await readApproval(store, silo, approvalId, readOptions);
-  const savedReview = keys.decrypt(silo, bound.conversationId, current.request);
-  if (sha256Hex(savedReview) !== reviewDigest) throw new Error('Review unavailable');
+  if (sha256Hex(current.request.review) !== reviewDigest) throw new Error('Review unavailable');
   return current;
 }
 
@@ -363,7 +357,7 @@ async function consumeApproval(store: EventStore, silo: string, current: Awaited
 }
 
 export async function approvalCards(store: EventStore, silo: string, conversationId: string,
-  memberId: string, keys: ReviewKeys, options: ApprovalCardsOptions): Promise<ApprovalCard[]> {
+  memberId: string, options: ApprovalCardsOptions): Promise<ApprovalCard[]> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
   const readOptions = { now, deadline };
@@ -371,7 +365,7 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   for (const { event } of options.approvalRows) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;
     const request = toolApprovalRequestedDataSchema.parse(event.data);
-    // Keep other people's reviews encrypted when reading a shared child.
+    // Withhold other people's reviews when reading a shared child.
     if (options.requesterOnly && request.requesterId !== memberId) continue;
     if (request.conversationId === conversationId) ids.push(request.approvalId);
   }
@@ -379,7 +373,7 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   for (const id of ids) {
     const current = await readApproval(store, silo, id, readOptions);
     const { request } = current;
-    const text = keys.decrypt(silo, conversationId, request);
+    const text = request.review;
     if (sha256Hex(text) !== request.reviewDigest) throw new Error('Review digest mismatch');
     const card = approvalCard(current, memberId, text);
     cards.push(card);
@@ -405,12 +399,11 @@ function approvalCard(current: Awaited<ReturnType<typeof readApproval>>, memberI
 }
 
 export async function approvalDecision(store: EventStore, silo: string, bound: Binding,
-  policy: Policy, keys: ReviewKeys | undefined,
-  now: () => Date, fresh: FreshAuthority, requestId: string, conversationRows?: StoredEvent[]) {
+  policy: Policy, now: () => Date, fresh: FreshAuthority, requestId: string, conversationRows?: StoredEvent[]) {
   if (policy.expectedApproval && policy.outcome !== 'ask') {
     return { outcome: 'deny' as const, reason: 'approval_mismatch', approvalId: undefined };
   }
-  if (policy.outcome !== 'ask' || !policy.review || !keys) return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
+  if (policy.outcome !== 'ask' || !policy.review) return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
   await fresh();
   const deadline = fresh.deadline ?? Infinity;
   const prepared = prepareApproval(silo, bound, policy);
@@ -418,7 +411,7 @@ export async function approvalDecision(store: EventStore, silo: string, bound: B
     return { outcome: 'deny' as const, reason: 'approval_mismatch',
       approvalId: undefined };
   }
-  const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline,
+  const approval = await askApproval(store, silo, bound, policy, now(), deadline,
     prepared, conversationRows);
   // Require the approval id added by the held proxy path; a new Codex call lacks it.
   if (approval.retryRequested && policy.expectedApproval !== approval.request.approvalId) {

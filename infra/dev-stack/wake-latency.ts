@@ -14,7 +14,6 @@ import { database } from '../../libs/projections/test/database.ts';
 import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
 import { history, field, lifecycleHandlers, suspendComputer, watchComputers } from '../../apps/ops/src/lifecycle.ts';
 import { chatCommand, chatHistory } from '../../apps/server/src/chat/commands.ts';
-import { conversationKeys } from '../../apps/server/src/chat/keys.ts';
 import { watchBridges } from '../../apps/server/src/chat/bridge.ts';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
@@ -136,7 +135,6 @@ try {
   const store = nats.store;
   const runner = new ProjectionRunner(storage.db, nats.reader, createLogger('wake-measure', { level: 'silent' }));
   await runner.initialise(conversations);
-  const keys = conversationKeys(`${directory}/keys`);
   const joined = { id: randomUUID(), commandId: randomUUID(), type: 'member.joined', subject: 'member-alice', silo: 'test', source: 'test', correlation: {}, time: new Date().toISOString(), principal: { kind: 'human' as const, id: 'alice' }, data: { memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'member' } };
   assert.equal((await store.append({ event: joined, expectedSequence: 0 })).status, 'appended');
   const handlers = lifecycleHandlers(store);
@@ -193,10 +191,10 @@ try {
   void lifecycle.catch(error => { console.error(error); stop.abort(); });
   await until(async () => (await history(store, subject)).at(-1)?.event.type === 'computer.ready', 'initial Ready');
   const conversationId = randomUUID(), context = { silo: 'test', memberId: 'alice' };
-  keys.provision('test', conversationId);
-  await chatCommand(store, keys, context, { id: randomUUID(), conversationId, assistantId });
+
+  await chatCommand(store, context, { id: randomUUID(), conversationId, assistantId });
   await runner.run(conversations);
-  bridges = watchBridges({ store, keys, db: storage.db, silo: 'test' }, tokens, kube, proxyUrl, stop.signal);
+  bridges = watchBridges({ store, db: storage.db, silo: 'test' }, tokens, kube, proxyUrl, stop.signal);
   void bridges.catch(error => { console.error(error); stop.abort(); });
   for (let index = 0; index < 5; index++) {
     const rows = await history(store, subject), latest = rows.findLast(r => r.event.type === 'computer.ready')!.event;
@@ -205,7 +203,7 @@ try {
     await delay(500); // Settle deletion watches before arming the next sample.
     trace = {};
     const id = randomUUID();
-    await chatCommand(store, keys, context, { id, conversationId, text: 'Say hello briefly.' });
+    await chatCommand(store, context, { id, conversationId, text: 'Say hello briefly.' });
     trace['message_posted'] = Date.parse((await chatHistory(store, 'test', conversationId)).find(r => r.event.id === id)!.event.time);
     await until(async () => (await chatHistory(store, 'test', conversationId)).some(r => r.event.type === 'agent.turn_completed' && field(r.event.data, 'turnId') === id), 'stub turn completed');
     await until(() => trace?.['first_token'] !== undefined, 'first-token marker');

@@ -1,3 +1,4 @@
+import type { OnboardingOptions } from './onboarding/options.ts';
 import { seedOwnership, providerSecrets, oauthConfigurationFromFile, connectionCustodyFromFile } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
@@ -8,7 +9,7 @@ import type { FileOptions } from './files/routes.ts';
 // server to its underlying HTTP server. Run with:
 //   node --experimental-strip-types src/main.ts
 import { requireLegacyClosesProjected } from './chat/participation.ts';
-import { conversationKeys } from './chat/keys.ts';
+import { conversationKeys } from '@opencrane/projections';
 import { startChildRecovery } from './chat/child-recovery.ts';
 import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
@@ -62,20 +63,18 @@ if (databaseUrl) {
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
 }
 const personalKeyDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
-let onboarding: ChatOptions | undefined;
+let onboarding: OnboardingOptions | undefined;
 if (realtime && events && modelDb && personalKeyDirectory) {
   onboarding = { silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(personalKeyDirectory) };
 }
-const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
 const readinessFile = process.env['DEV_DISPATCHER_READY_FILE'];
 function readDispatcherReady() {
   return dispatcherReady(readinessFile);
 }
-const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
+const chat: ChatOptions | undefined = realtime && events && modelDb ? { silo: realtime.binding.silo, store: events.store,
   db: modelDb.db, feed: realtime.feed, binding: realtime.binding,
-  dispatcherReady: readDispatcherReady,
-  keys: conversationKeys(keyDirectory, process.env['CONVERSATION_WRAP_KEY_FILE']) } : undefined;
+  dispatcherReady: readDispatcherReady } : undefined;
 if (chat) await requireLegacyClosesProjected(chat.store, chat.db);
 if (realtime && chat) realtime.chat = chat;
 let files: FileOptions | undefined;

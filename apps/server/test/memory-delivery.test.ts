@@ -26,7 +26,7 @@ import { assistantSnapshot, processConversation, type AgentSession }
   from '../src/chat/bridge-conversation.ts';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { invalidateMemoryAccess, invalidateMemoryContext } from '../src/memory/invalidation.ts';
 
 let storage: Awaited<ReturnType<typeof database>>;
@@ -34,7 +34,6 @@ let deployment: Awaited<ReturnType<typeof initialQualificationFixture>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let computer: Awaited<ReturnType<typeof fixture>>;
 let link: Awaited<ReturnType<typeof connectBridge>>;
-let keys: ReturnType<typeof conversationKeys>;
 let processor: ReturnType<typeof assistantProcessor>;
 const sessions: AgentSession[] = [];
 const frameSchema = z.object({ type: z.string(), token: z.unknown().optional() });
@@ -133,8 +132,7 @@ async function writeFact(memoryId: string, dependsOn: { scopeId: string;
 async function setup() {
   nats = await natsFixture();
   computer = await fixture(false);
-  keys = conversationKeys(`${dirname(nats.env().NATS_CA_FILE)}/keys`);
-  keys.provision('test', 'chat');
+
   await append('member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite',
     email: 'a@example.test', role: 'member', invitedBy: 'owner' });
   await append('member-alice', 'member.joined', { memberId: 'alice', invitationId: 'invite',
@@ -147,7 +145,7 @@ async function setup() {
     computerId: 'computer', generation: 1, podUid: 'pod' });
   await append('conversation-chat', 'conversation.created', { conversationId: 'chat',
     createdBy: 'alice', assistantId: 'assistant', mode: 'agent_session' });
-  const encrypted = keys.encrypt('test', 'chat', 'Hello');
+  const encrypted = ({ utterance: 'Hello' });
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
     authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted }, 'turn');
   await append('computer-assistant', 'computer.turn_started', { conversationId: 'chat',
@@ -173,7 +171,7 @@ async function setup() {
   await writeFact('base', [{ scopeId, memoryId: 'root', revision: 1 }]);
   await writeFact('fact', [{ scopeId, memoryId: 'base', revision: 1 }], 'alice', null, true);
   const initial = await prepareInitialDelivery();
-  const options = { silo: 'test', store: nats.store, keys, binding: iam, ...initial };
+  const options = { silo: 'test', store: nats.store, binding: iam, ...initial };
   const input = { url: computer.socket.url, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test' };
   link = await connectBridge(options, input, computer.issuer);
@@ -309,10 +307,10 @@ async function otherTurn(requesterId = 'alice') {
     await append('member-bob', 'member.joined', { memberId: 'bob', invitationId: 'bob',
       email: 'b@example.test', role: 'member', displayName: 'Bob' });
   }
-  keys.provision('test', 'other');
+
   await append('conversation-other', 'conversation.created', { conversationId: 'other',
     createdBy: requesterId, assistantId: 'assistant', mode: 'agent_session' });
-  const encrypted = keys.encrypt('test', 'other', 'Independent question');
+  const encrypted = ({ utterance: 'Independent question' });
   await append('conversation-other', 'message.posted', { conversationId: 'other',
     authorId: requesterId, authorKind: 'human', contentType: 'text', ...encrypted }, 'other-turn');
   await append('computer-assistant', 'computer.turn_started', { conversationId: 'other',
@@ -439,11 +437,10 @@ it('keeps other conversation checks and connection shutdown independent of stall
   doesNotBlockOther);
 
 async function replayAndUnrelated() {
-  const decrypt = vi.spyOn(keys, 'decrypt');
   await append('conversation-chat', 'file.uploaded', { conversationId: 'chat', fileId: 'upload',
     uploadedBy: 'alice', name: 'file.txt', size: 1, sha256: 'a'.repeat(64),
     mime: 'text/plain', objectKey: 'test/chat/upload' });
-  const encrypted = keys.encrypt('test', 'chat', 'Independent human message');
+  const encrypted = ({ utterance: 'Independent human message' });
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
     authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted });
   await invalidated();
@@ -456,7 +453,6 @@ async function replayAndUnrelated() {
   function interrupted() { expect(computer.calls.filter(targetInterrupt)).toHaveLength(1); }
   await vi.waitFor(interrupted);
   expect(link.socket.readyState).toBe(link.socket.OPEN);
-  expect(decrypt).not.toHaveBeenCalled();
 }
 it('replays without effects and delivers despite unrelated uploads and human messages',
   replayAndUnrelated);
@@ -486,7 +482,7 @@ async function racingPollsShareInterrupt() {
 it('shares an in-flight interruption across repeated and racing polls', racingPollsShareInterrupt);
 
 async function startReplacement() {
-  const encrypted = keys.encrypt('test', 'chat', 'New request');
+  const encrypted = ({ utterance: 'New request' });
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
     authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted }, 'replacement');
   await append('computer-assistant', 'computer.turn_started', { conversationId: 'chat',
@@ -1415,7 +1411,7 @@ async function prepareRecallTurn() {
   await append('mcp-memory', 'mcp.server_reviewed', reviewed);
   const published = { serverId: 'memory', publishedBy: 'alice' };
   await append('mcp-memory', 'mcp.server_published', published);
-  const encrypted = keys.encrypt('test', 'chat', 'Recall my fact');
+  const encrypted = ({ utterance: 'Recall my fact' });
   const message = { conversationId: 'chat', authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted };
   await append('conversation-chat', 'message.posted', message, 'recall-turn');
@@ -1582,7 +1578,7 @@ async function offersQualifiedRecall() {
   link.sentTurns.delete('chat');
   const rows = await history(nats.store, 'computer-assistant', 'test');
   const assistant = assistantSnapshot(rows, 'personal', 'test');
-  const options = { silo: 'test', store: nats.store, keys, binding: iam, db: storage.db };
+  const options = { silo: 'test', store: nats.store, binding: iam, db: storage.db };
   function connectedComputer() {
     const connected = { ...link, connectionId: 1 };
     return Promise.resolve(connected);

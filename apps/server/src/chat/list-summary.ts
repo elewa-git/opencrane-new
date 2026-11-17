@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { z } from 'zod';
 import { sessionSlug } from '@opencrane/protocol';
 import type { ChatOptions } from './access.ts';
@@ -57,7 +58,7 @@ export async function summary(options: ChatOptions, conversationId: string, mode
   const first = result.rows.find(isFirstMessage);
   const last = result.rows.findLast(changesStatus);
   let title = 'New session';
-  if (first) title = sessionSlug(options.keys.decrypt(options.silo, conversationId, first.data));
+  if (first) title = sessionSlug(readConversationProse(first.data));
   let status = conversationStatus(result.rows, last, mode);
   if (saved.rows[0]?.closed) status = 'closed';
   return { title, status };

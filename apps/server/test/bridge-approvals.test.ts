@@ -19,7 +19,7 @@ const request = {
   toolRevision: approvalId, schemaDigest: approvalId, profile: 'none', policySequence: 0,
   digestVersion: 'lossless-json-v1', argumentsDigest: approvalId,
   expiresAt: '2099-01-01T00:00:00.000Z', stepUp: false,
-  ciphertext: 'AAAAAAAAAAAAAAAAAAAAAA==', keyId: 'key:fixture', reviewDigest: approvalId,
+  review: 'Saved conversation prose', reviewDigest: approvalId,
 };
 const waiting = { type: 'approval_waiting', approvalId, conversationId: 'chat', turnId: 'turn' };
 
@@ -361,7 +361,6 @@ it('bounds waiting entries, refuses unknown fields and forgets a closed link',
 
 async function acceptsSocketSignals() {
   const { connectBridge } = await import('../src/chat/bridge.ts');
-  const { conversationKeys } = await import('../src/chat/keys.ts');
   const server = createServer();
   const wss = new WebSocketServer({ server });
   const resume = Promise.withResolvers<unknown>();
@@ -379,8 +378,8 @@ async function acceptsSocketSignals() {
   if (!address || typeof address === 'string') throw new Error('No port');
   const input = { url: `ws://127.0.0.1:${address.port}`, computerId: 'computer',
     assistantId: 'assistant', bearer: 'local-test' };
-  const keys = conversationKeys('/unused-approval-test');
-  const options = { silo: 'test', store: nats.store, keys };
+
+  const options = { silo: 'test', store: nats.store };
   const link = await connectBridge(options, input);
   const socketValue = firstEventArgument(await connected);
   if (!(socketValue instanceof WebSocket)) throw new Error('No computer socket');

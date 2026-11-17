@@ -1,3 +1,5 @@
+import { approvalFixture } from './support/approval-fixture.ts';
+import { substituteStoredContent } from '@opencrane/event-store/testing';
 /* eslint max-lines: ["error", { max: 1686, skipBlankLines: true, skipComments: true }] */
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -5,97 +7,16 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { z } from 'zod';
 import { parseEventByType, toolDispatchRecordedDataSchema } from '@opencrane/events';
-import { encodeSession } from '@opencrane/auth';
-import { testAuthConfig } from '@opencrane/auth/testing';
-import { approvalCardsSchema, chatFeedSchema, originalCallStatusSchema } from '@opencrane/protocol';
+
+
+import { chatFeedSchema, originalCallStatusSchema } from '@opencrane/protocol';
 import { auditTrail, readAudit, conversations, readConversation } from '@opencrane/projections';
 import { envelope, history, readApproval, readToolPolicy, decideApproval,
   ingestUsage } from '@opencrane/models';
-import { buildServer } from '../src/server.ts';
+
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { catalogueEvidence, fixture, reviewCatalogue,
-  toolEvidence } from '@opencrane/models/testing';
-async function approvalFixture(stepUp = false,
-  retainedCall?: () => Promise<{ approvalId: string; turnId: string;
-    callId: string; conversationId: string; computerId: string; generation: number;
-    serverId: string; connectionId: string; toolName: string;
-    expiresAt: string } | undefined>) {
-  const f = await fixture();
-  await f.runner.initialise(conversations);
-  await f.runner.run(conversations);
-  await f.runner.initialise(auditTrail);
-  await f.runner.run(auditTrail);
-  const config = testAuthConfig({ expectedOrgId: 'org-test' });
-  const chat = { silo: 'test', store: f.nats.store, db: f.db, keys: f.keys,
-    binding: f.binding, feed: { memberId: identity },
-    ...(retainedCall ? { retainedCall } : {}) };
-  function identity(_silo: string, _issuer: string, sub: string) {
-    return Promise.resolve(sub);
-  }
-  let app = buildServer(config, { chat });
-  async function restartReader() {
-    await app.close();
-    app = buildServer(config, { chat });
-  }
-  const headers = (sub = 'alice', authTime = 0, approval?: string) => ({ origin: new URL(config.redirectUri).origin,
-    cookie: `${config.cookieName}=${encodeSession(config, { sub, orgId: 'org-test', roles: [], authTime,
-      exp: Math.floor(Date.now() / 1000) + 3600, ...(approval ? { stepUpApproval: approval } : {}) })}` });
-  await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
-  const tool = toolEvidence({ name: 'write', reviewed: true, costCents: 0 });
-  function discover(stepUp: boolean) {
-    const review = { action: 'Update order note', consequence: 'The order note changes immediately.',
-      targetArgument: 'order', fields: ['order', 'note', 'amount'], stepUp };
-    const reviewedTool = { ...tool, review };
-    const catalogue = catalogueEvidence([reviewedTool]);
-    const data = { serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-      ...catalogue };
-    return f.append('mcp-fixture', 'mcp.server_discovered', data);
-  }
-  await discover(stepUp);
-  await reviewCatalogue(f);
-  await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'write', toolRevision: tool.revision, mode: 'ask', setBy: 'alice' });
-  await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
-  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
-    const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
-    await f.auth.handler.handle(event, f.db);
-  }
-  function body(args = '{"order":9007199254740993,"note":"hello","amount":1.00e2}') {
-    const metadata = {
-      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-      'io.modelcontextprotocol/clientCapabilities': {},
-      threadId: 'thread', callId: 'approval-call',
-    };
-    const encodedMetadata = JSON.stringify(metadata);
-    const parameters = `{"name":"write","arguments":${args},"_meta":${encodedMetadata}}`;
-    return `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":${parameters}}`;
-  }
-  const call = async (args?: string, extra = {}, raw = body(args)) => {
-    const response = await fetch(`http://127.0.0.1:${f.options.port}/mcp/fixture/installed`, { method: 'POST', headers: { ...f.headers,
-      'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'write', ...extra }, body: raw });
-    return { status: response.status, text: await response.text() };
-  };
-  const url = '/api/conversations/conversation/approvals';
-  const read = async (session = headers()) => {
-    const response = await app.inject({ url, headers: session });
-    expect(response.statusCode).toBe(200);
-    return z.object({ cards: approvalCardsSchema, csrf: z.string() }).parse(response.json());
-  };
-  const decide = async (decision = 'approved', session = headers(), patch = {}) => {
-    const { cards, csrf } = await read(session);
-    return app.inject({ method: 'POST', url, headers: { ...session, 'x-csrf-token': csrf }, payload: { approvalId: cards[0]!.approvalId, decision, ...patch } });
-  };
-  async function close() {
-    await app.close();
-    await f.close();
-  }
-  return { ...f, config, restartReader, headers, read, decide, call, body, discover, close,
-    get app() {
-      return app;
-    },
-  };
-}
-
+import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
 async function exactReviewFixture() {
   const setup = await approvalFixture();
   try {
@@ -175,7 +96,7 @@ async function checksApprovalAfterRenewal(outcome: typeof checkOutcomes[number])
 it.each(checkOutcomes)('checks waiting approval after %s and renewal',
   checksApprovalAfterRenewal);
 
-it('opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart', async () => {
+it('opens one readable Ask card and forwards approved lossless bytes once across tabs, retries and restart', async () => {
   const f = await approvalFixture();
   try {
     expect((await f.call()).text).toContain('approvalId');
@@ -209,7 +130,9 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
       events.push(row.event);
       if (row.sequence === await f.nats.store.head()) break;
     }
-    expect(JSON.stringify(events)).not.toContain('hello');
+    const request = events.find(event => event.type === 'tool.approval_requested');
+    const review = z.object({ review: z.string() }).parse(request?.data);
+    expect(review.review).toContain('hello');
     expect(events.filter(e => e.type === 'approval.used')).toHaveLength(1);
     const used = z.object({ permitId: z.string() }).parse(events.find(e => e.type === 'approval.used')!.data);
     const decision = (await history(f.nats.store, `decision-${used.permitId}`, 'test'))[0]!;
@@ -237,7 +160,7 @@ async function refusesMessageDuringAllowAudit() {
     await fixture.call();
     expect((await fixture.decide()).statusCode).toBe(200);
     const append = fixture.nats.store.append.bind(fixture.nats.store);
-    const encrypted = fixture.keys.encrypt('test', 'conversation', 'Withdraw this request');
+    const encrypted = ({ utterance: 'Withdraw this request' });
     const message = {
       conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted,
@@ -490,12 +413,12 @@ it('fences changed authority before consumption, leaving no upstream effect or c
   } finally { await f.close(); }
 }, 40_000);
 
-it('refuses decisions and consumption when the encrypted review cannot be read', async () => {
+it('refuses decisions and consumption when the saved review is malformed', async () => {
   const f = await approvalFixture();
   try {
     await f.call();
     const headers = f.headers(), { cards, csrf } = await f.read(headers);
-    const unavailable = vi.spyOn(f.keys, 'decrypt').mockImplementation(() => { throw new Error('Key unavailable'); });
+    const unavailable = substituteStoredContent(f.nats.store, 'tool.approval_requested', { review: '{' });
     try {
       expect((await f.app.inject({ method: 'POST', url: '/api/conversations/conversation/approvals', headers: { ...headers, 'x-csrf-token': csrf }, payload: { approvalId: cards[0]!.approvalId, decision: 'approved' } })).statusCode).toBe(503);
       expect((await f.call()).status).toBe(403); expect(f.received()).toBe(0);
@@ -514,7 +437,7 @@ it('refuses approval reads and decisions when the stored review digest does not 
       ...cards[0]!.review,
       action: 'Changed after storage',
     });
-    const changedReview = vi.spyOn(f.keys, 'decrypt').mockReturnValue(changedReviewText);
+    const changedReview = substituteStoredContent(f.nats.store, 'tool.approval_requested', { review: changedReviewText });
     try {
       const read = await f.app.inject({ url: '/api/conversations/conversation/approvals',
         headers });
@@ -740,7 +663,7 @@ async function refusesApprovalChangeDuringFinalCheck(type: string) {
     const current = await readApproval(setup.nats.store, 'test', approvalId);
     async function changeDuringFinalCheck() {
       if (type === 'message.posted') {
-        const encrypted = setup.keys.encrypt('test', 'conversation', 'Withdraw the request');
+        const encrypted = ({ utterance: 'Withdraw the request' });
         await setup.append('conversation-conversation', type, {
           conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
           contentType: 'text', ...encrypted,
@@ -1679,7 +1602,7 @@ async function recordsCancellationCause(type: string, data: object, subject: str
     const approvalId = (await setup.read()).cards[0]!.approvalId;
     let payload = data;
     if (type === 'message.posted') {
-      const encrypted = setup.keys.encrypt('test', 'conversation', 'New request');
+      const encrypted = ({ utterance: 'New request' });
       payload = { ...data, ...encrypted };
     }
     await setup.append(subject, type, payload);

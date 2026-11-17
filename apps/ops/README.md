@@ -28,7 +28,7 @@ flowchart LR
 
 ## What it is responsible for
 
-- Keep read tables current for people, chats, providers, files, tools and spending.
+- Keep read tables current for people, readable chats, providers, files, tools and spending.
 - Apply saved permission and outside-network rules.
 - Set up assistants and claim one computer for each assistant.
 - Start and pause computers while keeping their files.

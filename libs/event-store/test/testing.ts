@@ -405,3 +405,4 @@ export function manualClock(started = 0): ManualClock {
   }
   return { now, advance, sleep };
 }
+export { substituteStoredContent } from './stored-content.ts';

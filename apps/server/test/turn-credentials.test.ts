@@ -1,17 +1,16 @@
-import { dirname } from 'node:path';
+
 import { setTimeout as pause } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { fixture } from '../../computer/test/bridge-gate-fixture.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { readChatFacts } from '../src/chat/chat-summary.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { releaseTurnCredentials } from '../src/chat/turn-credentials.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let computer: Awaited<ReturnType<typeof fixture>>;
-let keys: ReturnType<typeof conversationKeys>;
 const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
 const turn = { conversationId: 'chat', turnId: 'turn', threadId: 'thread',
   requesterId: 'alice', task: 'chat_turn' as const, executionMode: 'restricted' as const };
@@ -19,8 +18,7 @@ const turn = { conversationId: 'chat', turnId: 'turn', threadId: 'thread',
 async function setup() {
   nats = await natsFixture();
   computer = await fixture(false);
-  keys = conversationKeys(`${dirname(nats.env().NATS_CA_FILE)}/keys`);
-  keys.provision('test', 'chat');
+
   const member = envelope('test', 'member-alice', 'member.joined', { memberId: 'alice',
     email: 'alice@example.test', displayName: 'Alice', role: 'member' });
   const assistant = envelope('test', 'assistant-assistant', 'assistant.created', {
@@ -34,7 +32,7 @@ async function setup() {
     conversationId: 'chat', createdBy: 'alice', assistantId: 'assistant', mode: 'agent_session' });
   const message = envelope('test', 'conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ...keys.encrypt('test', 'chat', 'New question') }, 'turn');
+    ...({ utterance: 'New question' }) }, 'turn');
   const admitted = envelope('test', 'computer-assistant', 'computer.turn_started', {
     ...turn, assistantId: 'assistant', computerId: 'computer' });
   await nats.seed([member, assistant, claimed, ready, created, message, admitted]);
@@ -49,14 +47,14 @@ beforeEach(setup);
 afterEach(cleanup);
 
 async function refusesRetryWithoutInitialDependencies(retrySequence: number) {
-  const options = { silo: 'test', store: nats.store, keys };
+  const options = { silo: 'test', store: nats.store };
   const signed = vi.spyOn(computer.issuer, 'turn');
   const delivered = vi.fn();
   for (const sequence of [1, retrySequence]) {
     const report = { conversationId: turn.conversationId, turnId: turn.turnId,
       threadId: turn.threadId, assistantId: 'assistant', type: 'agent.turn_started',
       executionMode: turn.executionMode, sequence, previousSequence: sequence - 1 };
-    const result = await recordReport(nats.store, keys, context, report);
+    const result = await recordReport(nats.store, context, report);
     const delivery = { ...report, replay: result === 'duplicate' };
     const acknowledgement: Record<string, unknown> = {};
     await releaseTurnCredentials(options, context, computer.issuer, delivery,
@@ -80,7 +78,7 @@ async function selectsProfilesBeforeStartingTheShortAccessCheck() {
   }
   const binding = { apiUrl: 'http://127.0.0.1:0', storeId: 'test',
     authorizationModelId: 'test', silo: 'test' };
-  const options = { silo: 'test', store: nats.store, keys, binding,
+  const options = { silo: 'test', store: nats.store, binding,
     catalogue: { async rows() {
       await pause(2_200);
       return [];

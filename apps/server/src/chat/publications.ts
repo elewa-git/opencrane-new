@@ -1,5 +1,6 @@
 import { sha256Hex as digest } from '@opencrane/events/digest';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readConversationProse } from '@opencrane/events';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
@@ -150,7 +151,7 @@ function verifySaved(row: StoredEvent, options: ChatOptions, binding: Binding,
       parsed.data.conversationId !== binding.parentConversationId ||
       parsed.data.childConversationId !== binding.childConversationId ||
       parsed.data.reviewDigest !== digest(input.review) ||
-      options.keys.decrypt(options.silo, binding.parentConversationId, parsed.data) !== input.text) {
+      readConversationProse(parsed.data) !== input.text) {
     throw new PublicationConflict('review_stale');
   }
   return { status: 'appended', sequence: row.sequence };
@@ -216,12 +217,12 @@ async function appendPublication(options: ChatOptions, memberId: string, loaded:
   const fresh = await authorityFence(options.store, performance.now(), subjects);
   const parent = await check(options, memberId, loaded, fresh.deadline);
   if (parent.accessPosition !== binding.accessPosition) throw new PublicationConflict('review_stale');
-  const encrypted = options.keys.encrypt(options.silo, binding.parentConversationId, input.text);
+  const prose = { utterance: input.text };
   const data = childResultPublishedDataSchema.parse({
     conversationId: binding.parentConversationId, publishedBy: memberId,
     childConversationId: loaded.child, publicationKind: binding.publicationKind,
     ...selected, reviewDigest: digest(input.review),
-    ...encrypted, contentType: 'text' });
+    ...prose, contentType: 'text' });
   const subject = `conversation-${binding.parentConversationId}`;
   const expectedSequence = streamPosition(loaded.parentRows, subject);
   const event = { id: input.id, commandId: input.id, type: 'conversation.child_result_published',

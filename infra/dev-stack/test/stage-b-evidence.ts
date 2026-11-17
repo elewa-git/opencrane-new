@@ -76,8 +76,8 @@ function approvalRecords(toolRevision: string, schemaDigest: string) {
     serverId: 'demo', toolRevision, schemaDigest, connectionId: 'connection',
     profile: 'none', policySequence: 3, digestVersion: 'lossless-json-v1' as const, argumentsDigest,
     expiresAt: '2026-10-23T10:04:00Z', stepUp: false,
-    ciphertext: Buffer.from('synthetic-encrypted-review').toString('base64'),
-    keyId: 'key:synthetic-review', reviewDigest: 'e'.repeat(64) };
+    review: 'Saved conversation prose',
+    reviewDigest: 'e'.repeat(64) };
   const approvalSubject = `approval-${approvalId}`;
   const request = record('tool.approval_requested', requestData, 10,
     '2026-10-23T10:00:10Z', approvalSubject);

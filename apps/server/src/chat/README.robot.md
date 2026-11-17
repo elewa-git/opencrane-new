@@ -18,6 +18,7 @@ membership after loading the row. No conversation or participant row is created.
 Message commands accept up to 100 file ids with text, or files alone. Each id must
 name a clean upload by the sender in that conversation. The server reads these file
 events before its short write access check and saves one `message.posted` event.
+The event stores the message as bounded plaintext `utterance`; no conversation key is needed.
 The bridge uses only that message's files. Older messages without file ids keep
 their earlier delivery behaviour. A retry compares the ids as well as the text.
 

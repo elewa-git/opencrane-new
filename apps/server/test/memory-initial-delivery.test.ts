@@ -844,14 +844,14 @@ const admitted = { conversationId: 'conversation', turnId: 'turn', threadId: 'th
 const bridgeContext = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
 async function credentialMessage(text = 'New question') {
   const data = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', text) };
+    contentType: 'text', ...({ utterance: text }) };
   const saved = await setup.append('conversation-conversation', 'message.posted', data);
   const message = { ...saved, id: 'turn', commandId: 'turn' };
   await setup.nats.seed([message]);
 }
 async function credentials(acknowledgement: Record<string, unknown>,
   executionMode: 'restricted' | 'memory_free' = 'restricted', replay = false) {
-  const bridgeOptions = { ...options, keys: setup.keys };
+  const bridgeOptions = { ...options };
   const turn = { ...admitted, executionMode };
   function release(reply: object) {
     Object.assign(acknowledgement, reply);
@@ -974,7 +974,7 @@ async function slowHistoryCredentials() {
   const sign = setup.tokens.turn.bind(setup.tokens);
   async function signing(input: Parameters<typeof sign>[0]) {
     const grant = await sign(input);
-    const text = setup.keys.encrypt('test', 'conversation', 'Unrelated message');
+    const text = ({ utterance: 'Unrelated message' });
     await setup.append('conversation-conversation', 'message.posted', {
       conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...text });
@@ -1006,12 +1006,12 @@ it('never upgrades a replayed private start even before initial evidence exists'
 
 async function refusesLaterStartAfterQualificationLoss() {
   const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', 'Numbered question') };
+    contentType: 'text', ...({ utterance: 'Numbered question' }) };
   const saved = await setup.append('conversation-conversation', 'message.posted', message);
   const report = { conversationId: 'conversation', turnId: saved.id, threadId: 'numbered-thread',
     assistantId: 'assistant', sequence: 1, previousSequence: 0,
     type: 'agent.turn_started', executionMode: 'restricted' as const };
-  await recordReport(options.store, setup.keys, bridgeContext, report);
+  await recordReport(options.store, bridgeContext, report);
   const input = { ...report, status: 'started' as const };
   const turn = await turnCommand(options.store, bridgeContext, input);
   expect(turn?.executionMode).toBe('restricted');
@@ -1019,10 +1019,10 @@ async function refusesLaterStartAfterQualificationLoss() {
   deployment.remove();
   const signed = vi.spyOn(setup.tokens, 'turn');
   const delivered = vi.fn();
-  const bridgeOptions = { ...options, keys: setup.keys };
+  const bridgeOptions = { ...options };
   for (const sequence of [1, 2]) {
     const retry = { ...report, sequence, previousSequence: sequence - 1 };
-    if (sequence > 1) await recordReport(options.store, setup.keys, bridgeContext, retry);
+    if (sequence > 1) await recordReport(options.store, bridgeContext, retry);
     const acknowledgement: Record<string, unknown> = {};
     await releaseTurnCredentials(bridgeOptions, bridgeContext, setup.tokens, retry,
       turn, acknowledgement, delivered);

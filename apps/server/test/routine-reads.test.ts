@@ -294,7 +294,7 @@ async function slowHistory() {
       elapsed += 3000;
       const chat: EventEnvelope = event('unrelated', 'conversation-unrelated', 'message.posted');
       chat.data = { conversationId: 'unrelated', authorId: 'alice', authorKind: 'human',
-        ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+        utterance: 'Saved conversation prose' };
       await nats.seed([chat]);
     }
   }

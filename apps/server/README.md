@@ -49,7 +49,7 @@ Not built yet:
 
 1. **A person joins.** The sign-in service checks their identity.
    The server records their first-owner claim or accepted invitation.
-2. **A person sends a message.** The server saves it and sends assistant work to the
+2. **A person sends a message.** The server saves readable prose in the event log and sends assistant work to the
    right computer. Replies arrive as live updates, and the person can stop the work.
    People can also chat with each other without starting assistant work.
 3. **An assistant makes a call.** The AI gateway asks the models process whether

@@ -135,8 +135,7 @@ async function ignoresLargeUnrelatedHistoryTail() {
     subject: 'conversation-unrelated-volume', type: 'message.posted',
     data: {
       conversationId: 'unrelated-volume', authorId: 'someone-else', authorKind: 'human',
-      ciphertext: Buffer.from('Unrelated volume fixture').toString('base64'),
-      keyId: 'key:unrelated-volume', contentType: 'text',
+      utterance: 'Saved conversation prose', contentType: 'text',
     },
   });
   const messagePosition = await nats.store.head('conversation-unrelated-volume');

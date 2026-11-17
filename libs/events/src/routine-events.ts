@@ -8,7 +8,7 @@ const definition = {
   connectionKind: 'company' as const,
   profileId: 'orders-bot',
   profileRevision: 1, connectionRevision: 1, companyAccountId: 'verified-bot', scopes: ['orders:read'],
-  instructions: { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' },
+  instructions: 'Prepare the daily report',
   schedule: { frequency: 'daily' as const, localTime: '09:00', zone: 'Europe/Brussels' },
 };
 const slot = { localDate: '2026-10-11', localTime: '09:00', zone: 'Europe/Brussels',

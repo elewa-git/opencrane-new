@@ -19,7 +19,7 @@ import {
 } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../src/server.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
@@ -110,7 +110,7 @@ async function initialise() {
   await budget.start(2000, 20000, 'personal-default');
   await runner.run(members);
   chat = { silo: 'test', store: nats.store, db, binding,
-    feed: { memberId }, keys: conversationKeys(directory) };
+    feed: { memberId } };
   app = buildServer(config, { chat });
 }
 beforeAll(initialise, 120_000);
@@ -286,7 +286,7 @@ async function usesLongPersonalConversation() {
   const events: ReturnType<typeof envelope>[] = [];
   for (let index = 0; index < 1500; index++) {
     const data = { conversationId: 'personal-2', turnId: 'long-message', messageId: 'answer',
-      contentType: 'text', ...chat.keys.encrypt('test', 'personal-2', `Part ${index}`) };
+      contentType: 'text', ...({ utterance: `Part ${index}` }) };
     const record = envelope('test', 'conversation-personal-2', 'agent.message_delta',
       data, `long-delta-${index}`);
     record.source = 'computer-bridge';

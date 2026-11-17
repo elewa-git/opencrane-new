@@ -33,7 +33,6 @@ import { hostedImageCheckHandler, recoverHostedImageChecks }
 import { trustedHostedImageInputs } from './hosted-image-inputs.ts';
 import { runAndWriteHostedImageCheck } from '../../../infra/clamav/image-worker.mjs';
 import { runRoutineScheduler } from './routine-production.ts';
-import { loadRoutineCustody } from './routine-custody.ts';
 import type { Handler } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
 
@@ -187,9 +186,7 @@ try {
       throw new Error('ROUTINE_EXECUTION_ENABLED must be true or false');
     }
     if (setting === 'true') {
-      // Check persistent keys before any future claim or wake path can start.
-      loadRoutineCustody(required('SILO_ID'), process.env['CONVERSATION_KEYS_DIR'],
-        process.env['CONVERSATION_WRAP_KEY_FILE']);
+      required('SILO_ID');
     }
     await runRoutineScheduler({ enabled: setting === 'true' });
   }

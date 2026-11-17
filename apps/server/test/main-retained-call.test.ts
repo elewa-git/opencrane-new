@@ -26,7 +26,6 @@ vi.mock('@opencrane/projections', () => ({
   connectComputers: () => ({ close: vi.fn() }),
   connectProjectionDb: () => ({ db: {}, close: vi.fn() }),
 }));
-vi.mock('../src/chat/keys.ts', () => ({ conversationKeys: () => ({}) }));
 vi.mock('../src/chat/participation.ts', () => ({ requireLegacyClosesProjected: vi.fn() }));
 vi.mock('../src/chat/child-recovery.ts', () => ({ startChildRecovery: vi.fn() }));
 vi.mock('../src/computers/desktop.ts', () => ({ desktopConnection: vi.fn() }));

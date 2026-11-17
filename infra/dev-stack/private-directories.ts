@@ -20,7 +20,7 @@ export async function preparePrivateDirectories(directory: string, fresh: boolea
   const missing: string[] = [];
   try {
     await checkDirectory(directory);
-    for (const name of ['models', 'conversation-keys', 'provider-secrets']) {
+    for (const name of ['models', 'provider-secrets']) {
       try {
         await checkDirectory(`${directory}/${name}`);
       } catch (error) {

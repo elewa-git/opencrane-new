@@ -2,7 +2,6 @@ import { routineLifecycle } from './routine-lifecycle.ts';
 import { bindRoutineBudgetOwner } from './routine-delivery-owner.ts';
 import type { ChildProcess } from 'node:child_process';
 import { remoteCatalogueWatch } from './integrations/remote-catalogue-watch.ts';
-import { conversationKeys } from './chat/keys.ts';
 import { startRecordedChild } from './chat/child-start.ts';
 import { prepareNightlyMaintenance } from './memory/maintenance-preparation.ts';
 import { readDeploymentQualification } from '../../../scripts/private-memory-qualification/deployment.ts';
@@ -74,12 +73,6 @@ try {
     const binding = { silo, apiUrl: required('OPENFGA_API_URL'),
       storeId: required('OPENFGA_STORE_ID'),
       authorizationModelId: required('OPENFGA_MODEL_ID') };
-    const conversationKeyDirectory = process.env['CONVERSATION_KEYS_DIR'];
-    let keys: ReturnType<typeof conversationKeys> | undefined;
-    if (conversationKeyDirectory) {
-      keys = conversationKeys(conversationKeyDirectory,
-        process.env['CONVERSATION_WRAP_KEY_FILE']);
-    }
     async function readManagedMode(timeoutMs: number) {
       try {
         return await managedProviderCallsEnabled(events.store, silo, performance.now() + timeoutMs);
@@ -109,7 +102,7 @@ try {
       }
     }
     const modelRoute = modelGatewayRoute();
-    let verification: Parameters<typeof startDecision>[5];
+    let verification: Parameters<typeof startDecision>[4];
     if (providerSecretDirectory) {
       verification = {
         secrets: providerSecrets(providerSecretDirectory),
@@ -144,8 +137,7 @@ try {
     }
     async function childStart(value: unknown) {
       await requireDispatchLeader();
-      if (!keys) throw new Error('Child start unavailable');
-      const options = { store: events.store, silo, db: db.db, binding, keys };
+      const options = { store: events.store, silo, db: db.db, binding };
       return startRecordedChild(options, actor, value);
     }
     async function maintenancePrepare(scopeId: string, nightId: string) {
@@ -174,7 +166,7 @@ try {
     stop.signal.addEventListener('abort', closeRelays, { once: true });
     const decisionPort = Number(required('MODEL_DECISION_PORT'));
     const decision = await startDecision(actor, identity, binding, decisionPort,
-      keys, verification, maintenanceDispatchOptions, egress.registry);
+      verification, maintenanceDispatchOptions, egress.registry);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     function configurationFailed(error: unknown) {
       const errorName = error instanceof Error ? error.name : typeof error;

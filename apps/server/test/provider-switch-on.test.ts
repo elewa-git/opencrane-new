@@ -358,7 +358,7 @@ async function lateStart() {
   await drain(false);
   const message = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+    utterance: 'Saved conversation prose',
   });
   const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
   const start = { conversationId: 'conversation', turnId: message.id,
@@ -406,7 +406,7 @@ async function newChoice(kind: 'assistant' | 'silo_default') {
   expect((await request(await input())).statusCode).toBe(200);
   const message = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+    utterance: 'Saved conversation prose',
   });
   const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
   const start = { conversationId: 'conversation', turnId: message.id,

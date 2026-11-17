@@ -33,7 +33,7 @@ import { natsFixture, event, type ManualClock }
 import { foldRoutine, routineActivationSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
-import { conversationKeys } from '@opencrane/projections';
+
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import * as routineSession from '../src/routine-session.ts';
@@ -45,7 +45,6 @@ import { inspectRoutineSender } from '../src/routine-sender.ts';
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
-let keys: ReturnType<typeof conversationKeys>;
 let actor: BudgetActor;
 let directory: string;
 let now: number;
@@ -90,13 +89,12 @@ async function setup() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
   directory = await mkdtemp('/tmp/routine-sender-');
-  keys = conversationKeys(directory);
-  keys.provision('test', 'routine-orders');
+
   now = Date.parse('2026-10-11T07:00:00Z');
   owned = true;
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = keys.encrypt('test', 'routine-orders', 'Private routine instructions');
+  const instructions = ({ utterance: 'Private routine instructions' });
   const definition = { ...original.definition, instructions };
   const active = { ...created, data: { ...original, definition, status: 'active' } };
   const events = [joinedMember('alice')];
@@ -171,7 +169,7 @@ async function prepareSenderFixture() {
   projection.mockImplementation(projectSession);
   try {
     const link = await preparedComputer.wake();
-    return await prepareRoutineComputer(nats.store, keys, worker(), input, actor, link, 1);
+    return await prepareRoutineComputer(nats.store, worker(), input, actor, link, 1);
   } catch (cause) {
     throw new Error(`Sender fixture stage: ${stage}`, { cause });
   } finally {
@@ -190,10 +188,10 @@ async function cleanup() {
 beforeEach(setup);
 afterEach(cleanup);
 function admit() {
-  return admitRoutineActivation(nats.store, keys, worker(), input, selection, 'sender-attempt');
+  return admitRoutineActivation(nats.store, worker(), input, selection, 'sender-attempt');
 }
 function inspect(senderAttemptId = 'sender-attempt') {
-  return inspectRoutineSender(nats.store, keys, worker(), input, selection, senderAttemptId);
+  return inspectRoutineSender(nats.store, worker(), input, selection, senderAttemptId);
 }
 function modernExhaustion(shape: 'reasons' | 'work', stopId?: string) {
   if (shape === 'reasons') {
@@ -217,7 +215,7 @@ async function refusesSavedModernExhaustion(shape: 'reasons' | 'work') {
   const exhausted = record(`exhausted-${shape}`, 'budget-test', 'budget.exhausted',
     modernExhaustion(shape, stopId));
   await nats.seed([exhausted]);
-  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+  const checked = await readRoutineActivation(nats.store, worker(), input, selection,
     'sender-attempt');
   await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
 }
@@ -334,7 +332,7 @@ async function retainsUncertainHold() {
   await actor.uncertain(hold, 'settle_timeout');
   const before = await nats.store.head();
   expect(await inspect()).toMatchObject({ status: 'unknown', rootId: root.rootId });
-  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+  const checked = await readRoutineActivation(nats.store, worker(), input, selection,
     'sender-attempt');
   await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
   expect(rootTotals(actor.state, root.rootId)).toEqual({
@@ -403,7 +401,7 @@ function sender(enabled = true, replay = false) {
   const options = { enabled, replay, confirmCompany,
     configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
     confirmCredentialUse };
-  return createRoutineSender(options, nats.store, keys, worker(), input, selection,
+  return createRoutineSender(options, nats.store, worker(), input, selection,
     'sender-attempt');
 }
 async function missingCompanyConfirmation() {
@@ -412,7 +410,7 @@ async function missingCompanyConfirmation() {
   }
   const options = { enabled: true, configurationDigest: 'a'.repeat(64),
     custodyRecordVersion: '1', confirmCredentialUse };
-  const authority = createRoutineSender(options, nats.store, keys, worker(),
+  const authority = createRoutineSender(options, nats.store, worker(),
     input, selection, 'sender-attempt');
   const append = vi.spyOn(nats.store, 'append');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
@@ -445,7 +443,7 @@ async function missingCredentialUseCheck() {
   }
   const options = { enabled: true, confirmCompany, configurationDigest: 'a'.repeat(64),
     custodyRecordVersion: '1' };
-  const authority = createRoutineSender(options, nats.store, keys, worker(), input,
+  const authority = createRoutineSender(options, nats.store, worker(), input,
     selection, 'sender-attempt');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   const rows = await history(nats.store, 'routine-orders', 'test');
@@ -468,7 +466,7 @@ async function refusesCredentialVersionChangedBeforeReleaseReply() {
   const options = { enabled: true, confirmCompany,
     configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
     confirmCredentialUse };
-  const authority = createRoutineSender(options, nats.store, keys, worker(), input,
+  const authority = createRoutineSender(options, nats.store, worker(), input,
     selection, 'sender-attempt');
   const append = nats.store.append.bind(nats.store);
   let releaseReplyDelayed = false;
@@ -573,7 +571,7 @@ async function startComputer(computerId = 'computer') {
     issuer: 'https://routine.test/' });
   const connection = { computerId, assistantId: 'sales-assistant',
     bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
-  const options = { silo: 'test', store: nats.store, keys, binding };
+  const options = { silo: 'test', store: nats.store, binding };
   let link = await connectBridge(options, connection, tokens);
   function trackFrames() {
     const send = link.socket.send.bind(link.socket);
@@ -751,7 +749,7 @@ async function inert(enabled: boolean, replay: boolean) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
   const authority = enabled ? sender(enabled, replay)
-    : createRoutineSender({}, nats.store, keys, worker(), input, selection, 'sender-attempt');
+    : createRoutineSender({}, nats.store, worker(), input, selection, 'sender-attempt');
   expect(await authority.send(wake)).toEqual({ status: 'unknown' });
   expect(wake).not.toHaveBeenCalled();
   expect(await nats.store.head()).toBe(before);
@@ -1119,7 +1117,7 @@ async function pollRoutine() {
   function connectionId() {
     return 1;
   }
-  const options = { silo: 'test', store: nats.store, keys, db: undefined! };
+  const options = { silo: 'test', store: nats.store, db: undefined! };
   const logger = createLogger('routine-stop-test', { level: 'silent' });
   const processor = assistantProcessor(options, preparedComputer.tokens, new Set(), forbidden,
     connectionId, logger, connected);
@@ -1399,8 +1397,8 @@ it('cancels a delayed native start reply without executing another turn', delaye
 
 async function runningNeighbour(link: Awaited<ReturnType<typeof preparedComputer.wake>>) {
   await apply([joinedMember('bob')]);
-  keys.provision('test', 'neighbour-chat');
-  const encrypted = keys.encrypt('test', 'neighbour-chat', 'Private routine instructions');
+
+  const encrypted = ({ utterance: 'Private routine instructions' });
   await nats.seed([
     record('neighbour-chat', 'conversation-neighbour-chat', 'conversation.created',
       { conversationId: 'neighbour-chat', assistantId: 'sales-assistant', createdBy: 'bob',

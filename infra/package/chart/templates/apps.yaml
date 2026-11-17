@@ -111,7 +111,6 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
-            - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
             - { name: storage-lease, mountPath: /run/storage, readOnly: true }
           ports: [{ containerPort: 8080 }]
@@ -155,7 +154,6 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
-            - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: model-state, mountPath: /var/lib/opencrane/models }
           ports:
             - { containerPort: 43000, name: model-gateway }
@@ -179,8 +177,6 @@ spec:
           secret:
             secretName: {{ .Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
-        - name: keys
-          persistentVolumeClaim: { claimName: conversation-keys }
         - name: model-state
           emptyDir: {}
         - name: kubeconfig

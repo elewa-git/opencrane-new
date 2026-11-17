@@ -37,7 +37,7 @@ async function setup() {
   });
   await save('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+    utterance: 'Saved conversation prose',
   });
   // Use the actual message id as the logical turn id.
   input.turnId = `admission-${counter}`;

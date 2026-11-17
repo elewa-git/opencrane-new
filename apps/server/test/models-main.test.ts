@@ -15,7 +15,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { BudgetActor, envelope, history } from '@opencrane/models';
 import { chatCommand } from '../src/chat/commands.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { turnCommand } from '../src/chat/turns.ts';
 import { tokenIssuer } from '@opencrane/auth';
 
@@ -228,9 +228,9 @@ it.each(['startup', 'migration'] as const)('upgrades an existing budget through 
     await nats.seed([joined]);
     await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-personal', 'assistant.created', { assistantId: 'personal', ownerId: 'alice', kind: 'personal' }) });
     await nats.store.append({ expectedSequence: 0, event: envelope('test', 'computer-personal', 'computer.ready', { assistantId: 'personal', computerId: 'personal', generation: 1 }) });
-    const keys = conversationKeys(directory); keys.provision('test', 'chat');
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-chat', conversationId: 'chat', assistantId: 'personal' });
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'chat', text: 'Hello' });
+
+    await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'create-chat', conversationId: 'chat', assistantId: 'personal' });
+    await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'chat', text: 'Hello' });
     expect(await turnCommand(nats.store, { silo: 'test', assistantId: 'personal', computerId: 'personal' },
       { conversationId: 'chat', turnId: 'message', threadId: 'thread', status: 'started' })).toMatchObject({ payingGroupId: 'installation-default' });
   } finally { await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true }); }

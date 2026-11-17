@@ -42,8 +42,8 @@ afterEach(cleanup);
 
 async function bridgeFixture(cachedControl = false) {
   const view = await viewFixture(noDesktop);
-  view.keys.provision('test', 'chat');
-  const encrypted = view.keys.encrypt('test', 'chat', 'Keep working');
+
+  const encrypted = ({ utterance: 'Keep working' });
   const message = await view.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted,
@@ -194,11 +194,11 @@ it('fails each queued input once after close and keeps the original messages', a
   const test = fixture;
   const second = await test.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ...test.keys.encrypt('test', 'chat', 'Another request'),
+    ...({ utterance: 'Another request' }),
   });
   await test.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'routine', authorKind: 'system', contentType: 'text',
-    ...test.keys.encrypt('test', 'chat', 'Routine update'),
+    ...({ utterance: 'Routine update' }),
   });
   await test.append('conversation-chat', 'conversation.closed', {
     conversationId: 'chat', closedBy: 'alice',
@@ -384,7 +384,7 @@ it('refuses private bytes in an exit report before saving a digest', async () =>
     conversationId: 'chat', turnId: test.message.id, assistantId: 'assistant',
     executionMode: 'restricted', text: 'private reply' };
   const context = { ...test, silo: 'test', computerId: 'desktop', assistantId: 'assistant' };
-  await expect(recordReport(test.store, test.keys, context, report)).rejects.toThrow(
+  await expect(recordReport(test.store, context, report)).rejects.toThrow(
     'Private exit report mismatch');
   const rows = await chatHistory(test.store, 'test', 'chat');
   function isExit(row: (typeof rows)[number]) {
@@ -594,7 +594,7 @@ it('bounds queued close cancellations and reads each history once per pass', asy
   for (let index = 0; index < 96; index++) {
     await test.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-      ...test.keys.encrypt('test', 'chat', `Queued request ${index}`),
+      ...({ utterance: `Queued request ${index}` }),
     });
   }
   await test.append('conversation-chat', 'conversation.closed', {
@@ -639,7 +639,7 @@ it('repairs a computer ending while 32 other closed inputs still wait', async ()
   for (let index = 0; index < 32; index++) {
     const input = await test.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-      ...test.keys.encrypt('test', 'chat', `Waiting request ${index}`),
+      ...({ utterance: `Waiting request ${index}` }),
     });
     await test.append('conversation-chat', 'agent.turn_started', {
       conversationId: 'chat', assistantId: 'assistant', turnId: input.id,
@@ -675,7 +675,7 @@ it('keeps an earlier waiting input pending after the last input batch settles', 
   for (let index = 0; index < 31; index++) {
     await test.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-      ...test.keys.encrypt('test', 'chat', `Settled request ${index}`),
+      ...({ utterance: `Settled request ${index}` }),
     });
   }
   await test.append('conversation-chat', 'conversation.closed', {
@@ -703,7 +703,7 @@ it('rechecks a queued input when a computer start arrives during the cleanup pas
   const test = fixture;
   const second = await test.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ...test.keys.encrypt('test', 'chat', 'Second request'),
+    ...({ utterance: 'Second request' }),
   });
   await test.append('conversation-chat', 'conversation.closed', {
     conversationId: 'chat', closedBy: 'alice',

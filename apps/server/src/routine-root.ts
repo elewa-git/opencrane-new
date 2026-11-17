@@ -43,23 +43,22 @@ async function checkComputerChanges(store: Arguments[0], assistantId: string,
 }
 
 // Accept computer and thread choices only from trusted preparation, never a public request.
-export async function allocateRoutineRoot(store: Arguments[0], keys: Arguments[1],
-  worker: Arguments[2], raw: unknown, actor: BudgetActor, selection: Selection,
+export async function allocateRoutineRoot(store: Arguments[0], worker: Arguments[1], raw: unknown, actor: BudgetActor, selection: Selection,
   confirmCompany?: () => Promise<void>) {
   try {
-    return await allocate(store, keys, worker, raw, actor, selection, confirmCompany);
+    return await allocate(store, worker, raw, actor, selection, confirmCompany);
   } catch {
     throw new Error('Routine root refused');
   }
 }
 
-async function allocate(store: Arguments[0], keys: Arguments[1], worker: Arguments[2],
+async function allocate(store: Arguments[0], worker: Arguments[1],
   raw: unknown, actor: BudgetActor, selection: Selection,
   confirmCompany?: () => Promise<void>) {
   if (actor.store !== store || actor.silo !== worker.silo) {
     throw new Error('Routine root refused');
   }
-  const checked = await loadRoutineRootPreparation(store, keys, worker, raw, selection);
+  const checked = await loadRoutineRootPreparation(store, worker, raw, selection);
   const { binding, firstCallBoundCents, deadline, run } = checked;
   async function confirmAllocation() {
     await checked.confirmPreparation();
@@ -90,11 +89,10 @@ async function allocate(store: Arguments[0], keys: Arguments[1], worker: Argumen
     startBy: run.startBy, executionAvailable: false as const };
 }
 
-export async function loadRoutineRootPreparation(store: Arguments[0], keys: Arguments[1],
-  worker: Arguments[2], raw: unknown, selection: Selection, allowActivation = false) {
+export async function loadRoutineRootPreparation(store: Arguments[0], worker: Arguments[1], raw: unknown, selection: Selection, allowActivation = false) {
   const selected = { threadId: selection.threadId, computerId: selection.computerId,
     generation: selection.generation };
-  const input = await loadRoutineInput(store, keys, worker, raw, allowActivation);
+  const input = await loadRoutineInput(store, worker, raw, allowActivation);
   const { preparation, previous, rows } = input;
   if (!previous) {
     throw new Error('Routine root refused');

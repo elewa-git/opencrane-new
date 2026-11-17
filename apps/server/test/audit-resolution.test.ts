@@ -443,7 +443,7 @@ async function accessAfterLoading(change: 'demotion' | 'removal' | 'slow') {
       changed = true;
       if (change === 'slow') {
         const message = event('message.posted', 'conversation-unrelated', {
-          conversationId: 'unrelated', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:unrelated',
+          conversationId: 'unrelated', utterance: 'Saved conversation prose',
         });
         await append(message);
         await delay(2100);

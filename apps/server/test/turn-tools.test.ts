@@ -152,7 +152,7 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
   }
   const messageEvent = envelope('test', 'conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'person', authorKind: 'human',
-    ciphertext: 'a'.repeat(16), keyId: 'key:unused', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   const message: StoredEvent = { sequence: 101, event: messageEvent };
   const rows = uploadRows;

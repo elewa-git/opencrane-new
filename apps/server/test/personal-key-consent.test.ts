@@ -90,7 +90,7 @@ it('offers tools only with owner consent, keeps old events and preserves the lis
 async function assertIssuedSelections(runtime: Awaited<ReturnType<typeof fixture>>,
   catalogue: ReturnType<typeof connectMcpCatalogue>, expected: unknown[]) {
   const options = { silo: 'test', store: runtime.nats.store, binding: runtime.binding,
-    keys: runtime.keys, catalogue };
+    catalogue };
   const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
   const report = { conversationId: 'conversation', turnId: 'turn', threadId: 'thread' };
   const turn = { ...report, requesterId: 'alice', task: 'chat_turn' as const,

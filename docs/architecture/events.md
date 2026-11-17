@@ -16,7 +16,7 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 2. **PostgreSQL holds content, not truth:** who owns what, installed MCP servers, conversations, budgets and so on. Every table is a **projection** with a checkpoint, and can be dropped and **rebuilt by replay**.
 3. **Order is guaranteed within a stream, never across streams.** Each stream is handled by one writer at a time, so projections need no locks. Handlers recheck current state when they depend on another stream.
 4. **Projections and reactions are separate.** A replay rebuilds projections only. Reactions (waking a computer, pushing gateway config, sending mail) keep their own checkpoints, are idempotent, and are switched off during a rebuild.
-5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message text uses a per-conversation key. Memory text uses a separate key for each fact revision. Forget records a tombstone first, then deletes every revision key and the searchable text.
+5. **No credentials in events.** Events carry secret *references*. Conversation messages, replies, reasoning summaries, command previews, child results, approval reviews and routine instructions use bounded plaintext fields. Memory and onboarding answers stay encrypted. Memory text uses a separate key for each fact revision. Forget records a tombstone first, then deletes every revision key and the searchable text.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
 7. **Idempotency is by event id, not by the event store's duplicate window.** Every projection and reaction records the event ids it has applied (in the same Postgres transaction as its checkpoint), and commands use expected-sequence appends. JetStream's `Nats-Msg-Id` de-duplication only lasts for its duplicate window, is lost on backup/restore, and is **stream-wide** (an id first used on another subject makes the append report a duplicate and store nothing), so it is an optimisation, never the guarantee (found in spike S0.7).
    - A retried **command** is recognised from the stream itself: the envelope carries `commandId` (a non-empty string; optional for older events), and the command checks the entity history it already loads before appending. There is no separate command ledger: a ledger written after the publish leaves a gap, and a ledger restored to a different point than the stream re-runs commands.
@@ -304,18 +304,18 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `conversation.child_start_failed` | opencrane-server, system principal; may record after parent close | no feed row; child-requests-v4 marks the request failed with attempt 1–3, create/first_input/activation stage and access_refused/conversation_closed/record_changed reason | recovery stops; requester-only status shows the saved failure; outages and applying access save nothing |
 | `conversation.child_retry_requested` | opencrane-server, original requester | no feed row; child-requests-v4 clears the matching saved failure | recovery resumes missing stages with original ids and choices, at attempt 2 or 3; children remain held |
 | `conversation.child_activated` | internal server command, original requester | no feed row; binds exact saved intent, creation, first input, assistant, payer and current attempt; child-requests-v4 retires only the matching candidate | no reaction; child execution remains held pending root allocation and first-start recovery |
-| `conversation.child_result_published` | reviewed human publication command on the immediate parent | one encrypted text entry; credits `publishedBy`; stores child, final/interim kind and review digest; sourced entries retain result id/position and turn; human interim text needs no result; HTTP and sockets show only text, author, kind and content type | none; never starts a turn |
+| `conversation.child_result_published` | reviewed human publication command on the immediate parent | one plaintext `utterance` entry; credits `publishedBy`; stores child, final/interim kind and review digest; sourced entries retain result id/position and turn; human interim text needs no result; HTTP and sockets show only text, author, kind and content type | none; never starts a turn |
 | `participant.added` / `participant.removed` | creator add/remove or non-creator self-leave on `participation-<id>`, with an expected access position; legacy conversation subjects remain readable | conversations, participant intervals with global join/end positions and event ids; child changes record review position and explicit child-only additions | OpenFGA participants and applied receipts; chat sockets, history, files, desktop and approvals check saved changes before IAM catches up |
 | `message.posted` | person, or the system for routines | messages; optional `attachmentIds` bind up to 100 clean uploads from that person and conversation to the same message; older messages without this field remain readable | browser delivery (WebSocket) in every mode; only `agent_session` dispatches to its assistant's computer and wakes it if suspended |
 | `agent.memory_context_recorded` | server (trusted) | private turn identity, generations, reference additions, scope positions and bounded byte counts; no text; excluded from the public conversation feed | server turn summary; the live bridge polls personal correction/forget causes and sends saved invalidations to the exact pending private turn; withdrawal after completion leaves it ended; replay creates no dispatch permission or Stop |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported); server close cleanup (system terminal only) | activity (`executionMode` on starts; `stop_interrupted`, `model_error`, `bridge_restarted`, legacy `bridge_interrupted`, `restricted_tool_refused` or `conversation_closed` on failures) | browser (WebSocket); notify on failure |
 | `agent.private_exited` | bridge, after supervisor exit confirmation | close cleanup waits for this record for a restricted turn on a live computer; excluded from the public conversation feed | no private reply bytes; no new turn or spend |
 | `agent.turn_stop_requested` | member command or stop-budget-turns | activity; freeze partial text at this position | bridge removes the turn's grants and tool lists, cancels waits and aborts local requests before interrupting; queued turns do not start; browser keeps saved partial text on replay; server tells the original browser to clear a delivered private reply, even after a late completion |
-| `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; adjacent reports for the same reply may share one event, with original sequence/digest receipts in report.preceding; browser replay with positions and generations |
-| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
+| `agent.message_delta` | bridge (reported) | messages | plaintext `utterance` deltas; adjacent reports for the same reply may share one event, with original sequence/digest receipts in report.preceding; browser replay with positions and generations |
+| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Plaintext deltas are retained for gap-free replay |
 | `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
-| `agent.command_ran` | bridge (reported) | command digest, exit code, optional fixed plain label and optional `view` encrypted with the conversation message key; older events have no view; no plain arguments, environment, output or tokens | current conversation members through history and WebSocket; audit and admin views omit `view` |
+| `agent.command_ran` | bridge (reported) | command digest, exit code, optional fixed plain label and optional `view` holding `preview` containing a redacted command preview; older events have no view; no plain arguments, environment, output or tokens | current conversation members through history and WebSocket; audit and admin views omit `view` |
 | `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.tool_call_started` | bridge (reported) | call id, server id and tool name; no arguments | conversation feed; browser (WebSocket) |
 | `agent.native_consent_refused` | bridge (reported) | native request id, named server, bound turn and explicit unsupported refusal; no consent text | conversation feed; browser (WebSocket); grants no permission |
@@ -340,8 +340,7 @@ simple shapes: `ls`, `rg`/`grep`/`find`, `pdfinfo`/`pdftotext`, a
 Arguments, environment, output, tokens and file names never enter this field.
 The computer may send a masked `preview` beside that label. The bridge keeps it
 in memory only; a restart before delivery leaves the label alone. The server
-encrypts it as `view` with the conversation's message key. It saves only
-`ciphertext` and `keyId` in the event and conversation feed. A current member
+saves that redacted preview as `view` holding `preview` in the event and conversation feed. A current member
 reads the view through the same history and live access checks as message text.
 An administrator without conversation membership and a removed member cannot read it.
 
@@ -390,8 +389,8 @@ stored. Memory-free turns receive no earlier private context.
 ### Tools, approvals and effects
 
 P3-2 approval requests include expiry, `lossless-json-v1`, server/tool/schema,
-connection/profile and policy-sequence bindings, plus bounded encrypted review
-content, key reference and review digest. Plaintext arguments are never events.
+connection/profile and policy-sequence bindings, plus a bounded plaintext `review` and its existing review digest. Only reviewed scalar
+arguments enter that review; other tool arguments remain represented by their digest.
 Requester decisions and consumption append conditionally to `approval-<id>`.
 Expiry (24 hours) or a closed logical turn prevents use; a changed reviewed binding
 cancels. Consumption is terminal even if its acknowledgement or forwarding fails.
@@ -780,7 +779,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 The activation command requires an existing checked allocation. Its `admission` reference
 names the exact `budget.root_allowance_set` event and position. That record's root id and
-preparation digest bind the owner admission, payer, encrypted input, provider choice, model,
+preparation digest bind the owner admission, payer, saved input, provider choice, model,
 tariff, computer and thread generation. The activation's `rootId` retains the due record's
 routine root reference; the referenced allocation supplies the budget actor's root id.
 The deterministic activation id permits one saved `senderAttemptId`. Recovery compares the
@@ -788,7 +787,7 @@ whole record and returns only its receipt. It neither allocates again nor grants
 sender. Access, Stop, current preparation and `startBy` are checked before publication and
 receipt return. No production caller, wake, send or Ask bypass is enabled.
 
-Routine version 1 stores a full encrypted request, one member owner, a team assistant,
+Routine version 1 stores full plaintext instructions, one member owner, a team assistant,
 its fixed payer, explicit company connection/profile/account and daily/weekly schedule.
 Definition, schedule and control revisions bind later records. Due records freeze the request
 and occurrence/root/input ids. Skip and missed records carry local slots or a compact range.

@@ -172,7 +172,7 @@ Hosted MCP servers never run inside the gateway.
   2. **External effects** (model, tool and web calls) pass the gateway and are **observed by the gateway**: trusted evidence.
 - **What the bridge forwards** (from Codex app-server): turn start and end, streamed message text, reasoning *summaries* (raw chain-of-thought is not available from reasoning models and is not stored), tool-call and command start/end with exit status, file changes in the workspace, approval requests, and errors.
   - Events carry a per-computer sequence number, so a reconnect resumes without loss or duplicates.
-- **Stored:** chat messages and activity items go to append-only Postgres tables, encrypted like messages. Reasoning summaries follow the same retention rules. Screenshots are conversation files.
+- **Stored:** chat messages and activity items are plaintext fields in events and replayable PostgreSQL tables. Reasoning summaries follow the same retention rules. Screenshots are conversation files.
 - **Audit record = server decisions + gateway observations + computer reports**, joined by shared ids: conversation, turn, step permit, reservation and approval. The gateway forwards the permit id upstream and logs it.
   - The audit view marks each line's source.
   - An effect in the gateway log without a matching permit or decision is an alert.
@@ -235,7 +235,7 @@ Hosted MCP servers never run inside the gateway.
 - **KEDA** (event-driven autoscaling) where scaling to zero pays off:
   - per-user hosted MCP instances (the fallback pattern);
   - the `workers` Deployment, scaled on queue depth (KEDA's PostgreSQL scaler).
-  
+
   Computers are scaled by Agent Sandbox itself.
 - **Logs and traces per handler:** every projection and reaction is a named handler with its own pg-boss queue (e.g. `settle-budget`, `wake-computer`, `update-openfga`).
   - Each run logs structured JSON with `handler`, `event_id`, `event_type`, `stream`, `attempt` and `trace_id`, and is one OpenTelemetry span.

@@ -21,7 +21,7 @@ async function creation(options: ChatOptions, conversationId: string, deadline: 
 }
 
 async function readOrigin(options: ChatOptions, memberId: string, conversationId: string) {
-  // Load saved references before the short access checks. Keep all text encrypted here.
+  // Load saved references before the short access checks. Return no conversation prose here.
   const deadline = performance.now() + 10_000;
   const child = await creation(options, conversationId, deadline);
   const origin = child.origin;
@@ -58,7 +58,7 @@ export async function childOrigin(options: ChatOptions, memberId: string, conver
     return chatOriginSchema.parse(result);
   } catch (error) {
     if (isChatRefused(error) || error instanceof ChatAccessApplying) throw error;
-    // Keep store, database and decryption errors from naming a hidden parent in logs.
+    // Keep store, database and content errors from naming a hidden parent in logs.
     // eslint-disable-next-line preserve-caught-error -- Do not retain hidden parent details.
     throw new Error('Origin unavailable');
   }

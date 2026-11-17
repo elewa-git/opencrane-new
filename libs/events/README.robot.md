@@ -17,14 +17,18 @@ human principal. Its strict data contains the member, frozen welcome id and
 generation, and archive choice. It contains no answer text.
 
 `agent.command_ran` accepts an optional label from seven fixed plain phrases and
-an optional encrypted `view` with `ciphertext` and `keyId`. It refuses a plain
+an optional redacted `view.preview` of at most 32,768 characters. It refuses an unlabelled
 `preview` and keeps older events without a view readable.
 Old events without a label remain valid. The event still keeps only the command
 digest and exit code; raw command text and output are rejected.
 
 `message.posted` has optional `attachmentIds` with at most 100 file ids. New human
 commands include the field, even when empty. Older events without it still parse.
-The ids carry no file bytes or message text.
+The ids carry no file bytes. Conversation prose uses `utterance` with at most
+1,048,576 characters. The same field carries replies, reasoning summaries and child
+results. Approval details use `review`; routine definitions use plaintext `instructions`.
+Old encrypted conversation records require a development reset. Memory and personal
+answer schemas retain their ciphertext and key references.
 
 `provider.retired` is strict. It stores the connection revision and category
 position, each reviewed old binding position, and one explicit pause or replacement.

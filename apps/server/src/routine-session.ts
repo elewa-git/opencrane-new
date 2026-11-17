@@ -6,7 +6,6 @@ import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-st
 import { parseEventByType, type RoutineState } from '@opencrane/events';
 import { currentAuthority, currentMembership, history, ownershipWriteAccess } from '@opencrane/models';
 import { chatCommand } from './chat/commands.ts';
-import type { conversationKeys } from './chat/keys.ts';
 import { sharedAssistantAuthority } from './chat/private-session.ts';
 
 type Run = NonNullable<RoutineState['activeRun']>;
@@ -131,9 +130,9 @@ async function loadAssistantPosition(store: EventStore, worker: Worker, run: Run
 
 /** Prepare only the private session. A receipt never authorises input or execution. */
 export async function prepareRoutineSession(store: EventStore,
-  keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown) {
+  worker: Worker, raw: unknown) {
   try {
-    const saved = await loadRoutinePreparation(store, keys, worker, raw);
+    const saved = await loadRoutinePreparation(store, worker, raw);
     let attemptedAppend = false;
     async function append(change: AppendCommand) {
       attemptedAppend = true;
@@ -145,7 +144,7 @@ export async function prepareRoutineSession(store: EventStore,
       return store.append(checked);
     }
     const guarded = { readStream: saved.readStream, append, clock: store.clock };
-    const result = await chatCommand(guarded, keys, saved.context,
+    const result = await chatCommand(guarded, saved.context,
       saved.command, saved.checkFresh);
     if (result.status !== 'appended') {
       throw new Error('Routine session refused');
@@ -161,7 +160,7 @@ export async function prepareRoutineSession(store: EventStore,
 }
 
 export async function loadRoutinePreparation(store: EventStore,
-  keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown, allowActivation = false) {
+  worker: Worker, raw: unknown, allowActivation = false) {
   try {
     const input = inputSchema.parse(raw);
     const workerId = recordIdSchema.parse(worker.workerId);
@@ -219,12 +218,8 @@ export async function loadRoutinePreparation(store: EventStore,
       }
       return fresh.subjects();
     }
-    async function checkFresh(operation: 'retry' | 'append') {
-      const deadline = await checkAccess();
-      if (operation === 'append') {
-        keys.provision(worker.silo, run.conversationId);
-      }
-      return deadline;
+    async function checkFresh() {
+      return checkAccess();
     }
     const context = { silo: worker.silo, memberId: ownerId };
     const command = { id: `routine-session-create-${run.occurrenceId}`,

@@ -1325,8 +1325,6 @@ one of its required settings is missing.
 | `OPENFGA_API_URL` | Both | Models yes; server with projections | None | OpenFGA permission service address. |
 | `OPENFGA_STORE_ID` | Both | Models yes; server with projections | None | OpenFGA store used by this silo. |
 | `OPENFGA_MODEL_ID` | Both | Models yes; server with projections | None | OpenFGA permission model used by this silo. |
-| `CONVERSATION_KEYS_DIR` | Both | No | Unset | Directory of keys for private conversation content. |
-| `CONVERSATION_WRAP_KEY_FILE` | Both | No | Unset | Optional 32-byte Kubernetes Secret used to encrypt conversation keys stored in that directory. The chat server and model process must use the same file. |
 | `MINIO_CREDENTIALS_FILE` | Server | No | Unset | Enables file storage with credentials read from this file. |
 | `MINIO_URL` | Server | Required with MinIO credentials | None | MinIO object-storage address. |
 | `SCANNER_URL` | Server | Uploads | None | Fixed private HTTPS endpoint ending in `/scan/upload`. |
@@ -1614,14 +1612,14 @@ whose organisation no longer matches the configured pin or an exact configured i
 
 ## Conversation core
 
-With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
+With the event store, database and access settings, the server exposes `POST /api/conversations`
 (`id`, `conversationId`, `assistantId`, `mode`), `POST /api/conversations/:conversationId/messages`
 (`id`, `text`, optional `executionMode: "memory_free"`), and GET on those paths.
 The caller supplies stable event ids for
 retries. POST requires the session's exact Origin. Only live silo members acting
 for their personal assistant can create; conversation participants can read/post.
 Owner/admin roles do not bypass private conversation access. List/messages reads
-come from the `conversations` projection; text is decrypted only after permission
+come from the `conversations` projection; prose is returned only after permission
 checks. The messages response contains ordered event rows, a position, generation,
 `computerState` (`ready`, `starting`, `recovering` or `not_applicable`),
 `computerRecovered`, and the optional `computerLostAt` time. A lost computer stays
@@ -1880,8 +1878,7 @@ These fixtures create disposable NATS/OpenFGA instances and private Postgres dat
 They do not use the shared dev stack or a paid upstream.
 
 The model process ignores `MODEL_MCP_ROUTES`. Dispatch uses saved publication records. Catalogue watching reads bounded remote
-catalogue rows independently of the empty operator route list. `CONVERSATION_KEYS_DIR`
-still names the server's private directory for encrypted approval reviews.
+catalogue rows independently of the empty operator route list. Approval reviews need no conversation key.
 
 Read-only desktop sessions use `POST /api/conversations/:id/view` and
 `/ws/conversations/:id/view` for the WebSocket. The POST requires the session, exact Origin and
@@ -2297,7 +2294,7 @@ removal during that read, through the real HTTP route and disposable services.
 Message commands can save up to 100 ids of clean uploads by the sender in the same
 conversation. A files-only message has empty text. File history is read with its own
 ten-second limit before the short write access check. The saved ids stay with the
-encrypted message event. Retried commands compare text and ids; old events without
+plaintext message event. Retried commands compare text and ids; old events without
 ids remain readable. The bridge passes only that message's files on new turns.
 
 Report reads do not load participation history. Turn starts check the small participation
@@ -2787,7 +2784,7 @@ lease. After startup, new closes are visible without waiting for the worker.
 Restart readers after event-store restoration or table replacement. Retained
 summaries must not survive either operation.
 
-Approval decisions read history and the encrypted review before the two-second write
+Approval decisions read history and the saved review before the two-second write
 check. They carry the checked approval sequence and conversation position forward,
 then check only later conversation changes and the current tool policy before append.
 The approval append also uses the remaining write deadline. File commands load their history before checking participation.
@@ -4335,7 +4332,7 @@ IAM lag and outages remain queued. Rebuilding the index runs no commands; activa
 removes the candidate so later scans stop reading it. Tests cover crashes before and after
 append, lost replies beyond broker deduplication, two workers, restart and retained holds.
 
-The durable handler host is in apps/ops; the checked commands and conversation keys are
+The durable handler host is in apps/ops; the checked commands are
 in apps/server. Durable job integration, root selection, first-start recovery and dispatch
 remain later work. No second event dispatcher or execution path is added.
 `test/child-recovery.test.ts` covers crashes, competing workers, changed index records,
@@ -5666,22 +5663,22 @@ with close code 1008 for `routine-session-` ids, before loading or decrypting co
 History checks the saved creation separately from the requested page, so a cursor
 after creation cannot skip `routinePreparation`. Display rejects that marker and
 reserved conversation ids. Conversation lists omit these sessions, and their title
-reader checks creation before decrypting a first message. These checks also hide a
+reader checks creation before reading a first message. These checks also hide a
 marked preparation session whose id has no reserved prefix. Access checks and their
 deadlines are unchanged.
 
-`test/routine-session.test.ts` saves and projects the encrypted input, proves that the
+`test/routine-session.test.ts` saves and projects the plaintext input, proves that the
 owner's underlying permissions permit reading, and exercises a real public socket
 starting after creation. It also checks HTTP history, paged history and list titles
-with decryption spies. `test/chat-display.test.ts` checks direct display refusals.
+without conversation keys. `test/chat-display.test.ts` checks direct display refusals.
 Part of #106, P4-24 row 9. Fresh-install execution qualification: NOT RUN.
 
 ### Checked routine root allocation
 
-`routine-root.ts` supplies internal `allocateRoutineRoot(store, keys, worker, input, actor,
+`routine-root.ts` supplies internal `allocateRoutineRoot(store, worker, input, actor,
 selection)`. It has no production caller. Input still accepts only routineId and occurrenceId.
 The trusted caller supplies the prepared thread, computer and generation separately.
-Shared input validation requires the exact encrypted saved message and worker-bound creation.
+Shared input validation requires the exact saved message and worker-bound creation.
 Shared child preparation checks the ready computer and provider choice. History precedes the
 original two-second access check. Only small access streams are watched; later routine controls,
 input changes, computer changes and closure are read incrementally. Activity in another
@@ -7166,7 +7163,7 @@ team assistant with the same payer, group memberships and applied IAM receipts.
 History loads before the original two-second write check over small access streams.
 One conditional `routine.reassigned` changes owner/admission and advances definition
 and control revisions only. It remains paused. Occupied runs refuse even after Stop.
-All other settings and encrypted instructions stay unchanged. Existing IAM and
+All other settings and saved instructions stay unchanged. Existing IAM and
 projection handlers apply the saved event; original completed runs stay private.
 Identical retries recover the receipt after current authority checks, including after
 the new owner retires the routine. Paused status and absence of an occupied run are
@@ -7428,7 +7425,7 @@ exists, or `null` at the person's first visible row. `?before=<position>&limit=5
 returns the preceding page. Both replies include the feed's newest `position`,
 projection generation, computer state and dispatcher state. Limits are 1 to 100.
 The route loads participation and rows before checking current access once. It
-decrypts text only after that check. It never uses a conversation stream in the
+returns prose only after that check. It never uses a conversation stream in the
 two-second write check.
 
 ## Checked company delivery binding

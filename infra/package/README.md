@@ -29,7 +29,7 @@ flowchart LR
 
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
-- Keep private settings in named Secrets and refuse public network exposure.
+- Keep private settings in named Secrets and refuse public network exposure. Chats need no key volume.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log, sign-in and a first owner for local testing.
 - Set the installation's public organisation name.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { EventEnvelope } from './envelope.ts';
-import { ciphertextSchema, keyIdSchema } from './data.ts';
+import { conversationProseSchema } from './conversation-prose.ts';
 
 const id = z.string().min(1).max(300);
 const revision = z.int().positive();
@@ -30,7 +30,7 @@ export const routineDefinitionSchema = z.object({
   profileId: id, profileRevision: revision, connectionRevision: revision,
   companyAccountId: id, scopes: z.array(id).max(32),
   tool: companyTool.optional(),
-  instructions: z.object({ ciphertext: ciphertextSchema, keyId: keyIdSchema }).strict(),
+  instructions: conversationProseSchema,
   schedule: routineScheduleSchema,
 }).strict().refine(hasAssistantPayer, 'The payer must equal the assistant payer');
 function hasAssistantPayer(data: { payingGroupId: string; assistantPayingGroupId: string }) {

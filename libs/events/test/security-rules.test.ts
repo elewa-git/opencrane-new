@@ -2,8 +2,7 @@ import { createHash } from 'node:crypto';
 import { record as asRecord } from './record.ts';
 // Security rules from docs/architecture/events.md rule 5 and plan.md,
 // checked as schema rules:
-// - no plaintext conversation content in any event (message and agent
-//   text travel as `ciphertext` + `keyId`, never as `text` or `content`);
+// - bounded conversation prose uses named fields; memory and personal answers stay encrypted;
 // - credentials only as a secret reference id, never a raw token or password;
 // - tool arguments only as a digest, never the raw arguments;
 // - reasons are short codes, never free text.
@@ -96,7 +95,7 @@ function typesDeclaring(field: string): string[] {
     .map((entry) => entry.type);
 }
 
-describe('no plaintext conversation content', () => {
+describe('encrypted memory and personal content', () => {
   const plaintextFields: ReadonlyArray<[type: string, field: string, value: unknown]> = [
     ['message.posted', 'text', 'this should have been encrypted'],
     ['agent.message_completed', 'text', 'this should have been encrypted'],
@@ -118,7 +117,7 @@ describe('no plaintext conversation content', () => {
 
   it('finds the event types that carry ciphertext, and they all carry a key id too', () => {
     expect(ciphertextTypes).toEqual(
-      expect.arrayContaining(['message.posted', 'agent.message_completed', 'agent.reasoning_summarised', 'memory.written', 'memory.corrected']),
+      expect.arrayContaining(['memory.written', 'memory.corrected', 'onboarding.survey_step_saved']),
     );
     expect(keyIdTypes).toEqual(ciphertextTypes);
   });
@@ -157,12 +156,7 @@ describe('no plaintext conversation content', () => {
     });
   });
 
-  it('message.posted carries a keyId, so a key change or a "forget" can find its messages', () => {
-    const { example } = definitionFor('message.posted');
-    expect(example).toHaveProperty('keyId');
-    const { keyId: _removed, ...withoutKey } = asRecord(example);
-    expect(definitionFor('message.posted').dataSchema.safeParse(withoutKey).success).toBe(false);
-  });
+
 });
 
 describe('credentials only as a reference id', () => {
@@ -323,15 +317,15 @@ describe('tool arguments only as a digest', () => {
       .toBe(false);
   });
 
-  it('agent.command_ran accepts encrypted view bytes and refuses a plain preview', () => {
+  it('agent.command_ran accepts a bounded redacted view and refuses raw command output', () => {
     const { example, dataSchema } = definitionFor('agent.command_ran');
     const valid = { ...asRecord(example), view: {
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+      preview: 'curl •••',
     } };
     expect(dataSchema.safeParse(valid).success).toBe(true);
     expect(rejectedFields('agent.command_ran', { preview: 'curl •••' }))
       .toEqual(['preview']);
-    expect(dataSchema.safeParse({ ...asRecord(example), view: { preview: 'curl •••' } }).success)
+    expect(dataSchema.safeParse({ ...asRecord(example), view: { preview: 'x'.repeat(32769) } }).success)
       .toBe(false);
   });
 
@@ -494,7 +488,7 @@ function looseSpots(jsonSchema: unknown): string[] {
 }
 
 describe('every event schema in the registry', () => {
-  it('declares no field named like plaintext content or a credential', () => {
+  it('declares no unapproved field named like content or a credential', () => {
     for (const entry of eventRegistry) {
       expect(riskyFieldNames(acceptedShape(entry.dataSchema)), entry.type).toEqual([]);
     }

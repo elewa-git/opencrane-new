@@ -28,7 +28,7 @@ async function seedTurn() {
       mode: 'agent_session' }),
     envelope('test', 'conversation-conversation', 'message.posted', {
       conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }, 'message'),
+      utterance: 'Saved conversation prose', contentType: 'text' }, 'message'),
   ];
   await nats.seed(rows);
   expect(await turnCommand(nats.store, context, input)).toMatchObject({
@@ -91,7 +91,7 @@ async function refusesQueuedStartAfterRecovery() {
   const actor = await seedTurn();
   const queued = envelope('test', 'conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }, 'queued');
+    utterance: 'Saved conversation prose', contentType: 'text' }, 'queued');
   await nats.seed([queued]);
   const limit = { scope: 'paying_group', scopeId: 'personal-default', setBy: 'alice' };
   await actor.configure({ ...limit, ceilingCents: 0 });
@@ -108,7 +108,7 @@ async function refusesNewMessageDuringStop() {
     ceilingCents: 0, setBy: 'alice' });
   const queued = envelope('test', 'conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }, 'new');
+    utterance: 'Saved conversation prose', contentType: 'text' }, 'new');
   await nats.seed([queued]);
   const newStart = { ...input, turnId: 'new', threadId: 'new-thread' };
   await expect(turnCommand(nats.store, context, newStart)).rejects.toThrow('spending');

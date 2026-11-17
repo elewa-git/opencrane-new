@@ -12,19 +12,17 @@ import { loadRoutineRootPreparation } from './routine-root.ts';
 type Arguments = Parameters<typeof loadRoutineRootPreparation>;
 
 // Record only the admission. A saved receipt never grants a caller permission to send.
-export async function admitRoutineActivation(store: Arguments[0], keys: Arguments[1],
-  worker: Arguments[2], raw: unknown, selection: Arguments[4], senderAttemptId: string) {
+export async function admitRoutineActivation(store: Arguments[0], worker: Arguments[1], raw: unknown, selection: Arguments[3], senderAttemptId: string) {
   try {
-    const checked = await admit(store, keys, worker, raw, selection, senderAttemptId, true);
+    const checked = await admit(store, worker, raw, selection, senderAttemptId, true);
     return checked.receipt;
   } catch {
     throw new Error('Routine activation refused');
   }
 }
 
-export async function readRoutineActivation(store: Arguments[0], keys: Arguments[1],
-  worker: Arguments[2], raw: unknown, selection: Arguments[4], senderAttemptId: string) {
-  return admit(store, keys, worker, raw, selection, senderAttemptId, false);
+export async function readRoutineActivation(store: Arguments[0], worker: Arguments[1], raw: unknown, selection: Arguments[3], senderAttemptId: string) {
+  return admit(store, worker, raw, selection, senderAttemptId, false);
 }
 
 // Retain publication proof only in the live caller. Reading a receipt cannot recreate it.
@@ -32,13 +30,13 @@ export async function claimRoutineActivation(...args: Parameters<typeof readRout
   return admit(...args, true);
 }
 
-async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[2],
-  raw: unknown, selection: Arguments[4], senderAttemptId: string, recordAdmission: boolean) {
+async function admit(store: Arguments[0], worker: Arguments[1],
+  raw: unknown, selection: Arguments[3], senderAttemptId: string, recordAdmission: boolean) {
   recordIdSchema.parse(senderAttemptId);
   // Read growing budget history before preparation starts its access deadline.
   const budgetSubject = `budget-${worker.silo}`;
   const budgetRows = await history(store, budgetSubject, worker.silo, performance.now() + 10_000);
-  const checked = await loadRoutineRootPreparation(store, keys, worker, raw, selection, true);
+  const checked = await loadRoutineRootPreparation(store, worker, raw, selection, true);
   const { run, binding, deadline, preparation } = checked;
   const rootId = sha256HexOfJson([worker.silo, run.conversationId, run.turnId]);
   let allocation: StoredEvent | undefined;

@@ -243,7 +243,7 @@ async function blockedRead(change: 'demotion' | 'removal' | 'slow', target = rol
       if (change === 'slow') {
         const message = saved('message.posted', 'unrelated-message', {
           conversationId: 'unrelated', authorId: 'admin', authorKind: 'human',
-          ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:unrelated', contentType: 'text',
+          utterance: 'Saved conversation prose', contentType: 'text',
         });
         message.subject = 'conversation-unrelated';
         await append(message);

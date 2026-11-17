@@ -44,8 +44,6 @@ function get(memberId = 'bob', conversationId = 'child', path = 'origin') {
 }
 async function read(code: number, memberId = 'bob', conversationId = 'child') {
   const before = await savedState();
-  const decrypt = vi.spyOn(context.keys, 'decrypt');
-  decrypt.mockClear();
   const response = await get(memberId, conversationId);
   expect(response.statusCode, response.body).toBe(code);
   expect(response.headers['cache-control']).toBe('no-store');
@@ -56,7 +54,7 @@ async function read(code: number, memberId = 'bob', conversationId = 'child') {
   }
   expect(await savedState()).toEqual(before);
   if (response.json<{ status: string }>().status !== 'linked') {
-    expect(decrypt).not.toHaveBeenCalled();
+    expect(response.body).not.toContain('The parent source message');
   }
   return response;
 }
@@ -320,7 +318,7 @@ async function viewerTitle() {
   const child = await seeded();
   await joinJane();
   await add('parent', 'jane');
-  const encrypted = context.keys.encrypt('test', 'parent', 'A later visible source');
+  const encrypted = ({ utterance: 'A later visible source' });
   const message = { conversationId: 'parent', authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted };
   const source = await context.append('conversation-parent', 'message.posted', message, false);

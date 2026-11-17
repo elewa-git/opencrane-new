@@ -1649,7 +1649,7 @@ async function consumesPublishedPermitOnce(concurrent: boolean) {
   await expectDispatchStarted(setup, context.record, 0);
   const unused = await permit(setup, headers);
   const restarted = await startDecision(setup.actor, setup.identity, setup.binding,
-    0, setup.keys, undefined, setup.dispatchOptions);
+    0, undefined, setup.dispatchOptions);
   onTestFinished(restarted.close);
   const request = { method: 'POST', headers: { 'x-opencrane-mcp-permit': unused }, body };
   const response = await fetch(`${restarted.url}/dispatch/mcp/fixture/installed`, request);
@@ -2740,7 +2740,7 @@ async function refusesChangedPersonalCall(change: typeof personalChanges[number]
   } else if (change === 'new Ask message') {
     await setup.append('conversation-conversation', 'message.posted', {
       conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-      contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+      contentType: 'text', utterance: 'Saved conversation prose',
     });
   } else {
     const append = setup.nats.store.append.bind(setup.nats.store);

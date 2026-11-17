@@ -77,14 +77,10 @@ checkpoint and receipts. It maps `CONTENT_DATABASE_URL` to the secret's `DATABAS
 the existing server read-role URL, for the gateway configuration lock. It never uses
 `PROJECTION_DATABASE_URL` for this connection. Offline Helm rendering checks both
 references; this does not qualify live gateway delivery in a packaged install. The
-`runtimeFiles` secret holds certificates, model files, the local stub key and
-a fresh 32-byte conversation wrapping key. An init container copies those
-files into memory, gives them to the `node` user and sets mode 0400. The
-server, model process, workers and bootstrap Job mount the copy read-only.
-The server and model process share a private volume. They wrap each
-conversation key before saving it on the volume, which stays with the claimed
-install when its Pod restarts. Preparing a new key Secret for an existing volume
-would make its keys unreadable; a fresh install gets a fresh volume and Secret.
+`runtimeFiles` secret holds certificates, model files and the local stub key.
+An init container copies those files into memory, gives them to the `node` user
+and sets mode 0400. The server, model process, workers and bootstrap Job mount
+the copy read-only. Conversations need no key volume or wrapping Secret.
 The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
@@ -1894,6 +1890,23 @@ terms and attribution. The Git tree has no built module, and the published npm
 module differs from the retained bundle range. The build change is unproved, so
 this grant stays BLOCKED. The [receipt](../../docs/process/p5-4-images16/receipt.md)
 records the boundary. `scripts/p5-4-images16.test.mjs` runs the refusal fixtures.
+
+## Reset development conversations
+
+Conversation encryption is deferred. New messages, replies, reasoning summaries,
+child results, redacted command previews, approval reviews and routine instructions
+are plaintext event fields. Current membership and conversation permissions still
+protect browser and file reads. Event logs, database dumps and backups contain
+readable conversation data and belong in private operator storage.
+Memory facts and personal survey answers keep their separate encryption.
+
+No customer data requires conversion. Stop and remove the package in your claimed
+secondary slot with `infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"`.
+Prepare a fresh installation using `package-prepare`, then `package-up` for that
+same slot. The ordinary development install uses `infra/dev-stack/up.sh --fresh`
+instead. Both replace development data; keep any needed old fixture with its old
+software and keys separately. Do not replay old encrypted conversation events into
+this version or reuse those backups. Create a new backup baseline after the reset.
 
 ## Scheduled pilot backup
 

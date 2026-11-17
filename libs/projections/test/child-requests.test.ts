@@ -87,7 +87,7 @@ async function retiresOnlyActivation() {
   const input = { ...intent, id: 'input', commandId: 'input', subject: 'conversation-child',
     type: 'message.posted', data: { conversationId: 'child', authorKind: 'human',
       authorId: 'alice', contentType: 'text',
-      ciphertext: 'ZW5jcnlwdGVkLW1lc3NhZ2U=', keyId: 'key:child' } };
+      utterance: 'Saved conversation prose' } };
   await childRequests.apply(storage.db, input, 5);
   expect(await savedFailure()).toHaveLength(1);
   await childRequests.apply(storage.db, activation, 6);

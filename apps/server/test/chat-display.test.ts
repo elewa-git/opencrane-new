@@ -54,12 +54,12 @@ function dispatchRow(data: unknown = savedDispatch.data) {
 }
 
 function feedWithDispatch(data: unknown = savedDispatch.data) {
-  const posted = { conversationId, authorId: 'alice', text: 'Read the fixture quote.' };
+  const posted = { conversationId, authorId: 'alice', utterance: 'Read the fixture quote.' };
   const turnFields = { conversationId, turnId };
   const finished = { ...callFields, status: 'completed', durationMs: 1140 };
   const reply = {
     conversationId, turnId, messageId: 'fixture-reply', contentType: 'text',
-    text: 'Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.',
+    utterance: 'Quote DEMO-001: 12500 euro cents, morning delivery. Recorded effects: 0.',
   };
   const rows = [
     displayRow(turnId, 431, 'message.posted', posted),
@@ -180,7 +180,7 @@ it.each(['routine-session-occurrence', 'marked-preparation'])(
 
 function refusesRoutineMessage(conversationId: string) {
   const data = { conversationId, authorId: 'alice', authorKind: 'system',
-    text: 'Private routine instructions', contentType: 'text' };
+    utterance: 'Private routine instructions', contentType: 'text' };
   function display() {
     return chatDisplayData('message.posted', data);
   }

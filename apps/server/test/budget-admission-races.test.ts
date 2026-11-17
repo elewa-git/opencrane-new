@@ -15,7 +15,7 @@ async function initialise() {
   setup = await fixture();
   const queued = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   input = { conversationId: 'conversation', turnId: queued.id,
     threadId: 'queued-thread', status: 'started' };
   const rows = await history(setup.nats.store, 'conversation-conversation', 'test');

@@ -294,7 +294,7 @@ Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM st
 readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
 supplies these settings and qualifies the processes together on real services.
 
-`npm run worker -w apps/ops -- conversations` runs the encrypted conversation
+`npm run worker -w apps/ops -- conversations` runs the conversation
 feed and unfinished child request projections. The server reads the child request
 table without database write rights and retries when the worker is catching up.
 `ProjectionRunner.rebuild(conversations)` rebuilds the feed with readers
@@ -525,7 +525,7 @@ stopped. The replay CLI does not yet select this table.
 
 The `members` worker also runs `personalSettings`. The dispatcher enables
 `prepare-personal-key` only with `PERSONAL_KEY_DIRECTORY`, a server-only secret-store
-directory separate from conversation keys. It reuses `conversationKeys` with the
+directory separate from memory keys. It reuses `conversationKeys` with the
 identity `personal:<memberId>`; keys are never returned to events or computers.
 Duplicate delivery retains the same key. Current membership is checked from events
 before old joins/bootstrap records prepare custody, including `personalAssistant: none`.
@@ -1245,12 +1245,8 @@ With `enabled` absent or false, or `replay` true, it returns disabled without
 reading or saving any routine. With `enabled: true`, it refuses before a due claim
 if the callback and its checked dependencies are missing. The routines projection
 worker calls this entry at startup with the single `ROUTINE_EXECUTION_ENABLED`
-setting, which defaults off. With literal `true`, it first opens the same
-`CONVERSATION_KEYS_DIR` and `CONVERSATION_WRAP_KEY_FILE` used by server chat.
-The key directory and 32-byte wrap-key file must be present. The loader binds
-all key operations to `SILO_ID` and masks file and key errors. Missing custody
-refuses before the scheduler can claim a due slot. The worker does not read
-custody in disabled or replay mode. It still refuses enabled startup because
+setting, which defaults off. With literal `true`, it validates `SILO_ID` and still
+refuses enabled startup because
 the budget actor, computer wake and company dispatch are absent. The same enabled option can be passed to the
 server composition when the budget actor and bridge share a checked production
 hand-off. `createRoutineDelivery` now carries the scheduler's checked due receipt,

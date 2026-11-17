@@ -58,8 +58,7 @@ async function start() {
   expect((await nats.store.append({ event: joined, expectedSequence: 0 })).status).toBe('appended');
   const db = pgDb(dbs.queue);
   await memberAuthorisation(binding).handler.handle(joined, db);
-  const chatKeys = conversationKeys(`${directory}/chat`);
-  const chat = { silo: 'test', store: nats.store, db, keys: chatKeys,
+  const chat = { silo: 'test', store: nats.store, db,
     binding, feed: { memberId } };
   const onboarding = { ...chat, keys };
   app = buildServer(config, { chat, onboarding });
@@ -862,7 +861,7 @@ async function welcomeStartAndAnswer() {
     nextStep: null, answered: 1 });
   const ordinary = { ...event('ordinary-chat', 'conversation-ordinary', 'message.posted'),
     data: { conversationId: 'ordinary', authorId: 'alice', authorKind: 'human',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' } };
+      utterance: 'Saved conversation prose', contentType: 'text' } };
   expect((await nats.store.append({ event: ordinary, expectedSequence: 0 })).status)
     .toBe('appended');
   expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())

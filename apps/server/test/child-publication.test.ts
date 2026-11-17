@@ -23,8 +23,8 @@ async function savedResult(context: Fixture, kind = 'final') {
   const append = context.append;
   async function withSource(...args: Parameters<typeof append>) {
     if (args[0] === 'team-child-team') {
-      context.keys.provision('test', 'parent');
-      const encrypted = context.keys.encrypt('test', 'parent', 'Please investigate');
+
+      const encrypted = ({ utterance: 'Please investigate' });
       const data = { conversationId: 'parent', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...encrypted };
       const source = envelope('test', 'conversation-parent', 'message.posted', data);
@@ -41,7 +41,7 @@ async function savedResult(context: Fixture, kind = 'final') {
   const start = { ...common, assistantId: 'child-assistant',
     executionMode: 'restricted', sharingClass: 'shared_only' };
   await append('conversation-child', 'agent.turn_started', start, false);
-  const encrypted = context.keys.encrypt('test', 'child', 'Saved answer');
+  const encrypted = ({ utterance: 'Saved answer' });
   const data = { ...common, messageId: 'saved-message', contentType: 'text', ...encrypted };
   const result = await append('conversation-child', 'agent.message_completed', data, false);
   if (kind === 'final') {
@@ -64,7 +64,7 @@ async function publishesOnce(kind: string) {
     const payload = { id: 'publication', review: review.json<{ review: string }>().review,
       text: 'Reviewed answer' };
     const unrelated = { conversationId: 'parent', authorId: 'alice', authorKind: 'human',
-      contentType: 'text', ...context.keys.encrypt('test', 'parent', 'Unrelated message') };
+      contentType: 'text', ...({ utterance: 'Unrelated message' }) };
     await context.append('conversation-parent', 'message.posted', unrelated, false);
     await context.append('participation-child', 'conversation.closed',
       { conversationId: 'child', closedBy: 'alice' }, false);
@@ -383,7 +383,7 @@ async function changesAfterChildHistory(change: string) {
     const sending = request(context, 'publications', payload).then();
     await reached.promise;
     if (change === 'message') {
-      const encrypted = context.keys.encrypt('test', 'child', 'Unrelated message');
+      const encrypted = ({ utterance: 'Unrelated message' });
       const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...encrypted };
       await context.append('conversation-child', 'message.posted', data, false);
@@ -432,7 +432,7 @@ async function verifyPublicationWindow(kind: string, caseName: string) {
       if (injected) return;
       injected = true;
       if (change === 'message') {
-        const encrypted = context.keys.encrypt('test', 'child', 'Unrelated child message');
+        const encrypted = ({ utterance: 'Unrelated child message' });
         const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
           contentType: 'text', ...encrypted };
         await context.append('conversation-child', 'message.posted', data, false);
@@ -551,7 +551,7 @@ async function refusesInterimSource(change: string) {
       await context.append('conversation-child', 'agent.turn_completed', data, false);
     } else {
       const data = { conversationId: 'child', turnId: 'other-turn', messageId: 'delta',
-        ...context.keys.encrypt('test', 'child', 'Live text'), contentType: 'text' };
+        ...({ utterance: 'Live text' }), contentType: 'text' };
       const delta = await context.append('conversation-child', 'agent.message_delta', data, false);
       input.resultEventId = delta.id;
     }

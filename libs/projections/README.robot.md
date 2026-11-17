@@ -11,7 +11,7 @@ routine records retain only the existing safe audit metadata; schedules, keys
 and private inputs do not enter the history table. Rebuild audit after upgrading
 to include earlier records.
 
-The conversation feed retains an encrypted command `view` beside the plain
+The conversation feed retains a redacted command `view` beside the plain
 activity label. The audit projection drops `view` from `agent.command_ran` so
 organisation readers receive only the safe activity summary.
 
@@ -264,15 +264,10 @@ failure. Ordinary `ProjectionRunner.rebuild(auditTrail)` also supports drop/rebu
 with readers stopped. Neither path runs reactions. Test:
 `PG_TEST_URL=… npx vitest run libs/projections/test/audit.test.ts`.
 
-`conversationKeys(directory)` is the existing dev encrypted-content adapter shared
-by the chat server and approval decision process. It stores per-conversation keys
-with private filesystem permissions, exposes only key references in events, and
-refuses decryption with a different silo/conversation binding. A packaged install
-passes `CONVERSATION_WRAP_KEY_FILE` as the optional second argument. That file is
-a 32-byte Kubernetes Secret generated in the claimed slot. The adapter uses
-AES-256-GCM to wrap each new conversation key before saving it on the package's
-private volume. Both processes use the same Secret. A missing, changed or damaged
-wrapping key stops decryption; rotating it requires rewrapping existing keys.
+`conversationKeys(directory)` remains the development encrypted-content adapter for
+personal settings, bound to the silo and `personal:<memberId>`. Conversation events
+and their projections contain readable prose and need no key. The memory adapter
+and its revision-key destruction remain separate and unchanged.
 
 The members worker also maintains the flat-group view (`groups`, `group_members`,
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online

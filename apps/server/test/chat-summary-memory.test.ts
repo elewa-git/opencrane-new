@@ -1,11 +1,11 @@
 import { systemClock } from '@opencrane/event-store';
 import { expect, it } from 'vitest';
-import { dirname } from 'node:path';
+
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
 import { event as fixtureEvent, natsFixture } from '@opencrane/event-store/testing';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordReport } from '../src/chat/reports.ts';
 
 const subject = 'conversation-chat';
@@ -69,17 +69,17 @@ async function recordsAfterLongRepliesUsingOnlyTheTail() {
   store.readStream = readStream;
   store.append = append;
   try {
-    const keys = conversationKeys(`${dirname(nats.env().NATS_CA_FILE)}/keys`);
-    keys.provision('test', 'chat');
+
+
     await readChatFacts(store, 'test', 'chat', 'message');
     fromPositions.length = 0;
     const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
     const report = { conversationId: 'chat', turnId: 'message', assistantId: 'assistant',
       requesterId: 'alice', sequence: 180001, previousSequence: 180000,
       type: 'agent.message_delta', messageId: 'reply', text: 'Next chunk' };
-    expect(await recordReport(store, keys, context, report)).toBe('recorded');
+    expect(await recordReport(store, context, report)).toBe('recorded');
     expect(fromPositions).toEqual([180003, 180003]);
-    expect(await recordReport(store, keys, context, report)).toBe('duplicate');
+    expect(await recordReport(store, context, report)).toBe('duplicate');
     expect(fromPositions).toEqual([180003, 180003, 180003, 180003]);
   } finally {
     await nats.close();

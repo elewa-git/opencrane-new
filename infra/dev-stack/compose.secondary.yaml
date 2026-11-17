@@ -44,7 +44,6 @@ services:
       - ${DEV_STACK_DIR}/model-jwks.json:${DEV_STACK_DIR}/model-jwks.json:ro
       - ${DEV_STACK_DIR}/model-stub-key:${DEV_STACK_DIR}/model-stub-key:ro
       - ${DEV_STACK_DIR}/models:${DEV_STACK_DIR}/models
-      - ${DEV_STACK_DIR}/conversation-keys:${DEV_STACK_DIR}/conversation-keys
       - ${DEV_STACK_DIR}/provider-secrets:${DEV_STACK_DIR}/provider-secrets:ro
     cpus: 1
     mem_limit: 768m

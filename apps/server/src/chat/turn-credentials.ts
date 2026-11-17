@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { sessionConfiguration, sessionAssistantSchema } from '@opencrane/events';
 import { turnToolReaders } from './turn-tool-readers.ts';
 import type { recallBridge } from './recall-bridge.ts';
@@ -23,7 +24,7 @@ const assistantKind = sessionAssistantSchema.pick({ kind: true });
 const savedAssistantKind = assistantKind.extend({ kind: z.string() });
 
 type BridgeOptions = { recall?: ReturnType<typeof recallBridge> } &
-  Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
+  Pick<ChatOptions, 'silo' | 'store'> &
   Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
     loadOAuthConfiguration?: (serverId: string) => Promise<unknown> };
@@ -163,9 +164,6 @@ async function turnContextFor(options: BridgeOptions,
   function isMessage(row: ChatRows[number]) {
     return row.event.type === 'message.posted' && row.event.id === (binding.messageId ?? report.turnId);
   }
-  function decrypt(data: unknown) {
-    return options.keys.decrypt(options.silo, report.conversationId, data);
-  }
   try {
     const facts = await requireOpenConversation(options, report);
     // Check the saved creation before choosing either reader, including on retries.
@@ -184,9 +182,9 @@ async function turnContextFor(options: BridgeOptions,
     const rows = await chatHistory(options.store, options.silo, report.conversationId);
     const message = rows.find(isMessage);
     if (!message) throw new Error('Requested message unavailable');
-    const text = shared || binding.rootId === undefined ? decrypt(message.event.data) : '';
-    const history = shared ? sharedContext(rows, message, decrypt)
-      : privateContext(rows, message, binding.requesterId, decrypt);
+    const text = shared || binding.rootId === undefined ? readConversationProse(message.event.data) : '';
+    const history = shared ? sharedContext(rows, message)
+      : privateContext(rows, message, binding.requesterId);
     const renewal = canRenewTurnStart(rows, report, facts.memoryContext?.initialLoaded === true);
     return { text, history, renewal };
   } catch (error) {

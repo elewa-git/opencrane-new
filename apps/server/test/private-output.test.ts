@@ -37,8 +37,7 @@ async function initialise() {
   await setup.runner.initialise(conversations);
   await setup.runner.initialise(computers);
   feed = await connectMemberFeed(setup.databaseUrl!);
-  const options = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
-    binding: setup.binding, feed: { memberId } };
+  const options = { silo: 'test', store: setup.nats.store, db: setup.db, binding: setup.binding, feed: { memberId } };
   const serverOptions = { chat: options };
   app = buildServer(config, serverOptions);
   const websocketOptions = { feed, binding: setup.binding, chat: options };
@@ -85,13 +84,13 @@ async function initialise() {
   await setup.runner.run(computers);
 }
 async function session(conversationId: string, requesterId = 'alice') {
-  setup.keys.provision('test', conversationId);
+
   const conversation = { conversationId, createdBy: requesterId, assistantId: 'assistant',
     mode: 'agent_session', payingGroupId: 'sales' };
   const subject = `conversation-${conversationId}`;
   await setup.append(subject, 'conversation.created', conversation);
   const messageData = { conversationId, authorId: requesterId, authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', conversationId, 'Human request') };
+    contentType: 'text', ...({ utterance: 'Human request' }) };
   const message = envelope('test', subject, 'message.posted', messageData);
   const messages = [{ ...message, id: conversationId, commandId: conversationId }];
   await setup.nats.seed(messages);
@@ -187,7 +186,6 @@ async function isolatesAndConsumes() {
   const first = await subscribe();
   const second = await subscribe('second');
   const bob = await subscribe('bob', 'bob');
-  const encrypt = vi.spyOn(setup.keys, 'encrypt');
   await send();
   function delivered() {
     expect(privateFrames(first.frames)).toHaveLength(1);
@@ -205,7 +203,6 @@ async function isolatesAndConsumes() {
   const duplicate = { ...report(), sequence: 2, previousSequence: 1 };
   await send(duplicate);
   expect(privateFrames(first.frames)).toHaveLength(1);
-  expect(encrypt).not.toHaveBeenCalled();
   const bobReport = { ...report(), conversationId: 'bob', turnId: 'bob', threadId: 'bob', sequence: 3 };
   await send(bobReport);
   const secondReport = { ...report(), conversationId: 'second', turnId: 'second',
@@ -316,7 +313,7 @@ async function releaseRace(kind: string, readNumber = 1, repeat = false,
       bufferedAmount.mockReturnValue(64 * 1024);
     } else {
       const message = { conversationId: 'first', authorId: 'alice', authorKind: 'human',
-        contentType: 'text', ...setup.keys.encrypt('test', 'first', 'An unrelated question') };
+        contentType: 'text', ...({ utterance: 'An unrelated question' }) };
       await setup.append('conversation-first', 'message.posted', message);
     }
   }
@@ -603,7 +600,7 @@ async function unrelatedActivityKeepsReply() {
   const first = await completedReply();
   await changeFact('forget', 'unrelated');
   const message = { conversationId: 'first', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', 'first', 'Another question') };
+    contentType: 'text', ...({ utterance: 'Another question' }) };
   await setup.append('conversation-first', 'message.posted', message);
   const upload = { conversationId: 'first', fileId: 'upload', uploadedBy: 'alice',
     name: 'fixture.txt', mime: 'text/plain', size: 1, sha256: 'a'.repeat(64),
@@ -650,7 +647,7 @@ async function oldInvalidationKeepsNextReply() {
   const original = memoryContextRecordedEventSchema.parse(preparation.event).data;
   const next = { ...original, turnId: 'next', threadId: 'next-thread', inputGeneration: 'next-input' };
   const message = { conversationId: 'first', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', 'first', 'Next question') };
+    contentType: 'text', ...({ utterance: 'Next question' }) };
   const request = envelope('test', 'conversation-first', 'message.posted', message);
   const requests = [{ ...request, id: 'next', commandId: 'next' }];
   await setup.nats.seed(requests);

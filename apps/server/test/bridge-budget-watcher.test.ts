@@ -124,7 +124,7 @@ async function budgetWatcher() {
     await until(polled, 3000);
   }
   async function message(conversationId: string) {
-    const encrypted = view.keys.encrypt('test', conversationId, 'Keep working');
+    const encrypted = ({ utterance: 'Keep working' });
     const posted = { conversationId, authorId: 'alice', authorKind: 'human',
       contentType: 'text', executionMode: 'memory_free', ...encrypted };
     const saved = await view.append(`conversation-${conversationId}`, 'message.posted', posted);
@@ -134,7 +134,7 @@ async function budgetWatcher() {
     const created = { conversationId, assistantId: 'assistant', createdBy: 'alice',
       mode: 'agent_session', payingGroupId: 'personal' };
     await view.append(`conversation-${conversationId}`, 'conversation.created', created);
-    view.keys.provision('test', conversationId);
+
   }
   async function start(turn: Turn) {
     const started = { ...turn, assistantId: 'assistant', threadId: `thread-${turn.conversationId}` };
@@ -162,7 +162,7 @@ async function budgetWatcher() {
   let work: Promise<void> | undefined;
   async function watch() {
     await project();
-    const options = { silo: 'test', store, keys: view.keys, db: view.db,
+    const options = { silo: 'test', store, db: view.db,
       binding: view.binding, objects };
     work = watchBridges(options, tokens, kube, proxyUrl, abort.signal, logger);
   }

@@ -55,10 +55,10 @@ async function publishesAssistantFiles() {
   const context = { silo: 'test', computerId: 'desktop', assistantId: 'assistant',
     files: options, readArtifact };
   try {
-    fixture.keys.provision('test', 'chat');
+
     const person = { silo: 'test', memberId: 'alice' };
     const message = { id: 'request', conversationId: 'chat', text: 'Create a report' };
-    await chatCommand(options.store, fixture.keys, person, message);
+    await chatCommand(options.store, person, message);
     const report = { sequence: 1, previousSequence: 0, conversationId: 'chat',
       turnId: 'request', assistantId: 'assistant', type: 'agent.turn_completed',
       artifacts: [artifact] };
@@ -70,12 +70,12 @@ async function publishesAssistantFiles() {
     }
     const appends = vi.spyOn(options.store, 'append');
     appends.mockImplementation(interruptCard);
-    await expect(recordReport(options.store, fixture.keys, context, report))
+    await expect(recordReport(options.store, context, report))
       .rejects.toThrow('Interrupted publication');
     appends.mockRestore();
     currentBytes = Buffer.alloc(0);
-    expect(await recordReport(options.store, fixture.keys, context, report)).toBe('recorded');
-    expect(await recordReport(options.store, fixture.keys, context, report)).toBe('duplicate');
+    expect(await recordReport(options.store, context, report)).toBe('recorded');
+    expect(await recordReport(options.store, context, report)).toBe('duplicate');
     const rows = await chatHistory(options.store, 'test', 'chat');
     function isCard(row: typeof rows[number]) { return row.event.type === 'agent.file_changed'; }
     const cards = rows.filter(isCard);
@@ -110,10 +110,10 @@ async function publishesAssistantFiles() {
         sha256: digest.digest('hex') };
       const turnId = `refusal-${sequence}`;
       const request = { id: turnId, conversationId: 'chat', text: 'Create another file' };
-      await chatCommand(options.store, fixture.keys, person, request);
+      await chatCommand(options.store, person, request);
       const refused = { ...report, previousSequence: sequence, sequence: ++sequence,
         turnId, artifacts: [changed] };
-      expect(await recordReport(options.store, fixture.keys, context, refused)).toBe('recorded');
+      expect(await recordReport(options.store, context, refused)).toBe('recorded');
       const saved = await chatHistory(options.store, 'test', 'chat');
       const cards = saved.filter(isCard);
       expect(cards.at(-1)?.event.data).toMatchObject({ path: 'unavailable',
@@ -121,7 +121,7 @@ async function publishesAssistantFiles() {
     }
     const tooLarge = { ...report, previousSequence: sequence, sequence: sequence + 1,
       artifacts: [{ ...artifact, size: 20 * 1024 * 1024 + 1 }] };
-    await expect(recordReport(options.store, fixture.keys, context, tooLarge)).rejects.toThrow();
+    await expect(recordReport(options.store, context, tooLarge)).rejects.toThrow();
     const scanned = Promise.withResolvers<void>();
     const releaseScan = Promise.withResolvers<void>();
     async function scanDuringClose() {

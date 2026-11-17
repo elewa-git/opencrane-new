@@ -68,7 +68,7 @@ async function separateSettings() {
       const ownerEmail = await readFile(`${home}/.config/opencrane/dev-owner-email`, 'utf8');
       assert.equal(ownerEmail.trim(), 'owner@example.test');
       const original = await readFile(`${directory}/server.env`, 'utf8');
-      const aliased = original.replace(`${directory}/memory-keys`, `${directory}/conversation-keys`);
+      const aliased = original.replace(`${directory}/memory-keys`, `${directory}/provider-secrets`);
       await writeFile(`${directory}/server.env`, aliased);
       assert.notEqual(generate(home, id).status, 0, 'Refuse changed saved custody');
       assert.equal(await readFile(`${directory}/server.env`, 'utf8'), aliased);
@@ -107,9 +107,9 @@ async function unsafePaths() {
       await rm(path, { recursive: true, force: true });
     }
     assert.equal(generate(home, '1').status, 0);
-    await symlink(`${directory}/memory-keys`, `${directory}/conversation-keys`);
-    assert.notEqual(generate(home, '1').status, 0, 'Refuse conversation custody aliases');
-    await rm(`${directory}/conversation-keys`);
+    await symlink(`${directory}/memory-keys`, `${directory}/provider-secrets`);
+    assert.notEqual(generate(home, '1').status, 0, 'Refuse provider custody aliases');
+    await rm(`${directory}/provider-secrets`);
     await rm(`${directory}/memory-keys`, { recursive: true });
     assert.notEqual(generate(home, '1').status, 0, 'Never recreate lost custody');
   } finally {

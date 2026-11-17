@@ -9,7 +9,6 @@ import { readPrivateSession, privateSessionCreation, requirePrivateReader }
 import { GroupRefused } from '../members/groups.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { Query, connectMemberFeed } from '@opencrane/projections';
-import type { conversationKeys } from './keys.ts';
 import type { RetainedCall } from '@opencrane/models';
 import type { createRoutineWake } from './routine-wake.ts';
 
@@ -17,7 +16,6 @@ export interface ChatOptions {
   silo: string;
   store: EventStore;
   db: Query;
-  keys: ReturnType<typeof conversationKeys>;
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
   dispatcherReady?: () => Promise<boolean>;

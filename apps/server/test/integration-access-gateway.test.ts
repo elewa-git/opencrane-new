@@ -389,7 +389,7 @@ async function preservesAccess() {
   await allowed(context);
   async function output() {
     const data = { conversationId: 'conversation', turnId: 'turn', messageId: 'progress',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' };
+      utterance: 'Saved conversation prose', contentType: 'text' };
     await context.setup.append('conversation-conversation', 'agent.message_delta', data);
   }
   await heldCall(context, output, 200);

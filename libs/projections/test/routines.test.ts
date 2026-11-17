@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createCipheriv } from 'node:crypto';
+
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -12,10 +12,7 @@ import { database } from './database.ts';
 
 const exec = promisify(execFile);
 const privateCanary = 'routine-private-canary';
-const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 9), Buffer.alloc(12, 7));
-const encryptedParts = [cipher.update(privateCanary), cipher.final(), cipher.getAuthTag()];
-const encrypted = Buffer.concat(encryptedParts);
-const instructions = { ciphertext: encrypted.toString('base64'), keyId: 'key:1' };
+const instructions = privateCanary;
 const logger = createLogger('routine-test', { level: 'silent' });
 let storage: Awaited<ReturnType<typeof database>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -276,7 +273,7 @@ async function runsProcessEntrypoints() {
   const jobs = await storage.db.query("SELECT tablename FROM pg_tables WHERE schemaname='pgboss'");
   expect(jobs.rows).toEqual([]);
   const diagnostics = dry.stdout + dry.stderr + rebuilt.stdout + rebuilt.stderr;
-  expect(diagnostics + workerDiagnostics).not.toContain(instructions.ciphertext);
+  expect(diagnostics + workerDiagnostics).not.toContain(instructions);
   expect(diagnostics + workerDiagnostics).not.toContain(privateCanary);
   expect(diagnostics + workerDiagnostics).not.toContain('Forbidden routine replay effect');
   expect(diagnostics).not.toContain('key:1');

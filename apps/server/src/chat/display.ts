@@ -1,6 +1,7 @@
+import { agentCommandRanDataSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { conversationCreatedDataSchema, fileUploadedDataSchema,
-  childResultPublishedDataSchema } from '@opencrane/events';
+  readConversationProse, childResultPublishedDataSchema } from '@opencrane/events';
 import { chatRowSchema } from '@opencrane/protocol';
 import { ChatRefused } from './access.ts';
 import { isPublicChatId } from './public-id.ts';
@@ -23,12 +24,12 @@ const displayTypes = new Set([
   'agent.message_delta', 'agent.message_completed', 'file.uploaded', 'file.rejected',
   'file.delivered', 'tool.dispatch_recorded', 'decision.recorded',
 ]);
-const encryptedTextTypes = new Set([
+const proseTypes = new Set([
   'conversation.child_result_published', 'message.posted', 'agent.message_delta',
   'agent.message_completed', 'agent.reasoning_summarised',
 ]);
 
-// Select display fields before decrypting. Saved access references are not chat content.
+// Select display fields explicitly. Saved access references are not chat content.
 export function chatDisplayData(type: string, input: unknown) {
   if (typeof input === 'object' && input !== null && 'conversationId' in input &&
       typeof input.conversationId === 'string' && !isPublicChatId(input.conversationId)) {
@@ -37,7 +38,7 @@ export function chatDisplayData(type: string, input: unknown) {
   if (type === 'conversation.child_result_published') {
     const saved = childResultPublishedDataSchema.parse(input);
     return { authorId: saved.publishedBy, publicationKind: saved.publicationKind,
-      contentType: saved.contentType };
+      contentType: saved.contentType, text: saved.utterance };
   }
   if (type === 'conversation.created') {
     const created = conversationCreatedDataSchema.parse(input);
@@ -50,9 +51,15 @@ export function chatDisplayData(type: string, input: unknown) {
   }
   // Require a safe display contract before a new event can enter an HTTP or socket reply.
   if (!displayTypes.has(type)) throw new Error('Chat display unavailable');
-  return displayData.parse(input);
+  const display = displayData.parse(input);
+  if (hasDisplayText(type)) return { ...display, text: readConversationProse(input) };
+  if (type === 'agent.command_ran') {
+    const command = agentCommandRanDataSchema.parse(input);
+    return { ...display, preview: command.view?.preview };
+  }
+  return display;
 }
 
 export function hasDisplayText(type: string) {
-  return encryptedTextTypes.has(type);
+  return proseTypes.has(type);
 }

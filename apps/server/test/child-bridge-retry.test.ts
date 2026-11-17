@@ -74,7 +74,7 @@ async function preservesPreparedChild(failure: Failure) {
     const dispatch = { routes: [], requireLeader, childStart };
     const identity = { issuer: 'https://child.test/', jwks: context.tokens.jwks };
     decision = await startDecision(actor, identity, context.options.binding,
-      0, undefined, undefined, dispatch);
+      0, undefined, dispatch);
     if (failure === 'reply') {
       const fetchOriginal = globalThis.fetch.bind(globalThis);
       async function loseFirstReply(input: string | URL | Request, init?: RequestInit) {

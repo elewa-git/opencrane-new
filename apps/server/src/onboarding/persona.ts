@@ -1,5 +1,5 @@
+import type { OnboardingOptions } from './options.ts';
 import { memoryTextSchema, surveyAnswersSchema } from '@opencrane/events';
-import type { ChatOptions } from '../chat/access.ts';
 import { decryptAnswers, type surveyHistory } from './history.ts';
 
 function labelled(label: string, value: unknown) {
@@ -11,7 +11,7 @@ export function checkedPersona(value: string) {
   return memoryTextSchema.parse(value);
 }
 
-export function renderPersona(options: ChatOptions, memberId: string,
+export function renderPersona(options: OnboardingOptions, memberId: string,
   history: Awaited<ReturnType<typeof surveyHistory>>) {
   if (history.steps.length !== 4) throw new Error('Incomplete survey');
   const answers = [];

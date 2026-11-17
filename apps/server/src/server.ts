@@ -1,3 +1,4 @@
+import type { OnboardingOptions } from './onboarding/options.ts';
 import { registerOverviewRoutes } from './overview/routes.ts';
 import { registerRoutineReads } from './routine-routes.ts';
 import { registerTakeoverRoutes } from './computers/takeover-routes.ts';
@@ -61,7 +62,7 @@ export interface BuildServerOptions {
   audit?: AuditOptions;
   chat?: ChatOptions;
   takeoverRequestsEnabled?: boolean;
-  onboarding?: ChatOptions;
+  onboarding?: OnboardingOptions;
   files?: FileOptions;
   integrations?: IntegrationOptions;
   mcpInstances?: McpInstanceOptions;

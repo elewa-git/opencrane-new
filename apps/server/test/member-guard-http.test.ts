@@ -50,7 +50,7 @@ function scan() {
 }
 function server(config: AuthConfig, binding: Binding = services.binding) {
   const chat = { silo: 'test', store: services.nats.store, db: services.db,
-    binding, keys: services.keys, feed: { memberId } };
+    binding, feed: { memberId } };
   const files = { ...chat, objects: new Client({ endPoint: '127.0.0.1' }), scan };
   return buildServer(config, { chat, files });
 }
@@ -251,7 +251,7 @@ async function hidesHistoryFailureDetails() {
   vi.stubEnv('LOG_LEVEL', 'info');
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const chat = { silo: 'test', store: services.nats.store, db: services.db,
-    binding: services.binding, keys: services.keys, feed: { memberId: failedLookup } };
+    binding: services.binding, feed: { memberId: failedLookup } };
   const logDestination = { write };
   const app = buildServer(config, { chat, logDestination });
   try {

@@ -43,7 +43,7 @@ export async function saveSession(fixture: Awaited<ReturnType<typeof savedSessio
         firstInputId: `input-${conversationId}` } };
     created = child;
   }
-  fixture.keys.provision('test', conversationId);
+
   const event = await fixture.append(`conversation-${conversationId}`, 'conversation.created',
     created);
   const conversation: AgentSession = { ...created, assistantKind: 'team', createdAt: event.time };
@@ -52,7 +52,7 @@ export async function saveSession(fixture: Awaited<ReturnType<typeof savedSessio
 
 export async function saveInput(fixture: Awaited<ReturnType<typeof savedSessionFixture>>,
   conversationId: string, mode: ExecutionMode) {
-  const encrypted = fixture.keys.encrypt('test', conversationId, 'Saved question');
+  const encrypted = ({ utterance: 'Saved question' });
   const data = { conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
     ...encrypted, ...(mode === 'memory_free' ? { executionMode: mode } : {}) };
   return fixture.append(`conversation-${conversationId}`, 'message.posted', data, false);

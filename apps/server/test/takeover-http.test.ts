@@ -44,7 +44,7 @@ async function setup(requestsEnabled = true, open: Parameters<typeof viewFixture
   app = buildServer(fixture.config, options);
   const message = await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
     resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
@@ -159,7 +159,7 @@ async function retriesAndLostReplies() {
   expect((await get('outsider')).statusCode).toBe(403);
   await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   expect((await post()).statusCode).toBe(409);
 }
@@ -205,7 +205,7 @@ async function otherChat() {
   }, true);
   const message = await fixture.append('conversation-other', 'message.posted', {
     conversationId: 'other', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   return { ...body, commandId: 'other-command', requesterEventId: message.id };
 }
@@ -310,7 +310,7 @@ async function laterMessageDuringAccess() {
     added = true;
     await fixture.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+      utterance: 'Saved conversation prose', contentType: 'text',
     });
   }
   vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(changed);
@@ -345,7 +345,7 @@ async function retryAfterStateChanged(field: 'requesterEventId' | 'generation') 
   if (field === 'requesterEventId') {
     const message = await fixture.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+      utterance: 'Saved conversation prose', contentType: 'text',
     });
     changed.requesterEventId = message.id;
   } else {

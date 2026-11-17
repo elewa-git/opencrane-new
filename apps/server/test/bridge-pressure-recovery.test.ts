@@ -7,22 +7,22 @@ import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { until } from '@opencrane/authz/testing';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { chatCommand } from '../src/chat/commands.ts';
 import { reportPosition } from '../src/chat/reports.ts';
 
 async function keepsAcceptedReports() {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/bridge-pressure-recovery-`);
-  const keys = conversationKeys(directory);
+
   const server = createServer();
   const sockets = new WebSocketServer({ server });
-  keys.provision('test', 'chat');
+
   const owner = { silo: 'test', memberId: 'alice' };
   const creation = { id: 'create', conversationId: 'chat', assistantId: 'assistant' };
-  await chatCommand(nats.store, keys, owner, creation);
+  await chatCommand(nats.store, owner, creation);
   const message = { id: 'message', conversationId: 'chat', text: 'Hello' };
-  await chatCommand(nats.store, keys, owner, message);
+  await chatCommand(nats.store, owner, message);
   let release!: () => void;
   function hold(resolve: () => void) { release = resolve; }
   const gate = new Promise<void>(hold);
@@ -38,7 +38,7 @@ async function keepsAcceptedReports() {
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No listener');
-  const options = { silo: 'test', store: nats.store, keys };
+  const options = { silo: 'test', store: nats.store };
   const input = { url: `ws://127.0.0.1:${address.port}`, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test' };
   function peer(resolve: (socket: WebSocket) => void) { sockets.once('connection', resolve); }

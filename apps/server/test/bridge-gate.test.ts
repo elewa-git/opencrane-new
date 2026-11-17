@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { dirname } from 'node:path';
+
 import { z } from 'zod';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -19,7 +19,7 @@ import { takeoverClock, waitForControl } from './support/takeover-clock.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { savePausing } from '../src/chat/bridge-pausing.ts';
 import { readyBridgePass } from '../src/chat/bridge-control.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 
 let cleanup = async () => {};
 afterEach(async function closeFixture() {
@@ -57,8 +57,7 @@ async function setup(real = false, stopExecution?: (input: StopInput) => Promise
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing port');
   const url = real ? computer.socket.url : `ws://127.0.0.1:${address.port}`;
-  const options = { store: nats.store, silo: 'test', keys: conversationKeys(dirname(computer.keyPath)),
-    stopExecution };
+  const options = { store: nats.store, silo: 'test', stopExecution };
   const input = { url, computerId: 'computer', assistantId: 'assistant', bearer: 'test' };
   const links: Awaited<ReturnType<typeof connectBridge>>[] = [];
   async function append(subject: string, type: string, data: unknown) {
@@ -277,8 +276,8 @@ async function watchesIdle(mode: string) {
   vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
   const stop = new AbortController();
   if (mode === 'connected' || mode === 'suspended') {
-    test.keys.provision('test', 'chat');
-    const encrypted = test.keys.encrypt('test', 'chat', 'Hello');
+
+    const encrypted = ({ utterance: 'Hello' });
     await test.append('conversation-chat', 'message.posted', { conversationId: 'chat',
       authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted });
   }
@@ -364,8 +363,8 @@ async function gateDuringSlowChat(connected: boolean) {
     yield* readStream(...args);
   }
   if (connected) {
-    test.keys.provision('test', 'chat');
-    const encrypted = test.keys.encrypt('test', 'chat', 'Hello');
+
+    const encrypted = ({ utterance: 'Hello' });
     await test.append('conversation-chat', 'message.posted', { conversationId: 'chat',
       authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted });
   } else {
@@ -1062,7 +1061,7 @@ async function gatesBeforeApprovalWake(withIssuer: boolean) {
     toolRevision: approvalId, schemaDigest: approvalId, profile: 'none', policySequence: 0,
     digestVersion: 'lossless-json-v1', argumentsDigest: approvalId,
     expiresAt: '2099-01-01T00:00:00.000Z', stepUp: false,
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAA==', keyId: 'key:fixture', reviewDigest: approvalId,
+    review: 'Saved conversation prose', reviewDigest: approvalId,
   });
   await test.append(`approval-${approvalId}`, 'approval.cancelled', { approvalId });
   await test.save();

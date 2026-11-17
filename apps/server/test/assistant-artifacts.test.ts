@@ -18,10 +18,10 @@ async function publicationFixture(bytes: Buffer) {
   function readArtifact() { return Promise.resolve(bytes); }
   const context = { silo: 'test', computerId: 'desktop', assistantId: 'assistant',
     files: options, readArtifact };
-  fixture.keys.provision('test', 'chat');
+
   const person = { silo: 'test', memberId: 'alice' };
   const message = { id: 'request', conversationId: 'chat', text: 'Create reports' };
-  await chatCommand(options.store, fixture.keys, person, message);
+  await chatCommand(options.store, person, message);
   const digest = createHash('sha256');
   digest.update(bytes);
   const artifact = { id: 'a'.repeat(64), name: 'report.txt', size: bytes.length,
@@ -30,7 +30,7 @@ async function publicationFixture(bytes: Buffer) {
     turnId: 'request', assistantId: 'assistant', type: 'agent.turn_completed',
     artifacts: [artifact] };
   function record(value: unknown) {
-    return recordReport(options.store, fixture.keys, context, value);
+    return recordReport(options.store, context, value);
   }
   async function close() {
     await services.close();

@@ -395,9 +395,9 @@ test('the package includes the owner bootstrap command', () => {
   assert.match(manifest, /enableServiceLinks: false/u);
 });
 
-test('a chat turn has private keys, a stub model and a computer runtime', () => {
+test('a chat turn needs no conversation keys and has a computer runtime', () => {
   const manifest = render();
-  assert.match(manifest, /name: conversation-keys/u);
+  assert.doesNotMatch(manifest, /name: conversation-keys/u);
   assert.match(manifest, /infra\/dev-stack\/secondary-models\.ts/u);
   assert.match(manifest, /"kind": "SandboxTemplate"/u);
   assert.match(manifest, /name: computer-runtime/u);
@@ -466,16 +466,15 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
   assert.equal(patches.length, 1);
 });
 
-test('preparation keeps the binary wrapping key in the file Secret', async () => {
+test('preparation needs no conversation key or wrapping Secret', async () => {
   const { key, settings, secrets } = await preparedSecretsFixture();
   const runtime = settings.get('package-runtime');
   const runtimeFiles = secrets.get('runtime-files');
   const runtimeSecret = secrets.get('runtime');
   assert.equal(runtime.DEV_OWNER_EMAIL, 'owner@example.test');
   assert.equal(runtimeSecret.DEV_OWNER_EMAIL.toString('utf8'), 'owner@example.test');
-  assert.deepEqual(runtimeFiles['conversation-wrap-key'], key);
-  assert.equal(runtime.CONVERSATION_WRAP_KEY_FILE,
-    '/run/opencrane/files/conversation-wrap-key');
+  assert.equal(runtimeFiles['conversation-wrap-key'], undefined);
+  assert.equal(runtime.CONVERSATION_WRAP_KEY_FILE, undefined);
   assert.equal(runtime['conversation-wrap-key'], undefined);
   assert.equal(runtime.CONVERSATION_WRAP_KEY, undefined);
   assert.equal(runtimeSecret['conversation-wrap-key'], undefined);

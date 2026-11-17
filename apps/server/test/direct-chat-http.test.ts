@@ -27,7 +27,7 @@ import { envelope, history } from '@opencrane/models';
 import { chatListSchema, chatFeedSchema, chatColleaguesSchema, chatChangeSchema,
   chatGroupsSchema, chatGroupSnapshotSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 async function directFixture() {
@@ -39,10 +39,10 @@ async function directFixture() {
   const binding = await createStore(fga.apiUrl, 'test');
   const db = pgDb(dbs.queue);
   const auth = memberAuthorisation(binding);
-  const keys = conversationKeys(directory);
+
   const runner = new ProjectionRunner(db, nats.store, createLogger('direct-test'));
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const options: ChatOptions = { silo: 'test', store: nats.store, db, keys, binding, feed };
+  const options: ChatOptions = { silo: 'test', store: nats.store, db, binding, feed };
   const app = buildServer(config, { chat: options });
   async function append(subject: string, type: string, data: unknown, iam = true) {
     const event = envelope('test', subject, type, data);
@@ -943,7 +943,7 @@ async function seedPagingMessages(fixture: Awaited<ReturnType<typeof directFixtu
   const previousHead = await fixture.nats.store.head();
   // Paging tests content reads; command admission and retries have separate coverage.
   for (let index = 0; index < 101; index++) {
-    const encrypted = fixture.options.keys.encrypt('test', 'direct', `Message ${index}`);
+    const encrypted = ({ utterance: `Message ${index}` });
     const data = {
       conversationId: 'direct', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted,
@@ -1108,11 +1108,11 @@ it('returns list rows checked before access changes during their summaries', asy
   const fixture = await directFixture();
   try {
     for (const conversationId of ['two', 'one']) {
-      fixture.options.keys.provision('test', conversationId);
+
       await fixture.append(`conversation-${conversationId}`, 'conversation.created', {
         conversationId, createdBy: 'alice', mode: 'agent_session', assistantId: 'assistant',
       });
-      const encrypted = fixture.options.keys.encrypt('test', conversationId, `${conversationId} title`);
+      const encrypted = ({ utterance: `${conversationId} title` });
       const message = {
         conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
       };
@@ -1681,12 +1681,12 @@ it('refuses a group change after its position was read during the write check',
 type ListFixture = Awaited<ReturnType<typeof directFixture>>;
 async function seedListChat(fixture: ListFixture, conversationId: string, iam = true,
   participantIds = ['alice', 'bob']) {
-  fixture.options.keys.provision('test', conversationId);
+
   const data = { conversationId, mode: 'group', createdBy: 'alice', participantIds };
   return fixture.append(`conversation-${conversationId}`, 'conversation.created', data, iam);
 }
 async function seedListMessage(fixture: ListFixture, conversationId: string, text: string) {
-  const encrypted = fixture.options.keys.encrypt('test', conversationId, text);
+  const encrypted = ({ utterance: text });
   const data = { conversationId, authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted };
   await fixture.append(`conversation-${conversationId}`, 'message.posted', data, false);
@@ -1979,11 +1979,11 @@ async function hidesPersonalSessionHistoryBeforeJoin() {
     const messageAt = new Date('2026-10-06T10:00:00.000Z');
     const joinedAt = new Date('2026-10-09T10:00:00.000Z');
     const conversationId = 'personal-late-time';
-    fixture.options.keys.provision('test', conversationId);
+
     const created = envelope('test', `conversation-${conversationId}`, 'conversation.created', {
       conversationId, mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant',
     }, 'created-personal-late-time', createdAt);
-    const encrypted = fixture.options.keys.encrypt('test', conversationId, 'Secret before joining');
+    const encrypted = ({ utterance: 'Secret before joining' });
     const message = envelope('test', `conversation-${conversationId}`, 'message.posted', {
       conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
     }, 'message-personal-late-time', messageAt);

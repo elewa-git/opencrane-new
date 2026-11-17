@@ -10,7 +10,7 @@ import { until } from '@opencrane/authz/testing';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { BudgetActor, history, priceTableId, rootTotals } from '@opencrane/models';
-import { conversationKeys } from '@opencrane/projections';
+
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
@@ -34,7 +34,6 @@ import { routineCompanyPreflightFromCustody } from '../src/routine-company-prefl
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
-let keys: ReturnType<typeof conversationKeys>;
 let actor: BudgetActor;
 let directory: string;
 let now: number;
@@ -139,14 +138,13 @@ async function setup() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
   directory = await mkdtemp('/tmp/routine-composition-');
-  keys = conversationKeys(directory);
-  keys.provision('test', 'routine-orders');
+
   now = Date.parse('2026-10-11T07:00:00Z');
   owned = true;
   company = await prepareCompany();
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = keys.encrypt('test', 'routine-orders', 'Private routine instructions');
+  const instructions = ({ utterance: 'Private routine instructions' });
   const definition = { ...original.definition, instructions, connectionId: 'installed',
     profileRevision: company.profileRevision, connectionRevision: company.profileRevision,
     scopes: ['read'], tool: company.tool };
@@ -265,7 +263,7 @@ async function startComputer() {
   const tokens = await tokenIssuer(tokenOptions);
   const connection = { computerId: 'computer', assistantId: 'sales-assistant',
     bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
-  const options = { silo: 'test', store: nats.store, keys, binding };
+  const options = { silo: 'test', store: nats.store, binding };
   const link = await connectBridge(options, connection, tokens);
   const send = link.socket.send.bind(link.socket);
   function track(bytes: Parameters<typeof send>[0]) {
@@ -331,7 +329,7 @@ function syntheticCompanyPreflight(run: Parameters<NonNullable<Options['companyP
 function compose(options: Options = { enabled: true }) {
   const companyPreflight = options.companyPreflight ?? syntheticCompanyPreflight;
   const checked = { ...options, companyPreflight };
-  return createRoutineComposition(checked, nats.store, keys, worker(), input, actor,
+  return createRoutineComposition(checked, nats.store, worker(), input, actor,
     'sender-attempt');
 }
 async function saved(type: string, subject: string) {
@@ -424,15 +422,14 @@ async function productionCompanyDelivery() {
   const due = { status: 'confirmed' as const, executionAvailable: false as const,
     routineId: 'orders', occurrenceId: 'occurrence', turnId };
   const leadership = { signal: signal.signal, checkCurrent };
-  const disabled = createRoutineCompanyDelivery(companyOptions, nats.store, keys,
-    identity, actor, preparedComputer.wake, owner);
+  const disabled = createRoutineCompanyDelivery(companyOptions, nats.store, identity, actor, preparedComputer.wake, owner);
   expect(await disabled(due, leadership)).toEqual({ status: 'unknown' });
   const replay = createRoutineCompanyDelivery({ ...companyOptions, enabled: true, replay: true },
-    nats.store, keys, identity, actor, preparedComputer.wake, owner);
+    nats.store, identity, actor, preparedComputer.wake, owner);
   expect(await replay(due, leadership)).toEqual({ status: 'unknown' });
   expect(preparedComputer.frames).toEqual([]);
   expect(company.recover).not.toHaveBeenCalled();
-  const prepared = await routineSession.loadRoutinePreparation(nats.store, keys, worker(), input);
+  const prepared = await routineSession.loadRoutinePreparation(nats.store, worker(), input);
   const profileRows = await history(nats.store, 'connection-company:odoo:orders-bot', 'test');
   expect(foldCompanyConnection(profileRows).status).toBe('verified');
   const choiceRows = await history(nats.store, 'connection-selection-alice-odoo', 'test');
@@ -446,7 +443,7 @@ async function productionCompanyDelivery() {
   await expect(preflight(prepared.run, 1)).resolves.toMatchObject({
     occurrenceId: 'occurrence', rootId });
   const enabled = createRoutineCompanyDelivery({ ...companyOptions, enabled: true },
-    nats.store, keys, identity, actor, preparedComputer.wake, owner);
+    nats.store, identity, actor, preparedComputer.wake, owner);
   expect(await enabled(due, leadership)).toEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   expect(await enabled(due, leadership)).toEqual({ status: 'unknown' });
@@ -625,7 +622,7 @@ async function refusesCompanyChange(kind: LateCompanyChange, afterAuthorisation:
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changeAtAuthorisation);
-  const deliver = createRoutineCompanyDelivery(options, nats.store, keys, identity,
+  const deliver = createRoutineCompanyDelivery(options, nats.store, identity,
     actor, preparedComputer.wake, owner);
   expect(await deliver(due, leadership)).toEqual({ status: 'unknown' });
   expect(changed).toBe(true);
@@ -681,7 +678,7 @@ async function refusesChangedCredentialBeforeUse() {
     return result;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changeAfterAuthorisation);
-  const deliver = createRoutineCompanyDelivery(options, nats.store, keys, identity,
+  const deliver = createRoutineCompanyDelivery(options, nats.store, identity,
     actor, preparedComputer.wake, owner);
   expect(await deliver(due, leadership)).toEqual({ status: 'unknown' });
   expect(changed).toBe(true);

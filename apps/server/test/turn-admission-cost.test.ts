@@ -5,7 +5,7 @@ import { expect, it } from 'vitest';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, priceTableId } from '@opencrane/models';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordReport } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 
@@ -24,7 +24,7 @@ async function admissionGrowth(longChat: boolean) {
     const computer = await tokens.computer({ silo: 'test', assistantId: 'assistant',
       computerId: 'computer', generation: 1 });
     const credentials = computerCredentials(store, tokens, 'test');
-    const keys = conversationKeys(`${directory}/keys`);
+
     const positions = new Map<string, number>();
     async function append(subject: string, type: string, data: unknown, id: string) {
       const event = envelope('test', subject, type, data, id);
@@ -51,13 +51,13 @@ async function admissionGrowth(longChat: boolean) {
       dailyCeilingCents: 100_000_000, ceilingCents: 100_000_000, setBy: 'installation',
       defaultPayingGroupId: 'personal' }, 'budget');
     async function createChat(conversationId: string) {
-      keys.provision('test', conversationId);
+
       await append(`conversation-${conversationId}`, 'conversation.created', {
         conversationId, assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
       }, `create-${conversationId}`);
     }
     async function post(conversationId: string, turnId: string) {
-      const text = keys.encrypt('test', conversationId, 'Hello');
+      const text = ({ utterance: 'Hello' });
       await append(`conversation-${conversationId}`, 'message.posted', {
         conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...text,
       }, turnId);
@@ -108,7 +108,7 @@ async function admissionGrowth(longChat: boolean) {
         threadId: `thread-${conversationId}`, requesterId: 'alice' };
       reads.clear();
       const began = performance.now();
-      expect(await recordReport(store, keys, context, start)).toBe('recorded');
+      expect(await recordReport(store, context, start)).toBe('recorded');
       const admitted = await turnCommand(store, context, { ...start, status: 'started' });
       expect(admitted).toMatchObject({ payingGroupId: 'personal', executionMode: 'memory_free' });
       const credentialReadStart = reads.calls.length;

@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
@@ -7,7 +8,7 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { conversationKeys, conversations, computers, pgDb, ProjectionRunner }
+import { conversations, computers, pgDb, ProjectionRunner }
   from '@opencrane/projections';
 import { childRequestedDataSchema, conversationCreatedDataSchema, eventEnvelopeSchema } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
@@ -49,7 +50,7 @@ async function initialiseWithNats(fixture: typeof nats) {
   directory = await mkdtemp(`${tmpdir()}/child-first-input-`);
   const db = pgDb(storage.queue);
   const binding = await createStore(fga.apiUrl, 'test');
-  options = { silo: 'test', store: nats.store, db, binding, keys: conversationKeys(directory) };
+  options = { silo: 'test', store: nats.store, db, binding };
   auth = memberAuthorisation(binding, nats.store);
   runner = new ProjectionRunner(db, nats.reader, createLogger('child-input-test'));
   await runner.initialise(computers);
@@ -75,7 +76,7 @@ async function close() {
 afterAll(close);
 afterEach(vi.restoreAllMocks);
 async function post(conversationId: string, authorId: string, text: string) {
-  const encrypted = options.keys.encrypt('test', conversationId, text);
+  const encrypted = ({ utterance: text });
   const data = { conversationId, authorId, authorKind: 'human', contentType: 'markdown',
     ...encrypted };
   const saved = { ...event(`message-${++counter}`, `conversation-${conversationId}`, 'message.posted'),
@@ -86,7 +87,7 @@ async function prepare(create = true) {
   const conversationId = `parent-${++counter}`;
   await save(`conversation-${conversationId}`, 'conversation.created',
     { conversationId, createdBy: 'alice', mode: 'group', participantIds: ['alice', 'bob'] });
-  options.keys.provision('test', conversationId);
+
   for (const author of ['alice', 'bob']) await post(conversationId, author, `${author} BEFORE canary`);
   const source = await post(conversationId, 'alice', sourceText);
   for (const author of ['alice', 'bob']) await post(conversationId, author, `${author} AFTER canary`);
@@ -137,7 +138,7 @@ async function copiesAfterReceipt() {
     source: 'opencrane-server', principal: { kind: 'human', id: 'alice' },
     data: { authorId: 'alice', authorKind: 'human', contentType: 'markdown' } });
   expect(first.event.data).not.toHaveProperty('executionMode');
-  expect(options.keys.decrypt('test', data.childConversationId, first.event.data)).toBe(sourceText);
+  expect(readConversationProse(first.event.data)).toBe(sourceText);
   expect(await chatHistory(nats.store, 'test', data.childConversationId)).toEqual([creation, first]);
   expect(await chatHistory(nats.store, 'test', input.conversationId)).toEqual(parentBefore);
   expect(JSON.stringify(first)).not.toMatch(/canary|Reviewed/u);
@@ -176,7 +177,7 @@ async function refusesChangedState(kind: string) {
       { memberId: 'alice', removedBy: 'bob', reason: 'left' }, false);
   }
   if (kind === 'later entry') {
-    options.keys.provision('test', data.childConversationId);
+
     await post(data.childConversationId, 'alice', 'unrelated input');
   }
   const before = await nats.store.head();
@@ -232,7 +233,7 @@ async function retriesLostReplyAfterExpiry() {
   expect(await addChildFirstInput(options, 'alice', retry)).toEqual(rows[1]);
   expect(await chatHistory(nats.store, 'test', prepared.data.childConversationId)).toEqual(rows);
 }
-it('returns the saved id, position and ciphertext after a lost reply beyond deduplication',
+it('returns the saved id, position and prose after a lost reply beyond deduplication',
   retriesLostReply);
 async function concurrentCalls() {
   const prepared = await prepare();
@@ -269,10 +270,10 @@ async function refusesDifferentInput(patch: string) {
   const prepared = await prepare();
   const { data, input } = prepared;
   await applyCreation(prepared);
-  options.keys.provision('test', data.childConversationId);
+
   let text = sourceText;
   if (patch === 'text') text = 'a different message';
-  const encrypted = options.keys.encrypt('test', data.childConversationId, text);
+  const encrypted = ({ utterance: text });
   let payload: object = { conversationId: data.childConversationId, authorId: 'alice',
     authorKind: 'human', contentType: 'markdown', ...encrypted };
   if (patch === 'authorId') payload = { ...payload, authorId: 'bob' };

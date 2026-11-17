@@ -228,8 +228,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       conversationId: 'conv_1',
       authorId: 'alice',
       authorKind: 'human',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
-      keyId: 'key:1',
+      utterance: 'Hello',
       contentType: 'text',
     },
   ),
@@ -260,7 +259,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'conversation',
     'The bridge reported a reasoning summary for a turn.',
     data.agentReasoningSummarisedDataSchema,
-    { conversationId: 'conv_1', turnId: 'turn_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' },
+    { conversationId: 'conv_1', turnId: 'turn_1', utterance: 'Hello' },
   ),
   event(
     'agent.command_ran',
@@ -338,7 +337,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       argumentsDigest: DIGEST_EXAMPLE,
       requesterId: 'mem_1', serverId: 'mcp_1', toolRevision: DIGEST_EXAMPLE, schemaDigest: DIGEST_EXAMPLE,
       connectionId: 'installed', profile: 'none', policySequence: 1, digestVersion: 'lossless-json-v1',
-      expiresAt: '2026-10-04T00:00:00.000Z', stepUp: false, ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0LWZvci10ZXN0cw==', keyId: 'key:1', reviewDigest: DIGEST_EXAMPLE,
+      expiresAt: '2026-10-04T00:00:00.000Z', stepUp: false, review: 'Reviewed tool call', reviewDigest: DIGEST_EXAMPLE,
     },
   ),
   event(

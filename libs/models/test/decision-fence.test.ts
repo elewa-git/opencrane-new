@@ -8,7 +8,6 @@ import { reviewCatalogue, catalogueEvidence, fixture, toolEvidence } from './fix
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 interface Injection { label: string; subject: string; type: string; data: Record<string, unknown> }
 
-const ciphertext = 'ZmFrZS1jaXBoZXJ0ZXh0';
 const appendedEventSchema = z.object({ type: z.string(), data: z.unknown() });
 const otherTurn = {
   assistantId: 'assistant', computerId: 'computer', conversationId: 'other',
@@ -120,7 +119,7 @@ const harmless: Injection[] = [
   { label: 'agent.message_delta',
     subject: 'conversation-conversation', type: 'agent.message_delta',
     data: { conversationId: 'conversation', turnId: 'turn', messageId: 'm1',
-      ciphertext, keyId: 'key:1', contentType: 'text' } },
+      utterance: 'An unrelated message', contentType: 'text' } },
   { label: 'agent.command_ran',
     subject: 'conversation-conversation', type: 'agent.command_ran',
     data: { conversationId: 'conversation', turnId: 'turn', commandDigest: 'a'.repeat(64), exitCode: 0 } },
@@ -135,7 +134,7 @@ const harmless: Injection[] = [
   { label: 'message.posted',
     subject: 'conversation-conversation', type: 'message.posted',
     data: { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-      ciphertext, keyId: 'key:1', contentType: 'text' } },
+      utterance: 'An unrelated message', contentType: 'text' } },
   otherTurnStarted,
   { label: 'another conversation closing a turn',
     subject: 'computer-assistant', type: 'computer.turn_closed',

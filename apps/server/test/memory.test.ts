@@ -12,8 +12,7 @@ import { createLogger } from '@opencrane/observability';
 import { HandlerRuntime } from '@opencrane/handlers';
 import { memoryCleanupHandler } from '../../ops/test/server.ts';
 import { until } from '../../../libs/handlers/test/helpers.ts';
-import { computers, groups, memoryKeys, conversationKeys, memoryProjection, memoryScopeId,
-  pgDb, ProjectionRunner, conversations, type Db } from '@opencrane/projections';
+import { computers, groups, memoryKeys, memoryProjection, memoryScopeId, pgDb, ProjectionRunner, conversations, type Db } from '@opencrane/projections';
 import * as projections from '@opencrane/projections';
 import { memoryWrittenEventSchema, memoryForgottenEventSchema, memoryCorrectedEventSchema, type MemoryIdentity,
   type memoryWrittenDataSchema } from '@opencrane/events';
@@ -121,7 +120,7 @@ async function setup() {
   for (const target of [projection, groups, computers]) await runner.run(target);
   memory = { silo: 'acme', store: nats.store, db, binding,
     feed: { memberId: resolveMember }, keyDirectory: directory };
-  memory.chat = { ...memory, keys: conversationKeys(directory) };
+  memory.chat = { ...memory };
   app = buildServer(config, { memory });
 }
 async function cleanup() {
@@ -1297,7 +1296,7 @@ it('lists an empty group and refuses notes without a recorded read grant', async
 });
 it('keeps reads open during long-chat and memory activity without a write fence', async function activity() {
   const message = { conversationId: 'busy', authorId: 'bob', authorKind: 'human',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+    utterance: 'Saved conversation prose', contentType: 'text' };
   for (let index = 0; index < 100; index++) {
     await append('conversation-busy', 'message.posted', message);
   }
@@ -1720,7 +1719,7 @@ it('resolves source status separately and hides denied source references', async
   });
   const message = await append('conversation-detail_chat', 'message.posted', {
     conversationId: 'detail_chat', authorId: 'bob', authorKind: 'human',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   const references = [{ conversationId: 'detail_chat', messageId: message.id }];
   await write('bob', 'person', 'with_source', 'A sourced fact', false, 'acme', references);
@@ -1809,7 +1808,7 @@ it('keeps memory source links within the latest participation period',
       conversationId, createdBy: 'owner', mode: 'group', participantIds: ['owner', 'admin'],
     });
     const messageData = { conversationId, authorId: 'owner', authorKind: 'human',
-      ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+      utterance: 'Saved conversation prose', contentType: 'text' };
     const older = await append(subject, 'message.posted', messageData);
     await append(`participation-${conversationId}`, 'participant.added', {
       conversationId, participantId: 'bob', addedBy: 'owner',
@@ -1835,7 +1834,7 @@ it('checks chat access first and looks up only the selected source message', asy
     conversationId, createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'owner'],
   });
   const messageData = { conversationId, authorId: 'bob', authorKind: 'human',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+    utterance: 'Saved conversation prose', contentType: 'text' };
   const message = await append(`conversation-${conversationId}`, 'message.posted', messageData);
   for (let index = 0; index < 100; index++) {
     await append(`conversation-${conversationId}`, 'message.posted', messageData);
@@ -2108,8 +2107,8 @@ it('loads long history before the write time limit and ignores chat activity', a
     const position = await originalHead(subject, deadline);
     if (subject === undefined) {
       await append('conversation-busy', 'message.posted', { conversationId: 'busy',
-        authorId: 'bob', authorKind: 'human', ciphertext: 'AAAAAAAAAAAAAAAAAAAA',
-        keyId: 'key:chat', contentType: 'text' });
+        authorId: 'bob', authorKind: 'human', utterance: 'Saved conversation prose',
+        contentType: 'text' });
     }
     return position;
   }
@@ -2399,7 +2398,7 @@ it('accepts accessible personal chat messages and refuses missing or private mes
     }
     const posted = await append('conversation-memory-source', 'message.posted', {
       conversationId: 'memory-source', authorId: 'bob', authorKind: 'human',
-      ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+      utterance: 'Saved conversation prose', contentType: 'text',
     });
     await runner.run(conversations);
     const original = nats.store.readStream.bind(nats.store);
@@ -3980,7 +3979,7 @@ async function maintenanceReadAccess() {
   });
   await append('conversation-pager-chat', 'message.posted', {
     conversationId: 'pager-chat', authorId: 'pager', authorKind: 'human',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   expect((await get(groupPath, 'pager')).statusCode).toBe(200);
 

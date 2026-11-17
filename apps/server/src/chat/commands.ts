@@ -1,13 +1,13 @@
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { readEventAt,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { chatIdSchema, groupConversationCommandSchema,
-  conversationCreatedDataSchema, getEventDefinition } from '@opencrane/events';
+  conversationCreatedDataSchema, messagePostedDataSchema, getEventDefinition } from '@opencrane/events';
 import { fileUploadedDataSchema } from '@opencrane/events';
 import { participationClosed } from './participation.ts';
 import { chatWrite } from './write-priority.ts';
 import { readChatCommandFacts } from './chat-summary.ts';
-import type { conversationKeys } from './keys.ts';
 
 const id = chatIdSchema;
 function isUserConversation(conversationId: string) {
@@ -47,7 +47,6 @@ function commandType(input: Input) {
 
 function verifyRetry(
   previous: StoredEvent, input: Input, context: Context,
-  keys: ReturnType<typeof conversationKeys>,
 ) {
   verifyCommandIdentity(previous, input, context);
   const data = z.record(z.string(), z.unknown()).parse(previous.event.data);
@@ -65,7 +64,7 @@ function verifyRetry(
   } else if ('stopTurnId' in input) {
     matches = data['turnId'] === input.stopTurnId;
   } else {
-    matches = sameMessageRetry(data, input, context, keys);
+    matches = sameMessageRetry(data, input);
   }
   if (!matches) throw new ChatConflict('Id reused');
 }
@@ -73,14 +72,12 @@ function verifyRetry(
 function sameMessageRetry(
   data: Record<string, unknown>,
   input: Extract<Input, { text: string }>,
-  context: Context,
-  keys: ReturnType<typeof conversationKeys>,
 ): boolean {
-  const savedText = keys.decrypt(context.silo, input.conversationId, data);
-  const savedIds = JSON.stringify(data['attachmentIds'] ?? []);
-  const requestedIds = JSON.stringify(input.attachmentIds ?? []);
-  return savedText === input.text && data['executionMode'] === input.executionMode
-    && savedIds === requestedIds;
+  const saved = messagePostedDataSchema.parse(data);
+  const savedIds = saved.attachmentIds ?? [];
+  const requestedIds = input.attachmentIds ?? [];
+  return saved.utterance === input.text && saved.executionMode === input.executionMode
+    && isDeepStrictEqual(savedIds, requestedIds);
 }
 
 function verifyCommandIdentity(previous: StoredEvent, input: Input, context: Context) {
@@ -100,7 +97,7 @@ function sameGroupCreation(data: unknown,
   const savedIds = [...created.participantIds].sort();
   return created.createdBy === memberId && created.groupId === input.groupId &&
     created.groupSnapshotPosition === input.groupSnapshotPosition &&
-    JSON.stringify(savedIds) === JSON.stringify(ids);
+    isDeepStrictEqual(savedIds, ids);
 }
 
 export async function chatHistory(
@@ -126,11 +123,11 @@ function comparePosition(first: StoredEvent, second: StoredEvent) {
 
 /** Load command facts before the short access check, then append one event. */
 export async function chatCommand(
-  store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
+  store: Store, context: Context,
   value: unknown, fresh?: (operation: 'retry' | 'append') => Promise<number>,
 ) {
   const input = chatInput.parse(value);
-  const save = saveChatCommand.bind(null, store, keys, context, input, fresh);
+  const save = saveChatCommand.bind(null, store, context, input, fresh);
   if ('stopTurnId' in input) {
     return chatWrite(store, `conversation-${input.conversationId}`, 'stop', save);
   }
@@ -143,7 +140,7 @@ function stoppedTurnId(input: Input) {
 }
 
 async function saveChatCommand(
-  store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
+  store: Store, context: Context,
   input: Input, fresh?: (operation: 'retry' | 'append') => Promise<number>,
 ) {
   const subject = `conversation-${input.conversationId}`;
@@ -153,7 +150,7 @@ async function saveChatCommand(
   if (facts.position !== undefined) {
     const previous = await readEventAt(store, subject, facts.position, performance.now() + 10_000);
     if (!previous) throw new Error('Saved command unavailable');
-    verifyRetry(previous, input, context, keys);
+    verifyRetry(previous, input, context);
     await fresh?.('retry');
     return { status: 'appended' as const, sequence: previous.sequence };
   }
@@ -168,7 +165,7 @@ async function saveChatCommand(
         turn.event.principal?.id !== context.memberId) throw new ChatConflict('Unrequested turn');
   }
   const type = commandType(input);
-  const data = commandData(input, context, keys);
+  const data = commandData(input, context);
   getEventDefinition(type)!.dataSchema.parse(data);
   const event = {
     id: input.id, commandId: input.id, type, subject,
@@ -183,11 +180,11 @@ async function saveChatCommand(
   // Verify the saved payload because the adapter may have found a concurrent retry.
   const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
   if (!saved) throw new Error('Append outcome unavailable');
-  verifyRetry(saved, input, context, keys);
+  verifyRetry(saved, input, context);
   return { status: 'appended' as const, sequence: saved.sequence };
 }
 
-function commandData(input: Input, context: Context, keys: ReturnType<typeof conversationKeys>) {
+function commandData(input: Input, context: Context) {
   const conversationId = input.conversationId;
   if ('assistantId' in input) {
     const data = {
@@ -210,9 +207,8 @@ function commandData(input: Input, context: Context, keys: ReturnType<typeof con
   if ('stopTurnId' in input) {
     return { conversationId, turnId: input.stopTurnId, requestedBy: context.memberId };
   }
-  const encrypted = keys.encrypt(context.silo, conversationId, input.text);
   const data = {
-    conversationId, authorId: context.memberId, authorKind: 'human', contentType: 'text', ...encrypted,
+    conversationId, authorId: context.memberId, authorKind: 'human', contentType: 'text', utterance: input.text,
     attachmentIds: input.attachmentIds ?? [],
   };
   if (input.executionMode) return { ...data, executionMode: input.executionMode };
