@@ -44,3 +44,22 @@ async function refusesMissingStart() {
 it.each(['agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested'])(
   'keeps an approval when an unprojected other turn emits %s', ignoresOtherTurn, 40_000);
 it('refuses an approval snapshot with its bound turn start missing', refusesMissingStart, 40_000);
+
+async function refusesAbsentPreparedRows() {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).status).toBe(403);
+    const approvalId = (await setup.read()).cards[0]!.approvalId;
+    const rows = await history(setup.nats.store, `approval-${approvalId}`, 'test');
+    const first = rows[0]!;
+    const request = toolApprovalRequestedDataSchema.parse(first.event.data);
+    const read = { request, requestPosition: first.sequence, deadline: Infinity, snapshot: {} };
+    await expect(approvalInvalidation(setup.nats.store, 'test', read))
+      .rejects.toThrow('Approval conversation history unavailable');
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+it('refuses an approval when its prepared conversation rows are absent',
+  refusesAbsentPreparedRows, 40_000);
