@@ -66,7 +66,7 @@ async function snapshot() {
     checkpoints: checkpoints.rows, receipts: receipts.rows, generations: generations.rows };
 }
 
-async function rebuildsEncryptedFacts() {
+async function rebuildsRoutineInstructions() {
   const created = record('routine.created');
   await save(created);
   await save(record('routine.resumed'));
@@ -125,10 +125,9 @@ async function rebuildsEncryptedFacts() {
   const before = await snapshot();
   expect(before.current).toHaveLength(2);
   expect(before.occurrences).toHaveLength(3);
-  expect(JSON.stringify(before)).not.toContain(privateCanary);
   const frozen = { due: { definitionRevision: 1, definition: { ownerId: 'alice',
     assistantId: 'sales-assistant', payingGroupId: 'sales',
-    instructions: definition.instructions } },
+    instructions: privateCanary } },
   activation: { senderAttemptId: 'attempt' }, terminal: { outcome: 'cancelled' },
   terminalReference: { eventId: finished.id, position: 7 } };
   const run = before.occurrences.find(isRun);
@@ -147,8 +146,8 @@ async function rebuildsEncryptedFacts() {
   expect(after.occurrences).toEqual(before.occurrences);
   expect(append).not.toHaveBeenCalled();
 }
-it('rebuilds encrypted facts, frozen runs, compact ranges and legacy without effects',
-  rebuildsEncryptedFacts);
+it('rebuilds readable instructions, frozen runs, compact ranges and legacy without effects',
+  rebuildsRoutineInstructions);
 function isMissed(row: Record<string, unknown>) {
   return row['kind'] === 'missed';
 }

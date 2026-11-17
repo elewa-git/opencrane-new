@@ -1,4 +1,6 @@
 import { readConversationProse } from '@opencrane/events';
+import { holdFixtureClock, withRoutineFixtureClock }
+  from '../../ops/test/support/routine-clock.ts';
 /* eslint max-lines: ["error", { max: 2512, skipBlankLines: true, skipComments: true }] */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { once, once as onceEvent } from 'node:events';
@@ -1544,6 +1546,7 @@ function routineRootTests() {
     'withholds the receipt after a late %s change', lateChange);
 
   async function trafficDuringConfirmation(revocation: string, computerActivity = false) {
+    holdFixtureClock();
     let appended = 0;
     async function appendDuringCheck() {
       appended += 1;
@@ -1628,7 +1631,7 @@ function routineRootTests() {
 
   function activationTests() {
     async function allocated() {
-      await prepare();
+      await withRoutineFixtureClock(prepare);
       activationMode = true;
     }
     beforeEach(allocated);
@@ -2075,6 +2078,10 @@ function routineRootTests() {
 
     async function allowsSustainedUnrelatedActivity() {
       const fixture = await dispatchFixture();
+      const timerOptions: Parameters<typeof vi.useFakeTimers>[0] = {
+        toFake: ['Date', 'performance'],
+      };
+      vi.useFakeTimers(timerOptions);
       const head = nats.store.head.bind(nats.store);
       const append = nats.store.append.bind(nats.store);
       const encrypted = ({ utterance: 'Unrelated fixture input' });
@@ -2130,6 +2137,7 @@ function routineRootTests() {
         expect(actor.state.dispatches).toHaveLength(2);
         expect(fixture.received()).toBeGreaterThan(0);
       } finally {
+        vi.useRealTimers();
         await fixture.close();
       }
     }

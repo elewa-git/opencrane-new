@@ -15,6 +15,7 @@ import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
 import { expectRoutineInput } from './support/routine-prose.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
@@ -382,6 +383,7 @@ async function reachesPreparedThread() {
   const invocation = compose();
   async function wake(assistantId: string) {
     advanceWake();
+    holdFixtureClock();
     return preparedComputer.wake(assistantId);
   }
   const results = await Promise.all([
@@ -1298,17 +1300,8 @@ function advanceWake() {
   const clockSpy = vi.spyOn(performance, 'now');
   clockSpy.mockImplementation(afterWake);
 }
-function holdFixtureClock() {
-  const started = performance.now();
-  function fixedTime() {
-    return started;
-  }
-  const clockSpy = vi.spyOn(performance, 'now');
-  clockSpy.mockImplementation(fixedTime);
-  return clockSpy;
-}
 async function refusesChangedAccess(kind: string, late: boolean) {
-  if (kind === 'worker' && late) holdFixtureClock();
+  if (late) holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function afterStart(...supplied: Parameters<typeof append>) {
@@ -1363,7 +1356,7 @@ async function lostSendReply() {
   }
   const sendSpy = vi.spyOn(socket, 'send');
   sendSpy.mockImplementation(loseReply);
-  expect(await compose().send(preparedComputer.wake)).toEqual({ status: 'unknown' });
+  expect(await sendWithHeldFixtureClock()).toEqual({ status: 'unknown' });
   function refused() {
     return preparedComputer.closedSessions === 1;
   }

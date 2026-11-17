@@ -6,6 +6,7 @@ function isInput(row: StoredEvent) {
 }
 
 export function expectRoutineInput(rows: StoredEvent[]) {
+  expect(rows[1]?.event.type).toBe('message.posted');
   const inputs = rows.filter(isInput);
   expect(inputs).toHaveLength(1);
   expect(inputs[0]?.event.data).toMatchObject({

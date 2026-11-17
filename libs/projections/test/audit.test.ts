@@ -126,7 +126,7 @@ it('joins forthcoming typed families, withholds private details and keeps absent
     await append({ ...fixture('takeover.started', 'foreign-requester', { requestedBy: 'bob' }, false), correlation: { conversation: 'conversation', turn: 'turn' } });
     const privateMessageData = {
       conversationId: 'conversation',
-      ciphertext: Buffer.from(canary).toString('base64'),
+      utterance: canary,
     };
     const privateMessage = fixture('message.posted', 'private-message', privateMessageData);
     const privateConversationMessage = { ...privateMessage, subject: 'conversation-conversation' };

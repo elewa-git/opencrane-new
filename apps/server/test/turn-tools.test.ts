@@ -152,7 +152,7 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
   }
   const messageEvent = envelope('test', 'conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'person', authorKind: 'human',
-    utterance: 'Saved conversation prose', contentType: 'text',
+    utterance: '界'.repeat(32_000), contentType: 'text',
   });
   const message: StoredEvent = { sequence: 101, event: messageEvent };
   const rows = uploadRows;
@@ -160,7 +160,6 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Other WatchOptions fields are unused.
   const options = {
     silo: 'test',
-    keys: { decrypt: () => '界'.repeat(32_000) },
   } as unknown as WatchOptions;
   const conversationDetails = agentSessionData({
     conversationId: 'chat', assistantId: 'assistant', createdBy: 'person',

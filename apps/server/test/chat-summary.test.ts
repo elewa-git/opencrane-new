@@ -1,6 +1,5 @@
-import { readConversationProse } from '@opencrane/events';
+import { agentCommandRanDataSchema, readConversationProse } from '@opencrane/events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { z } from 'zod';
 
 import { afterEach, expect, it, vi } from 'vitest';
 import { readEventAt, wireSubject, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
@@ -86,7 +85,7 @@ async function reportReplayMakesNoAppend() {
 }
 it('checks report repeats before an append that opts into historyChecked', reportReplayMakesNoAppend);
 
-it('encrypts the masked command with the conversation message key', async () => {
+it('stores the masked command as a readable preview', async () => {
   await setup();
   const preview = 'rg ••• •••';
   const command = { sequence: 1, previousSequence: 0, conversationId: 'chat',
@@ -96,10 +95,11 @@ it('encrypts the masked command with the conversation message key', async () => 
   const history = await chatHistory(nats.store, 'test', 'chat');
   const saved = history.find(row => row.event.type === 'agent.command_ran');
   expect(saved).toBeDefined();
-  expect(JSON.stringify(saved?.event)).not.toContain(preview);
-  const data = z.record(z.string(), z.unknown()).parse(saved?.event.data);
-  expect(readConversationProse(data['view'])).toBe(preview);
-  expect(chatDisplayData('agent.command_ran', data)).not.toHaveProperty('view');
+  const data = agentCommandRanDataSchema.parse(saved?.event.data);
+  expect(data.view).toEqual({ preview });
+  const display = chatDisplayData('agent.command_ran', data);
+  expect(display).toMatchObject({ preview });
+  expect(display).not.toHaveProperty('view');
   const { preview: _preview, ...journalReplay } = command;
   expect(await recordReport(nats.store, context, journalReplay)).toBe('duplicate');
 });

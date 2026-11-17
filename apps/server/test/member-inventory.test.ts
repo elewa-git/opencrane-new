@@ -343,9 +343,8 @@ async function overlappingToolGroups() {
   const conversation = { conversationId: 'unrelated', assistantId: 'unrelated',
     createdBy: 'someone-else' };
   await append('conversation-unrelated', 'conversation.created', conversation);
-  const ciphertext = Buffer.from('Unrelated message content').toString('base64');
   const message = { conversationId: 'unrelated', authorId: 'someone-else',
-    authorKind: 'human', ciphertext, keyId: 'key:unrelated', contentType: 'text' };
+    authorKind: 'human', utterance: 'Unrelated message content', contentType: 'text' };
   await append('conversation-unrelated', 'message.posted', message);
   expect(await review.checkCurrent(performance.now() + 10_000)).toBe(true);
   await project();
@@ -469,7 +468,7 @@ async function retainsOnlyCounts() {
   });
   await append('conversation-private', 'message.posted', {
     conversationId: 'private', authorId: 'bob', authorKind: 'human',
-    utterance: 'Saved conversation prose',
+    utterance: 'PRIVATE CONTENT',
     contentType: 'text',
   });
   await project();

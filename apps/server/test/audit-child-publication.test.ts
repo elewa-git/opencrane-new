@@ -174,7 +174,7 @@ async function publish(id: string, withResult = true) {
     publicationKind: withResult ? 'final' : 'interim',
     ...(withResult ? { resultEventId: 'child-result', resultPosition: 2, turnId: 'turn' } : {}),
     reviewDigest: 'a'.repeat(64), contentType: 'text',
-    utterance: 'Saved conversation prose',
+    utterance: privateText,
   };
   await append('conversation-parent', 'conversation.child_result_published', data, id);
   await runner.run(auditTrail);

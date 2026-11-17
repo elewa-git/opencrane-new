@@ -774,6 +774,9 @@ async function losesReply(stage: string) {
     if (stage === 'send') {
       const send = link.socket.send.bind(link.socket);
       function loseSend(bytes: Parameters<typeof send>[0]) {
+        const text = z.string().parse(bytes);
+        const frame = frameSchema.parse(JSON.parse(text));
+        expect(frame['type']).toBe('turn');
         send(bytes);
         lost = true;
         forbidden();
@@ -784,7 +787,7 @@ async function losesReply(stage: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(loseStart);
   try {
-    await authority.send(wake);
+    await sendWithFixtureTime(authority, wake);
     function replyLost() {
       return lost;
     }
@@ -1503,7 +1506,7 @@ async function stoppedBeforeGrant() {
     send(bytes, {});
   }
   sending.mockImplementation(holdGrant);
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  expect(await sendWithFixtureTime(sender(), preparedComputer.wake)).toEqual({ status: 'sent' });
   function acknowledged() {
     expect(held).toBeDefined();
   }

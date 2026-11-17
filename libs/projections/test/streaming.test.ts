@@ -24,7 +24,7 @@ function replyEvents(): StoredEvent[] {
   for (let index = 0; index < 448; index += 1) {
     events.push(saved(events.length + 1, 'agent.message_delta', {
       conversationId: 'chat', turnId: 'turn', messageId: 'reply',
-      utterance: 'Saved conversation prose', contentType: 'text',
+      utterance: 'a'.repeat(63), contentType: 'text',
     }));
   }
   events.push(saved(events.length + 1, 'agent.turn_failed', {
@@ -55,7 +55,7 @@ it('reads the newest conversation rows and pages back without replaying the star
   for (let index = 0; index < 69; index += 1) {
     events.push(saved(events.length + 1, 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-      utterance: 'Saved conversation prose', contentType: 'text',
+      utterance: 'saved message', contentType: 'text',
     }));
   }
   const runner = new ProjectionRunner(db, sourceFor(events),
@@ -83,12 +83,12 @@ it('keeps the post that starts a long active turn in the newest window', async (
     conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
   }), saved(2, 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-    utterance: 'Saved conversation prose', contentType: 'text',
+    utterance: 'Please help', contentType: 'text',
   })];
   for (let index = 0; index < 55; index += 1) {
     events.push(saved(events.length + 1, 'agent.message_delta', {
       conversationId: 'chat', turnId: 'event-2', messageId: 'reply',
-      utterance: 'Saved conversation prose', contentType: 'text',
+      utterance: 'a'.repeat(63), contentType: 'text',
     }));
   }
   const runner = new ProjectionRunner(db, sourceFor(events),
