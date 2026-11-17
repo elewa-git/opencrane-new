@@ -2,7 +2,8 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
-import { conversations, readConversation } from '@opencrane/projections';
+import { conversations, readConversation, readEvents } from '@opencrane/projections';
+import type { StoredEvent } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
 import { approvalCards, decideApproval, envelope, history, losslessJson, readApproval } from '../src/index.ts';
 import { fixture, reviewCatalogue } from './fixture.ts';
@@ -13,6 +14,19 @@ const toolRevision = toolDefinition.digest;
 const catalogueDigest = losslessJson(JSON.stringify([{ name: 'write', revision: toolRevision }])).digest;
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+async function discoverApprovalRequests(setup: Fixture) {
+  const position = await setup.nats.store.head();
+  const approvalRows: StoredEvent[] = [];
+  // Scan every candidate stream so an unexpected second request cannot stay hidden.
+  for await (const row of readEvents(setup.nats.store, 1, position)) {
+    if (row.event.silo !== 'test') continue;
+    if (!row.event.subject.startsWith('approval-')) continue;
+    if (row.event.type !== 'tool.approval_requested') continue;
+    approvalRows.push(row);
+  }
+  return approvalRows;
+}
 
 async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = 'allow',
   ttlMs = 300_000) {
@@ -472,8 +486,10 @@ async function bindsHeldApproval(change: string) {
     expect(result.status, await result.text()).toBe(['same', 'unchanged'].includes(change) ? 200 : 403);
     expect(setup.received()).toBe(['same', 'unchanged'].includes(change) ? 1 : 0);
     if (change === 'bytes' || change === 'wrong-id') {
+      const approvalRows = await discoverApprovalRequests(setup);
+      const listOptions = { approvalRows };
       const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
-        'alice', setup.keys);
+        'alice', setup.keys, listOptions);
       expect(cards).toHaveLength(1);
       expect(cards[0]?.approvalId).toBe(decision.approvalId);
     }
@@ -493,20 +509,23 @@ it('keeps requester identity and the stored review digest when reading an approv
     const asked = await fetch(url, { method: 'POST', headers, body: JSON.stringify(capture.body) });
     const approval = z.object({ approvalId: z.string() }).parse(await asked.json());
 
+    const approvalRows = await discoverApprovalRequests(setup);
+    const listOptions = { approvalRows };
     const cardsForRequester = await approvalCards(setup.nats.store, 'test', 'conversation',
-      'alice', setup.keys);
+      'alice', setup.keys, listOptions);
     expect(cardsForRequester).toMatchObject([{ requesterId: 'alice', state: 'requested',
       canDecide: true }]);
 
     const cardsForAnotherMember = await approvalCards(setup.nats.store, 'test', 'conversation',
-      'bob', setup.keys);
+      'bob', setup.keys, listOptions);
     expect(cardsForAnotherMember).toMatchObject([{ requesterId: 'alice', state: 'requested',
       canDecide: false }]);
 
     const changedReview = vi.spyOn(setup.keys, 'decrypt')
       .mockReturnValue('{"action":"Changed after storage"}');
     try {
-      await expect(approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys))
+      await expect(approvalCards(setup.nats.store, 'test', 'conversation', 'alice',
+        setup.keys, listOptions))
         .rejects.toThrow('Review digest mismatch');
     } finally {
       changedReview.mockRestore();

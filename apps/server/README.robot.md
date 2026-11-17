@@ -3690,9 +3690,19 @@ A valid explicit child join does not depend on parent or creator membership.
 Retained shared history starts at child creation; access still uses the current join.
 File reads keep their separate file restrictions and do not grant parent file access.
 Child approval reads omit other requesters before loading or decrypting their reviews.
-They use checked approval event positions from the audit projection and read the
-short unprojected tail from the event log. This keeps long chat history out of the approval
-request scan while retaining new requests that have not reached PostgreSQL yet.
+They use checked approval event positions from the audit projection and read every
+event after its saved position up to the captured log position. Each listing fetches
+one saved request event per indexed approval, then reads its approval stream for
+current state. This keeps earlier unrelated silo events out of approval discovery.
+
+If the audit projection stops, each listing scans the whole growing range after its
+saved position, including unrelated events. New approvals and later cancellations
+remain visible because the event log still supplies their state. Requests do not
+cache that range between polls. Listing keeps its ten-second deadline and returns
+503 if it cannot finish; a stopped projection can therefore make polling slower or
+unavailable. Resume or rebuild the audit projection to shorten the range. The
+[qualification ledger](../../docs/process/ledger.md#approval-listing-reads) records
+the stopped-projection time and the request count for 50 approvals.
 
 Sockets watch member and child participation streams. Inherited sockets also watch
 parent participation and creator membership. Their existing independent 100 ms poll

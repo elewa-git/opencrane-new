@@ -126,7 +126,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         const deadline = performance.now() + 10_000;
         const approvalRows = await approvalRequestEvents(configured, conversationId,
           access.historyPosition, deadline);
-        const readOptions = { deadline, fromSequence: access.historyPosition, approvalRows,
+        const readOptions = { deadline, approvalRows,
           requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
           configured.store, configured.silo, conversationId, memberId, configured.keys,
