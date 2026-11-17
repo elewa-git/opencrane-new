@@ -26,7 +26,7 @@ async function reservesProviderConversationPrefix() {
 it('reserves the provider conversation prefix for verification accounting',
   reservesProviderConversationPrefix);
 
-it('creates and posts with event-id retries, rejects changed retries, and stores only encrypted text', async () => {
+it('creates and posts with event-id retries, rejects changed retries, and stores readable conversation prose', async () => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/chat-keys-`);
   try {
     const keys = conversationKeys(directory), conversationId = randomUUID();
@@ -44,7 +44,8 @@ it('creates and posts with event-id retries, rejects changed retries, and stores
     await expect(chatCommand(nats.store, keys, context, { ...posted, text: 'different' })).rejects.toThrow('Id reused');
     const events = await chatHistory(nats.store, context.silo, conversationId);
     expect(events.map(r => r.event.type)).toEqual(['conversation.created', 'message.posted']);
-    expect(JSON.stringify(events)).not.toContain('Hello computer');
+    expect(events[1]!.event.data).toMatchObject({ utterance: 'Hello computer' });
+    expect(events[1]!.event.data).not.toHaveProperty('ciphertext');
     expect(keys.decrypt(context.silo, conversationId, events[1]!.event.data)).toBe('Hello computer');
   } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
 });
