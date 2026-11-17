@@ -1,6 +1,12 @@
 # ADR 0001: event store — NATS JetStream
 
 **Status:** Draft, from spike S0.7. Ready for the morning decision.
+
+**Amended 2026-11-17:** Commands recognise a retry by the `commandId` in the entity
+stream. There is no separate PostgreSQL command ledger. This replaces the ledger
+requirement in the original spike findings below; see
+[rule 7 of the event catalogue](../architecture/events.md#principles).
+
 **Spike evidence:** [`spikes/s0-7-jetstream/`](../../spikes/s0-7-jetstream/), all 6 pass conditions run and passing, plus one follow-up finding (pass condition 7, below), on 2026-09-30 (darwin/arm64, nats-server v2.15.0, natscli v0.5.0, Node 22.15.0). Conditions 4 and 5 were each re-measured over 5 consecutive full-suite runs from a clean state; the ranges below are the real min–max across those 5 runs, not a single run's numbers.
 
 Phase 1 transport and permission policy: [ADR 0005](0005-nats-access.md).

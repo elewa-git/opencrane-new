@@ -17,10 +17,7 @@ machine to a managed cloud cluster.
 
 ## Target cluster drawing
 
-This drawing is an earlier plan, kept for reference. Its arrows show intended
-connections, not calls or deployments that exist today. Background jobs and computer
-claims now live in `apps/ops`, although the drawing still shows them inside the server
-box.
+The arrows show intended connections, not calls or deployments that exist today.
 
 ```text
                     EXTERNAL
@@ -43,16 +40,16 @@ box.
  │  ┌───────────────┐   ┌───────────────────────────────────────────┐   ┌──────────────┐  │
  │  │ web (Angular) │──▶│ opencrane-server                          │──▶│ OpenFGA      │  │
  │  └───────▲───────┘   │ • API: chats, groups, admin, audit        │   │ humans +     │  │
- │          │           │ • claim & bind computers                  │   │ agents: who  │  │
+ │          │           │                                           │   │ agents: who  │  │
  │  browser ┘           │ • decision service (ext_authz):           │   │ may do what  │  │
  │  (via ingress)       │   budgets, Allow/Ask/Block, credentials   │   └──────────────┘  │
  │                      │ • live-view / takeover proxy              │   ┌──────────────┐  │
- │                      │ • reactions + jobs (pg-boss): schedules,  │──▶│ Memory facts │  │
- │                      │   wake-ups, settlement, memory tidy-up    │   │ Postgres     │  │
- │                      └──────▲─────────────▲──────────────┬───────┘   │ projection   │  │
- │                             │ext_authz    │live view     │claim      └──────────────┘  │
- │  acme-gateway               │             │              │                             │
- │  ┌──────────────────────────┴───────────┐ │              │                             │
+ │                      │ • memory API                              │──▶│ Memory facts │  │
+ │                      │                                           │   │ Postgres     │  │
+ │                      └──────▲─────────────▲──────────────────────┘   │ projection   │  │
+ │                             │ext_authz    │live view                 └──────────────┘  │
+ │  acme-gateway               │             │                                            │
+ │  ┌──────────────────────────┴───────────┐ │                                            │
  │  │ agentgateway: the ONLY way out       │─┼──────▶ models · remote MCP · web (allowlist)│
  │  │ • checks computer token (JWKS)       │ │                                            │
  │  │ • CEL allowlist, rate limits         │ │                                            │
@@ -71,6 +68,10 @@ box.
  │  │ └─ MarkItDown / poppler             │   │ content (replay-│  │ per-user creds,  │   │
  │  │ warm pool · volume kept on suspend  │   │ able), OpenFGA  │  │ signing key      │   │
  │  └─────────────────────────────────────┘   └─────────────────┘  └──────────────────┘   │
+ │    ┌───────────────────────────────────────────────────────────────────────────────┐   │
+ │    │ apps/ops: reactions + jobs (pg-boss), schedules, wake-ups, settlement, memory   │   │
+ │    │ tidy-up; claim and bind computers ──▶ acme-computers                            │   │
+ │    └───────────────────────────────────────────────────────────────────────────────┘   │
  │    acme-events: NATS JetStream — every event, the only source of truth → projections   │
  │    ClamAV scanner (uploads) · package mirror access (npm / PyPI) through the gateway   │
  └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -83,14 +84,14 @@ box.
 
 | Part | Intended job | What remains |
 | --- | --- | --- |
-| Helm installation | Package one customer silo for Kubernetes. | Build the charts and prove a fresh customer install. |
+| Helm installation | Package one customer silo for Kubernetes. | The [chart](../../infra/package/chart/) exists as a local installation trial. A fresh customer install is still to prove. |
 | ingress-nginx and cert-manager | Route incoming traffic and renew encrypted-connection certificates. | Package and check them in the customer install. |
 | CloudNativePG operator | A program that runs PostgreSQL inside Kubernetes and looks after standby copies and backups. | Replace the dev database setup and prove recovery after failure. |
 | Replicated NATS JetStream | Keep several copies of the event log, so it keeps working when one server fails. | Package it, and test switching to a copy (failover) and restoring from backup. |
-| Odoo tool server | Use the business system with the requesting person's own rights. | Build the connector; `infra/odoo` is a test system, not this connector. |
-| Memory tool server | Remember, recall, correct and forget facts within the permitted scope. | Build the service and its replay and access checks. |
+| Odoo tool server | Use the business system with the requesting person's own rights. | The [connector](../../apps/odoo-mcp/src/tools.ts) exists. Using Odoo with only the requester’s rights still needs to be connected and proven. |
+| Memory tool server | Remember, recall, correct and forget facts within the permitted scope. | The [service](../../apps/server/src/memory/mcp.ts) has remember and recall handlers. Memory during assistant turns, including team chats, remains disabled until private work is proven isolated. Correcting facts through the assistant remains planned. |
 | Team assistants and delegation | Share work while keeping access and spending tied to the requester. | Finish the product flows and test them together. |
-| Scheduled work | Start agreed work at set times. | Build the routines and check their permissions and spending. |
+| Scheduled work | Start agreed work at set times. | Routine code exists in [the server](../../apps/server/src/routine-routes.ts) and [background workers](../../apps/ops/src/routine-production.ts). The full product journeys still need to be connected and proven. |
 | Screen takeover | Let a person control the assistant's screen and hand it back. | Finish control permissions, recording and live checks. |
 | Hosted tool servers | Run checked, ready-made tool server packages (container images) with limited internet access. | Finish the install and release flow and test it live. |
 | Outgoing computer traffic | Make the gateway the only permitted route to outside services. | Finish the rules for all computer traffic and prove they hold. |
