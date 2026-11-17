@@ -3,28 +3,33 @@
 ## Journey rerun, 17 November 2026
 
 Journey on a fresh dev stack: **FAIL (slice journey)** — **NOT RUN** at both
-1280 px and 390 px. Source head checked: `28405a2d6767a0bbd4f4d48dd3f4f082d5e9638c`.
-The source is unchanged from the draft PR head. `origin/main` had not moved, so no
-rebase was needed. No stack was claimed and no startup attempt was made.
+1280 px and 390 px. Tested source head: `0e34f89a15b743dab171eb058929a60527398f11`.
+`origin/main` was already an ancestor of this head, so no rebase or changed-test rerun
+was needed. The source checks and hosted CI remained green at this head.
 
-The runner sampled the one-minute load every 30 seconds for the full three-hour
-limit, from 09:51:36 to 12:51:14 UTC. Load never stayed below 4 for five minutes.
-The longest observed run below 4 lasted three minutes, from 11:40:11 to 11:43:11 UTC;
-the 11:43:41 sample was 4.30 and reset the count. Load peaked at 28.04 at 12:24:43
-and was 12.55 at the final sample. The wait timed out without a fresh-stack run.
+The runner sampled one-minute load every 30 seconds from 13:02:27 to 13:18:57 UTC.
+The gate passed after eleven consecutive samples below 6, spanning five minutes.
+The stack started at 13:19:17 UTC on secondary slot 1 with load 4.64. Owner bootstrap,
+provider setup and website readiness passed. The startup failure was observed at 13:28:26 UTC with load 13.98. No slice step ran.
+
+`down.sh` stopped the secondary stack. The private slot directory, including its
+startup failure and process logs, was removed during teardown before those logs were
+copied. They could not be recovered after teardown. The safe record contains the
+startup result, timestamps and load only; it contains no credentials. Higher load at
+failure makes load pressure a plausible contributor, but without the startup logs this
+run cannot distinguish load pressure from a startup defect. No second attempt was made.
 
 | Required action | 1280 px | 390 px |
 | --- | --- | --- |
-| Sustained low-load gate | FAIL: three-hour wait ended before five quiet minutes. | Same wait; no separate stack. |
-| Fresh startup and shared chat | NOT RUN. | NOT RUN. |
+| Sustained low-load gate | PASS: five minutes below 6. | Same shared gate. |
+| Fresh startup and shared chat | FAIL during shared startup, after website readiness. | Same stack; viewport journey not reached. |
 | Admin installs, reviews and publishes the ordinary server | NOT RUN. | NOT RUN. |
 | Member’s live tool call and Ask approval | NOT RUN. | NOT RUN. |
 | Tool-list change blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
-| Stack teardown | NOT RUN: no stack was claimed. | NOT RUN: no stack was claimed. |
+| Stack teardown | PASS: secondary slot 1 stopped. | Same stack teardown. |
 
-No startup failure occurred in this rerun, so there are no startup logs to save.
-This run gives no evidence about whether the earlier shared-chat timeout was caused
-by load or by a startup defect. See [load-wait record](run-2026-11-17-rerun/load-wait.json).
+See [load samples](run-2026-11-17-rerun/load-wait.jsonl), [stack start](run-2026-11-17-rerun/stack-start.txt)
+and [failure-time load](run-2026-11-17-rerun/startup-failure-load.txt).
 
 ## Rework round 6, 17 November 2026
 
