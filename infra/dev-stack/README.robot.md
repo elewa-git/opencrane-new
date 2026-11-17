@@ -647,15 +647,19 @@ infra/dev-stack/down.sh
 ```
 
 `up` includes CORE by default. Set `APPROVAL_JOURNEY_ONLY=1` when starting a fresh
-secondary stack to qualify tool approval and denial after 3,000 saved messages in
+secondary stack to attempt tool approval and denial after 3,000 saved messages in
 one chat at both browser widths. Seed history in batches of 50 and wait for the
 conversation projection between batches. Set up the timed tool review after history
 preparation. This mode runs the common sign-in and membership checks, then the
 approval driver and shared cleanup. CORE remains a separate journey.
 The driver uses a scripted active turn and the recording stand-in tool through the
 real gateway; it makes no paid model call. It checks one approved send, single use
-and zero sends after denial.
- Every command also accepts `--id 1` or `--id 2`,
+and zero sends after denial. This mode currently fails at the first gateway request
+with HTTP 404, before an approval exists. Its tool helper uses the old publication
+event shape and needs the current acknowledged publication flow and guarded TLS
+fixture transport. It is not live qualification evidence.
+
+Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
 
 Secondary Zitadel setup verifies the fixed OpenCrane 2 Dev organisation and project

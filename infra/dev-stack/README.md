@@ -6,7 +6,8 @@ This package starts a full local copy of OpenCrane for development and testing.
 It brings the apps and services together and checks product journeys.
 The checks use a browser to sign in, chat and reload saved replies.
 Developers can also check files, spending and organisation settings.
-Tool approval checks cover allowing one call and refusing a denied call in long chats.
+The focused tool approval driver prepares long chats, but currently stops before
+creating an approval because its tool publication setup has no live gateway route.
 
 ## Where it fits
 
@@ -20,7 +21,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts and checks services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps, checks approvals and shows recovery| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps, checks browser and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks hosts and launches| package["infra/package<br/>Helm install"]
 ```

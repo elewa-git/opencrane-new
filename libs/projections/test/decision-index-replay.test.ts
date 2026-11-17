@@ -140,3 +140,34 @@ async function validatesBeforeIndexing(fault: string) {
 }
 it.each(['subject', 'silo'])('validates %s before attempting a repeated index position',
   validatesBeforeIndexing);
+
+async function refusesDuplicateGlobalPosition() {
+  const setup = await setupIndex();
+  try {
+    const duplicate = setup.storage.db.query(`INSERT INTO decision_conversation_events
+      SELECT silo, 'other-chat', position, event_id, type, turn_id
+      FROM decision_conversation_events WHERE position=1`);
+    await expect(duplicate).rejects.toMatchObject({ code: '23505',
+      constraint: 'decision_conversation_position' });
+  } finally {
+    await setup.close();
+  }
+}
+it('requires a unique global position even across different conversations',
+  refusesDuplicateGlobalPosition);
+
+async function refusesNonPositivePrefix() {
+  const setup = await setupIndex();
+  try {
+    await setup.storage.db.query('UPDATE decision_conversation_events SET position=0');
+    await setup.storage.db.query('UPDATE decision_conversation_coverage SET position=0');
+    const lookup = { silo: 'test', conversationId: 'chat', turnId: 'turn',
+      metadataTypes: ['conversation.created'], latestTypes: [], ignoredTypes: [],
+      deadline: performance.now() + 2000, head: 1 };
+    await expect(decisionConversationPositions(setup.storage.db, lookup))
+      .rejects.toThrow('Conversation index is incomplete');
+  } finally {
+    await setup.close();
+  }
+}
+it('requires the counted range to start at the first saved event', refusesNonPositivePrefix);
