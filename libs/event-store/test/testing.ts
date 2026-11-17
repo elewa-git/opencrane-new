@@ -1,5 +1,6 @@
 export { freePort } from "./ports.ts";
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
@@ -107,6 +108,26 @@ export function event(
     principal,
     data: { ...definition.example, memberId: subject.slice("member-".length) },
   };
+}
+
+export type AppendEventOptions = Pick<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'> &
+  Partial<Omit<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'>> & {
+    historyChecked?: true;
+  };
+
+/** Save fixture data and leave projections to the calling test. */
+export async function appendEvent(store: EventStore, options: AppendEventOptions) {
+  const { historyChecked, ...fields } = options;
+  const id = fields.id ?? randomUUID();
+  const record = { ...event(id, fields.subject, fields.type), ...fields };
+  const expectedSequence = await store.head(record.subject);
+  const command = { event: record, expectedSequence, ...(historyChecked ? { historyChecked } : {}) };
+  const result = await store.append(command);
+  expect(result.status).toBe('appended');
+  if (result.status !== 'appended') {
+    throw new Error('Fixture event was not appended');
+  }
+  return { event: record, sequence: result.sequence };
 }
 
 export async function natsFixture({ provision = true, freshCertificates = false } = {}) {
