@@ -3,7 +3,7 @@
 Journey on a fresh dev stack: FAIL
 
 Date: 17 November 2026 UTC. Branch: `work/bug-1148-s1`.
-The PR remains a draft. Finding 4 remains open in this PR.
+The PR remains a draft. Finding 4 and the failing decision-cost gate block completion.
 The earlier CORE receipt and chat pictures do not qualify these review fixes.
 
 ## Fresh stack and browser steps
@@ -54,22 +54,22 @@ capture and text, into the private rework receipt folder before teardown. Ran
 
 ## Own source checks
 
-Every test, lint, typecheck
-and build command ran under `nice -n 10`. Tests used the supplied disposable
+Every test, lint, typecheck and build command ran under `nice -n 10`. Tests used the supplied disposable
 PostgreSQL database and normal NATS, OpenFGA and gateway fixtures.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
 | New index, creation and catch-up cases | PASS twice | Six files, 27 tests in each run; 205.12 s and 261.02 s. |
 | Added prepared-history and validation-order cases | PASS twice | Two focused files, 12 tests per run. |
+| Final completeness proof cases | PASS twice | All nine replay tests passed twice after adding unique-position and first-position guard probes. Both removals failed their isolated tests first. |
 | Unchanged activity and participation assertions | PASS | Five activity and four participation cases, plus seven replay cases: 16 passed. |
 | Guard removal | PASS | Each touched guard failed its focused test when removed; normal source restored. See [fix details](rework1.md#guard-removal-evidence). |
 | Final affected groups | PASS twice | Four files, 16 tests in each run: approval history, decision measurements, activity and participation. |
-| Unchanged decision-cost suite | PENDING | Earlier full run passed all 28, including 3,000 messages and cold catch-up; final prefix version is being checked. |
+| Unchanged decision-cost suite | FAIL | Final run: 27 passed, one failed. The 3,000-message and cold catch-up cases passed unchanged. The many-models cache case returned HTTP 503 where it requires 200. An earlier 28-test PASS does not replace this result. |
 | Typecheck | PASS | Full workspace, package and dev-stack checks on the final product source. |
 | Scoped ESLint, events, Knip, changelog and reads | PASS | Zero ESLint warnings in its configured changed-file scope; 174 event types; two existing Knip hints; 308 known whole-stream reads and five rebuild reads. Dev-stack files use their dedicated typecheck and are outside repository ESLint scope. |
-| Markdown | PENDING | Repository run with no file arguments after updating this receipt. |
-| Public privacy and secret scan | PENDING | Required before the push. |
+| Markdown | PASS | Repository run with no file arguments; zero issues. Rechecked after receipt changes. |
+| Public privacy and secret scan | PASS | Both required scans passed; repeated before the push. |
 
 Made right: reused the existing summary and read baseline, split catch-up and
 conversation application into named functions, and removed the moved fallback from
@@ -79,7 +79,14 @@ in that total. No file or function limit was raised.
 
 No pre-existing assertion, access check, money check or memory check was loosened.
 No dependency, event type, API field, product retry, timeout or size limit was
-added or increased. The full root suite, real-provider qualification and second independent
+added or increased.
+
+A diagnostic repeat of the isolated many-models case, with structured warning logging and unchanged assertions and deadlines, passed. It did not reproduce or
+explain the full-suite HTTP 503. The full-suite gate remains FAIL. Five selected
+approval requester, payer and single-use cases also passed; the other 75 were
+not selected in that run.
+
+The full root suite, real-provider qualification and second independent
 review are NOT RUN. Hosted CI is not claimed here.
 
 ## Earlier fresh attempts
