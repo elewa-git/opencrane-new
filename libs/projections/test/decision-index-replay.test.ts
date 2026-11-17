@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { conversations, ProjectionRunner, rebuildConversationsProjection } from '../src/index.ts';
+import { conversations, decisionConversationPositions, ProjectionRunner, rebuildConversationsProjection } from '../src/index.ts';
 import { database } from './database.ts';
 
 async function setupIndex() {
@@ -70,3 +70,19 @@ async function matchesReplyBatching() {
 }
 it('indexes reply deltas identically when applied individually and in a replay batch',
   matchesReplyBatching);
+
+async function refusesMissingCoverageReason() {
+  const setup = await setupIndex();
+  try {
+    await setup.storage.db.query('DELETE FROM decision_conversation_coverage');
+    const lookup = { silo: 'test', conversationId: 'chat', turnId: 'turn',
+      metadataTypes: ['conversation.created'], latestTypes: [], ignoredTypes: [],
+      deadline: Infinity, head: await setup.nats.store.head() };
+    await expect(decisionConversationPositions(setup.storage.db, lookup))
+      .rejects.toThrow('Conversation index is incomplete');
+  } finally {
+    await setup.close();
+  }
+}
+it('explains missing coverage proof instead of trusting an empty index',
+  refusesMissingCoverageReason);

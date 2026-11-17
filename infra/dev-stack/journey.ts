@@ -1,5 +1,6 @@
 import './journey-entry.ts';
 import { phase4JourneyScope, requireJourneyProviderMode } from './journey-guard.ts';
+import { approvalJourney } from './approval-journey.ts';
 import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
@@ -570,7 +571,11 @@ try {
       throw error;
     } finally { page.off('requestfailed', failed); }
   }
-  console.log('SKIP approval journey: waits for #45 rows 4, 5 and 14');
+  if (browser) {
+    await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz, append,
+      { silo, origin, requesterId: member, assistantId: computer!.assistant_id,
+        computerId: computer!.computer_id, generation: computer!.generation });
+  }
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();
