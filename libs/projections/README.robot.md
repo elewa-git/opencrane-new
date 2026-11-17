@@ -505,7 +505,7 @@ uses the same read-only custody as rebuild.
 
 The `conversations` projection also writes `decision_conversation_events` in its
 existing transaction. It stores one reference for every global event position.
-A unique position index and a count from position one through the checkpoint prove
+A unique position index and a count from position one through the covered read position prove
 that this range has no gaps. Other streams use an empty conversation id and never
 enter the selected conversation facts. Conversation rows use the event store’s
 conversation-read guard, including
