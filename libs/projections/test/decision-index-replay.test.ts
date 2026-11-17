@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { event as memberEvent, natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { conversations, decisionConversationPositions, ProjectionRunner, rebuildConversationsProjection } from '../src/index.ts';
@@ -100,10 +100,7 @@ it('explains missing coverage proof instead of trusting an empty index',
 async function accountsForOtherStreamsWithoutSelectingThem() {
   const setup = await setupIndex();
   try {
-    const outside = envelope('test', 'member-outsider-long-id', 'member.joined', {
-      memberId: 'outsider-long-id', email: 'outsider@example.test',
-      displayName: 'Other', role: 'member',
-    });
+    const outside = memberEvent('outside', 'member-outsider-long-id');
     await setup.nats.seed([outside]);
     await setup.runner.run(conversations);
     const references = await setup.rows();
