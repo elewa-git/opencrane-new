@@ -2,7 +2,7 @@
 
 Journey on a fresh dev stack: PASS (core journey)
 
-Latest tested head: `c51db8f86d99f9d4e02543d786bff1634f27b3b2`.
+Latest tested head: `b2ab21a37611e881e211b0378d8701ca091656ee`.
 The first attempt below tested `9bf27f7e62b2080602a95d247b536e3b7cc529c7`.
 Date: 17 November 2026 UTC. Branch: `work/clean-1041-s1`.
 The later receipt commit changes documents and the failure picture only.
@@ -103,6 +103,45 @@ No journey step failed, so there is no failure load. Load at the runner's comple
 was 16.00. The stack was stopped with `down.sh`, which exited 0; the following status
 check reported `free`. The start and teardown record is in the private task receipt
 directory. This passing rerun does not remove either earlier failure record above.
+
+## Passing run with retained screenshots
+
+Journey on a fresh dev stack: PASS (core journey). Tested head:
+`b2ab21a37611e881e211b0378d8701ca091656ee`. Date: 17 November 2026 UTC.
+Claimed secondary slot 1 after the following 1-minute load readings stayed below 6
+at 30-second intervals for five minutes. Startup, owner bootstrap and managed-provider
+setup passed; website readiness took 50,328 ms.
+
+| UTC | 1-minute load average |
+| --- | ---: |
+| 17:01:58 | 3.56 |
+| 17:02:28 | 4.32 |
+| 17:02:58 | 3.63 |
+| 17:03:28 | 3.00 |
+| 17:03:58 | 3.07 |
+| 17:04:28 | 3.29 |
+| 17:04:58 | 3.58 |
+| 17:05:28 | 3.43 |
+| 17:05:58 | 2.88 |
+| 17:06:28 | 3.00 |
+| 17:06:58 | 2.08 |
+
+The 390 px and 1280 px chats completed a stub reply, retained it after reload, and
+kept partial text after Stop. Both upload journeys passed after one retry; upload
+transport logged `net::ERR_FAILED` and preview transport logged `net::ERR_ABORTED`.
+Live view, sign-in, session and organisation refusals, audit, budget, replay,
+token-boundary, sign-out, reauthentication and loopback-listener checks passed.
+The approval journey was skipped because it waits for #45 rows 4, 5 and 14. No
+journey step failed.
+
+The chat captures show the completed and stopped replies:
+[chat at 1280 px](pass-chat-1280.png) · [chat at 390 px](pass-chat-390.png).
+The organisation refusal captures show protected history cleared:
+[refusal at 1280 px](pass-refusal-1280.png) ·
+[refusal at 390 px](pass-refusal-390.png). I opened and checked all four images.
+
+`down.sh` exited 0 and the following status check reported `free`. The passing
+run adds screenshots and does not remove either earlier failure record above.
 
 ## Own source checks
 

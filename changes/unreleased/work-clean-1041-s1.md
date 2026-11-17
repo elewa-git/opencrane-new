@@ -3,3 +3,5 @@ The qualification ledger now separates merged source from fresh-install proof fo
 unknown verdicts and recorded live results without a date, commit and local receipt.
 Builders and qualification runners have separate column duties. Historical tables
 remain linked, and newer measurements remain below the capability tables.
+The passing fresh CORE rerun now includes inspected chat and organisation refusal
+screenshots at 1280 px and 390 px.
