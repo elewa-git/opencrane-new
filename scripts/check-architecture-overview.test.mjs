@@ -70,7 +70,7 @@ const invalidPages = [
     'participant G;participant H;participant I;Browser->>Server: end"'), 'participants'],
   ['invalid quoted participant alias', validPage.replace('participant Browser',
     'participant Browser as "Browser; client";'), 'Parse error'],
-  ['26 arrows with activation' , validPage.replace('Browser->>Server: Send',
+  ['26 arrows with activation', validPage.replace('Browser->>Server: Send',
     'Browser->>+Server: Send\n'.repeat(26)), 'arrows'],
   ['more than 250 lines', validPage + '\n'.repeat(250), '250 lines'],
 ];
@@ -104,7 +104,8 @@ function acceptsLimits(arrow) {
   const participants = 'participant A\nparticipant B\nparticipant C\nparticipant D\n' +
     'participant E\nparticipant F\nparticipant G\nparticipant H\n';
   const maximumDiagram = '```mermaid\nsequenceDiagram\n' + participants +
-    `A${arrow}H: Send\n`.repeat(25) + '```\n';
+    'loop Delivery\n' + `A${arrow}H: Send\n`.repeat(25) +
+    'Note over A,H: Await the next delivery\nend\n```\n';
   const page = '# Overview\n' + maximumDiagram.repeat(3);
   const trimmedPage = page.trimEnd();
   const lines = trimmedPage.split('\n');
@@ -113,7 +114,7 @@ function acceptsLimits(arrow) {
   expect(result.status, result.stderr).toBe(0);
 }
 
-test.each(['->>', '-->>'])(
+test.each(['->>', '-->>', '->>+'])(
   'accepts 250 lines, 8 participants and 25 %s arrows per diagram', acceptsLimits);
 
 function acceptsStatementPunctuation(statement) {

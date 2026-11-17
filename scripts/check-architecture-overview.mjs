@@ -1,10 +1,18 @@
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { eventRegistry } from '../libs/events/src/registry.ts';
 
+// Resolve the existing web dependency without depending on npm's hoisting layout.
+const webRequire = createRequire(new URL('../apps/web/package.json', import.meta.url));
+const mermaidEntry = pathToFileURL(webRequire.resolve('mermaid'));
+const { default: mermaid } = await import(mermaidEntry.href);
+// Parse trusted repository text only. Loose mode avoids DOM sanitisation; nothing is rendered.
+mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+
 const overviewPath = 'docs/architecture/overview.md';
-const arrowPattern = /^\s*([\w-]+?)\s*(?:<<)?[-.]+(?:>>?|[x)])\s*[+-]?\s*([\w-]+)\s*:/u;
 const eventPattern = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u;
 
 function trackedPaths() {
@@ -38,35 +46,14 @@ function sequenceDiagrams(markdown) {
   return diagrams;
 }
 
-function hasMultipleStatements(line) {
-  const trimmedLine = line.trimStart();
-  if (trimmedLine.startsWith('%%')) return false;
-  // Ignore separators inside Mermaid's quoted participant names.
-  const withoutQuotedText = line.replace(/"[^"]*"/gu, '""');
-  const statements = withoutQuotedText.split(';');
-  let statementCount = 0;
-  for (const statement of statements) {
-    if (statement.trim() !== '') statementCount += 1;
-  }
-  return statementCount > 1;
-}
-
-function checkDiagram(diagram, number, errors) {
-  const participants = new Set();
+async function checkDiagram(diagram, number, errors) {
+  const parsedDiagram = await mermaid.mermaidAPI.getDiagramFromText(diagram);
+  const database = parsedDiagram.db;
+  const participants = database.getActors();
   let arrows = 0;
-  for (const line of diagram.split('\n')) {
-    if (hasMultipleStatements(line)) {
-      errors.push(`Diagram ${number} must use one statement per line`);
-      continue;
-    }
-    const declaration = /^\s*(?:participant|actor)\s+([\w-]+)/u.exec(line);
-    if (declaration) participants.add(declaration[1]);
-    const arrow = arrowPattern.exec(line);
-    if (arrow) {
-      participants.add(arrow[1]);
-      participants.add(arrow[2]);
-      arrows += 1;
-    }
+  for (const message of database.getMessages()) {
+    // Notes and control statements share the message list but do not draw arrows.
+    if (message.from && message.to && message.type !== database.LINETYPE.NOTE) arrows += 1;
   }
   if (participants.size > 8) {
     errors.push(`Diagram ${number} exceeds 8 participants: ${participants.size}`);
@@ -102,7 +89,7 @@ async function main() {
   const diagrams = sequenceDiagrams(markdown);
   if (diagrams.length !== 3) errors.push('Page must contain exactly 3 sequence diagrams');
   for (const [index, diagram] of diagrams.entries()) {
-    checkDiagram(diagram, index + 1, errors);
+    await checkDiagram(diagram, index + 1, errors);
   }
   checkNames(markdown, trackedPaths(), errors);
   if (errors.length > 0) {
