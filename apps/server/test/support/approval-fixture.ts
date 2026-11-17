@@ -137,6 +137,10 @@ async function seedMessageProjection(setup: ApprovalFixture,
       SELECT 'test', 'conversation', position, event_id, type, NULL
       FROM jsonb_to_recordset($1::jsonb) AS row(position BIGINT, event_id TEXT, type TEXT)`,
     parameters);
+    await tx.query(`UPDATE decision_conversation_coverage
+      SET event_count=event_count+$1, position=$2
+      WHERE silo='test' AND conversation_id='conversation'`,
+    [messages.length, throughPosition]);
     await tx.query(`INSERT INTO projection_events
       SELECT 'conversations', event_id FROM jsonb_to_recordset($1::jsonb)
         AS row(event_id TEXT)`, parameters);
