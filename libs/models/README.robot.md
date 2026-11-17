@@ -678,7 +678,9 @@ The models process supplies `decisionConversationReader` to `startDecision`.
 The reader uses the conversation projection's event index to load creation,
 participation and closing records, the current turn's records and queued message,
 and the latest message and turn start. It excludes the shared list of output reports.
-It first compares the index's full row count and latest position with an independent
+It first proves that the index contains every global event position from one through
+its checkpoint, without gaps. It also compares the conversation's row count and
+latest position with an independent
 coverage record saved in the same projection transaction. A missing row or missing
 coverage record refuses the decision. It also checks every returned reference against
 the saved NATS event. These records retain
