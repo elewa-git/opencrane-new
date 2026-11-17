@@ -51,7 +51,7 @@ async function seedLiveTurn() {
   await append('mcp-fixture', 'mcp.server_discovered', {
     checkedAt, expiresAt,
     serverId: 'fixture', connectionId: 'installed', accountMode: 'none',
-    schemaDigest: catalogueDigest([]), toolCount: 0, tools: [],
+    schemaDigest: catalogueDigest([]), digestVersion: 2, toolCount: 0, tools: [],
   });
   await append('mcp-fixture', 'mcp.server_published', {
     serverId: 'fixture', publishedBy: 'alice',

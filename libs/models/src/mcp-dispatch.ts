@@ -1,15 +1,17 @@
 import type { BudgetBinding, McpAccessCheck, MemorySend, Permit, Route }
   from './mcp-dispatch-contract.ts';
-import { consumePermit, dispatchRemoteTarget, dispatchDigest as digest,
-  type PersonalDispatchRequest, type RemoteTarget }
-  from './mcp-dispatch-request.ts';
-import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
+import { consumePermit, dispatchDigest as digest, dispatchRemoteTarget,
+  type PersonalDispatchRequest, type RemoteTarget } from './mcp-dispatch-request.ts';
 /* eslint max-lines: ["error", { max: 672, skipBlankLines: true, skipComments: true }] */
+import { credentialPatterns } from './credential-patterns.ts';
+import { containsCredential, replyContainsCredential } from './mcp-credential-echo.ts';
+import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
+import { currentRemoteCatalogue, toolServerBody, changedToolListReply } from './mcp-wire.ts';
+import { isOrdinaryToolCatalogue } from '@opencrane/protocol';
 import { createLogger } from '@opencrane/observability';
 import { privateDecisionReason } from './decision-refusal.ts';
 import { exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
 import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
-import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -31,11 +33,28 @@ export interface McpDispatchOptions {
   credentialDispatch?: PersonalCredentialDispatch;
 }
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
+export type McpPermitRequest = Pick<Permit,
+  'requestId' | 'confirmAccess' | 'accessDeadline' | 'budget' | 'memory' | 'release'> & {
+    policy: Policy;
+    body: string;
+  };
+
+interface DispatchAttempt {
+  req: IncomingMessage;
+  res: ServerResponse;
+  permit: Permit;
+  position: number;
+  deadline: number;
+  startedAt: number;
+}
+
 type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
-  deadline?: number) => Promise<void>;
+  deadline?: number, cost?: ReturnType<typeof observedToolCost>) => Promise<void>;
+const remoteLogger = createLogger('mcp-remote');
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
+
 function remoteAccountAvailable(policy: Policy, hasCredentialDispatch: boolean) {
   if (policy.policy.accountMode === 'none') return true;
   return policy.policy.accountMode === 'personal' && Boolean(policy.personal) &&
@@ -57,17 +76,31 @@ function isBuiltInMemory(policy: Policy) {
 }
 
 export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
-  const { store, silo } = actor;
-  const logger = createLogger('mcp-dispatch');
-  const signingKey = randomBytes(32);
-  const pending = new Map<string, Permit>();
-  const consumer = { pending, silo };
+  const dispatcher = new McpDispatcher(actor, options);
+  return {
+    handle: dispatcher.handle.bind(dispatcher),
+    bindPolicy: dispatcher.bindPolicy.bind(dispatcher),
+    setPermit: dispatcher.setPermit.bind(dispatcher),
+    acknowledged: dispatcher.acknowledged.bind(dispatcher),
+  };
+}
 
-  function acknowledged() {
-    return options?.acknowledged?.() ?? null;
+class McpDispatcher {
+  private readonly actor: BudgetActor;
+  private readonly options: McpDispatchOptions | undefined;
+  private readonly logger = createLogger('mcp-dispatch');
+  private readonly signingKey = randomBytes(32);
+  private readonly pending = new Map<string, Permit>();
+
+  constructor(actor: BudgetActor, options?: McpDispatchOptions) {
+    this.actor = actor;
+    this.options = options;
   }
 
-  function routeFor(serverId: string, connectionId: string) {
+  readonly acknowledged = () => this.options?.acknowledged?.() ?? null;
+
+  routeFor(serverId: string, connectionId: string) {
+    const options = this.options;
     function matches(route: Route) {
       return route.serverId === serverId && route.connectionId === connectionId;
     }
@@ -79,7 +112,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     return route;
   }
 
-  function requireContract(policy: Policy) {
+  requireContract(policy: Policy) {
+    const options = this.options;
     // Keep built-in memory on this path. Other hosted images still need image admission.
     const builtInMemory = isBuiltInMemory(policy);
     if (policy.serverKind === 'hosted' && !builtInMemory) {
@@ -89,8 +123,10 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       return route.serverId === policy.policy.serverId &&
         route.connectionId === policy.policy.connectionId;
     }
-    if (!policy.personal && (options?.routes.some(configured) || builtInMemory)) {
-      return routeFor(policy.policy.serverId!, policy.policy.connectionId!);
+    const configuredRoute = options?.routes.find(configured);
+    const hasConfiguredRoute = configuredRoute ?? builtInMemory;
+    if (!policy.personal && hasConfiguredRoute) {
+      return this.routeFor(policy.policy.serverId!, policy.policy.connectionId!);
     }
     if (!policy.gatewayBinding || !policy.locator || policy.serverKind !== 'remote' ||
         !remoteAccountAvailable(policy, Boolean(options?.credentialDispatch))) {
@@ -100,24 +136,26 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       throw new Error('MCP catalogue watch unavailable');
     }
     options.requireCatalogue(policy.policy.serverId!);
-    requireRemoteRevision(policy.policy.catalogue?.discoverResult);
+    const standard = isOrdinaryToolCatalogue(policy.policy.catalogue);
+    requireRemoteRevision(policy.policy.catalogue?.discoverResult, standard);
     return { serverId: policy.policy.serverId!, connectionId: policy.policy.connectionId!,
-      upstream: '', locator: policy.locator, generation: String(policy.gatewayBinding.generation),
+      upstream: '', locator: policy.locator, standard,
+      generation: String(policy.gatewayBinding.generation),
       revisionHeader: 'x-opencrane-mcp-revision' as const };
   }
 
-  function bindPolicy(policy: Policy) {
-    const route = requireContract(policy);
+  bindPolicy(policy: Policy) {
+    const route = this.requireContract(policy);
     const dispatchBinding = digest(JSON.stringify([route, policy.personal]));
     return { ...policy, dispatchBinding };
   }
 
-  function issue(policy: Policy, body: string, requestId: string,
-    confirmAccess: McpAccessCheck, accessDeadline: number, budget: BudgetBinding,
-    memory?: MemorySend, release?: z.infer<typeof toolCredentialReleaseSchema>) {
-    const route = requireContract(policy);
+  issue(request: McpPermitRequest) {
+    const { policy, body, requestId, confirmAccess, accessDeadline, budget,
+      memory, release } = request;
+    const route = this.requireContract(policy);
     if (policy.gatewayBinding) {
-      requireGatewayAcknowledgement(policy.gatewayBinding, acknowledged);
+      requireGatewayAcknowledgement(policy.gatewayBinding, this.acknowledged);
     }
     if (policy.dispatchBinding !== digest(JSON.stringify([route, policy.personal]))) {
       throw new Error('MCP backend changed during the decision');
@@ -125,13 +163,13 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     requirePersonalRelease(policy, release);
     const lifetime = policy.personal ? 30_000 : 2000;
     const expiresAt = Math.min(Date.now() + lifetime, Date.parse(policy.policy.expiresAt!));
-    for (const [token, permit] of pending) {
-      if (permit.expiresAt <= Date.now()) pending.delete(token);
+    for (const [token, permit] of this.pending) {
+      if (permit.expiresAt <= Date.now()) this.pending.delete(token);
     }
-    if (pending.size >= 1024 || expiresAt <= Date.now() || !policy.revision) {
+    if (this.pending.size >= 1024 || expiresAt <= Date.now() || !policy.revision) {
       throw new Error('MCP dispatch unavailable');
     }
-    const binding = { requestId, silo, route: { ...route },
+    const binding = { requestId, silo: this.actor.silo, route: { ...route },
       ...(policy.gatewayBinding ? { gatewayBinding: policy.gatewayBinding } : {}),
       policyRevision: policy.policy.policyRevision, catalogueSequence: policy.policy.sequence,
       reviewRevision: policy.policy.reviewRevision,
@@ -140,141 +178,193 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const signedBinding = { ...binding, nonce: randomUUID() };
     const bindingBytes = Buffer.from(JSON.stringify(signedBinding));
     const encoded = bindingBytes.toString('base64url');
-    const signatureHash = createHmac('sha256', signingKey);
+    const signatureHash = createHmac('sha256', this.signingKey);
     signatureHash.update(encoded);
     const signature = signatureHash.digest('base64url');
     const token = `${encoded}.${signature}`;
     // Keep permits only in this active process. A restart cannot revive an old call.
     const memoryBinding = { permitDigest: digest(token), backendGeneration: route.generation!,
       schemaDigest: binding.schemaDigest, policyRevision: binding.policyRevision };
-    pending.set(token, { ...binding, confirmAccess, accessDeadline, memoryBinding, budget,
+    this.pending.set(token, { ...binding, confirmAccess, accessDeadline, memoryBinding, budget,
       ...(release ? { release } : {}),
       ...(memory ? { memory } : {}) });
     return token;
   }
 
-  function setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
+  setPermit(res: ServerResponse, outcome: string, policy: Policy, body: string,
     requestId: string, confirmAccess: McpAccessCheck, accessDeadline: number,
     budget: BudgetBinding, memory?: MemorySend,
     release?: z.infer<typeof toolCredentialReleaseSchema>) {
-    if (outcome !== 'allow') {
-      return;
-    }
-    const permit = issue(policy, body, requestId, confirmAccess, accessDeadline,
-      budget, memory, release);
+    if (outcome !== 'allow') return;
+    const request: McpPermitRequest = { policy, body, requestId, confirmAccess,
+      accessDeadline, budget, ...(memory ? { memory } : {}), release };
+    const permit = this.issue(request);
     res.setHeader('x-opencrane-mcp-permit', permit);
   }
 
-  async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
+  async handle(req: IncomingMessage, res: ServerResponse, body: string) {
     const startedAt = performance.now();
-    const permit = consumePermit(req, body, consumer);
+    const permit = consumePermit(req, body, { pending: this.pending, silo: this.actor.silo });
     const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
     if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
-    const route = requireCurrentRoute(permit);
+    const route = this.requireCurrentRoute(permit);
     const remaining = Math.max(0, permit.expiresAt - Date.now());
     const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
     // Prepare immutable history and receipts before entering the shared budget queue.
     await permit.confirmAccess.prepare?.(deadline);
-    const target = await dispatchRemoteTarget(route, deadline, options?.remoteNetwork ?? {});
-    await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      acknowledged, deadline);
-    const position = await store.head(`mcp-${route.serverId}`, deadline);
-    await requireOnlyAdmissions(store, silo, `mcp-${route.serverId}`,
+    const remote = await this.prepareRemoteCall(permit, deadline);
+    if (remote.catalogueChanged) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(changedToolListReply(body));
+      return;
+    }
+    const target = remote.target;
+    await requireGatewayPosition(this.actor.store, this.actor.silo, permit.gatewayBinding,
+      this.acknowledged, deadline);
+    const position = await this.actor.store.head(`mcp-${route.serverId}`, deadline);
+    await requireOnlyAdmissions(this.actor.store, this.actor.silo, `mcp-${route.serverId}`,
       permit.catalogueSequence, position, deadline);
     let memoryContext: string | undefined;
     if (permit.memory) {
       memoryContext = await permit.memory.sign(permit.memoryBinding, permit.expiresAt);
     }
-    await options!.requireLeader();
+    await this.options!.requireLeader();
     const personalRequest = { permit, target, body, res, deadline,
-      dispatch: options?.credentialDispatch, network: options?.remoteNetwork ?? {} };
-    const personal = personalDispatch(store, silo, personalRequest);
+      dispatch: this.options?.credentialDispatch, network: this.options?.remoteNetwork ?? {} };
+    const personal = personalDispatch(this.actor.store, this.actor.silo, personalRequest);
     if (personal) permit.prepareCredential = personal.prepare;
-    const observe = await admitCall(req, res, permit, route, position, deadline, startedAt);
+    const attempt = { req, res, permit, position, deadline, startedAt };
+    const observe = await this.admitCall(attempt);
     if (personal) {
-      try {
-        await personal.send(observe!);
-      } catch (error) {
-        await reportRefusal(permit, observe, startedAt, 'credential_release', deadline, error);
-        throw error;
-      }
+      await this.sendPersonalCall(personal, observe, attempt);
       return;
     }
     if (target) {
-      await forwardRemote(target, permit, body, res, options?.remoteNetwork ?? {}, observe!);
+      const call: RemoteToolCall = { target, raw: toolServerBody(body), res,
+        network: this.options?.remoteNetwork ?? {}, toolName: permit.toolName,
+        revision: route.standard ? undefined : permit.schemaDigest, observe: observe! };
+      await forwardRemote(call);
       return;
     }
-    forward(route, permit, body, res, memoryContext);
+    forward(route, permit, permit.memory ? body : toolServerBody(body), res, memoryContext);
   }
 
-  async function admitCall(req: IncomingMessage, res: ServerResponse, permit: Permit,
-    route: Route, position: number, deadline: number, startedAt: number) {
+  async prepareRemoteCall(permit: Permit, deadline: number) {
+    const route = permit.route;
+    const network = this.options?.remoteNetwork ?? {};
+    const remote = await dispatchRemoteTarget(route, deadline, network);
+    if (!remote) {
+      return { target: undefined, catalogueChanged: false };
+    }
+    const { target, signal } = remote;
+    if (route.standard && !await this.checkStandardCatalogue(target, permit, signal)) {
+      return { target, catalogueChanged: true };
+    }
+    return { target, catalogueChanged: false };
+  }
+
+  async sendPersonalCall(personal: NonNullable<ReturnType<typeof personalDispatch>>,
+    observe: RemoteObserver | undefined, attempt: DispatchAttempt) {
+    try {
+      await personal.send(observe!);
+    } catch (error) {
+      await this.reportRefusal(attempt.permit, observe, attempt.startedAt,
+        'credential_release', error);
+      throw error;
+    }
+  }
+
+  async checkStandardCatalogue(target: RemoteTarget,
+    permit: Permit, signal: AbortSignal) {
+    const current = await currentRemoteCatalogue(target, this.options?.remoteNetwork ?? {}, signal);
+    if (current === permit.schemaDigest) return true;
+    await this.options!.requireLeader();
+    const data = { serverId: permit.route.serverId,
+      previousSchemaDigest: permit.schemaDigest, newSchemaDigest: current };
+    const subject = `mcp-${permit.route.serverId}`;
+    const event = envelope(this.actor.silo, subject, 'mcp.tools_changed', data);
+    const deadline = permit.accessDeadline;
+    const command = { event, expectedSequence: permit.catalogueSequence, deadline };
+    const result = await this.actor.store.append(command);
+    if (result.status !== 'appended') throw new Error('Changed tool list could not be saved');
+    return false;
+  }
+
+  async admitCall(attempt: DispatchAttempt) {
+    const { req, res, permit, deadline, startedAt } = attempt;
+    const route = permit.route;
     const dispatch = { callId: permit.requestId, decisionId: permit.budget.decisionId,
       bodyDigest: permit.bodyDigest, modelCall: permit.budget.modelCall,
       ...(permit.budget.rootId === undefined ? {} : { rootId: permit.budget.rootId }) };
-    async function confirmSend() {
-      await permit.confirmAccess();
-      await requireGatewayPosition(store, silo, permit.gatewayBinding,
-        acknowledged, deadline);
-      requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
-    }
+    const confirmSend = this.confirmSend.bind(this, attempt);
     let observe: RemoteObserver | undefined;
     let stage = 'dispatch_start';
     try {
       // Save the HTTPS start before budget admission, so an unsent refusal has exact proof.
       if (route.locator) {
-        observe = await recordStarted(permit, deadline);
+        observe = await this.recordStarted(permit, deadline);
       }
       stage = 'credential_preparation';
       await permit.prepareCredential?.();
       stage = 'budget_admission';
       const admissionDeadline = permit.release ? { queueDeadline: deadline } : deadline;
-      await actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt,
+      await this.actor.admitDispatch(dispatch, confirmSend, permit.budget.admittedAt,
         undefined, admissionDeadline);
       stage = 'mcp_admission';
-      const admittedPosition = await admit(req, res, permit, route, position, deadline);
+      const admittedPosition = await this.admit(attempt);
       if (!route.locator && permit.gatewayBinding) {
         stage = 'dispatch_start';
-        await requirePublishedPositions(permit, admittedPosition, deadline);
-        requireCurrentRoute(permit);
+        await this.requirePublishedPositions(permit, admittedPosition, deadline);
+        this.requireCurrentRoute(permit);
         requireFreshDispatch(req, res, permit);
-        observe = await recordStarted(permit, deadline);
+        observe = await this.recordStarted(permit, deadline);
       }
       stage = 'final_access';
       if (permit.gatewayBinding) {
         await permit.confirmAccess();
       }
-      await requirePublishedPositions(permit, admittedPosition, deadline);
+      await this.requirePublishedPositions(permit, admittedPosition, deadline);
       await permit.budget.confirmRoutine();
       // Allow this acknowledged generation if a replacement was saved after the last
       // gateway-position read: that replacement is not live yet. Refuse changes visible
       // at that read, then check local state and send without another read or a lock.
-      requireCurrentRoute(permit);
+      this.requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
     } catch (error) {
-      await reportRefusal(permit, observe, startedAt, stage, deadline, error);
+      await this.reportRefusal(permit, observe, startedAt, stage, error);
       throw error;
     }
     return observe;
   }
 
-  async function reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
-    startedAt: number, stage: string, deadline: number, error: unknown) {
+  async confirmSend(attempt: DispatchAttempt) {
+    const { req, res, permit, deadline } = attempt;
+    await permit.confirmAccess();
+    await requireGatewayPosition(this.actor.store, this.actor.silo, permit.gatewayBinding,
+      this.acknowledged, deadline);
+    this.requireCurrentRoute(permit);
+    requireFreshDispatch(req, res, permit);
+  }
+
+  async reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
+    startedAt: number, stage: string, error: unknown) {
+    const remainingLifetime = permit.expiresAt - Date.now();
+    const remainingAccess = permit.accessDeadline - performance.now();
+    const accessRemainingMs = Math.max(0, Math.floor(Math.min(remainingLifetime, remainingAccess)));
     const diagnostic = { stage, reason: privateDecisionReason(error),
-      elapsedMs: Math.ceil(performance.now() - startedAt),
-      accessRemainingMs: Math.max(0, Math.floor(deadline - performance.now())) };
-    logger.warn(diagnostic, 'MCP dispatch refused');
+      elapsedMs: Math.ceil(performance.now() - startedAt), accessRemainingMs };
+    // Keep dependency error text private; log only the recognised refusal reason.
+    this.logger.warn(diagnostic, 'MCP dispatch refused');
     try {
-      await recordRefusedStart(permit, observe, startedAt);
+      await this.recordRefusedStart(permit, observe, startedAt);
     } catch {
       const evidence = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
         elapsedMs: Math.ceil(performance.now() - startedAt) };
-      logger.warn(evidence, 'MCP dispatch refused');
+      this.logger.warn(evidence, 'MCP dispatch refused');
     }
   }
 
-  async function recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
+  async recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
     startedAt: number) {
     // Allow one second to save evidence only. This cannot extend permission to send.
     const deadline = performance.now() + 1000;
@@ -292,26 +382,28 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
       evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
       durationMs: Math.ceil(performance.now() - startedAt) };
-    await recordToolObservation(actor, observation, deadline);
+    await recordToolObservation(this.actor, observation, deadline);
   }
 
-  async function requirePublishedPositions(permit: Permit, admittedPosition: number,
+  async requirePublishedPositions(permit: Permit, admittedPosition: number,
     deadline: number) {
+    const { store, silo } = this.actor;
     if (!permit.gatewayBinding) {
       return;
     }
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      acknowledged, deadline);
+      this.acknowledged, deadline);
     const currentPosition = await store.head(`mcp-${permit.route.serverId}`, deadline);
     if (currentPosition !== admittedPosition) {
       throw new Error('MCP policy changed');
     }
     // Catch a saved replacement while the MCP read waited, even with an unchanged member.
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
-      acknowledged, deadline);
+      this.acknowledged, deadline);
   }
 
-  async function recordStarted(permit: Permit, deadline: number) {
+  async recordStarted(permit: Permit, deadline: number) {
+    const { store, silo } = this.actor;
     const binding = permit.gatewayBinding;
     if (!binding) {
       return;
@@ -339,37 +431,44 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     const adapter = { silo: permit.silo, decisionId: permit.budget.decisionId,
       startId: event.id, connectionId: payload.connectionId, generation: payload.generation,
       recordDigest: payload.recordDigest, reviewRevision: payload.reviewRevision! };
+    const actor = this.actor;
     async function observe(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
-      evidenceDeadline?: number) {
+      evidenceDeadline?: number, cost?: Parameters<RemoteObserver>[2]) {
       const evidence = remoteEvidence(outcome);
       const observation = { id: permit.requestId, toolOutcome: outcome, evidence,
         observedAt: new Date().toISOString(),
-        durationMs: Math.ceil(performance.now() - startedAt) } as const;
+        durationMs: Math.ceil(performance.now() - startedAt), ...cost } as const;
       await recordAdapterObservation(actor, adapter, observation, evidenceDeadline);
     }
     return observe;
   }
 
-  function requireCurrentRoute(permit: Permit) {
+  requireCurrentRoute(permit: Permit) {
     if (permit.gatewayBinding) {
-      requireGatewayAcknowledgement(permit.gatewayBinding, acknowledged);
+      requireGatewayAcknowledgement(permit.gatewayBinding, this.acknowledged);
     }
     if (permit.route.locator) {
-      if (!options?.requireCatalogue) {
+      if (!this.options?.requireCatalogue) {
         throw new Error('MCP catalogue watch unavailable');
       }
-      options.requireCatalogue(permit.route.serverId);
+      this.options.requireCatalogue(permit.route.serverId);
       return permit.route;
     }
-    const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
-    if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
+    const currentRoute = this.routeFor(permit.route.serverId, permit.route.connectionId);
+    if (currentRoute.serverId !== permit.route.serverId ||
+        currentRoute.connectionId !== permit.route.connectionId ||
+        currentRoute.upstream !== permit.route.upstream ||
+        currentRoute.generation !== permit.route.generation ||
+        currentRoute.revisionHeader !== permit.route.revisionHeader) {
       throw new Error('MCP backend changed');
     }
     return currentRoute;
   }
 
-  async function admit(req: IncomingMessage, res: ServerResponse, permit: Permit,
-    route: Route, position: number, deadline: number) {
+  async admit(attempt: DispatchAttempt) {
+    const { store, silo } = this.actor;
+    const { req, res, permit, position, deadline } = attempt;
+    const route = permit.route;
     const subject = `mcp-${route.serverId}`;
     const payload = { serverId: route.serverId, connectionId: route.connectionId,
       requestId: permit.requestId, toolName: permit.toolName,
@@ -380,8 +479,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await permit.confirmAccess();
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
-        acknowledged, deadline);
-      requireCurrentRoute(permit);
+        this.acknowledged, deadline);
+      this.requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit);
       // Order admission with Block and quarantine writes on the same server stream.
       // Published calls also recheck this position after saving their start.
@@ -399,7 +498,6 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     throw new Error('MCP admission refused');
   }
 
-  return { handle, bindPolicy, setPermit, acknowledged };
 }
 
 function requireFreshDispatch(req: IncomingMessage, res: ServerResponse,
@@ -449,9 +547,38 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
   upstream.end(body);
 }
 
-async function forwardRemote(target: RemoteTarget, permit: Permit,
-  raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver,
-  material?: string) {
+function requireRemoteRevision(saved: string | undefined, standard: boolean) {
+  if (standard) return;
+  try {
+    const declaration = z.object({ capabilities: z.object({
+      experimental: z.record(z.string(), z.unknown()),
+    }) }).parse(JSON.parse(saved ?? '{}'));
+    if (Object.hasOwn(declaration.capabilities.experimental, 'io.opencrane/expectedRevision')) {
+      return;
+    }
+  } catch { /* Refuse malformed declarations without exposing their contents. */ }
+  throw new Error('Remote MCP revision unavailable');
+}
+
+
+interface CheckedRemoteReply {
+  data: Buffer;
+  cost: ReturnType<typeof observedToolCost>;
+}
+
+interface RemoteToolCall {
+  target: RemoteTarget;
+  raw: string;
+  res: ServerResponse;
+  network: RemoteNetwork;
+  toolName: string;
+  revision?: string | undefined;
+  observe: RemoteObserver;
+  material?: string;
+}
+
+async function forwardRemote(call: RemoteToolCall) {
+  const { target, raw, res, network, observe, material } = call;
   if (material !== undefined && !/^[\x21-\x7e]+$/u.test(material)) {
     throw new Error('MCP credential refused');
   }
@@ -461,20 +588,23 @@ async function forwardRemote(target: RemoteTarget, permit: Permit,
   const headers = { host: target.endpoint.host, 'content-type': 'application/json',
     accept: 'application/json', 'content-length': String(Buffer.byteLength(raw)),
     'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
-    'mcp-name': permit.toolName, 'x-opencrane-mcp-revision': permit.schemaDigest,
+    'mcp-name': call.toolName,
+    ...(call.revision ? { 'x-opencrane-mcp-revision': call.revision } : {}),
     ...(material === undefined ? {} : { authorization: `Bearer ${material}` }) };
-  let reply: Awaited<ReturnType<typeof exchangeRemote>> | undefined;
+  let reply: CheckedRemoteReply | undefined;
   try {
     const received = await exchangeRemote(target, raw, headers, network,
       controller.signal, 1024 * 1024);
-    const safeData = requireRemoteReply(received.data, received.contentType, raw, material);
-    reply = { ...received, data: safeData };
-  } catch {
+    reply = requireRemoteReply(received.data, received.contentType, raw, material);
+  } catch (error) {
+    remoteLogger.warn({ err: error }, 'Remote tool exchange failed');
     // Keep every failed exchange unknown, including refusal before confirmed receipt.
   } finally { clearTimeout(timer); }
   try {
-    await observe(reply ? 'responded' : 'outcome_unknown');
-  } catch {
+    const cost = !call.revision && reply ? reply.cost : undefined;
+    await observe(reply ? 'responded' : 'outcome_unknown', undefined, cost);
+  } catch (error) {
+    remoteLogger.warn({ err: error }, 'Remote tool observation could not be saved');
     res.writeHead(503);
     res.end();
     return;
@@ -488,56 +618,20 @@ async function forwardRemote(target: RemoteTarget, permit: Permit,
   res.end();
 }
 
-function collectStringValues(value: JsonValue, values: string[]): void {
-  if (value.value instanceof Map) {
-    for (const nested of value.value.values()) collectStringValues(nested, values);
-    return;
-  }
-  if (Array.isArray(value.value)) {
-    for (const nested of value.value) collectStringValues(nested, values);
-    return;
-  }
-  if (value.kind === 'string' && typeof value.value === 'string') {
-    values.push(value.value);
-  }
+function observedToolCost(reply: JsonValue) {
+  const root = reply.value;
+  const result = root instanceof Map ? root.get('result')?.value : undefined;
+  const metadata = result instanceof Map ? result.get('_meta')?.value : undefined;
+  const value = metadata instanceof Map ? metadata.get('io.opencrane/costCents') : undefined;
+  if (!value) return { costStatus: 'not_reported' as const };
+  const cost = Number(value.canonical);
+  if (value.kind !== 'number' || !/^(?:0|[1-9]\d*)$/u.test(value.canonical) ||
+      !Number.isSafeInteger(cost)) return { costStatus: 'invalid' as const };
+  return { costStatus: 'reported' as const, costCents: cost };
 }
 
-function collectTextBlocks(value: JsonValue, values: string[]): void {
-  if (value.value instanceof Map) {
-    for (const [key, nested] of value.value) {
-      if (key === 'text' && nested.kind === 'string' &&
-          typeof nested.value === 'string') {
-        values.push(nested.value);
-      } else {
-        collectTextBlocks(nested, values);
-      }
-    }
-    return;
-  }
-  if (Array.isArray(value.value)) {
-    for (const nested of value.value) collectTextBlocks(nested, values);
-  }
-}
-
-function containsCredential(value: JsonValue, patterns: string[]): boolean {
-  if (value.value instanceof Map) {
-    for (const [key, nested] of value.value) {
-      if (containsCredentialText(key, patterns) || containsCredential(nested, patterns)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  if (Array.isArray(value.value)) {
-    for (const nested of value.value) {
-      if (containsCredential(nested, patterns)) return true;
-    }
-    return false;
-  }
-  return typeof value.value === 'string' && containsCredentialText(value.value, patterns);
-}
-
-function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefined): Buffer {
+function safeRemoteError(sent: Map<string, JsonValue>,
+  material: string | undefined): CheckedRemoteReply {
   const originalId = sent.get('id')!;
   const patterns = credentialPatterns(material);
   let requestId: unknown = null;
@@ -547,27 +641,12 @@ function safeRemoteError(sent: Map<string, JsonValue>, material: string | undefi
   }
   const safeReply = { jsonrpc: '2.0', id: requestId,
     error: { code: -32603, message: 'Remote tool error' } };
-  return Buffer.from(JSON.stringify(safeReply));
-}
-
-function replyContainsCredential(reply: JsonValue, contentType: string,
-  material: string | undefined): boolean {
-  const patterns = credentialPatterns(material);
-  const values: string[] = [];
-  const textBlocks: string[] = [];
-  collectStringValues(reply, values);
-  collectTextBlocks(reply, textBlocks);
-  return containsCredential(reply, patterns) ||
-    containsCredentialText(values.join(''), patterns) ||
-    containsCredentialText(values.join(' '), patterns) ||
-    containsCredentialText(textBlocks.join(''), patterns) ||
-    containsCredentialText(textBlocks.join(' '), patterns) ||
-    containsCredentialText(reply.canonical, patterns) ||
-    containsCredentialText(contentType, patterns);
+  const data = Buffer.from(JSON.stringify(safeReply));
+  return { data, cost: { costStatus: 'not_reported' } };
 }
 
 function requireRemoteReply(data: Buffer, contentType: string, raw: string,
-  material?: string): Buffer {
+  material?: string): CheckedRemoteReply {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
   const parsedReply = losslessJson(text);
   const reply = parsedReply.value;
@@ -593,19 +672,7 @@ function requireRemoteReply(data: Buffer, contentType: string, raw: string,
     // Return fixed error fields because the remote server may copy our bearer into them.
     return safeRemoteError(sent, material);
   }
-  return data;
-}
-
-function requireRemoteRevision(saved: string | undefined) {
-  try {
-    const declaration = z.object({ capabilities: z.object({
-      experimental: z.record(z.string(), z.unknown()),
-    }) }).parse(JSON.parse(saved ?? '{}'));
-    if (Object.hasOwn(declaration.capabilities.experimental, 'io.opencrane/expectedRevision')) {
-      return;
-    }
-  } catch { /* Refuse malformed declarations without exposing their contents. */ }
-  throw new Error('Remote MCP revision unavailable');
+  return { data, cost: observedToolCost(parsedReply) };
 }
 
 function personalDispatch(store: BudgetActor['store'], silo: string,
@@ -618,7 +685,11 @@ function personalDispatch(store: BudgetActor['store'], silo: string,
   let sendCredential: (() => Promise<void>) | undefined;
   async function sendAccess(material: string) {
     if (!observer) throw new Error('Personal tool unavailable');
-    await forwardRemote(target!, permit, body, res, network, observer, material);
+    const call: RemoteToolCall = { target: target!, raw: toolServerBody(body), res, network,
+      toolName: permit.toolName,
+      revision: permit.route.standard ? undefined : permit.schemaDigest,
+      observe: observer, material };
+    await forwardRemote(call);
   }
   async function prepare() {
     const credentialRequest = { decisionId: permit.budget.decisionId, release: release!,

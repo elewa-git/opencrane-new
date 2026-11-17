@@ -109,11 +109,6 @@
     "max": 1502
   },
   {
-    "file": "libs/models/test/mcp-dispatch.test.ts",
-    "rule": "max-lines",
-    "max": 3622
-  },
-  {
     "file": "libs/projections/src/audit.ts",
     "rule": "max-lines",
     "max": 545

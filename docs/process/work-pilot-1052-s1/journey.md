@@ -1,0 +1,798 @@
+# Ordinary third-party tool server journey
+
+## Journey rerun, 17 November 2026
+
+Journey on a fresh dev stack: **FAIL (slice journey)** — **NOT RUN** at both
+1280 px and 390 px. Tested source head: `0e34f89a15b743dab171eb058929a60527398f11`.
+`origin/main` was already an ancestor of this head, so no rebase or changed-test rerun
+was needed. The source checks and hosted CI remained green at this head.
+
+The runner sampled one-minute load every 30 seconds from 13:02:27 to 13:18:57 UTC.
+The gate passed after eleven consecutive samples below 6, spanning five minutes.
+The stack started at 13:19:17 UTC on secondary slot 1 with load 4.64. Owner bootstrap,
+provider setup and website readiness passed. The startup failure was observed at 13:28:26 UTC with load 13.98. No slice step ran.
+
+`down.sh` stopped the secondary stack. The private slot directory, including its
+startup failure and process logs, was removed during teardown before those logs were
+copied. They could not be recovered after teardown. The safe record contains the
+startup result, timestamps and load only; it contains no credentials. Higher load at
+failure makes load pressure a plausible contributor, but without the startup logs this
+run cannot distinguish load pressure from a startup defect. No second attempt was made.
+
+| Required action | 1280 px | 390 px |
+| --- | --- | --- |
+| Sustained low-load gate | PASS: five minutes below 6. | Same shared gate. |
+| Fresh startup and shared chat | FAIL during shared startup, after website readiness. | Same stack; viewport journey not reached. |
+| Admin installs, reviews and publishes the ordinary server | NOT RUN. | NOT RUN. |
+| Member’s live tool call and Ask approval | NOT RUN. | NOT RUN. |
+| Tool-list change blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
+| Stack teardown | PASS: secondary slot 1 stopped. | Same stack teardown. |
+
+See [load samples](run-2026-11-17-rerun/load-wait.jsonl), [stack start](run-2026-11-17-rerun/stack-start.txt)
+and [failure-time load](run-2026-11-17-rerun/startup-failure-load.txt).
+
+## Rework round 6, 17 November 2026
+
+Owner-authorised limits: two slices, 23 agent-hours and six rework rounds.
+This is the final round. Result: PARTIAL. Source gates: PASS. Fresh journey: FAIL.
+All ordinary-server slice steps are NOT RUN at both widths. The PR remains draft.
+
+### Reproduction before fixes
+
+Fetched origin and completed the rebase onto `f5af2162b`.
+Retained main’s shorter READMEs and session defaults alongside ordinary-tool contracts.
+No conflict needed a product decision.
+
+The two named test files reproduced all three CI failures: 3 failed, 8 passed
+in 68.36 seconds. The dependency fixture tries to read removed `apps/odoo-mcp/src`.
+Both concurrency assertions classify every sanitised wire body as Alice’s request,
+including Bob’s. Before this PR, the fixture distinguished the otherwise identical
+requests using private thread metadata. This PR intentionally strips that metadata.
+
+The reproduction gives Bob a distinct business argument, `SO-BOB`, so wire requests
+can be identified without private metadata. Both selected tests still fail at the
+old full-input-body comparison: 2 failed, 8 unselected, in 29.24 seconds.
+The later fix must keep exact argument-to-credential binding and verify both requests.
+No assertion, access window or production credential handling has changed yet.
+
+### Fixes and assertion sensitivity
+
+Removed only the stale Odoo directory from the dependency fixture baseline inputs.
+The existing test still checks rejection for every cross-application source import,
+including source specifications and imports hidden by a source baseline.
+
+The concurrency tests now use distinct business arguments and require the complete
+expected request body together with its exact personal credential. The two expected
+pairs must each occur once, independent of arrival order. Expected bodies name only
+the permitted protocol metadata; the production sanitiser is not used to build them.
+Existing release-audit, read-count, status and one-use assertions remain.
+
+No production credential-mixing defect was demonstrated. The cause is the fixture’s
+reliance on private metadata deliberately stripped by this PR’s `toolServerBody`.
+Production credential handling, access checks and their time limits are unchanged.
+
+The first full run of the two changed test files passed all 11 tests in 105.63 seconds.
+A temporary fixture mutation returned Alice’s synthetic key for Bob’s request.
+Both concurrency tests failed at the complete body/credential-pair assertion, in
+24.58 seconds. The original fixture bytes were restored before the second full run.
+The second full run passed all 11 tests in 95.45 seconds.
+No mutation is committed. No timeout, retry or assertion was loosened.
+
+### Approval listing after the rebase
+
+The first complete typecheck failed at three new ordinary-test calls to
+`approvalCards`: main now requires discovered approval rows as its sixth argument.
+The selected target/object/array refusal cases reproduced the resulting missing-options
+exception: 3 failed, 14 unselected, in 22.16 seconds. This is a test caller mismatch;
+main deliberately removed the production silo-scan fallback. That fallback must stay
+removed. Reuse the existing full candidate discovery helper from the Codex tests.
+
+The fix moves main’s existing `discoverApprovalRequests` helper into test support
+and supplies its complete candidate rows at all three ordinary-test call sites.
+Every approval assertion is retained. The new personal-concurrency helpers also
+live in test support; moving them changes no expected body or credential value.
+The first expanded run passed all 58 tests across the four affected files in
+261.85 seconds. The second expanded run passed all 58 tests in 217.49 seconds.
+
+### Final local source checks
+
+All commands ran under `nice -n 10`; tests used the shared disposable test database.
+No full root suite ran. The original two-file run passed twice, then the expanded
+four-file run passed twice after the approval API adjustment.
+
+| Check | Own verdict |
+| --- | --- |
+| Four affected test files, 58 tests, two runs | PASS: 261.85 and 217.49 seconds. |
+| Scoped ESLint for all changed code, zero warnings | PASS; final test-support files also checked separately. |
+| `lint:debt`, `lint:deps`, `lint:reads`, `lint:readmes` | PASS. |
+| Full workspace, package and dev-stack typecheck | PASS after correcting the approval test callers. |
+| `check:events`, Knip, `lint:changelog`, Markdown | PASS. |
+| Fresh-stack journey | FAIL at shared chat completion; ordinary slice steps NOT RUN at both widths. |
+
+The PR Evidence records the hosted CI result for the final pushed head.
+Local ESLint follows the requested changed-file scope. CI runs the complete
+`lint:code` command. No lint cap, suppression allowance or read baseline was raised.
+
+### Fresh qualification result
+
+Journey source: `f8eb968821ff120deab1f68301640b2b3e63989d`.
+Base: `f5af2162b2fef5f52592de099c5819c137162e0a`.
+The last fetch found main unchanged. The rebase is complete.
+
+The runner waited for one-minute load strictly below 6 before `claim.sh` returned
+secondary slot 1. The last recorded pre-start sample was 5.52 at 08:59:30 UTC;
+startup began at 08:59:34 UTC. `up.sh --fresh` used the operator-managed
+`ZITADEL_KEY_FILE` path. Owner/access bootstrap, managed provider setup and website
+readiness passed. The built-in journey generated its desktop and phone live-view
+artefacts, then failed before the upload checkpoint and ordinary-server collector.
+
+The failure is `Chat journey timeout` at `chat-journey.ts:25`, while waiting for
+`agent.turn_completed` at line 34, called from `journey.ts:575`. Its original
+60-second assertion is unchanged. The shared chat, upload and journey drivers are
+byte-for-byte equal to current main. A cause or connection to ordinary dispatch
+has not been established. Observed load later peaked at 28.77; that alone does not
+establish causation. The earlier upload failure was not reached in this attempt.
+
+[Safe startup diagnostic](run-2026-11-17-r6/startup-failure.json).
+Private startup logs and failure records were retained before `down.sh` exited 0.
+The claim status then returned `free`. Six generated live-view files were copied
+privately and restored. No owner stack was touched. No 390 px stack was claimed.
+
+| Required action | 1280 px | 390 px |
+| --- | --- | --- |
+| Fresh shared startup | FAIL at member chat completion. | NOT RUN. |
+| Admin installs, reviews and publishes the ordinary server | NOT RUN. | NOT RUN. |
+| Member’s live tool call and Ask approval | NOT RUN. | NOT RUN. |
+| Tool-list change blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
+| Teardown and claim release | PASS. | NOT RUN: no claim. |
+
+No retry, longer timeout or further fresh attempt was made. The final round has
+not qualified the capability. Further shared-startup investigation or live
+qualification needs owner direction; the PR stays draft.
+
+## Rework round 5 continued, 16 November 2026
+
+Result: PARTIAL. Source gates: PASS. Fresh-stack journey: FAIL during shared startup.
+Every ordinary-server slice action is NOT RUN at both requested widths. The PR stays draft.
+Authorised limits remain two slices, 20 agent-hours and five rework rounds.
+This continues round 5 of 5. No further round or attempt is assumed.
+
+### Source and rebase
+
+Journey source: `2d5734fb2de59da3fa26fa140e143af8d4593164`.
+Base: `1a278fd0bca3730f186efe8d077c4e03420eb332`.
+Fetched origin and completed both rebases: first onto repaired main `e5463218c`, then
+onto `1a278fd0b`. README conflicts retained both current behaviour and ordinary-tool
+review rules. The second rebase had no conflicts. The final fetch found the same main;
+`git rebase origin/main` reported the branch up to date. Neither rebase state remains.
+
+The slice changes 1,360 application and library source lines, including the Odoo source
+deletion. Tests and documents are excluded. No dependency, event type, access stream,
+money check, memory check, timeout or lint cap was added or loosened.
+
+### Structural findings and fixes
+
+Scoped ESLint reproduced `handle` complexity 20 against 15 before extraction.
+All 242 tests in the six dispatch files then passed before the handler changed
+(682.99 seconds). `98384d664` separates remote destination and catalogue preparation
+from personal sending. Both remote preparation steps retain one abort signal and the
+original deadline; credential preparation still precedes budget admission. Final scoped
+ESLint passes with zero warnings. Obsolete suppressions were removed, never raised.
+
+The six focused files from the earlier checkpoint are retained with identical assertions.
+Their original AST comparison covered 210 declarations and registrations. The continuation
+changes none of those test files. `003cdaea8` registers their measured durations in CI's
+grouping data. A list-only check assigns all 638 discovered test files exactly once,
+including all six dispatch files; this is selection evidence, not 638 executed suites.
+
+Changed-file lint also reproduced three slice fixture overruns: approvals 1,692 against
+1,686; integrations 2,198 against 2,189; memory 4,127 against 4,126. Test-first receipt
+`286f976e8` records those failures. Six affected paths passed before extraction.
+`72ed9bd1d` moves date cases, event setup and the memory preview fixture into test support.
+An AST comparison preserves every expect call and matcher in all three files. Sixteen
+selected paths passed twice afterwards; the remaining 408 cases in those files were not
+selected in this continuation. All three files now pass their unchanged caps.
+
+The earlier round-5 README rewrites remain within their frozen sizes. Main's read-ledger
+repair removes the inherited blocker; no whole-stream read baseline was raised here.
+
+### Fresh-stack attempt
+
+A separately claimed secondary slot 2 used `claim.sh`, `up.sh --fresh` and `down.sh`.
+`ZITADEL_KEY_FILE` referenced the operator-managed key file by path. The runner waited
+for one-minute load at most 8 before claiming. Development owner/access setup, managed
+calls and website readiness completed. The shared startup journey then failed at
+`infra/dev-stack/upload-journey.ts:21`, called from `journey.ts:578`, with:
+
+> File list did not finish applying
+
+That assertion is inside the HTTP 425 branch after the existing 120,000 ms deadline.
+The upload driver, shared journey and file-list route source are identical to main.
+A connection to ordinary MCP dispatch has not been established. Load subsequently rose
+to an observed 40.90; that observation alone does not establish the failure's cause.
+
+The launcher buffers the shared journey output, so quiet startup logs do not identify
+its current browser step. The failed result, rather than missing output, identifies
+this checkpoint. The ordinary-server collector never started.
+
+[Safe startup diagnostic](run-2026-11-16-r5/startup-failure.json).
+Private launcher logs and failure records were retained before cleanup. The shared
+journey also generated six existing live-view artefacts; private copies were kept and
+only those generated working-tree changes were restored. Teardown exited 0 and released
+slot 2. No secondary claim remains for this worktree. No current slice screenshots exist.
+
+| Required journey action | 1280 px | 390 px |
+| --- | --- | --- |
+| Fresh shared startup | FAIL: upload file list remained applying. | NOT RUN. |
+| Admin installs and discovers the ordinary standard server | NOT RUN. | NOT RUN. |
+| Admin saves Allow/Ask and audience access | NOT RUN. | NOT RUN. |
+| Admin reviews and publishes | NOT RUN. | NOT RUN. |
+| Member's live read returns the tool's result | NOT RUN. | NOT RUN. |
+| Member approves exactly one Ask write | NOT RUN. | NOT RUN. |
+| Changed tool list blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
+| Teardown and claim release | PASS. | NOT RUN: no claim. |
+
+Further investigation or another fresh attempt needs owner direction within this final
+round. No upload, projection, access or timeout change was made, and no attempt was
+repeated. Earlier successful journeys below do not qualify this source.
+
+### Own source checks
+
+All tests, typechecks and lint ran under `nice -n 10`. Database tests used the supplied
+shared disposable PostgreSQL database. No full root suite or fleet batch ran locally.
+
+| Check | Verdict |
+| --- | --- |
+| Dispatch/member/gateway batch | PASS twice: 251 tests, 684.44 and 795.07 seconds. |
+| Affected server fixture/date/preview paths | PASS twice: 16 selected cases, 103.26 and 89.40 seconds. Other cases were not selected. |
+| Assertion preservation | PASS: six dispatch files unchanged; all expect calls and matchers preserved in the three server extractions. |
+| CI grouping selection | PASS: 638 files assigned exactly once, six dispatch timings registered. |
+| Scoped lint:code | PASS with zero warnings; infrastructure remains excluded by repository configuration. |
+| lint:debt, lint:deps, lint:reads and lint:readmes | PASS with unchanged caps and read baselines. |
+| Knip and changelog | PASS. |
+| Workspace and infrastructure typecheck | PASS on the latest rebased source. |
+| Event catalogue | PASS: 174 types agree. |
+| Markdown, process evidence and qualification index | PASS after the final evidence update. |
+| Hosted CI for the evidence head | NOT RUN before push; final-head results are recorded in PR Evidence. |
+
+The two 251-case runs preceded the second rebase. A byte comparison confirms the tested
+dispatcher, its fixtures, member-call tests and library source dependencies are unchanged
+by that rebase. Final scoped lint, dependency checks, typecheck and catalogue checks ran
+afterwards. The fresh startup used the source and base named above.
+
+## Earlier checkpoint within round 5
+
+Result: PARTIAL. Required source gate: FAIL. Fresh-stack journey: NOT RUN at both widths.
+No head was pushed in this round. The PR remains draft.
+
+Local source/test checkpoint: `70117732d`. Fetched main and completed the rebase onto
+`29d0d2cb7`. Preserved the earlier uncommitted receipt and shared fixture reconciliation
+before rebasing. Retained current consent fields, dependency checks and the reviewed
+image inventory. Neither rebase state remains.
+
+Authorised limits: slice 1 of 2; ticket limit 20 agent-hours; rework round 5 of 5.
+
+### Findings and retained work
+
+Scoped ESLint reproduced both requested structural failures before extraction:
+`handle` complexity 20 against 15, and 3,694 counted test lines against 3,622.
+The test-first receipt commit is `e1a2765eb`.
+
+`21b2724f5` splits the tests into permit/budget, catalogue/watch, publication/admission,
+HTTPS outcomes, personal credentials and ordinary tools. Shared helpers live under
+`test/support`. An AST comparison confirms that all 210 declarations and registrations
+retain identical bodies, including every assertion. All six files fit the standard
+1,500-line test cap. `70117732d` removes the obsolete test size exception; no cap or
+suppression was raised. CI timing registration remains unfinished.
+
+`a9353e49b` rewrites the affected README passages within their frozen lengths and
+removes the deleted adapter's stale opening exception. It retains the ordinary-server
+contract and current consent behaviour. The README gate passes.
+
+The handler extraction is NOT RUN. Knip also identifies the existing unused
+`dispatchRemoteTarget` helper and `RemoteTarget` type left by reconciliation.
+Their reuse was planned with the handler extraction; no production change was applied.
+
+### Inherited main failure requiring owner direction
+
+`lint:reads` fails identically here and in a separate clean checkout of `origin/main`
+at `29d0d2cb7`:
+
+- `libs/models/src/decision.ts`: recorded 2 whole-stream reads, found 1.
+- `libs/models/src/personal-tool-context.ts`: recorded 2, found 4 at lines 43, 49, 51 and 93.
+
+The personal-account source is byte-for-byte identical to main. The checker forbids
+raising recorded counts. Passing it requires a separate repair of main or an authorised
+personal-account history refactor that removes reads. Neither is assumed in this last
+round. No access, identity, money or memory guard was changed, and no helper was renamed
+to evade the checker. Work stopped for owner direction under the explicit last-round rule.
+The [PR comment](https://github.com/elewa-git/opencrane-new/pull/1122#issuecomment-6916869654)
+records the findings and the pending decision.
+
+### Own checks
+
+| Check | Verdict |
+| --- | --- |
+| Fetch and rebase onto current fetched main | PASS. Rebase completed. |
+| Original structural lint failures | FAIL, reproduced before extraction. |
+| Assertion-preserving test split | PASS: 210 identical declarations and registrations. |
+| Scoped ESLint on all split test files and shared support | PASS, no warnings. |
+| Workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types. |
+| Dependency checks | PASS. |
+| README gate | PASS with unchanged caps. |
+| Lint debt after obsolete test exception removal | PASS. |
+| Whole-stream read gate | FAIL on both branch and clean main, as above. |
+| Knip | FAIL: the existing unused remote-target helper and type remain. |
+| Existing dispatch baseline before handler changes | PARTIAL: interrupted with exit 130 after the inherited blocker was confirmed; no completed-suite PASS is claimed. |
+| Changed tests twice and final full source gates | NOT RUN after the stop. |
+| Admin/member journey at 1280 px | NOT RUN. |
+| Admin/member journey at 390 px | NOT RUN. |
+| Push and final-head CI watch | NOT RUN. Remote remains `1608c8776`. |
+
+No secondary stack was claimed. No screenshots were taken. All earlier journeys below
+remain historical evidence and do not qualify this rebased source.
+
+## Rebase qualification, 15 November 2026
+
+Result: FAIL at the source gate. Fresh-stack journey: NOT RUN at both widths.
+
+Local rebased head: `8389e7ef723b7e791683617abdb352f9ae553b1e`.
+Base: `117564913`, including the secondary sign-in setup repair and concurrent
+personal-key release. The rebase completed. No new head was pushed.
+
+Conflict resolution retains the shared dispatch contract, credential preparation
+before budget queueing, ordinary-tool catalogue checks, reply costs and both sets
+of test assertions. The shared test-fixture reconciliation remains uncommitted.
+No behavioural contradiction was established.
+
+| Own check | Verdict |
+| --- | --- |
+| Rebase onto the requested main head | PASS. |
+| Source and test dependency boundaries | PASS: both dependency-cruiser checks. |
+| Scoped ESLint on reconciled files | FAIL: dispatch `handle` complexity is 20 against 15; the dispatch test has 3,694 counted lines against 3,622. |
+| Changed Vitest files from the slice and concurrent-key change | PARTIAL: started once with two workers, then interrupted after the lint blockers; no completed-suite PASS is claimed. |
+| Sign-in setup tests and changed website tests | NOT RUN after the stop. |
+| Remaining typecheck, event, unused-code and documentation gates | NOT RUN after the stop. |
+| Every admin and member journey step at 1280 px | NOT RUN. |
+| Every admin and member journey step at 390 px | NOT RUN. |
+| Push and CI for the local rebased head | NOT RUN. |
+
+The owner authorised qualification with no further code fixes. Resolving these
+lint failures requires code changes, so work stopped without weakening either
+limit. No secondary stack was claimed. No new screenshots were taken.
+The earlier runs below do not qualify this rebased source.
+
+Date: 13 November 2026.
+Checked source: `ec790fbe9625a5cfdc548931b929976b0c17bd53`.
+Base: `1e85888428e91cec9a39bfada3b7f99649b61766`, including personal keys and installation naming.
+Environment: separately claimed fresh secondary slot 1 for each attempt.
+Each run used `claim.sh`, `up.sh --fresh` and `down.sh`.
+
+## Result
+
+Journey on the final rebased source: PARTIAL
+
+At 1280 px, an admin installed the standard HTTPS demo, discovered its ordinary
+MCP 2026-07-28 definitions, saved Allow and Ask, granted person and assistant access,
+reviewed Needs no key and published. The member's real assistant turn returned the
+quote, then an approved Ask call changed its delivery slot exactly once. Changing
+the listed definition blocked the next live call and showed the admin-review reason.
+Only two tool executions reached the recorder. The refused third call did not execute.
+
+At 390 px, the first rebased startup passed but the slice collector failed sign-in.
+The slice actions were NOT RUN. A separately claimed fresh diagnostic attempt failed
+startup in the shared Spending budget editor before the slice collector started.
+No authentication or budget fix is claimed. Both attempts were torn down successfully.
+The complete 390 px slice previously passed before the latest main rebase; that
+older PASS does not qualify the final rebased source. This capability remains blocked
+on final rebased 390 px live qualification and needs the owner to direct further work.
+
+| Person's action | 1280 px | 390 px on rebased source |
+| --- | --- | --- |
+| Admin enters the ordinary HTTPS address. | [PASS](run-2026-11-13-rebased/install-1280.png) | NOT RUN |
+| Admin discovers definitions without OpenCrane declarations. | [PASS](run-2026-11-13-rebased/ordinary-definitions-1280.png) | NOT RUN |
+| Admin saves Allow, Ask and both audience grants. | [PASS](run-2026-11-13-rebased/modes-and-access-1280.png) | NOT RUN |
+| Admin reviews Needs no key. | [PASS](run-2026-11-13-rebased/review-1280.png) | NOT RUN |
+| Admin publishes and sees the matching acknowledgement. | [PASS](run-2026-11-13-rebased/published-1280.png) | NOT RUN |
+| Member receives the quote from a live ordinary read. | [PASS](run-2026-11-13-rebased/read-turn-1280.png) | NOT RUN |
+| Member sees the ordinary Ask card. | [PASS](run-2026-11-13-rebased/ask-waiting-1280.png) | NOT RUN |
+| Member approves and receives exactly one changed result. | [PASS](run-2026-11-13-rebased/approved-write-1280.png) | NOT RUN |
+| Changed definitions block the next live call. | [PASS](run-2026-11-13-rebased/drift-refused-1280.png) | NOT RUN |
+
+[1280 px observations](run-2026-11-13-rebased/observations-1280.json) ·
+[390 px sign-in failure](run-2026-11-13-rebased/signin-failed-390.json) ·
+[390 px diagnostic startup failure](run-2026-11-13-rebased/startup-failed-390.json).
+
+The quote remained 12500 euro cents. That quote amount is not a tool charge.
+At 1280 px, both remote reply records had `costStatus: not_reported` and no `costCents`.
+The separate gateway receipt for the local refusal had no remote adapter or cost.
+The shared checker requires exactly these three records and their evidence fields.
+The wire records show MCP 2026-07-28, no session or private revision header and only
+public protocol metadata. No thread, model, sandbox or client-version details left.
+
+The browser used real development-organisation sign-in and shipped controls. The
+full server, models and gateway processes used the existing guarded HTTPS test
+transport and `apps/demo-mcp` in standard mode. The free stand-in requested the real
+offered tools and quoted their actual results, including the refusal. It supplied no
+successful quote or refusal itself. No live vendor or paid model was used. Slice screenshots
+mask credentials and email addresses and retain the requested width.
+
+## Cause and repairs
+
+The original `protocol_refused` was caused by the temporary journey collector. Its
+`preSerialization` hook called `appendFile` with an options object in place of the
+data. Test-first commit `c6451b18d` (replayed as `f81e38bf1`) reproduced the real dispatch failure: tools/list
+returned HTTP 200, then tools/call raised `ERR_INVALID_ARG_TYPE`, the demo error
+handler returned HTTP 400, and dispatch returned HTTP 502. Recording runs after
+execution, so missing recorder output did not prove that no call reached the tool.
+
+The fixed collector writes a JSON line and the guarded standard launch imports that
+checked-in implementation. The regression checks the actual quote, exact protocol
+facts and changed-list refusal before another execution. Product dispatch, protocol,
+revision, access, money and credential-release checks did not change in this round.
+The declared-server safeguards and personal-key identity/release paths remain tested.
+
+Test-first commit `af86ef566` (replayed as `d1147b313`) reproduced the stand-in losing the actual review reason.
+Its parser now quotes a returned error only for the current call. It never repeats a
+failed call or substitutes a successful result.
+
+The first fresh attempt after that repair, source `14039774f`, passed every slice
+browser action at 1280 px, including read, approval and drift. Its final evidence
+check failed with `3 !== 2`, so its overall verdict remains FAIL; 390 px was NOT RUN.
+[That attempt's observations](run-2026-11-13-cost-check/observations-1280.json) retain
+the failure. Teardown exited 0 and released the slot.
+
+Test-first commit `58a16deb2` (replayed as `834a60199`) reproduced that count through real gateway requests
+and usage ingestion. Two records were remote replies. The third was the gateway
+receiving OpenCrane's local drift refusal, with no remote start or cost claim.
+The corrected checker requires both remote cost records and the separate local
+receipt by their full fields. It rejects an invented seven-cent amount. Both widths
+then passed on fresh stacks before the later main rebase. Those earlier observations
+remain linked below and do not qualify the latest rebased 390 px attempt.
+
+## Rebase onto the installation-name change
+
+Both widths had already passed on `99e785779` with the previous base, `7ec65e982`.
+[Those 1280 px observations](run-2026-11-13-final/observations-1280.json) and
+[390 px observations](run-2026-11-13-final/observations-390.json) remain available.
+While waiting for CI, main moved to `1e8588842`. GitHub reported a merge conflict
+and created no checks for the old pushed head, `fca2431f3`.
+
+Rebased onto that main commit. Only the development-stack diagram conflicted; its
+installation settings and tool checks were combined. MCP dispatch, personal-key
+paths and the regression code were unchanged. Main had changed the development
+web launcher, so fresh qualification was repeated through that launcher.
+`ORGANISATION_NAME=OpenCrane 2 Dev` set only the public installation label.
+
+The added launcher/settings batch exposed an existing refusal fixture assumption.
+With the runner's private umask, mkdir's requested mode 755 became mode 700. The
+fixture was safe, so startup correctly accepted it. Test-first commit `1f4a86f1f`
+forces umask 077 and checks the actual input mode; it failed with mode 700 instead
+of 755. The fixture now explicitly applies its intended mode before testing refusal
+and restores the process umask afterwards. All original refusal, no-repair and
+secret-canary assertions remain. No runtime permission check changed.
+
+The fixed settings suite passed twice. Removing the real directory-mode check in a
+controlled mutation made the unsafe-directory refusal assertion fail. The exact
+original guard bytes were restored before any rebased stack started. That mutation is
+separate from the in-memory catalogue and cost-check mutations described below.
+
+## Sign-in interruption during rebased qualification
+
+The first rebased 390 px attempt passed startup but the separate slice collector
+failed at sign-in before any slice action. Its [FAIL observation](run-2026-11-13-rebased/signin-failed-390.json)
+is retained. All slice actions in that attempt were NOT RUN. Teardown exited 0 and
+released the claim. The generic helper did not preserve the underlying reason,
+so no authentication cause is assigned.
+
+A further separately claimed fresh 390 px attempt used the same source. Safe sign-in
+phase and status diagnostics were added only to the temporary collector, with the same
+flow and 30-second limits. That collector never ran: startup failed in the shared
+Spending budget editor. The [startup screenshot](run-2026-11-13-rebased/startup-budget-failed-1280.png)
+shows unavailable spending evidence and budget service at 1280 px during the built-in
+journey. The safe diagnostic records no budget or effect read status, an unavailable
+budget service and no loaded spending section. The error points to the unchanged
+`browser-budgets.ts` editor loader. This PR changes neither that loader nor its budget
+routes. A causal connection to ordinary MCP dispatch was not established; the underlying
+service failure remains unconfirmed. Private launcher diagnostics were preserved before
+cleanup. No startup check, authentication rule, retry or timeout was changed. Teardown
+exited 0 and released the claim. No further attempt was started in this final rework round.
+
+## Own checks in this round
+
+All tests, typechecks, builds and lint commands ran under `nice -n 10`. Database
+tests used the supplied shared disposable PostgreSQL database. No full root suite
+ran. The final test passes used one worker and ran serially.
+
+| Own check | Verdict |
+| --- | --- |
+| Final ordinary dispatch, gateway evidence, standard demo and personal-key regressions | PASS: 12 tests across four files twice, 73.45 and 77.36 seconds. |
+| Changed stand-in and launch tests | PASS: 14 cases twice. |
+| Selected declared-server contract and revision guards | PASS: two cases; 239 other file cases NOT RUN locally in this round. |
+| Replica isolation and cleanup | PASS earlier in this round: all three cases, 92.83 seconds; backend and fixture code unchanged by the latest main commit. |
+| Workspace and infrastructure typecheck | PASS after the rebase, followed by an infrastructure repeat for the permission fixture. |
+| Custody settings and directory permissions | PASS: five cases twice with the private-umask regression. |
+| Updated development web launcher | PASS twice: the public installation name, Angular serving and native PDF response policy. |
+| Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS; Knip retains its existing two configuration hints. |
+| Scoped ESLint | PASS for the changed code; infrastructure files are ignored by repository configuration. |
+| Catalogue-comparison mutation | PASS: bypassing comparison executed a second quote and failed the required refusal assertion. |
+| Evidence-comparison mutation | PASS: bypassing comparison failed the invented-amount refusal assertion. |
+| Fresh-stack slice on rebased source | PARTIAL: 1280 px PASS; 390 px slice actions NOT RUN after sign-in and startup failures. |
+
+The initial expanded 12-case batch passed, but its concurrent repeat was FAIL:
+11 passed and the gateway write returned 403. The reason was not captured and is
+not assigned a cause here. The test now includes the response body in diagnostics.
+A focused diagnostic run passed; the two final serial passes above then passed
+without weakening a product check or extending a deadline. An initial mutation run
+failed during gateway fixture setup and is not counted as mutation proof. The later
+isolated mutation reached and failed the intended amount assertion. The catalogue and cost-check mutations
+used in-memory test transforms; repository source was not modified by them. The
+separate directory-mode mutation above was restored byte for byte before qualification.
+
+CI run 43481164833 originally failed in unchanged replica-fixture cleanup code.
+No connection to this PR's ordinary dispatch changes was found. The underlying
+cleanup error was swallowed, so its exact cause remains unconfirmed; it may be a
+flake. The one requested rerun of job 132078016076 passed, as did `ci-ok` for that
+old head. The final pushed-head CI result is recorded in the PR Evidence after
+`gh pr checks 1122 --watch`; it is not a local-test claim in this receipt.
+
+## Startup, teardown and scope
+
+Before each final claim, the runner waited while one-minute load exceeded 10.
+The successful 1280 px stack and first rebased 390 px stack passed their executed
+built-in checks, including browser checks, projection replay and token boundaries.
+Their built-in approval journey remains SKIP as reported by startup; the slice's
+ordinary Ask journey ran separately and passed only at 1280 px on this source.
+The additional diagnostic stack failed its built-in Spending journey before the
+slice collector ran. All three `down.sh` calls exited 0 and released their claims.
+The fleet marker remained set. No owner stack, Docker daemon
+setting or other organisation was changed.
+
+Rebased onto `1e8588842` and confirmed that no rebase state remained. Before the
+final fresh journeys, the runner fetched origin again and required the current
+main commit to be an ancestor of the checked source. No new main commit was pending.
+The final receipt commit adds documentation and screenshots to the checked source.
+Only the builder's own checks are reported here.
+
+## Earlier failed run before the recorder repair
+
+Checked source: `2520b29e909bebc17b08fbb5e5fc651992b36e18`.
+Evidence head: `54dda84c8e55958844971befb29a51c57af90108`.
+The diagnosis below was unconfirmed at that time; the cause is established above.
+
+### Failed live read before the repair
+
+Journey on a fresh dev stack: FAIL
+
+The failing step was **member asks their assistant to call the reviewed ordinary read
+tool in a live turn at 1280 px**. The transcript marked `read_fixture_quote` as Failed
+and answered: “The demo tool did not return a quote.” The expected quote did not appear
+within the collector's unchanged 120-second wait.
+
+The models process logged `Remote tool exchange failed` with `protocol_refused`.
+The recorder saved no `tools/call` entry. The later recorder reproduction above explains
+why that was not proof that execution was refused before reaching the tool. The remote HTTP check uses
+that reason for an unexpected status, a session header or an invalid content type.
+The likely cause is a live HTTP protocol mismatch between dispatch and the synthetic
+HTTPS fixture. The exact refused status or header was not captured, so the root cause
+and whether it belongs to the product or the fixture remain unconfirmed.
+
+The run stopped at that failure. No product fix, longer timeout or repeat of the failed
+read was attempted. The ordinary Ask write, changed-list refusal, live metadata and
+cost-record checks, and the entire ordinary-server journey at 390 px are **NOT RUN**.
+The passing built-in stack journey does not qualify those missing slice steps.
+
+[Failed live read](run-2026-11-13/read-failed-1280.png) ·
+[Structured observations](run-2026-11-13/observations-1280.json).
+
+### Browser steps
+
+| Person's action | 1280 px | 390 px |
+| --- | --- | --- |
+| Admin enters an ordinary HTTPS server address. | [PASS](run-2026-11-13/install-1280.png) | NOT RUN |
+| Admin discovers two definitions without OpenCrane declarations. | [PASS](run-2026-11-13/ordinary-definitions-1280.png) | NOT RUN |
+| Admin chooses Allow and Ask and grants person and assistant access. | [PASS](run-2026-11-13/modes-and-access-1280.png) | NOT RUN |
+| Admin reviews the definitions and selects Needs no key. | [PASS](run-2026-11-13/review-1280.png) | NOT RUN |
+| Admin publishes and sees the matching acknowledgement. | [PASS](run-2026-11-13/published-1280.png) | NOT RUN |
+| Member asks their assistant to read the quote in a live turn. | [FAIL](run-2026-11-13/read-failed-1280.png) | NOT RUN |
+| Member approves an ordinary Ask write. | NOT RUN | NOT RUN |
+| Server changes its list; the next call shows a review-required refusal. | NOT RUN | NOT RUN |
+
+The browser used real sign-in in the development organisation and the shipped controls.
+The server was `apps/demo-mcp` in standard mode, reached through the existing guarded
+Stage B HTTPS transport. Discovery saved digest version 2. The free model stand-in
+requested the real offered tools. A temporary collector adapter could quote the actual
+review-required tool result; that later step was never reached. It supplied no successful
+quote or refusal of its own. No live vendor server or paid model was used.
+Screenshots contain no credentials or email addresses. The 1280 px pages fit their viewport.
+
+### Startup and teardown
+
+The first fresh startup passed its built-in journey, but a newline-escaping error in the
+temporary collector prevented the slice fixture from starting. No slice browser action
+ran in that attempt: NOT RUN. Its logs were preserved privately and `down.sh` released
+slot 2. Only the collector was corrected, and its generated TypeScript parse check passed.
+
+A new claim and a second `up.sh --fresh` then passed the built-in journey, including its
+1280 px and 390 px checks, replay checks and token boundaries. The guarded standard
+fixture started successfully. The slice then failed at the read described above.
+`down.sh` exited 0 and released slot 2 again. The fleet marker remained set throughout.
+No owner stack, Docker daemon setting or other organisation was changed.
+
+### Checks after the rebase
+
+Both sets of changed tests were run twice, including the personal-key tests from the
+base branch. Tests, lint and typecheck ran under `nice -n 10`; tests that need PostgreSQL
+used the shared disposable test database. No full root suite ran.
+
+| Own check | Verdict |
+| --- | --- |
+| First targeted application/library pass, 38 files | FAIL: 1,770 passed, nine failed, one skipped; 3,462.36 seconds. |
+| Unchanged second targeted application/library pass, 38 files | PASS: 1,779 passed, one skipped; 2,154.67 seconds. All nine earlier failures passed. |
+| Changed infrastructure tests, both passes | PASS: 111 each, no skips; 675.31 and 377.12 seconds. |
+| Changed web specs, both passes | PASS: 150 each across four files; 155.39 and 116.26 seconds including builds. |
+| Existing approval browser case gated by `APPROVAL_BROWSER=1` | NOT RUN locally. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS. |
+| Changed-file ESLint | PASS after routing unchanged schema exports through their owning module. The existing outer catalogue-watch size warning remains; infrastructure is ignored by configuration. |
+
+The first application pass failed at the Angular dev-server build limit, two gateway
+responses containing an upstream error instead of JSON, and six routine send cases that
+did not reach their expected hooks or result. The unchanged repeat passed all nine.
+No product timeout or behaviour was changed. These passing tests do not turn the live
+slice failure into a PASS.
+
+The rebase retained both demo modes and the unchanged default, verified-key release,
+ordinary catalogue validation and cost recording. Shared credential scanning still uses
+one implementation. A combined event-schema file exceeded its existing limit by one
+line; the public exports and registry now import the same schemas from their existing
+module. No schema validation or size limit changed.
+
+## Earlier guarded attempt
+
+An earlier source (`207644124155fadf0e67d0373fe427fccfdbba48`) could not start the browser
+journey because the old guard refused the fleet marker. It was recorded as NOT RUN and
+its secondary stack was released. The earlier source checks below predate this rebase;
+they do not qualify the current failed journey.
+
+## Earlier source checks
+
+These checks do not substitute for the browser journey.
+
+| Check | Observed outcome |
+| --- | --- |
+| Complete dispatch and gateway-access regression batch | PASS: 253 tests, one worker, 1179.72 seconds. |
+| Repeated changed/schema/dependency batch | PASS: 547 tests; the earlier corresponding batch passed 546 without the separate dependency case. |
+| Changed ordinary, privacy and certificate cases | PASS: 13 focused cases before the complete regression batch. |
+| Gateway-access file after restoring sanitised diagnostics | PASS: 23 cases before the complete regression batch. |
+| Event registry and examples | PASS: 355 tests. |
+| Snapshot, inventory and event-field security checks | PASS; the initially skipped database condition was subsequently exercised in the PostgreSQL replay run. |
+| PostgreSQL catalogue replay | PASS: all 11 cases with the supplied disposable test database. |
+| Web tests and repeated changed spec | PASS: 1,556 full web tests and all 8 initial-review tests on repeat. |
+| Production web build | PASS, with existing stylesheet and CommonJS warnings. |
+| Typecheck | PASS: root workspaces and infrastructure; subsequent changed models/server checks also passed. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS. |
+| Knip, changed-file ESLint, Markdown and changelog | PASS; changed-file ESLint has no warnings. |
+| Fixture boundary, package licences and offline links | PASS. |
+
+The wire checks use a real recording HTTPS server, NATS, PostgreSQL and the gateway.
+They check standard calls, Ask approval, catalogue drift before execution, complete
+paginated lists, exact outgoing metadata and preserved argument number text.
+Cost records distinguish reported integer cents from missing or invalid reports.
+The default demo catalogue digest and declared-server safeguards remain checked.
+
+An earlier regression run caught raw dependency error text added during cleanup.
+The original sanitised diagnostic contract was restored; private canary assertions
+remain unchanged. Certificate refusal cases now hold local validation clocks steady
+while network timers remain real. Separate cases still check permit and access expiry.
+No product timeout or lint limit was raised.
+
+Manual guard mutations failed the matching tests: catalogue comparison, metadata
+stripping, declared-server unknown cost, cost-record consistency and certificate
+verification. Both certificate tests returned 200 instead of the required refusal
+when verification was removed. All five mutations were restored.
+
+## Second fix round
+
+Checked source: `0b4cc6ffa`. The slice changes 1,400 shipped source lines, including
+the Odoo source deletion. Tests and documents are excluded.
+
+The legacy replay test failed with `Tool catalogue digest mismatch` before the fix.
+The review script reproduced the failure too. After the fix, the adapted script reads
+old dated history followed by a new discovery. A PostgreSQL test also rebuilds the
+projection before and after that new discovery and compares the saved catalogue.
+Unversioned stored events keep accepted-only digests during reads and rebuilds.
+New discoveries save `digestVersion: 2` and validate accepted and rejected tools. Replay changes no saved events.
+
+Money status checks permit only the three fixed report states. Numbers, unrestricted
+strings and an extra enum value still fail under `costStatus`. Forwarding tests assert
+the complete public request body and exact approved argument number text. Routine
+fixtures now use the generic identities in their event examples. The original pinned
+image inventory is restored; the historical image evidence is unchanged.
+
+Four isolated mutations caused six expected test failures: checking old events with
+the full-list rule, ignoring rejected revisions for new events, allowing amounts under
+the report-status name, and forwarding agent metadata. Transforms affected only the
+test processes; repository source was not changed by the mutations.
+
+| Own check | Verdict |
+| --- | --- |
+| Final replay and money tests | PASS: 33 tests on each of two consecutive runs. |
+| Event schemas, examples and replay | PASS: 1,238 tests. |
+| Named CI regressions | PASS: 11 focused cases. |
+| Ordinary classification and full-list dispatch drift | PASS: six cases. |
+| Historical image licence evidence | PASS: 80 tests on each of two runs. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue, Knip, changelog and Markdown | PASS. |
+| Changed-file ESLint | PASS: no warnings. |
+| Process evidence and qualification index consistency | PASS; this checks records, not live behaviour. |
+
+The PR's Evidence section records the longer targeted regression runs and the hosted
+CI result for the final head. These checks do not qualify the browser journey.
+
+Journey: NOT RUN until PR #1119 is repaired. A browser PASS at both widths remains
+required before merge.
+This receipt reports only the builder's own checks.
+
+## Third fix round
+
+Checked source: `3d3b2ded5`. The slice changes 1,439 shipped source lines, including
+354 lines deleting the Odoo source. This repair adds 39 source changes to the earlier
+1,400-line count. Tests and documents are excluded.
+
+New appends and fresh captures use `validateNewMcpCatalogue`. It requires digest
+version 2 and checks accepted and rejected tool revisions. Removing dates cannot bypass validation. Only stored-history
+reads use `validateStoredMcpCatalogue`, which keeps the original accepted-only rule
+for unversioned saved events. The schema still parses those older records.
+
+The regression tests were committed before the fix. Three unversioned append cases
+and an undated v2 accepted-only digest were incorrectly saved. The downgrade followed
+by rejected-sibling removal reached `tools/call`. After the fix, the append is refused
+without changing saved history, and the subsequent changed list blocks execution.
+The replay test seeds an already stored legacy event, then appends a fresh v2 discovery
+and rebuilds PostgreSQL. The original saved events remain identical.
+
+Two manual mutations checked test strength. Removing the version requirement failed
+the unversioned full-list test. Routing append through the stored-history validator
+failed the three downgrade append cases and reached `tools/call` in the dispatch test.
+Both source mutations were restored before final checks.
+
+New-event fixtures also use v2, including the dev-stack catalogue builder. Its added
+regression failed at the public append before the marker was added. It now saves the
+catalogue and stops before any browser operation. Other affected fixtures were refused
+by the new guard; their markers now match the current write contract. Empty lists use
+the empty-list digest instead of an image digest. All existing refusal assertions remain.
+The first hosted run of this round failed on those outdated fixture writes. The register
+and inventory tests now seed their incomplete old catalogues as stored history and check
+the saved events exactly; their current discoveries still use the normal append guard.
+Snapshot integrity probes also use v2 so their refusals still test definitions and hashes.
+
+The reviewer append/rebuild probes pass unchanged: four cases with the disposable
+PostgreSQL test database. The downgrade dispatch regression uses the public conditional
+append; a stored-history fixture deliberately bypasses that interface.
+
+| Own check | Verdict |
+| --- | --- |
+| Targeted append, dispatch, declarations, watch and replay regressions | PASS: 129 tests on each of two consecutive runs (71.24 and 68.52 seconds). |
+| New-event fixture regressions | PASS: 106 tests on each of two runs (70.81 and 71.41 seconds). The journey builder also passed a separate repeat. |
+| Register and member inventory regressions | PASS: 96 register and 27 inventory cases twice; the register Chromium case was not selected locally and remains covered by hosted CI. |
+| Bridge replay and routine expiry regressions | PASS: 84 cases on each of two runs (81.95 and 83.58 seconds). |
+| Snapshot integrity probes with current write markers | PASS: 34 cases twice. |
+| Selected Memory preview regressions | PASS: three cases on each of two runs; other file cases were not selected. |
+| Reviewer append and rebuild probes | PASS: four cases. |
+| Offline approval-evidence checks | PASS: 28 tests. |
+| Selected watch restart and renewal cases | PASS: three cases; the remaining file cases were not selected. |
+| Root workspace and infrastructure typecheck | PASS. |
+| Event catalogue | PASS: 174 event types agree. |
+| Knip, Markdown and changelog | PASS. |
+| Knip, Markdown, changelog, process/privacy checks and secret scan | PASS. |
+| Changed-file ESLint | PASS: no warnings in changed functions. The untouched outer watch function retains its existing size warning; infrastructure is excluded by repository configuration. |
+
+Journey: NOT RUN, explicitly deferred until PR #1119. No stack was claimed in this
+round. The earlier stack was released. Fresh-stack browser PASS at 1280 and 390 px
+matching the final source remains required before merge.

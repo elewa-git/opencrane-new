@@ -37,6 +37,8 @@ flowchart LR
 - Set money aside before a paid call, then record its cost or keep it held for review.
 - Stop further spending when a turn's allowance or a spending limit is exhausted.
 - Check tool rules, approvals and the current reviewed tool list before sending a call.
+- Run reviewed ordinary tools without a cost estimate and record reported costs after replies.
+- Keep agent details private and retain strict checks for declared servers.
 - Check selected personal accounts and record credential releases before tool calls.
 - Check access to saved memory and refuse calls that rely on facts no longer usable.
 - Prepare gateway settings and check that the running gateway has accepted them.

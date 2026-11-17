@@ -83,7 +83,7 @@ and the future workload name. Docker's local administrator remains trusted. This
 verify a container identity. P3-12 must bind the approved workload and fixed
 upstream policy before making it usable; arbitrary remote URL registration must
 never use this path. No MCP service is deployed by this fixture. Standalone discovery and opt-in read tests live in
-[apps/odoo-mcp](../../apps/odoo-mcp/README.robot.md); the product route remains unavailable.
+the generic tool-server installation flow. No product adapter is supplied.
 
 ## Pins, licences and evidence
 

@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-13T21:39:08.925Z",
+  "width": 390,
+  "source": "ec790fbe9625a5cfdc548931b929976b0c17bd53",
+  "verdict": "FAIL",
+  "observations": [
+    {
+      "step": "sign in",
+      "verdict": "FAIL",
+      "cause": "Error: Browser sign-in did not finish"
+    }
+  ]
+}

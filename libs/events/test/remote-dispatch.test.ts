@@ -42,3 +42,29 @@ function checksUnsentAdapterEvidence() {
   }
 }
 it('binds proved remote non-dispatch to the original start', checksUnsentAdapterEvidence);
+
+it('keeps reported euro cents separate from missing and invalid cost reports', () => {
+  const response = { ...example, outcome: 'responded', evidence: 'adapter_response_received',
+    adapter };
+  const valid = [
+    { ...response, costStatus: 'not_reported' },
+    { ...response, costStatus: 'invalid' },
+    { ...response, costStatus: 'reported', costCents: 0 },
+    { ...response, costStatus: 'reported', costCents: 7 },
+  ];
+  for (const observation of valid) {
+    expect(toolDispatchRecordedDataSchema.safeParse(observation).success).toBe(true);
+  }
+  const invalid = [
+    { ...response, costStatus: 'reported' },
+    { ...response, costStatus: 'not_reported', costCents: 0 },
+    { ...response, costStatus: 'invalid', costCents: 0 },
+    { ...response, costCents: 7 },
+    { ...response, costStatus: 'reported', costCents: -1 },
+    { ...response, costStatus: 'reported', costCents: 0.5 },
+    { ...response, costStatus: 'reported', costCents: Number.MAX_SAFE_INTEGER + 1 },
+  ];
+  for (const observation of invalid) {
+    expect(toolDispatchRecordedDataSchema.safeParse(observation).success).toBe(false);
+  }
+});

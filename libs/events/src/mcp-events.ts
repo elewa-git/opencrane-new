@@ -55,7 +55,7 @@ export const mcpEvents = [
     'An admin registered a new MCP server in the catalogue (draft).',
     data.mcpServerRegisteredDataSchema,
     { serverId: 'mcp_1', kind: 'remote', locator: 'https://mcp.example.com', registeredBy: 'mem_1',
-      catalogueRef: 'catalogue:odoo' },
+      catalogueRef: 'catalogue:crm' },
   ),
   event(
     'mcp.server_discovered',
@@ -63,7 +63,7 @@ export const mcpEvents = [
     "Discovery read the server's tool list and schema digests.",
     data.mcpServerDiscoveredDataSchema,
     { serverId: 'mcp_1', toolCount: 3, schemaDigest: DIGEST_EXAMPLE,
-      serverInfo: { name: 'Odoo', version: '1.4.2' } },
+      serverInfo: { name: 'CRM', version: '1.4.2' } },
   ),
   event(
     'mcp.catalogue_checked', 'mcp',
@@ -91,14 +91,14 @@ export const mcpEvents = [
     'mcp',
     'An admin set a tool to Allow automatically, Ask, or Block.',
     data.mcpToolModeSetDataSchema,
-    { serverId: 'mcp_1', toolName: 'odoo.write', mode: 'ask', setBy: 'mem_1' },
+    { serverId: 'mcp_1', toolName: 'crm.write', mode: 'ask', setBy: 'mem_1' },
   ),
   event(
     'mcp.dispatch_admitted', 'mcp',
     'A one-use call was admitted before later tool policy or hold changes.',
     data.mcpDispatchAdmittedDataSchema,
     { serverId: 'mcp_1', connectionId: 'installed', requestId: 'call_1',
-      toolName: 'odoo.write', toolRevision: DIGEST_EXAMPLE,
+      toolName: 'crm.write', toolRevision: DIGEST_EXAMPLE,
       schemaDigest: DIGEST_EXAMPLE, generation: 'instance-1' },
   ),
   event(

@@ -48,6 +48,7 @@ export function turnToolReaders(options: TurnToolReaderOptions) {
       published: policy.published,
       accountMode: policy.accountMode,
       ...(discovered.serverInfo ? { serverInfo: discovered.serverInfo } : {}),
+      catalogue: discovered,
       discoveryTools,
       policyTools,
     };

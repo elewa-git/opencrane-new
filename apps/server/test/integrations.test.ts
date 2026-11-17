@@ -21,7 +21,7 @@ import { encodeSession, tokenIssuer } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, parseEventByType, mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
+import { mcpServerReviewedDataSchema, mcpPublicationIntentDataSchema, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed,
   isToolPolicyAvailable, mcpCatalogue, members, pgDb, ProjectionRunner, type Query
@@ -32,6 +32,7 @@ import {
 } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+import { integrationEvent, seedStoredEvent } from './support/integration-events.ts';
 
 const config = { ...testAuthConfig(), expectedOrgId: 'org-acme' };
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -53,17 +54,9 @@ const streamSequences = new Map<string, number>();
 beforeAll(async () => { fga = await openfga(); }, 120_000);
 afterAll(async () => { await fga.close(); });
 
-function fixture(type: string, subject: string, data: Record<string, unknown>, silo = 'test'): EventEnvelope {
-  const definition = getEventDefinition(type);
-  if (!definition || typeof definition.example !== 'object' || definition.example === null) throw new Error('Bad fixture type');
-  const eventData = { ...definition.example, ...data } as Record<string, unknown>;
-  if (type === 'mcp.server_registered' && !Object.hasOwn(data, 'catalogueRef')) delete eventData['catalogueRef'];
-  if (type === 'mcp.server_discovered' && !Object.hasOwn(data, 'serverInfo')) delete eventData['serverInfo'];
-  const parsed = parseEventByType({ id: `integration-${++id}`, commandId: `integration-${id}`, type,
-    source: 'test', time: `2026-10-01T00:${String(id).padStart(2, '0')}:00Z`, subject, silo,
-    principal: { id: 'admin', kind: 'human' }, data: eventData });
-  if (!parsed.success) throw new Error(`Bad ${type} fixture: ${parsed.reason}`);
-  return parsed.event;
+function fixture(type: string, subject: string, data: Record<string, unknown>, silo = 'test') {
+  const eventNumber = ++id;
+  return integrationEvent(type, subject, data, eventNumber, silo);
 }
 
 async function append(event: EventEnvelope) {
@@ -81,6 +74,12 @@ async function member(memberId: string, role: 'owner' | 'admin' | 'member') {
     displayName: memberId, invitationId: `invite-${memberId}` }), principal: { id: `oidc-${memberId}`, kind: 'human' as const } };
   await append(joined);
   await authorisation.handler.handle(joined, pgDb(dbs.queue));
+}
+
+async function seedStoredCatalogue(serverId: string, data: Record<string, unknown>) {
+  const stored = fixture('mcp.server_discovered', `mcp-${serverId}`, { serverId, ...data });
+  const sequence = await seedStoredEvent(nats, stored);
+  streamSequences.set(stored.subject, sequence);
 }
 
 async function mcp(serverId: string, type: string, data: Record<string, unknown>, silo = 'test') {
@@ -114,7 +113,7 @@ beforeEach(async () => {
 
   await mcp('odoo', 'mcp.server_registered', { kind: 'remote', locator: 'https://odoo.example.test/mcp',
     catalogueRef: 'catalogue:odoo' });
-  await mcp('odoo', 'mcp.server_discovered', { toolCount: 14, schemaDigest: 'a'.repeat(64),
+  await seedStoredCatalogue('odoo', { toolCount: 14, schemaDigest: 'a'.repeat(64),
     serverInfo: { name: 'Odoo Accounting', version: '1.4.2' }, connectionId: 'installed-odoo', accountMode: 'none',
     tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
       { name: 'write', revision: 'b'.repeat(64), reviewed: true, costCents: 0 }, { name: 'new', revision: 'c'.repeat(64), reviewed: false }] });
@@ -127,10 +126,10 @@ beforeEach(async () => {
   await mcp('broken', 'mcp.server_registered', { kind: 'remote', locator: 'https://broken.example.test/mcp' });
   await mcp('broken', 'mcp.server_rejected', { reason: 'ssrf_guard_failed' });
   await mcp('pricing', 'mcp.server_registered', { kind: 'remote', locator: 'https://pricing.example.test/mcp' });
-  await mcp('pricing', 'mcp.server_discovered', { toolCount: 3, schemaDigest: 'c'.repeat(64) });
+  await seedStoredCatalogue('pricing', { toolCount: 3, schemaDigest: 'c'.repeat(64) });
   await mcp('pricing', 'mcp.tools_changed', { previousSchemaDigest: 'c'.repeat(64), newSchemaDigest: 'd'.repeat(64) });
   await mcp('review', 'mcp.server_registered', { kind: 'remote', locator: 'https://review.example.test/mcp' });
-  await mcp('review', 'mcp.server_discovered', { toolCount: 4, schemaDigest: 'e'.repeat(64) });
+  await seedStoredCatalogue('review', { toolCount: 4, schemaDigest: 'e'.repeat(64) });
   await mcp('retired', 'mcp.server_registered', { kind: 'remote', locator: 'https://retired.example.test/mcp' });
   await mcp('retired', 'mcp.server_published', { publishedBy: 'alice' });
   await mcp('retired', 'mcp.server_unpublished', { unpublishedBy: 'alice' });
@@ -548,6 +547,7 @@ async function prepareReviewedOdooCatalogue(reviewed = true) {
   const checkedAt = new Date().toISOString();
   const expiresAt = new Date(Date.parse(checkedAt) + 300_000).toISOString();
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: catalogueDigest(tools),
+    digestVersion: 2,
     checkedAt, expiresAt, connectionId: 'installed-odoo', accountMode: 'none', tools });
   await runner.run(mcpCatalogue);
   if (reviewed) {

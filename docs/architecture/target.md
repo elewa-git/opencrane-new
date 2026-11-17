@@ -23,7 +23,7 @@ The arrows show intended connections, not calls or deployments that exist today.
                     EXTERNAL
    ┌──────────┐  ┌───────────┐  ┌────────────────┐  ┌───────────────┐  ┌──────────────┐
    │ Zitadel  │  │ Model     │  │ Remote MCP     │  │ Company       │  │ Web          │
-   │ (sign-in)│  │ providers │  │ servers (later)│  │ systems (Odoo)│  │              │
+   │ (sign-in)│  │ providers │  │ servers (later)│  │ systems (CRM) │  │              │
    └────▲─────┘  └─────▲─────┘  └───────▲────────┘  └──────▲────────┘  └──────▲───────┘
         │              │                │                  │                  │
  ═══════╪══════════════╪════════════════╪══════════════════╪══════════════════╪═════════════
@@ -56,7 +56,7 @@ The arrows show intended connections, not calls or deployments that exist today.
  │  │ • asks the decision service          │ │                                            │
  │  │ • injects credentials, logs          │─┼──────▶ acme-mcp (hosted MCP servers)       │
  │  └──────────▲───────────────────────────┘ │         ┌────────────────────────────────┐ │
- │             │ all traffic,                │         │ Odoo MCP (stateless, per-call  │ │
+ │             │ all traffic,                │         │ Tool MCP (stateless, per-call  │ │
  │             │ short-lived token           │         │ credential) · memory MCP       │ │
  │  acme-computers (gVisor)                  │         │ (remember/recall) · adapters   │ │
  │  ┌──────────┴──────────────────────────┐  │         │ ingress from the gateway only  │ │
@@ -88,7 +88,7 @@ The arrows show intended connections, not calls or deployments that exist today.
 | ingress-nginx and cert-manager | Route incoming traffic and renew encrypted-connection certificates. | Package and check them in the customer install. |
 | CloudNativePG operator | A program that runs PostgreSQL inside Kubernetes and looks after standby copies and backups. | Replace the dev database setup and prove recovery after failure. |
 | Replicated NATS JetStream | Keep several copies of the event log, so it keeps working when one server fails. | Package it, and test switching to a copy (failover) and restoring from backup. |
-| Odoo tool server | Use the business system with the requesting person's own rights. | The [connector](../../apps/odoo-mcp/src/tools.ts) exists. Using Odoo with only the requester’s rights still needs to be connected and proven. |
+| Third-party tool servers, installed by an admin | Use the business system with the requesting person's own rights. | Connect standard tool servers; `infra/odoo` is an optional test system. |
 | Memory tool server | Remember, recall, correct and forget facts within the permitted scope. | The [service](../../apps/server/src/memory/mcp.ts) has remember and recall handlers. Memory during assistant turns, including team chats, remains disabled until private work is proven isolated. Correcting facts through the assistant remains planned. |
 | Team assistants and delegation | Share work while keeping access and spending tied to the requester. | Finish the product flows and test them together. |
 | Scheduled work | Start agreed work at set times. | Routine code exists in [the server](../../apps/server/src/routine-routes.ts) and [background workers](../../apps/ops/src/routine-production.ts). The full product journeys still need to be connected and proven. |

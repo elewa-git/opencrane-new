@@ -87,6 +87,7 @@ test('fresh slots share only their own private directories and retain contents o
 
 async function unsafePaths() {
   const home = await mkdtemp(`${tmpdir()}/private-refusal-`);
+  const previousMask = process.umask(0o077);
   try {
     const directory = await fixture(home, '1');
     const path = `${directory}/personal-keys`;
@@ -95,7 +96,13 @@ async function unsafePaths() {
       if (state === 'file') await writeFile(path, 'private-canary');
       if (state === 'symlink') await symlink(directory, path);
       if (state === 'unsafe' || state === 'unreadable') {
-        await mkdir(path, { mode: state === 'unsafe' ? 0o755 : 0o000 });
+        const expectedMode = state === 'unsafe' ? 0o755 : 0o000;
+        await mkdir(path, { mode: expectedMode });
+        // Override the private umask so this really tests unsafe permissions.
+        await chmod(path, expectedMode);
+        const details = await stat(path);
+        const actualMode = details.mode & 0o777;
+        assert.equal(actualMode, expectedMode, 'Create the intended refusal fixture mode');
       }
       if (state === 'foreign') supplied.PERSONAL_KEY_DIRECTORY = home;
       const result = generate(home, '1', supplied);
@@ -113,6 +120,7 @@ async function unsafePaths() {
     await rm(`${directory}/memory-keys`, { recursive: true });
     assert.notEqual(generate(home, '1').status, 0, 'Never recreate lost custody');
   } finally {
+    process.umask(previousMask);
     await rm(home, { recursive: true, force: true });
   }
 }

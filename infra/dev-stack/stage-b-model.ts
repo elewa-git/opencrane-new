@@ -9,6 +9,9 @@ const namespaceSchema = z.object({ type: z.literal('namespace'), name: z.string(
   tools: z.array(z.object({ name: z.string(), type: z.string().optional() })) });
 const quoteSchema = z.object({ quoteId: z.literal('DEMO-001'), amountCents: z.int(),
   slot: z.enum(['morning', 'afternoon']), effectCount: z.int().nonnegative(), actedAs: z.string().max(100).optional() });
+const refusalSchema = z.object({ isError: z.literal(true),
+  content: z.array(z.object({ type: z.literal('text'), text: z.string() })).min(1) });
+const toolResultSchema = z.union([quoteSchema, refusalSchema]);
 
 function lastPrompt(body: z.infer<typeof bodySchema>) {
   function user(item: z.infer<typeof itemSchema>) {
@@ -82,8 +85,11 @@ export function stageBModelAnswer(raw: unknown) {
   for (const item of later) {
     if (item.call_id !== selected.callId ||
         !['function_call_output', 'custom_tool_call_output'].includes(item.type)) continue;
-    const quote = findQuote(item.output);
-    if (!quote) return 'The demo tool did not return a quote.';
+    const result = findToolResult(item.output);
+    if (!result) return 'The demo tool did not return a quote.';
+    // Quote only a refusal received from this call; never invent a successful reply.
+    if ('isError' in result) return result.content[0]!.text;
+    const quote = result;
     let answer = `Quote ${quote.quoteId}: ${quote.amountCents} euro cents, ${quote.slot} delivery. ` +
       `Recorded effects: ${quote.effectCount}.`;
     if (quote.actedAs) answer += ` Acted as ${quote.actedAs}.`;
@@ -92,20 +98,20 @@ export function stageBModelAnswer(raw: unknown) {
   return undefined;
 }
 
-function findQuote(value: unknown): z.infer<typeof quoteSchema> | undefined {
-  const quote = quoteSchema.safeParse(value);
-  if (quote.success) return quote.data;
+function findToolResult(value: unknown): z.infer<typeof toolResultSchema> | undefined {
+  const result = toolResultSchema.safeParse(value);
+  if (result.success) return result.data;
   if (typeof value === 'string') {
     try {
       const parsed: unknown = JSON.parse(value);
-      return findQuote(parsed);
+      return findToolResult(parsed);
     } catch {
       return undefined;
     }
   }
   if (!value || typeof value !== 'object') return undefined;
   for (const child of Object.values(value)) {
-    const found = findQuote(child);
+    const found = findToolResult(child);
     if (found) return found;
   }
   return undefined;

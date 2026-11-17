@@ -60,7 +60,7 @@ export const effectObservedDataSchema = z
   .object({
     permitId: z.string().min(1),
     computerId: z.string().min(1),
-    // The tool that was called, e.g. "odoo.read" or a model name.
+    // The tool that was called, e.g. "crm.read" or a model name.
     tool: z.string().min(1),
     // What the call reached: a model, an MCP server, or a web domain.
     destination: z.string().min(1),

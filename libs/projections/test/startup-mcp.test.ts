@@ -1,3 +1,4 @@
+import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { event, natsFixture } from '@opencrane/event-store/testing';
@@ -36,7 +37,8 @@ async function preservesCredentialReview(testCase: (typeof registrations)[number
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(mcpCatalogue);
     await runner.run(mcpCatalogue);
-    const discovered = { serverId: 'startup', toolCount: 0, schemaDigest: 'a'.repeat(64),
+    const discovered = { serverId: 'startup', toolCount: 0, schemaDigest: catalogueDigest([]),
+      digestVersion: 2,
       connectionId: 'forged', accountMode: 'none', tools: [] };
     await append('mcp.server_discovered', discovered);
     await append('mcp.server_published', { serverId: 'startup', publishedBy: 'admin' });

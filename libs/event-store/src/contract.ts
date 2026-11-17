@@ -1,4 +1,4 @@
-import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
+import { validateNewMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import {
@@ -243,9 +243,7 @@ function validMcpSnapshot(event: EventEnvelope): boolean {
         return false;
       }
     }
-    if (catalogue.checkedAt !== undefined) {
-      validateMcpCatalogue(catalogue);
-    }
+    validateNewMcpCatalogue(catalogue);
     return true;
   } catch {
     return false;

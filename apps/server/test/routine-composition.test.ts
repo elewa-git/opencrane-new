@@ -74,8 +74,8 @@ async function apply(events: EventEnvelope[]) {
   }
 }
 async function prepareCompany() {
-  const selected = await oauthSelectionFixture(nats, 'alice', 'odoo', 'orders-bot');
-  const serverRows = await history(nats.store, 'mcp-odoo', 'test');
+  const selected = await oauthSelectionFixture(nats, 'alice', 'crm', 'orders-bot');
+  const serverRows = await history(nats.store, 'mcp-crm', 'test');
   const policy = toolPolicyFromRows(serverRows);
   function isReadTool(tool: (typeof policy.tools)[number]) {
     return tool.name === 'read';
@@ -87,7 +87,7 @@ async function prepareCompany() {
     schemaDigest: policy.catalogue!.schemaDigest,
     destinationDigest: destinationHash.digest('hex'),
     policyRevision: policy.policyRevision, costCents: 0 as const };
-  const serverId = 'odoo';
+  const serverId = 'crm';
   const profileId = 'orders-bot';
   const optInSubject = `connection-company-${serverId}`;
   const optIn = record(connectionOperationId('test', optInSubject, 'enable'),
@@ -167,8 +167,8 @@ async function setup() {
       grantedBy: 'alice' };
     events.push(record(`grant-${granteeKind}`, grantStream('model', 'gpt-6.1-sol'),
       'grant.given', grant));
-    const companyGrant = { ...grant, resourceType: 'mcp_server', resourceId: 'odoo' };
-    events.push(record(`company-grant-${granteeKind}`, grantStream('mcp_server', 'odoo'),
+    const companyGrant = { ...grant, resourceType: 'mcp_server', resourceId: 'crm' };
+    events.push(record(`company-grant-${granteeKind}`, grantStream('mcp_server', 'crm'),
       'grant.given', companyGrant));
   }
   await apply(events);
@@ -433,9 +433,9 @@ async function productionCompanyDelivery() {
   expect(preparedComputer.frames).toEqual([]);
   expect(company.recover).not.toHaveBeenCalled();
   const prepared = await routineSession.loadRoutinePreparation(nats.store, keys, worker(), input);
-  const profileRows = await history(nats.store, 'connection-company:odoo:orders-bot', 'test');
+  const profileRows = await history(nats.store, 'connection-company:crm:orders-bot', 'test');
   expect(foldCompanyConnection(profileRows).status).toBe('verified');
-  const choiceRows = await history(nats.store, 'connection-selection-alice-odoo', 'test');
+  const choiceRows = await history(nats.store, 'connection-selection-alice-crm', 'test');
   const choice = foldConnectionSelection(choiceRows).selected!;
   expect(choice).not.toBeNull();
   const readProfile = readCurrentCompanyProfile(companyOptions.custody);
@@ -491,9 +491,9 @@ async function recordLateCompanyChange(kind: LateCompanyChange) {
   let commandId = `late-${kind}`;
   let eventId = commandId;
   if (kind === 'choice') {
-    subject = 'connection-selection-alice-odoo';
+    subject = 'connection-selection-alice-crm';
     type = 'connection.selected';
-    data = { action: 'clear', userId: 'alice', serverId: 'odoo',
+    data = { action: 'clear', userId: 'alice', serverId: 'crm',
       connectionId: 'installed', expectedSequence: 1 };
     commandId = 'clear';
     eventId = connectionOperationId('test', subject, commandId);
@@ -511,17 +511,17 @@ async function recordLateCompanyChange(kind: LateCompanyChange) {
     data = { assistantId: 'sales-assistant', changedBy: 'alice',
       changedFields: ['active'], active: false };
   } else if (kind === 'grant') {
-    subject = grantStream('mcp_server', 'odoo');
+    subject = grantStream('mcp_server', 'crm');
     type = 'grant.revoked';
-    data = { resourceType: 'mcp_server', resourceId: 'odoo',
+    data = { resourceType: 'mcp_server', resourceId: 'crm',
       granteeKind: 'member', granteeId: 'alice', revokedBy: 'admin' };
   } else if (kind === 'block' || kind === 'ask') {
-    subject = 'mcp-odoo';
+    subject = 'mcp-crm';
     type = 'mcp.tool_mode_set';
-    data = { serverId: 'odoo', connectionId: 'installed', toolName: 'read',
+    data = { serverId: 'crm', connectionId: 'installed', toolName: 'read',
       toolRevision: company.tool.revision, mode: kind, setBy: 'admin' };
   } else if (kind === 'profile') {
-    subject = 'connection-company:odoo:orders-bot';
+    subject = 'connection-company:crm:orders-bot';
     type = 'connection.refreshed';
     const rows = await history(nats.store, subject, 'test');
     const saved = foldCompanyConnection(rows).data!;
@@ -534,22 +534,22 @@ async function recordLateCompanyChange(kind: LateCompanyChange) {
     Reflect.deleteProperty(activation, 'configurationDigest');
     data = { ...saved, secretRef: 'secret:rotated', activation };
   } else if (kind === 'oauth') {
-    subject = 'mcp-odoo';
+    subject = 'mcp-crm';
     type = 'mcp.oauth_configuration_recorded';
-    data = { serverId: 'odoo', changeId: '00000000-0000-4000-8000-000000000001',
+    data = { serverId: 'crm', changeId: '00000000-0000-4000-8000-000000000001',
       status: 'changing' };
   } else if (kind === 'schema') {
-    subject = 'mcp-odoo';
+    subject = 'mcp-crm';
     type = 'mcp.tools_changed';
-    data = { serverId: 'odoo', previousSchemaDigest: company.tool.schemaDigest,
+    data = { serverId: 'crm', previousSchemaDigest: company.tool.schemaDigest,
       newSchemaDigest: 'f'.repeat(64) };
   } else if (kind === 'destination') {
-    subject = 'mcp-odoo';
+    subject = 'mcp-crm';
     type = 'mcp.server_registered';
-    data = { serverId: 'odoo', kind: 'remote', locator: 'https://other.test/mcp',
+    data = { serverId: 'crm', kind: 'remote', locator: 'https://other.test/mcp',
       registeredBy: 'admin' };
   } else if (kind === 'tariff') {
-    subject = 'mcp-odoo';
+    subject = 'mcp-crm';
     type = 'mcp.server_discovered';
     const rows = await history(nats.store, subject, 'test');
     function isDiscovery(row: typeof rows[number]) {
@@ -992,14 +992,14 @@ async function refusesChangeDuringFinalCustodyRead(
   holdFixtureClock();
   const waiting = Promise.withResolvers<void>();
   const resume = Promise.withResolvers<void>();
-  const grantSubject = grantStream('mcp_server', 'odoo');
+  const grantSubject = grantStream('mcp_server', 'crm');
   const grantPosition = await nats.store.head(grantSubject);
-  const toolPosition = await nats.store.head('mcp-odoo');
+  const toolPosition = await nats.store.head('mcp-crm');
   function companyPreflight(run: Parameters<NonNullable<Options['companyPreflight']>>[0],
     computerGeneration: number) {
     async function confirmCurrent() {
       const currentGrant = await nats.store.head(grantSubject);
-      const currentTool = await nats.store.head('mcp-odoo');
+      const currentTool = await nats.store.head('mcp-crm');
       if (currentGrant !== grantPosition || currentTool !== toolPosition) {
         throw new Error('Company access changed');
       }

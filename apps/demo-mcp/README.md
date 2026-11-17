@@ -19,14 +19,14 @@ flowchart LR
   apps["apps: applications"] --> demo["demo-mcp: synthetic tools"]
   apps --> server["server: product back end"]
   operator["Operator<br/>synthetic account settings"] -->|enables optional key checks| demo
-  apps --> odoo["odoo-mcp: Odoo tools"]
   server -.->|remote MCP when deployed| demo
   demo -.->|tests use the inventory helper| server
 ```
 
 ## What it is responsible for
 
-- Describe the quote tools and an optional account check, their zero cost and the fields an admin reviews.
+- Describe the quote tools and an optional account check, and the definitions an admin reviews.
+- Offer ordinary definitions or the stricter OpenCrane cost and review declarations.
 - Read the quote or change its slot only inside this process.
 - Refuse calls that do not match the advertised tool definitions.
 
@@ -36,7 +36,8 @@ flowchart LR
 2. **Read.** The read tool returns the synthetic quote and number of accepted changes.
    In credential-checked mode it also names the account whose key arrived; an account
    without permission receives a refusal.
-3. **Change.** The write tool checks the catalogue revision, then changes the slot once.
+3. **Change.** The write tool changes the slot once. The default and credential-checked
+   modes also check the catalogue revision first.
    The revision identifies the tool definitions, not the quote's current state. Two calls
    with the same revision can both succeed; each adds one to the effect count.
    Restarting the process resets the fixture. No supplier or product record changes.

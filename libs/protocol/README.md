@@ -4,9 +4,9 @@
 
 Shared message shapes for the OpenCrane browser app and back end. Both sides use the same schemas, written rules for what each message must contain, to check messages before using them. The package also defines the shapes for chat, computers, integrations, budgets, held spend, approvals, model access and receipts for saved changes.
 
-Tool policy can name the hosted workload that supplied its tools and the admin's read-only identity tool.
-Replies carry the person's allowed assistants and refusals for assistants without consent.
-They show safe profile status and connection needs without returning a key.
+Tool policy names captured workloads and read-only identity tools. Safe replies carry
+profile status, connection needs, allowed assistants and refusals without keys. Review
+rules distinguish ordinary definitions from OpenCrane cost, approval or revision declarations.
 
 Chat replies can name the files attached to a saved message. Older replies still work.
 Conversation lists can also carry one completed welcome with its own kind and route.

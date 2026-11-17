@@ -2,7 +2,7 @@ import { Overlay } from '../ui/overlay';
 import { JsonPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, input, output, signal,
   type OnDestroy, type OnInit } from '@angular/core';
-import { modelAccessGrantSchema, type ToolPolicy } from '@opencrane/protocol';
+import { isOrdinaryToolCatalogue, modelAccessGrantSchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
 const accessProjectionSchema = z.object({
@@ -30,6 +30,7 @@ const accessSchema = z.object({
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class InitialReviewConfirmation implements OnInit, OnDestroy {
+  protected readonly ordinaryCatalogue = isOrdinaryToolCatalogue;
   readonly policy = input.required<ToolPolicy>();
   readonly name = input.required<string>();
   readonly enabled = input(false);

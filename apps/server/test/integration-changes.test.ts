@@ -96,7 +96,7 @@ async function discover(declaration: typeof tool) {
   const captured = Date.now();
   const tools = [declaration];
   const data = { serverId: 'fixture', toolCount: 1, connectionId: command.connectionId,
-    accountMode: 'none', tools, schemaDigest: catalogueDigest(tools),
+    accountMode: 'none', tools, schemaDigest: catalogueDigest(tools), digestVersion: 2,
     checkedAt: new Date(captured).toISOString(), expiresAt: new Date(captured + 300_000).toISOString() };
   await append('mcp-fixture', 'mcp.server_discovered', data);
 }

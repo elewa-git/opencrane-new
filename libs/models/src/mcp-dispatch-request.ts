@@ -54,9 +54,12 @@ export interface PersonalDispatchRequest {
   network: RemoteNetwork;
 }
 
-export async function dispatchRemoteTarget(route: Route, deadline: number, network: RemoteNetwork) {
+export async function dispatchRemoteTarget(route: Route, deadline: number,
+  network: RemoteNetwork) {
   if (!route.locator) return undefined;
   const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
   const signal = AbortSignal.timeout(duration);
-  return prepareRemote(route.locator, network, signal);
+  const target = await prepareRemote(route.locator, network, signal);
+  // Keep catalogue checking within the same deadline as destination preparation.
+  return { target, signal };
 }

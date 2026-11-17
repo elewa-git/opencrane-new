@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-11-16T17:56:24.448626+00:00",
+  "source": "2d5734fb2de59da3fa26fa140e143af8d4593164",
+  "base": "1a278fd0bca3730f186efe8d077c4e03420eb332",
+  "stackId": "2",
+  "fresh": true,
+  "requestedWidths": [
+    1280,
+    390
+  ],
+  "startupVerdict": "FAIL",
+  "checkpoint": "shared HTTP upload file list",
+  "reason": "File list did not finish applying",
+  "assertion": "infra/dev-stack/upload-journey.ts:21",
+  "caller": "infra/dev-stack/journey.ts:578",
+  "lastStatus": 425,
+  "existingDeadlineMs": 120000,
+  "sliceVerdicts": {
+    "1280": "NOT RUN",
+    "390": "NOT RUN"
+  },
+  "oneMinuteLoadBeforeClaimAtMost": 8,
+  "observedPeakOneMinuteLoadDuringStartup": 40.9,
+  "cause": "Not established; the load observations do not establish the cause.",
+  "diagnosticsRetainedBeforeTeardown": true,
+  "teardown": {
+    "verdict": "PASS",
+    "exitCode": 0,
+    "claimReleased": true
+  },
+  "furtherAttempts": "NOT RUN; owner direction is required within the last-round limit."
+}

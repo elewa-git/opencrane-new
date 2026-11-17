@@ -55,11 +55,6 @@
       "count": 2
     }
   },
-  "apps/odoo-mcp/src/odoo.ts": {
-    "max-params": {
-      "count": 1
-    }
-  },
   "apps/ops/src/departure-cleanup.ts": {
     "max-params": {
       "count": 2
@@ -697,11 +692,8 @@
     }
   },
   "libs/models/src/mcp-dispatch.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    },
     "max-params": {
-      "count": 6
+      "count": 1
     }
   },
   "libs/models/src/mcp-position.ts": {

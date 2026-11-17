@@ -7,10 +7,10 @@ import { body, permit, send, publishedFixture, selectedPersonalFixture, requestF
   from './support/mcp-dispatch-fixture.ts';
 import { personalPair } from './support/personal-dispatch.ts';
 import { delayReceiptReplies } from './support/dispatch-receipts.ts';
+import { distinctPersonalTurns, expectPersonalRequests } from './support/personal-concurrency.ts';
 
 async function concurrentPersonalTurns() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob, reads } = await personalPair(context, body);
+  const { setup, remote, headers, bob, reads } = await distinctPersonalTurns();
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   const append = setup.nats.store.append.bind(setup.nats.store);
@@ -34,11 +34,7 @@ async function concurrentPersonalTurns() {
     for (const response of responses) expect(response.status, await response.text()).toBe(200);
     expect(reads.toSorted()).toEqual(['alice', 'bob']);
     expect(remote.received).toHaveLength(2);
-    for (const received of remote.received) {
-      const raw = received.raw.toString();
-      const expected = raw === bob.body ? 'Bearer bob-access' : 'Bearer alice-access';
-      expect(received.headers.authorization).toBe(expected);
-    }
+    expectPersonalRequests(remote.received);
     for (const [value, userId, assistantId] of [
       [alicePermit, 'alice', 'assistant'], [bobPermit, 'bob', 'bob-assistant'],
     ]) {
@@ -74,8 +70,7 @@ it('prepares immutable receipt work for a tool that needs no personal key',
   noKeyReceiptWork, 60_000);
 
 async function concurrentReceiptWork() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob } = await personalPair(context, body);
+  const { setup, remote, headers, bob } = await distinctPersonalTurns();
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   delayReceiptReplies(setup);
@@ -86,10 +81,7 @@ async function concurrentReceiptWork() {
     expect(response.status, await response.text()).toBe(200);
   }
   expect(remote.received).toHaveLength(2);
-  for (const received of remote.received) {
-    const expected = received.raw.toString() === bob.body ? 'Bearer bob-access' : 'Bearer alice-access';
-    expect(received.headers.authorization).toBe(expected);
-  }
+  expectPersonalRequests(remote.received);
 }
 it('keeps concurrent credential releases within the access window with receipt service work',
   concurrentReceiptWork, 60_000);

@@ -28,7 +28,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
   projections["libs/projections<br/>read tables"] -.->|reads the log| store
   store -->|stores the log| nats["NATS JetStream<br/>saved copies and recovery"]
-  store -.->|checks event shapes| events["libs/events<br/>event definitions"]
+  store -.->|checks event shapes and new tool list fingerprints| events["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
@@ -36,6 +36,8 @@ flowchart LR
 - Save a valid event only if the relevant history has not changed since the caller
   read it. Report a conflict when another change came first. For some changes,
   check the whole log position as well as one item's history.
+- Require new tool lists to name the full-list fingerprint rule and match every tool,
+  including rejected tools. Keep older stored lists readable.
 - Check that saved memory facts belong to the right person or group before saving them.
 - Accept hosted image scan claims and results only from the models system writer.
 - Stop retrying when the caller cancels or its access time limit runs out.

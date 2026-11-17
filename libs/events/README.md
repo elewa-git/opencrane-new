@@ -28,10 +28,13 @@ flowchart LR
 - Define each event's type, data and shared details, such as its id and time.
 - Reject unknown event types and badly formed records.
 - Keep older records readable during [replay](../../GLOSSARY.md#replay).
+- Require the full-list fingerprint rule for new tool lists.
+- Keep each stored tool list’s original rule so older lists still replay.
 - Name the background jobs that follow each kind of saved change.
 - Rebuild routine definitions and preview their scheduled dates without starting work.
 - Derive session settings and tool choices from saved facts.
 - Keep private text encrypted and credentials out of event data.
+- Record reported tool costs without inventing a charge or settling spending.
 
 ## Processes it handles
 

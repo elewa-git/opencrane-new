@@ -71,7 +71,8 @@ export { conversationEventId, chatIdSchema, groupConversationCommandSchema } fro
 
 export { providerTurnBindingSchema, optionalProviderTurnBindingSchema } from './turn-binding.ts';
 
-export { toolDispatchRecordedDataSchema, agentNativeConsentRefusedDataSchema } from './data.ts';
+export { agentNativeConsentRefusedDataSchema } from './data.ts';
+export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
 export { grantGivenDataSchema, teamCreatedDataSchema } from './data.ts';
 export { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema }
   from './conversation.ts';
@@ -138,7 +139,7 @@ export { memoryCorrectedEventSchema, memoryValueEventSchema } from './memory.ts'
 
 export { approvalCancelReasonSchema, approvalCancelledDataSchema }
   from './approval-cancellation.ts';
-export { approvalUsedDataSchema } from './data.ts';
+export { approvalUsedDataSchema } from './tool-dispatch.ts';
 
 export { agentNativeRequestRefusedDataSchema } from './native-request.ts';
 

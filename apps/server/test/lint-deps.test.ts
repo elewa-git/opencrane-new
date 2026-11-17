@@ -10,7 +10,7 @@ const repository = resolve(import.meta.dirname, '../../..');
 
 async function recordFixtureBaseline(directory: string) {
   const applications = [
-    'apps/demo-mcp/src', 'apps/odoo-mcp/src', 'apps/computer/src',
+    'apps/demo-mcp/src', 'apps/computer/src',
     'apps/ops/src', 'apps/server/src', 'apps/web/src', 'libs',
   ];
   const args = [
@@ -42,7 +42,7 @@ async function rejectsCrossAppTestImport() {
       join(repository, 'scripts/check-dependency-baseline.mjs'),
       join(directory, 'scripts/check-dependency-baseline.mjs'),
     );
-    const applications = ['computer', 'demo-mcp', 'odoo-mcp', 'ops', 'server', 'web'];
+    const applications = ['computer', 'demo-mcp', 'ops', 'server', 'web'];
     for (const app of applications) {
       const source = join(directory, 'apps', app, 'src');
       await mkdir(source, { recursive: true });

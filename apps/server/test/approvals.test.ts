@@ -14,6 +14,7 @@ import { envelope, history, readApproval, readToolPolicy, decideApproval,
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
+import { datedApprovalEnds } from './support/approval-dates.ts';
 import { catalogueEvidence, fixture, reviewCatalogue,
   toolEvidence } from '@opencrane/models/testing';
 async function approvalFixture(stepUp = false,
@@ -200,7 +201,13 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
     // The loser may fail closed on unavailable authority; single use is the invariant.
     expect(statuses[0]).toBe(200);
     expect([403, 503]).toContain(statuses[1]);
-    expect(f.received()).toBe(1); expect(f.upstreamBody()).toBe(f.body());
+    const expectedBody = '{"jsonrpc":"2.0","id":1,"method":"tools/call",' +
+      '"params":{"name":"write",' +
+      '"arguments":{"amount":1.00e2,"note":"hello","order":9007199254740993},' +
+      '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",' +
+      '"io.modelcontextprotocol/clientCapabilities":{}}}}';
+    expect(f.received()).toBe(1);
+    expect(f.upstreamBody()).toBe(expectedBody);
     await f.restart();
     expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
     expect((await f.read()).cards[0]?.state).toBe('outcome_unknown');
@@ -1540,18 +1547,6 @@ async function refusesTakeoverCancellationAfterRemoval(removal: 'member' | 'part
 it.each(['member', 'participant'] as const)(
   'saves no takeover cancellation after %s removal during approval history loading',
   refusesTakeoverCancellationAfterRemoval);
-
-const datedApprovalEnds = [
-  ['approval.decided', { decision: 'approved', decidedBy: 'alice' }, 'approved',
-    { decidedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.decided', { decision: 'rejected', decidedBy: 'alice' }, 'denied',
-    { decidedAt: '2026-10-12T10:01:00.000Z', endedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.expired', {}, 'expired', { endedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.cancelled', {}, 'cancelled', { endedAt: '2026-10-12T10:01:00.000Z' }],
-  ['approval.used', { permitId: 'dated-permit' }, 'outcome_unknown',
-    { usedAt: '2026-10-12T10:01:00.000Z',
-      uses: [{ permitId: 'dated-permit', usedAt: '2026-10-12T10:01:00.000Z' }] }],
-] as const;
 
 async function preservesApprovalDates(type: string, details: object, state: string,
   dates: object) {
