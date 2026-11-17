@@ -131,7 +131,7 @@ async function validatesBeforeIndexing(fault: string) {
     let reason = 'Conversation subject mismatch';
     if (fault === 'silo') {
       invalid = { ...added, silo: 'other' };
-      reason = 'Conversation does not exist';
+      reason = 'Missing conversation in silo';
     }
     await expect(conversations.apply(setup.storage.db, invalid, 1)).rejects.toThrow(reason);
   } finally {
