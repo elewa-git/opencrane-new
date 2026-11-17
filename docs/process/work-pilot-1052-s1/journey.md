@@ -60,7 +60,26 @@ and supplies its complete candidate rows at all three ordinary-test call sites.
 Every approval assertion is retained. The new personal-concurrency helpers also
 live in test support; moving them changes no expected body or credential value.
 The first expanded run passed all 58 tests across the four affected files in
-261.85 seconds. The second run and final source gates remain in progress.
+261.85 seconds. The second expanded run passed all 58 tests in 217.49 seconds.
+
+### Final local source checks
+
+All commands ran under `nice -n 10`; tests used the shared disposable test database.
+No full root suite ran. The original two-file run passed twice, then the expanded
+four-file run passed twice after the approval API adjustment.
+
+| Check | Own verdict |
+| --- | --- |
+| Four affected test files, 58 tests, two runs | PASS: 261.85 and 217.49 seconds. |
+| Scoped ESLint for all changed code, zero warnings | PASS; final test-support files also checked separately. |
+| `lint:debt`, `lint:deps`, `lint:reads`, `lint:readmes` | PASS. |
+| Full workspace, package and dev-stack typecheck | PASS after correcting the approval test callers. |
+| `check:events`, Knip, `lint:changelog`, Markdown | PASS. |
+| Fresh-stack journey at both widths | NOT RUN yet; waiting for one-minute load below 6. |
+| Hosted CI on the final push | NOT RUN yet; see the PR Evidence for the final result. |
+
+Local ESLint follows the requested changed-file scope. CI runs the complete
+`lint:code` command. No lint cap, suppression allowance or read baseline was raised.
 
 ## Rework round 5 continued, 16 November 2026
 
