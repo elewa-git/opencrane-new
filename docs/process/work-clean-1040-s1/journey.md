@@ -98,3 +98,13 @@ or building values inside calls. No existing behaviour was replaced or deleted.
 Every new function has at most five parameters and fewer than 80 counted lines.
 The script adds 160 shipped-code lines. Tests, documentation and receipts are
 excluded from that count; the workflow adds six lines. No size limits were raised.
+
+## Feature journey: a person opens a CI run and sees the report
+
+Hosted CI run [44041610817](https://github.com/elewa-git/opencrane-new/actions/runs/44041610817) on head `0513748` (product code identical to `604f172`) passed.
+
+1. In the run, open the `checks` job. The "Report test size" step finished with conclusion `success` (started and completed at 07:56:53 UTC, under one second).
+2. The step printed the report. [ci-report-run-44041610817.txt](ci-report-run-44041610817.txt) is a copy of that step's output from the job log: a table for 15 of 15 packages (total 132,304 source lines against 243,775 test lines, ratio 1.8), the two weekly blocks for main, the block for this pull request, and the final `size-report:` JSON line.
+3. Screenshots are not possible here: GitHub shows workflow logs and job summaries only to signed-in users, and the fleet does not sign a browser in. The log copy was taken with the signed-in GitHub CLI.
+
+Never fails: `node --test scripts/ci/size-report.test.mjs` passes 5 of 5, including the case that runs the report on a made-up tree with a 10 to 1 ratio and asserts exit code 0 (re-run on 17 November 2026).

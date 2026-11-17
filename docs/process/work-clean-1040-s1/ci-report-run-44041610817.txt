@@ -1,0 +1,64 @@
+##[group]Run node scripts/ci/size-report.mjs
+node scripts/ci/size-report.mjs
+shell: /usr/bin/bash -e {0}
+env:
+  BASE_SHA: f5af2162b2fef5f52592de099c5819c137162e0a
+  HEAD_SHA: 0513748387fa019d4d399542f40cbed4e8d73291
+##[endgroup]
+## Test size
+
+| Package | Source lines | Test lines | Test/source |
+| --- | ---: | ---: | ---: |
+| apps/computer | 7450 | 19884 | 2.7 |
+| apps/demo-mcp | 314 | 338 | 1.1 |
+| apps/odoo-mcp | 354 | 487 | 1.4 |
+| apps/ops | 4573 | 11881 | 2.6 |
+| apps/server | 37389 | 116253 | 3.1 |
+| apps/web | 38903 | 32153 | 0.8 |
+| libs/auth | 1379 | 1868 | 1.4 |
+| libs/authz | 1286 | 2389 | 1.9 |
+| libs/event-store | 1155 | 5726 | 5.0 |
+| libs/events | 5042 | 3020 | 0.6 |
+| libs/handlers | 1075 | 2283 | 2.1 |
+| libs/models | 24536 | 41377 | 1.7 |
+| libs/observability | 378 | 629 | 1.7 |
+| libs/projections | 7019 | 4980 | 0.7 |
+| libs/protocol | 1451 | 507 | 0.3 |
+| Total | 132304 | 243775 | 1.8 |
+
+Packages: 15.
+
+## Main line changes
+
+Through f5af2162b2fef5f52592de099c5819c137162e0a; measured at 2026-11-17T07:56:53.000Z.
+
+### Last 7 days
+
+| Category | Added | Deleted |
+| --- | ---: | ---: |
+| source | 7275 | 1495 |
+| tests | 9495 | 574 |
+| evidence | 58629 | 83 |
+| other | 28367 | 4961 |
+
+### Previous 7 days
+
+| Category | Added | Deleted |
+| --- | ---: | ---: |
+| source | 18931 | 2078 |
+| tests | 28777 | 1315 |
+| evidence | 4980 | 34 |
+| other | 28488 | 1933 |
+
+## Pull request changes
+
+### Base to head
+
+| Category | Added | Deleted |
+| --- | ---: | ---: |
+| source | 0 | 0 |
+| tests | 0 | 0 |
+| evidence | 100 | 0 |
+| other | 310 | 1 |
+
+size-report:{"packages":[{"name":"apps/computer","source":7450,"tests":19884},{"name":"apps/demo-mcp","source":314,"tests":338},{"name":"apps/odoo-mcp","source":354,"tests":487},{"name":"apps/ops","source":4573,"tests":11881},{"name":"apps/server","source":37389,"tests":116253},{"name":"apps/web","source":38903,"tests":32153},{"name":"libs/auth","source":1379,"tests":1868},{"name":"libs/authz","source":1286,"tests":2389},{"name":"libs/event-store","source":1155,"tests":5726},{"name":"libs/events","source":5042,"tests":3020},{"name":"libs/handlers","source":1075,"tests":2283},{"name":"libs/models","source":24536,"tests":41377},{"name":"libs/observability","source":378,"tests":629},{"name":"libs/projections","source":7019,"tests":4980},{"name":"libs/protocol","source":1451,"tests":507}],"total":{"source":132304,"tests":243775},"main":"f5af2162b2fef5f52592de099c5819c137162e0a","now":1794902213,"weeks":[{"source":{"added":7275,"deleted":1495},"tests":{"added":9495,"deleted":574},"evidence":{"added":58629,"deleted":83},"other":{"added":28367,"deleted":4961}},{"source":{"added":18931,"deleted":2078},"tests":{"added":28777,"deleted":1315},"evidence":{"added":4980,"deleted":34},"other":{"added":28488,"deleted":1933}}],"pullRequest":{"source":{"added":0,"deleted":0},"tests":{"added":0,"deleted":0},"evidence":{"added":100,"deleted":0},"other":{"added":310,"deleted":1}}}
