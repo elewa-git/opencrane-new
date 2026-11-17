@@ -15,6 +15,7 @@ import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { expectRoutineInput } from './support/routine-prose.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
@@ -375,10 +376,7 @@ async function assertCounts(threadId = 'native-1') {
   expect(rootTotals(actor.state, root.rootId)).toEqual({
     settledCents: 0, heldCents: 0, availableCents: 1000 });
   const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-  expect(rows[1]?.event.type).toBe('message.posted');
-  expect(rows[1]?.event.data).toMatchObject({
-    utterance: 'Routine instructions (user data):\n\nPrivate routine instructions',
-  });
+  expectRoutineInput(rows);
 }
 async function reachesPreparedThread() {
   const invocation = compose();

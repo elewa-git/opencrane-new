@@ -23,6 +23,7 @@ import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler, 
 import { dispatchForRelease, observeDispatch, reportDispatchFailure, traceRoutineAppends,
   waitForDispatchHandler,
   type RoutineDispatchObservation } from './support/routine-dispatch-observation.ts';
+import { expectRoutineStreamProse } from './support/routine-prose.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -539,15 +540,7 @@ async function assertSingleRun() {
   const counts = new Map<string, number>();
   for (const subject of subjects) {
     const rows = await history(nats.store, subject, 'test');
-    if (subject === conversationSubject) {
-      expect(rows[1]?.event.type).toBe('message.posted');
-      expect(rows[1]?.event.data).toMatchObject({
-        utterance: 'Routine instructions (user data):\n\nPrivate routine instructions',
-      });
-    }
-    if (subject === 'budget-test') {
-      expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
-    }
+    expectRoutineStreamProse(rows, subject, conversationSubject);
     for (const row of rows) {
       counts.set(row.event.type, (counts.get(row.event.type) ?? 0) + 1);
     }

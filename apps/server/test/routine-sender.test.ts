@@ -13,6 +13,8 @@ import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
+import { expectRoutineInput } from './support/routine-prose.ts';
 import { routineAsk } from './support/routine-ask.ts';
 import { advanceRoutineFixtureClock, checkSlowPayerPublication, sendWithFixtureTime }
   from './support/routine-sender-clock.ts';
@@ -688,14 +690,7 @@ async function handsOffOnce() {
     expect(rootTotals(actor.state, root.rootId)).toEqual({
       settledCents: 0, heldCents: 0, availableCents: 1000 });
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-    function isInput(row: typeof rows[number]) {
-      return row.event.type === 'message.posted';
-    }
-    const inputs = rows.filter(isInput);
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0]?.event.data).toMatchObject({
-      utterance: 'Routine instructions (user data):\n\nPrivate routine instructions',
-    });
+    expectRoutineInput(rows);
   } finally { await computer.close(); }
 }
 it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
@@ -819,12 +814,10 @@ async function refusesChangedStart(field: string) {
   const computer = await recordingComputer();
   const link = await computer.wake();
   const send = link.socket.send.bind(link.socket);
-  let altered = false;
   function alter(bytes: Parameters<typeof send>[0]) {
     const text = z.string().parse(bytes);
     const frame = frameSchema.parse(JSON.parse(text));
     expect(frame['type']).toBe('turn');
-    altered = true;
     frame[field] = 'different';
     send(JSON.stringify(frame));
   }
@@ -832,13 +825,16 @@ async function refusesChangedStart(field: string) {
   function closed() {
     return link.socket.readyState === link.socket.CLOSED || computer.closedSessions > 0;
   }
+  const monotonicClock = holdFixtureClock();
   try {
     await authority.send(computer.wake);
-    expect(altered).toBe(true);
     await until(closed);
     expect(await savedStarts()).toEqual([]);
     expect(computer.starts).toBe(0);
-  } finally { await computer.close(); }
+  } finally {
+    monotonicClock.mockRestore();
+    await computer.close();
+  }
 }
 it.each(['messageId', 'id', 'rootId', 'senderAttemptId', 'threadId',
   'conversationId', 'assistantId', 'requesterId'])(

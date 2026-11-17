@@ -5,7 +5,9 @@ export function holdFixtureClock() {
   function fixedClock() {
     return fixedTime;
   }
-  vi.spyOn(performance, 'now').mockImplementation(fixedClock);
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockImplementation(fixedClock);
+  return monotonicClock;
 }
 
 export async function withRoutineFixtureClock<Result>(work: () => Promise<Result>) {
