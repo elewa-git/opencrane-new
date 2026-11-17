@@ -58,7 +58,8 @@ passed afterwards.
 - Creation: subject, silo, type, exact position, cached event id, missing creation
   and duplicate creation.
 - Approval: terminal turn matching, missing bound start and missing prepared history.
-- Index: complete global range, missing coverage, conversation count and latest
+- Index: unique global positions, a range starting at one, complete global range,
+  missing coverage, conversation count and latest
   position, separation of other streams, upgrade refusal and batched reply inclusion.
 - Activity: the 64-position limit and restored-history refusal.
 - Summary: missing and incomplete cached prefixes, a ready prefix and one pending
