@@ -1,3 +1,22 @@
+import { sessionConfiguration } from '@opencrane/events/session-configuration';
+import type { Turn } from './turn-frame.ts';
+
+export type ComputerSessionFacts = {
+  executionMode?: Turn['executionMode'] | undefined;
+  sharingClass?: Turn['sharingClass'] | undefined;
+  senderAttemptId?: string | undefined;
+};
+
+export function computerSessionConfiguration(turn: ComputerSessionFacts) {
+  // Derive settings from admitted turn facts, never a supplied configuration.
+  // Keep shared-input refusals even when a frame also carries routine identifiers.
+  const routine = turn.senderAttemptId && !turn.sharingClass;
+  const conversation = routine ? { routinePreparation: {} } : {};
+  return sessionConfiguration({ conversation, sharingClass: turn.sharingClass,
+    requestedMode: turn.executionMode ?? 'memory_free',
+    memoryEnabled: turn.executionMode === 'restricted' });
+}
+
 export function memoryFreeEnvironments() {
   return `default = "tools"
 include_local = false
@@ -13,6 +32,7 @@ cwd = "/workspace"
 }
 
 export function memoryFreeConfig(model: string) {
+  const configuration = computerSessionConfiguration({ executionMode: 'memory_free' });
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
 thread_unload_delay_secs = 0
@@ -44,9 +64,9 @@ memories = false
 apps = false
 plugins = false
 remote_plugin = false
-code_mode_host = true
-shell_tool = true
-unified_exec = true
+code_mode_host = ${configuration.localTools}
+shell_tool = ${configuration.localTools}
+unified_exec = ${configuration.localTools}
 shell_snapshot = false
 [skills]
 include_instructions = false
@@ -54,6 +74,7 @@ include_instructions = false
 }
 
 export function privateConfig(model: string) {
+  const configuration = computerSessionConfiguration({ executionMode: 'restricted' });
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
 thread_unload_delay_secs = 0
@@ -82,9 +103,9 @@ memories = false
 apps = false
 plugins = false
 remote_plugin = false
-code_mode_host = false
-shell_tool = false
-unified_exec = false
+code_mode_host = ${configuration.localTools}
+shell_tool = ${configuration.localTools}
+unified_exec = ${configuration.localTools}
 shell_snapshot = false
 `;
 }

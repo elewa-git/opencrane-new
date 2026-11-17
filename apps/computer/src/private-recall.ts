@@ -1,3 +1,4 @@
+import { computerSessionConfiguration } from './codex-config.ts';
 import { randomUUID } from 'node:crypto';
 import type { GateIdentity } from './bridge-gate-authority.ts';
 import { record } from './http.ts';
@@ -9,7 +10,9 @@ export type RecallOwner = Omit<PrivateThreadBinding, 'session' | 'tools' | 'gran
 function recallTools(input: Turn) {
   const tools = parseTools(input.tools);
   const server = tools[0];
-  if (input.executionMode !== 'restricted' || input.sharingClass || input.rootId
+  const configuration = computerSessionConfiguration(input);
+  if (configuration.process !== 'fresh_isolated'
+    || configuration.context === 'shared_exchanges' || input.rootId
     || input.taskKind !== 'chat_turn' || !input.requesterId
     || tools.length !== 1 || server?.serverId !== 'memory' || server.connectionId !== 'server') {
     throw new Error('Private recall refused');

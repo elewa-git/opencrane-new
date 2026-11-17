@@ -92,7 +92,11 @@ Use the existing chat routes:
 
 Agent session rows include `assistantKind` as `personal` or `team`. The chat uses
 that value to keep shared assistant sessions in their own list and to offer the
-private or memory-free mode choice.
+private or memory-free mode choice. Rows also include
+`sessionConfiguration: { executionMode: 'restricted' | 'memory_free' }`.
+The server derives that default from the shared session configuration; the chat
+reads it when opening a session. Older replies may omit the view. Turn admission
+still checks the requested mode and deployment qualification separately.
 
 Message feeds report `computerState` as `ready`, `starting`, `recovering` or
 `not_applicable`. A computer stays `recovering` after `computer.lost` until a new

@@ -887,6 +887,15 @@ or computer credential. See [bridge evidence](../../docs/process/bridge-evidence
 ## Private turns
 
 Team messages default to `restricted`, unless posted with `memory_free`.
+`computerSessionConfiguration` reads the admitted execution mode, saved sharing
+class and routine sender attempt. It derives settings through `libs/events` and
+ignores a configuration supplied in a bridge frame. The computer uses only fields
+independent of assistant ownership and payer facts that it does not hold.
+`turn-runner.ts` reads process isolation for thread selection and lifecycle handling.
+`turn-input.ts` reads context and attachment settings for granted input, while
+`private-recall.ts` keeps shared context out of personal recall. Both Codex launch
+configurations read local tool settings. The image copies the independent
+`@opencrane/events/session-configuration` entry point; it needs no server code.
 Each private turn opens the pinned Codex binary and an ephemeral thread as UID 1003.
 It never resumes a thread. At most two private turns prepare or run together.
 Its home is `/home/private/turn-<n>`, with config, temporary files and working

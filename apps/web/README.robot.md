@@ -489,6 +489,12 @@ Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-host
 DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
 
+`ChatSession.select` derives the composer default from the authorised row's
+`assistantKind` through `sessionDefaults` in `libs/protocol`. That helper calls the
+shared event-library configuration with memory disabled. Personal sessions default
+to memory-free; shared assistant sessions default to restricted. Turn admission
+checks deployment qualification and the requested mode separately.
+
 The member picker lives at `/workspace/shared`. It lists only assistant rows with
 `canStartSession` and asks the member to confirm the assistant's fixed paying group.
 It creates a private session with `POST /api/conversations`, using one command id,

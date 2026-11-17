@@ -78,3 +78,14 @@ function array(value: unknown): unknown[] {
   if (!Array.isArray(value)) throw new Error('Expected an array');
   return value;
 }
+
+function keepsMemoryFreeLocalToolsEnabled() {
+  const config = memoryFreeConfig('test-model');
+  expect(config).toContain('code_mode_host = true\n');
+  expect(config).toContain('shell_tool = true\n');
+  expect(config).toContain('unified_exec = true\n');
+  expect(config).toContain('sandbox_mode = "danger-full-access"\n');
+  expect(config).toContain('inherit = "none"\n');
+}
+it('enables code mode, shell and unified execution in memory-free launch settings',
+  keepsMemoryFreeLocalToolsEnabled);

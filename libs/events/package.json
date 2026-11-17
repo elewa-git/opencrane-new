@@ -12,7 +12,8 @@
     "./command-activity-label": "./src/command-activity-label.ts",
     "./lossless-json": "./src/lossless-json.ts",
     "./mcp-catalogue": "./src/mcp-catalogue.ts",
-    "./routine-schedule": "./src/routine-schedule.ts"
+    "./routine-schedule": "./src/routine-schedule.ts",
+    "./session-configuration": "./src/session-configuration.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

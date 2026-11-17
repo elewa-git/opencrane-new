@@ -1,0 +1,11 @@
+head=0562532c3714c58f16df64860c4b18f8a7115bfe
+slot=1
+up_exit=0
+status_exit=0
+screenshot_1280=copied
+screenshot_390=copied
+down_exit=0
+status_after_exit=0
+
+Status after teardown:
+free

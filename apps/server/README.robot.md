@@ -1,5 +1,15 @@
 # Server
 
+## Session defaults for the browser
+
+Authorised conversation list replies keep their existing fields. The browser derives
+its composer default from the saved assistant kind through `sessionDefaults` in
+`libs/protocol`. Personal sessions start memory-free and shared assistant sessions
+start restricted. Turn admission separately checks memory qualification and any
+requested override. The browser default grants no access.
+Session creation and subchat request review use the shared payer comparison and
+select their assistant fields from `sessionAssistantSchema`, keeping their earlier validation.
+
 ## Hosted catalogue capture
 
 `integrations/hosted-capture.ts` takes an admitted pinned image and exact observed
