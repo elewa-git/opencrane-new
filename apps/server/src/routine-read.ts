@@ -30,7 +30,7 @@ export async function readRoutineMetadata(store: EventStore, binding: Binding,
     throw new Error('Routine metadata unavailable');
   }
   const definition = record.definition;
-  // Select public facts explicitly; never copy the encrypted definition or run links.
+  // Select public facts explicitly; keep the private instructions and run links out.
   const metadata = { routineId: state.routineId, name: definition.name,
     ownerId: definition.ownerId, assistantId: definition.assistantId,
     payingGroupId: definition.payingGroupId, status: state.status,

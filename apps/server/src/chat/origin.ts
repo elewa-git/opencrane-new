@@ -44,7 +44,7 @@ async function readOrigin(options: ChatOptions, memberId: string, conversationId
       source.sequence < parent.historyPosition) {
     return { status: 'restricted' as const };
   }
-  // Decrypt only the visible title after both chats and the exact source have been checked.
+  // Read the visible title only after checking both chats and the exact source.
   const display = await summary(options, origin.parentConversationId,
     parent.created.mode, parent.historyPosition);
   return { status: 'linked' as const, parentConversationId: origin.parentConversationId,

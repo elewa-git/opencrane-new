@@ -103,8 +103,8 @@ spec:
               command: [sh, -ec]
               args:
                 - >-
-                  {{ if $restore }}mkdir -p /restore && chown 1000:1000 /restore &&
-                  chmod 0700 /restore &&{{ else }}mkdir -p /backups/sets &&
+                  {{ if $restore }}mkdir -p /restore/state && chown 1000:1000 /restore/state &&
+                  chmod 0700 /restore/state &&{{ else }}mkdir -p /backups/sets &&
                   chown 1000:1000 /backups/sets && chmod 0700 /backups/sets &&{{ end }}
                   mkdir -p /run/opencrane/files &&
                   cp /run/opencrane-source/* /run/opencrane/files/ &&

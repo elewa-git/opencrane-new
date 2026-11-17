@@ -2042,8 +2042,10 @@ The Job reads the set through a read-only mount and validates private regular fi
 part checksums, exact package versions, timestamps and complete inventories before
 mutation. It requires no event stream, application databases, application roles or
 uploaded objects. An advisory database lock excludes concurrent runners. A durable
-mode-0600 journal on `pilot-restore` binds the manifest digest to the service-account
-and volume identities before any data is loaded. The ten-minute Job deadline bounds
+mode-0600 journal in `/restore/state` on `pilot-restore` binds the manifest digest
+to the service-account and volume identities before any data is loaded. Keep the volume root group-managed
+and its state directory private. This lets Kubernetes skip recursive permission
+changes on remount, so journal files keep mode 0600. The ten-minute Job deadline bounds
 an eight-minute operation; native events retain their 60-second and 64 MiB limits.
 
 Recovery first transfers the native event snapshot and verifies event identities,

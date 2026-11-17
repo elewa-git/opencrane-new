@@ -12,7 +12,7 @@ async function main() {
   if (extra) throw new Error('Unexpected restore argument');
   const id = descriptorSchema.shape.attempt.parse(argument);
   const images = z.record(z.string(), z.string()).parse(JSON.parse(process.env['BACKUP_IMAGES'] ?? '{}'));
-  const options = { directory: '/backups/sets', stateDirectory: '/restore', id,
+  const options = { directory: '/backups/sets', stateDirectory: '/restore/state', id,
     silo: process.env['SILO_ID'] ?? '', images };
   const runtime = await packageRestoreTarget(options);
   try {
