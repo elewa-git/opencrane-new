@@ -8,7 +8,7 @@ import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { grantStream, type memberAuthorisation } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { envelope, history } from '@opencrane/models';
-import { conversationKeys, connectProjectionDb } from '@opencrane/projections';
+import { conversationKeys, connectProjectionDb, type Query } from '@opencrane/projections';
 import { directory, readEnv } from './config.ts';
 import { approvalJourneyTool, reviewJourneyTools } from './journey-tool-policy.ts';
 
@@ -177,24 +177,20 @@ async function seedApprovalChat(store: EventStore, silo: string,
   const encrypted = keys.encrypt(silo, conversationId, 'An earlier message in this long chat.');
   const subject = `conversation-${conversationId}`;
   let position = await store.head(subject);
-  for (let index = 0; index < 3000; index++) {
-    const data = { conversationId, authorId: assistantId, authorKind: 'agent',
-      contentType: 'text', ...encrypted };
-    const event = envelope(silo, subject, 'message.posted', data);
-    const result = await store.append({ event, expectedSequence: position, historyChecked: true });
-    assert.equal(result.status, 'appended', 'Seed each earlier chat message once');
-    if (result.status !== 'appended') throw new Error('Chat seeding refused');
-    position = result.sequence;
-  }
   const db = connectProjectionDb(server['DATABASE_URL']!, failDatabase);
   try {
-    const deadline = performance.now() + 30_000;
-    while (true) {
-      const saved = await db.db.query<{ sequence: string }>(
-        "SELECT sequence FROM projection_checkpoints WHERE name='conversations'");
-      if (Number(saved.rows[0]?.sequence) >= position) break;
-      assert(performance.now() < deadline, 'The long chat reaches the conversation projection');
-      await delay(100);
+    // Keep setup traffic behind projection progress instead of creating an unbounded backlog.
+    for (let batchIndex = 0; batchIndex < 60; batchIndex++) {
+      for (let messageIndex = 0; messageIndex < 50; messageIndex++) {
+        const data = { conversationId, authorId: assistantId, authorKind: 'agent',
+          contentType: 'text', ...encrypted };
+        const event = envelope(silo, subject, 'message.posted', data);
+        const result = await store.append({ event, expectedSequence: position, historyChecked: true });
+        assert.equal(result.status, 'appended', 'Seed each earlier chat message once');
+        if (result.status !== 'appended') throw new Error('Chat seeding refused');
+        position = result.sequence;
+      }
+      await waitForApprovalHistory(db.db, position);
     }
   } finally {
     await db.close();
@@ -203,4 +199,15 @@ async function seedApprovalChat(store: EventStore, silo: string,
 
 function failDatabase(error: Error) {
   throw error;
+}
+
+async function waitForApprovalHistory(db: Query, position: number) {
+  const deadline = performance.now() + 30_000;
+  while (true) {
+    const saved = await db.query<{ sequence: string }>(
+      "SELECT sequence FROM projection_checkpoints WHERE name='conversations'");
+    if (Number(saved.rows[0]?.sequence) >= position) break;
+    assert(performance.now() < deadline, 'The long chat reaches the conversation projection');
+    await delay(100);
+  }
 }
