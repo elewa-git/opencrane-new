@@ -7493,3 +7493,25 @@ The same suite checks a competing call's reservation, a settlement, an assistant
 exhaustion record, matching payer and assistant ceilings, and an unrelated assistant
 ceiling. A reservation saved after the callback's budget read must conflict with the
 release append.
+
+## Folders
+
+[src/main.ts](src/main.ts) starts the server; [src/models-main.ts](src/models-main.ts) starts the models process.
+[src/server.ts](src/server.ts) builds the server. Tests live in `test/`, with shared helpers in [test/support/](test/support/).
+
+| Folder | What it does |
+| --- | --- |
+| [assistants](src/assistants/README.md) | Sets up shared assistants and lists the ones a person may use. |
+| [audit](src/audit/README.md) | Returns permitted organisation and conversation change history. |
+| [auth](src/auth/README.md) | Handles browser sign-in, sign-out and session status. |
+| [chat](src/chat/README.md) | Saves conversations and carries assistant work, replies, stops and approvals. |
+| [computers](src/computers/README.md) | Provides desktop views, screenshots and control-preparation status. |
+| [effects](src/effects/README.md) | Reviews call costs and resolves supported uncertain outcomes. |
+| [egress](src/egress/README.md) | Saves rules for connections to outside destinations. |
+| [files](src/files/README.md) | Checks, scans, stores and delivers conversation files. |
+| [integrations](src/integrations/README.md) | Registers and reviews tool servers, manages tool access and serves spending settings. |
+| [members](src/members/README.md) | Manages invitations, membership, groups, roles and ownership. |
+| [memory](src/memory/README.md) | Reads, saves, corrects and forgets permitted remembered facts. |
+| [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
+| [onboarding](src/onboarding/README.md) | Saves the private survey, persona approval and scripted welcome progress. |
+| [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |

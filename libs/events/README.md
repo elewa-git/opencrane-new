@@ -3,264 +3,70 @@
 ## What this is
 
 The list of every kind of event OpenCrane records, and the exact data each one carries.
-Saved hosted image attempts now queue a private image check through the worker list.
-Reading or replaying these events does not call the scanner.
-Each hosted workload start records its image, Pod and run generation before a new
-tool list can be saved. The list names that same run.
-Private persona revisions carry encrypted bytes and a checked digest, never plain text.
-An approval records the exact saved version a member chose, without copying its text.
-A completed welcome's archive choice is a separate personal event. It leaves its
-answer and assistant choice intact.
-
-A routine Stop can name the exact saved denial or expiry of its held tool approval.
-A new routine definition can name the MCP server separately from its connection.
-Older records without that name remain readable but cannot pass company preparation.
-An OAuth settings change records when editing starts and the digest of the finished
-settings. It contains no OAuth client secret or token.
-A verified company connection record can hold an account name, actual scopes and expiry.
-The credential stays in private custody; reading the record alone grants no call.
-A personal key activation can also record its checked account and the exact read-only
-tool used to verify it. A tool review names that identity tool. Neither record holds
-the key itself.
-A system routine pause names the exact saved removal of its recorded owner.
-The reference carries only the event id and position; readers verify the history.
-An Ask for a company routine can name its run, account and tool details with digests
-where private values would be unsafe. The later account release must name that Ask.
-
-An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened, such as a member joining or a message being sent. This package says which event types exist and what information each one carries. It checks event data, including encrypted command views, and still accepts older events for replay. It does not save events or decide whether a person may act. It also defines private turn records that contain memory reference ids, counts and fixed reasons, without saved fact text. Native spending holds can keep their original access expiry after a restart. The package can preview routine dates and work out session settings from saved facts and signed turn claims without starting work.
-
-A saved message can name the clean files sent with it. Older messages without file ids
-remain readable. Message text stays encrypted.
-
-A routine spending allowance can keep a fingerprint of its checked preparation.
-Retries must match it before they can recover that allowance. A routine activation
-receipt names that allocation and one sender attempt. Reading or replaying it starts no work.
-An unconfirmed delivery can record Stop intent referring to that admission. It keeps
-the occurrence occupied until termination is proved.
-
-Control refusals record the attempt, the person who made it, its conversation, a
-fingerprint of the checked request and a fixed reason. They contain no computer or private turn details.
-Writer lease records name one requester, computer generation and writer session.
-Return records close that lease without allowing new assistant work.
-Closure records distinguish a proved end from an unknown final input state.
-An unknown closure keeps the requested end reason for identical command retries.
-They carry no keys, clipboard or screen content.
-
-Approval cancellation can record takeover as its fixed cause. It ends unused
-consent for a matching saved control request and carries no private review details.
-
-Computer turn records can keep a routine's input id separate from its turn id,
-alongside the allocated spending root. These identifiers grant no permission to send.
-A failed turn can also record a confirmed native terminal reply. Socket failure and
-requested cancellation alone do not prove that the turn ended.
-A private process exit record confirms that the supervisor saw the process end.
-It carries no reply text and stays out of chat history.
-
-Command activity can carry one of a few fixed plain labels. Older command records
-still read without a label. No command text or output is saved with the label.
-
-Account refresh starts record one attempt for a saved generation. Rebuilding these
-records keeps the account and attempt without contacting its provider.
-A later claim records one live worker and the exact saved credential reference.
-Replaying a claim cannot give a restarted worker permission to send.
-
-Assistant file publication records fix a turn's file list before uploads begin.
-Retries must keep that list and its original allowance.
+An [event](../../GLOSSARY.md#event) is a saved record of something that happened.
+This library checks those records and keeps older records readable.
+It does not save events or decide who may act.
 
 ## Where it fits
 
-This is one of the packages that build everything from the
-[event log](../../GLOSSARY.md#event-log-event-store), the permanent record of changes.
-[libs/event-store](../event-store/README.md) uses it to check events before saving
-or returning them. [libs/projections](../projections/README.md) builds read tables,
-and [libs/handlers](../handlers/README.md) queues background work using its definitions.
-The server, computer and AI access library share session settings and the saved
-Allow, Ask or Block choice for a tool.
+This package belongs to the event core. [libs/event-store](../event-store/README.md)
+checks events with it before saving or returning them.
+Other libraries and apps use the same definitions to read saved changes.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> events["libs/events<br/>events, session settings and checked account references"]
-  server["apps/server<br/>back end"] -.->|checks message file ids, assistant files, private exits, routine server and turn identities, settled cents, owner approvals, Stops and admission receipts, sessions, control refusals, child requests, activations, send and final access records with OAuth digests, retries and writer closure| events
-  store["libs/event-store<br/>saved event log"] -.->|checks instances, starts, stops and report receipts| events
-  projections["libs/projections<br/>read tables and retired choices"] -.-> events
-  workers["libs/handlers and apps/ops<br/>background workers"] -.->|checks worker records, welcome completion, private tool stops, publication, nightly memory claims and routine permissions| events
-  models["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.->|checks Ask and release bindings, consent starts, callback, refresh and image scan claims, refresh starts, account confirmations and replacement generations, takeover cancellation and saved event shapes, including routine Stop reasons, native access expiry, retry records, personal assistant consent, company and saved tool choices, company opt-in, company credential replacements, and blocks| events
-  computer["apps/computer<br/>personal computers"] -.->|reads event and command label shapes and derives session settings| events
-  models -.->|checks OAuth settings and derives session settings| events
+  store["libs/event-store<br/>saved event log"] -.-> events["libs/events<br/>event definitions"]
+  projections["libs/projections<br/>read tables"] -.-> events
+  handlers["libs/handlers<br/>background jobs"] -.-> events
+  server["apps/server<br/>back end"] -.-> events
+  models["libs/models<br/>AI access rules"] -.-> events
+  computer["apps/computer<br/>assistant computers"] -.-> events
 ```
 
 ## What it is responsible for
 
-Provider retirement records carry the reviewed old binding and one explicit
-pause or replacement for each dependant. They contain no key value.
-
-The nightly memory record can hold a safe refusal or a checked root reference for
-one saved scope and date. It never contains a memory fact or a provider key.
-
-Company account choices record the requesting person, owning silo, profile revision,
-generation and a digest of the verified account identity. They grant no tool access
-and contain no account label or credential. An explicit clear leaves no chosen account.
-
-Company-account creation and replacement have their own strict records. They name the
-owning silo and admin custodian without changing existing personal records. A replacement
-records the next generation of the saved profile. Saving grants no access.
-
-- List every event type and the data it holds, from membership and chat to tools,
-  spending and memory.
-- Define the details shared by events: an id, type, subject, source and time,
-  plus who caused the change when recorded. The subject names what changed.
-- Refuse unknown event types and badly formed data. Checking a record does not
-  give its writer permission or save it.
-- Keep older saved records readable during [replay](../../GLOSSARY.md#replay),
-  reading the log again to rebuild data.
-- Check saved welcome starts and encrypted answers against their script references.
-- Check the system's completion against its saved final-answer reference.
-- List which named [reactions](../../GLOSSARY.md#reaction-handler), background jobs
-  following a saved change, subscribe to each event type.
-- Rebuild routine definitions and preview future dates for scheduled work, including
-  clock changes, without starting that work.
-  Share the same pause record checks with the server's internal owner operation.
-
-File records can identify the assistant turn that created them. A file change can
-also record a fixed refusal reason, without storing file contents or private paths.
+- Define each event's type, data and shared details, such as its id and time.
+- Reject unknown event types and badly formed records.
+- Keep older records readable during [replay](../../GLOSSARY.md#replay).
+- Name the background jobs that follow each kind of saved change.
+- Rebuild routine definitions and preview their scheduled dates without starting work.
+- Derive session settings and tool choices from saved facts.
+- Keep private text encrypted and credentials out of event data.
 
 ## Processes it handles
 
-A normal tool-call audit can name the exact saved decision and selected account generation.
-Its confirmation records permission checks, not delivery or a successful outside call.
-Reading the receipt cannot send credentials. The live sending path is not built yet.
-
-A first account confirmation records the verified issuer and account, granted scopes,
-expiry and exact private storage reference. It follows the consent and callback records.
-A refresh saves the next generation after a matching refresh start and claim.
-Replaying these records starts no work and grants no tool access.
-The profile list and profile reader use the same check for a person's saved creation.
-
-A personal callback claim records the one worker allowed to continue the attempt.
-It contains only references. It does not confirm a provider request or activate an account.
-Replaying it reads no credentials and starts no work.
-
-Routine session creation can name its saved claim, occurrence and worker. These details
-keep retries apart from ordinary human chats and grant no permission to start work.
-
-Company opt-in records an admin’s explicit choice for one server installation.
-It grants no access and starts no background work.
-
-A saved reply can include receipts for several small pieces of text. Each receipt
-keeps its original number and digest so a repeated piece can be checked.
-
-Personal account choices record a checked profile revision or explicit clear and may name
-allowed assistants. They grant no access and contain no account label or credential.
-
-Saved personal connection revocations and replacements name the background cleanup
-reaction. Replaying those records never deletes stored credentials.
-
-Memory correction records name the replacement revision and the revision it replaces.
-The replacement stays encrypted. Older records still parse for recovery, but cannot
-supply the ownership and revision needed to read a fact.
-
-Hosted image check requests record the exact image, registration and attempt number.
-An image scan claim records which attempt has started before image bytes are prepared.
-Its random token identifies the caller that saved the claim.
-They contain no report bytes or credentials and say nothing about passing checks.
-
-Before sending a published tool call, the models process saves a start record with
-the request, server, connection, reviewed revision and acknowledged gateway configuration.
-It contains no request bytes or credentials. It records that the pass was spent;
-it does not prove that the call reached the tool. Replaying it never sends a call.
-If a later check refuses the call before sending, the models process saves a not-sent
-outcome on the same stream.
-
-Routine creation, reassignment and retirement name the permission worker. It records
-who may read metadata or manage a routine. These subscriptions start no routine work.
-
-The publication subscription names the worker that prepares complete gateway
-configurations. Withdrawal has no preparation subscription.
-
-A routine Stop has its own fixed budget reason and keeps the saved source reference.
-The server reuses its schema to save owner intent and check an exact retry.
-It does not describe an admin intervention as a requester Stop or start routine work.
-A finished routine can keep a private result reference and the final held and settled
-amounts in euro cents. The record never contains the result itself.
-A routine send authorisation records one checked attempt and its custody record version
-before the turn is sent.
-The final send record confirms that access was checked again after custody replied.
-It includes the OAuth configuration digest checked for that attempt. It does not
-prove delivery or allow a replay to send the turn again.
-
-Budget turn stops carry only their reason kind and a reference to the saved spending
-stop. Participants can read them without seeing amounts or payer ids. Member stops
-keep their original shape. The bridge uses the same data checks as the event log
-before delivering these Stops to a computer.
-
-A child-chat request records the source id, chosen people, assistant and spending
-upper bound. It contains no message text and must name the requesting person.
-A saved child start failure names the attempt, stage and a fixed refusal reason.
-The stage is creation, first input or activation; the record contains no credentials.
-A retry names that failure and the next attempt without changing the original request.
-It contains no source text and cannot authorise work.
-A child activation records the checked intent, creation, first input and attempt.
-It contains no message text and does not release the hold on execution.
-
-Hosted image requests name one platform, a public upstream and the first check attempt.
-These records contain no check result or report bytes.
-
-Personal connection records can name an exact stored generation and the person who
-saved it. A replacement names the expected stream version. Old records still replay,
-but missing generation details never make a profile available for tool calls.
-Consent starts record private storage references and expiry. They contain no consent link
-or private sign-in values, and replay never contacts the provider or activates an account.
-Owner revocation records invalidate one profile. Admin disable records block all personal
-profiles for one member and server. Neither record claims the stored token was deleted.
-
-Nightly memory records name one scope and date, its selected fact revisions and why work stopped.
-They contain no memory text and grant no spending or computer access.
-
-A memory tombstone records a fact id and its next revision without any private text.
-The projection uses it to hide the fact and dependent copies before reading their keys.
-The cleanup record reports completed deletion or unavailable cleanup after retries run out.
-It names the original change without private text. An operator can retry the failed job;
-a later completion then confirms key destruction and removal of searchable text.
-The HTTP forget command is not built yet.
-
-1. **The event store checks an event before saving it.** It passes the event to
-   `parseEventByType`. A badly formed event or an unknown type is refused and
-   never saved.
-2. **A developer adds an event type.** The registry and event catalogue are
-   updated together. `npm run check:events` checks that this list and the event
-   catalogue match.
-
-3. **Saved routine records are read again.** `foldRoutine` rebuilds their definition
-   and run facts. It remembers each modern event's id and ignores that event if it
-   arrives again, even after later changes. Definitions still match when a database
-   returns their fields in a different order. It grants no access and starts no work.
-   A newer definition can name one reviewed company tool and its zero-cent price.
-
-4. **A caller previews a routine schedule.** It supplies the time and the last used
-   local date, if there is one. The library returns future dates and clock-change
-   warnings. It saves nothing and starts no work.
+1. **A caller checks an event.** The library checks its type and data.
+   The caller gets either a checked record or a reason for refusal.
+2. **A developer adds an event type.** They update the registry and event catalogue
+   together. The catalogue check reports any difference between their event lists.
+3. **A caller rebuilds a routine.** The library reads its saved changes and returns
+   its definition and run facts. It grants no access and starts no work.
+4. **A caller previews a schedule.** The library returns future dates and warnings
+   about clock changes. It saves nothing.
 
 ## How to run or test it
 
-Run the type check and focused tests with these commands. A small real call is:
+Run these commands from the repository root:
 
 ```sh
 nice -n 10 npm run typecheck -w libs/events
-nice -n 10 npm test -- libs/events/test
-npm run check:events
+nice -n 10 npx vitest run libs/events/test --maxWorkers=2
+nice -n 10 npm run check:events
 ```
+
+For example, an unknown event type is refused:
 
 ```ts
 import { parseEventByType } from '@opencrane/events';
 
 const result = parseEventByType({ type: 'not.registered' });
-// Expect result.success to be false and result.reason to be 'unknown_event_type'.
+// Expect result.success to be false.
 ```
 
 ## Where to read more
 
-- [README.robot.md](README.robot.md): full contracts, examples and test details.
-- [Event catalogue](../../docs/architecture/events.md): what each saved event means.
+- [README.robot.md](README.robot.md): exact contracts, limits and test details.
+- [Event catalogue](../../docs/architecture/events.md): what each event means and triggers.
 - [Event store](../event-store/README.md): where events are saved.
 - [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.
