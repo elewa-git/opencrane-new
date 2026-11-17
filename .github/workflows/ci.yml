@@ -133,6 +133,12 @@ jobs:
         if: needs.select.outputs.mode != 'docs'
         run: nice -n 10 node --test scripts/ci/*.test.mjs
 
+      - name: Report test size
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci/size-report.mjs
+
       - name: Check local provider setup and model stub
         if: needs.select.outputs.mode != 'docs'
         run: >-

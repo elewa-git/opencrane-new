@@ -274,3 +274,18 @@ A missing base skips comparison, while missing ledgers allow their initial creat
 A change introducing `.prettierrc.json` may increase debt once; existing comment
 and configuration checks still run. `baseline.test.mjs` uses Node's test runner;
 `../check-lint-debt.test.mjs` uses Vitest with disposable Git repositories.
+
+## Size report
+
+`size-report.mjs` owns classification for current tracked files and Git numstat.
+The checks job runs it after the grouping tests, including documentation-only PRs.
+`BASE_SHA` and `HEAD_SHA` use the same event commits as the select job.
+Main history uses first-parent commits, no renames, and committer timestamps.
+Local runs reuse `baseline.mjs` to find the main merge base, falling back to HEAD
+when no remote base exists.
+The exact seven-day boundary belongs to the recent week; fourteen days belongs
+to the previous week. Binary numstat entries are skipped. File totals count
+newline bytes in the checkout. Package rows come from tracked package manifests.
+The script prints Markdown and a final `size-report:` JSON line, and appends the
+same output to `GITHUB_STEP_SUMMARY`. Collection and summary-write errors retain
+the cause in the log and exit zero. The report sets no size or ratio threshold.
