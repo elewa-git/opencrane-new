@@ -48,7 +48,8 @@ Not built yet:
 - Run automatic routines or native child tasks.
 - Use company accounts in live tool calls or offer public account sign-in routes.
 - Start hosted tool images or wake private tool instances.
-- Let assistants correct or forget memory through tools.
+- Deliver private memory tools in live turns or let assistants correct or forget facts.
+- Stop running computers when a spending limit is exhausted.
 - Enable outside network connections for assistant commands.
 
 ## Processes it handles
