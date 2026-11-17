@@ -152,6 +152,38 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-11-13 | — | #120, slice 1 | Source checks for size limits and recorded debt | PASS | 39 function / 298 parameter suppressions; seven rejected probes; 21 checker and 52 CI script tests; uncached full lint | [Lint receipt](clean-120-s1.md#final-full-lint) |
 | 2026-11-13 | — | #120, slice 1 | Fresh secondary core journey entry | FAIL (main defect) | Bootstrap, provider setup and website ready; fleet-task guard refused core entry; claim released | [Lint receipt](clean-120-s1.md#fresh-secondary-stack) |
 
+## Approval listing reads
+
+Measured on 17 November 2026 with real disposable NATS, PostgreSQL and OpenFGA.
+The [read-count tests](../../apps/server/test/approval-listing-reads.test.ts) use the
+HTTP listing route and observe `subscribe`, `readStream`, `readEvent` and `head`.
+[Recorded counters](work-clean-255-s1/measurements.json) retain the observed values.
+Times are observations on the shared host, without timing assertions or a changed deadline.
+
+| Situation | Result | Observed reads and time |
+| --- | --- | --- |
+| 100,000 unrelated events; audit projection current; one card; three idle listings | PASS | Zero subscription events and zero unrelated events through named streams; three indexed `readEvent` calls in total. Access and card-state validation still made 21 named-stream reads returning 16 events, and 15 `head` calls. |
+| Audit projection stopped; 10,000 unrelated later events, a new request and decision, and a cancellation | PASS | One subscription returned all 10,003 later events, none at or before the saved position; one indexed `readEvent`; eight named-stream reads returned eight events; five `head` calls; 4,402.34 ms for the listing. Both cards had the expected current state, also after rebuilding the audit projection. |
+| 50 approvals; audit projection current; one listing | PASS | 50 indexed `readEvent` calls; 56 named-stream reads returned 103 events; five `head` calls; no subscription; 266 NATS `connection.request` calls; 504.68 ms. |
+
+A separate complete listing-file repeat returned the same counts: 2,957.98 ms for
+the stopped projection and 385.33 ms for 50 approvals. Skipping the unprojected
+range by hand made the new-approval assertion fail; the original code was restored.
+
+The 50-card fixture has 49 rejected approvals and one cancelled approval. The NATS
+request count includes the listing's access checks and saved card histories. It
+excludes OpenFGA HTTP requests, SQL queries, fixture setup and projection replay.
+The HTTP listing itself is one request. Counts describe discovery separately from
+the small authority streams and per-approval history needed for current checks;
+they do not claim that all event-store reads disappear.
+
+The missing-rows regression failed before the fix: the removed fallback read all
+100,033 saved events through `subscribe`. A prior fixture setup using individual
+team-creation events timed out during projection replay, before any listing
+assertion. The fixture now uses unrelated streamed chat events so the existing
+projection runner batches replay; the test timeout was not increased.
+Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1/journey.md).
+
 ## Still NOT RUN
 
 The evidence does not qualify these conditions yet:

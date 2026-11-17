@@ -1,0 +1,84 @@
+[
+  {
+    "run": "changed-files-repeat",
+    "measurements": [
+      {
+        "scenario": "idle-100000",
+        "subscriptions": 0,
+        "subscribedEvents": 0,
+        "beforeCheckpoint": 0,
+        "streamRequests": 21,
+        "streamEvents": 16,
+        "unrelatedEvents": 0,
+        "eventRequests": 3,
+        "headRequests": 15
+      },
+      {
+        "scenario": "stalled-10000",
+        "elapsedMs": 4402.344925000012,
+        "subscriptions": 1,
+        "subscribedEvents": 10003,
+        "beforeCheckpoint": 0,
+        "streamRequests": 8,
+        "streamEvents": 8,
+        "unrelatedEvents": 0,
+        "eventRequests": 1,
+        "headRequests": 5
+      },
+      {
+        "scenario": "fifty-approvals",
+        "elapsedMs": 504.6791959999973,
+        "subscriptions": 0,
+        "subscribedEvents": 0,
+        "beforeCheckpoint": 0,
+        "streamRequests": 56,
+        "streamEvents": 103,
+        "unrelatedEvents": 0,
+        "eventRequests": 50,
+        "headRequests": 5,
+        "natsRequests": 266
+      }
+    ]
+  },
+  {
+    "run": "final-listing-repeat",
+    "measurements": [
+      {
+        "scenario": "idle-100000",
+        "subscriptions": 0,
+        "subscribedEvents": 0,
+        "beforeCheckpoint": 0,
+        "streamRequests": 21,
+        "streamEvents": 16,
+        "unrelatedEvents": 0,
+        "eventRequests": 3,
+        "headRequests": 15
+      },
+      {
+        "scenario": "stalled-10000",
+        "elapsedMs": 2957.9824910000025,
+        "subscriptions": 1,
+        "subscribedEvents": 10003,
+        "beforeCheckpoint": 0,
+        "streamRequests": 8,
+        "streamEvents": 8,
+        "unrelatedEvents": 0,
+        "eventRequests": 1,
+        "headRequests": 5
+      },
+      {
+        "scenario": "fifty-approvals",
+        "elapsedMs": 385.3276509999996,
+        "subscriptions": 0,
+        "subscribedEvents": 0,
+        "beforeCheckpoint": 0,
+        "streamRequests": 56,
+        "streamEvents": 103,
+        "unrelatedEvents": 0,
+        "eventRequests": 50,
+        "headRequests": 5,
+        "natsRequests": 266
+      }
+    ]
+  }
+]
