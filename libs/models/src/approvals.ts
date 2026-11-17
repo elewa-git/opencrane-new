@@ -153,7 +153,7 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   let canRetry = dispatch.canRetry;
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
-    const conversation = await approvalConversationSnapshot(store, request, options);
+    const conversation = await approvalConversationSnapshot(store, silo, request, options);
     const invalidationRead: ApprovalInvalidationRead = { request, requestPosition: rows[0]!.sequence,
       deadline, snapshot: conversation };
     const checked = await approvalInvalidation(store, silo, invalidationRead);
@@ -185,13 +185,18 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
     conversationPosition, canRetry, toolReplied, retryRequested };
 }
 
-async function approvalConversationSnapshot(store: EventStore, request: Request,
+async function approvalConversationSnapshot(store: EventStore, silo: string, request: Request,
   options: ApprovalReadOptions): Promise<ApprovalConversationSnapshot> {
-  if (options.conversationRows || !options.conversationHistory) {
+  const deadline = options.deadline ?? Infinity;
+  if (options.conversationRows) {
     return { conversationRows: options.conversationRows,
       conversationPosition: options.conversationPosition };
   }
-  const deadline = options.deadline ?? Infinity;
+  if (!options.conversationHistory) {
+    const conversationRows = await history(
+      store, `conversation-${request.conversationId}`, silo, deadline);
+    return { conversationRows, conversationPosition: options.conversationPosition };
+  }
   const head = await store.head(undefined, deadline);
   const lookup = { conversationId: request.conversationId, turnId: request.turnId,
     deadline, head };

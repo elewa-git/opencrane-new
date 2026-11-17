@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, type EventEnvelope } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { ApprovalCard } from '@opencrane/protocol';
-import { history } from './event-history.ts';
 import { approvalGrantRevoked, approvalPolicyChange, approvalTakenOver }
   from './approval-cancellation.ts';
 
@@ -38,8 +37,8 @@ export async function approvalInvalidation(store: EventStore, silo: string,
   if (await approvalTakenOver(store, silo, request, requestPosition, deadline)) {
     return { closed: true, conversationPosition: 0, cancelReason: 'takeover' as const };
   }
-  const rows = snapshot.conversationRows ?? await history(
-    store, `conversation-${request.conversationId}`, silo, deadline);
+  const rows = snapshot.conversationRows;
+  if (!rows) throw new Error('Approval conversation history unavailable');
   function startsBoundTurn(row: StoredEvent) {
     return row.event.type === 'agent.turn_started' &&
       z.object({ turnId: z.string() }).parse(row.event.data).turnId === request.turnId;

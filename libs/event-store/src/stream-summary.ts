@@ -127,3 +127,17 @@ export function readStreamSummary<Summary, Result>(
   }
   return readBeforeDeadline(readResult, deadline, undefined, store.clock);
 }
+
+/** Copy an already read prefix without starting or waiting for history reads. */
+export function peekStreamSummary<Summary>(
+  store: object, silo: string, subject: string, kind: SummaryKind<Summary>,
+  through: number,
+): { summary: Summary; sequence: number } | undefined {
+  const key = JSON.stringify([silo, subject]);
+  const entries = stores.get(store)?.get(kind.name);
+  // Each kind name owns one summary shape, as in entryFor.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Match entryFor's kind lookup.
+  const entry = entries?.get(key) as Entry<Summary> | undefined;
+  if (!entry || entry.sequence < through) return undefined;
+  return { summary: entry.summary, sequence: entry.sequence };
+}

@@ -1,3 +1,4 @@
+import { caughtUpConversation } from './decision-conversation-catchup.ts';
 import { outputReportTypes } from './authority.ts';
 import { decisionConversationPositions, type Query } from '@opencrane/projections';
 import { readFirstEvent, type EventStore, type StoredEvent }
@@ -31,8 +32,19 @@ export function decisionConversationReader(store: EventStore, db: Query,
     }
     const conversation: StoredEvent[] = [];
     const subject = `conversation-${request.conversationId}`;
+    // Read changes after the projection's saved position, including both close formats.
+    const latest = await store.head(subject, request.deadline, true);
+    const through = Math.min(latest, request.head);
+    // Global positions may include other streams. This conservative bound also caps
+    // the number of conversation events read inside the original access deadline.
+    if (through - indexed.position > 64) {
+      return caughtUpConversation(store, silo, request, through);
+    }
     for (const entry of indexed.rows) {
       const position = Number(entry.position);
+      if (position > through) {
+        throw new Error('Conversation projection is beyond saved history');
+      }
       let row: StoredEvent;
       if (entry.type === 'conversation.created') {
         const creationRead = { silo, subject, position, type: 'conversation.created',
@@ -48,9 +60,6 @@ export function decisionConversationReader(store: EventStore, db: Query,
       }
       conversation.push(row);
     }
-    // Read changes after the projection's saved position, including both close formats.
-    const latest = await store.head(subject, request.deadline, true);
-    const through = Math.min(latest, request.head);
     if (through > indexed.position) {
       const changes = store.readStream(subject, indexed.position + 1,
         request.deadline, true, through);

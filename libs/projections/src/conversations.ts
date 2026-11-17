@@ -19,12 +19,11 @@ export const conversations: Projection = {
     await requireActivityReplay(db);
     await requireDecisionIndexReplay(db);
     await createConversationTables(db);
-    await createDecisionConversationIndex(db);
     await refuseMissingParticipation(db);
   },
   async drop(db) {
     const tables = 'conversation_participants, conversations, conversation_feed, ' +
-      'conversation_legacy_participation, conversation_list_state, decision_conversation_events';
+      'conversation_legacy_participation, conversation_list_state, decision_conversation_events, decision_conversation_coverage';
     await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
@@ -47,12 +46,13 @@ export const conversations: Projection = {
 };
 
 async function requireDecisionIndexReplay(db: Query) {
-  const result = await db.query<{ present: string | null; feed: string | null; sequence: string }>(`
+  const result = await db.query<{ present: string | null; coverage: string | null; feed: string | null; sequence: string }>(`
     SELECT to_regclass('decision_conversation_events')::text AS present,
+      to_regclass('decision_conversation_coverage')::text AS coverage,
       to_regclass('conversation_feed')::text AS feed, sequence
       FROM projection_checkpoints WHERE name='conversations'`);
   const saved = result.rows[0];
-  if (saved?.feed && !saved.present && Number(saved.sequence) > 0) {
+  if (saved?.feed && (!saved.present || !saved.coverage) && Number(saved.sequence) > 0) {
     throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
       + 'then run npm run replay -- conversations --confirm-conversations-stopped');
   }
@@ -91,6 +91,7 @@ async function requireLegacyReplay(db: Query) {
 }
 
 async function createConversationTables(db: Query): Promise<void> {
+  await createDecisionConversationIndex(db);
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_feed (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
     event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
@@ -482,6 +483,7 @@ async function applyReplies(db: Query, events: StoredEvent[]): Promise<void> {
   const placeholders: string[] = [];
   for (const stored of events) {
     const event = stored.event;
+    await indexDecisionConversationEvent(db, event, stored.sequence);
     if (event.type !== 'agent.message_delta') {
       throw new Error('Expected a reply delta');
     }
