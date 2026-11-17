@@ -19,7 +19,7 @@ AI and reviewed tool calls go through the gateway.
 flowchart LR
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer["apps/computer<br/>assistant computer"]
   server["apps/server<br/>back end"] -->|sends work and files| computer
-  computer -->|returns progress and results| server
+  computer -->|reports results| server
   computer -->|runs assistant work| desktop["Codex, browser and desktop<br/>working tools"]
   computer -->|sends checked calls| gateway["agentgateway<br/>AI gateway"]
   computer -.-> events["libs/events<br/>session settings"]
