@@ -10,7 +10,10 @@ export function substituteStoredContent(store: EventStore, type: string,
         yield row;
         continue;
       }
-      const data = row.event.data as Record<string, unknown>;
+      const data = row.event.data;
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+        throw new Error('Stored content is not an object');
+      }
       yield { ...row, event: { ...row.event, data: { ...data, ...patch } } };
     }
   }
