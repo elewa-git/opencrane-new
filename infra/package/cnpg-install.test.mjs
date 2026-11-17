@@ -102,6 +102,32 @@ async function fixtureInputFiles(directory, fixture) {
   return { valuesFile, bin: application.bin, privateDirectory };
 }
 
+function patchesComputerGateway(call) {
+  return call.program === 'kubectl' && call.args.includes('patch') &&
+    call.args.includes('computer-runtime');
+}
+
+function usesBootstrapJob(call) {
+  return call.program === 'kubectl' && call.args.includes('job') &&
+    call.args.includes('bootstrap');
+}
+
+function readsBootstrapJob(call) {
+  return usesBootstrapJob(call) && call.args.includes('get');
+}
+
+function checkBootstrapOrder(calls, restoring) {
+  const gateway = calls.findIndex(patchesComputerGateway);
+  assert.ok(gateway >= 0, 'Configure the private computer gateway');
+  if (restoring) {
+    assert.equal(calls.some(usesBootstrapJob), false,
+      'An empty restore target must never run or wait for owner bootstrap');
+    return;
+  }
+  const bootstrap = calls.findIndex(readsBootstrapJob);
+  assert.ok(bootstrap > gateway, 'Configure the gateway before waiting for bootstrap');
+}
+
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
   const directory = await mkdtemp(`${tmpdir()}/cnpg-install-`);
   try {
@@ -174,16 +200,13 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
         }
       }
       assert.deepEqual(helmCommands, ['template', 'install']);
+      checkBootstrapOrder(calls, fixture.values.pilotRestore?.enabled === true);
       if (fixture.values.pilotRestore?.enabled) {
         for (const name of ['nats', 'postgres']) {
           function waited(call) {
             return call.args.includes('rollout') && call.args.includes(`statefulset/${name}`);
           }
           assert.ok(calls.some(waited), 'Wait for core storage without owner bootstrap');
-        }
-        for (const call of calls) {
-          assert.equal(call.args.includes('job') && call.args.includes('bootstrap'), false,
-            'An empty restore target must never run or wait for owner bootstrap');
         }
       }
       assert.equal(result.stderr, '');

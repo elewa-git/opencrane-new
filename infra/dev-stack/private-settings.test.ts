@@ -95,7 +95,10 @@ async function unsafePaths() {
       if (state === 'file') await writeFile(path, 'private-canary');
       if (state === 'symlink') await symlink(directory, path);
       if (state === 'unsafe' || state === 'unreadable') {
-        await mkdir(path, { mode: state === 'unsafe' ? 0o755 : 0o000 });
+        const mode = state === 'unsafe' ? 0o755 : 0o000;
+        await mkdir(path, { mode });
+        // Test the requested permissions even when the caller has a restrictive umask.
+        await chmod(path, mode);
       }
       if (state === 'foreign') supplied.PERSONAL_KEY_DIRECTORY = home;
       const result = generate(home, '1', supplied);

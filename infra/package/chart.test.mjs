@@ -414,8 +414,6 @@ test('the computer can reach only the private gateway without DNS', () => {
 });
 
 test('the installer sets the computer gateway from a validated Service IP', async () => {
-  const installSource = readFileSync('infra/dev-stack/packaged.ts', 'utf8');
-  assert.match(installSource, /await configureComputerGateway\(owner\);\s*await waitForBootstrap\(owner\);/u);
   let service = { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
   const patches = [];
   const owner = { worktree: process.cwd(), slot: 'test', context: 'k3d-test-target',
