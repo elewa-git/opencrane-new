@@ -678,10 +678,16 @@ The models process supplies `decisionConversationReader` to `startDecision`.
 The reader uses the conversation projection's event index to load creation,
 participation and closing records, the current turn's records and queued message,
 and the latest message and turn start. It excludes the shared list of output reports.
-It checks every returned reference against the saved NATS event. These records retain
+It first compares the index's full row count and latest position with an independent
+coverage record saved in the same projection transaction. A missing row or missing
+coverage record refuses the decision. It also checks every returned reference against
+the saved NATS event. These records retain
 requester, payer, turn, approval and shared-child checks without replaying earlier messages.
-The reader then reads only conversation activity after the projection's saved global
-position, through the request's captured position. Later confirmations retain the
+The reader then reads conversation activity after the projection's saved global
+position, through the request's captured position, only when that range spans at most
+64 global positions. A larger gap uses an already caught-up event-store summary.
+Without one it refuses with `Conversation history is catching up` and starts a separate
+background catch-up. The refused request consumes no approval and dispatches no call. Later confirmations retain the
 same access deadline and read only activity after that captured position.
 Sparse snapshots keep their checked position even when they omit output reports,
 so approval confirmation cannot replay those reports inside the short write check.

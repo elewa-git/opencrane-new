@@ -514,8 +514,10 @@ and the latest record of each requested type. Selection returns saved event posi
 business checks remain in TypeScript in the models library.
 
 The checkpoint covers index writes, including private memory records excluded from
-the visible feed. Batched reply deltas do not need index rows because decisions exclude
-those output reports. An existing conversation projection without this index refuses
+the visible feed. Each included event also advances a separate coverage count and last
+position. Readers compare this proof with all rows for the conversation before selecting
+facts. Missing rows refuse rather than hiding a stop or close. Both individual and
+batched reply deltas enter the index, even though decisions exclude those reports. An existing conversation projection without this index refuses
 startup and requires the documented stopped-reader conversation replay. Rebuild drops
 and recreates the index with the other conversation tables.
 

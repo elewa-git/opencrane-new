@@ -17,6 +17,7 @@ uses its model choices and private caller checks.
 The models process runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway),
 which forwards AI calls. Saved events decide access and spending;
 read tables locate the saved records needed for each tool decision without replaying earlier chat messages.
+A missing record or history still catching up prevents a new send.
 
 ```mermaid
 flowchart LR
@@ -26,7 +27,7 @@ flowchart LR
   models <-->|call checks and usage| gateway["agentgateway<br/>AI gateway"]
   models -.-> auth["libs/auth and libs/authz<br/>passes and permissions"]
   models -.->|saves publication and dated tool checks| store["libs/event-store<br/>saved event log"]
-  models -.->|find saved decision records| projections["libs/projections<br/>read tables"]
+  models -.->|check saved decision records| projections["libs/projections<br/>read tables"]
 ```
 
 ## What it is responsible for
