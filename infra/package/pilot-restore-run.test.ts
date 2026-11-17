@@ -1,12 +1,12 @@
-import { execFile } from 'node:child_process';
+import { execFile, type ExecFileException } from 'node:child_process';
 import { expect, it } from 'vitest';
 
 async function withholdsSecretCanary() {
   const canary = 'private-restore-secret-canary';
-  const result = await new Promise<{ stdout: string; stderr: string; code: number | undefined }>(
+  const result = await new Promise<{ stdout: string; stderr: string; code: string | number | null | undefined }>(
     function run(resolve) {
       const env = { ...process.env, BACKUP_IMAGES: canary, LOG_LEVEL: 'info' };
-      function completed(error: (Error & { code?: number }) | null, stdout: string, stderr: string) {
+      function completed(error: ExecFileException | null, stdout: string, stderr: string) {
         resolve({ code: error?.code, stdout, stderr });
       }
       execFile(process.execPath, ['--experimental-strip-types',

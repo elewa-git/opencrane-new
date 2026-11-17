@@ -14,7 +14,8 @@ async function replaysReadableContentWithoutEffects() {
       conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     });
     const message = envelope('test', 'conversation-chat', 'message.posted', {
-      conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text', utterance: 'A saved conversation',
+      conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text',
+      utterance: 'A saved conversation',
     });
     await events.store.append({ event: created, expectedSequence: 0 });
     await events.store.append({ event: message, expectedSequence: 1 });

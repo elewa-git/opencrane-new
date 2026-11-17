@@ -91,7 +91,8 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   }
   async function databasePart(destination: string) {
     await writeFile(destination, 'fixture database');
-    return { databases: ['postgres'], lsn: '0/123' };
+    return { databases: ['postgres'], lsn: '0/123',
+      access: { storeId: 'saved-store', modelId: 'saved-model' } };
   }
   async function filesPart(destination: string) {
     await writeFile(destination, 'fixture files');

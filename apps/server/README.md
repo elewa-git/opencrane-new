@@ -24,6 +24,7 @@ flowchart LR
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
   server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
   server -->|checks permissions| openfga["OpenFGA<br/>permissions service"]
+  restore["Verified pilot restore"] -->|opens reads with writes held| server
   server -.-> models["libs/models<br/>AI access rules"]
 ```
 
@@ -31,6 +32,7 @@ flowchart LR
 
 - Sign people in and keep their browser sessions.
 - Check access before returning private information or saving changes.
+- Serve verified pilot restores with writes and assistant work held.
 - Carry chat messages, assistant work, live replies, stops and tool approvals.
 - Check and scan files before storing them or passing them to a computer.
 - Serve desktop views and screenshots to people with access.

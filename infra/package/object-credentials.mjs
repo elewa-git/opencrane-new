@@ -87,12 +87,18 @@ export async function issueObjectLease(identity, leaseFile, endpoint, signal) {
   }
 }
 
+export async function ensureFileBucket(identity, signal = AbortSignal.timeout(10000)) {
+  const options = { endPoint: 'objects', port: 9000, useSSL: false, ...identity,
+    transport: storageTransport('http:', signal), retryOptions: { disableRetry: true } };
+  const client = new Client(options);
+  if (!await client.bucketExists('files')) await client.makeBucket('files');
+}
+
 async function main() {
   const accessKey = await readFile('/run/object-owner/MINIO_ROOT_USER', 'utf8');
   const secretKey = await readFile('/run/object-owner/MINIO_ROOT_PASSWORD', 'utf8');
   const identity = { accessKey, secretKey };
-  const client = new Client({ endPoint: 'objects', port: 9000, useSSL: false, ...identity });
-  if (!await client.bucketExists('files')) await client.makeBucket('files');
+  await ensureFileBucket(identity);
   const stop = new AbortController();
   function shutdown() {
     stop.abort();

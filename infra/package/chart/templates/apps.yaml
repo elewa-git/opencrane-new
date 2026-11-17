@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: openfga
 spec:
-  replicas: 1
+  replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
   selector:
     matchLabels: { app: openfga }
   template:
@@ -51,7 +51,7 @@ kind: Deployment
 metadata:
   name: server
 spec:
-  replicas: 1
+  replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
   selector:
     matchLabels: { app: server }
   template:
@@ -100,6 +100,7 @@ spec:
           image: {{ required "server pin" .Values.images.server | quote }}
           command: [node, --experimental-strip-types, apps/server/src/main.ts]
           env:
+            - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
@@ -139,6 +140,7 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 64Mi }
             limits: { cpu: 100m, memory: 128Mi }
+        {{- if not .Values.pilotRestore.enabled }}
         - name: models
           image: {{ .Values.images.server | quote }}
           command: [node, --experimental-strip-types, infra/dev-stack/secondary-models.ts]
@@ -164,6 +166,7 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
+        {{- end }}
       volumes:
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }

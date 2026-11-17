@@ -56,6 +56,16 @@ infra/package/*
 !infra/package/scheduled-backup-run.ts
 !infra/package/event-backup.ts
 !infra/package/backup-bytes.ts
+!infra/package/event-restore.ts
+!infra/package/package-database.ts
+!infra/package/pilot-projections.ts
+!infra/package/pilot-backup-contract.ts
+!infra/package/pilot-storage.ts
+!infra/package/pilot-restore.ts
+!infra/package/pilot-restore-database.ts
+!infra/package/pilot-restore-kube.ts
+!infra/package/pilot-restore-target.ts
+!infra/package/pilot-restore-run.ts
 **/test
 **/tests
 **/*.spec.*

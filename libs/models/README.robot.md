@@ -1768,7 +1768,7 @@ a close from any source refuses it.
 
 The chat summary keeps events in their saved order, except `outputReportTypes`.
 A posted message keeps only `{ conversationId }` in its data. No decision reads
-its encrypted text. Each call copies rows up to its captured log position. The
+its prose. Each call copies rows up to its captured log position. The
 unchanged `confirm()` checks later activity, including approval invalidation.
 The shared two-second budget, disconnect check before reservation, watched access
 streams and all existing refusal rules remain in place.
@@ -4964,7 +4964,7 @@ records alone, foreign people, requests, turns, routines and silos refuse.
 The routine-session tests cover saved expiry after use, owner retry and another unsent
 use, including a NATS restart before verification and cold replay of the saved Stop.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
-read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
+read mutates state, opens review prose, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
 
 ## Typed memory access refusals (P4-15 PR 3i)
@@ -4987,7 +4987,7 @@ Clock passage alone proves nothing. A saved expiry can follow approval if the ca
 never used. Requested, approved or used records alone, foreign people, requests, turns,
 routines and silos refuse.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
-read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
+read mutates state, opens review prose, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
 
 ## Release audit confirmation (P3-8 PR 5a; Part of #49)

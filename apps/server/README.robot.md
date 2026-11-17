@@ -24,10 +24,9 @@ function yet; hosted dispatch and fresh-install qualification remain NOT RUN.
 The server checks the bridge's optional command activity label against the event
 catalogue before saving it. Older bridge reports without a label remain valid.
 The conversation feed sends the same fixed label to authorised chat readers.
-When the bridge also supplies a masked preview, the server encrypts it with the
-conversation message key before appending `agent.command_ran`. The event stores
-only the nested `view` ciphertext and key id. Member history and live chat decrypt
-it after their usual participation check. Audit and admin views omit the view.
+When the bridge supplies a masked preview, `agent.command_ran` stores it as
+`view.preview`. Member history and live chat display it after their usual
+participation check. Audit and admin views omit the view.
 
 ## Retained Ask call read
 
@@ -549,7 +548,7 @@ defines the strict linked and restricted replies. Session and active membership 
 precede creation and source reads, which share a separate ten-second deadline.
 The source uses `readEventAt`; it must match the saved id, type, silo and parent id.
 Child and parent participation checks follow, without an `authorityFence`.
-Only a visible source allows the shared `list-summary.ts` reader to decrypt a title.
+Only a visible source allows the shared `list-summary.ts` reader to read a title.
 Errors carry no parent details. `test/child-origin.test.ts` uses real NATS, PostgreSQL
 and OpenFGA, including permission outages, delayed reads, removal and unchanged state.
 Fresh-install qualification is NOT RUN.
@@ -557,8 +556,8 @@ Fresh-install qualification is NOT RUN.
 ## Closed chat display (P4-6 PR 4b; Part of #88)
 
 `chat/history.ts` handles HTTP history and supplies socket display rows. HTTP loads
-join facts and encrypted rows before checking current access once with `requireMember`.
-It decrypts only after that check. Join changes refuse the loaded page. No conversation
+join facts and readable rows before checking current access once with `requireMember`.
+It displays prose only after that check. Join changes refuse the loaded page. No conversation
 stream enters an authority fence. Socket access polling remains independent of loading.
 The conversations reader returns up to 100 visible rows, scanning past late execution,
 approval and publication rows and later duplicate closes. Socket delivery advances
@@ -633,7 +632,7 @@ Every new child output report must name the thread from its first server-owned
 `computer.turn_started`. That saved start must have `sharingClass: shared_only`
 and `executionMode: restricted`, and match the computer, assistant, conversation,
 turn and message author. Missing, private, closed or substituted turns are refused
-before encryption and append. The report class still belongs only on start reports.
+before saving prose and appending. The report class still belongs only on start reports.
 The saved start supplies the class for later output.
 
 Reports use the computer summary with a separate ten-second history deadline.
@@ -1294,6 +1293,7 @@ one of its required settings is missing.
 | --- | --- | --- | --- | --- |
 | `PORT` | Server | No | `8080` | HTTP port. |
 | `HOST` | Server | No | `0.0.0.0` | Address for the HTTP listener. |
+| `PILOT_RESTORE_READ_ONLY` | Server | No | `false` | With `true`, refuse API writes and hold bridges, child recovery, live views and ownership seeding after verified pilot restore. |
 | `SHUTDOWN_GRACE_MS` | Server | No | `10000` | Maximum time allowed for a clean shutdown. |
 | `NODE_ENV` | Server | No | None | Selects production sign-in rules and the development model-decision URL. |
 | `OIDC_ISSUER_URL` | Server | Yes | None | Sign-in provider address. |
@@ -1635,9 +1635,9 @@ generation when reconnecting. The server rechecks permissions throughout a strea
 The bridge runner also needs `KUBECONFIG`, `KUBE_NAMESPACE`,
 `TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER`. The dev host uses a loopback Kubernetes
 proxy with scoped Pod-proxy permission. Its separate `x-bridge-token` capability
-never replaces Kubernetes authentication. Per-conversation AES-GCM keys live in
-the private dev secret-store directory, outside events and projections. Preserve
-those keys with event backups; deleting a key makes that conversation’s event/projection text unreadable.
+never replaces Kubernetes authentication. Conversation prose is stored as plaintext
+in events and projections. Keep backups in private operator storage. Memory facts
+and personal answers retain their separate encryption and key custody.
 [Qualification and limits](../../docs/process/bridge-evidence.md).
 
 Creation defaults omitted `mode` to `agent_session` and records it immutably in
@@ -3708,7 +3708,7 @@ Reads never open a write check. Writes include these small dependencies in their
 existing two-second check. Creation reads stop after the first event; no access check
 reads conversation history or watches conversation activity.
 
-Feed replies select display fields before decrypting text. Shared child creation and
+Feed replies select permitted display fields before returning prose. Shared child creation and
 list rows omit origin and parent join references. Unrecognised feed event types
 return 503 without rows until they have a safe display contract. Lists retain the bounded scan,
 visible activity, title search and join-time rules from #352. Child invitations use
@@ -3877,18 +3877,18 @@ id for the same source returns the original intent. Stage ids hash silo, parent 
 Creation copies the saved joins, including people later removed; inherited access still
 checks the original joins. It never replaces them with new people. Parent closure blocks
 creation at admission; closing immediately afterwards is not an atomic cross-stream check.
-`addChildFirstInput` takes the same input as creation, with `keys` in its options.
+`addChildFirstInput` takes the same input as creation.
 It reads parent and child history with separate ten-second deadlines, then checks
 current requester access within one two-second write check. It watches only member,
 participation, assistant and team streams. The child must already exist and match the
 saved intent, including `origin.firstInputId`. Its creation must have an OpenFGA receipt;
 otherwise the command throws `ParticipationApplying` and appends nothing.
 
-The command decrypts only the source and encrypts its exact text under the child's key.
+The command copies only the exact source prose into the child's `utterance`.
 It appends one `message.posted`, with the requester as human author and principal, the
 original content type and no execution mode. The intent's first-input id is both event
 and command id. The expected sequence is the creation's position. Saved retries compare
-decrypted text and the other command fields, returning the original row and ciphertext.
+prose and the other command fields, returning the original row.
 A different saved record throws `ChatConflict`, including after NATS deduplication expires.
 `test/child-first-input.test.ts` uses real NATS, PostgreSQL and OpenFGA to check these rules,
 concurrent calls, neighbouring parent messages staying private and rebuilds saving no events.
@@ -4559,7 +4559,7 @@ records the closure checks and the remaining outage-watchdog and crash-recovery 
 
 ## Memory-bearing reports (P4-15 PR 3a; Part of #97)
 
-`chat/reports.ts` reads `readChatFacts` before hashing or encrypting report content.
+`chat/reports.ts` reads `readChatFacts` before hashing or saving report content.
 Any saved memory context, including prepared, invalidated and ended context, refuses
 reports carrying `text` or `commandDigest`. The fixed `ReportRejected` message is
 `Memory-bearing report content refused`. The bridge handles ordinary output through
@@ -4569,10 +4569,10 @@ Duplicate reports receive the same check before saved digest comparison.
 Text-free loss and completion reports keep their existing acknowledgements and replay.
 
 A competing memory append makes the report's conditional append conflict. Reloading
-checks the new evidence before another hash or encryption attempt. An uncertain append
-is never repeated automatically. Ciphertext constructed before a competing recall
+checks the new evidence before another hash or save attempt. An uncertain append
+is never repeated automatically. Prose prepared before a competing recall
 is not saved when recall wins the append.
-`chat/private-context.ts` collects every memory-bearing turn before decrypting replies.
+`chat/private-context.ts` collects every memory-bearing turn before reading reply prose.
 It excludes replies saved before the first recall too, while preserving human records
 and the existing behaviour for turns without memory.
 
@@ -4612,7 +4612,7 @@ The bridge combines only adjacent queued `agent.message_delta` reports with iden
 turn, chat, assistant, requester, thread, message and execution details. It keeps the
 64-report, 1 MiB and 64-chat queue limits, and limits combined text to 128,000 characters.
 There is no timer waiting for a batch. Starts, completions, tools and legacy reports
-stay separate. One conditional append saves encrypted combined text and each original
+stay separate. One conditional append saves bounded combined prose and each original
 sequence and digest. Only then does the bridge acknowledge every included report.
 Replay checks original digests even when it arrives in different groups. After an
 append, the server checks every original against saved receipts before acknowledging
@@ -5610,7 +5610,7 @@ Full root suite and fresh-install qualification: NOT RUN. The PR remains draft.
 
 ## Private routine session preparation
 
-`src/routine-session.ts` exports `prepareRoutineSession(store, keys, worker, input)`.
+`src/routine-session.ts` exports `prepareRoutineSession(store, worker, input)`.
 Input accepts only `routineId` and `occurrenceId`. The trusted worker supplies the silo,
 OpenFGA binding, workerId, current ownership check and optional clock. Saved due and current routine
 history supply every binding. Removal and rejoining cannot reuse the original admission.
@@ -5636,30 +5636,28 @@ There is no production caller. Execution stays unavailable. Scheduling, company
 profile checks, wake, Ask and activation remain later work. Root allocation is described below.
 Fresh-install qualification is NOT RUN. Own checks: [receipt](../../docs/process/p4-24-pr9a/receipt.md).
 
-### Encrypted routine input preparation
+### Routine input preparation
 
 `src/routine-input.ts` exports `prepareRoutineInput` with the same arguments as session
 preparation. It requires the exact existing worker-prepared session. It never creates one.
-The frozen due definition supplies the instructions. Conversation custody uses
-`routine-<routineId>` for those instructions and the occurrence's conversation id for
-the saved input. Neither key is provisioned by this helper.
+The frozen due definition supplies the saved plaintext instructions.
 One conditional append saves `message.posted` with the due message id, system origin,
-the worker principal and the recorded owner as author. The encrypted text begins with
+the worker principal and the recorded owner as author. The saved prose begins with
 `Routine instructions (user data):`. Retries validate the original input and return its
-position without re-encrypting or appending. Receipts keep `executionAvailable: false`.
+position without changing prose or appending. Receipts keep `executionAvailable: false`.
 The shared session checks enforce current worker ownership, owner admission, unchanged
-definition, Stop, access and `startBy`. History and custody reads precede the short write
-check. The append access callback reads no key file; it checks only current work and
+definition, Stop, access and `startBy`. History reads precede the short write
+check. The append access callback checks only current work and
 small access streams. No growing conversation stream is watched for receipt access.
 The bridge checks `routinePreparation` before pending work, lifecycle recovery, wake or
 delivery. The exclusion applies regardless of message author kind, including replayed
 history. Memory delivery wiring is unchanged. Root/budget admission, Stop and required
 Ask must be connected before any later enablement.
-`test/routine-session.test.ts` exercises both helpers, crash/retry recovery, custody and
+`test/routine-session.test.ts` exercises both helpers, crash/retry recovery and
 access loss, the actual bridge path and offline replay with effects forbidden. It also
-reads a saved encrypted input after restarting custody with the configured wrap key.
+reads saved input without a chat key.
 Public WebSocket subscriptions share the HTTP reserved-id rule and send `refused`
-with close code 1008 for `routine-session-` ids, before loading or decrypting content.
+with close code 1008 for `routine-session-` ids, before loading content.
 History checks the saved creation separately from the requested page, so a cursor
 after creation cannot skip `routinePreparation`. Display rejects that marker and
 reserved conversation ids. Conversation lists omit these sessions, and their title
@@ -5696,8 +5694,8 @@ payer and model-grant revocations still refuse, even before OpenFGA applies them
 The existing budget actor derives root identity from silo, conversation and turn. The due
 record's routine root reference is retained inside the checked fingerprint; it does not replace
 the budget actor's identity. The receipt returns the actual budget rootId with occurrenceId.
-The optional preparationDigest binds the frozen run, exact creation and encrypted input records,
-provider mode/choice, model, tariff and first-call bound. No plaintext is saved or returned.
+The optional preparationDigest binds the frozen run, exact creation and saved input records,
+provider mode/choice, model, tariff and first-call bound. That receipt returns no prose.
 The actor caps the allowance at remaining applicable ceilings and 1,000 cents. A smaller
 allowance is retried only after the actor reports available capacity; all checks use the same
 deadline. Recovery uses the actor's saved amount and refuses changed bindings. It cannot
@@ -5714,12 +5712,12 @@ concurrency, lost replies, broker/actor restart, capped immutable allowances and
 
 ### Checked routine activation admission
 
-`routine-activation.ts` exports internal `admitRoutineActivation(store, keys, worker,
+`routine-activation.ts` exports internal `admitRoutineActivation(store, worker,
 input, selection, senderAttemptId)`. Input accepts only routineId and occurrenceId.
 The trusted worker supplies the prepared computer/thread/generation and stable sender
 attempt separately. There is no production caller. One conditional append records the
 existing `routine.run_activation_admitted` event on the routine stream. Its allocation
-reference binds the exact encrypted input, frozen owner admission and payer, selected
+reference binds the exact saved input, frozen owner admission and payer, selected
 provider/model/tariff and prepared computer. A missing or changed allocation refuses.
 Retries compare the entire saved admission, including sender attempt. They return only
 its receipt with `executionAvailable: false`; they allocate nothing and grant no sender.
@@ -5799,7 +5797,7 @@ allow exactly one execution; replacement and selected-thread activity must refus
 No model service or dev stack is called. Fresh-install live qualification: NOT RUN.
 
 `prepareRoutineComputer` now starts the native thread before saving the private session,
-encrypted input and root allocation. It checks the routine before preparation and repeats
+saved input and root allocation. It checks the routine before preparation and repeats
 current checks through the existing commands after startup. The authenticated connection
 returns the actual thread id. Allocation records that id with the computer generation;
 admission and delivery keep the same identity. No new event or budget writer is added.
@@ -5843,7 +5841,7 @@ Replies are 401 without a session, 403 for refused access or silo mismatch, 400
 for invalid route parameters and 503 for missing configuration or unavailable
 history/IAM. Errors return fixed status values without upstream details.
 The route selects fields explicitly and checks a strict output schema. It never
-returns instructions, encrypted definitions, custody references or private run links.
+returns instructions, saved definitions, custody references or private run links.
 It does not call `readApproval`, decrypt, append, start jobs, wake or dispatch.
 
 `test/routine-reads.test.ts` uses disposable NATS/OpenFGA and the real server route.
@@ -7566,3 +7564,14 @@ exemptions were removed, then passed repeatedly after the rewrites. The document
 unknown-event parser example also passed. No test or production code changed;
 changed-test runs, changed-code ESLint and web build/tests were not applicable.
 Independent review was not run.
+
+## Reading after pilot restore
+
+`PILOT_RESTORE_READ_ONLY=true` keeps normal authenticated reads and their access
+checks. The server refuses non-GET and non-HEAD API calls with HTTP 503 and
+`restore_read_only`, including owner claims. It starts no bridge watcher, child
+recovery, live view or ownership seed. The restore chart omits the models container
+and holds workers and scheduled backup. Authentication still uses the normal OIDC
+routes and restored membership. The restore Job opens this mode only after checking
+events, replayed tables, rights and files. `test/restored-read-only.test.ts` checks
+read admission, held writes and owner-claim refusal.

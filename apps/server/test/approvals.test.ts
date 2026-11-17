@@ -16,7 +16,7 @@ import { envelope, history, readApproval, readToolPolicy, decideApproval,
 
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
-import { catalogueEvidence, fixture, toolEvidence } from '@opencrane/models/testing';
+import { catalogueEvidence, toolEvidence } from '@opencrane/models/testing';
 async function exactReviewFixture() {
   const setup = await approvalFixture();
   try {

@@ -158,6 +158,19 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
+    def test_missing_restore_import_refuses_even_with_entry_point_present(self):
+        required = ("pilot-restore.ts", "pilot-backup-contract.ts", "pilot-projections.ts",
+                    "pilot-restore-database.ts", "pilot-restore-target.ts", "pilot-storage.ts",
+                    "pilot-restore-kube.ts", "package-database.ts", "event-restore.ts")
+        for name in required:
+            with self.subTest(module=name):
+                sources = dict(self.sources)
+                sources.pop("infra/package/" + name, None)
+                self.assertIn("infra/package/pilot-restore-run.ts", sources)
+                result = self.check_imports(sources)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
+
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
@@ -165,7 +178,11 @@ class ImageLayerTests(unittest.TestCase):
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
                          "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs",
                          "scheduled-backup-run.ts", "scheduled-backup.ts",
-                         "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts"}
+                         "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts",
+                         "event-restore.ts", "package-database.ts", "pilot-projections.ts",
+                         "pilot-backup-contract.ts", "pilot-storage.ts", "pilot-restore.ts",
+                         "pilot-restore-database.ts", "pilot-restore-kube.ts",
+                         "pilot-restore-target.ts", "pilot-restore-run.ts"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)
         for path in self.paths:
             if path.startswith("app/infra/package/"):

@@ -31,7 +31,6 @@ const secretKeys: Record<string, string[]> = {
     'SCANNER_MANIFEST_DIGEST',
   ],
   runtimeFiles: [
-    'conversation-wrap-key',
     'ca.crt', 'command.crt', 'command.key', 'command.seed',
     'projection.crt', 'projection.key', 'projection.seed',
     'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed',
@@ -78,6 +77,7 @@ type PackageOwner = {
 type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
   images: Record<string, string>;
   natsCluster?: { enabled: boolean };
+  pilotRestore?: { enabled: boolean; backupId: string };
 };
 type PackageReview = {
   requiredSecrets: string[];
@@ -509,7 +509,7 @@ export async function installPackage(valuesFile: string) {
   if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
   await configureComputerGateway(owner);
-  await waitForBootstrap(owner);
+  if (!values.pilotRestore?.enabled) await waitForBootstrap(owner);
   await checkedKubectl(['-n', namespace, 'rollout', 'status', 'statefulset/objects',
     '--timeout=120s'], 150_000);
   const deployments = [

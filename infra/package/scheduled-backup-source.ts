@@ -1,28 +1,21 @@
+import { pilotDatabaseDetailsSchema } from './pilot-backup-contract.ts';
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
-import { Client } from 'minio';
 import { connectNats } from '@opencrane/event-store';
-import { budgets } from '@opencrane/models';
-import { members, mcpCatalogue, computers, conversations, files, auditTrail,
-  personalSettings, groups, providers, modelAccess, egressPolicy, connectionProfiles,
-  childRequests } from '@opencrane/projections';
+import { pilotProjectionNames } from './pilot-projections.ts';
 import { hashBackupBytes } from './backup-bytes.ts';
-import { readStorageLease } from '@opencrane/auth';
 import { z } from 'zod';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
-import { issueObjectLease, storageTransport } from './object-credentials.mjs';
+import { pilotStorage } from './pilot-storage.ts';
 import type { BackupPoint, BackupSource, ScheduledBackupOptions } from './scheduled-backup.ts';
 
 const execute = promisify(execFile);
 const deploymentSchema = z.object({ spec: z.object({ replicas: z.literal(1) }) });
 const podsSchema = z.object({ items: z.array(z.unknown()) });
-const projections = [members.name, mcpCatalogue.name, computers.name, conversations.name,
-  files.name, budgets.name, auditTrail.name, personalSettings.name, groups.name, providers.name,
-  modelAccess.name, egressPolicy.name, connectionProfiles.name, childRequests.name];
 const admission = ['server', 'worker-dispatcher'];
 const readers = ['worker-members', 'worker-mcp-catalogue', 'worker-computers',
   'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit', 'openfga'];
@@ -117,7 +110,7 @@ class PilotBackupSource implements BackupSource {
     function caughtUp(name: string) {
       return positions[name] === sequence;
     }
-    while (!projections.every(caughtUp)) {
+    while (!pilotProjectionNames.every(caughtUp)) {
       await delay(500);
       this.remaining();
       positions = await this.checkpoints();
@@ -197,20 +190,12 @@ class PilotBackupSource implements BackupSource {
       'SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY datname');
     const names: string[] = [];
     for (const row of databases.rows) names.push(row.datname);
-    return { databases: names, lsn: this.point.lsn };
+    const access = { storeId: process.env['OPENFGA_STORE_ID'],
+      modelId: process.env['OPENFGA_MODEL_ID'] };
+    return pilotDatabaseDetailsSchema.parse({ databases: names, lsn: this.point.lsn, access });
   }
   async files(destination: string) {
-    await mkdir('/tmp/backup-storage', { recursive: true, mode: 0o700 });
-    const accessKey = await readFile('/run/object-owner/MINIO_ROOT_USER', 'utf8');
-    const secretKey = await readFile('/run/object-owner/MINIO_ROOT_PASSWORD', 'utf8');
-    const leaseFile = '/tmp/backup-storage/lease.json';
-    await issueObjectLease({ accessKey, secretKey }, leaseFile, 'http://objects:9000');
-    const lease = await readStorageLease(leaseFile);
-    const storageOptions = { endPoint: 'objects', port: 9000, useSSL: false,
-      accessKey: lease.accessKey, secretKey: lease.secretKey, sessionToken: lease.sessionToken,
-      transport: storageTransport('http:', AbortSignal.timeout(this.remaining())),
-      retryOptions: { disableRetry: true } };
-    const client = new Client(storageOptions);
+    const client = await pilotStorage(this.deadline);
     const objects: { key: string; byteCount: number; sha256: string }[] = [];
     const lines: string[] = [];
     let total = 0;

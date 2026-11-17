@@ -1,10 +1,11 @@
 import { hashBackupBytes } from './backup-bytes.ts';
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, writeFile }
+import { lstat, mkdir, open, readdir, realpath, rename, rm, writeFile }
   from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { descriptorSchema } from './event-backup.ts';
+import { readPrivateFile } from './event-restore.ts';
 
 const identifier = descriptorSchema.shape.attempt;
 const integer = descriptorSchema.shape.lastSequence;
@@ -18,7 +19,7 @@ const partSchema = z.object({
   startedAt: z.iso.datetime(), finishedAt: z.iso.datetime(),
   details: z.record(z.string(), z.json()),
 }).strict();
-const manifestSchema = z.object({
+export const manifestSchema = z.object({
   version: z.literal(1), id: identifier, silo: identifier, point: pointSchema,
   startedAt: z.iso.datetime(), stoppedAt: z.iso.datetime(), completedAt: z.iso.datetime(),
   images: z.record(z.string(), z.string()), chartVersion: z.literal('0.1.0'),
@@ -36,7 +37,7 @@ export type ScheduledBackupOptions = {
   directory: string; id: string; silo: string; images: Record<string, string>;
 };
 
-async function privateDirectory(directory: string) {
+export async function privateDirectory(directory: string) {
   const metadata = await lstat(directory);
   if (!metadata.isDirectory() || metadata.uid !== process.getuid?.() ||
       (metadata.mode & 0o777) !== 0o700 || await realpath(directory) !== resolve(directory)) {
@@ -45,11 +46,7 @@ async function privateDirectory(directory: string) {
 }
 
 async function fingerprint(path: string) {
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || metadata.size > 128 * 1024 * 1024) {
-    throw new Error('Backup part refused');
-  }
-  const bytes = await readFile(path);
+  const bytes = readPrivateFile(path, 128 * 1024 * 1024);
   return { byteCount: bytes.length, sha256: hashBackupBytes(bytes) };
 }
 
@@ -167,8 +164,8 @@ export async function showBackup(directory: string, id: string) {
   await privateDirectory(directory);
   const backup = join(directory, id);
   await privateDirectory(backup);
-  const bytes = await readFile(join(backup, 'manifest.json'), 'utf8');
-  const manifest = manifestSchema.parse(JSON.parse(bytes));
+  const bytes = readPrivateFile(join(backup, 'manifest.json'), 1024 * 1024);
+  const manifest = manifestSchema.parse(JSON.parse(bytes.toString('utf8')));
   if (manifest.id !== id) throw new Error('Backup identity differs');
   drained(manifest.point);
   for (const name of ['events', 'database', 'files'] as const) {

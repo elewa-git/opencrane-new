@@ -202,7 +202,7 @@ Schema acceptance alone is not authorisation or evidence that an event was store
 
 The [event catalogue](../../docs/architecture/events.md) owns event semantics and
 which projection or reaction follows each event. Change that catalogue and this registry
-together. Money is safe integer EUR cents; sensitive payloads use ciphertext/key ids,
+together. Money is safe integer EUR cents; memory and personal answers use ciphertext/key ids,
 and credentials appear only as secret references.
 
 ## Session configuration
@@ -824,10 +824,10 @@ requires the matching MCP subject. This receipt grants no call permission.
 ## Reviewed child answers
 
 Final and interim text publication follow the [HTTP contract](../../docs/api/group-chats.md#reviewed-child-publication).
-`childResultPublishedDataSchema` requires a SHA-256 review digest and parent-key
-ciphertext. Final publications require result id, position and turn references.
+`childResultPublishedDataSchema` requires a SHA-256 review digest and bounded plaintext
+`utterance`. Final publications require result id, position and turn references.
 Interim publications accept either all three references or none for human text.
-Partial references, file fields and plaintext fields are refused.
+Partial references, file fields and unrecognised prose fields are refused.
 
 ## Gateway publication subscription
 
@@ -1045,7 +1045,7 @@ The fold keeps the schedule and occupied run, sets stopRequested, and performs n
 
 The company variant now requires the Ask id, root id, destination digest and
 distinct tool revision. A saved company Ask may carry a strict routine binding
-with ids, revisions and digests. The review remains encrypted. These fields
+with ids, revisions and digests. The review remains a bounded plaintext JSON string. These fields
 add no event type or reaction; replay cannot use them to release an account.
 
 `credential.released` accepts the old strict six-field shape for replay, or the strict

@@ -1,9 +1,10 @@
 import { expect, it } from 'vitest';
+import { z } from 'zod';
 import { getEventDefinition } from '../src/registry.ts';
 
 function plaintextConversation(type: string) {
   const definition = getEventDefinition(type)!;
-  const example = definition.example as Record<string, unknown>;
+  const example = z.record(z.string(), z.unknown()).parse(definition.example);
   const { ciphertext: _ciphertext, keyId: _keyId, ...identity } = example;
   const data = { ...identity, utterance: 'A restored conversation is readable.' };
   expect(definition.dataSchema.safeParse(data).success).toBe(true);
