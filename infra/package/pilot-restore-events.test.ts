@@ -62,8 +62,10 @@ async function readsBackAnUncertainCompletion() {
       }
       return reply;
     }
-    target.connection.request = loseCompletion;
     const options = { directory, silo: 'test', disposable: true };
+    await expect(restoreOfflineEventBackup(target.connection, descriptor, archive,
+      { ...options, resume: true })).rejects.toThrow('Offline event restore refused');
+    target.connection.request = loseCompletion;
     await expect(restoreOfflineEventBackup(target.connection, descriptor, archive, options))
       .rejects.toThrow('Offline event restore refused');
     const sent = transfers;

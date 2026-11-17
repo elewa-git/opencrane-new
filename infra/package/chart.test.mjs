@@ -904,6 +904,8 @@ test('restore installation holds bootstrap, writers and models until verified ad
     assert.ok(job.containers[0].command.includes('infra/package/pilot-restore-run.ts'));
     assert.ok(job.containers[0].volumeMounts.some(isReadOnlyBackup));
     assert.ok(namedResource('PersistentVolumeClaim', 'pilot-restore'));
+    const permissions = namedResource('Role', 'package-restore');
+    assert.ok(permissions.rules.find(isPodRule).verbs.includes('watch'));
   } finally {
     delete values.pilotRestore;
   }
@@ -922,3 +924,5 @@ function isReadOnlyBackup(mount) {
 }
 
 function isNatsCertificate(setting) { return setting.name === 'NATS_CERT_FILE'; }
+
+function isPodRule(rule) { return rule.resources.includes('pods'); }

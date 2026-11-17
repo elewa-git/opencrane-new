@@ -248,3 +248,21 @@ async function refusesInvalidFiles(kind: string) {
 }
 it.each(['duplicate', 'corrupt'])('refuses %s file bytes before changing the target',
   refusesInvalidFiles);
+
+async function remembersANativeAttemptAcrossCrashes() {
+  const options = await backupFixture();
+  const runtime = emptyTarget();
+  const attempts: boolean[] = [];
+  const events = runtime.target.events;
+  async function interrupted(backup: Parameters<typeof events>[0], resume = false) {
+    attempts.push(resume);
+    await events(backup);
+    if (attempts.length === 1) throw new Error('Simulated interrupted native attempt');
+  }
+  runtime.target.events = interrupted;
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({ stage: 'events' });
+  await restorePilotBackup(options, runtime.target);
+  expect(attempts).toEqual([false, true]);
+}
+it('journals the native attempt before transfer so crashes cannot trigger a blind resend',
+  remembersANativeAttemptAcrossCrashes);
