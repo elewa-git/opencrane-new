@@ -99,7 +99,9 @@ function acceptsLimits(arrow) {
   const maximumDiagram = '```mermaid\nsequenceDiagram\n' + participants +
     `A${arrow}H: Send\n`.repeat(25) + '```\n';
   const page = '# Overview\n' + maximumDiagram.repeat(3);
-  const lineCount = page.trimEnd().split('\n').length;
+  const trimmedPage = page.trimEnd();
+  const lines = trimmedPage.split('\n');
+  const lineCount = lines.length;
   const result = runCheck(page + '\n'.repeat(250 - lineCount));
   expect(result.status, result.stderr).toBe(0);
 }

@@ -38,10 +38,27 @@ function sequenceDiagrams(markdown) {
   return diagrams;
 }
 
+function hasMultipleStatements(line) {
+  const trimmedLine = line.trimStart();
+  if (trimmedLine.startsWith('%%')) return false;
+  // Ignore separators inside Mermaid's quoted participant names.
+  const withoutQuotedText = line.replace(/"[^"]*"/gu, '""');
+  const statements = withoutQuotedText.split(';');
+  let statementCount = 0;
+  for (const statement of statements) {
+    if (statement.trim() !== '') statementCount += 1;
+  }
+  return statementCount > 1;
+}
+
 function checkDiagram(diagram, number, errors) {
   const participants = new Set();
   let arrows = 0;
   for (const line of diagram.split('\n')) {
+    if (hasMultipleStatements(line)) {
+      errors.push(`Diagram ${number} must use one statement per line`);
+      continue;
+    }
     const declaration = /^\s*(?:participant|actor)\s+([\w-]+)/u.exec(line);
     if (declaration) participants.add(declaration[1]);
     const arrow = arrowPattern.exec(line);
