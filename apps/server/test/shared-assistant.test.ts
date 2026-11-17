@@ -1418,7 +1418,7 @@ async function sharesOnlyChildHistory() {
     const firstMessage = rows.find(isFirstInput)!;
     const conversation: AgentSession = { ...test.created,
       createdAt: firstMessage.event.time, assistantKind: 'team' };
-    const frame = turnMessage(chat!, conversation, rows, [], firstMessage, 'restricted');
+    const frame = turnMessage(conversation, rows, [], firstMessage, 'restricted');
     expect(frame).toMatchObject({ text: 'Reviewed source', sharingClass: 'shared_only' });
     const savedText: string[] = [];
     for (const row of rows) {

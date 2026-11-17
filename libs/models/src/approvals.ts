@@ -408,7 +408,9 @@ export async function approvalDecision(store: EventStore, silo: string, bound: B
   if (policy.expectedApproval && policy.outcome !== 'ask') {
     return { outcome: 'deny' as const, reason: 'approval_mismatch', approvalId: undefined };
   }
-  if (policy.outcome !== 'ask' || !policy.review) return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
+  if (policy.outcome !== 'ask' || !policy.review) {
+    return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
+  }
   await fresh();
   const deadline = fresh.deadline ?? Infinity;
   const prepared = prepareApproval(silo, bound, policy);

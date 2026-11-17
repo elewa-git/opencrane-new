@@ -120,7 +120,7 @@
   },
   "apps/server/src/chat/bridge-conversation.ts": {
     "max-params": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/server/src/chat/bridge-opening.ts": {
@@ -214,7 +214,7 @@
   },
   "apps/server/src/chat/reports.ts": {
     "max-params": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/server/src/chat/routes.ts": {

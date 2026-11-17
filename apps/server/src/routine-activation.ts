@@ -12,7 +12,8 @@ import { loadRoutineRootPreparation } from './routine-root.ts';
 type Arguments = Parameters<typeof loadRoutineRootPreparation>;
 
 // Record only the admission. A saved receipt never grants a caller permission to send.
-export async function admitRoutineActivation(store: Arguments[0], worker: Arguments[1], raw: unknown, selection: Arguments[3], senderAttemptId: string) {
+export async function admitRoutineActivation(store: Arguments[0], worker: Arguments[1],
+  raw: unknown, selection: Arguments[3], senderAttemptId: string) {
   try {
     const checked = await admit(store, worker, raw, selection, senderAttemptId, true);
     return checked.receipt;
@@ -21,7 +22,8 @@ export async function admitRoutineActivation(store: Arguments[0], worker: Argume
   }
 }
 
-export async function readRoutineActivation(store: Arguments[0], worker: Arguments[1], raw: unknown, selection: Arguments[3], senderAttemptId: string) {
+export async function readRoutineActivation(store: Arguments[0], worker: Arguments[1],
+  raw: unknown, selection: Arguments[3], senderAttemptId: string) {
   return admit(store, worker, raw, selection, senderAttemptId, false);
 }
 

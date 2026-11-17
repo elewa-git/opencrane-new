@@ -119,8 +119,8 @@ function attachmentsBefore(
   return attachments;
 }
 
-export function turnMessage(options: WatchOptions, conversation: AgentSession,
-  rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
+export function turnMessage(conversation: AgentSession, rows: ChatRows,
+  uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
   const posted = messagePostedDataSchema.parse(message.event.data);
   const configuration = sessionConfiguration({ conversation, requestedMode: executionMode,
     assistantKind: conversation.assistantKind, memoryEnabled: executionMode === 'restricted' });
@@ -347,7 +347,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   // Retry busy computers until they accept the turn, without flooding the connection.
   const resendDue = !accepted && performance.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
   if (previousDelivery?.turnId === message.event.id && !resendDue) return;
-  const turn = turnMessage(options, conversation, rows, uploads, message, mode) as
+  const turn = turnMessage(conversation, rows, uploads, message, mode) as
     ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
   const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn));
   async function buildTools() {

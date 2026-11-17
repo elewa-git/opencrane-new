@@ -8,7 +8,8 @@ type Arguments = Parameters<typeof allocateRoutineRoot>;
 type Link = Awaited<ReturnType<typeof connectBridge>>;
 
 // Keep this preparation internal. No worker dispatches automatic routines yet.
-export async function prepareRoutineComputer(store: Arguments[0], worker: Arguments[1], raw: unknown, actor: Arguments[3], link: Link, generation: number,
+export async function prepareRoutineComputer(store: Arguments[0], worker: Arguments[1],
+  raw: unknown, actor: Arguments[3], link: Link, generation: number,
   confirmCompany?: () => Promise<void>) {
   let turnId: string | undefined;
   let conversationId: string | undefined;

@@ -171,11 +171,11 @@ export async function recordReport(store: EventStore, context: ReportContext, va
   const authorId = reportAuthor(report, context.assistantId, created, facts.message);
   requirePrivateExitShape(report);
   requireMemoryFreeContent(report, facts);
-  const digest = reportDigest(batch?.at(-1) ?? report);
   const subject = `conversation-${report.conversationId}`;
   if (facts.reportPosition !== undefined) {
-    return verifyRecordedReport(store, context, report, batch, facts.reportPosition, digest);
+    return verifyRecordedReport(store, context, report, batch, facts.reportPosition);
   }
+  const digest = reportDigest(batch?.at(-1) ?? report);
   await requireSharedReportTurn(store, context, report, created, authorId);
   await requirePrivateExitTurn(store, context, report);
   let previousSequence = facts.lastReportSequence;
@@ -288,13 +288,14 @@ function reportAuthor(report: Report, assistantId: string,
   return message.authorId;
 }
 
-async function verifyRecordedReport(store: EventStore, context: ReportContext, report: Report, batch: Report[] | undefined, position: number,
-  digest: string) {
+async function verifyRecordedReport(store: EventStore, context: ReportContext,
+  report: Report, batch: Report[] | undefined, position: number) {
   if (batch) {
     // Replay can split a previously saved batch. Check every original digest and position.
     for (const original of batch) await recordReport(store, context, original);
     return 'duplicate' as const;
   }
+  const digest = reportDigest(report);
   const subject = `conversation-${report.conversationId}`;
   const previous = await readEventAt(store, subject, position, performance.now() + 10_000);
   if (previous) verifyReportReplay(previous, report, digest);

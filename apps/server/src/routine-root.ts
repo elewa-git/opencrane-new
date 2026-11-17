@@ -43,8 +43,8 @@ async function checkComputerChanges(store: Arguments[0], assistantId: string,
 }
 
 // Accept computer and thread choices only from trusted preparation, never a public request.
-export async function allocateRoutineRoot(store: Arguments[0], worker: Arguments[1], raw: unknown, actor: BudgetActor, selection: Selection,
-  confirmCompany?: () => Promise<void>) {
+export async function allocateRoutineRoot(store: Arguments[0], worker: Arguments[1],
+  raw: unknown, actor: BudgetActor, selection: Selection, confirmCompany?: () => Promise<void>) {
   try {
     return await allocate(store, worker, raw, actor, selection, confirmCompany);
   } catch {
@@ -89,7 +89,8 @@ async function allocate(store: Arguments[0], worker: Arguments[1],
     startBy: run.startBy, executionAvailable: false as const };
 }
 
-export async function loadRoutineRootPreparation(store: Arguments[0], worker: Arguments[1], raw: unknown, selection: Selection, allowActivation = false) {
+export async function loadRoutineRootPreparation(store: Arguments[0], worker: Arguments[1],
+  raw: unknown, selection: Selection, allowActivation = false) {
   const selected = { threadId: selection.threadId, computerId: selection.computerId,
     generation: selection.generation };
   const input = await loadRoutineInput(store, worker, raw, allowActivation);

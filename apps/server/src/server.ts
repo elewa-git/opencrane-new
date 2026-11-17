@@ -28,7 +28,8 @@ import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 import { registerFileRoutes, type FileOptions } from './files/routes.ts';
 // Builds the Fastify instance. Kept separate from main.ts so tests can
 // build a server without binding a real port.
-import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance, type FastifyRequest, type FastifyReply } from 'fastify';
+import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance,
+  type FastifyRequest, type FastifyReply } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
 import { shutdownTelemetry, type LogDestination } from '@opencrane/observability';
 import { registerAuthRoutes } from './auth/routes.ts';
