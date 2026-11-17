@@ -1,5 +1,28 @@
 # Ordinary third-party tool server journey
 
+## Rework round 6, 17 November 2026
+
+Owner-authorised limits: two slices, 23 agent-hours and six rework rounds.
+This is the final round. The PR remains draft.
+
+### Reproduction before fixes
+
+Fetched origin and completed the rebase onto `f5af2162b`.
+Retained main’s shorter READMEs and session defaults alongside ordinary-tool contracts.
+No conflict needed a product decision.
+
+The two named test files reproduced all three CI failures: 3 failed, 8 passed
+in 68.36 seconds. The dependency fixture tries to read removed `apps/odoo-mcp/src`.
+Both concurrency assertions classify every sanitised wire body as Alice’s request,
+including Bob’s. Before this PR, the fixture distinguished the otherwise identical
+requests using private thread metadata. This PR intentionally strips that metadata.
+
+The reproduction gives Bob a distinct business argument, `SO-BOB`, so wire requests
+can be identified without private metadata. Both selected tests still fail at the
+old full-input-body comparison: 2 failed, 8 unselected, in 29.24 seconds.
+The later fix must keep exact argument-to-credential binding and verify both requests.
+No assertion, access window or production credential handling has changed yet.
+
 ## Rework round 5 continued, 16 November 2026
 
 Result: PARTIAL. Source gates: PASS. Fresh-stack journey: FAIL during shared startup.

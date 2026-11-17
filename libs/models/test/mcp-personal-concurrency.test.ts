@@ -8,9 +8,17 @@ import { body, permit, send, publishedFixture, selectedPersonalFixture, requestF
 import { personalPair } from './support/personal-dispatch.ts';
 import { delayReceiptReplies } from './support/dispatch-receipts.ts';
 
-async function concurrentPersonalTurns() {
+async function distinctPersonalTurns() {
   const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob, reads } = await personalPair(context, body);
+  const pair = await personalPair(context, body);
+  // Distinguish calls by business data because private thread metadata never leaves the server.
+  pair.bob.body = pair.bob.body.replace('SO-1042', 'SO-BOB');
+  expect(pair.bob.body).toContain('SO-BOB');
+  return pair;
+}
+
+async function concurrentPersonalTurns() {
+  const { setup, remote, headers, bob, reads } = await distinctPersonalTurns();
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   const append = setup.nats.store.append.bind(setup.nats.store);
@@ -74,8 +82,7 @@ it('prepares immutable receipt work for a tool that needs no personal key',
   noKeyReceiptWork, 60_000);
 
 async function concurrentReceiptWork() {
-  const context = await selectedPersonalFixture();
-  const { setup, remote, headers, bob } = await personalPair(context, body);
+  const { setup, remote, headers, bob } = await distinctPersonalTurns();
   const alicePermit = await permit(setup, headers);
   const bobPermit = await permit(setup, bob.headers, bob.body);
   delayReceiptReplies(setup);
