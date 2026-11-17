@@ -174,3 +174,9 @@ stops the 5,000-message read early.
 | 100 | 103 / 126 | 1,149.59 / 619.30 | 403 | 3 / 26 | 353.60 / 10.59 | 403 |
 | 1,500 | 1,503 / 1,506 | 2,023.50 / 5,846.08 | 503 | 3 / 26 | 246.20 / 6.94 | 403 |
 | 5,000 | 2,152 / 2,155 | 2,012.00 / 10,000.18 | 503 | 3 / 26 | 335.28 / 8.02 | 403 |
+
+Fresh secondary CORE: PASS at source head
+`76a45566cf8f876283f49548ce6a207ac4b407d5`, including the post-status browser run
+at 1280 and 390 px. The [journey receipt](work-bug-1148-s1/journey.md) includes
+captures, source gates, earlier incomplete or failed attempts and explicit skipped
+live coverage. The final shutdown exited 0 and the slot reported free.
