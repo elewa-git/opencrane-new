@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { grantStream, type memberAuthorisation } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
-import { history } from '@opencrane/models';
+import { envelope, history } from '@opencrane/models';
+import { conversationKeys, connectProjectionDb } from '@opencrane/projections';
 import { directory, readEnv } from './config.ts';
 import { approvalJourneyTool, reviewJourneyTools } from './journey-tool-policy.ts';
 
@@ -62,6 +63,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       data: { id: randomUUID(), conversationId, assistantId: input.assistantId } });
     assert.equal(response.status(), 200, 'Requester creates the conversation');
     await until(async () => (await auth.conversation(input.requesterId, conversationId, 'post')).allowed);
+    await seedApprovalChat(store, input.silo, conversationId, input.assistantId);
     await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, turnId, assistantId: input.assistantId });
     await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', payingGroupId: defaultPayingGroupId }, 'opencrane-server');
     try {
@@ -154,7 +156,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       const approvals = await history(store, `approval-${approvalId}`, input.silo);
       assert.equal(approvals.filter(row => row.event.type === 'approval.used' &&
         (row.event.data as { permitId: string }).permitId === recorded.at(-1)!.requestId).length, 1);
-      console.log(`PASS approvals ${width}px: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
+      console.log(`PASS approvals ${width}px after 3,000 saved messages: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
     } catch (error) {
       // Capture the card before cleanup closes the turn and leaves the conversation.
       await captureApprovalFailure(page, width, error);
@@ -165,4 +167,40 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       await page.goto(input.origin); // Stop this viewport's polling before the next journey.
     }
   }
+}
+
+async function seedApprovalChat(store: EventStore, silo: string,
+  conversationId: string, assistantId: string) {
+  const server = await readEnv('server');
+  const keys = conversationKeys(server['CONVERSATION_KEYS_DIR']!,
+    server['CONVERSATION_WRAP_KEY_FILE']);
+  const encrypted = keys.encrypt(silo, conversationId, 'An earlier message in this long chat.');
+  const subject = `conversation-${conversationId}`;
+  let position = await store.head(subject);
+  for (let index = 0; index < 3000; index++) {
+    const data = { conversationId, authorId: assistantId, authorKind: 'agent',
+      contentType: 'text', ...encrypted };
+    const event = envelope(silo, subject, 'message.posted', data);
+    const result = await store.append({ event, expectedSequence: position, historyChecked: true });
+    assert.equal(result.status, 'appended', 'Seed each earlier chat message once');
+    if (result.status !== 'appended') throw new Error('Chat seeding refused');
+    position = result.sequence;
+  }
+  const db = connectProjectionDb(server['DATABASE_URL']!, failDatabase);
+  try {
+    const deadline = performance.now() + 30_000;
+    while (true) {
+      const saved = await db.db.query<{ sequence: string }>(
+        "SELECT sequence FROM projection_checkpoints WHERE name='conversations'");
+      if (Number(saved.rows[0]?.sequence) >= position) break;
+      assert(performance.now() < deadline, 'The long chat reaches the conversation projection');
+      await delay(100);
+    }
+  } finally {
+    await db.close();
+  }
+}
+
+function failDatabase(error: Error) {
+  throw error;
 }

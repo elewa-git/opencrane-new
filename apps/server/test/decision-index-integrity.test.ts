@@ -26,6 +26,7 @@ async function refusesMissingFact(type: string, fields: object) {
     const result = await setup.call();
     expect(result.status, result.text).toBeGreaterThanOrEqual(400);
     expect(setup.received()).toBe(0);
+    expect(setup.admitted).toHaveLength(0);
     expect(setup.actor.state.reservations).toHaveLength(0);
     const cards = await history(setup.nats.store, 'approval-*', 'test');
     function consumed(row: typeof cards[number]) {
@@ -64,6 +65,7 @@ async function boundsUnprojectedTail() {
     expect(result.text).toContain('Conversation history is catching up');
     expect(decisionRows).toBeLessThanOrEqual(64);
     expect(setup.received()).toBe(0);
+    expect(setup.admitted).toHaveLength(0);
     expect(setup.actor.state.reservations).toHaveLength(0);
   } finally {
     vi.restoreAllMocks();
@@ -86,6 +88,7 @@ async function refusesUnprovedCoverage(fault: string) {
     const result = await setup.call();
     expect(result.status, result.text).toBeGreaterThanOrEqual(400);
     expect(setup.received()).toBe(0);
+    expect(setup.admitted).toHaveLength(0);
     expect(setup.actor.state.reservations).toHaveLength(0);
   } finally {
     await setup.close();
