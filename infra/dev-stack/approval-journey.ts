@@ -172,7 +172,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
 async function seedApprovalChat(store: EventStore, silo: string,
   conversationId: string, assistantId: string) {
   const server = await readEnv('server');
-  const keys = conversationKeys(server['CONVERSATION_KEYS_DIR']!,
+  const keys = conversationKeys(`${directory}/conversation-keys`,
     server['CONVERSATION_WRAP_KEY_FILE']);
   const encrypted = keys.encrypt(silo, conversationId, 'An earlier message in this long chat.');
   const subject = `conversation-${conversationId}`;
