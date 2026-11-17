@@ -40,3 +40,25 @@ All captures are from the failed 390 px run:
 - [Upload](screenshots/upload-390.png)
 - [PDF preview](screenshots/preview-390.png)
 - [Failed attachment reply](screenshots/chat-failure.png)
+
+## Fresh rerun
+
+Journey on a fresh dev stack: FAIL
+
+- Date: 17 November 2026.
+- Tested head: `66305ff418ad16eb177057e4e6a3ce6f66e8825f`.
+- Fresh secondary slot: 1; managed calls enabled with the free stand-in provider.
+- The 1-minute load average stayed below 6 for five minutes before the stack was claimed.
+  It rose to at least 25.56 while the journey was running.
+- `infra/dev-stack/up.sh --fresh`: FAIL, exit 1 during the browser journey.
+- `infra/dev-stack/down.sh`: PASS; final slot status was `free`.
+- Sanitised `server.log`, `computers.log` and failure metadata, plus the available
+  390 px captures, are in the private fleet receipt for this rerun.
+
+The browser completed the 390 px workspace, upload, preview and attachment checks,
+then failed in the later computer live-view check. The runner timed out waiting for
+the fourth agent reply's “Done” marker in `browserLiveViewJourney`. The screenshot
+shows the read-only computer view. This differs from the earlier attachment-reply
+failure; neither run proves a product defect or qualifies the slice for merge.
+The 1280 px checks and later CORE steps were NOT RUN. No passing-run screenshots
+were produced. Paid-provider and approval journeys remain NOT RUN.
