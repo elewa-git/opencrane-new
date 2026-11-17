@@ -36,6 +36,7 @@ export async function restoreOfflineEventBackup(target: NatsConnection,
     const absent = z.object({ error: z.object({ code: z.literal(404), err_code: z.literal(10059) }) });
     let restored: z.infer<typeof infoSchema>;
     if (absent.safeParse(current).success) {
+      if (options.resume === true) throw refusal();
       restored = await transfer(target, bounds, descriptor, archive);
     } else {
       if (options.resume !== true) throw refusal();

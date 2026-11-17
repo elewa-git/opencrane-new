@@ -48,7 +48,7 @@ rules:
   {{- end }}
   - apiGroups: [""]
     resources: [pods]
-    verbs: [get, list]
+    verbs: [get, list{{ if $restore }}, watch{{ end }}]
   - apiGroups: [""]
     resources: [pods/exec]
     resourceNames: [postgres-0]

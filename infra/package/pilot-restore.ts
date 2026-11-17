@@ -21,7 +21,7 @@ export type PilotRestoreTarget = {
   requireIsolated(): Promise<void>;
   hold(): Promise<void>;
   empty(): Promise<boolean>;
-  events(backup: CheckedPilotBackup): Promise<void>;
+  events(backup: CheckedPilotBackup, resume?: boolean): Promise<void>;
   database(backup: CheckedPilotBackup): Promise<void>;
   files(backup: CheckedPilotBackup): Promise<void>;
   verify(backup: CheckedPilotBackup): Promise<void>;
@@ -32,6 +32,7 @@ const stages = ['events', 'database', 'files', 'verify', 'open', 'complete'] as 
 const journalSchema = z.object({
   version: z.literal(1), backupId: z.string(), manifestDigest: z.string(),
   target: z.record(z.string(), z.string().min(1)), stage: z.enum(stages),
+  eventsStarted: z.boolean(),
 }).strict();
 type Journal = z.infer<typeof journalSchema>;
 export type PilotRestoreReason = 'invalid_backup' | 'non_empty' | 'target_changed'
@@ -84,7 +85,7 @@ async function restorationJournal(options: PilotRestoreOptions,
   if (!await target.empty()) throw new PilotRestoreRefused('non_empty', 'empty');
   await target.requireIsolated();
   const journal: Journal = { version: 1, backupId: backup.manifest.id,
-    manifestDigest: backup.manifestDigest, target: identity, stage: 'events' };
+    manifestDigest: backup.manifestDigest, target: identity, stage: 'events', eventsStarted: false };
   await saveJournal(options.stateDirectory, journal);
   return journal;
 }
@@ -96,7 +97,14 @@ async function restoreStages(options: PilotRestoreOptions, backup: CheckedPilotB
     if (stages.indexOf(stage) < stages.indexOf(journal.stage)) continue;
     await checkTargetIdentity(target, journal);
     await target.requireIsolated();
-    await target[stage](backup);
+    if (stage === 'events') {
+      const resume = journal.eventsStarted;
+      journal.eventsStarted = true;
+      await saveJournal(options.stateDirectory, journal);
+      await target.events(backup, resume);
+    } else {
+      await target[stage](backup);
+    }
     const index = stages.indexOf(stage);
     journal.stage = stages[index + 1]!;
     await saveJournal(options.stateDirectory, journal);

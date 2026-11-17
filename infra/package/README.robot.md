@@ -2065,8 +2065,9 @@ normal conversation and file routes to verify authorised and denied reads.
 After interruption, keep restore mode and the same volumes, set and credentials.
 Create another Job from the same CronJob. The journal resumes owned stages;
 partially loaded databases are reset only within that recorded empty installation.
-An uncertain native completion is checked by readback, without retransmitting a
-completed stream. Existing file objects must already match their checksums. A
+The journal records a native attempt before sending bytes. An uncertain native
+completion is checked by readback, without retransmitting. If an interrupted attempt
+has no complete readable stream, recovery refuses and needs operator investigation. Existing file objects must already match their checksums. A
 completed rerun briefly closes reading and verifies again without reloading data.
 A different set, replaced volume, foreign content or concurrent runner refuses.
 Failures report a safe stage and reason, retain their internal cause and leave

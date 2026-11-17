@@ -155,8 +155,8 @@ class PackageRestoreTarget implements PilotRestoreTarget {
     for await (const _object of objects.listObjectsV2('files', '', true)) return false;
     return true;
   }
-  async events(backup: CheckedPilotBackup) {
-    const options = { directory: '', silo: this.options.silo, disposable: true, resume: true };
+  async events(backup: CheckedPilotBackup, resume = false) {
+    const options = { directory: '', silo: this.options.silo, disposable: true, resume };
     await restoreOfflineEventBackup(this.connection, backup.events, backup.bytes.events, options);
   }
   async database(backup: CheckedPilotBackup) {
