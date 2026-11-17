@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { envelope, history } from '@opencrane/models';
 
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
@@ -88,3 +89,34 @@ export async function approvalFixture(stepUp = false,
     },
   };
 }
+
+type ApprovalFixture = Awaited<ReturnType<typeof approvalFixture>>;
+
+export async function prepareLongConversation(setup: ApprovalFixture) {
+  const messages = [];
+  for (let index = 0; index < 5000; index++) {
+    const data = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', utterance: 'Earlier message' };
+    messages.push(envelope('test', 'conversation-conversation', 'message.posted', data));
+  }
+  await setup.nats.seed(messages);
+  const turn = { assistantId: 'assistant', computerId: 'computer',
+    conversationId: 'conversation', turnId: 'long-turn', threadId: 'thread',
+    requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
+  await setup.append('computer-assistant', 'computer.turn_started', turn);
+  const started = { conversationId: 'conversation', assistantId: 'assistant',
+    turnId: 'long-turn' };
+  await setup.append('conversation-conversation', 'agent.turn_started', started);
+  const claims = { ...setup.t, turn: 'long-turn' };
+  const token = await setup.sign(claims, 'decision-service');
+  const headers = { 'x-turn-token': token };
+  const response = await setup.call(undefined, headers);
+  expect(response.status, response.text).toBe(403);
+  const rows = await history(setup.nats.store, 'conversation-conversation', 'test');
+  function isMessage(row: typeof rows[number]) {
+    return row.event.type === 'message.posted';
+  }
+  const savedMessages = rows.filter(isMessage);
+  expect(savedMessages).toHaveLength(5000);
+}
+
