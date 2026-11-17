@@ -4,7 +4,7 @@ const publicEntrypoints = {
   'libs/observability': '^libs/observability/(src/index|test/memory-sink)\\.ts$',
   'libs/events': '^libs/events/src/(index|tool-call|command-activity-label|lossless-json|mcp-catalogue|routine-schedule|session-configuration)\\.ts$',
   'libs/projections': '^libs/projections/(src/index|test/database)\\.ts$',
-  'libs/models': '^libs/models/(src/(index|routing|private-callers)|test/(fixture|support/remote-mcp))\\.ts$',
+  'libs/models': '^libs/models/(src/(index|routing|private-callers)|test/(fixture|members|support/remote-mcp))\\.ts$',
   'libs/event-store': '^libs/event-store/(src/index|test/testing)\\.ts$',
   'libs/authz': '^libs/authz/(src/index|test/services)\\.ts$',
   'libs/auth': '^libs/auth/(src/index|test/testing)\\.ts$',
