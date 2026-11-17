@@ -55,6 +55,13 @@ exception: 3 failed, 14 unselected, in 22.16 seconds. This is a test caller mism
 main deliberately removed the production silo-scan fallback. That fallback must stay
 removed. Reuse the existing full candidate discovery helper from the Codex tests.
 
+The fix moves main’s existing `discoverApprovalRequests` helper into test support
+and supplies its complete candidate rows at all three ordinary-test call sites.
+Every approval assertion is retained. The new personal-concurrency helpers also
+live in test support; moving them changes no expected body or credential value.
+The first expanded run passed all 58 tests across the four affected files in
+261.85 seconds. The second run and final source gates remain in progress.
+
 ## Rework round 5 continued, 16 November 2026
 
 Result: PARTIAL. Source gates: PASS. Fresh-stack journey: FAIL during shared startup.

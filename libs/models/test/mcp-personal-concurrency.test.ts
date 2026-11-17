@@ -1,4 +1,3 @@
-import type { IncomingHttpHeaders } from 'node:http';
 import type { AppendCommand } from '@opencrane/event-store';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -8,39 +7,7 @@ import { body, permit, send, publishedFixture, selectedPersonalFixture, requestF
   from './support/mcp-dispatch-fixture.ts';
 import { personalPair } from './support/personal-dispatch.ts';
 import { delayReceiptReplies } from './support/dispatch-receipts.ts';
-
-function expectedPersonalRequest(order: string, authorization: string) {
-  const metadata = {
-    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-    'io.modelcontextprotocol/clientCapabilities': {},
-  };
-  const toolArguments = { order, note: 'Deliver 1.0 pallets' };
-  const params = { name: 'write', arguments: toolArguments, _meta: metadata };
-  const body = { jsonrpc: '2.0', id: 2, method: 'tools/call', params };
-  return { authorization, body };
-}
-
-function observedPersonalRequest(received: { raw: Buffer; headers: IncomingHttpHeaders }) {
-  const body: unknown = JSON.parse(received.raw.toString());
-  return { authorization: received.headers.authorization, body };
-}
-
-function expectPersonalRequests(received: { raw: Buffer; headers: IncomingHttpHeaders }[]) {
-  const observed = received.map(observedPersonalRequest);
-  const alice = expectedPersonalRequest('SO-1042', 'Bearer alice-access');
-  const bob = expectedPersonalRequest('SO-BOB', 'Bearer bob-access');
-  expect(observed).toHaveLength(2);
-  expect(observed).toEqual(expect.arrayContaining([alice, bob]));
-}
-
-async function distinctPersonalTurns() {
-  const context = await selectedPersonalFixture();
-  const pair = await personalPair(context, body);
-  // Distinguish calls by business data because private thread metadata never leaves the server.
-  pair.bob.body = pair.bob.body.replace('SO-1042', 'SO-BOB');
-  expect(pair.bob.body).toContain('SO-BOB');
-  return pair;
-}
+import { distinctPersonalTurns, expectPersonalRequests } from './support/personal-concurrency.ts';
 
 async function concurrentPersonalTurns() {
   const { setup, remote, headers, bob, reads } = await distinctPersonalTurns();

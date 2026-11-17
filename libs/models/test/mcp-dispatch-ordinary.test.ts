@@ -13,6 +13,7 @@ import { approvalCards, decideApproval, readApproval, readToolPolicy } from '../
 import { catalogueEvidence, fixture } from './fixture.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 import { approvalForReviewedTool } from './support/mcp-dispatch-assertions.ts';
+import { discoverApprovalRequests } from './support/approval-requests.ts';
 
 async function runsOrdinaryRemoteTool() {
   const { setup, headers, remote } = await ordinaryRemoteFixture();
@@ -84,7 +85,10 @@ async function approvesOrdinaryDescription(_name: string, description: string | 
   expect(remote.calls).toHaveLength(0);
   const waiting = await readApproval(setup.nats.store, 'test', approvalId);
   expect(waiting.state).toBe('requested');
-  const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
+  const approvalRows = await discoverApprovalRequests(setup);
+  const options = { approvalRows };
+  const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
+    'alice', setup.keys, options);
   expect(cards).toHaveLength(1);
   expect(cards[0]!.review).toMatchObject({ tool: 'write', target: 'write', consequence,
     data: losslessJson(JSON.stringify(capture.body.params.arguments)).canonical });
@@ -184,7 +188,10 @@ async function refusesUnreviewedDeclaredArguments(kind: 'target' | 'object' | 'a
     setup.actor.now, fresh, 'unreviewed-arguments');
   await expect(decision).rejects.toThrow('Unreviewed arguments');
   expect(await setup.nats.store.head()).toBe(before);
-  const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
+  const approvalRows = await discoverApprovalRequests(setup);
+  const options = { approvalRows };
+  const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
+    'alice', setup.keys, options);
   expect(cards).toEqual([]);
   expect(setup.received()).toBe(0);
 }
@@ -203,7 +210,10 @@ async function approvesStructuredOrdinaryArguments(kind: 'object' | 'array') {
     request);
   expect(response.status).toBe(403);
   const answer = z.object({ approvalId: z.string() }).parse(await response.json());
-  const cards = await approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys);
+  const approvalRows = await discoverApprovalRequests(setup);
+  const options = { approvalRows };
+  const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
+    'alice', setup.keys, options);
   expect(cards).toHaveLength(1);
   expect(cards[0]!.review.data).toBe(losslessJson(JSON.stringify(argumentsValue)).canonical);
   const waiting = await readApproval(setup.nats.store, 'test', answer.approvalId);

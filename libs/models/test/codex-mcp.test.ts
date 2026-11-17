@@ -2,11 +2,11 @@ import { setTimeout as pause } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
-import { conversations, readConversation, readEvents } from '@opencrane/projections';
-import type { StoredEvent } from '@opencrane/event-store';
+import { conversations, readConversation } from '@opencrane/projections';
 import { grantStream } from '@opencrane/authz';
 import { approvalCards, decideApproval, envelope, history, losslessJson, readApproval } from '../src/index.ts';
 import { fixture, reviewCatalogue } from './fixture.ts';
+import { discoverApprovalRequests } from './support/approval-requests.ts';
 import capture from './fixtures/codex-0.159.2-tools-call.json' with { type: 'json' };
 
 const toolDefinition = losslessJson('{"name":"write","inputSchema":{"type":"object"}}');
@@ -15,18 +15,6 @@ const catalogueDigest = losslessJson(JSON.stringify([{ name: 'write', revision: 
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-async function discoverApprovalRequests(setup: Fixture) {
-  const position = await setup.nats.store.head();
-  const approvalRows: StoredEvent[] = [];
-  // Scan every candidate stream so an unexpected second request cannot stay hidden.
-  for await (const row of readEvents(setup.nats.store, 1, position)) {
-    if (row.event.silo !== 'test') continue;
-    if (!row.event.subject.startsWith('approval-')) continue;
-    if (row.event.type !== 'tool.approval_requested') continue;
-    approvalRows.push(row);
-  }
-  return approvalRows;
-}
 
 async function prepareCapturedCall(setup: Fixture, toolMode: 'allow' | 'ask' = 'allow',
   ttlMs = 300_000) {
