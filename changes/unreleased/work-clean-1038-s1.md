@@ -1,0 +1,1 @@
+Newcomers can read the plan, target installation page and decision records with ten out-of-date statements corrected against the code. The pages distinguish existing parts from work still to prove, name the approval events correctly and explain command retries through a dated amendment.
