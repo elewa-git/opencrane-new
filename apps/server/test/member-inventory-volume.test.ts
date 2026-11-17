@@ -3,7 +3,7 @@ import { encodeSession } from '@opencrane/auth';
 import type { EventEnvelope } from '@opencrane/events';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { conversations, members, routines, computers, pgDb, ProjectionRunner,
   type Query } from '@opencrane/projections';
@@ -20,10 +20,18 @@ let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let counter = 0;
 
-async function append(subject: string, type: string, data: unknown) {
-  const record = { ...event(`volume-${++counter}`, subject, type), silo: 'acme', data };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+}
+
+async function appendAndAuthorise(
+  { subject, type, data }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `volume-${++counter}`, subject, type, silo: 'acme', data,
+  });
   if (auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
@@ -62,8 +70,11 @@ async function initialise() {
     await runner.initialise(projection);
   }
   for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member']]) {
-    await append(`member-${memberId}`, 'member.joined', {
-      memberId, role, email: `${memberId}@example.test`, displayName: memberId,
+    await appendAndAuthorise({
+      subject: `member-${memberId}`, type: 'member.joined',
+      data: {
+        memberId, role, email: `${memberId}@example.test`, displayName: memberId,
+      },
     });
   }
   await project();
@@ -113,14 +124,20 @@ async function projectVolumeFixtures(records: EventEnvelope[], firstPosition: nu
 }
 
 async function ignoresLargeUnrelatedHistoryTail() {
-  const creation = await append('conversation-unrelated-volume', 'conversation.created', {
-    conversationId: 'unrelated-volume', assistantId: 'unrelated-volume',
-    createdBy: 'someone-else',
+  const creation = await appendAndAuthorise({
+    subject: 'conversation-unrelated-volume', type: 'conversation.created',
+    data: {
+      conversationId: 'unrelated-volume', assistantId: 'unrelated-volume',
+      createdBy: 'someone-else',
+    },
   });
-  const message = await append('conversation-unrelated-volume', 'message.posted', {
-    conversationId: 'unrelated-volume', authorId: 'someone-else', authorKind: 'human',
-    ciphertext: Buffer.from('Unrelated volume fixture').toString('base64'),
-    keyId: 'key:unrelated-volume', contentType: 'text',
+  const message = await appendAndAuthorise({
+    subject: 'conversation-unrelated-volume', type: 'message.posted',
+    data: {
+      conversationId: 'unrelated-volume', authorId: 'someone-else', authorKind: 'human',
+      ciphertext: Buffer.from('Unrelated volume fixture').toString('base64'),
+      keyId: 'key:unrelated-volume', contentType: 'text',
+    },
   });
   const messagePosition = await nats.store.head('conversation-unrelated-volume');
   await project();

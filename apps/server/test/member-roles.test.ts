@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { history, seedOwnership } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { members, pgDb, ProjectionRunner,
@@ -21,15 +21,6 @@ let runner: ProjectionRunner;
 let count = 0;
 const logger = createLogger('ownership-test', { level: 'silent' });
 
-async function append(subject: string, type: string, data: unknown, silo = 'acme') {
-  const record = {
-    ...event(`ownership-fixture-${++count}`, subject, type), silo, data,
-    correlation: {}, principal: { kind: 'human' as const, id: 'idp-owner' },
-  };
-  const expectedSequence = await nats.store.head(subject);
-  expect((await nats.store.append({ event: record, expectedSequence })).status).toBe('appended');
-  return record;
-}
 async function project() {
   const head = await nats.reader.head();
   for await (const row of readEvents(nats.reader, 1, head)) {
@@ -65,7 +56,10 @@ async function initialise() {
   await runner.initialise(members);
   for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member'], ['admin', 'admin']]) {
     const data = { memberId, email: `${memberId}@example.test`, displayName: memberId, role };
-    const joined = await append(`member-${memberId}`, 'member.joined', data);
+    const joined = (await appendEvent(nats.store, {
+      id: `ownership-fixture-${++count}`, subject: `member-${memberId}`, type: 'member.joined',
+      silo: 'acme', data: data, principal: { kind: 'human' as const, id: 'idp-owner' },
+    })).event;
     await auth.handler.handle(joined, db);
   }
   await seedOwnership(nats.store, 'acme');
@@ -181,7 +175,10 @@ async function readsHistoryBeforeShortCheck() {
 async function losesAuthorityBeforeAppend() {
   const joined = { memberId: 'temporary', email: 'temporary@example.test',
     displayName: 'Temporary', role: 'admin' };
-  await append('member-temporary', 'member.joined', joined);
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-temporary', type: 'member.joined',
+    silo: 'acme', data: joined, principal: { kind: 'human' as const, id: 'idp-owner' },
+  });
   await project();
   const input = { commandId: 'ended-authority', newRole: 'member',
     expectedSequence: await nats.store.head('member-bob') };
@@ -190,8 +187,13 @@ async function losesAuthorityBeforeAppend() {
   async function demoteBeforeFinalCheck(subject?: string, deadline?: number) {
     if (subject === 'member-temporary' && !changed) {
       changed = true;
-      await append('member-temporary', 'member.role_changed', {
-        memberId: 'temporary', previousRole: 'admin', newRole: 'member', changedBy: 'owner' });
+      await appendEvent(nats.store, {
+        id: `ownership-fixture-${++count}`, subject: 'member-temporary',
+        type: 'member.role_changed', silo: 'acme',
+        data: {
+          memberId: 'temporary', previousRole: 'admin', newRole: 'member', changedBy: 'owner' },
+        principal: { kind: 'human' as const, id: 'idp-owner' },
+      });
     }
     return original(subject, deadline);
   }
@@ -217,15 +219,25 @@ it('refuses ended event authority and unavailable IAM without changing the targe
 
 async function racesAppointment(appointmentFirst: boolean) {
   const memberId = appointmentFirst ? 'race-before' : 'race-after';
-  await append(`member-${memberId}`, 'member.joined', {
-    memberId, email: `${memberId}@example.test`, displayName: memberId, role: 'member' });
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: `member-${memberId}`, type: 'member.joined',
+    silo: 'acme',
+    data: {
+      memberId, email: `${memberId}@example.test`, displayName: memberId, role: 'member' },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
+  });
   await project();
   const input = { commandId: memberId, newRole: 'admin',
     expectedSequence: await nats.store.head(`member-${memberId}`) };
   const original = nats.store.append.bind(nats.store);
   async function appoint() {
-    await append('ownership-acme', 'ownership.transferred', {
-      memberId, transferredBy: 'owner' });
+    await appendEvent(nats.store, {
+      id: `ownership-fixture-${++count}`, subject: 'ownership-acme', type: 'ownership.transferred',
+      silo: 'acme',
+      data: {
+        memberId, transferredBy: 'owner' },
+      principal: { kind: 'human' as const, id: 'idp-owner' },
+    });
   }
   async function appendInOrder(command: Parameters<typeof original>[0]) {
     expect(command.historyChecked).toBe(true);
@@ -283,9 +295,18 @@ async function refusesInactiveRemainingOwners() {
   // Keep the malformed old owner removals out of the live projections.
   const owners = ['race-before', 'race-after'];
   for (const memberId of owners) {
-    await append('ownership-acme', 'ownership.transferred', {
-      memberId, transferredBy: 'owner' });
-    await append(`member-${memberId}`, 'member.removed', { memberId, removedBy: 'owner' });
+    await appendEvent(nats.store, {
+      id: `ownership-fixture-${++count}`, subject: 'ownership-acme', type: 'ownership.transferred',
+      silo: 'acme',
+      data: {
+        memberId, transferredBy: 'owner' },
+      principal: { kind: 'human' as const, id: 'idp-owner' },
+    });
+    await appendEvent(nats.store, {
+      id: `ownership-fixture-${++count}`, subject: `member-${memberId}`, type: 'member.removed',
+      silo: 'acme', data: { memberId, removedBy: 'owner' },
+      principal: { kind: 'human' as const, id: 'idp-owner' },
+    });
   }
   const input = { action: 'step_down', commandId: 'inactive-owners',
     expectedSequence: await nats.store.head('ownership-acme') };

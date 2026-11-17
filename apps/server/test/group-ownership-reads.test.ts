@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { groups, members, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
@@ -17,12 +17,20 @@ let auth: ReturnType<typeof memberAuthorisation>;
 let app: ReturnType<typeof buildServer>;
 let count = 0;
 
-async function append(subject: string, type: string, data: unknown, apply = true) {
-  const record = { ...event(`owning-read-${++count}`, subject, type), silo: 'acme', data,
-    principal: { kind: 'human' as const, id: 'owner' } };
-  const expectedSequence = await nats.store.head(subject);
-  const result = await nats.store.append({ event: record, expectedSequence });
-  expect(result.status).toBe('appended');
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+  apply?: boolean;
+}
+
+async function appendAndAuthorise(
+  { subject, type, data, apply = true }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `owning-read-${++count}`, subject, type, silo: 'acme', data,
+    principal: { kind: 'human' as const, id: 'owner' },
+  });
   if (apply && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, db);
   }
@@ -47,14 +55,24 @@ async function initialise() {
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin']] as const) {
     const joined = { memberId, role, displayName: memberId,
       email: `${memberId}@example.test` };
-    await append(`member-${memberId}`, 'member.joined', joined);
+    await appendAndAuthorise({
+      subject: `member-${memberId}`, type: 'member.joined', data: joined,
+    });
   }
-  await append('ownership-acme', 'ownership.seeded', { ownerIds: ['owner'] });
-  await append('ownership-acme', 'ownership.transferred', {
-    memberId: 'owner', transferredBy: 'owner', awaitingConfirmation: true,
+  await appendAndAuthorise({
+    subject: 'ownership-acme', type: 'ownership.seeded', data: { ownerIds: ['owner'] },
   });
-  await append('team-sales', 'team.created', {
-    teamId: 'sales', name: 'Sales', createdBy: 'owner',
+  await appendAndAuthorise({
+    subject: 'ownership-acme', type: 'ownership.transferred',
+    data: {
+      memberId: 'owner', transferredBy: 'owner', awaitingConfirmation: true,
+    },
+  });
+  await appendAndAuthorise({
+    subject: 'team-sales', type: 'team.created',
+    data: {
+      teamId: 'sales', name: 'Sales', createdBy: 'owner',
+    },
   });
   await runner.run(members);
   await runner.run(groups);
@@ -173,11 +191,15 @@ async function slowRead(route: ReadCase) {
 it.each(routes)('returns $url after history takes more than two seconds', slowRead);
 
 async function revokeDuringRead(route: ReadCase) {
-  let removal: Awaited<ReturnType<typeof append>> | undefined;
+  let removal: Awaited<ReturnType<typeof appendAndAuthorise>> | undefined;
   async function revoke() {
-    removal = await append('member-admin', 'member.removed', {
-      memberId: 'admin', removedBy: 'owner',
-    }, false);
+    removal = await appendAndAuthorise({
+      subject: 'member-admin', type: 'member.removed',
+      data: {
+        memberId: 'admin', removedBy: 'owner',
+      },
+      apply: false,
+    });
   }
   const loading = interceptLoading(route, revoke);
   try {
@@ -194,8 +216,11 @@ async function revokeDuringRead(route: ReadCase) {
     loading.restore();
     if (removal) {
       await auth.handler.handle(removal, db);
-      await append('member-admin', 'member.joined', { memberId: 'admin', role: 'admin',
-        displayName: 'admin', email: 'admin@example.test' });
+      await appendAndAuthorise({
+        subject: 'member-admin', type: 'member.joined',
+        data: { memberId: 'admin', role: 'admin',
+          displayName: 'admin', email: 'admin@example.test' },
+      });
     }
   }
 }
@@ -204,11 +229,15 @@ it.each(routes)('denies $url when removal lands during loading, before IAM catch
 
 async function chatDuringRead(route: ReadCase) {
   async function postMessage() {
-    await append('conversation-unrelated', 'message.posted', {
-      conversationId: 'unrelated', authorId: 'owner', authorKind: 'human',
-      ciphertext: Buffer.from('unrelated chat').toString('base64'),
-      keyId: 'key:test', contentType: 'text',
-    }, false);
+    await appendAndAuthorise({
+      subject: 'conversation-unrelated', type: 'message.posted',
+      data: {
+        conversationId: 'unrelated', authorId: 'owner', authorKind: 'human',
+        ciphertext: Buffer.from('unrelated chat').toString('base64'),
+        keyId: 'key:test', contentType: 'text',
+      },
+      apply: false,
+    });
   }
   const loading = interceptLoading(route, postMessage);
   try {

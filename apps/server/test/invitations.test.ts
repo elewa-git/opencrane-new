@@ -4,7 +4,7 @@ import { encodeSession } from '@opencrane/auth';
 import { memberInvitedDataSchema, parseEventByType } from '@opencrane/events';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import type { Query } from '@opencrane/projections';
@@ -48,12 +48,23 @@ function server(db: Query = pgDb(dbs.queue)) {
   const membership = { silo: 'acme', store: nats.store, db: pgDb(dbs.queue), now };
   return buildServer(config, { invitationEmail: options, membership, audit: options });
 }
-async function append(subject: string, type: string, data: unknown, apply = false) {
-  const record = { ...event(randomUUID(), subject, type), silo: 'acme', data };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
-  await members.apply(pgDb(dbs.queue), record, await nats.store.head(subject));
-  if (apply) await memberAuthorisation(binding).handler.handle(record, pgDb(dbs.queue));
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+  apply?: boolean;
+}
+
+async function appendAndProject(
+  { subject, type, data, apply = false }: FixtureAppendOptions,
+) {
+  const { event: record, sequence } = await appendEvent(nats.store, {
+    id: randomUUID(), subject, type, silo: 'acme', data,
+  });
+  await members.apply(pgDb(dbs.queue), record, sequence);
+  if (apply) {
+    await memberAuthorisation(binding).handler.handle(record, pgDb(dbs.queue));
+  }
 }
 async function fixture() {
   clock = new Date('2026-10-01T12:00:00Z');
@@ -63,7 +74,9 @@ async function fixture() {
   binding = await createStore(fga.apiUrl, 'acme');
   for (const role of ['owner', 'admin', 'member']) {
     const data = { memberId: role, displayName: role, email: `${role}@example.test`, role };
-    await append(`member-${role}`, 'member.joined', data, true);
+    await appendAndProject({
+      subject: `member-${role}`, type: 'member.joined', data, apply: true,
+    });
   }
   await prepareAcceptanceProjection();
   app = server();
@@ -153,13 +166,17 @@ async function refusesBodyId() {
 it('requires a random UUID for a new invitation', refusesBodyId);
 async function refusesActiveTarget() {
   const data = { memberId: 'existing', displayName: 'Person', email, role: 'member' };
-  await append('member-existing', 'member.joined', data);
+  await appendAndProject({
+    subject: 'member-existing', type: 'member.joined', data,
+  });
   expect((await request('POST')).json()).toMatchObject({ reason: 'already_member' });
   expect(await records()).toEqual([]);
 }
 it('refuses an active projected target after checking its events', refusesActiveTarget);
 async function refusesRemovedStream() {
-  await append(`member-${memberId}`, 'member.removed', { memberId, removedBy: 'admin' });
+  await appendAndProject({
+    subject: `member-${memberId}`, type: 'member.removed', data: { memberId, removedBy: 'admin' },
+  });
   const before = await records();
   const body = { ...input, expectedSequence: before[0]!.sequence };
   expect((await request('POST', body)).json()).toMatchObject({ reason: 'access_removed' });
@@ -236,7 +253,9 @@ async function demotesDuringRequest(duringHistory: boolean) {
     changed = true;
     const data = { memberId: 'admin', previousRole: 'admin', newRole: 'member',
       changedBy: 'owner' };
-    await append('member-admin', 'member.role_changed', data, true);
+    await appendAndProject({
+      subject: 'member-admin', type: 'member.role_changed', data, apply: true,
+    });
   }
   if (duringHistory) {
     const read = nats.store.readStream.bind(nats.store);
@@ -278,7 +297,9 @@ async function keepsEmailAndIdentity(bound: boolean) {
     earlier = { ...data, email,
       invitedIdentity: { issuer: config.issuerUrl, sub: 'another-account' } };
   }
-  await append(`member-${memberId}`, 'member.invited', earlier);
+  await appendAndProject({
+    subject: `member-${memberId}`, type: 'member.invited', data: earlier,
+  });
   const before = await records();
   const body = { ...input, expectedSequence: before[0]!.sequence };
   expect((await request('POST', body)).json()).toMatchObject({ reason: 'identity_mismatch' });
@@ -328,14 +349,18 @@ it('saves no invitation when IAM is unavailable', refusesUnavailableIam);
 async function refusesTargetJoining() {
   const data = { memberId, email, role: 'member', invitedBy: 'admin',
     invitationId: 'pending' };
-  await append(`member-${memberId}`, 'member.invited', data);
+  await appendAndProject({
+    subject: `member-${memberId}`, type: 'member.invited', data,
+  });
   const read = nats.store.readStream.bind(nats.store);
   let actorReads = 0;
   async function* joinDuringAuthority(...args: Parameters<typeof read>) {
     yield* read(...args);
     if (args[0] !== 'member-admin' || ++actorReads !== 2) return;
     const joined = { memberId, email, role: 'member', displayName: 'Person' };
-    await append(`member-${memberId}`, 'member.joined', joined);
+    await appendAndProject({
+      subject: `member-${memberId}`, type: 'member.joined', data: joined,
+    });
   }
   vi.spyOn(nats.store, 'readStream').mockImplementation(joinDuringAuthority);
   const before = await records();
@@ -386,9 +411,13 @@ it('accepts a route-created email invitation and rebuilds its account binding',
 
 async function reinvitesRemovedEmail() {
   const joined = { memberId: 'old-person', displayName: 'Person', email, role: 'member' };
-  await append('member-old-person', 'member.joined', joined);
-  await append('member-old-person', 'member.removed',
-    { memberId: 'old-person', removedBy: 'admin' });
+  await appendAndProject({
+    subject: 'member-old-person', type: 'member.joined', data: joined,
+  });
+  await appendAndProject({
+    subject: 'member-old-person', type: 'member.removed',
+    data: { memberId: 'old-person', removedBy: 'admin' },
+  });
   const old = await history(nats.store, 'member-old-person', 'acme');
   expect((await request('POST')).statusCode).toBe(200);
   expect(await records()).toHaveLength(1);
@@ -491,7 +520,9 @@ it('compares the reviewed position before passing historyChecked to append',
 
 async function checksCandidateEvents() {
   const data = { memberId: 'existing', displayName: 'Person', email, role: 'member' };
-  await append('member-existing', 'member.joined', data);
+  await appendAndProject({
+    subject: 'member-existing', type: 'member.joined', data,
+  });
   await dbs.queue.query("UPDATE members SET status = 'invited' WHERE member_id = 'existing'");
   const read = nats.store.readStream.bind(nats.store);
   async function* exactStreams(...args: Parameters<typeof read>) {
@@ -534,7 +565,6 @@ async function findsExistingInvitation() {
 }
 it('finds the existing invitation by email and requires its id for renewal',
   findsExistingInvitation);
-
 
 async function reconcilesSavedDuringFence() {
   const originalRead = nats.store.readStream.bind(nats.store);
@@ -583,7 +613,6 @@ async function renewsAtExpiry(offset: number) {
 it.each([-1, 0, 1])('renews just before, at and after expiry with an injected clock (%s ms)',
   renewsAtExpiry);
 
-
 async function refusesMalformedJson() {
   const session = { sub: 'admin', orgId: 'org-acme', roles: [],
     authTime: clock.getTime() / 1000, exp: 2000000000 };
@@ -596,7 +625,6 @@ async function refusesMalformedJson() {
   expect(await records()).toEqual([]);
 }
 it('returns invalid_request for malformed request JSON', refusesMalformedJson);
-
 
 async function prepareAcceptanceProjection() {
   await members.drop(pgDb(dbs.queue));
@@ -724,7 +752,6 @@ async function ignoresAlreadyProjectedHistory() {
 }
 it('accepts without reading more than ten thousand already projected unrelated member events',
   ignoresAlreadyProjectedHistory);
-
 
 async function checksProjectedIdentityAgainstEvents(kind: string) {
   const identity = { issuer: config.issuerUrl, sub: 'person' };
@@ -912,11 +939,16 @@ async function readsOriginalChange() {
   expect((await changeRead('admin', 'other-org')).statusCode).toBe(403);
   const demotion = { memberId: 'admin', previousRole: 'admin', newRole: 'member',
     changedBy: 'owner' };
-  await append('member-admin', 'member.role_changed', demotion, true);
+  await appendAndProject({
+    subject: 'member-admin', type: 'member.role_changed', data: demotion, apply: true,
+  });
   const minimal = (await changeRead()).json<Record<string, unknown>>();
   expect(minimal).toMatchObject({ status: 'recorded', sequence: created.sequence });
   expect(minimal).not.toHaveProperty('result');
-  await append('member-admin', 'member.removed', { memberId: 'admin', removedBy: 'owner' }, true);
+  await appendAndProject({
+    subject: 'member-admin', type: 'member.removed',
+    data: { memberId: 'admin', removedBy: 'owner' }, apply: true,
+  });
   expect((await changeRead()).statusCode).toBe(403);
   expect(await records()).toHaveLength(1);
 }
@@ -1007,7 +1039,9 @@ async function savedInvitationWinsOverRefusal() {
   expect(refused.json()).toMatchObject({ status: 'refused', reason: 'access_refused' });
   const promotion = { memberId: 'member', previousRole: 'member', newRole: 'admin',
     changedBy: 'owner' };
-  await append('member-member', 'member.role_changed', promotion, true);
+  await appendAndProject({
+    subject: 'member-member', type: 'member.role_changed', data: promotion, apply: true,
+  });
   expect((await request('POST', input, 'member')).statusCode).toBe(200);
   expect((await changeRead('member')).json()).toMatchObject({ status: 'recorded',
     commandId: input.commandId, type: 'member.invited' });
@@ -1127,7 +1161,9 @@ async function refusesReadWithoutCurrentPermissions(route: string, failure: stri
   } else {
     const change = { memberId: 'admin', previousRole: 'admin', newRole: 'admin',
       changedBy: 'owner' };
-    await append('member-admin', 'member.role_changed', change);
+    await appendAndProject({
+      subject: 'member-admin', type: 'member.role_changed', data: change,
+    });
     expect((await memberAuthorisation(binding).check('admin', 'admin')).allowed).toBe(true);
   }
   const appendSpy = vi.spyOn(nats.store, 'append');
@@ -1161,7 +1197,9 @@ async function refusesAuditAuthorityLossDuringRead() {
     if (sql.startsWith('SELECT * FROM audit_entries') && !removed) {
       removed = true;
       const data = { memberId: 'admin', removedBy: 'owner' };
-      await append('member-admin', 'member.removed', data);
+      await appendAndProject({
+        subject: 'member-admin', type: 'member.removed', data,
+      });
     }
     return result;
   }
@@ -1362,7 +1400,6 @@ async function refusesMalformedRefusalReplay() {
 }
 it('refuses malformed refusal replay and retains the previously authorised HTTP history',
   refusesMalformedRefusalReplay);
-
 
 async function refusesForeignAuditSession(url: string) {
   const response = await organisationHistory('admin', 'other-org', url);

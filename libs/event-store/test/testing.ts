@@ -112,13 +112,22 @@ export function event(
 
 export type AppendEventOptions = Pick<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'> & {
   id?: string;
+  principal?: EventEnvelope['principal'];
+  time?: EventEnvelope['time'];
+  commandId?: EventEnvelope['commandId'];
 };
 
 /** Save fixture data and leave projections to the calling test. */
 export async function appendEvent(store: EventStore, options: AppendEventOptions) {
   const { silo, subject, type, data } = options;
   const id = options.id ?? randomUUID();
-  const record = { ...event(id, subject, type), silo, data };
+  const defaults = event(id, subject, type);
+  const record = {
+    ...defaults, silo, data,
+    principal: options.principal ?? defaults.principal,
+    time: options.time ?? defaults.time,
+    commandId: options.commandId ?? defaults.commandId,
+  };
   const expectedSequence = await store.head(subject);
   const result = await store.append({ event: record, expectedSequence });
   expect(result.status).toBe('appended');

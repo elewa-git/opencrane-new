@@ -3,7 +3,7 @@ import type { EventEnvelope } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { history } from '@opencrane/models';
 import { members, pgDb, ProjectionRunner, rebuildMemberProjection } from '@opencrane/projections';
@@ -22,12 +22,19 @@ let database: ReturnType<typeof pgDb>;
 let runner: ProjectionRunner;
 let counter = 0;
 
-async function append(stream: string, type: string, data: unknown, silo = 'acme') {
-  const record = { ...event(`access-fixture-${++counter}`, stream, type), silo, data };
-  const expectedSequence = await nats.store.head(stream);
-  const command = { event: record, expectedSequence };
-  const result = await nats.store.append(command);
-  expect(result.status).toBe('appended');
+export interface FixtureAppendOptions {
+  stream: string;
+  type: string;
+  data: unknown;
+  silo?: string;
+}
+
+async function appendAndAuthorise(
+  { stream, type, data, silo = 'acme' }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `access-fixture-${++counter}`, subject: stream, type, silo, data,
+  });
   if (silo === 'acme' && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, database);
   }
@@ -48,20 +55,32 @@ async function initialise() {
     createLogger('integration-access-test', { level: 'silent' }));
   await runner.initialise(members);
   for (const [id, role] of [['owner', 'owner'], ['bob', 'member'], ['admin', 'admin']]) {
-    await append(`member-${id}`, 'member.joined', {
-      memberId: id, role, email: `${id}@example.test`,
-      displayName: id, invitationId: `invite-${id}`,
+    await appendAndAuthorise({
+      stream: `member-${id}`, type: 'member.joined',
+      data: {
+        memberId: id, role, email: `${id}@example.test`,
+        displayName: id, invitationId: `invite-${id}`,
+      },
     });
   }
-  await append('team-sales', 'team.created', {
-    teamId: 'sales', name: 'Sales', createdBy: 'owner',
+  await appendAndAuthorise({
+    stream: 'team-sales', type: 'team.created',
+    data: {
+      teamId: 'sales', name: 'Sales', createdBy: 'owner',
+    },
   });
-  await append('assistant-helper', 'assistant.created', {
-    assistantId: 'helper', kind: 'personal', ownerId: 'bob',
+  await appendAndAuthorise({
+    stream: 'assistant-helper', type: 'assistant.created',
+    data: {
+      assistantId: 'helper', kind: 'personal', ownerId: 'bob',
+    },
   });
-  await append('mcp-fixture', 'mcp.server_registered', {
-    serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
-    registeredBy: 'owner',
+  await appendAndAuthorise({
+    stream: 'mcp-fixture', type: 'mcp.server_registered',
+    data: {
+      serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp',
+      registeredBy: 'owner',
+    },
   });
   const modelAccess = { silo: 'acme', store: nats.store, db: database, binding,
     feed: { memberId } };
@@ -167,14 +186,25 @@ it('refuses non-admin, wrong Origin, stale, unknown targets and extra fields wit
   refusesUntrustedChanges);
 
 async function refusesInactiveAndForeignTargets() {
-  await append('member-left', 'member.joined', { memberId: 'left', role: 'member',
-    email: 'left@example.test', displayName: 'Left', invitationId: 'invite-left' });
-  await append('member-left', 'member.removed', { memberId: 'left', removedBy: 'owner' });
-  await append('assistant-inactive', 'assistant.created', {
-    assistantId: 'inactive', kind: 'personal', ownerId: 'bob',
+  await appendAndAuthorise({
+    stream: 'member-left', type: 'member.joined',
+    data: { memberId: 'left', role: 'member',
+      email: 'left@example.test', displayName: 'Left', invitationId: 'invite-left' },
   });
-  await append('assistant-inactive', 'assistant.settings_changed', {
-    assistantId: 'inactive', active: false, changedFields: ['active'], changedBy: 'owner',
+  await appendAndAuthorise({
+    stream: 'member-left', type: 'member.removed', data: { memberId: 'left', removedBy: 'owner' },
+  });
+  await appendAndAuthorise({
+    stream: 'assistant-inactive', type: 'assistant.created',
+    data: {
+      assistantId: 'inactive', kind: 'personal', ownerId: 'bob',
+    },
+  });
+  await appendAndAuthorise({
+    stream: 'assistant-inactive', type: 'assistant.settings_changed',
+    data: {
+      assistantId: 'inactive', active: false, changedFields: ['active'], changedBy: 'owner',
+    },
   });
   for (const [kind, id] of [['member', 'left'], ['assistant', 'inactive']]) {
     const input = await command(kind, id);
@@ -188,18 +218,27 @@ async function refusesInactiveAndForeignTargets() {
     ['team', { teamId: 'foreign', name: 'Foreign', createdBy: 'foreign' }],
   ] as const) {
     const type = kind === 'member' ? 'member.joined' : `${kind}.created`;
-    await append(`${kind}-foreign`, type, data, 'other');
+    await appendAndAuthorise({
+      stream: `${kind}-foreign`, type, data, silo: 'other',
+    });
     const input = await command(kind, 'foreign');
     const response = await post(input);
     expect(response.statusCode).toBe(409);
   }
   for (const serverId of ['foreign', 'inactive']) {
     const silo = serverId === 'foreign' ? 'other' : 'acme';
-    await append(`mcp-${serverId}`, 'mcp.server_registered', {
-      serverId, kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'owner',
-    }, silo);
+    await appendAndAuthorise({
+      stream: `mcp-${serverId}`, type: 'mcp.server_registered',
+      data: {
+        serverId, kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'owner',
+      },
+      silo,
+    });
     if (serverId === 'inactive') {
-      await append(`mcp-${serverId}`, 'mcp.server_unpublished', { serverId, unpublishedBy: 'owner' });
+      await appendAndAuthorise({
+        stream: `mcp-${serverId}`, type: 'mcp.server_unpublished',
+        data: { serverId, unpublishedBy: 'owner' },
+      });
     }
     const prepared = await command();
     const input = { ...prepared, expectedSequence: 0 };
@@ -331,8 +370,11 @@ async function revokeDepartedTargetsAndLegacyGrant() {
     expect(saved.statusCode).toBe(200);
     expect(saved.json()).toMatchObject({ operation: 'grant.revoked' });
   }
-  await append(subject, 'grant.revoked', {
-    resourceType: 'mcp_server', resourceId: 'fixture', granteeId: 'bob', revokedBy: 'owner',
+  await appendAndAuthorise({
+    stream: subject, type: 'grant.revoked',
+    data: {
+      resourceType: 'mcp_server', resourceId: 'fixture', granteeId: 'bob', revokedBy: 'owner',
+    },
   });
   const input = await command();
   const saved = await post(input);
@@ -376,12 +418,16 @@ it('refuses a non-admin before reading grant history', refusesNonAdminBeforeGran
 async function createAdmin(actor: string) {
   const data = { memberId: actor, role: 'admin', email: `${actor}@example.test`,
     displayName: actor, invitationId: `invite-${actor}` };
-  await append(`member-${actor}`, 'member.joined', data);
+  await appendAndAuthorise({
+    stream: `member-${actor}`, type: 'member.joined', data,
+  });
 }
 
 async function demoteAdmin(actor: string) {
   const data = { memberId: actor, previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
-  await append(`member-${actor}`, 'member.role_changed', data);
+  await appendAndAuthorise({
+    stream: `member-${actor}`, type: 'member.role_changed', data,
+  });
 }
 
 async function refusesDemotionAfterPreparation() {
@@ -476,7 +522,9 @@ async function refusesChangedReceiptIdentity(_name: string, identity: ReceiptIde
   const serverId = `receipt-${++counter}`;
   const serverData = { serverId, kind: 'remote',
     locator: 'https://fixture.example.test/mcp', registeredBy: 'owner' };
-  await append(`mcp-${serverId}`, 'mcp.server_registered', serverData);
+  await appendAndAuthorise({
+    stream: `mcp-${serverId}`, type: 'mcp.server_registered', data: serverData,
+  });
   const prepared = await command('team', 'sales');
   const input = { ...prepared, expectedSequence: 0 };
   const url = path.replace('fixture', serverId);

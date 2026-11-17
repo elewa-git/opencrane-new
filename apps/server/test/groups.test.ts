@@ -4,7 +4,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import type { StoredEvent } from '@opencrane/event-store';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { groups, members, pgDb, ProjectionRunner, rebuildGroupProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
@@ -18,11 +18,24 @@ let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let count = 0;
-async function append(subject: string, type: string, data: unknown, apply = true, silo = 'acme') {
-  const record = { ...event(`group-fixture-${++count}`, subject, type), silo, data, correlation: {}, principal: { kind: 'human' as const, id: 'owner' } };
-  const result = await nats.store.append({ event: record, expectedSequence: await nats.store.head(subject) });
-  expect(result.status).toBe('appended');
-  if (apply && auth.handler.eventTypes.includes(type)) await auth.handler.handle(record, pgDb(dbs.queue));
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+  apply?: boolean;
+  silo?: string;
+}
+
+async function appendAndAuthorise(
+  { subject, type, data, apply = true, silo = 'acme' }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `group-fixture-${++count}`, subject, type, silo, data,
+    principal: { kind: 'human' as const, id: 'owner' },
+  });
+  if (apply && auth.handler.eventTypes.includes(type)) {
+    await auth.handler.handle(record, pgDb(dbs.queue));
+  }
   return record;
 }
 function request(method: 'GET' | 'POST', url = '/api/groups', payload?: unknown, sub = 'idp-owner', orgId = 'org-acme') {
@@ -42,13 +55,19 @@ const initialiseGroupsFixture = async () => {
   await runner.initialise(members);
   await runner.initialise(groups);
   for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member'], ['admin', 'admin']] as const) {
-    await append(`member-${memberId}`, 'member.invited', { memberId, email: `${memberId}@example.test`, role, invitedBy: 'owner', invitationId: `invite-${memberId}`, invitedIdentity: { issuer: config.issuerUrl, sub: `idp-${memberId}` } });
+    await appendAndAuthorise({
+      subject: `member-${memberId}`, type: 'member.invited',
+      data: { memberId, email: `${memberId}@example.test`, role, invitedBy: 'owner', invitationId: `invite-${memberId}`, invitedIdentity: { issuer: config.issuerUrl, sub: `idp-${memberId}` } },
+    });
     const joined = { ...event(`group-fixture-${++count}`, `member-${memberId}`, 'member.joined'), silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: `idp-${memberId}` }, data: { memberId, email: `${memberId}@example.test`, displayName: memberId, role, invitationId: `invite-${memberId}` } };
     expect((await nats.store.append({ event: joined, expectedSequence: await nats.store.head(joined.subject) })).status).toBe('appended');
     await auth.handler.handle(joined, db);
   }
-  await append('member-identity-owner', 'member.joined', { memberId: 'identity-owner',
-    email: 'identity-owner@example.test', displayName: 'Invitation admin', role: 'admin' });
+  await appendAndAuthorise({
+    subject: 'member-identity-owner', type: 'member.joined',
+    data: { memberId: 'identity-owner',
+      email: 'identity-owner@example.test', displayName: 'Invitation admin', role: 'admin' },
+  });
   await runner.run(members);
   const invitationEmail = { silo: 'acme', store: nats.store, binding,
     feed: { memberId: resolveMemberId } };
@@ -89,8 +108,14 @@ const listsMembershipWithoutPrivateAccess = async () => {
 };
 it('an admin adds a silo member and the list explains group membership without private-content rights', listsMembershipWithoutPrivateAccess);
 const preservesDirectoryMembership = async () => {
-  await append('team-directory', 'team.created', { teamId: 'directory', name: 'Directory', createdBy: 'idp', membershipSource: 'identity_provider' });
-  await append('team-directory', 'team.member_added', { teamId: 'directory', memberId: 'bob', addedBy: 'idp', membershipSource: 'identity_provider' });
+  await appendAndAuthorise({
+    subject: 'team-directory', type: 'team.created',
+    data: { teamId: 'directory', name: 'Directory', createdBy: 'idp', membershipSource: 'identity_provider' },
+  });
+  await appendAndAuthorise({
+    subject: 'team-directory', type: 'team.member_added',
+    data: { teamId: 'directory', memberId: 'bob', addedBy: 'idp', membershipSource: 'identity_provider' },
+  });
   await runner.run(groups);
   expect((await request('GET', '/api/groups/directory')).json()).toMatchObject({ rows: [{ membershipSource: 'identity_provider', members: [{ membershipSource: 'identity_provider' }] }] });
   expect((await request('POST', '/api/groups/directory', { action: 'remove', commandId: 'remove-directory', memberId: 'bob' })).statusCode).toBe(403);
@@ -122,9 +147,16 @@ it.each([
   ['unsafe id', 'idp-owner', 'org-acme', { commandId: 'wild-create', groupId: '*', name: 'No' }, 400],
 ])('refuses %s without appending', refusesInvalidGroupCommand);
 const refusesRevokedMembers = async () => {
-  await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' }, false);
+  await appendAndAuthorise({
+    subject: 'member-bob', type: 'member.removed', data: { memberId: 'bob', removedBy: 'owner' },
+    apply: false,
+  });
   expect((await request('POST', '/api/groups/support', { action: 'add', commandId: 'readd-inactive', memberId: 'bob' })).statusCode).toBe(403);
-  await append('member-admin', 'member.role_changed', { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' }, false);
+  await appendAndAuthorise({
+    subject: 'member-admin', type: 'member.role_changed',
+    data: { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' },
+    apply: false,
+  });
   expect((await request('POST', '/api/groups', { commandId: 'revoked-admin', groupId: 'revoked', name: 'Revoked' }, 'idp-admin')).statusCode).toBe(403);
 };
 it('refuses inactive targets and a revoked administrator before IAM catches up', refusesRevokedMembers);
@@ -193,7 +225,10 @@ const serialisesGroupCommands = async (same: boolean) => {
 };
 it.each([false, true])('serialises racing membership commands on one group stream (same command: %s)', serialisesGroupCommands);
 const refusesUnavailableOrForeignAuthority = async () => {
-  await append('team-foreign', 'team.created', { teamId: 'foreign', name: 'Foreign', createdBy: 'owner' }, false, 'other');
+  await appendAndAuthorise({
+    subject: 'team-foreign', type: 'team.created',
+    data: { teamId: 'foreign', name: 'Foreign', createdBy: 'owner' }, apply: false, silo: 'other',
+  });
   const before = await nats.store.head();
   expect((await request('POST', '/api/groups/foreign', { action: 'add', commandId: 'foreign-add', memberId: 'owner' })).statusCode).toBe(503);
   expect(await nats.store.head()).toBe(before);
@@ -236,8 +271,14 @@ const refusesUntrustedOrAlteredRequests = async () => {
 it('requires the verified session and Origin and refuses altered command bodies', refusesUntrustedOrAlteredRequests);
 const replaysDistinctGroupGrants = async () => {
   const { grantStream } = await import('@opencrane/authz');
-  await append('assistant-shared', 'assistant.created', { assistantId: 'shared', ownerId: 'finance', kind: 'team' });
-  await append(grantStream('assistant', 'shared'), 'grant.given', { resourceType: 'assistant', resourceId: 'shared', granteeId: 'finance', granteeKind: 'team', grantedBy: 'owner' });
+  await appendAndAuthorise({
+    subject: 'assistant-shared', type: 'assistant.created',
+    data: { assistantId: 'shared', ownerId: 'finance', kind: 'team' },
+  });
+  await appendAndAuthorise({
+    subject: grantStream('assistant', 'shared'), type: 'grant.given',
+    data: { resourceType: 'assistant', resourceId: 'shared', granteeId: 'finance', granteeKind: 'team', grantedBy: 'owner' },
+  });
   await runner.run(groups);
   const before = (await request('GET', '/api/groups/finance')).json<unknown>();
   expect(before).toMatchObject({ rows: [{ access: { grants: [
@@ -255,7 +296,9 @@ function resolveMemberId(_silo: string, _issuer: string, subject: string) {
 }
 
 function appendIdentity(memberId: string, type: string, data: unknown, apply = false) {
-  return append(`member-${memberId}`, type, data, apply);
+  return appendAndAuthorise({
+    subject: `member-${memberId}`, type, data, apply,
+  });
 }
 
 function checkEmail(sub = 'idp-identity-owner', orgId = 'org-acme', origin = 'https://app.example.test',
@@ -563,8 +606,10 @@ async function refusesIncompleteAdmissionHistory() {
   } finally {
     spy.mockRestore();
   }
-  await append('member-foreign-admission', 'member.removed',
-    { memberId: 'foreign-admission', removedBy: 'owner' }, false, 'foreign');
+  await appendAndAuthorise({
+    subject: 'member-foreign-admission', type: 'member.removed',
+    data: { memberId: 'foreign-admission', removedBy: 'owner' }, apply: false, silo: 'foreign',
+  });
   await expect(admissionForInvitee()).rejects.toThrow('Identity history unavailable');
 }
 it('refuses an incomplete member search and member events from another silo',

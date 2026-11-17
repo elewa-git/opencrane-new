@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, routines, ProjectionRunner, rebuildProviderProjection, readProviders } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import type { EventEnvelope } from '@opencrane/events';
@@ -19,27 +19,45 @@ let auth: ReturnType<typeof memberAuthorisation>;
 let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let counter = 0;
-async function append(subject: string, type: string, data: unknown, apply = true) {
-  const record = { ...event(`binding-${++counter}`, subject, type), silo: 'acme', data,
-    correlation: {}, principal: { kind: 'human' as const, id: 'owner' } };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+  apply?: boolean;
+}
+
+async function appendAndAuthorise(
+  { subject, type, data, apply = true }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `binding-${++counter}`, subject, type, silo: 'acme', data,
+    principal: { kind: 'human' as const, id: 'owner' },
+  });
   if (apply && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
 }
 async function connection(providerId: string, verified = true, apply = true) {
   const common = { providerId, changedBy: 'owner' };
-  await append(`provider-${providerId}`, 'provider.created',
-    { ...common, revision: 1, provider: 'openai', name: providerId }, apply);
-  await append(`provider-${providerId}`, 'provider.key_saved', { ...common, revision: 2,
-    secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) });
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.created',
+    data: { ...common, revision: 1, provider: 'openai', name: providerId }, apply,
+  });
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.key_saved',
+    data: { ...common, revision: 2,
+      secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) },
+  });
   if (verified) {
-    await append(`provider-${providerId}`, 'provider.verification_recorded',
-      { ...common, revision: 2, kind: 'reachability', attemptId: 'check', outcome: 'pass' });
+    await appendAndAuthorise({
+      subject: `provider-${providerId}`, type: 'provider.verification_recorded',
+      data: { ...common, revision: 2, kind: 'reachability', attemptId: 'check', outcome: 'pass' },
+    });
   }
-  await append(`provider-${providerId}`, 'provider.models_selected',
-    { ...common, revision: 3, models: ['gpt-6.1-sol'] });
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.models_selected',
+    data: { ...common, revision: 3, models: ['gpt-6.1-sol'] },
+  });
 }
 async function initialise() {
   nats = await natsFixture();
@@ -48,12 +66,17 @@ async function initialise() {
   binding = await createStore(fga.apiUrl, 'acme');
   auth = memberAuthorisation(binding);
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
-    await append(`member-${memberId}`, 'member.joined', { memberId, role,
-      email: `${memberId}@example.test`, displayName: memberId, invitationId: 'invite' });
+    await appendAndAuthorise({
+      subject: `member-${memberId}`, type: 'member.joined',
+      data: { memberId, role,
+        email: `${memberId}@example.test`, displayName: memberId, invitationId: 'invite' },
+    });
   }
   for (const assistantId of ['one', 'two']) {
-    await append(`assistant-${assistantId}`, 'assistant.created',
-      { assistantId, ownerId: 'bob', kind: 'personal' });
+    await appendAndAuthorise({
+      subject: `assistant-${assistantId}`, type: 'assistant.created',
+      data: { assistantId, ownerId: 'bob', kind: 'personal' },
+    });
   }
   await connection('primary');
   await connection('secondary');
@@ -222,7 +245,10 @@ async function hidesAfterRemoval() {
   const late = request('GET', 'primary', undefined, 'admin', undefined, undefined,
     'dependencies');
   await started;
-  await append('member-admin', 'member.removed', { memberId: 'admin', removedBy: 'owner' }, false);
+  await appendAndAuthorise({
+    subject: 'member-admin', type: 'member.removed',
+    data: { memberId: 'admin', removedBy: 'owner' }, apply: false,
+  });
   releaseRead?.();
   expect((await late).statusCode).toBe(403);
   spy.mockRestore();
@@ -239,8 +265,10 @@ async function previewsRetirementWithoutChangingHistory() {
     const defaultChoice = await input({ kind: 'silo_default', dependantId: 'acme' });
     expect((await request('POST', 'primary', defaultChoice)).statusCode).toBe(200);
   }
-  await append('assistant-preview', 'assistant.created',
-    { assistantId: 'preview', ownerId: 'bob', kind: 'personal' });
+  await appendAndAuthorise({
+    subject: 'assistant-preview', type: 'assistant.created',
+    data: { assistantId: 'preview', ownerId: 'bob', kind: 'personal' },
+  });
   const ownChoice = await input({ dependantId: 'preview' });
   expect((await request('POST', 'primary', ownChoice)).statusCode).toBe(200);
   const before = await nats.store.head();
@@ -283,26 +311,40 @@ async function previewsRetirementWithoutChangingHistory() {
 it('shows exact saved dependencies only to a current admin without saving an event',
   previewsRetirementWithoutChangingHistory);
 
-async function checksLiveReplacementGrants() {
-  function isPreviewDependency(row: { dependantId: string }) {
-    return row.dependantId === 'preview';
-  }
+function isPreviewDependency(row: { dependantId: string }) {
+  return row.dependantId === 'preview';
+}
+
+async function prepareReplacementGrants() {
   const saved = (await request('GET')).json<{ rows: { dependantId: string }[] }>();
   if (!saved.rows.some(isPreviewDependency)) {
-    await append('assistant-preview', 'assistant.created',
-      { assistantId: 'preview', ownerId: 'bob', kind: 'personal' });
+    await appendAndAuthorise({
+      subject: 'assistant-preview', type: 'assistant.created',
+      data: { assistantId: 'preview', ownerId: 'bob', kind: 'personal' },
+    });
     const choice = await input({ dependantId: 'preview' });
     expect((await request('POST', 'primary', choice)).statusCode).toBe(200);
   }
   const subject = grantStream('model', 'gpt-6.1-sol');
   for (const [granteeKind, granteeId] of [['member', 'bob'], ['assistant', 'preview']]) {
-    await append(subject, 'grant.given', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
-      granteeKind, granteeId, grantedBy: 'owner' });
+    await appendAndAuthorise({
+      subject, type: 'grant.given',
+      data: { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+        granteeKind, granteeId, grantedBy: 'owner' },
+    });
   }
-  await append('provider-secondary', 'provider.verification_recorded', {
-    providerId: 'secondary', changedBy: 'owner', revision: 3,
-    kind: 'reachability', attemptId: 'retest', outcome: 'pass',
+  await appendAndAuthorise({
+    subject: 'provider-secondary', type: 'provider.verification_recorded',
+    data: {
+      providerId: 'secondary', changedBy: 'owner', revision: 3,
+      kind: 'reachability', attemptId: 'retest', outcome: 'pass',
+    },
   });
+  return subject;
+}
+
+async function checksLiveReplacementGrants() {
+  const subject = await prepareReplacementGrants();
   const withoutPayer = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
   const missingPayer = withoutPayer.json<{ expectedProviderSequence: number;
@@ -324,9 +366,12 @@ async function checksLiveReplacementGrants() {
     choices: missingPayerRows.map(proposedChoice) };
   expect((await request('POST', 'primary', missingPayerProposal, 'owner', undefined,
     undefined, 'dependencies/preview')).statusCode).toBe(409);
-  await append('budget-acme', 'budget.ceiling_set', {
-    scope: 'global', dailyCeilingCents: 0, ceilingCents: 0,
-    setBy: 'owner', defaultPayingGroupId: 'personal',
+  await appendAndAuthorise({
+    subject: 'budget-acme', type: 'budget.ceiling_set',
+    data: {
+      scope: 'global', dailyCeilingCents: 0, ceilingCents: 0,
+      setBy: 'owner', defaultPayingGroupId: 'personal',
+    },
   });
   const withoutBudget = await request('GET', 'primary', undefined, 'owner', undefined,
     undefined, 'dependencies');
@@ -338,9 +383,12 @@ async function checksLiveReplacementGrants() {
     choices: unbudgetedRows.map(proposedChoice) };
   expect((await request('POST', 'primary', unbudgetedProposal, 'owner', undefined,
     undefined, 'dependencies/preview')).statusCode).toBe(409);
-  await append('budget-acme', 'budget.ceiling_set', {
-    scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
-    setBy: 'owner', defaultPayingGroupId: 'personal',
+  await appendAndAuthorise({
+    subject: 'budget-acme', type: 'budget.ceiling_set',
+    data: {
+      scope: 'global', dailyCeilingCents: 2000, ceilingCents: 20000,
+      setBy: 'owner', defaultPayingGroupId: 'personal',
+    },
   });
   const response = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
     'dependencies');
@@ -364,8 +412,11 @@ async function checksLiveReplacementGrants() {
   const proposed = { expectedProviderSequence: preview.expectedProviderSequence, choices };
   expect((await request('POST', 'primary', proposed, 'owner', undefined, undefined,
     'dependencies/preview')).json()).toMatchObject({ choicesValid: true, canRetire: false });
-  await append(subject, 'grant.revoked', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
-    granteeKind: 'assistant', granteeId: 'preview', revokedBy: 'owner' });
+  await appendAndAuthorise({
+    subject, type: 'grant.revoked',
+    data: { resourceType: 'model', resourceId: 'gpt-6.1-sol',
+      granteeKind: 'assistant', granteeId: 'preview', revokedBy: 'owner' },
+  });
   expect((await request('POST', 'primary', proposed, 'owner', undefined, undefined,
     'dependencies/preview')).statusCode).toBe(409);
 }
@@ -405,8 +456,10 @@ async function refusesRoutineCreatedDuringPreparation() {
     const pending = request('POST', 'primary', proposal, 'owner', undefined, undefined,
       'dependencies/preview');
     await checked;
-    await append('routine-during-preview', 'routine.paused',
-      { routineId: 'during-preview', pausedBy: 'owner' });
+    await appendAndAuthorise({
+      subject: 'routine-during-preview', type: 'routine.paused',
+      data: { routineId: 'during-preview', pausedBy: 'owner' },
+    });
     await runner.run(routines);
     releaseRead?.();
     expect((await pending).statusCode).toBe(409);
@@ -422,13 +475,18 @@ it('rejects a proposal when a routine appears during preparation',
 async function pagesStableDependencies() {
   for (let index = 0; index < 51; index++) {
     const assistantId = `page-${index}`;
-    await append(`assistant-${assistantId}`, 'assistant.created',
-      { assistantId, ownerId: 'bob', kind: 'personal' });
-    await append('provider-primary', 'provider.model_binding_set', {
-      providerId: 'primary', revision: 3, changedBy: 'owner',
-      kind: 'assistant', dependantId: assistantId, task: 'chat_turn',
-      expectedProviderSequence: await nats.store.head('provider-*'),
-      previousBindingSequence: 0, state: 'active', model: 'gpt-6.1-sol',
+    await appendAndAuthorise({
+      subject: `assistant-${assistantId}`, type: 'assistant.created',
+      data: { assistantId, ownerId: 'bob', kind: 'personal' },
+    });
+    await appendAndAuthorise({
+      subject: 'provider-primary', type: 'provider.model_binding_set',
+      data: {
+        providerId: 'primary', revision: 3, changedBy: 'owner',
+        kind: 'assistant', dependantId: assistantId, task: 'chat_turn',
+        expectedProviderSequence: await nats.store.head('provider-*'),
+        previousBindingSequence: 0, state: 'active', model: 'gpt-6.1-sol',
+      },
     });
   }
   const first = await request('GET', 'primary', undefined, 'owner', undefined, undefined,
@@ -459,7 +517,9 @@ async function routineGaps() {
   expect(lag.json()).toMatchObject({ sources: { routines: 'unavailable' },
     canRetire: false });
   await runner.initialise(routines);
-  await append('routine-old', 'routine.paused', { routineId: 'old', pausedBy: 'owner' });
+  await appendAndAuthorise({
+    subject: 'routine-old', type: 'routine.paused', data: { routineId: 'old', pausedBy: 'owner' },
+  });
   expect((await request('GET')).statusCode).toBe(503);
   await runner.run(routines);
   expect((await request('GET')).json()).toMatchObject({ routines: { status: 'unsupported' } });
@@ -472,15 +532,17 @@ async function routineGaps() {
 it('reports projection failure and legacy routine history without invented counts', routineGaps);
 
 
-
 async function replaysRecordedSwitchOn() {
   const db = pgDb(dbs.queue);
   await runner.run(providers);
   const before = (await readProviders(db, 'acme', 'primary'))[0];
   if (!before) throw new Error('Missing fixture provider');
   const expectedProviderSequence = await nats.store.head('provider-*');
-  await append('budget-acme', 'provider.managed_calls_enabled', {
-    providerId: 'primary', revision: before.revision, changedBy: 'owner', expectedProviderSequence,
+  await appendAndAuthorise({
+    subject: 'budget-acme', type: 'provider.managed_calls_enabled',
+    data: {
+      providerId: 'primary', revision: before.revision, changedBy: 'owner', expectedProviderSequence,
+    },
   });
   await runner.run(providers);
   const saved = await readProviders(db, 'acme', 'primary');
@@ -497,34 +559,52 @@ it('rebuilds the recorded switch-on without changing keys, models or verificatio
 async function replaysRetiredBindings() {
   const source = 'retirement-source';
   const common = { providerId: source, changedBy: 'owner' };
-  await append(`provider-${source}`, 'provider.created', {
-    ...common, revision: 1, provider: 'openai', name: 'Retirement source',
+  await appendAndAuthorise({
+    subject: `provider-${source}`, type: 'provider.created',
+    data: {
+      ...common, revision: 1, provider: 'openai', name: 'Retirement source',
+    },
   });
-  await append(`provider-${source}`, 'provider.key_saved', {
-    ...common, revision: 2, secretRef: providerSecretRef('acme', source, 'source-key'),
+  await appendAndAuthorise({
+    subject: `provider-${source}`, type: 'provider.key_saved',
+    data: {
+      ...common, revision: 2, secretRef: providerSecretRef('acme', source, 'source-key'),
+    },
   });
-  await append(`provider-${source}`, 'provider.models_selected', {
-    ...common, revision: 3, models: ['gpt-6.1-sol'],
+  await appendAndAuthorise({
+    subject: `provider-${source}`, type: 'provider.models_selected',
+    data: {
+      ...common, revision: 3, models: ['gpt-6.1-sol'],
+    },
   });
-  await append(`provider-${source}`, 'provider.model_binding_set', {
-    ...common, revision: 3, kind: 'assistant', dependantId: 'one', task: 'chat_turn',
-    expectedProviderSequence: 0, previousBindingSequence: 0,
-    state: 'active', model: 'gpt-6.1-sol',
+  await appendAndAuthorise({
+    subject: `provider-${source}`, type: 'provider.model_binding_set',
+    data: {
+      ...common, revision: 3, kind: 'assistant', dependantId: 'one', task: 'chat_turn',
+      expectedProviderSequence: 0, previousBindingSequence: 0,
+      state: 'active', model: 'gpt-6.1-sol',
+    },
   });
   const bindingPosition = await nats.store.head(`provider-${source}`);
   const choices = [{ kind: 'assistant', dependantId: 'one', task: 'chat_turn',
     old: { providerId: source, model: 'gpt-6.1-sol', state: 'active',
       bindingSequence: bindingPosition },
     next: { state: 'active', providerId: 'secondary', model: 'gpt-6.1-sol', revision: 3 } }];
-  await append(`provider-${source}`, 'provider.retired', {
-    ...common, revision: 3, expectedProviderSequence: bindingPosition, choices,
+  await appendAndAuthorise({
+    subject: `provider-${source}`, type: 'provider.retired',
+    data: {
+      ...common, revision: 3, expectedProviderSequence: bindingPosition, choices,
+    },
   });
   const admission = await providerTurnAdmission(nats.store, 'acme', 'one',
     performance.now() + 10_000);
   expect(admission.choice).toMatchObject({ providerId: 'secondary',
     model: 'gpt-6.1-sol', state: 'active' });
-  await append(`provider-${source}`, 'provider.verification_recorded', {
-    ...common, revision: 3, kind: 'reachability', attemptId: 'late-check', outcome: 'pass',
+  await appendAndAuthorise({
+    subject: `provider-${source}`, type: 'provider.verification_recorded',
+    data: {
+      ...common, revision: 3, kind: 'reachability', attemptId: 'late-check', outcome: 'pass',
+    },
   });
   await runner.run(providers);
   const before = await dbs.queue.query('SELECT * FROM model_bindings WHERE silo = $1 AND '
@@ -567,14 +647,24 @@ async function boundsReplacementPreparation() {
     const providerId = `extra-${index}`;
     const subject = `provider-${providerId}`;
     const common = { providerId, changedBy: 'owner' };
-    await append(subject, 'provider.created',
-      { ...common, revision: 1, provider: 'openai', name: providerId });
-    await append(subject, 'provider.key_saved', { ...common, revision: 2,
-      secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) });
-    await append(subject, 'provider.models_selected',
-      { ...common, revision: 3, models: candidateModels });
-    await append(subject, 'provider.verification_recorded', {
-      ...common, revision: 3, kind: 'reachability', attemptId: 'check', outcome: 'pass',
+    await appendAndAuthorise({
+      subject, type: 'provider.created',
+      data: { ...common, revision: 1, provider: 'openai', name: providerId },
+    });
+    await appendAndAuthorise({
+      subject, type: 'provider.key_saved',
+      data: { ...common, revision: 2,
+        secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) },
+    });
+    await appendAndAuthorise({
+      subject, type: 'provider.models_selected',
+      data: { ...common, revision: 3, models: candidateModels },
+    });
+    await appendAndAuthorise({
+      subject, type: 'provider.verification_recorded',
+      data: {
+        ...common, revision: 3, kind: 'reachability', attemptId: 'check', outcome: 'pass',
+      },
     });
   }
   const response = await request('GET', 'primary', undefined, 'owner', undefined,
