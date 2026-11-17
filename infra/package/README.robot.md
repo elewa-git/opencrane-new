@@ -2073,6 +2073,9 @@ completion is checked by readback, without retransmitting. If an interrupted att
 has no complete readable stream, recovery refuses and needs operator investigation. Existing file objects must already match their checksums. A
 completed rerun briefly closes reading and verifies again without reloading data.
 A different set, replaced volume, foreign content or concurrent runner refuses.
+Runtime patches use mode-0600 files in the Job's private memory-backed temporary
+directory. Only filenames enter arguments; patch values stay private. SQL enters
+PostgreSQL through stdin. Each patch file is removed after its command.
 Failures report a safe stage and reason, retain their internal cause and leave
 writers held. Inspect the failed Job and journal; never delete them to bypass an
 empty-target refusal. There is no command here to release effects after recovery.
