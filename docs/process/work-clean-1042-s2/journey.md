@@ -85,3 +85,32 @@ that reply completion passed. The 1280 px checks and later CORE steps were NOT R
 The attachment reply did not reproduce its earlier failure in this attempt. This
 run does not qualify the slice for merge. Paid-provider and approval journeys remain
 NOT RUN.
+
+## Passing run
+
+Journey on a fresh dev stack: PASS
+
+- Date: 17 November 2026.
+- Tested head: `a8e7a7ff8f265b8aaabc2c347a88abbb66e70464`.
+- Fresh secondary slot: 1; managed calls enabled with the free stand-in provider.
+- Before claiming the slot, the 1-minute load average stayed below 6 for five minutes.
+  Samples taken about every 30 seconds ranged from 0.43 to 1.17.
+- `infra/dev-stack/up.sh --fresh`: PASS; website readiness took 39,488 ms.
+- CORE browser checks: PASS at 390 px and 1280 px. Attachment uploads and replies,
+  chat completion, the live computer view and the later CORE checks completed.
+  One upload transport attempt reported `net::ERR_FAILED`; its retry passed, with
+  no duplicate files.
+- Organisation sign-in refusal: PASS at 390 px and 1280 px.
+- `infra/dev-stack/down.sh --id 1`: PASS; final slot status was `free`.
+- Paid-provider and approval journeys remain NOT RUN.
+
+The live-view assistant replies completed at both widths. No reply timed out, so
+there is no unfinished fourth reply to diagnose in this run. The captures below
+show the completed chat and the organisation refusal at both widths.
+
+### Captures
+
+- [Chat at 1280 px](pass-chat-1280.png)
+- [Chat at 390 px](pass-chat-390.png)
+- [Organisation refusal at 1280 px](pass-refusal-1280.png)
+- [Organisation refusal at 390 px](pass-refusal-390.png)
