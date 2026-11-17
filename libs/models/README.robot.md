@@ -1305,6 +1305,15 @@ P3-14/P3-15 own hard-stop cascades and evidence-based uncertainty resolution.
 
 ## Run and test
 
+`@opencrane/models/testing/members` exports `joinMembers(options, people)`.
+Options contain `store`, `silo`, optional `auth` with `db`, and optional
+`project(event, sequence)`. People contain `memberId`, `role`, optional `email`
+and optional `displayName`. Each `member.joined` uses `member-<memberId>`;
+email defaults to `<memberId>@example.test` and display name to the member id.
+It returns saved `{ event, sequence }` rows in input order. For each row it
+applies permissions before calling the projection. It uses `appendEvent` and
+does not start the larger model fixture or its gateway.
+
 With `PG_TEST_URL` set to a disposable test database, run the focused accounting checks:
 
 ```sh

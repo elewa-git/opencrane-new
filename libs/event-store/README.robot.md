@@ -263,6 +263,14 @@ omitted server defaults where stated and never repairs an existing stream.
 
 ## Tests and dependencies
 
+`@opencrane/event-store/testing` exports `appendEvent(store, options)`. Required
+named fields are `silo`, `subject`, `type` and `data`. It uses `event` defaults,
+generates an id unless supplied, reads the subject's latest position and requires
+an `appended` result. It returns `{ event, sequence }` and applies no projections.
+The only optional field is `id`. The builder creates all other envelope fields;
+callers cannot override them. Tests that require a different envelope build and
+append that event locally, keeping their fixture-specific checks there.
+
 Root `npm test` fetches the pinned test server automatically after `npm ci`.
 OpenSSL must be on PATH to generate a fresh test CA and one-day certificates.
 The issuer lives in `src/certificates.ts` so image setup can use it. Only the

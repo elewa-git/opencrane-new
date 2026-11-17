@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
 import { HandlerRuntime } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
 import { members, ProjectionRunner, readEvents } from '@opencrane/projections';
@@ -20,23 +20,28 @@ let runner: ProjectionRunner;
 let removal: EventEnvelope;
 let counter = 0;
 
-async function append(subject: string, type: string, data: unknown) {
-  const record = { ...event(`departure-${++counter}`, subject, type), data };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
-  return record;
-}
-
 async function group(teamId: string) {
-  await append(`team-${teamId}`, 'team.created', { teamId, name: teamId, createdBy: 'owner' });
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: `team-${teamId}`, type: 'team.created',
+    data: { teamId, name: teamId, createdBy: 'owner' },
+  });
   for (const memberId of ['alice', 'bob']) {
-    await append(`team-${teamId}`, 'team.member_added', { teamId, memberId, addedBy: 'owner' });
+    await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: `team-${teamId}`, type: 'team.member_added',
+      data: { teamId, memberId, addedBy: 'owner' },
+    });
   }
 }
 
 async function grant(granteeKind: string, granteeId: string, resourceId = 'test-model') {
-  await append(grantStream('model', resourceId), 'grant.given', {
-    resourceType: 'model', resourceId, granteeKind, granteeId, grantedBy: 'owner',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: grantStream('model', resourceId), type: 'grant.given',
+    data: {
+      resourceType: 'model', resourceId, granteeKind, granteeId, grantedBy: 'owner',
+    },
   });
 }
 
@@ -49,32 +54,52 @@ async function setup() {
   runner = new ProjectionRunner(storage.db, nats.reader, createLogger('departure-test'));
   await runner.initialise(members);
   for (const memberId of ['alice', 'bob']) {
-    await append(`member-${memberId}`, 'member.joined', {
-      memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+    await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: `member-${memberId}`, type: 'member.joined',
+      data: {
+        memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+      },
     });
   }
   await group('early');
   for (const [assistantId, ownerId, kind] of [
     ['personal', 'alice', 'personal'], ['shared', 'early', 'team'], ['other', 'bob', 'personal'],
   ]) {
-    await append(`assistant-${assistantId}`, 'assistant.created', { assistantId, ownerId, kind });
+    await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: `assistant-${assistantId}`, type: 'assistant.created',
+      data: { assistantId, ownerId, kind },
+    });
     await grant('assistant', assistantId!);
   }
   for (const assistantId of ['personal', 'shared', 'other']) {
-    await append(`computer-${assistantId}`, 'computer.claimed', {
-      assistantId, computerId: `desk-${assistantId}`, generation: 1, tokenId: 'token:fixture',
+    await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: `computer-${assistantId}`, type: 'computer.claimed',
+      data: {
+        assistantId, computerId: `desk-${assistantId}`, generation: 1, tokenId: 'token:fixture',
+      },
     });
   }
   await computerEvent('personal', 'computer.ready');
-  await append('connection-existing', 'connection.created', {
-    userId: 'alice', serverId: 'mcp', profile: 'default', secretRef: 'secret:fixture',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'connection-existing', type: 'connection.created',
+    data: {
+      userId: 'alice', serverId: 'mcp', profile: 'default', secretRef: 'secret:fixture',
+    },
   });
   await grant('member', 'alice');
   await grant('member', 'bob');
   await grant('team', 'early');
-  removal = await append('member-alice', 'member.removed', {
-    memberId: 'alice', removedBy: 'owner', reviewRevision: 'a'.repeat(64),
-  });
+  removal = (await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'member-alice', type: 'member.removed',
+    data: {
+      memberId: 'alice', removedBy: 'owner', reviewRevision: 'a'.repeat(64),
+    },
+  })).event;
   await runner.run(members);
 }
 beforeEach(setup);
@@ -160,8 +185,12 @@ async function retries() {
   await runner.run(members);
   await finish();
   const saved = await nats.store.head();
-  await append('assistant-personal', 'assistant.settings_changed', {
-    assistantId: 'personal', changedBy: 'owner', changedFields: ['persona'],
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'assistant-personal', type: 'assistant.settings_changed',
+    data: {
+      assistantId: 'personal', changedBy: 'owner', changedFields: ['persona'],
+    },
   });
   await runner.run(members);
   await deliver();
@@ -209,9 +238,17 @@ async function oldRemoval() {
   removal = { ...removal, data: { memberId: 'alice', removedBy: 'owner' } };
   await deliver();
   expect(await nats.store.head()).toBe(before);
-  removal = await append('member-alice', 'member.removed', removal.data);
-  await append('member-alice', 'member.role_changed', {
-    memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  removal = (await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'member-alice', type: 'member.removed',
+    data: removal.data,
+  })).event;
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'member-alice', type: 'member.role_changed',
+    data: {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+    },
   });
   await deliver();
   expect(await nats.store.head()).toBe(before + 2);
@@ -252,7 +289,11 @@ it('rebuilds without effects and previews the added subscription without running
 async function computerEvent(assistantId: string, type: string) {
   const data: Record<string, unknown> = { assistantId, computerId: `desk-${assistantId}` };
   if (type === 'computer.resumed') data['tokenId'] = 'token:fixture';
-  return append(`computer-${assistantId}`, type, data);
+  return (await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: `computer-${assistantId}`, type: type,
+    data: data,
+  })).event;
 }
 
 async function finish() {
@@ -272,11 +313,19 @@ async function busyComputer() {
   const turn = { assistantId: 'personal', computerId: 'desk-personal',
     conversationId: 'private', turnId: 'turn', threadId: 'thread',
     requesterId: 'alice', task: 'chat_turn' };
-  await append('computer-personal', 'computer.turn_started', turn);
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'computer-personal', type: 'computer.turn_started',
+    data: turn,
+  });
   await expect(deliver()).rejects.toThrow('Departure computer busy');
   expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
   expect(await history(nats.store, 'computer-personal')).toHaveLength(3);
-  await append('computer-personal', 'computer.turn_closed', { ...turn, status: 'completed' });
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'computer-personal', type: 'computer.turn_closed',
+    data: { ...turn, status: 'completed' },
+  });
   await finish();
   const computer = await history(nats.store, 'computer-personal');
   expect(computer).toHaveLength(5);
@@ -309,11 +358,19 @@ it.each(['computer.suspended', 'computer.retired', 'computer.resumed'])(
   'does not suspend a computer whose latest state is %s', computerStates);
 
 async function claimedComputer() {
-  await append('assistant-starting', 'assistant.created', {
-    assistantId: 'starting', kind: 'personal', ownerId: 'alice',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'assistant-starting', type: 'assistant.created',
+    data: {
+      assistantId: 'starting', kind: 'personal', ownerId: 'alice',
+    },
   });
-  await append('computer-starting', 'computer.claimed', {
-    assistantId: 'starting', computerId: 'desk-starting', generation: 1, tokenId: 'token:fixture',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'computer-starting', type: 'computer.claimed',
+    data: {
+      assistantId: 'starting', computerId: 'desk-starting', generation: 1, tokenId: 'token:fixture',
+    },
   });
   await runner.run(members);
   await expect(deliver()).rejects.toThrow('Departure computer busy');
@@ -349,15 +406,27 @@ async function reorderedCompletion() {
   await runner.run(members);
   await expect(deliver()).rejects.toThrow('Departure permissions pending');
   expect(await history(nats.store, 'memberaudit-alice')).toEqual([]);
-  await append('member-returned', 'member.joined', {
-    memberId: 'returned', role: 'member', email: 'alice@example.test', displayName: 'Alice',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'member-returned', type: 'member.joined',
+    data: {
+      memberId: 'returned', role: 'member', email: 'alice@example.test', displayName: 'Alice',
+    },
   });
-  await append('assistant-returned', 'assistant.created', {
-    assistantId: 'returned', kind: 'personal', ownerId: 'returned',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'assistant-returned', type: 'assistant.created',
+    data: {
+      assistantId: 'returned', kind: 'personal', ownerId: 'returned',
+    },
   });
   await grant('member', 'returned');
-  await append('computer-returned', 'computer.claimed', {
-    assistantId: 'returned', computerId: 'desk-returned', generation: 1, tokenId: 'token:fixture',
+  await appendEvent(nats.store, {
+    id: `departure-${++counter}`, silo: 'test',
+    subject: 'computer-returned', type: 'computer.claimed',
+    data: {
+      assistantId: 'returned', computerId: 'desk-returned', generation: 1, tokenId: 'token:fixture',
+    },
   });
   await computerEvent('returned', 'computer.ready');
   const returnedComputer = await history(nats.store, 'computer-returned');
@@ -387,13 +456,21 @@ it('requires IAM receipts and saves one complete record across reordered deliver
 
 async function existingRevocation(type: string) {
   if (type === 'group') {
-    await append('team-early', 'team.member_removed', {
-      teamId: 'early', memberId: 'alice', removedBy: 'owner',
+    await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: 'team-early', type: 'team.member_removed',
+      data: {
+        teamId: 'early', memberId: 'alice', removedBy: 'owner',
+      },
     });
   } else {
-    await append(grantStream('model', 'test-model'), 'grant.revoked', {
-      resourceType: 'model', resourceId: 'test-model', granteeKind: 'member',
-      granteeId: 'alice', revokedBy: 'owner',
+    await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: grantStream('model', 'test-model'), type: 'grant.revoked',
+      data: {
+        resourceType: 'model', resourceId: 'test-model', granteeKind: 'member',
+        granteeId: 'alice', revokedBy: 'owner',
+      },
     });
   }
   await runner.run(members);
@@ -481,9 +558,13 @@ async function pausedClaimAfterCleanup() {
   const pendingClaim = claim.handle(lost, storage.db);
   try {
     await paused.promise;
-    removal = await append('member-bob', 'member.removed', {
-      memberId: 'bob', removedBy: 'owner', reviewRevision: 'b'.repeat(64),
-    });
+    removal = (await appendEvent(nats.store, {
+      id: `departure-${++counter}`, silo: 'test',
+      subject: 'member-bob', type: 'member.removed',
+      data: {
+        memberId: 'bob', removedBy: 'owner', reviewRevision: 'b'.repeat(64),
+      },
+    })).event;
     await runner.run(members);
     await expect(deliver()).rejects.toThrow('Departure permissions pending');
     await finish();

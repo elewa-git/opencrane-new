@@ -74,6 +74,9 @@ Not built yet:
 
 ## How to run or test it
 
+Tests can join people with `joinMembers` from `@opencrane/models/testing/members`.
+Named options can also apply permissions and read tables after each saved event.
+
 Run these commands from the repository root:
 
 ```sh

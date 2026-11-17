@@ -4,6 +4,14 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Pool } from "pg";
 import { tcpProxy } from "@opencrane/event-store/testing";
+import { createStore, memberAuthorisation } from '../src/index.ts';
+
+export async function permissionStore(fga: Pick<Awaited<ReturnType<typeof openfga>>, 'apiUrl'>,
+  silo: string) {
+  const binding = await createStore(fga.apiUrl, silo);
+  const auth = memberAuthorisation(binding);
+  return { binding, auth };
+}
 
 const exec = promisify(execFile);
 const containers = new Set<string>();
