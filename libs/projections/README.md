@@ -4,381 +4,84 @@
 
 Build and read rebuildable PostgreSQL tables from events.
 A [read table](../../GLOSSARY.md#read-table-projection) is a copy arranged so
-screens can load data quickly. The package keeps tables for members, groups,
-model providers, conversations, files, computers, memory, tool servers and a history of
-who did what. The saved event log
-remains the record of what happened, so these tables can be rebuilt.
-Conversation tables keep encrypted command views. Organisation history keeps
-only the plain activity label and leaves out the view.
-Organisation history also groups member, tool, spending, memory and routine
-changes. It keeps only safe fields from provider, budget and routine events.
-Provider read tables keep a retired connection's safe details and apply its
-reviewed binding choices in one database transaction. Rebuilding them reads only
-saved events and does not contact a model provider.
-The tool register closes a hosted server's old review when a new workload starts.
-Rebuilding that register never starts a workload or contacts its tools.
-The member's welcome stays complete after later survey and assistant changes.
-Its archive choice and completion position rebuild from personal events. The
-welcome is not a conversation row.
-Workers save adjacent pieces of a streamed reply together. This keeps live
-text and the final Stop result from waiting behind hundreds of separate commits.
-Conversation readers can request the newest messages and then read older pages.
-
-Refused control attempts appear in the requester’s conversation history with the
-verified person and a fixed reason. Rebuilding that history does not change computer control or running work.
-
-Admission, removal, role and ownership history keeps the affected person and the
-change recorded by each event.
-Admission records keep the saved role and invitation reference when one exists.
-They do not copy sign-in identities or treat them as verified people.
-It keeps appointment requests separate from confirmations and step-downs.
-Removal records include a safe recorded reason when one exists, without private details.
-The history table also keeps the parent and child identifiers from a saved publication.
-It keeps the publication kind and recorded result reference when present. It never
-copies the published text or a file key. The server checks who may see each identifier.
-Each publication stays on its own history entry, even when another chat reuses its turn id.
-Modern child task outcomes also get one history entry. The table keeps a small set of
-saved task references and the execution result. It keeps the financial state unavailable
-until a spending record can be joined. A missing parent or child record stays unavailable.
-It copies no task text, result or file reference.
-History searches can use the id shown on a task entry without revealing its private event id.
-Nightly memory history keeps only dates, safe outcomes and random references. It does not
-copy a fact's text. A root allowance is shown as a limit, never as a charge.
-Routine history joins saved receipts to one occurrence. It shows a result only
-when the finish records a confirmed settlement. Rebuilding starts no routine work.
-The memory read table also keeps when each nightly choice was saved, so its
-authorised detail can show the observed time after a rebuild.
-It keeps the latest review for each fact, so a history page can read just its
-own saved choices.
-
-Saved spending resolutions keep the original person, date and chosen amount,
-plus a reference to the saved change. They do not prove an external action finished or that held money was released.
+screens can load data quickly. This library builds tables for people, chats,
+files, computers, tools, spending and memory.
+The saved event log remains the record of what happened.
 
 ## Where it fits
 
-OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
-that is never changed. Everything else, such as read tables and permissions, is
-built from that log and can be rebuilt from it. This package builds the read
-tables.
-This package belongs to the event core. `apps/ops` runs the workers that fill its
-tables, and `apps/server` reads those tables. It reads events from
-`libs/event-store`, checks their shapes with `libs/events`, and writes to
-PostgreSQL, the database for the read tables.
+This library belongs to the event core.
+[apps/ops](../../apps/ops/README.md) runs its workers;
+[apps/server](../../apps/server/README.md) reads its tables.
+It reads saved events, checks their definitions and stores the results in PostgreSQL.
+Callers check access before returning private data.
 
 ```mermaid
 flowchart LR
-  models["libs/models<br/>model choices and replay tests"] -.->|uses database locks and the test helper| projections
-  ops["apps/ops<br/>workers"] -->|fills tables, reads ordered routines and send access checks, and checks saved changes| projections["libs/projections<br/>read tables, chat history and safe audit, routines, memory and nightly reviews"]
-  server["apps/server<br/>back end"] -->|reads tables, own and admin routine lists, run pages and spending choices| pg["PostgreSQL<br/>database"]
-  projections -->|saves history, child publication, searchable task outcomes and spending; keeps private audits and process exits outside chat feeds| pg
-  store["libs/event-store<br/>saved events"] -->|ordered events, image requests and results, nightly records, tool holds, check recovery, gateway restart receipts and private instance stops and reports| projections
-  server -.->|reads member references, tool readiness, nightly memory inputs and child requests awaiting activation| projections
-  projections -.-> events["libs/events<br/>events and personal account checks"]
-  projections -->|checks memory key identities; stores wrapped chat keys; repairs correction keys| keys["Server files<br/>private key store and package Secret"]
-  store -->|OAuth settings change positions| projections
+  ops["apps/ops<br/>background workers"] -.-> projections["libs/projections<br/>read tables"]
+  server["apps/server<br/>back end"] -.-> projections
+  models["libs/models<br/>AI access rules"] -.-> projections
+  projections -.-> store["libs/event-store<br/>saved event log"]
+  projections -.-> events["libs/events<br/>event definitions"]
+  projections -->|reads and writes tables| pg["PostgreSQL<br/>content database"]
 ```
-
-Reviewed tool policy keeps the admin's personal-key requirement and identity tool
-when a catalogue is checked again or events are replayed.
 
 ## What it is responsible for
 
-A small connection index records where each person's profile was first saved.
-The server uses it to find a page, then reads the saved events for current status.
-Rebuilding the index cannot change a profile or grant access.
+- Turn saved events into tables and keep each worker's saved position with its changes.
+- Keep membership, participation and grant history for callers to check.
+- Keep chat messages, activity, files and each person's private list choices.
+- Keep tool reviews, publication records and provider choices separate from permission to act.
+- Keep spending records as integer euro cents.
+- Build a safe organisation history without copying private text or credentials.
+- Encrypt conversation content and keep memory keys separate from searchable text.
+- Hide forgotten memory facts and dependent copies before opening their text.
+- Rebuild tables without sending messages, changing permissions or starting work.
 
-Tool checks keep an acknowledged publication while its definitions stay unchanged.
-OAuth settings change records move the saved tool server position. They leave its
-review, tool modes and publication state as they were.
-Failed checks pause calls until fresh evidence arrives. Changed tools still need review.
-A new gateway receipt confirms an unchanged publication after restart. Status still
-requires the current process and exact configuration to match. Rebuilding the tables
-follows the same rules and cannot restore ended approvals.
+Not built yet:
 
-Database locks keep related work from overlapping. Callers can limit the wait and
-cancel it. A running callback keeps its lock until its work has stopped.
-
-Remote tool grant lists include each person's membership status. A departure keeps
-the saved grant history, so the server can label the person as departed.
-
-The chat index keeps closed assistant chats available to the back end. The back
-end uses their saved events to finish waiting and running work after a restart.
-The index itself never sends a Stop or changes a turn.
-
-Closed chat history stops showing assistant output, decisions, tool dispatches,
-child publications and agent or system posts at the first saved close. Human posts
-remain visible.
-Later rows stay in the read table as evidence. History pages skip those rows
-and keep scanning for visible human posts, using their original saved positions.
-
-Keep publication requests and gateway receipts separate from permission to call tools.
-New publication requests end that server’s waiting and unused approvals. Requests for
-another server leave them unchanged. Receipts preserve the resulting approval revision.
-A receipt can release a changed server's hold only for its current review and fresh checks.
-It does not change the rules or revive an old approval. Publication status compares the
-saved request, gateway observation and server receipt in one database snapshot. A missing
-match stays Applying or Unknown. Rebuilding these tables repeats the checks without
-sending configuration or probing the gateway.
-
-Keep the first write at an equal memory revision, including its expiry and saved
-position. The nightly scanner shares this rule. A nightly review covers expiry only
-through its intended time, so a delayed selection cannot hide later expiry.
-
-Private memory records, process exit reports and native request refusal audits stay
-in the saved event log. They do not enter the chat read table, so history pages
-and live chat show only public rows.
-
-The optional private tool-instance table keeps each recorded run and its status.
-It checks each new observation against the preceding saved revision.
-An admin stop shows its reason to the instance owner. An owner stop must come from
-that owner.
-Rebuilding it starts no process and releases no credentials. Its worker is not enabled yet.
-
-The tool catalogue keeps exact tool definitions and their check and expiry dates.
-Allow and Ask both require a declared zero cost and approval details. The admin’s
-review locks those saved values; changing them requires another review.
-It retains both lists after a change, so the earlier list can still be read.
-A server without a fresh check is shown as unavailable. Saved definitions must
-match their hashes before review choices are kept. A hash is a fixed-length value
-calculated from the definitions. Checks renew only the same server in the same silo.
-A fresh catalogue check does not approve startup credentials. Required startup review
-keeps calls blocked.
-
-A saved tool change holds the whole server, including tools whose definitions stayed
-the same. Fresh checks, another review and restarting a worker cannot lift that hold.
-A matching gateway receipt for the new review releases the saved hold. The running
-watch still checks the tool list before calls resume. Rebuilding tables sends no calls.
-
-- Keep dated tool snapshots and the earlier list after a change.
-
-The members worker keeps an index of the saved streams used in access and departure
-reviews. The index retains removed memberships and revoked grants, so an empty list
-cannot hide permission updates that are still pending. Member replay rebuilds it
-without changing permissions or making outside calls. An upgraded installation
-keeps reviews incomplete until a full rebuild has finished. The index also records
-which saved history changes affect each person. A small saved count of stream names
-lets removal checks detect new history without reading unrelated events.
-
-File reads return upload details and workspace paths. The private storage key
-stays inside the projection.
-
-- Keep current destination rules, including who revoked them and when.
-
-- Keeps hosted tool policies unpublished, including older records and replay.
-- Keeps startup tool policies unpublished through review and replay.
-  Existing per-call connections, including memory, keep their reviewed status.
-
-- Keeps each scope’s chosen member, assistant and paying group for nightly memory upkeep.
-  Rebuilding this choice makes no outside calls.
-- Keeps the time of that choice and each night's reviewed fact references, so the
-  back end can show whether any facts are waiting.
-- Keeps control references and affected-turn counts in history without private turn details.
-- Keeps saved tool hand-offs and transport observations in Change history. A response
-  records transport evidence; it does not prove a business change succeeded.
-  A hand-off without a saved outcome stays unknown, including after a rebuild.
-- Keeps a short, dated change history. Each row can open more saved evidence in small pages.
-- Keep tool discovery separate from an owner or admin’s recorded review.
-  Require a new review when the connection or account mode changes.
-  Keep blocked tools blocked when rebuilding the tables.
-
-- Rebuild child participants and their recorded parent references from saved events.
-- Keep an index for reading initial memory in a stable order.
-- Keep each saved fact’s earlier links to the facts it came from.
-- Hide forgotten facts and every dependent copy before reading their encrypted text.
-- Keeps delegated task relationships and outcomes in read tables. Rebuilding these
-  tables starts no tasks and changes no permissions or spending.
-- Copies recorded tool dispatch evidence into conversation feeds without calling a tool.
-- Rebuilds saved provider choices, drains and switch-on from the spending stream without calling a provider.
-- Adds a new owner to the member tables only after confirmation is saved.
-- Turn ordered events into tables that the server can read.
-- Bind member accounts from bound invitations or accepted email invitations.
-- Keep old conversation participant records separate from new participant changes.
-- Keep the latest model grant for each person, group or assistant, including revoked history.
-- Keep assistant names and personal owners' display names for access choices.
-- Read remote tool grant references from the member inventory, including revoked grants.
-- Copy tool progress, dispatch records and tool access decisions into each conversation's feed.
-  Keep the call id so the page can match a decision to its tool call.
-  Index message ids so an authorised caller can find one source message quickly.
-- Save table changes and each worker's position together in one database step.
-- Rebuild tables from the event log. The replay command rebuilds members,
-  groups, model grants, model providers, budgets, the tool catalogue, computers and the
-  history table while the system runs.
-- Store a separate encryption key for each conversation, so chat text is saved
-  in encrypted form. A packaged install encrypts those keys with a Kubernetes
-  Secret before saving them on its private volume.
-- Build current memory rows and searchable text without copying text into change history.
-  Keep newer revisions when an older or repeated write arrives.
-- Read memory ids and search matches within one silo and scope. Callers check permission first.
-- Keep each memory revision key separately, with a permanent marker when it is deleted.
-  Remove unfinished correction key files so a later correction can proceed.
-  Refuse a missing store or key, so a storage failure cannot look like deliberate deletion.
-- Send member-change notices after the table update commits.
-- Keep private conversation content out of the event-history table.
-- Include invitation and refusal summaries without copying email addresses or names.
-- Avoid outside actions while rebuilding tables.
-
-Memory encryption and searchable text stay on the server. The memory rebuild command
-runs with readers and workers stopped. Customer deployment and backup recovery still need testing.
-
-Conversation lists select at most 100 candidates ordered by each person’s visible activity.
-Late joins start without earlier activity; later visible messages advance their order.
-Conversation lists can first select a person's current participation rows. The server
-checks saved events and permissions before returning any candidate.
-Conversation tables keep each person's join and removal positions, so replay can
-restore their periods of participation. Conversation tables are rebuilt with readers
-and workers stopped. The worker names the replay command when an upgrade needs it.
-
-The conversation worker also saves each person's archive and read choices. Choices belong to
-one period of participation; joining again starts fresh. Rebuild restores them without
-adding them to the shared conversation feed or running background actions.
-It keeps the last visible message's position and the first close's event, person and time.
-Closing a chat keeps that message position. Later reports and repeated closes cannot replace
-these details. The reports remain in the feed so their saved evidence is available.
+- Run the optional private tool-instance worker in the normal stack.
 
 ## Processes it handles
 
-Member departure reads can leave routine references out of their inventory query.
-They use a separate bounded presence check. Departure cleanup keeps reading those
-references, so this read optimisation cannot remove its blockers.
-
-A matching gateway confirmation makes a reviewed tool policy available, including
-its first publication. The tool list and publication status use the same availability
-check as chat. People and assistants still need their own access grants. Rebuilding
-the catalogue restores these saved decisions without sending tool calls.
-
-The routines worker copies saved definitions and runs into read tables.
-It checks a saved send authorisation and the final access check against the
-admitted run. These records do not prove the turn reached a computer.
-An owner index lets the server read small pages of one person’s routines.
-The routine scanner reads up to fifty references in their original event order for
-one silo. Edits keep that order, and newly added routines follow the existing ones.
-Older tables need an offline replay before the scanner can use that order.
-It checks each reference against saved events before reporting what it found.
-Paused routines, missing local times and occupied runs remain in these pages.
-A silo index supports admin pages across owners. The server checks current access
-before returning either list.
-An index lets the server read small run pages in their original order, even after a run ends. Instructions
-stay encrypted. Each run keeps its original owner, assistant and paying group after
-later edits. Missed dates stay in one compact record. Rebuilding these tables starts
-no work and requires readers and workers to be stopped.
-
-Child activation records stay out of message feeds, including after replay.
-
-The conversations worker builds an index of child requests from saved events. It keeps
-event references, ids and failed attempt numbers until matching activation is saved.
-Saved first inputs remain on the list. Recovery skips failed requests until the requester saves a retry.
-Rebuilding this index creates no child and copies no message.
-
-Memory replay reads saved corrections before opening any text. It rebuilds only
-the latest usable revision and hides facts derived from superseded revisions.
-It creates no keys and starts no cleanup work.
-
-Internal child-chat requests stay in the event log. They do not appear in parent
-history or change its visible activity, including when the tables are rebuilt.
-
-Nightly memory records become a small history table for the server to read.
-Rebuilding it copies the saved records and starts no scheduled work.
-
-A saved memory tombstone marks a fact as hidden permanently. The worker follows its saved
-links and removes search text for every dependent copy in the same database step.
-Rebuilding reads these links first, so hidden text is never decrypted, even while its
-keys still exist. The dispatcher can then destroy the keys and record completion.
-The projection checks that record without reading hidden text or changing keys.
-The HTTP forget command is not built yet.
-
-A saved survey event arrives. The worker checks the hash of its encrypted bytes, then keeps the answers, hash
-and saved date.
-Editing an earlier step clears later current answers; replay restores the same progress
-without reading or creating a key. The server serves authorised survey progress.
-
-A saved persona revision adds an encrypted, immutable version and updates the
-current revision number. Rebuilding restores both without opening text or creating keys.
-An approval keeps the chosen version and time after another edit or restart.
-The same read table keeps the frozen welcome reference and encrypted answer.
-Rebuilding restores whether an answer is pending without opening it or starting work.
-
-A Member or Admin role change that reaches an Owner keeps the owner role. The worker
-records its position and continues with later events.
-
-1. **A member joins.** The worker reads the saved event and updates the member
-   table. It saves its position with the table change, then sends a notice after
-   the change commits.
-2. **A computer starts, sleeps or recovers.** The worker saves its current state
-   and the time of its last loss. Chat pages read this small record instead of reading
-   all of the computer's past events.
-3. **An admin reads model access.** The server reads grant facts and bounded
-   member, group or assistant choices from these tables. Missing provider choices
-   stay marked as not available yet.
-4. **Memory text is encrypted.** The internal helper uses an existing private key
-   directory on the server. An empty deletion marker means the text was forgotten;
-   a missing key means storage failed. Replay checks every required key before replacing memory tables.
-   It reads keys again before each database update.
-   It saves normalised text for search, marks destroyed content unavailable and keeps
-   older text with refused controls out of search. The live memory worker keeps these
-   tables current when its key directory is configured. The server lists and searches
-   facts after checking access.
-5. **An operator rebuilds a table.** They run `npm run replay -- members`. The
-   command reads the whole event log again, builds fresh tables on the side and
-   swaps them in. It does not run reactions or make outside calls.
-6. **A conversation closes.** The worker saves who closed it and when. Late reports
-   still enter the feed, but leave its latest visible activity and first close unchanged.
-   An offline conversation rebuild restores the same details from the saved events.
+1. **A change is saved.** A worker reads the event and updates the matching tables.
+   The table changes and worker position commit together, so a failed update leaves
+   the event available to try again.
+2. **A person opens a chat.** The server reads the newest visible messages and can
+   request older pages. The tables preserve participation and closing records;
+   the server checks current access before returning them.
+3. **A memory fact is forgotten.** The worker hides it and its dependent copies from
+   search. Rebuilding checks those saved deletion records before decrypting any text.
+4. **An operator rebuilds data.** Replay reads saved events and restores the tables.
+   Conversation, memory and routine rebuilds require readers and workers to stop first.
+   Rebuilding never repeats outside actions.
 
 ## How to run or test it
 
-Tests that also need models live in `libs/models/test`.
-
-Run the type check and focused tests with these commands. The tests need the
-local NATS test server fetched first:
+Run these commands from the repository root. Focused tests need the local NATS test server;
+[README.robot.md](README.robot.md#test-dependencies) explains database setup.
 
 ```sh
-npm run typecheck -w libs/projections
+nice -n 10 npm run typecheck -w libs/projections
 sh scripts/fetch-nats.sh
-npx vitest run libs/projections/test
+nice -n 10 npx vitest run libs/projections/test --maxWorkers=2
 ```
 
-This example connects the event store and the database, then fills the member
-tables. Before you run it, set `DATABASE_URL`, set the NATS settings described
-in [the event-store details](../event-store/README.robot.md), and create the
-event log once with `npm run provision`.
+With an initialised `ProjectionRunner` named `runner`, fill the member tables:
 
 ```ts
-import { connectEventStore } from '@opencrane/event-store';
-import { createLogger } from '@opencrane/observability';
-import { connectProjectionDb, ProjectionRunner, members } from '@opencrane/projections';
+import { members } from '@opencrane/projections';
 
-const logger = createLogger('members');
-function logDatabaseError(error: Error): void {
-  logger.error({ err: error }, 'Projection database connection failed');
-}
-
-const eventStore = await connectEventStore();
-const database = connectProjectionDb(process.env['DATABASE_URL']!, logDatabaseError);
-const runner = new ProjectionRunner(database.db, eventStore.store, logger);
 await runner.initialise(members);
 await runner.run(members);
-await database.close();
-await eventStore.close();
 ```
 
-The [memory recovery check](../../infra/package/README.robot.md#memory-restore-preflight)
-checks current deletion records before rebuilding memory from older events.
-It checks every saved key reference and required key before decrypting surviving values.
-Its isolated test uses temporary keys and checks that forgotten text stays out of search.
+The [complete example](README.robot.md) shows how to connect and close the services.
 
 ## Where to read more
 
-- [README.robot.md](README.robot.md): table details, settings, recovery and tests.
-- [Event store](../event-store/README.md): the saved events used to build tables.
-- [Handlers](../handlers/README.md): background reactions to saved events.
-- [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+- [README.robot.md](README.robot.md): table contracts, settings, recovery and tests.
+- [Event store](../event-store/README.md): saved events used to build tables.
+- [Background workers](../../apps/ops/README.md): running workers and replay commands.
+- [Why NATS holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.
-
-Tool admission records advance the catalogue's write position. They leave tool rules,
-approval revisions and check dates unchanged. Rebuilding the tables never sends calls.
-
-Hosted image admission reports dated check results. All four checks must pass before
-an image is admitted. Admission grants no tool access and starts no process.
-
-Spending choice reads give the database a time limit. If a table stays locked, the page can report
-that it is temporarily unavailable.

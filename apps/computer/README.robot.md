@@ -789,6 +789,10 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
 
 ## Processes and storage
 
+The bridge derives session settings in `src/codex-config.ts` with
+`sessionConfiguration` from `@opencrane/events/session-configuration`. It uses
+the same shared settings as server admission and the browser defaults.
+
 - The root supervisor accepts fixed native exec-server and code-mode host launches
   over separate private Unix sockets in root-owned `/run/executor` (0750, group
   1000). Both pass through `tool-user.c`: UID/GID 1001, no supplementary groups,

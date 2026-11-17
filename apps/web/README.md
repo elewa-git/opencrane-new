@@ -3,177 +3,71 @@
 ## What this is
 
 The website people use to chat with their assistant and manage an OpenCrane organisation.
-It runs in a browser and sends requests to the server. Passwords go to the company
-sign-in service. The website shows saved results from the server rather than deciding
-permissions or spending limits itself. People can sign out from the workspace
-rail or phone menu. Owners and admins also see Settings there.
+It runs in a browser and sends requests to the server.
+The company sign-in service checks passwords.
+The website shows saved results; the server decides permissions and spending limits.
 
 ## Where it fits
 
-[apps/server](../server/README.md) handles this browser app's requests and live updates.
-[libs/protocol](../../libs/protocol/README.md) checks messages and sets the default chat
-mode from whether an assistant is personal or shared.
+This package belongs to the browser app layer.
+[apps/server](../server/README.md) handles its requests, sign-in and live updates.
+[libs/protocol](../../libs/protocol/README.md) defines the messages they exchange.
+The browser uses the website's own address for server connections.
 
 ```mermaid
 flowchart LR
-  system["OpenCrane<br/>the whole product"] --> web["apps/web<br/>the website"]
-  browser["Person's browser<br/>pages with the installation name and file drops where Attach is available"] -->|requests and tab sign-out| web
-  web -->|messages, settings and personal key consent| server["apps/server<br/>the back end"]
-  server -->|saved chats, assistant types, command labels and masked views, persona versions, files and live updates| web
-  web -->|sign-in| zitadel["Zitadel<br/>company sign-in"]
-  web -.->|message rules| protocol["libs/protocol<br/>shared messages"]
-  web -->|saved and private replies| capture["Chat workspace<br/>reply details, shared images and diagrams"]
-  web -->|settings and safe history details| admin["Admin pages<br/>overview, provider, tool, people and memory"]
+  browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
+  web -->|sends requests and messages| server["apps/server<br/>back end"]
+  server -->|returns saved and live results| web
+  web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
-
-Sign-in goes through the server to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service).
-The browser uses the website's own address for requests and live connections.
-No credentials are built into its public assets.
 
 ## What it is responsible for
 
-For everyone, the website:
+- Show sign-in, first-owner setup, the welcome survey and private persona review.
+- Show the installation's name and provide sign-out from desktop and phone menus.
+- Offer Settings to owners and admins.
+- Support assistant sessions and direct or group chats with colleagues.
+- Show live and saved replies, safe formatting, code, images and diagrams.
+- Keep private personal replies only in page memory and clear them when access ends.
+- Open recent and archived chats, load older messages and show saved action details.
+- Upload and preview files, explain refusals and show when files are ready to send.
+- Show tool approvals and the assistant's read-only desktop when permitted.
+- Show permitted memory facts and support personal saving, correction and forgetting.
+- Let members choose personal tool keys and which assistants may use them.
+- Let admins manage people, groups, assistants, model providers and tool servers.
+- Show spending, budgets, held money and permitted organisation history.
+- Keep unknown save results tied to their original reference while checking status.
+- Support phones, keyboard navigation and clear messages when access changes.
 
-- Shows sign-in, first-owner setup, the welcome survey and private persona review.
-  Sign-in and workspace navigation show the organisation name set by the installer.
-- Supports assistant sessions and direct or group chats with colleagues.
-  An own message in a group chat can open a review to ask a shared assistant for work.
-  The first review includes people who could read the source message. The server
-  confirms the people, paying group and allowance before Start. The website reads
-  the paying group's checked name for display.
-  A long computer start explains when the assistant service is waiting for maintenance.
-  The saved message runs once the service and computer are ready.
-  Assistant replies show headings, lists, quotes, code and safe links.
-  Messages to the assistant can hold text and clean file attachments together. The composer
-  shows each file's progress, scan result and remove control while typing stays open.
-  Links to published workspace files open their previews. Published PNG, JPEG,
-  WebP and GIF images in assistant replies appear in the text. Local file links
-  that cannot be opened show their file name and say the agent has not shared them.
-  Uploaded and assistant images also appear as file cards in the chat.
-  Code blocks have a copy button. Mermaid diagrams appear as images in live and
-  saved replies, including after reload or returning to a chat. Their source
-  shows as code until the block closes or when a diagram cannot be drawn.
-  Drawing happens in a separate browser document that cannot contact the network.
-- Shows private personal replies in page memory without saving them in message history.
-  Clearance removes their text and diagrams, including when copying or drawing is still waiting.
-  Disconnecting, losing access or signing out
-  in another tab discards them. Reload explains that the reply is unavailable.
-  Returning tabs check the session before accepting private frames.
-- Names recognised computer commands in plain words, explains common failures and lists
-  the newest action first in Activity. Expands saved command and tool details in chat.
-- Lists recent and archived conversations and opens saved chat links.
-- Shows the organisation task list in server order and opens its existing evidence pages.
-- Opens assistant chats at their newest messages and loads older messages as people scroll up.
-  The visible message stays in place while an older page arrives.
-- Catches up saved assistant chats before saying they are current. A failed read keeps the
-  messages already shown and offers another try. Missing chat links show no chat details.
-  Private shared sessions show the checked paying group name without exposing its id.
-- Lets people the server authorises close a conversation after a review. Closed chats keep
-  their saved messages and files for people who can still read them. A closed group keeps
-  its participant list readable without offering changes or showing a removed person's id.
-- Shows tool actions for review and lets the requester approve or deny them.
-  A saved takeover cancellation names its cause and end time.
-  Approval details say when the tool replied, while an uncertain result stays unconfirmed.
-- Uploads and previews files, saves screenshots and opens the assistant's read-only
-  [computer](../../GLOSSARY.md#computer) view when permitted.
-  Files show Preparing files… until the workspace receives them, then Ready and Send
-  become available together. Desktop file drops use the same uploads where Attach is available.
-  Colleague chats have no file-drop controls. Phones keep the Attach button.
-- Shows permitted memory facts and supports saving, correcting and forgetting personal facts.
-  While saved membership permissions are still being applied, Memory shows a setup
-  message and retries its reads for up to 30 seconds. Refused reads show access loss straight away.
-  After a correction, Edit and Forget stay visible but disabled until the saved revision appears.
-  Temporary read failures offer another refresh.
-- Lets members verify and choose a personal key and its allowed assistants in My tools.
-  Chat links to this page when a key is missing or the assistant is not allowed.
-- Supports phones, keyboard navigation and clear messages when access changes.
+Not built yet:
 
-For owners and admins, it:
-
-- Manages people, groups, invitations, shared assistants and ownership.
-- Connects model providers and changes who may use their models.
-- Shows spending, edits budgets and reviews money held for unfinished calls.
-- Registers tool servers, reviews tools and publishes their settings, even when other
-  changes are saved between review and publication. A paused check is labelled as a
-  tool change only when the saved catalogue shows a change. Admins can require a
-  personal key and name a read-only tool that checks the account.
-- Shows organisation change history with filters and one record's paged evidence.
-  A temporary read failure keeps loaded records; access loss clears them.
-- Names saved routine stages in change history and opens routine attention at its saved history.
-- Shows a reviewed child publication's permitted parent link in change history.
-
-A shared assistant belongs to a group; members can start private sessions with it.
-Its paying group is the group whose budget pays for that work.
-If the reply to a save is lost, the website asks the server what was saved before
-it offers another action. An unknown result stays visible with its original reference.
-
-Not built yet: organisation Routines; personal Preferences;
-some profile details and the Invitations list. The relevant
-pages explain these limits instead of showing invented data.
-
-## Folders
-
-| Folder | What it contains |
-| --- | --- |
-| [src](src/) | Browser startup in `main.ts`, `csp.ts` and `startup.ts`, the page in `index.html` and shared styles in `styles.css`. |
-| [test](test/) | `chat-browser.test.ts`, `chat-state.test.ts` and `theme.test.ts`; example pages in `live-view-main.ts` and `overlays-main.ts`; and the `chat-state.ts` transcript helper used by server recovery tests. |
-| [src/app](src/app/README.md) | Selects pages and puts them inside shared menus. |
-| [audit](src/app/audit/README.md) | Organisation changes and conversation action history. |
-| [chat](src/app/chat/README.md) | Assistant sessions, colleague chats, files and conversation lists. |
-| [claim](src/app/claim/README.md) | First-owner setup for a new installation. |
-| [core](src/app/core/README.md) | Browser navigation and the live server connection. |
-| [integrations](src/app/integrations/README.md) | Tool-server lists, details, changed tools and publication. |
-| [live-view](src/app/live-view/README.md) | Read-only viewing of an assistant's computer. |
-| [mcp-install](src/app/mcp-install/README.md) | Remote tool-server registration and package safety checks. |
-| [memory](src/app/memory/README.md) | Search, saving and forgetting of permitted memory facts. |
-| [models](src/app/models/README.md) | Provider setup, model choices and model permissions. |
-| [organisation](src/app/organisation/README.md) | Shared navigation for organisation settings. |
-| [people](src/app/people/README.md) | Members, groups, invitations, shared assistants and owners. |
-| [settings](src/app/settings/README.md) | Account identity, personal connections and settings navigation. |
-| [shared-state](src/app/shared-state/README.md) | Reusable progress, result and access messages. |
-| [sign-in](src/app/sign-in/README.md) | Company sign-in and its waiting and rejection pages. |
-| [spending](src/app/spending/README.md) | Budgets, charges and review of held amounts. |
-| [tool-policy](src/app/tool-policy/README.md) | Tool rules and initial person and assistant access. |
-| [ui](src/app/ui/README.md) | Shared dialogs, menus and paper effects. |
-| [ui/fold-loader](src/app/ui/fold-loader/README.md) | Folding-paper activity animation. |
-| [welcome](src/app/welcome/README.md) | Saved welcome-survey answers and progress. |
-| [public](public/README.md) | Files the browser loads directly. |
-| [public/chat](public/chat/README.md) | The paper background texture. |
-
-A spending stop keeps its reason beside saved call statuses. A reservation, an unknown
-outcome, a recorded charge and a released reservation have different labels. Check status
-reads the original turn again and politely announces its progress and result. Participants
-see the status and reference without amounts.
-
-Files published by the assistant appear once, with an assistant badge, preview and
-download. Refused files show the reason in plain words.
+- Organisation Routines and personal Preferences pages.
+- Some profile details and the Invitations list.
 
 ## Processes it handles
 
-1. **Sign-in and setup.** A person signs in through their company account. The first
-   owner can claim a fresh installation; the welcome survey saves personal wishes
-   without granting access to tools or groups.
-2. **Conversations.** A person sends a message and sees the assistant's reply arrive.
-   A chat turn is one message and its reply. Stop requests an end to that reply;
-   a budget stop separately explains that a spending limit ended work and shows any reset time.
-   Colleague chats send human text and never start assistant work.
-   A socket rate limit keeps the selected chat, saved messages and draft while the
-   connection retries. Recovery reads missing updates without resending work.
-   Losing access still clears protected content, including files and drafts.
-3. **Files, memory and viewing.** A person opens the session panel to read permitted
-   facts or files, or watch the computer. The viewer checks permission before connecting
-   and clears its picture when permission expires or the session closes.
-4. **Organisation changes.** An admin reviews a person, budget, provider or tool server,
-   sends a change and follows its recorded result. The server checks permissions,
-   records changes and applies them; the website shows the confirmed outcome.
-   Tool publication uses the saved positions returned by the server.
-
-A refused upload explains why the file was refused and how to try again.
-The person can keep using Retry upload. Size and connection messages stay the same.
+1. **A person signs in.** Their company account identifies them.
+   The first owner can claim a new installation; the welcome survey saves personal
+   wishes without granting access to tools or groups.
+2. **A person chats.** They send a message and watch the assistant's reply arrive.
+   Stop requests an end to the reply; a spending stop explains the relevant limit.
+   Colleague chats save human messages without starting assistant work.
+3. **A person asks a shared assistant for work.** They review the audience, paying
+   group and allowance from their own group-chat message. The server checks the
+   reviewed request before starting a private session.
+4. **A person uses files, memory or the desktop.** The website loads permitted data
+   and shows its current state. Refused uploads explain the reason and offer retry;
+   losing access clears protected content and the desktop picture.
+5. **An admin changes settings.** They review and save a change, then follow its
+   recorded result. A lost reply triggers a status read before another action is offered.
+6. **A person returns to a chat.** The website loads saved messages and catches up
+   live updates. A failed read keeps messages already shown and offers another try;
+   a missing chat reveals no private details.
 
 ## How to run or test it
 
-From the repository root:
+From the repository root, with the server running:
 
 ```sh
 npm run dev -w apps/web
@@ -181,18 +75,15 @@ nice -n 10 npm run build -w apps/web
 nice -n 10 npm run typecheck -w apps/web
 ```
 
-`npm run dev` needs `apps/server` running on port 8080. The local proxy forwards
-`/api`, `/auth` and `/ws` to it. Builds reuse compiled files locally and in CI.
-The browser fixture runner builds the development app before its checks start their
-own test servers. This keeps the first build outside their startup time limits.
-Angular component checks live beside their source in `*.spec.ts` files. The root test
-runner also runs the checks in `test/`.
-The build writes static files to `apps/web/dist/web/browser`; deployment serves
-these with requests and live connections routed to the server.
+The development proxy connects to the server on port 8080.
+Use the [dev stack](../../infra/dev-stack/README.md) for the full product.
+[README.robot.md](README.robot.md#contract-and-verification) lists component and browser checks.
 
 ## Where to read more
 
-- [Detailed notes](README.robot.md): routes, settings, limits, retry rules and test commands.
-- [The back end](../server/README.md): sessions, permissions and saved changes.
-- [Live desktop access](../../docs/adr/0006-computer-disk-and-live-view.md): who may watch a computer and why.
-- [Shared words](../../GLOSSARY.md): terms used across the system.
+- [README.robot.md](README.robot.md): routes, settings, folders, limits and tests.
+- [apps/server](../server/README.md): sessions, permissions and saved changes.
+- [Chat](src/app/chat/README.md): conversations, files and assistant work.
+- [People](src/app/people/README.md): members, groups and ownership.
+- [Why desktop viewing checks access](../../docs/adr/0006-computer-disk-and-live-view.md).
+- [Glossary](../../GLOSSARY.md): shared words.
