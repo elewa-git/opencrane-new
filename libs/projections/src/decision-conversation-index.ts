@@ -8,6 +8,8 @@ export async function createDecisionConversationIndex(db: Query) {
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
     event_id TEXT NOT NULL, type TEXT NOT NULL, turn_id TEXT,
     PRIMARY KEY (silo, conversation_id, position))`);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS decision_conversation_position
+    ON decision_conversation_events (position)`);
   await db.query(`CREATE TABLE IF NOT EXISTS decision_conversation_coverage (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, event_count BIGINT NOT NULL,
     position BIGINT NOT NULL, PRIMARY KEY (silo, conversation_id))`);
@@ -21,22 +23,29 @@ export async function createDecisionConversationIndex(db: Query) {
 
 export async function indexDecisionConversationEvent(db: Query, event: EventEnvelope,
   position: number) {
-  const conversation = event.subject.startsWith('conversation-');
-  const participation = event.subject.startsWith('participation-');
-  if (!conversation && !participation) return;
-  const fields = z.record(z.string(), z.unknown()).parse(event.data);
-  const prefix = conversation ? 'conversation-' : 'participation-';
-  const conversationId = event.subject.slice(prefix.length);
-  const subject = `conversation-${conversationId}`;
-  if (!matchesConversationRead(event, subject)) return;
-  const turnId = typeof fields['turnId'] === 'string' ? fields['turnId'] : null;
+  const { conversationId, turnId } = decisionIndexIdentity(event);
   await db.query(`INSERT INTO decision_conversation_events VALUES ($1,$2,$3,$4,$5,$6)`,
     [event.silo, conversationId, position, event.id, event.type, turnId]);
+  if (conversationId === '') return;
   // Save the expected size independently so a missing refusal row cannot look complete.
   await db.query(`INSERT INTO decision_conversation_coverage VALUES ($1,$2,1,$3)
     ON CONFLICT (silo, conversation_id) DO UPDATE
       SET event_count=decision_conversation_coverage.event_count+1, position=$3`,
   [event.silo, conversationId, position]);
+}
+
+function decisionIndexIdentity(event: EventEnvelope) {
+  // Keep every global position, including events outside conversations, so a
+  // checkpoint can prove a complete prefix rather than just a consistent count.
+  const outside = { conversationId: '', turnId: null };
+  const prefix = event.subject.startsWith('conversation-')
+    ? 'conversation-' : 'participation-';
+  const conversationId = event.subject.slice(prefix.length);
+  const subject = `conversation-${conversationId}`;
+  if (!matchesConversationRead(event, subject)) return outside;
+  const fields = z.record(z.string(), z.unknown()).parse(event.data);
+  const turnId = typeof fields['turnId'] === 'string' ? fields['turnId'] : null;
+  return { conversationId, turnId };
 }
 
 export type DecisionConversationLookup = {
@@ -59,6 +68,7 @@ export async function decisionConversationPositions(db: Query, lookup: DecisionC
   if (!Number.isSafeInteger(position) || position <= 0) {
     throw new Error('Conversation projection unavailable');
   }
+  await requireContiguousPositions(db, position, lookup.deadline);
   await requireCompleteDecisionIndex(db, lookup);
   const parameters = [lookup.silo, lookup.conversationId, position, lookup.turnId,
     lookup.metadataTypes, lookup.latestTypes, lookup.ignoredTypes];
@@ -89,6 +99,18 @@ async function requireCompleteDecisionIndex(db: Query, lookup: DecisionConversat
   [lookup.silo, lookup.conversationId], { deadline: lookup.deadline });
   const counts = result.rows[0];
   if (!counts || counts.expected !== counts.actual || counts.position !== counts.latest) {
+    throw new Error('Conversation index is incomplete; rebuild conversation history');
+  }
+}
+
+async function requireContiguousPositions(db: Query, position: number, deadline: number) {
+  const result = await db.query<{ count: string; first: string | null }>(
+    `SELECT count(*)::text AS count, min(position)::text AS first
+      FROM decision_conversation_events WHERE position <= $1`, [position], { deadline });
+  const proof = result.rows[0];
+  // Unique integer positions, starting at one and ending at this bound, must
+  // include every saved event when their count equals the bound.
+  if (!proof || Number(proof.count) !== position || proof.first !== '1') {
     throw new Error('Conversation index is incomplete; rebuild conversation history');
   }
 }

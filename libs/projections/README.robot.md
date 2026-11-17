@@ -504,7 +504,11 @@ uses the same read-only custody as rebuild.
 ## Conversation decision index
 
 The `conversations` projection also writes `decision_conversation_events` in its
-existing transaction. It uses the event store’s conversation-read guard, including
+existing transaction. It stores one reference for every global event position.
+A unique position index and a count from position one through the checkpoint prove
+that this range has no gaps. Other streams use an empty conversation id and never
+enter the selected conversation facts. Conversation rows use the event store’s
+conversation-read guard, including
 participation closes and keeping other participation changes separate. The index
 stores only silo, conversation, position, event id,
 type and turn id. Its indexes support metadata, exact turn and queued-message lookups,
