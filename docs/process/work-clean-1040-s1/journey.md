@@ -1,5 +1,34 @@
 # Test size report journey
 
+Journey on a fresh dev stack: PASS (CORE journey)
+
+Date: 17 November 2026. Tested head: `604f172503dc1e3218e4f70ea524396773fd5d3e`.
+Fresh secondary stack: slot 1. Model: local stand-in. The branch was already based
+on the fetched `origin/main` at `f5af2162b2fef5f52592de099c5819c137162e0a`.
+
+## Rerun result
+
+- PASS: `infra/dev-stack/claim.sh`, then `infra/dev-stack/up.sh --fresh` with
+  `DEV_STACK_ID` set to the claimed slot and `ZITADEL_KEY_FILE` set by path.
+- PASS: CORE journey on the fresh stack, including the 390 px and 1280 px chats.
+  The 390 px browser chat streamed the stand-in reply; first token took 7,046 ms,
+  completion took 9,646 ms and the browser journey took 106,788 ms. The 1280 px
+  chat also passed; first token took 5,944 ms, completion took 6,813 ms and the
+  browser journey took 97,990 ms. The joined-member HTTP chat and wake-up reply
+  also passed.
+- PASS: remaining CORE checks, including sign-in, uploads, live view, audit,
+  organisation limits, replay and token/log boundaries. Approval journey was
+  skipped because its required rows are not ready; this is not part of the CORE
+  journey claim.
+- PASS: `infra/dev-stack/down.sh` ran after the journey. A subsequent
+  `infra/dev-stack/status.sh --id 1` reported `free`.
+
+This rerun passed after the prior failed attempt below. It does not change that
+earlier attempt's result. The stack's success output contained no model, gateway,
+computer or timeout failure, so there are no failure logs to retain.
+
+## Previous attempt
+
 Journey on a fresh dev stack: FAIL
 
 Date: 17 November 2026. Secondary slot: 1. Model: local stand-in.
