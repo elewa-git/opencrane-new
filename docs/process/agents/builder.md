@@ -42,7 +42,8 @@ Resolve missing product decisions with the owner; do not hide them behind an int
    change the structure, then show nothing changed.
 2. Update the affected README, event catalogue, API contract or ADR in the same change.
    Edit the sentences that are now wrong; do not append a note about this change.
-   Run the four required commands and the separate web build/tests where required.
+   Update Source merged under [orchestration step 8](../orchestration.md#one-change-start-to-finish).
+   Run required checks and web checks where needed.
 3. Supply the actual diff, acceptance criteria, changed contracts and evidence to an
    independent adversarial reviewer using a different model. Fix substantiated blockers.
 4. The second and final pass checks fixes, new risks and batched disputes. Hold remaining
@@ -60,8 +61,7 @@ Use one PR per slice, with stacks at most two deep. A slice lets a person do one
 thing from start to finish on a fresh dev stack. Aim for about 800 changed lines of
 shipped code per slice; tests and documents are not counted. Explain a larger slice first.
 
-Report changed behaviour, tests, durations, risks and explicit remaining live work,
-with a short log of what you did and why.
+Report changed behaviour, tests, durations, risks, remaining live work and a short work log.
 Source ready is not capability done: completion requires a live fresh-install journey.
 Use PASS, FAIL, PARTIAL or NOT RUN; a skipped condition never passes.
 Commit in small ordered steps and only within the caller's authorisation: emoji plus

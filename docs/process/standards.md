@@ -146,7 +146,7 @@ Use real, disposable dependencies for service guarantees. Mocks prove local deci
 
 Separate **source ready** from **capability done**. Source may land with green checks and an explicit remaining live-qualification issue. The capability is done only after its acceptance journey passes live on a fresh install, as required by `plan.md`. Run fresh-install journeys weekly and when a capability is claimed complete. A readiness probe or rendered chart alone does not qualify a user journey.
 
-Each evidence receipt records: date, source SHA/image digest, environment and whether fresh, command/journey, expected result, observed result, safe log/artifact link, and `PASS`, `FAIL`, `PARTIAL` or `NOT RUN`. Name the untested condition. Keep a short ledger index and link detailed run artefacts; never embed secrets. A successful workflow whose relevant jobs were skipped is `NOT RUN` for that claim.
+Each evidence receipt records: date, source SHA/image digest, environment and whether fresh, command/journey, expected result, observed result, safe log/artifact link, and `PASS`, `FAIL`, `PARTIAL` or `NOT RUN`. Name the untested condition. Update the capability row under [orchestration step 8](orchestration.md#one-change-start-to-finish) and link detailed run artefacts; never embed secrets. A successful workflow whose relevant jobs were skipped is `NOT RUN` for that claim.
 
 ## Documentation: a usable contract
 
