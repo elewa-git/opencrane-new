@@ -41,7 +41,8 @@ flowchart LR
 Not built yet:
 
 - Let people take control of an assistant's desktop.
-- Start private tool instances or automatic company routines.
+- Start private tool instances or call tools from hosted images.
+- Run automatic routines.
 - Deliver live private memory tools or run nightly memory upkeep.
 
 ## Processes it handles
