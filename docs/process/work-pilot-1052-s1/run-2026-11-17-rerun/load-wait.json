@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-17",
+  "sourceHead": "28405a2d6767a0bbd4f4d48dd3f4f082d5e9638c",
+  "originMainMoved": false,
+  "monitoringStartedAt": "2026-11-17T09:51:36Z",
+  "monitoringEndedAt": "2026-11-17T12:51:14Z",
+  "intervalSeconds": 30,
+  "loadThreshold": 4,
+  "requiredContinuousSeconds": 300,
+  "waitLimitSeconds": 10800,
+  "verdict": "FAIL",
+  "journeyRun": "NOT RUN",
+  "stackClaimed": false,
+  "startupAttempted": false,
+  "maximumObservedLoad": 28.04,
+  "lastObservedLoad": 12.55,
+  "longestObservedBelowThresholdRunSeconds": 180,
+  "longestRunEndedAt": "2026-11-17T11:43:11Z",
+  "resetSample": {
+    "time": "2026-11-17T11:43:41Z",
+    "oneMinuteLoad": 4.30
+  },
+  "ordinarySliceAt1280": "NOT RUN",
+  "ordinarySliceAt390": "NOT RUN",
+  "teardown": "NOT RUN: no stack was claimed",
+  "startupLogs": "NOT APPLICABLE: no startup attempt occurred",
+  "causeOfEarlierStartupFailure": "Not assessed by this rerun"
+}

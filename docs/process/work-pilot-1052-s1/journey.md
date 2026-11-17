@@ -1,5 +1,31 @@
 # Ordinary third-party tool server journey
 
+## Journey rerun, 17 November 2026
+
+Journey on a fresh dev stack: **FAIL (slice journey)** — **NOT RUN** at both
+1280 px and 390 px. Source head checked: `28405a2d6767a0bbd4f4d48dd3f4f082d5e9638c`.
+The source is unchanged from the draft PR head. `origin/main` had not moved, so no
+rebase was needed. No stack was claimed and no startup attempt was made.
+
+The runner sampled the one-minute load every 30 seconds for the full three-hour
+limit, from 09:51:36 to 12:51:14 UTC. Load never stayed below 4 for five minutes.
+The longest observed run below 4 lasted three minutes, from 11:40:11 to 11:43:11 UTC;
+the 11:43:41 sample was 4.30 and reset the count. Load peaked at 28.04 at 12:24:43
+and was 12.55 at the final sample. The wait timed out without a fresh-stack run.
+
+| Required action | 1280 px | 390 px |
+| --- | --- | --- |
+| Sustained low-load gate | FAIL: three-hour wait ended before five quiet minutes. | Same wait; no separate stack. |
+| Fresh startup and shared chat | NOT RUN. | NOT RUN. |
+| Admin installs, reviews and publishes the ordinary server | NOT RUN. | NOT RUN. |
+| Member’s live tool call and Ask approval | NOT RUN. | NOT RUN. |
+| Tool-list change blocks the next call with a visible reason | NOT RUN. | NOT RUN. |
+| Stack teardown | NOT RUN: no stack was claimed. | NOT RUN: no stack was claimed. |
+
+No startup failure occurred in this rerun, so there are no startup logs to save.
+This run gives no evidence about whether the earlier shared-chat timeout was caused
+by load or by a startup defect. See [load-wait record](run-2026-11-17-rerun/load-wait.json).
+
 ## Rework round 6, 17 November 2026
 
 Owner-authorised limits: two slices, 23 agent-hours and six rework rounds.
