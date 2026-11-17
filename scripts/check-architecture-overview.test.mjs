@@ -56,6 +56,13 @@ const invalidPages = [
     'E->>F: Send\nF->>G: Send\nG->>H: Send\nH->>I: Send\n```\n'), 'participants'],
   ['26 arrows', validPage.replace('Browser->>Server: Send',
     'Browser-->>Server: Send\n'.repeat(26)), 'arrows'],
+  ['26 arrows on one line', validPage.replace('Browser->>Server: Send',
+    'Browser->>Server: Send;'.repeat(26)), 'one statement per line'],
+  ['9 participants on one line', validPage.replace(diagram,
+    '```mermaid\nsequenceDiagram\n' +
+    'participant A;participant B;participant C;participant D;participant E;' +
+    'participant F;participant G;participant H;participant I\n```\n'),
+  'one statement per line'],
   ['26 arrows with activation', validPage.replace('Browser->>Server: Send',
     'Browser->>+Server: Send\n'.repeat(26)), 'arrows'],
   ['more than 250 lines', validPage + '\n'.repeat(250), '250 lines'],
@@ -99,3 +106,15 @@ function acceptsLimits(arrow) {
 
 test.each(['->>', '-->>'])(
   'accepts 250 lines, 8 participants and 25 %s arrows per diagram', acceptsLimits);
+
+function acceptsStatementPunctuation(statement) {
+  const page = validPage.replace('participant Browser', statement);
+  const result = runCheck(page);
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test.each([
+  'participant Browser;',
+  'participant Browser as "Browser; client";',
+  '%% A comment; with punctuation\nparticipant Browser',
+])('accepts a single statement with punctuation: %s', acceptsStatementPunctuation);
