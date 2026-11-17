@@ -10,7 +10,7 @@ const terminalFacts = [
   ['conversation.closed', { closedBy: 'alice' }],
 ] as const;
 
-async function refusesMissingFact(type: string, fields: object) {
+async function refusesMissingFact(type: string, fields: object, alignedCoverage = false) {
   const setup = await approvalFixture();
   try {
     expect((await setup.call()).status).toBe(403);
@@ -22,6 +22,9 @@ async function refusesMissingFact(type: string, fields: object) {
       conversationId: 'conversation', turnId: 'turn' });
     const checkpoint = await setup.runner.checkpoint(conversations);
     await setup.db.query('DELETE FROM decision_conversation_events WHERE event_id=$1', [saved.id]);
+    if (alignedCoverage) {
+      await setup.db.query('UPDATE decision_conversation_coverage SET event_count=event_count-1');
+    }
     expect(await setup.runner.checkpoint(conversations)).toBe(checkpoint);
     const result = await setup.call();
     expect(result.status, result.text).toBeGreaterThanOrEqual(400);
@@ -96,3 +99,10 @@ async function refusesUnprovedCoverage(fault: string) {
 }
 it.each(['missing', 'position'])('refuses %s coverage proof before approval consumption',
   refusesUnprovedCoverage, 40_000);
+
+async function refusesSelfConsistentGap() {
+  await refusesMissingFact('agent.turn_stop_requested',
+    { turnId: 'turn', requestedBy: 'alice' }, true);
+}
+it('refuses a missing stop even when a partial restore also aligns its coverage count',
+  refusesSelfConsistentGap, 40_000);
