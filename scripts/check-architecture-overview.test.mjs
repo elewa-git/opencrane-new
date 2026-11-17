@@ -6,8 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
 const checker = fileURLToPath(new URL('./check-architecture-overview.mjs', import.meta.url));
-const diagram = '```mermaid\nsequenceDiagram\nparticipant Browser\nparticipant Server\nBrowser->>Server: Send\n```\n';
-const validPage = '# Overview\n\n`message.posted` starts in `apps/server/entry.ts`.\n' + diagram.repeat(3);
+const diagram = '```mermaid\nsequenceDiagram\nparticipant Browser\n' +
+  'participant Server\nBrowser->>Server: Send\n```\n';
+const validPage = '# Overview\n\n`message.posted` starts in `apps/server/entry.ts`.\n' +
+  diagram.repeat(3);
 let repository;
 
 function createRepository() {
@@ -50,8 +52,8 @@ const invalidPages = [
     'participant A\nparticipant B\nparticipant C\nparticipant D\nparticipant E\n' +
     'participant F\nparticipant G\nparticipant Browser'), 'participants'],
   ['9 implicit participants', validPage.replace(diagram,
-    '```mermaid\nsequenceDiagram\nA->>B: Send\nB->>C: Send\nC->>D: Send\nD->>E: Send\nE->>F: Send\n' +
-    'F->>G: Send\nG->>H: Send\nH->>I: Send\n```\n'), 'participants'],
+    '```mermaid\nsequenceDiagram\nA->>B: Send\nB->>C: Send\nC->>D: Send\nD->>E: Send\n' +
+    'E->>F: Send\nF->>G: Send\nG->>H: Send\nH->>I: Send\n```\n'), 'participants'],
   ['26 arrows', validPage.replace('Browser->>Server: Send',
     'Browser-->>Server: Send\n'.repeat(26)), 'arrows'],
   ['26 arrows with activation', validPage.replace('Browser->>Server: Send',
@@ -72,7 +74,8 @@ function acceptsTrackedFolderAndOtherNames() {
   expect(result.status, result.stderr).toBe(0);
 }
 
-test('accepts tracked folders and names outside the event families', acceptsTrackedFolderAndOtherNames);
+test('accepts tracked folders and names outside the event families',
+  acceptsTrackedFolderAndOtherNames);
 
 function refusesExistingUntrackedFile() {
   writeFileSync(join(repository, 'apps/server/untracked.ts'), '');
