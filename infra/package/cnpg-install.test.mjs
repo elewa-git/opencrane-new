@@ -175,6 +175,12 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       }
       assert.deepEqual(helmCommands, ['template', 'install']);
       if (fixture.values.pilotRestore?.enabled) {
+        for (const name of ['nats', 'postgres']) {
+          function waited(call) {
+            return call.args.includes('rollout') && call.args.includes(`statefulset/${name}`);
+          }
+          assert.ok(calls.some(waited), 'Wait for core storage without owner bootstrap');
+        }
         for (const call of calls) {
           assert.equal(call.args.includes('job') && call.args.includes('bootstrap'), false,
             'An empty restore target must never run or wait for owner bootstrap');

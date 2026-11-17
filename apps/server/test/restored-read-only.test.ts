@@ -19,6 +19,10 @@ async function keepsRestoredEffectsHeld() {
     expect(history.json()).toEqual({ status: 'readable' });
     const claim = await app.inject({ method: 'POST', url: '/api/silo/claim' });
     expect(claim.statusCode).toBe(503);
+    const joining = await app.inject({ method: 'POST', url: '/members/join' });
+    expect(joining.statusCode).toBe(503);
+    const signOut = await app.inject({ method: 'POST', url: '/auth/logout' });
+    expect(signOut.statusCode).not.toBe(503);
   } finally {
     await app.close();
   }
