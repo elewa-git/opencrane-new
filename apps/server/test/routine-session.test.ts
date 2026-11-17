@@ -1630,8 +1630,11 @@ function routineRootTests() {
   it('confirms through sustained activity in another computer thread', otherThreadDuringConfirmation);
 
   function activationTests() {
+    async function prepareBeforeActivation() {
+      await prepare();
+    }
     async function allocated() {
-      await withRoutineFixtureClock(prepare);
+      await withRoutineFixtureClock(prepareBeforeActivation);
       activationMode = true;
     }
     beforeEach(allocated);
