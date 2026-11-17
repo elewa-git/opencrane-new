@@ -57,13 +57,17 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
     return z.array(z.object({ body: z.string(), requestId: z.uuid() })).parse(await response.json());
   };
   await mkdir('docs/process/p3-2-live', { recursive: true });
-  for (const page of pages) {
-    const width = page.viewportSize()!.width, conversationId = randomUUID(), turnId = randomUUID();
-    const response = await page.request.post(`${input.origin}/api/conversations`, { headers: { origin: input.origin },
+  const conversationId = randomUUID();
+  const firstPage = pages[0]!;
+  const response = await firstPage.request.post(`${input.origin}/api/conversations`,
+    { headers: { origin: input.origin },
       data: { id: randomUUID(), conversationId, assistantId: input.assistantId } });
-    assert.equal(response.status(), 200, 'Requester creates the conversation');
-    await until(async () => (await auth.conversation(input.requesterId, conversationId, 'post')).allowed);
-    await seedApprovalChat(store, input.silo, conversationId, input.assistantId);
+  assert.equal(response.status(), 200, 'Requester creates the conversation');
+  await until(async () => (await auth.conversation(input.requesterId, conversationId, 'post')).allowed);
+  await seedApprovalChat(store, input.silo, conversationId, input.assistantId);
+  for (const page of pages) {
+    const width = page.viewportSize()!.width;
+    const turnId = randomUUID();
     await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, turnId, assistantId: input.assistantId });
     await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', payingGroupId: defaultPayingGroupId }, 'opencrane-server');
     try {
@@ -103,7 +107,9 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       assert(await requested.evaluate(element => element.scrollWidth <= element.clientWidth), 'Card fits viewport');
       await page.screenshot({ path: `docs/process/p3-2-live/requested-${width}.png`, fullPage: true });
       const decide = async (button: 'Approve' | 'Deny', label: RegExp | string) => {
-        const terminal = page.getByRole('button', { name: label });
+        const decidingId = await requested.getAttribute('data-approval');
+        assert(decidingId);
+        const terminal = approvalTerminal(page, decidingId, label);
         for (let attempt = 1; attempt <= 3; attempt++) {
           const decisionPattern = button === 'Approve' ? /^Approve:/ : /^Deny:/;
           await requested.getByRole('button', { name: decisionPattern }).click();
@@ -141,16 +147,18 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       const audit = await history(store, `decision-${recorded.at(-1)!.requestId}`, input.silo);
       assert(audit.some(row => row.event.type === 'decision.recorded' && (row.event.data as { outcome: string }).outcome === 'allow'));
       await page.reload();
-      await page.getByRole('button', { name: /Approved by you.*used once/ }).waitFor();
+      await approvalTerminal(page, approvalId, /Approved by you.*used once/).waitFor();
       await page.screenshot({ path: `docs/process/p3-2-live/used-${width}.png`, fullPage: true });
       assert.equal(await call('Denied journey note'), 403);
       await requested.waitFor();
+      const deniedId = await requested.getAttribute('data-approval');
+      assert(deniedId);
       const denyAttempts = await decide('Deny', /Denied by you/);
       assert.equal(await call('Denied journey note'), 403, 'Denied call refused');
       assert.equal((await calls()).length, before + 1, 'Denial has zero upstream effects');
       await page.reload();
-      await page.getByRole('button', { name: /Denied by you/ }).waitFor();
-      await page.getByRole('button', { name: /Approved by you.*used once/ }).waitFor();
+      await approvalTerminal(page, deniedId, /Denied by you/).waitFor();
+      await approvalTerminal(page, approvalId, /Approved by you.*used once/).waitFor();
       assert.equal(await page.getByRole('button', { name: /^Approve:/ }).count(), 0);
       await page.screenshot({ path: `docs/process/p3-2-live/denied-${width}.png`, fullPage: true });
       const approvals = await history(store, `approval-${approvalId}`, input.silo);
@@ -210,4 +218,9 @@ async function waitForApprovalHistory(db: Query, position: number) {
     assert(performance.now() < deadline, 'The long chat reaches the conversation projection');
     await delay(100);
   }
+}
+
+function approvalTerminal(page: Page, approvalId: string, name: string | RegExp) {
+  const identity = page.locator(`button[data-approval="${approvalId}"]`);
+  return page.getByRole('button', { name }).and(identity);
 }
