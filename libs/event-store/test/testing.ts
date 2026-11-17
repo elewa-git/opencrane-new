@@ -110,19 +110,17 @@ export function event(
   };
 }
 
-export type AppendEventOptions = Pick<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'> &
-  Partial<Omit<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'>> & {
-    historyChecked?: true;
-  };
+export type AppendEventOptions = Pick<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'> & {
+  id?: string;
+};
 
 /** Save fixture data and leave projections to the calling test. */
 export async function appendEvent(store: EventStore, options: AppendEventOptions) {
-  const { historyChecked, ...fields } = options;
-  const id = fields.id ?? randomUUID();
-  const record = { ...event(id, fields.subject, fields.type), ...fields };
-  const expectedSequence = await store.head(record.subject);
-  const command = { event: record, expectedSequence, ...(historyChecked ? { historyChecked } : {}) };
-  const result = await store.append(command);
+  const { silo, subject, type, data } = options;
+  const id = options.id ?? randomUUID();
+  const record = { ...event(id, subject, type), silo, data };
+  const expectedSequence = await store.head(subject);
+  const result = await store.append({ event: record, expectedSequence });
   expect(result.status).toBe('appended');
   if (result.status !== 'appended') {
     throw new Error('Fixture event was not appended');
