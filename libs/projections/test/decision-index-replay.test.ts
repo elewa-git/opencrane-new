@@ -120,3 +120,23 @@ async function accountsForOtherStreamsWithoutSelectingThem() {
 }
 it('proves the full saved range while keeping other streams out of conversation facts',
   accountsForOtherStreamsWithoutSelectingThem);
+
+async function validatesBeforeIndexing(fault: string) {
+  const setup = await setupIndex();
+  try {
+    const added = envelope('test', 'participation-chat', 'participant.added', {
+      conversationId: 'chat', participantId: 'bob', addedBy: 'alice',
+    });
+    let invalid = { ...added, subject: 'participation-other' };
+    let reason = 'Conversation subject mismatch';
+    if (fault === 'silo') {
+      invalid = { ...added, silo: 'other' };
+      reason = 'Conversation does not exist';
+    }
+    await expect(conversations.apply(setup.storage.db, invalid, 1)).rejects.toThrow(reason);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['subject', 'silo'])('validates %s before attempting a repeated index position',
+  validatesBeforeIndexing);
