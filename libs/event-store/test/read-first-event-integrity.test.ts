@@ -8,13 +8,13 @@ const creation: StoredEvent = { sequence: 2, event: event('creation') };
 
 function source(rows: StoredEvent[]) {
   async function* readStream() {
-    for (const row of rows) yield row;
+    for (const row of rows) yield await Promise.resolve(row);
   }
   return { readStream };
 }
 
 async function refusesMalformedCreation(kind: string) {
-  let row = structuredClone(creation);
+  const row = structuredClone(creation);
   if (kind === 'subject') row.event.subject = 'member-bob';
   if (kind === 'silo') row.event.silo = 'other';
   if (kind === 'type') row.event.type = 'member.removed';
