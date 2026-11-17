@@ -7493,3 +7493,66 @@ The same suite checks a competing call's reservation, a settlement, an assistant
 exhaustion record, matching payer and assistant ceilings, and an unrelated assistant
 ceiling. A reservation saved after the callback's budget read must conflict with the
 release append.
+
+## Folders
+
+[src/main.ts](src/main.ts) starts the server; [src/models-main.ts](src/models-main.ts) starts the models process.
+[src/server.ts](src/server.ts) builds the server. Tests live in `test/`, with shared helpers in [test/support/](test/support/).
+
+| Folder | What it does |
+| --- | --- |
+| [assistants](src/assistants/README.md) | Sets up shared assistants and lists the ones a person may use. |
+| [audit](src/audit/README.md) | Returns permitted organisation and conversation change history. |
+| [auth](src/auth/README.md) | Handles browser sign-in, sign-out and session status. |
+| [chat](src/chat/README.md) | Saves conversations and carries assistant work, replies, stops and approvals. |
+| [computers](src/computers/README.md) | Provides desktop views, screenshots and control-preparation status. |
+| [effects](src/effects/README.md) | Reviews call costs and resolves supported uncertain outcomes. |
+| [egress](src/egress/README.md) | Saves rules for connections to outside destinations. |
+| [files](src/files/README.md) | Checks, scans, stores and delivers conversation files. |
+| [integrations](src/integrations/README.md) | Registers and reviews tool servers, manages tool access and serves spending settings. |
+| [members](src/members/README.md) | Manages invitations, membership, groups, roles and ownership. |
+| [memory](src/memory/README.md) | Reads, saves, corrects and forgets permitted remembered facts. |
+| [models](src/models/README.md) | Manages access to AI models for people, groups and assistants. |
+| [onboarding](src/onboarding/README.md) | Saves the private survey, persona approval and scripted welcome progress. |
+| [providers](src/providers/README.md) | Connects model providers and manages keys, checks and provider choices. |
+
+## Fresh-stack CORE journey
+
+Journey on a fresh dev stack: PASS
+
+17 November 2026 (UTC). Tested head:
+`5f9cfcfe2f571c875af8381d4a1a7bca4fd394a9`.
+The final documentation commit records this receipt and completes the short limitations
+list. Product source is unchanged from the tested head.
+
+Claimed secondary stack 1 ran `infra/dev-stack/up.sh --fresh` under `nice -n 10`,
+using managed calls with the stand-in provider. Playwright from the installed workspaces
+used the slot's loopback origin at 1280 px and 390 px.
+
+1. Sign in through Zitadel; refuse wrong organisation, expired sessions and hostile logout Origins.
+2. Send a chat message, receive a streamed reply, reload, Stop another reply and reload again.
+   Both widths keep the completed reply and stopped partial text.
+3. Upload and preview files; refuse malware, unsupported types and oversized files.
+   One deliberate lost-reply UI retry per width creates no duplicate file.
+4. Refuse desktop viewing without access, grant it, then revoke it. Pixels clear in
+   175 ms at 390 px and 396 ms at 1280 px.
+5. Read permitted action/history records. Refuse other-member and owner access to private history.
+6. Save group and assistant spending limits at both widths; refuse over-limit stand-in calls
+   and keep the notice after reload.
+7. Verify member and tool-catalogue replay, sign-out token boundaries and reauthentication.
+8. Check service health with `infra/dev-stack/status.sh`, then release with
+   `infra/dev-stack/down.sh` (exit 0). Final status reports `free`.
+
+Local receipt: `docs/process/work-clean-1053-s1/journey.md`.
+Local screenshots: `chat-1280.png`, `chat-390.png`, `history-refused-1280.png` and
+`history-refused-390.png` in that folder. All four were visually checked for private content.
+These files remain local to keep the explicit committed-file whitelist.
+
+Own gates PASS under `nice -n 10`: `npm run lint:readmes`, `npm run lint:docs`,
+`npm run lint:links`, `npx markdownlint-cli2`, `npm run typecheck`,
+`npm run check:events`, `npx knip` and `npm run lint:changelog`.
+The existing README checker first failed for the five expected violations after the
+exemptions were removed, then passed repeatedly after the rewrites. The documented
+unknown-event parser example also passed. No test or production code changed;
+changed-test runs, changed-code ESLint and web build/tests were not applicable.
+Independent review was not run.
