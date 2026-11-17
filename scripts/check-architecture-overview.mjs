@@ -4,7 +4,7 @@ import path from 'node:path';
 import { eventRegistry } from '../libs/events/src/registry.ts';
 
 const overviewPath = 'docs/architecture/overview.md';
-const arrowPattern = /^\s*([\w-]+)\s*(?:<<)?[-.]+(?:>>?|[x)])\s*([\w-]+)\s*:/u;
+const arrowPattern = /^\s*([\w-]+?)\s*(?:<<)?[-.]+(?:>>?|[x)])\s*[+-]?\s*([\w-]+)\s*:/u;
 const eventPattern = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u;
 
 function trackedPaths() {

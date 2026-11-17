@@ -48,12 +48,14 @@ const invalidPages = [
   ['an extra diagram', diagram.repeat(4), 'exactly 3 sequence diagrams'],
   ['9 participants', validPage.replace('participant Browser',
     'participant A\nparticipant B\nparticipant C\nparticipant D\nparticipant E\n' +
-    'participant F\nparticipant G\nparticipant H\nparticipant Browser'), 'participants'],
-  ['9 implicit participants', validPage.replace('Browser->>Server: Send',
-    'A->>B: Send\nB->>C: Send\nC->>D: Send\nD->>E: Send\nE->>F: Send\n' +
-    'F->>G: Send\nG->>H: Send\nH->>I: Send'), 'participants'],
+    'participant F\nparticipant G\nparticipant Browser'), 'participants'],
+  ['9 implicit participants', validPage.replace(diagram,
+    '```mermaid\nsequenceDiagram\nA->>B: Send\nB->>C: Send\nC->>D: Send\nD->>E: Send\nE->>F: Send\n' +
+    'F->>G: Send\nG->>H: Send\nH->>I: Send\n```\n'), 'participants'],
   ['26 arrows', validPage.replace('Browser->>Server: Send',
     'Browser-->>Server: Send\n'.repeat(26)), 'arrows'],
+  ['26 arrows with activation', validPage.replace('Browser->>Server: Send',
+    'Browser->>+Server: Send\n'.repeat(26)), 'arrows'],
   ['more than 250 lines', validPage + '\n'.repeat(250), '250 lines'],
 ];
 
@@ -81,15 +83,16 @@ function refusesExistingUntrackedFile() {
 
 test('refuses an existing file which git does not track', refusesExistingUntrackedFile);
 
-function acceptsLimits() {
+function acceptsLimits(arrow) {
   const participants = 'participant A\nparticipant B\nparticipant C\nparticipant D\n' +
     'participant E\nparticipant F\nparticipant G\nparticipant H\n';
   const maximumDiagram = '```mermaid\nsequenceDiagram\n' + participants +
-    'A->>H: Send\n'.repeat(25) + '```\n';
+    `A${arrow}H: Send\n`.repeat(25) + '```\n';
   const page = '# Overview\n' + maximumDiagram.repeat(3);
   const lineCount = page.trimEnd().split('\n').length;
   const result = runCheck(page + '\n'.repeat(250 - lineCount));
   expect(result.status, result.stderr).toBe(0);
 }
 
-test('accepts exactly 250 lines, 8 participants and 25 arrows per diagram', acceptsLimits);
+test.each(['->>', '-->>'])(
+  'accepts 250 lines, 8 participants and 25 %s arrows per diagram', acceptsLimits);

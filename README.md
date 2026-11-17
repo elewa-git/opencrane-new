@@ -137,21 +137,22 @@ Not built yet:
 1. A person signs in with their company account through Zitadel and opens the website.
    The server checks that they are signed in and belong to this company.
 2. The person sends a message to their assistant. The server saves it as an event.
-   Background work wakes the assistant's computer if it is asleep. The server then passes
+   The server requests a resume if the assistant's computer is asleep. A background worker
+   starts it and records that it is ready. The server then passes
    the message to the [bridge](GLOSSARY.md#bridge), the small program on the computer
    that hands work to Codex and reports progress.
 3. The assistant calls an AI model. The call goes through agentgateway, which asks the
    [models process](GLOSSARY.md#models-process) in `apps/server` two things: is the
    call allowed, and is there enough budget? If so, the models process sets that money
-   aside. Calls to reviewed MCP tools also pass through the gateway, which checks
-   the tool's [rule](GLOSSARY.md#tool-rule-allow-ask-block): Allow, Ask or Block.
+   aside. Calls to reviewed MCP tools also pass through the gateway. The models process
+   checks the tool's [rule](GLOSSARY.md#tool-rule-allow-ask-block): Allow, Ask or Block.
 4. If the tool's rule is Ask, the action waits in the chat until the person approves
-   it. The assistant then tries again. The approval works once, and only for exactly
-   the action the person approved.
+   it. The computer renews its pass and resends the held call once. The approval works
+   once, and only for exactly the action the person approved.
 5. The person reads the reply as it arrives. The bridge sends progress to the server,
-   which saves it as events and streams it to the website. Workers update the read
-   tables. The models process charges the real cost, using what the gateway reports
-   each call used.
+   which saves it as events. Workers update the read tables, and the server streams
+   their new rows to the website. The models process charges the real cost, using what
+   the gateway reports each call used.
 
 ### Use a file or watch the screen
 
@@ -201,7 +202,8 @@ infra/dev-stack/up.sh
 - [Glossary](GLOSSARY.md): plain meanings of the words used across the project.
 - [Current plan](plan.md): remaining work and recorded decisions.
 - [Changelog](CHANGELOG.md): changes people can use and known limits.
-- [Architecture](docs/architecture): the event catalogue and the upload API.
+- [Architecture overview](docs/architecture/overview.md): running programs and three request flows.
+  See also the [event catalogue](docs/architecture/events.md) and [upload API](docs/architecture/upload-api.md).
 - [Planned customer installation](docs/architecture/target.md): parts still to build or prove.
 - [Why OpenCrane 2 was redesigned](docs/background/2026-09-30-architecture-thread-brief.md): the architecture review that started this version.
 - [Design decisions](docs/adr/README.md): why the main components were chosen.

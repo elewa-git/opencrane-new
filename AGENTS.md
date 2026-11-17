@@ -195,6 +195,7 @@ by id, never by value, in events or in code.
 
 ## Where to look
 
+- [Architecture overview](docs/architecture/overview.md) — running programs and request flows.
 - [README.md](README.md) — the system map: layers, folders and one diagram.
 - [GLOSSARY.md](GLOSSARY.md) — the plain meaning of the words the READMEs share.
 - [plan.md](plan.md) — phases, spikes, decisions and the current plan.
