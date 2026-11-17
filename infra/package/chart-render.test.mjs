@@ -794,3 +794,29 @@ function scheduledPilotBackup() {
 
 test('the single-server package schedules a coordinated backup on separate storage',
   scheduledPilotBackup);
+
+function keepsJournalBelowGroupManagedRoot() {
+  const values = chartValues();
+  values.pilotRestore = { enabled: true, backupId: 'saved-backup' };
+  const args = ['template', 'chart-test', 'infra/package/chart', '--values', '-'];
+  const result = spawnSync('helm', args, { encoding: 'utf8', input: JSON.stringify(values) });
+  assert.equal(result.status, 0, result.stderr);
+  let restore;
+  for (const document of parseAllDocuments(result.stdout)) {
+    const resource = document.toJS();
+    if (resource.kind === 'CronJob' && resource.metadata.name === 'pilot-restore') {
+      restore = resource.spec.jobTemplate.spec.template.spec;
+    }
+  }
+  assert.ok(restore);
+  assert.equal(restore.securityContext.fsGroupChangePolicy, 'OnRootMismatch');
+  function privateDirectories(container) { return container.name === 'private-directories'; }
+  const prepare = restore.initContainers.find(privateDirectories);
+  // Keep the volume root group-managed so a remount leaves private child files untouched.
+  assert.match(prepare.args[0], /mkdir -p \/restore\/state/u);
+  assert.match(prepare.args[0], /chmod 0700 \/restore\/state/u);
+  assert.doesNotMatch(prepare.args[0], /chmod 0700 \/restore(?:\s|&&)/u);
+}
+
+test('keeps the restore journal private when Kubernetes mounts its volume again',
+  keepsJournalBelowGroupManagedRoot);
