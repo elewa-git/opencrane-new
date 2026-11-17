@@ -3,7 +3,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
 import { currentMembership, seedOwnership, ownershipConfirmationHandler } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, connectMemberFeed, members, pgDb, ProjectionRunner,
@@ -27,15 +27,6 @@ function futureInvitationExpiry(): string {
   return new Date(Date.now() + thirtyDays).toISOString();
 }
 
-async function append(subject: string, type: string, data: unknown, silo = 'acme') {
-  const record = {
-    ...event(`ownership-fixture-${++count}`, subject, type), silo, data,
-    correlation: {}, principal: { kind: 'human' as const, id: 'idp-owner' },
-  };
-  const expectedSequence = await nats.store.head(subject);
-  expect((await nats.store.append({ event: record, expectedSequence })).status).toBe('appended');
-  return record;
-}
 async function project() {
   const handler = ownershipConfirmationHandler(nats.store);
   for await (const row of nats.reader.readStream('ownership-acme')) {
@@ -78,12 +69,20 @@ async function initialise() {
   await runner.initialise(auditTrail);
   for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member'], ['admin', 'admin']]) {
     const data = { memberId, email: `${memberId}@example.test`, displayName: memberId, role };
-    const joined = await append(`member-${memberId}`, 'member.joined', data);
+    const joined = (await appendEvent(nats.store, {
+      id: `ownership-fixture-${++count}`, subject: `member-${memberId}`, type: 'member.joined',
+      silo: 'acme', data: data, principal: { kind: 'human' as const, id: 'idp-owner' },
+    })).event;
     await auth.handler.handle(joined, db);
   }
-  await append('conversation-private-owner-chat', 'conversation.created', {
-    conversationId: 'private-owner-chat', assistantId: 'private-assistant', createdBy: 'owner',
-    mode: 'agent_session',
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'conversation-private-owner-chat',
+    type: 'conversation.created', silo: 'acme',
+    data: {
+      conversationId: 'private-owner-chat', assistantId: 'private-assistant', createdBy: 'owner',
+      mode: 'agent_session',
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
   });
   await project();
   const options = {
@@ -103,14 +102,24 @@ afterAll(close);
 async function projectsPostSeedInvitations() {
   await seedOwnership(nats.store, 'acme');
   await project();
-  await append('member-owner', 'member.invited', {
-    memberId: 'owner', email: 'changed@example.test', role: 'member', invitedBy: 'admin',
-    invitationId: 'reinvite-seeded-owner', expiresAt: futureInvitationExpiry(),
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'another-identity' },
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-owner', type: 'member.invited',
+    silo: 'acme',
+    data: {
+      memberId: 'owner', email: 'changed@example.test', role: 'member', invitedBy: 'admin',
+      invitationId: 'reinvite-seeded-owner', expiresAt: futureInvitationExpiry(),
+      invitedIdentity: { issuer: config.issuerUrl, sub: 'another-identity' },
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
   });
-  await append('member-pending-owner', 'member.invited', {
-    memberId: 'pending-owner', email: 'pending@example.test', role: 'owner', invitedBy: 'owner',
-    invitationId: 'invite-pending-owner', expiresAt: futureInvitationExpiry(),
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-pending-owner', type: 'member.invited',
+    silo: 'acme',
+    data: {
+      memberId: 'pending-owner', email: 'pending@example.test', role: 'owner', invitedBy: 'owner',
+      invitationId: 'invite-pending-owner', expiresAt: futureInvitationExpiry(),
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
   });
   await runner.run(members);
   const feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
@@ -149,9 +158,14 @@ async function conflictsOnAuthorityChange() {
   async function changeAuthority(subject?: string, deadline?: number) {
     if (subject === 'member-owner' && !changed) {
       changed = true;
-      await append('member-owner', 'member.invited', {
-        memberId: 'owner', email: 'owner@example.test', role: 'admin', invitedBy: 'admin',
-        invitationId: 'authority-race', expiresAt: futureInvitationExpiry(),
+      await appendEvent(nats.store, {
+        id: `ownership-fixture-${++count}`, subject: 'member-owner', type: 'member.invited',
+        silo: 'acme',
+        data: {
+          memberId: 'owner', email: 'owner@example.test', role: 'admin', invitedBy: 'admin',
+          invitationId: 'authority-race', expiresAt: futureInvitationExpiry(),
+        },
+        principal: { kind: 'human' as const, id: 'idp-owner' },
       });
     }
     return original(subject, deadline);
@@ -178,13 +192,18 @@ async function readsAuditDuringChatActivity() {
     const [subject, fromSequence, deadline] = streamArguments;
     if (subject === 'member-owner' && !activityAppended) {
       activityAppended = true;
-      await append('conversation-private-owner-chat', 'message.posted', {
-        conversationId: 'private-owner-chat',
-        authorId: 'owner',
-        authorKind: 'human',
-        ciphertext: Buffer.from('ordinary chat activity').toString('base64'),
-        keyId: 'key:owner-test',
-        contentType: 'text',
+      await appendEvent(nats.store, {
+        id: `ownership-fixture-${++count}`, subject: 'conversation-private-owner-chat',
+        type: 'message.posted', silo: 'acme',
+        data: {
+          conversationId: 'private-owner-chat',
+          authorId: 'owner',
+          authorKind: 'human',
+          ciphertext: Buffer.from('ordinary chat activity').toString('base64'),
+          keyId: 'key:owner-test',
+          contentType: 'text',
+        },
+        principal: { kind: 'human' as const, id: 'idp-owner' },
       });
     }
     yield* original(subject, fromSequence, deadline);
@@ -447,10 +466,15 @@ async function assertRefusalPreservesAuthority(memberId: string, commandId: stri
 }
 
 async function refusesOwnerInvitation() {
-  await append('member-invitee', 'member.invited', {
-    memberId: 'invitee', email: 'invitee@example.test', role: 'owner', invitedBy: 'owner',
-    invitationId: 'invite-owner', expiresAt: futureInvitationExpiry(),
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invitee' },
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-invitee', type: 'member.invited',
+    silo: 'acme',
+    data: {
+      memberId: 'invitee', email: 'invitee@example.test', role: 'owner', invitedBy: 'owner',
+      invitationId: 'invite-owner', expiresAt: futureInvitationExpiry(),
+      invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invitee' },
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
   });
   const before = await nats.store.head();
   const memberSequence = await nats.store.head('member-invitee');
@@ -469,13 +493,27 @@ it('invitation acceptance cannot appoint an owner outside the ownership stream',
 async function refusesInactiveAndForeignSuccessors() {
   const state = (await request('GET')).json<{ owners: { memberId: string }[]; sequence: number }>();
   const actorId = state.owners[0]!.memberId;
-  await append('member-inactive', 'member.joined', {
-    memberId: 'inactive', email: 'inactive@example.test', displayName: 'Inactive', role: 'member',
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-inactive', type: 'member.joined',
+    silo: 'acme',
+    data: {
+      memberId: 'inactive', email: 'inactive@example.test', displayName: 'Inactive', role: 'member',
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
   });
-  await append('member-inactive', 'member.removed', { memberId: 'inactive', removedBy: actorId });
-  await append('member-foreign', 'member.joined', {
-    memberId: 'foreign', email: 'foreign@example.test', displayName: 'Foreign', role: 'member',
-  }, 'other');
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-inactive', type: 'member.removed',
+    silo: 'acme', data: { memberId: 'inactive', removedBy: actorId },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
+  });
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: 'member-foreign', type: 'member.joined',
+    silo: 'other',
+    data: {
+      memberId: 'foreign', email: 'foreign@example.test', displayName: 'Foreign', role: 'member',
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
+  });
   const before = await nats.store.head();
   const input = { action: 'transfer', commandId: 'bad-successor', successorId: 'inactive',
     expectedSequence: state.sequence };
@@ -516,10 +554,15 @@ it('a new owner cannot exercise ownership authority until IAM has the event rece
 async function refusesOwnerReinvitation() {
   const state = (await request('GET')).json<{ owners: { memberId: string }[] }>();
   const actorId = state.owners[0]!.memberId;
-  await append(`member-${actorId}`, 'member.invited', {
-    memberId: actorId, email: `${actorId}@example.test`, role: 'member', invitedBy: 'admin',
-    invitationId: 'reinvite-owner', expiresAt: futureInvitationExpiry(),
-    invitedIdentity: { issuer: config.issuerUrl, sub: `idp-${actorId}` },
+  await appendEvent(nats.store, {
+    id: `ownership-fixture-${++count}`, subject: `member-${actorId}`, type: 'member.invited',
+    silo: 'acme',
+    data: {
+      memberId: actorId, email: `${actorId}@example.test`, role: 'member', invitedBy: 'admin',
+      invitationId: 'reinvite-owner', expiresAt: futureInvitationExpiry(),
+      invitedIdentity: { issuer: config.issuerUrl, sub: `idp-${actorId}` },
+    },
+    principal: { kind: 'human' as const, id: 'idp-owner' },
   });
   const input = { memberId: actorId, invitationId: 'reinvite-owner',
     commandId: 'rejoin-owner', displayName: actorId };

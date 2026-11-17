@@ -3,7 +3,7 @@ import { parseEventByType } from '@opencrane/events';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
 import { pgDb, providers, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { providerSecretRef } from '@opencrane/models';
@@ -19,27 +19,45 @@ let auth: ReturnType<typeof memberAuthorisation>;
 let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let counter = 0;
-async function append(subject: string, type: string, data: unknown, apply = true) {
-  const record = { ...event(`binding-${++counter}`, subject, type), silo: 'acme', data,
-    correlation: {}, principal: { kind: 'human' as const, id: 'owner' } };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+  apply?: boolean;
+}
+
+async function appendAndAuthorise(
+  { subject, type, data, apply = true }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `binding-${++counter}`, subject, type, silo: 'acme', data,
+    principal: { kind: 'human' as const, id: 'owner' },
+  });
   if (apply && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
 }
 async function connection(providerId: string, verified = true, apply = true) {
   const common = { providerId, changedBy: 'owner' };
-  await append(`provider-${providerId}`, 'provider.created',
-    { ...common, revision: 1, provider: 'openai', name: providerId }, apply);
-  await append(`provider-${providerId}`, 'provider.key_saved', { ...common, revision: 2,
-    secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) });
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.created',
+    data: { ...common, revision: 1, provider: 'openai', name: providerId }, apply,
+  });
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.key_saved',
+    data: { ...common, revision: 2,
+      secretRef: providerSecretRef('acme', providerId, `binding-${counter + 1}`) },
+  });
   if (verified) {
-    await append(`provider-${providerId}`, 'provider.verification_recorded',
-      { ...common, revision: 2, kind: 'reachability', attemptId: 'check', outcome: 'pass' });
+    await appendAndAuthorise({
+      subject: `provider-${providerId}`, type: 'provider.verification_recorded',
+      data: { ...common, revision: 2, kind: 'reachability', attemptId: 'check', outcome: 'pass' },
+    });
   }
-  await append(`provider-${providerId}`, 'provider.models_selected',
-    { ...common, revision: 3, models: ['gpt-6.1-sol'] });
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.models_selected',
+    data: { ...common, revision: 3, models: ['gpt-6.1-sol'] },
+  });
 }
 async function initialise() {
   nats = await natsFixture();
@@ -48,12 +66,17 @@ async function initialise() {
   binding = await createStore(fga.apiUrl, 'acme');
   auth = memberAuthorisation(binding);
   for (const [memberId, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
-    await append(`member-${memberId}`, 'member.joined', { memberId, role,
-      email: `${memberId}@example.test`, displayName: memberId, invitationId: 'invite' });
+    await appendAndAuthorise({
+      subject: `member-${memberId}`, type: 'member.joined',
+      data: { memberId, role,
+        email: `${memberId}@example.test`, displayName: memberId, invitationId: 'invite' },
+    });
   }
   for (const assistantId of ['one', 'two']) {
-    await append(`assistant-${assistantId}`, 'assistant.created',
-      { assistantId, ownerId: 'bob', kind: 'personal' });
+    await appendAndAuthorise({
+      subject: `assistant-${assistantId}`, type: 'assistant.created',
+      data: { assistantId, ownerId: 'bob', kind: 'personal' },
+    });
   }
   await connection('primary');
   await connection('secondary');
@@ -215,7 +238,9 @@ async function toleratesComputerReadiness() {
       injected = true;
       const data = { assistantId: 'one', computerId: 'computer-one', generation: 1,
         podUid: 'readiness-pod', sandboxUid: 'readiness-sandbox' };
-      await append('computer-one', 'computer.ready', data, false);
+      await appendAndAuthorise({
+        subject: 'computer-one', type: 'computer.ready', data, apply: false,
+      });
     }
     return originalAppend(change);
   }
@@ -244,7 +269,9 @@ async function refusesProviderChange() {
       injected = true;
       const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
         kind: 'reachability', attemptId: 'concurrent-check', outcome: 'pass' };
-      await append('provider-primary', 'provider.verification_recorded', data);
+      await appendAndAuthorise({
+        subject: 'provider-primary', type: 'provider.verification_recorded', data,
+      });
     }
     return originalAppend(change);
   }
@@ -267,7 +294,9 @@ async function keepsOriginalDeadline() {
       injected = true;
       const data = { assistantId: 'one', computerId: 'computer-one', generation: 1,
         podUid: 'deadline-pod', sandboxUid: 'deadline-sandbox' };
-      await append('computer-one', 'computer.ready', data, false);
+      await appendAndAuthorise({
+        subject: 'computer-one', type: 'computer.ready', data, apply: false,
+      });
       const result = await originalAppend(change);
       expect(result.status).toBe('conflict');
       vi.spyOn(performance, 'now').mockReturnValue(change.deadline! + 1);
@@ -294,7 +323,9 @@ async function refusesRemovedCallerOnRetry() {
     if (parsed.success && parsed.event.type === 'provider.managed_calls_drain_set' && !injected) {
       injected = true;
       const data = { memberId: 'admin', removedBy: 'owner' };
-      await append('member-admin', 'member.removed', data, false);
+      await appendAndAuthorise({
+        subject: 'member-admin', type: 'member.removed', data, apply: false,
+      });
     }
     return originalAppend(change);
   }
@@ -311,7 +342,9 @@ async function refusesSilentRollback() {
   expect((await request('POST', 'primary', start)).statusCode).toBe(200);
   const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
     expectedProviderSequence: await nats.store.head('provider-*') };
-  await append('budget-acme', 'provider.managed_calls_enabled', data);
+  await appendAndAuthorise({
+    subject: 'budget-acme', type: 'provider.managed_calls_enabled', data,
+  });
   const command = await input();
   const before = await nats.store.head();
   expect((await request('POST', 'primary', command)).statusCode).toBe(403);
@@ -334,7 +367,9 @@ async function refusesSwitchOnBetweenCheckAndAppend() {
       switched = true;
       const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
         expectedProviderSequence: await nats.store.head('provider-*') };
-      await append('budget-acme', 'provider.managed_calls_enabled', data);
+      await appendAndAuthorise({
+        subject: 'budget-acme', type: 'provider.managed_calls_enabled', data,
+      });
     }
     return appendOriginal(change);
   }

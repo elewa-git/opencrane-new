@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { currentMembership, currentOwnershipMembership, history,
   ownershipConfirmationHandler, seedOwnership } from '@opencrane/models';
@@ -32,13 +32,7 @@ let db: ReturnType<typeof pgDb>;
 let options: GroupOptions;
 let counter = 0;
 let keyDirectory: string;
-async function append(subject: string, type: string, data: unknown,
-  time = new Date().toISOString()) {
-  const record = { ...event(`removal-${++counter}`, subject, type), time, data };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
-  return record;
-}
+
 async function project() {
   for await (const row of readEvents(nats.reader, 1, await nats.reader.head())) {
     if (auth.handler.eventTypes.includes(row.event.type)) {
@@ -66,9 +60,14 @@ async function review(memberId: string, commandId = `remove-${memberId}`) {
   return { commandId, expectedSequence: body.memberSequence, reviewRevision: body.reviewRevision };
 }
 async function join(memberId: string) {
-  const joined = await append(`member-${memberId}`, 'member.joined', {
-    memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
-  });
+  const joined = (await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: `member-${memberId}`, type: 'member.joined',
+    time: new Date().toISOString(),
+    data: {
+      memberId, role: 'member', email: `${memberId}@example.test`, displayName: memberId,
+    },
+    silo: 'test',
+  })).event;
   await auth.handler.handle(joined, pgDb(dbs.queue));
   await project();
 }
@@ -82,8 +81,13 @@ async function initialise() {
   db = pgDb(dbs.queue);
   runner = new ProjectionRunner(db, nats.reader, createLogger('removal-test'));
   for (const projection of [members, routines, conversations, computers]) await runner.initialise(projection);
-  await append('member-owner', 'member.joined', {
-    memberId: 'owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
+  await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: 'member-owner', type: 'member.joined',
+    time: new Date().toISOString(),
+    data: {
+      memberId: 'owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
+    },
+    silo: 'test',
   });
   await seedOwnership(nats.store, 'test');
   await project();
@@ -143,8 +147,13 @@ async function refusesUnsafeRemoval() {
   const lastOwner = await request('owner', 'remove', ownerInput);
   expect(lastOwner.statusCode).toBe(409);
   expect(lastOwner.json()).toMatchObject({ reason: 'ownership_stream_required' });
-  await append('team-changed', 'team.created', {
-    teamId: 'changed', name: 'Changed', createdBy: 'owner',
+  await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: 'team-changed', type: 'team.created',
+    time: new Date().toISOString(),
+    data: {
+      teamId: 'changed', name: 'Changed', createdBy: 'owner',
+    },
+    silo: 'test',
   });
   const incomplete = await request('reviewed', 'remove', input);
   expect(incomplete.statusCode).toBe(409);
@@ -184,9 +193,14 @@ it('checks the original command after a durable append loses its reply', losesAp
 async function racesConfirmation(confirmationFirst: boolean) {
   const memberId = confirmationFirst ? 'confirmed-first' : 'removed-first';
   await join(memberId);
-  const appointment = await append('ownership-test', 'ownership.transferred', {
-    memberId, transferredBy: 'owner', awaitingConfirmation: true,
-  });
+  const appointment = (await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: 'ownership-test', type: 'ownership.transferred',
+    time: new Date().toISOString(),
+    data: {
+      memberId, transferredBy: 'owner', awaitingConfirmation: true,
+    },
+    silo: 'test',
+  })).event;
   await project();
   const input = await review(memberId);
   const confirmation = ownershipConfirmationHandler(nats.store);
@@ -320,8 +334,13 @@ async function projectsDuringInventory(targetChanges: boolean) {
   const assistantId = `${memberId}-helper`;
   await join(memberId);
   if (!targetChanges) await join('inventory-poster');
-  await append(`assistant-${assistantId}`, 'assistant.created', {
-    assistantId, kind: 'personal', ownerId: memberId,
+  await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: `assistant-${assistantId}`, type: 'assistant.created',
+    time: new Date().toISOString(),
+    data: {
+      assistantId, kind: 'personal', ownerId: memberId,
+    },
+    silo: 'test',
   });
   await project();
   const input = await review(memberId);
@@ -334,8 +353,13 @@ async function projectsDuringInventory(targetChanges: boolean) {
     if (!projected && sql.includes('FROM computers WHERE silo = $1 AND owner_id = $2')) {
       projected = true;
       if (targetChanges) {
-        await append(`computer-${assistantId}`, 'computer.suspended', {
-          assistantId, computerId: `${memberId}-computer`,
+        await appendEvent(nats.store, {
+          id: `removal-${++counter}`, subject: `computer-${assistantId}`,
+          type: 'computer.suspended', time: new Date().toISOString(),
+          data: {
+            assistantId, computerId: `${memberId}-computer`,
+          },
+          silo: 'test',
         });
       } else {
         const keys = conversationKeys(keyDirectory);
@@ -343,7 +367,10 @@ async function projectsDuringInventory(targetChanges: boolean) {
         const encrypted = keys.encrypt('test', 'projected-other-chat', 'Another member posts');
         const data = { conversationId: 'projected-other-chat', authorId: 'inventory-poster',
           authorKind: 'human', contentType: 'text', ...encrypted };
-        await append('conversation-projected-other-chat', 'message.posted', data);
+        await appendEvent(nats.store, {
+          id: `removal-${++counter}`, subject: 'conversation-projected-other-chat',
+          type: 'message.posted', time: new Date().toISOString(), data: data, silo: 'test',
+        });
       }
       await project();
     }
@@ -385,8 +412,13 @@ async function refusesChangedHistory(projected: boolean) {
     const result = await query<Row>(sql, parameters);
     if (!changed && sql.includes('FROM computers WHERE silo = $1 AND owner_id = $2')) {
       changed = true;
-      await append(`conversation-${memberId}`, 'conversation.created', {
-        conversationId: memberId, assistantId: 'history-helper', createdBy: memberId,
+      await appendEvent(nats.store, {
+        id: `removal-${++counter}`, subject: `conversation-${memberId}`,
+        type: 'conversation.created', time: new Date().toISOString(),
+        data: {
+          conversationId: memberId, assistantId: 'history-helper', createdBy: memberId,
+        },
+        silo: 'test',
       });
       if (projected) await project();
     }
@@ -424,8 +456,13 @@ async function refusesPendingHistoryBeforeAppend() {
     const checkingAccess = deadline !== undefined && deadline - performance.now() <= 2000;
     if (!changed && subject === `member-${memberId}` && checkingAccess) {
       changed = true;
-      await append(`conversation-${memberId}`, 'conversation.created', {
-        conversationId: memberId, assistantId: 'history-helper', createdBy: memberId,
+      await appendEvent(nats.store, {
+        id: `removal-${++counter}`, subject: `conversation-${memberId}`,
+        type: 'conversation.created', time: new Date().toISOString(),
+        data: {
+          conversationId: memberId, assistantId: 'history-helper', createdBy: memberId,
+        },
+        silo: 'test',
       });
     }
     return position;
@@ -482,11 +519,18 @@ async function savedRemoval(memberId: string, reviewed = true) {
   await join(memberId);
   const data = { memberId, removedBy: 'owner',
     reviewRevision: reviewed ? 'a'.repeat(64) : undefined };
-  return append(`member-${memberId}`, 'member.removed', data);
+  return (await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: `member-${memberId}`, type: 'member.removed',
+    time: new Date().toISOString(), data: data, silo: 'test',
+  })).event;
 }
 async function completeCleanup(memberId: string, removalId: string) {
   const data = { memberId, removalId, sections: cleanupSections };
-  return append(`memberaudit-${memberId}`, 'member.departure_cleanup_completed', data);
+  return (await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: `memberaudit-${memberId}`,
+    type: 'member.departure_cleanup_completed', time: new Date().toISOString(), data: data,
+    silo: 'test',
+  })).event;
 }
 async function cleanupAtBound(offset: number) {
   const memberId = `cleanup-bound-${offset}`;
@@ -513,11 +557,17 @@ async function completedCleanup() {
   await completeCleanup(memberId, 'another-removal');
   const completedAt = new Date(Date.parse(removal.time) + 16 * 60_000).toISOString();
   const data = { memberId, removalId: removal.id, sections: cleanupSections };
-  const first = await append(`memberaudit-${memberId}`,
-    'member.departure_cleanup_completed', data, completedAt);
+  const first = (await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: `memberaudit-${memberId}`,
+    type: 'member.departure_cleanup_completed', time: completedAt, data: data, silo: 'test',
+  })).event;
   const duplicate = { memberId, removalId: removal.id,
     sections: { groups: ['later-result'], grants: [], assistant: [], computer: [] } };
-  await append(`memberaudit-${memberId}`, 'member.departure_cleanup_completed', duplicate);
+  await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: `memberaudit-${memberId}`,
+    type: 'member.departure_cleanup_completed', time: new Date().toISOString(), data: duplicate,
+    silo: 'test',
+  });
   const expected = { state: 'complete', completedAt: first.time, sections: cleanupSections };
   const before = await nats.store.head();
   const response = await request(memberId, `changes/${removal.commandId}`);
@@ -542,14 +592,24 @@ it('uses the first saved completion unchanged after the bound and replay', compl
 async function separateAdmissions() {
   for (const memberId of ['admission-a', 'admission-b']) {
     const identity = { issuer: config.issuerUrl, sub: 'returning-person' };
-    await append(`member-${memberId}`, 'member.invited', {
-      memberId, email: 'returning@example.test', role: 'member', invitedBy: 'owner',
-      invitationId: `invite-${memberId}`, invitedIdentity: identity,
-      expiresAt: '2030-01-01T00:00:00Z',
+    await appendEvent(nats.store, {
+      id: `removal-${++counter}`, subject: `member-${memberId}`, type: 'member.invited',
+      time: new Date().toISOString(),
+      data: {
+        memberId, email: 'returning@example.test', role: 'member', invitedBy: 'owner',
+        invitationId: `invite-${memberId}`, invitedIdentity: identity,
+        expiresAt: '2030-01-01T00:00:00Z',
+      },
+      silo: 'test',
     });
     await join(memberId);
-    await append(`member-${memberId}`, 'member.removed', {
-      memberId, removedBy: 'owner', reviewRevision: 'a'.repeat(64),
+    await appendEvent(nats.store, {
+      id: `removal-${++counter}`, subject: `member-${memberId}`, type: 'member.removed',
+      time: new Date().toISOString(),
+      data: {
+        memberId, removedBy: 'owner', reviewRevision: 'a'.repeat(64),
+      },
+      silo: 'test',
     });
   }
   const firstRows = await history(nats.reader, 'member-admission-a', 'test');
@@ -632,15 +692,25 @@ async function removalDuringCleanupRead() {
   const memberId = 'cleanup-access-order';
   const removal = await savedRemoval(memberId);
   await join('departing-admin');
-  await append('member-departing-admin', 'member.role_changed', {
-    memberId: 'departing-admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  await appendEvent(nats.store, {
+    id: `removal-${++counter}`, subject: 'member-departing-admin', type: 'member.role_changed',
+    time: new Date().toISOString(),
+    data: {
+      memberId: 'departing-admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+    },
+    silo: 'test',
   });
   await project();
   const read = nats.store.readStream.bind(nats.store);
   async function* removeReader(subject: string, from = 1, deadline = Infinity) {
     if (subject === `memberaudit-${memberId}`) {
-      await append('member-departing-admin', 'member.removed', {
-        memberId: 'departing-admin', removedBy: 'owner',
+      await appendEvent(nats.store, {
+        id: `removal-${++counter}`, subject: 'member-departing-admin', type: 'member.removed',
+        time: new Date().toISOString(),
+        data: {
+          memberId: 'departing-admin', removedBy: 'owner',
+        },
+        silo: 'test',
       });
     }
     yield* read(subject, from, deadline);

@@ -267,9 +267,16 @@ omitted server defaults where stated and never repairs an existing stream.
 named fields are `silo`, `subject`, `type` and `data`. It uses `event` defaults,
 generates an id unless supplied, reads the subject's latest position and requires
 an `appended` result. It returns `{ event, sequence }` and applies no projections.
-The only optional field is `id`. The builder creates all other envelope fields;
-callers cannot override them. Tests that require a different envelope build and
-append that event locally, keeping their fixture-specific checks there.
+Optional named fields retain the default from `event` when omitted:
+
+- `id` supplies the event identifier instead of generating one.
+- `principal` supplies the person or system responsible for the event.
+- `time` supplies the event timestamp.
+- `commandId` supplies the command identifier independently of the event identifier.
+
+Other envelope fields cannot be overridden. Pass each supported field by name;
+never spread a whole envelope into the options. Tests needing other fields build
+and append that event locally, keeping their fixture-specific checks there.
 
 Root `npm test` fetches the pinned test server automatically after `npm ci`.
 OpenSSL must be on PATH to generate a fresh test CA and one-day certificates.

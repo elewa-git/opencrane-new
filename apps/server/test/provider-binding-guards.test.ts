@@ -3,7 +3,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, deleteStoreById } from '@opencrane/authz';
 import * as authorisation from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import type { AppendCommand, AppendResult } from '@opencrane/event-store';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { applyProvider, pgDb, providers, routines, ProjectionRunner,
@@ -35,12 +35,21 @@ async function closeServices() {
 }
 afterAll(closeServices);
 
-async function append(subject: string, type: string, data: unknown,
-  commandId = `guard-${++counter}`, apply = true) {
-  const record = { ...event(commandId, subject, type), commandId, silo: 'acme', data,
-    correlation: {}, principal: { kind: 'human' as const, id: 'owner' } };
-  const command = { event: record, expectedSequence: await nats.store.head(subject) };
-  expect((await nats.store.append(command)).status).toBe('appended');
+export interface FixtureAppendOptions {
+  subject: string;
+  type: string;
+  data: unknown;
+  commandId?: string | undefined;
+  apply?: boolean;
+}
+
+async function appendAndAuthorise(
+  { subject, type, data, commandId = `guard-${++counter}`, apply = true }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: commandId, subject, type, commandId, silo: 'acme', data,
+    principal: { kind: 'human' as const, id: 'owner' },
+  });
   if (apply && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
@@ -50,16 +59,26 @@ async function connection(providerId: string, enabled = ['gpt-6.1-sol'],
   provider = 'openai', createCommand?: string) {
   const common = { providerId, changedBy: 'owner' };
   const creation = { ...common, revision: 1, provider, name: providerId };
-  const created = await append(`provider-${providerId}`, 'provider.created', creation, createCommand);
+  const created = await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.created', data: creation,
+    commandId: createCommand,
+  });
   const keyCommand = `key-${++counter}`;
   const key = { ...common, revision: 2,
     secretRef: providerSecretRef('acme', providerId, keyCommand) };
-  await append(`provider-${providerId}`, 'provider.key_saved', key, keyCommand);
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.key_saved', data: key,
+    commandId: keyCommand,
+  });
   const verification = { ...common, revision: 2, kind: 'reachability',
     attemptId: 'check', outcome: 'pass' };
-  await append(`provider-${providerId}`, 'provider.verification_recorded', verification);
+  await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.verification_recorded', data: verification,
+  });
   const selection = { ...common, revision: 3, models: enabled };
-  const trigger = await append(`provider-${providerId}`, 'provider.models_selected', selection);
+  const trigger = await appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.models_selected', data: selection,
+  });
   return { created, trigger };
 }
 async function initialise() {
@@ -70,11 +89,15 @@ async function initialise() {
     const role = memberId === 'owner' ? 'owner' : 'admin';
     const membership = { memberId, role, email: `${memberId}@example.test`,
       displayName: memberId, invitationId: 'invite' };
-    await append(`member-${memberId}`, 'member.joined', membership);
+    await appendAndAuthorise({
+      subject: `member-${memberId}`, type: 'member.joined', data: membership,
+    });
   }
   for (const assistantId of ['one', 'two']) {
     const creation = { assistantId, ownerId: 'owner', kind: 'personal' };
-    await append(`assistant-${assistantId}`, 'assistant.created', creation);
+    await appendAndAuthorise({
+      subject: `assistant-${assistantId}`, type: 'assistant.created', data: creation,
+    });
   }
   function memberId(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
@@ -361,9 +384,13 @@ async function wrongKey(commandMismatch: boolean) {
   }
   const common = { providerId: 'primary', changedBy: 'owner', revision: 4 };
   const key = { ...common, secretRef: providerSecretRef(silo, 'primary', referenceCommand) };
-  await append('provider-primary', 'provider.key_saved', key, commandId);
+  await appendAndAuthorise({
+    subject: 'provider-primary', type: 'provider.key_saved', data: key, commandId,
+  });
   const verification = { ...common, kind: 'reachability', attemptId: 'new-check', outcome: 'pass' };
-  await append('provider-primary', 'provider.verification_recorded', verification);
+  await appendAndAuthorise({
+    subject: 'provider-primary', type: 'provider.verification_recorded', data: verification,
+  });
   const overrides = { expectedRevision: 4 };
   await refused('primary', await input(overrides));
 }
@@ -417,7 +444,9 @@ async function finalAuthority(expired: boolean, retry = false) {
         clock.mockReturnValue(2200);
       } else {
         const removal = { memberId: 'owner', removedBy: 'admin' };
-        await append('member-owner', 'member.removed', removal, undefined, false);
+        await appendAndAuthorise({
+          subject: 'member-owner', type: 'member.removed', data: removal, apply: false,
+        });
       }
       return result;
     }
@@ -580,7 +609,9 @@ async function reactionEnabled() {
   expect(await nats.store.head()).toBe(before);
   const selection = { providerId: 'first', changedBy: 'owner', revision: 4,
     models: ['gpt-6.1-sol'] };
-  const enabled = await append('provider-first', 'provider.models_selected', selection);
+  const enabled = await appendAndAuthorise({
+    subject: 'provider-first', type: 'provider.models_selected', data: selection,
+  });
   await handler.handle(enabled, pgDb(dbs.queue));
   expect(await storedBindings('first')).toHaveLength(1);
 }
@@ -639,7 +670,9 @@ async function historyChanges(subjectToChange: string) {
     if (subject === subjectToChange) {
       if (subject === 'assistant-*') {
         const creation = { assistantId: 'new', ownerId: 'owner', kind: 'personal' };
-        await append('assistant-new', 'assistant.created', creation);
+        await appendAndAuthorise({
+          subject: 'assistant-new', type: 'assistant.created', data: creation,
+        });
       } else {
         await connection('new');
       }
@@ -659,7 +692,9 @@ async function lostStatusAuthority() {
   expect((await request('GET', 'primary', undefined, 'admin', suffix)).statusCode).toBe(200);
   const roleChange = { memberId: 'admin', previousRole: 'admin',
     newRole: 'member', changedBy: 'owner' };
-  await append('member-admin', 'member.role_changed', roleChange, undefined, false);
+  await appendAndAuthorise({
+    subject: 'member-admin', type: 'member.role_changed', data: roleChange, apply: false,
+  });
   expect((await request('GET', 'primary', undefined, 'admin', suffix)).statusCode).toBe(403);
 }
 it('checks current authority on binding status reads after an administrator loses their role',

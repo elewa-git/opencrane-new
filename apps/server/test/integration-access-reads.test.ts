@@ -4,7 +4,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { grantRevokedDataSchema, type EventEnvelope } from '@opencrane/events';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
 import { MemberAccessRefused, readActiveMember } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { groups, members, modelAccess, pgDb, ProjectionRunner,
@@ -25,11 +25,20 @@ let database: ReturnType<typeof pgDb>;
 let runner: ProjectionRunner;
 let counter = 0;
 
-async function append(stream: string, type: string, data: unknown, silo = 'acme', apply = true) {
-  const record = { ...event(`read-fixture-${++counter}`, stream, type), silo, data };
-  const expectedSequence = await nats.store.head(stream);
-  const command = { event: record, expectedSequence };
-  expect((await nats.store.append(command)).status).toBe('appended');
+export interface FixtureAppendOptions {
+  stream: string;
+  type: string;
+  data: unknown;
+  silo?: string;
+  apply?: boolean;
+}
+
+async function appendAndAuthorise(
+  { stream, type, data, silo = 'acme', apply = true }: FixtureAppendOptions,
+) {
+  const { event: record } = await appendEvent(nats.store, {
+    id: `read-fixture-${++counter}`, subject: stream, type, silo, data,
+  });
   if (apply && silo === 'acme' && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, database);
   }
@@ -54,30 +63,52 @@ async function initialise() {
   runner = new ProjectionRunner(database, nats.reader, logger);
   for (const projection of [members, groups, modelAccess]) await runner.initialise(projection);
   for (const [id, role] of [['owner', 'owner'], ['admin', 'admin'], ['bob', 'member']]) {
-    await append(`member-${id}`, 'member.joined', { memberId: id, role,
-      email: `${id}@example.test`, displayName: id, invitationId: `invite-${id}` });
+    await appendAndAuthorise({
+      stream: `member-${id}`, type: 'member.joined',
+      data: { memberId: id, role,
+        email: `${id}@example.test`, displayName: id, invitationId: `invite-${id}` },
+    });
   }
-  await append('team-sales', 'team.created', {
-    teamId: 'sales', name: 'Sales', createdBy: 'owner',
+  await appendAndAuthorise({
+    stream: 'team-sales', type: 'team.created',
+    data: {
+      teamId: 'sales', name: 'Sales', createdBy: 'owner',
+    },
   });
-  await append('team-sales', 'team.member_added', {
-    teamId: 'sales', memberId: 'bob', addedBy: 'owner',
+  await appendAndAuthorise({
+    stream: 'team-sales', type: 'team.member_added',
+    data: {
+      teamId: 'sales', memberId: 'bob', addedBy: 'owner',
+    },
   });
-  await append('assistant-helper', 'assistant.created', {
-    assistantId: 'helper', kind: 'personal', ownerId: 'bob',
+  await appendAndAuthorise({
+    stream: 'assistant-helper', type: 'assistant.created',
+    data: {
+      assistantId: 'helper', kind: 'personal', ownerId: 'bob',
+    },
   });
   for (const silo of ['acme', 'foreign']) {
     const serverId = silo === 'acme' ? 'fixture' : 'foreign';
-    await append(`mcp-${serverId}`, 'mcp.server_registered', { serverId, kind: 'remote',
-      locator: 'https://fixture.example.test/private-canary', registeredBy: 'owner' }, silo);
+    await appendAndAuthorise({
+      stream: `mcp-${serverId}`, type: 'mcp.server_registered',
+      data: { serverId, kind: 'remote',
+        locator: 'https://fixture.example.test/private-canary', registeredBy: 'owner' },
+      silo,
+    });
   }
-  await append('member-stranger', 'member.joined', { memberId: 'stranger', role: 'member',
-    email: 'stranger@example.test', displayName: 'Foreign canary', invitationId: 'foreign' },
-  'foreign');
+  await appendAndAuthorise({
+    stream: 'member-stranger', type: 'member.joined',
+    data: { memberId: 'stranger', role: 'member',
+      email: 'stranger@example.test', displayName: 'Foreign canary', invitationId: 'foreign' },
+    silo: 'foreign',
+  });
   for (const [granteeKind, granteeId] of [['member', 'bob'], ['team', 'sales'],
     ['assistant', 'helper']]) {
-    await append(subject, 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture',
-      granteeKind, granteeId, grantedBy: 'owner' });
+    await appendAndAuthorise({
+      stream: subject, type: 'grant.given',
+      data: { resourceType: 'mcp_server', resourceId: 'fixture',
+        granteeKind, granteeId, grantedBy: 'owner' },
+    });
   }
   await project();
   const options = { silo: 'acme', store: nats.store, db: database, binding, feed: { memberId } };
@@ -156,9 +187,14 @@ async function refusesInvalidReads() {
 it('refuses outsiders, foreign and unknown servers and invalid page inputs', refusesInvalidReads);
 
 async function labelsDepartedGrantHolderAfterReplay() {
-  const grant = await append(subject, 'grant.given', { resourceType: 'mcp_server',
-    resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' });
-  await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' });
+  const grant = await appendAndAuthorise({
+    stream: subject, type: 'grant.given',
+    data: { resourceType: 'mcp_server',
+      resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' },
+  });
+  await appendAndAuthorise({
+    stream: 'member-bob', type: 'member.removed', data: { memberId: 'bob', removedBy: 'owner' },
+  });
   await project();
   try {
     const before = await get();
@@ -192,8 +228,11 @@ async function labelsDepartedGrantHolderAfterReplay() {
       .rejects.toThrow(MemberAccessRefused);
     expect(await nats.store.head()).toBe(position);
   } finally {
-    await append('member-bob', 'member.joined', { memberId: 'bob', role: 'member',
-      email: 'bob@example.test', displayName: 'bob', invitationId: 'invite-bob' });
+    await appendAndAuthorise({
+      stream: 'member-bob', type: 'member.joined',
+      data: { memberId: 'bob', role: 'member',
+        email: 'bob@example.test', displayName: 'bob', invitationId: 'invite-bob' },
+    });
     await project();
   }
 }
@@ -201,8 +240,12 @@ it('labels Bob departed while keeping his saved grant before and after replay',
   labelsDepartedGrantHolderAfterReplay, 120_000);
 
 async function reportsLagAndReplays() {
-  const revoke = await append(subject, 'grant.revoked', { resourceType: 'mcp_server',
-    resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', revokedBy: 'owner' }, 'acme', false);
+  const revoke = await appendAndAuthorise({
+    stream: subject, type: 'grant.revoked',
+    data: { resourceType: 'mcp_server',
+      resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', revokedBy: 'owner' },
+    silo: 'acme', apply: false,
+  });
   const lagging = await get();
   expect(lagging.json()).toMatchObject({ complete: false, grantTotal: null,
     projection: { content: 'applying', iam: 'applying' } });
@@ -213,7 +256,9 @@ async function reportsLagAndReplays() {
   const pendingGrants = pending.json<{ grants: unknown[] }>().grants;
   expect(pendingGrants[1]).toMatchObject({ state: 'revoked', eventId: revoke.id });
   await auth.handler.handle(revoke, database);
-  await append('member-bob', 'member.removed', { memberId: 'bob', removedBy: 'owner' });
+  await appendAndAuthorise({
+    stream: 'member-bob', type: 'member.removed', data: { memberId: 'bob', removedBy: 'owner' },
+  });
   await project();
   const before = await get();
   const page = await get(`${path}/candidates?kind=member`);
@@ -243,8 +288,11 @@ function differentGrantHolder(record: EventEnvelope): EventEnvelope {
 }
 
 async function refusesMismatchedGrantEvent(change: (record: EventEnvelope) => EventEnvelope) {
-  const revoke = await append(subject, 'grant.revoked', { resourceType: 'mcp_server',
-    resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', revokedBy: 'owner' });
+  const revoke = await appendAndAuthorise({
+    stream: subject, type: 'grant.revoked',
+    data: { resourceType: 'mcp_server',
+      resourceId: 'fixture', granteeId: 'bob', granteeKind: 'member', revokedBy: 'owner' },
+  });
   await project();
   expect((await get()).statusCode).toBe(200);
   const read = nats.store.readStream.bind(nats.store);
@@ -292,8 +340,10 @@ async function slowReadSurvivesChatActivity() {
   database.query = async function slow(sql, parameters) {
     if (!waited && sql.includes('projection_checkpoints')) {
       waited = true;
-      await append('conversation-unrelated', 'agent.turn_started',
-        { conversationId: 'unrelated', turnId: 'unrelated-turn', assistantId: 'helper' });
+      await appendAndAuthorise({
+        stream: 'conversation-unrelated', type: 'agent.turn_started',
+        data: { conversationId: 'unrelated', turnId: 'unrelated-turn', assistantId: 'helper' },
+      });
       await delay(2100);
     }
     return query(sql, parameters);
@@ -329,8 +379,12 @@ it('returns an unknown read outcome without exposing private error details', una
 async function overflowIsIncomplete() {
   expect((await get()).statusCode).toBe(200);
   for (let index = 0; index < 101; index++) {
-    await append(subject, 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture',
-      granteeKind: 'member', granteeId: `historical-${index}`, grantedBy: 'owner' }, 'acme', false);
+    await appendAndAuthorise({
+      stream: subject, type: 'grant.given',
+      data: { resourceType: 'mcp_server', resourceId: 'fixture',
+        granteeKind: 'member', granteeId: `historical-${index}`, grantedBy: 'owner' },
+      silo: 'acme', apply: false,
+    });
   }
   await project();
   const response = await get();

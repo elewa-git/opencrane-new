@@ -41,13 +41,14 @@ async function refusesFailedAppend() {
 it('fails the calling test when the store refuses an append', refusesFailedAppend);
 
 expectTypeOf<AppendEventOptions['principal']>().toEqualTypeOf<
-  { kind: 'human' | 'system'; id: string } | undefined
+  { kind: 'human' | 'agent' | 'system'; id: string } | undefined
 >();
 expectTypeOf<AppendEventOptions['time']>().toEqualTypeOf<string | undefined>();
-expectTypeOf<AppendEventOptions['source']>().toEqualTypeOf<string | undefined>();
 expectTypeOf<AppendEventOptions['commandId']>().toEqualTypeOf<string | undefined>();
 
-async function savesNamedEnvelopeFields() {
+type OptionalEnvelopeField = 'principal' | 'time' | 'commandId';
+
+async function savesNamedEnvelopeField(field: OptionalEnvelopeField) {
   const nats = await natsFixture();
   try {
     const options = {
@@ -55,17 +56,15 @@ async function savesNamedEnvelopeFields() {
       data: { memberId: 'alice', role: 'owner', email: 'alice@example.test',
         displayName: 'Alice' },
       principal: { kind: 'human' as const, id: 'owner' },
-      time: '2026-11-01T12:00:00Z', source: 'fixture-server', commandId: 'join-alice',
+      time: '2026-11-01T12:00:00Z', commandId: 'join-alice',
     };
     const saved = await appendEvent(nats.store, options);
     const stored = await nats.reader.readEvent(saved.sequence);
-    expect(stored?.event.principal).toEqual(options.principal);
-    expect(stored?.event.time).toBe(options.time);
-    expect(stored?.event.source).toBe(options.source);
-    expect(stored?.event.commandId).toBe(options.commandId);
+    expect(stored?.event[field]).toEqual(options[field]);
   } finally {
     await nats.close();
   }
 }
 
-it('saves each explicitly named optional envelope field', savesNamedEnvelopeFields);
+const optionalFields: OptionalEnvelopeField[] = ['principal', 'time', 'commandId'];
+it.each(optionalFields)('saves the explicitly named %s field', savesNamedEnvelopeField);
