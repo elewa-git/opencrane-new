@@ -472,8 +472,11 @@ async function bindsHeldApproval(change: string) {
     expect(result.status, await result.text()).toBe(['same', 'unchanged'].includes(change) ? 200 : 403);
     expect(setup.received()).toBe(['same', 'unchanged'].includes(change) ? 1 : 0);
     if (change === 'bytes' || change === 'wrong-id') {
+      const approvalRows = await history(setup.nats.store,
+        `approval-${decision.approvalId}`, 'test');
+      const listOptions = { approvalRows };
       const cards = await approvalCards(setup.nats.store, 'test', 'conversation',
-        'alice', setup.keys);
+        'alice', setup.keys, listOptions);
       expect(cards).toHaveLength(1);
       expect(cards[0]?.approvalId).toBe(decision.approvalId);
     }
@@ -493,20 +496,24 @@ it('keeps requester identity and the stored review digest when reading an approv
     const asked = await fetch(url, { method: 'POST', headers, body: JSON.stringify(capture.body) });
     const approval = z.object({ approvalId: z.string() }).parse(await asked.json());
 
+    const approvalRows = await history(setup.nats.store,
+      `approval-${approval.approvalId}`, 'test');
+    const listOptions = { approvalRows };
     const cardsForRequester = await approvalCards(setup.nats.store, 'test', 'conversation',
-      'alice', setup.keys);
+      'alice', setup.keys, listOptions);
     expect(cardsForRequester).toMatchObject([{ requesterId: 'alice', state: 'requested',
       canDecide: true }]);
 
     const cardsForAnotherMember = await approvalCards(setup.nats.store, 'test', 'conversation',
-      'bob', setup.keys);
+      'bob', setup.keys, listOptions);
     expect(cardsForAnotherMember).toMatchObject([{ requesterId: 'alice', state: 'requested',
       canDecide: false }]);
 
     const changedReview = vi.spyOn(setup.keys, 'decrypt')
       .mockReturnValue('{"action":"Changed after storage"}');
     try {
-      await expect(approvalCards(setup.nats.store, 'test', 'conversation', 'alice', setup.keys))
+      await expect(approvalCards(setup.nats.store, 'test', 'conversation', 'alice',
+        setup.keys, listOptions))
         .rejects.toThrow('Review digest mismatch');
     } finally {
       changedReview.mockRestore();

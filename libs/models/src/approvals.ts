@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, toolDispatchRecordedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
-import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
 import { approvalGrantRevoked, approvalPolicyChange, approvalTakenOver }
@@ -22,13 +21,15 @@ type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
-  requesterOnly?: boolean;
   deferInvalidation?: boolean;
-  fromSequence?: number;
-  approvalRows?: StoredEvent[];
   now?: Date;
   deadline?: number;
   conversationRows?: StoredEvent[] | undefined;
+}
+
+interface ApprovalCardsOptions extends ApprovalReadOptions {
+  approvalRows: StoredEvent[];
+  requesterOnly?: boolean;
 }
 
 // Build the id before writing so a mismatched retry cannot create another card.
@@ -362,25 +363,12 @@ async function consumeApproval(store: EventStore, silo: string, current: Awaited
 }
 
 export async function approvalCards(store: EventStore, silo: string, conversationId: string,
-  memberId: string, keys: ReviewKeys, options: ApprovalReadOptions = {}): Promise<ApprovalCard[]> {
+  memberId: string, keys: ReviewKeys, options: ApprovalCardsOptions): Promise<ApprovalCard[]> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
   const readOptions = { now, deadline };
   const ids: string[] = [];
-  let rows: Iterable<StoredEvent> | AsyncIterable<StoredEvent>;
-  if (options.approvalRows) {
-    rows = options.approvalRows;
-  } else {
-    // Capture one head so new requests cannot change this read while it is running.
-    const head = await store.head(undefined, deadline);
-    let signal: AbortSignal | undefined;
-    if (Number.isFinite(deadline)) {
-      const remaining = Math.max(0, Math.ceil(deadline - performance.now()));
-      signal = AbortSignal.timeout(remaining);
-    }
-    rows = readEvents(store, options.fromSequence ?? 1, head, signal);
-  }
-  for await (const { event } of rows) {
+  for (const { event } of options.approvalRows) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;
     const request = toolApprovalRequestedDataSchema.parse(event.data);
     // Keep other people's reviews encrypted when reading a shared child.

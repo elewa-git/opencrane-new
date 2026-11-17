@@ -46,8 +46,9 @@ async function listingFixture() {
 type ListingFixture = Awaited<ReturnType<typeof listingFixture>>;
 
 async function seedUnrelated(setup: ListingFixture, count: number, prefix: string) {
-  const encrypted = setup.keys.encrypt('test', 'conversation', 'Unrelated reply');
   const conversationId = `noise-${prefix}`;
+  setup.keys.provision('test', conversationId);
+  const encrypted = setup.keys.encrypt('test', conversationId, 'Unrelated reply');
   for (let offset = 0; offset < count; offset += 100) {
     const batch: EventEnvelope[] = [];
     const end = Math.min(offset + 100, count);
@@ -62,7 +63,7 @@ async function seedUnrelated(setup: ListingFixture, count: number, prefix: strin
   }
 }
 
-async function seedApproval(setup: ListingFixture, index: number) {
+async function seedApproval(setup: ListingFixture, index: number, decided = true) {
   const hexIndex = index.toString(16);
   const approvalId = hexIndex.padStart(64, '0');
   const subject = `approval-${approvalId}`;
@@ -83,7 +84,9 @@ async function seedApproval(setup: ListingFixture, index: number) {
   const request = envelope('test', subject, 'tool.approval_requested', data);
   const decision = { approvalId, decision: 'rejected', decidedBy: 'alice' };
   const ended = envelope('test', subject, 'approval.decided', decision);
-  await setup.nats.seed([request, ended]);
+  const events = [request];
+  if (decided) events.push(ended);
+  await setup.nats.seed(events);
   return approvalId;
 }
 
@@ -170,7 +173,7 @@ it('counts all discovery reads with 100,000 projected events and refuses missing
 async function stalledProjectionAndFiftyApprovals() {
   const setup = await listingFixture();
   try {
-    const firstId = await seedApproval(setup, 1);
+    const firstId = await seedApproval(setup, 1, false);
     await setup.runner.run(auditTrail);
     const checkpoint = await setup.nats.store.head();
     await seedUnrelated(setup, 10_000, 'noise-later');

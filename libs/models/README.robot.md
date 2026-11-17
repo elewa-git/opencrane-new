@@ -1531,7 +1531,9 @@ Reviews use the conversation's encrypted-content/key-reference convention. Neith
 the model nor browser supplies approval authority or replacement review text.
 
 `approvalCards` includes the saved `turnId` in each card. The browser uses it to
-check whether that turn stopped.
+check whether that turn stopped. Callers must supply `approvalRows` containing
+the discovered approval request events; this function never discovers them by
+scanning the silo log.
 `approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
 record expiry/cancellation through conditional appends. Shared child callers set
 `requesterOnly: true` on `approvalCards`. It excludes other requesters before
