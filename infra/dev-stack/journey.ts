@@ -1,5 +1,5 @@
 import './journey-entry.ts';
-import { phase4JourneyScope, requireJourneyProviderMode } from './journey-guard.ts';
+import { phase4JourneyScope, requireJourneyProviderMode, requireStandInJourney } from './journey-guard.ts';
 import { approvalJourney } from './approval-journey.ts';
 import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
@@ -39,6 +39,8 @@ import { suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycl
 
 const settings = await readEnv('settings');
 requireJourneyProviderMode(settings);
+const approvalJourneyOnly = process.env['APPROVAL_JOURNEY_ONLY'] === '1';
+if (approvalJourneyOnly) requireStandInJourney(settings);
 const binding = await readEnv('binding');
 const config = loadAuthConfig(await authEnv());
 const silo = settings['SILO_ID']!;
@@ -489,7 +491,7 @@ async function modelGrantsRecorded() {
 function readActiveModelId(model: typeof models[number]) {
   return model.id;
 }
-try {
+journeyChecks: try {
   await until(modelGrantsRecorded, 'model grant history for existing members/assistants');
   console.log('PASS existing members/assistants have model grant history, including explicit revocations');
   assert.equal((await fetch(`${server}/api/org/integrations`)).status, 401);
@@ -547,11 +549,15 @@ try {
     assert(secondary && browser);
     await realModelJourney(browser.ownerPage, browser.memberPages[0]!, origin, events.store, silo);
   } else {
-  if (browser) {
+  if (approvalJourneyOnly) {
+    assert(browser);
     await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz, append,
       { silo, origin, requesterId: member, assistantId: computer!.assistant_id,
         computerId: computer!.computer_id, generation: computer!.generation });
+    // Keep login, socket and database cleanup shared with the CORE journey.
+    break journeyChecks;
   }
+  console.log('SKIP long-chat approvals: select APPROVAL_JOURNEY_ONLY on a fresh secondary stack');
   const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
     const failedTransport: string[] = [];

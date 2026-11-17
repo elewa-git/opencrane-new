@@ -879,7 +879,7 @@ async function journey() {
     DEV_STACK_DIR: directory,
     DEV_REAL_PROVIDER: settings['DEV_REAL_PROVIDER'] ?? '0',
   };
-  for (const name of ['OPENCRANE_FLEET_TASK', 'P4_JOURNEY_ATTEMPT']) {
+  for (const name of ['OPENCRANE_FLEET_TASK', 'P4_JOURNEY_ATTEMPT', 'APPROVAL_JOURNEY_ONLY']) {
     const value = process.env[name];
     if (value !== undefined) environment[name] = value;
   }

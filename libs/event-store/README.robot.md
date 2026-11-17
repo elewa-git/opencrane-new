@@ -345,7 +345,7 @@ whole-log reads through `subscribe`. Security tests prove command/reader/exclude
 unknown and missing credentials, plaintext and wrong-CA refusals. The pinned NATS server is 2.15.0; both downloaded
 platform archives have fixed SHA-256 checksums.
 
-`peekStreamSummary` copies an already read prefix only when its saved position reaches
+`peekStreamSummary` returns an already read prefix only when its saved position reaches
 the requested position. It starts no history read. Gateway decisions use this to refuse
 large projection gaps while a separate summary catch-up runs.
 

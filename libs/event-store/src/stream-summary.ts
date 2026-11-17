@@ -128,7 +128,7 @@ export function readStreamSummary<Summary, Result>(
   return readBeforeDeadline(readResult, deadline, undefined, store.clock);
 }
 
-/** Copy an already read prefix without starting or waiting for history reads. */
+/** Inspect a prefix that has reached the requested position without starting another read. */
 export function peekStreamSummary<Summary>(
   store: object, silo: string, subject: string, kind: SummaryKind<Summary>,
   through: number,
