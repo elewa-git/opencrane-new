@@ -2000,6 +2000,9 @@ source, layer, licence and promotion checks before installation.
 | [chart](chart/README.md) | Describes the local installation and its required settings. |
 | [chart/templates](chart/templates/README.md) | Describes the programs, storage and network rules to install. |
 
+Catalogue `list` and `show` commands load only backup-file validation. They do not
+load capture clients or require connections to running services.
+
 ## Restore one pilot backup
 
 Restore only a completed scheduled pilot set into a new, empty installation.
