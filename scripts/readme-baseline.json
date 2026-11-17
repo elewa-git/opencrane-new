@@ -74,20 +74,6 @@
     "rule": "opening"
   },
   {
-    "file": "libs/models/README.md",
-    "rule": "opening"
-  },
-  {
-    "file": "libs/models/README.md",
-    "rule": "summary",
-    "count": 98
-  },
-  {
-    "file": "libs/models/README.md",
-    "rule": "length",
-    "count": 904
-  },
-  {
     "file": "libs/models/README.robot.md",
     "rule": "robot-length",
     "count": 5189
