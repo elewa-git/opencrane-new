@@ -6,153 +6,115 @@ including both scanner rows. The [source receipt](p5-14-pr1/receipt.md) records
 this index's checks only. Full local operator execution, P5-13 and hosted acceptance
 remain NOT RUN. Original receipts retain their historical failures and partial results.
 
-Verified against PR titles and evidence on 2026-10-04.
+Each row separates merged source from proof on a fresh installation. Source is
+`No`, `Part` (open issue with a merged PR) or `Yes` (closed issue), followed by the
+UTC merge date and commit of the newest merged PR naming that issue. Live results
+are `PASS`, `FAIL`, `PARTIAL` or `NOT RUN`; a recorded run names its UTC date,
+tested commit and committed receipt. Later merges do not reset earlier live proof.
+`NOT RUN` means no committed fresh-install journey with sufficient attribution was
+found for that capability; source checks and intercepted browser captures do not qualify it.
 
-Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no committed receipt at that checkpoint. External-worktree measurements without committed receipts remain excluded. Pending PRs below are identified by issue number.
+The first fill checked issue states and merged PRs on 17 November 2026. Numeric
+search matches were checked for an explicit issue reference; unrelated timings and
+PR numbers are not capability work. The [first-fill notes](work-clean-1041-s1/ledger-evidence.md)
+explain limited coverage and identify the receipt lines behind each PASS.
+Update the columns as described in [orchestration step 8](orchestration.md#one-change-start-to-finish).
+
+Read the [old tables at commit 4ac3e85ea](https://github.com/elewa-git/opencrane-new/blob/4ac3e85ea/docs/process/ledger.md)
+for historical checks. Their source, review and fixture verdicts are separate from
+fresh-install proof. Phase 5 remains in the index linked above.
 
 ## Phase 1
 
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-01 | #5 | Member invitations | Event-backed invitation acceptance | PASS | — | [member-joined-evidence.md](member-joined-evidence.md) |
-| 2026-10-01 | #6 | Members realtime and shutdown | WebSocket replay/backpressure and graceful shutdown source suite | PASS | 42 files / 821 tests per run; 10 consecutive runs | [realtime-evidence.md](realtime-evidence.md) |
-| 2026-10-01 | #16 | NATS authentication | Component-scoped NATS rights and encrypted connections | PASS | — | [nats-auth-evidence.md](nats-auth-evidence.md) |
-| 2026-10-01 | #17 | Model proxy isolation spike | Separate-user exec commands cannot reach the proxy or Codex credentials; stub turns stream | PASS | — | [Spike receipt](../../spikes/s0-1b-proxy-gvisor/evidence.json) |
-| 2026-10-01 | #21 | Computer and live-view spikes | Disk resume and view-only refusals pass; resume onto a warm Pod remains unqualified | PARTIAL | — | [Disk resume](../../spikes/s0-3-warm-pool/evidence.json), [live view](../../spikes/s0-5-live-view/evidence.json) |
-| 2026-10-01 | #23 | Dev-box silo | Fresh install core dev-stack journey | PASS | — | [dev-stack-evidence.md](dev-stack-evidence.md) |
-| 2026-10-02 | #35 | Zitadel sign-in | Real-service sign-in/out, refusal cases, repeat fresh journeys | PASS | 14 checks in each of two fresh journeys | [signin-evidence.md](signin-evidence.md) |
-| 2026-10-02 | #35 | Sign-in review-fix regressions | Focused authentication regressions after the final review corrections | PASS | 78 focused tests | [signin-evidence.md](signin-evidence.md) |
-| 2026-10-04 | — | First-owner bootstrap (#12) source requalification | Rebase onto #111; lint, typecheck, catalogue, web checks and complete root rerun | PASS | 1,406 root tests passed / 14 skipped; earlier FAIL and PARTIAL retained | [Bootstrap receipt](bootstrap-live/README.md#requalification-on-main) |
-| 2026-10-04 | — | Bootstrap (#12) mixed authority denial correction | Rebase onto #137; regression red/green and all source gates | PASS | 1,475 root tests passed / 15 opt-in tests skipped | [Correction receipt](bootstrap-live/README.md#mixed-denial-and-unavailability-correction) |
-| 2026-10-04 | — | First-owner bootstrap (#12) fresh secondary journey | Owner claim, stub chat, token reuse and existing-member refusal; teardown | PASS | Two fresh installs on slot 1; 201 owner claim, 409 refusals; first token 15,776 ms | [Live receipt](bootstrap-live/README.md#corrected-fresh-secondary-qualification) |
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| #10 Local dev stack | [#10](https://github.com/elewa-git/opencrane-new/issues/10) | Yes 2026-10-17 `6fc60fc94` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| #11 Zitadel sign-in | [#11](https://github.com/elewa-git/opencrane-new/issues/11) | Yes 2026-10-02 `ea1f71c73` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
 
 ## Phase 2
 
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-02 | #34 | Computer image | Isolated reproducible licence-checked image | PASS | 382/382 licence components; 89 notice files | [Image receipt](../../apps/computer/evidence.json) |
-| 2026-10-02 | #35 | Sign-in | Zitadel sign-in and out in dev stack | PASS | — | [signin-evidence.md](signin-evidence.md) |
-| 2026-10-02 | #36 | Member computer lifecycle | Sleep, wake and Pod-loss persistence | PASS | — | [dev-stack-evidence.md](dev-stack-evidence.md#p2-2-post-rebase-qualification-2-october-2026) |
-| 2026-10-02 | #38 | Model gateway | Model calls within silo spending cap | PASS | — | [models-evidence.md](models-evidence.md) |
-| 2026-10-03 | #66 | Chat UI final qualification | Replies survive reconnect, sleep and Pod loss | PASS | — | [chat-final-evidence.md](chat-final-evidence.md) |
-| 2026-10-02 | #39 | Streamed Codex chat | Fresh and repeat streamed chat, reconnect, sleep and Pod-loss journeys | PASS | — | [bridge-evidence.md](bridge-evidence.md) |
-| 2026-10-02 | #35 | Sign-in physical-device qualification | Physical devices and real screen-reader qualification | NOT RUN | — | [signin-evidence.md](signin-evidence.md) |
-| 2026-10-02 | #39 | Bridge review fixes | Source regressions after review pass 1 | PARTIAL | Review pass 2 not run at this checkpoint | [bridge-fixes-evidence.md](bridge-fixes-evidence.md) |
-| 2026-10-02 | #39 | Bridge replay follow-up review | Focused independent verification of third fix | FAIL | 2 findings passed; third expiry blocker remained | [bridge-replay-evidence.md](bridge-replay-evidence.md) |
-| 2026-10-02 | #39 | Bridge full journey after fixes | Fresh full product, production image and paid-provider journey | NOT RUN | — | [bridge-replay-evidence.md](bridge-replay-evidence.md) |
-| 2026-10-02 | #39 | Bridge final live journey | Fresh and repeat dev-stack journeys, real paid turn and image | PASS | Fresh 200.11 s; repeat 144.01 s; one real turn | [bridge-evidence.md](bridge-evidence.md) |
-| 2026-10-02 | #39 | Real chat provider check | One authorised gpt-6.1-sol turn | PASS | 7.204 s; 3 cents settled | [bridge-evidence.md](bridge-evidence.md) |
-| 2026-10-04 | #126 | Readable computer channel | Characterisation, bridge/replay/reconnect tests and source gates | PARTIAL | Focused tests PASS; both full root runs had unrelated service-fixture failures, and each failed case passed alone | [i126-computer-channel-evidence.md](i126-computer-channel-evidence.md) |
-| 2026-10-02 | #66 | Fresh/repeat stack journey | Fresh and repeat core journeys and restored owner stack | PASS | — | [chat-stack-evidence.txt](chat-stack-evidence.txt) |
-| 2026-10-03 | #64 | Wake latency | Stub wake-to-first-token before/after optimisation | PASS | 11.462 s baseline; 8.944 s after; five runs | [wake-latency-evidence.md](wake-latency-evidence.md) |
-| 2026-10-03 | #64 | Wake repair qualification | Missing Kubernetes object recovery and final repeated wake | PASS | 9.120 s median; range 8.981–10.597 s | [wake-latency-evidence.md](wake-latency-evidence.md) |
-| 2026-10-03 | #64 | Real-provider wake latency | Real provider latency | NOT RUN | — | [wake-latency-evidence.md](wake-latency-evidence.md) |
-| 2026-10-03 | #66 | Chat workspace | Desktop and phone browser journeys, streamed replies, Stop and reload | PASS | — | [chat-final-evidence.md](chat-final-evidence.md) |
-| 2026-10-03 | #66 | Chat fresh/repeat final stack | Fresh, repeat and restored-main core journeys | PASS | Three stack journeys | [chat-final-stack-evidence.txt](chat-final-stack-evidence.txt) |
-| 2026-10-03 | #65 | Odoo Community fixture | Disposable Odoo Community 19 with real user rights | PASS | — | [odoo-fixture-evidence.md](odoo-fixture-evidence.md) |
-| 2026-10-03 | #69 | Parallel dev stacks | Two isolated stacks alongside stable owner stack | PASS | Maximum two secondary stacks | [parallel-stacks-evidence.md](parallel-stacks-evidence.md) |
-| 2026-10-04 | #79 | File upload and assistant PDF reading | Scan, upload, preview, delivery, edit preservation and real model answer | PARTIAL | Four paid turns; 13 cents combined; latest local suite FAIL; fresh handback FAIL | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | #79 | Paid PDF answer | One real gpt-6.1-sol turn answered Willow-47 | PASS | 1 turn; 3 cents actual; 502 cents reservation | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-03 | #79 | Paid PDF answer before custom-tool fix | One real turn, but no final answer because the custom tool history was refused | FAIL | 1 turn; 3 cents settled | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | #79 | Paid PDF answer with two provider responses | One chat turn completed without the PDF answer | FAIL | 2 responses; 4 cents settled | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | #79 | Upload paid-check aggregate | Four real turns recorded across upload qualification | PARTIAL | 13 cents combined; includes failed answers | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | #79 | Upload fresh-install handback | Latest fresh main journey after the budget/MCP rebase | FAIL | No-grant desktop viewer timed out; restored service health PASS | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | #79 | Rendered Office previews | Office document preview qualification | NOT RUN | — | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | #79 | Upload latest local full suite after final rebase | Latest local serial root suite; hosted CI later passed per PR body | FAIL | 1,373 passed, 14 skipped, 2 failed | [upload-evidence.md](upload-evidence.md) |
-| 2026-10-04 | Pending (#117) | Oversize upload refusals | HTTP 413, typed helper refusal and rendered size feedback; lint, typecheck, events and web checks PASS; root suite FAIL; fresh-install NOT RUN | PARTIAL | 1 HTTP regression; 62 web tests; 3 full root attempts FAIL outside the changed module | [upload-413-evidence.md](upload-413-evidence.md) |
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| P2-1 Computer image | [#26](https://github.com/elewa-git/opencrane-new/issues/26) | Yes 2026-10-02 `04084949f` | NOT RUN | — |
+| P2-2 Assistant and computer lifecycle | [#27](https://github.com/elewa-git/opencrane-new/issues/27) | Yes 2026-10-02 `f5c4eef4a` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P2-3 Bridge and conversation core | [#28](https://github.com/elewa-git/opencrane-new/issues/28) | Yes 2026-10-02 `113854436` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P2-4 Model gateway and spending cap | [#29](https://github.com/elewa-git/opencrane-new/issues/29) | Yes 2026-10-02 `3e5c899b5` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P2-5 Chat workspace | [#30](https://github.com/elewa-git/opencrane-new/issues/30) | Yes 2026-10-03 `ed21e0b42` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P2-6 File upload | [#31](https://github.com/elewa-git/opencrane-new/issues/31) | Yes 2026-10-04 `7b8b1d370` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P2-7 Daily fresh-install journey | [#32](https://github.com/elewa-git/opencrane-new/issues/32) | Part 2026-10-23 `e7179378f` | NOT RUN | — |
 
 ## Phase 3
 
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-03 | #68 | Tool policy | Allow, Ask or Block per tool enforced at gateway | PASS | — | [p3-1-policy-evidence.md](p3-1-policy-evidence.md) |
-| 2026-10-03 | #68 | Policy fresh/repeat qualification | Real gateway refusal, saved UI policy and durable deny audit | PASS | 403; zero upstream calls; 66 grant event IDs preserved | [p3-1-live/README.md](p3-1-live/README.md) |
-| 2026-10-03 | #68 | Policy first repeat attempt | Provider-input step in browser | FAIL | — | [p3-1-live/repeat-attempt1.txt](p3-1-live/repeat-attempt1.txt) |
-| 2026-10-03 | #72 | Approval card | One-time approval bound to viewed action | PASS | — | [p3-2-approvals.md](p3-2-approvals.md) |
-| 2026-10-03 | #72 | Approval fresh/repeat browser journey | Approval request, approve/deny and refusal cases | PASS | Fresh and repeat journeys; rebased journey retained | [p3-2-approvals.md](p3-2-approvals.md#rebased-approvals-budgets-and-fold-loader) |
-| 2026-10-03 | #72 | Approval independent review | Two-pass review of approval implementation | PASS | — | [p3-2-approvals.md](p3-2-approvals.md) |
-| 2026-10-03 | #71 | Paying-group budgets | Monthly budgets in euro cents | PASS | — | [p3-13-budgets-evidence.md](p3-13-budgets-evidence.md) |
-| 2026-10-03 | #71 | Budget fresh/repeat journeys | Assistant/group budget and refusal journeys | PASS | — | [p3-13-live/README.md](p3-13-live/README.md) |
-| 2026-10-04 | #76 | Real provider tokenisation margin | Live provider tokenisation against planning allowance | NOT RUN | — | [models-evidence.md](models-evidence.md) |
-| 2026-10-03 | #73 | Live computer view | Read-only viewer, grant revocation and audit | PASS | Revocation bound 2 s; fresh pixels clear in 341 ms and 334 ms | [live-view-chat-evidence.md](live-view-chat-evidence.md) |
-| 2026-10-03 | #73 | Live view independent review | Pass-two review checkpoint before final scheduling and history-read corrections | PASS | Later corrections have source and live evidence; review predates them | [live-view-chat-evidence.md](live-view-chat-evidence.md) |
-| 2026-10-03 | #73 | Viewer revoke pixel-clear measurement | Fresh journey at desktop and 390px | PASS | 341 ms; 334 ms | [Desktop receipt](live-view/fresh-conversation-1280.json), [390px receipt](live-view/fresh-conversation-390.json) |
-| 2026-10-03 | #74 | Audit history | Requester action and admin change history | PASS | 576 hostile HTTP variants leaked no canary | [p3-19-audit-evidence.md](p3-19-audit-evidence.md) |
-| 2026-10-03 | #74 | Audit fresh/repeat stack journeys | Action/change history, member refusal and log canaries | PASS | Fresh and repeat journeys | [p3-19-audit-evidence.md](p3-19-audit-evidence.md#final-secondary-stack-qualification) |
-| 2026-10-04 | #76 | Chat reservation bound | Request sizing, rendering margin and overrun accounting source checks | PASS | 1,201 tests; live provider tokenisation NOT RUN | [models-evidence.md](models-evidence.md) |
-| 2026-10-04 | #78 | MCP server registration and discovery | Fresh/repeat MCP discovery assertions | PASS | 2 tools; both blocked pending review | [p3-3-mcp-discover.md](p3-3-mcp-discover.md#secondary-live-qualification-4-october-2026) |
-| 2026-10-04 | #78 | Full MCP startup journey | Full fresh and repeat startup with live-view steps | PARTIAL | MCP journeys PASS; both complete startup journeys FAIL | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
-| 2026-10-04 | #78 | MCP independent review | Two-pass review of inventory fixes | PASS | — | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
-| 2026-10-05 | Pending (#45) | Integration register and detail screens | Search, status filters, access clearing and four separate detail facts; server support for publishing and grants remains open | PARTIAL | Browser captures passed; the full root suite needs a clean rerun | [Integrations screens](integrations-screens/README.md) |
-| 2026-10-06 | Pending (#45) | Integration add flow and tool modes | Remote discovery, per-tool mode saves, GET-only outcome checks and access clearing; server gaps remain open | PARTIAL | Source checks and fixture browser captures recorded in the receipt; fresh-install journey NOT RUN | [Integrations screens](integrations-screens/README.md) |
-| 2026-10-04 | Pending (#59) | P3-18 screenshots | Retained secondary capture, conversation/panel previews, reload and non-participant refusal; fresh qualification incomplete | PARTIAL | 1280px and 390px PASS; capture 5,061–6,065 ms; 403 refusals; fresh capture and complete startups FAIL after bounded reruns; teardown PASS | [p3-18-screenshots.md](p3-18-screenshots.md#final-rebase-and-secondary-stack-qualification--4-october-2026) |
-| 2026-10-04 | — | #77 live-view authority delays | Eight delay/control cases and two source reviews pass; live batches 3/10 and 5/10 | PARTIAL | All source gates pass; root suite 1,391 passed / 14 skipped; live revocations 395–1,158 ms; #77 remains open | [i77-live-view.md](i77-live-view.md) |
-| 2026-10-04 | — | #77 post-admission diagnosis | Safe timing records and ten fresh-secondary repetitions; captured lease expiry before desktop bytes and before/after first frame | PARTIAL | Root 1,415 passed / 15 skipped; live 4/10; revoked in 604–986 ms; server runnable wait 1,521 ms per 2 s | [Diagnosis and runs](i77-live-view.md#post-admission-diagnosis--4-october-2026) |
-| 2026-10-06 | Pending (#46) | Chat approval and tool detail screens | Requester decisions, checked outcomes, sanitised tool details and reconnect display; live governed turn not run | PARTIAL | Source and intercepted browser checks recorded in the pull request; dev-stack and live journey NOT RUN | [Visual receipt](p3-5-approvals/README.md) |
-
-## Infrastructure
-
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-01 | #23 | Dev-stack full journeys | Fresh core journeys and repeated shutdown/startup; dev-only sessions | PASS | — | [dev-stack-evidence.md](dev-stack-evidence.md) |
-| 2026-10-03 | #68 | Busy dev-stack wake | Wake-to-first-token on busy shared dev host | PASS | 16.631 s; host load not controlled | [p3-1-live/repeat-stack.txt](p3-1-live/repeat-stack.txt) |
-| 2026-10-03 | #68 | Member join to Ready | Retained member computer in the repeat lifecycle journey | PASS | 310 ms repeat-stack run | [p3-1-live/repeat-stack.txt](p3-1-live/repeat-stack.txt) |
-| 2026-10-03 | #68 | Message to first reply | Joined member HTTP message, streamed Codex/stub reply | PASS | 6,273 ms total; first token 4,521 ms | [p3-1-live/repeat-stack.txt](p3-1-live/repeat-stack.txt) |
-| 2026-10-03 | #69 | Two isolated secondary stacks | Concurrent isolated dev-stack journeys and owner preservation | PASS | Two secondary stack limit | [parallel-stacks-evidence.md](parallel-stacks-evidence.md) |
-| 2026-10-04 | #78 | MCP complete startup check on secondary stack | Fresh/repeat complete startup journeys including live-view | FAIL | Fresh live-view timeout; repeat decoded-pixels timeout | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
-| 2026-10-04 | Pending (#136) | Event-store read resilience | Real NATS stall, outage, deadline and abort regressions; required source checks and full root suite | PARTIAL | Final root 1,488 passed / 15 skipped; earlier focused and root failures plus passing reruns retained; fresh install NOT RUN | [Read-retry receipt](i136-read-retry.md) |
-| 2026-10-06 | #32 | Daily fresh dev-stack timer | User timer installed for 03:17 UTC with no catch-up after a missed run; receipts saved outside git | PARTIAL | Main commit `8bb9b814ef70444255a5b032ab4cdc91364005d1`; receipts: `~/.opencrane/daily-fresh/ledger.md`; timer active; full hand run FAIL at mobile approval | [Timer listing and hand-run result](p2-7-timer.md) |
-
-## Work awaiting qualification
-
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-04 | Pending (#131) | F1 UI foundation | Tokens, state specimen, paper directives, loaders, keyboard behaviour, evidence and reduced motion; owner-approved N1/N3 corrections; all source gates and fresh root suite | PASS | 1,453 passed / 15 skipped; 98 Angular tests; 56 fresh Chromium captures; corrected addresses submit by button and Enter; clipped folds keep keyboard focus rings at both widths | [F1 visual receipt](f1-foundation/README.md) |
-| 2026-10-04 | Pending (#131) | F1 UI foundation | Tokens, state specimen, paper directives, loaders, keyboard behaviour, evidence and reduced motion; all source gates and root suite | PASS | 1,451 passed / 15 skipped; 96 Angular tests; 48 Chromium captures; two unrelated initial flakes passed alone and on the final root rerun; updated integration and theme assertions passed | [F1 visual receipt](f1-foundation/README.md), [#136 flake note](https://github.com/elewa-git/opencrane-new/issues/136#issuecomment-5981713369) |
-| 2026-10-04 | Pending (#132) | F2 drawers, sheets and mobile menus | Shared overlays, workspace/file/computer consumers, keyboard and reduced motion; all source gates and two review passes | PASS | Root 1,448 passed / 15 skipped; 62 Angular tests; 16 Chromium captures; initial failures repaired or passed on final full rerun; fresh-install live qualification NOT RUN | [F2 receipt](f2-drawers/README.md) |
-| 2026-10-04 | #146 | F2 drawers, sheets and mobile menus (#132) | Shared overlays, workspace/file/computer consumers, keyboard and reduced motion; all source gates and two review passes | PASS | Root 1,448 passed / 15 skipped; 62 Angular tests; 16 Chromium captures; initial failures repaired or passed on final full rerun; fresh-install live qualification NOT RUN | [F2 receipt](f2-drawers/README.md) |
-| 2026-10-04 | #146 | F2 drawers, sheets and mobile menus (#132), review fixes | Guarded phone sessions, nested viewer teardown, full-width computer sheets, contrast, shared overlays and all source gates | PASS | Root 1,453 passed / 15 skipped; 105 Angular tests; 38 Chromium captures at 1280/390 and the 800px resize setup; independent fix verification and fresh-install qualification NOT RUN | [F2 receipt](f2-drawers/README.md) |
-| 2026-10-04 | Pending (#131) | F1 UI foundation | Tokens, state specimen, paper directives, loaders, keyboard behaviour, evidence and reduced motion; all source gates and root suite | PASS | 1,448 passed / 15 skipped; 59 Angular tests; 16 Chromium captures; two unrelated initial flakes passed alone and on the final root rerun; updated integration and theme assertions passed | [F1 visual receipt](f1-foundation/README.md), [#136 flake note](https://github.com/elewa-git/opencrane-new/issues/136#issuecomment-5981713369) |
-| 2026-10-05 | Pending (#133) | F3 organisation shell v2, independent pass 1 fixes | Rebase, stale notice, routing, labels, targets, caller and readability fixes; all local source gates | PASS | Root 1,566 passed / 15 skipped; 123 Angular tests; 116 Chromium captures; initial root failure and unchanged reruns recorded; independent pass 2 / fix verification and fresh-install live qualification NOT RUN | [F3 receipt](f3-org-shell/README.md) |
-| 2026-10-05 | Pending (#134) | F4 personal settings shell | Account, Preferences, Assistant and My tools shell; honest API gaps; 1280px/390px normal/reduced-motion visuals | PARTIAL | Lint, typecheck, check:events, build, Angular tests, 142 passed across 19 files, and F1/F3/F4 visuals PASS; F2 main bug #160 fixed and visual:f2-drawers PASS (38 captures); full root suite 1,602 passed / 3 failed / 15 skipped across 106 files, with all three failures passing alone under host load | [F4 receipt](f4-settings/README.md) |
-| 2026-10-05 | Pending (#135) | F5 shared workspace pieces | Route-safe downloads, truthful empty states, phone layouts, budget guidance, source checks and F1–F5 visuals | PARTIAL | Lint, typecheck, events, build, web 152 tests, F1–F5 visuals and chat browser PASS; root 1,686 passed / 15 skipped / 1 gateway timeout, with its file passing alone; fresh-install and budget journeys NOT RUN | [F5 receipt](f5-workspace/README.md) |
-| 2026-10-05 | [#187](https://github.com/elewa-git/opencrane-new/pull/187) (#83, PR 1 of 2) | People & groups list, create and read-only detail | Typed browser group contract, list and detail reads, search, create outcome checks and 78 Chromium captures | PARTIAL | Lint, typecheck, events, build, focused People tests (27) and F1–F5 visuals PASS; full web tests 181 passed / 6 failed; live backend and fresh-install qualification NOT RUN | [People & groups receipt](p4-1-people/README.md) |
-| 2026-10-05 | [#190](https://github.com/elewa-git/opencrane-new/pull/190) (#83, PR 2 of 2) | People & groups member removal | Review before removal, current-state check, retry and refusal handling, focus return and 110 Chromium captures | PARTIAL | Lint, typecheck, events, build, 202 Angular tests, 42 focused People tests, People and F1–F5 visuals PASS; full root suite and fresh-install qualification NOT RUN | [People & groups receipt](p4-1-people/README.md) |
-| 2026-10-04 | Not opened (#56) | P3-15 monetary reconciliation backend (original receipt) | Actor, command/event store, replay, native usage and safe HTTP fixtures pass; original full root test gate fails | PARTIAL | 18 actor/regression tests; 11 gateway tests; HTTP regression; root run 32 failed / 1,362 passed | [p3-15-reconcile.md](p3-15-reconcile.md) |
-| 2026-10-04 | Not opened (#56) | P3-15 full capability | Designed resolution view and fresh-install journey | NOT RUN | Claude Design prompt 3 pending; no stack touched | [p3-15-reconcile.md](p3-15-reconcile.md) |
-| 2026-10-04 | Not opened (#56) | P3-15 backend review corrections | Rebased source gates PASS; populated-list and detail HTTP fixtures PASS; reviewer verification and fresh-install qualification pending | PARTIAL | 50 reservations (25 held / 25 settled), list and details under 2 s; root 1,403 passed / 14 skipped; start load 13.56 | [p3-15-reconcile.md](p3-15-reconcile.md) |
-| 2026-10-04 | Pending (#83) | P4-1 flat groups backend, review pass 1 fixes | Rebased authority design, removal/deadline regressions, real 100,000-event volume benchmark, web tests and all source gates PASS | PARTIAL | Root 1,441 passed / 15 skipped; start load 4; volume p95 model 222.18 ms / MCP 151.66 ms / destination 59.92 ms; 60 web tests; independent pass 2 and fresh install NOT RUN | [p4-1-backend-evidence.md](p4-1-backend-evidence.md) |
-| 2026-10-04 | [#142](https://github.com/elewa-git/opencrane-new/pull/142) | Security, money and timing rules explained | Behaviour-preserving comments, named rules and audit allow-list equivalence coverage | IN PROGRESS | Independent review fixes and verification underway | [PR evidence](https://github.com/elewa-git/opencrane-new/pull/142) |
-| 2026-10-04 | Pending (#113) | Model stream recovery and PDF upload | NATS-stall and malformed-usage controls; proxy abort and normal completion; PDF answer reached Done on fresh stack | PARTIAL | Source gates PASS; root 1,494 passed / 15 skipped / 1 unrelated teardown timeout; later fresh live-view step failed | [i113-model-crash.md](i113-model-crash.md) |
-| 2026-10-04 | Pending (#77, PR 1 of 2) | Live-view lease-gated delivery foundation | Monotonic lease, serial admission retries and unavailable failure states; all source gates PASS, pause/resume and fresh-install journey pending | PARTIAL | Root 1,532 passed / 15 skipped; web 65 passed; 20 property seeds | [i77-lease-evidence.md](i77-lease-evidence.md) |
-| 2026-10-04 | [#147](https://github.com/elewa-git/opencrane-new/pull/147) | Live-view lease PR 1 rebase onto `2329adc` | Rebase complete; lint, typecheck, catalogue, focused integration/lease/read-retry tests, web spec and build PASS; full root gate FAIL | PARTIAL | Focused 142 passed / 2 skipped; web 5 passed; root rerun 1,564 passed / 2 failed / 15 skipped; exact failure replays pass unchanged; green full gate required before landing | [i77-lease-evidence.md](i77-lease-evidence.md#rebase-verification--4-october-2026) |
-| 2026-10-05 | [#156](https://github.com/elewa-git/opencrane-new/pull/156) | P4-2 ownership backend (#84) | Conditional appointment/step-down, last-owner race, fenced migration, receipt recovery and replay; invitation, seed and conflict regressions fixed; builder checks recorded separately | PARTIAL | Lint/typecheck/events and focused source checks PASS; final root FAIL (1,593 passed / 1 failed / 15 skipped); secondary FRESH/REPEAT FAIL at browser upload; ownership screens NOT RUN | [p4-2-backend-evidence.md](p4-2-backend-evidence.md) |
-| 2026-10-04 | Pending (#77, PR 2 of 2) | Live-view pause and automatic resume | Send-time delivery gates, bounded held setup/input, browser clock deadline and handshake replay; all source gates PASS; fresh-install and real Kasm qualification pending | PARTIAL | Root 1,546 passed / 15 opt-in skipped; live-view 56 passed; web 71 passed | [i77-pause-evidence.md](i77-pause-evidence.md) |
-| 2026-10-05 | [#153](https://github.com/elewa-git/opencrane-new/pull/153) | Live-view pause PR 2 rebase onto main `ce0e07b` | Browser pause/replay combined with SharedState and ModalSheet; shared deadline, denial-first order and timing records retained; all focused checks PASS | PARTIAL | Live-view/lease/delivery 97 passed / two opt-in skipped; web 119 passed; final root 1,579 passed / one timeout / 15 skipped; full root gate remains FAIL | [i77-pause-evidence.md](i77-pause-evidence.md#rebase-onto-main--5-october-2026) |
-| 2026-10-05 | [#155](https://github.com/elewa-git/opencrane-new/pull/155) (#103) | P4-21 provider backend | Late-admission outcomes, zero-cent rejection settlement and undispatched hold recovery; own source gates PASS | PARTIAL | Code 1a4c49c on main cfbf50a; 95 catalogue types; full root 1,684 passed / 15 skipped; preceding focused NATS teardown FAIL retained; UI and fresh install NOT RUN | [Provider backend receipt](p4-21-backend-evidence.md) |
-| 2026-10-05 | Pending (#77) | Live-view check pauses on chat activity | Access checks that see new chat, file, grant or team activity wait for the next check; revocation guards | PARTIAL | source gates as measured; live batch NOT RUN | [i77-fence-evidence.md](i77-fence-evidence.md) |
-| 2026-10-06 | Pending (#77) | Live-view batch 4 on main `a4508ae` | Fresh secondary 1; six budget refusals left by failed Spending setup; both later core journeys also failed at Spending; repeated member fixture passed | FAIL | 4/10; first deltas 4.060–5.546 s; revocation 772–923 ms; zero early denied checks in 14 viewer sessions | [Final qualification 4](i77-live-view.md#final-qualification-4--6-october-2026) |
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| P3-1 Per-tool Allow, Ask and Block | [#42](https://github.com/elewa-git/opencrane-new/issues/42) | Yes 2026-10-03 `17c61d35e` | PASS 2026-10-03 `b63234c` | [Receipt](p3-1-live/README.md) |
+| P3-2 Bound one-time approvals | [#43](https://github.com/elewa-git/opencrane-new/issues/43) | Yes 2026-10-04 `3972492d9` | PASS 2026-10-25 `f801d5b6b` | [Receipt](demo-stage-b-local-live/receipt.md#fresh-run-with-complete-approval-proof-25-october-2026) |
+| P3-3 Remote MCP registration and discovery | [#44](https://github.com/elewa-git/opencrane-new/issues/44) | Yes 2026-10-04 `39fe9dae5` | PARTIAL 2026-10-04 `d172909` | [Receipt](p3-3-mcp-discover.md#secondary-live-qualification-4-october-2026) |
+| P3-4 Publish tool routes and grants | [#45](https://github.com/elewa-git/opencrane-new/issues/45) | Part 2026-11-17 `b7288b23c` | PARTIAL 2026-10-25 `f801d5b6b` | [Receipt](demo-stage-b-local-live/receipt.md#fresh-run-with-complete-approval-proof-25-october-2026) |
+| P3-5 Governed tools in chat | [#46](https://github.com/elewa-git/opencrane-new/issues/46) | Part 2026-11-08 `36fa0e6c1` | PARTIAL 2026-10-25 `f801d5b6b` | [Receipt](demo-stage-b-local-live/receipt.md#fresh-run-with-complete-approval-proof-25-october-2026) |
+| P3-6 Hosted MCP images | [#47](https://github.com/elewa-git/opencrane-new/issues/47) | Part 2026-11-11 `85ead939e` | NOT RUN | — |
+| P3-7 Changed-tool review | [#48](https://github.com/elewa-git/opencrane-new/issues/48) | Part 2026-11-17 `b7288b23c` | NOT RUN | — |
+| P3-8 Personal bearer connections | [#49](https://github.com/elewa-git/opencrane-new/issues/49) | Yes 2026-11-17 `df068a68c` | PARTIAL 2026-11-16 `7fb923bf7` | [Receipt](work-main-personal-tool-reads/journey.md#personal-key-consent-journey) |
+| P3-9 OAuth connections | [#50](https://github.com/elewa-git/opencrane-new/issues/50) | Part 2026-10-30 `371087d3c` | NOT RUN | — |
+| P3-10 Isolated personal MCP instances | [#51](https://github.com/elewa-git/opencrane-new/issues/51) | Part 2026-10-15 `3dab5f455` | NOT RUN | — |
+| P3-11 Odoo Community fixture | [#52](https://github.com/elewa-git/opencrane-new/issues/52) | Yes 2026-10-03 `5ca26b64a` | NOT RUN | — |
+| P3-12 Governed Odoo reads and writes | [#53](https://github.com/elewa-git/opencrane-new/issues/53) | Part 2026-10-20 `8b7dd8acd` | NOT RUN | — |
+| P3-13 Monthly group and assistant budgets | [#54](https://github.com/elewa-git/opencrane-new/issues/54) | Yes 2026-10-03 `f5e30686c` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P3-14 Stop on budget exhaustion | [#55](https://github.com/elewa-git/opencrane-new/issues/55) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P3-15 Uncertain effects and settlement | [#56](https://github.com/elewa-git/opencrane-new/issues/56) | Part 2026-10-12 `3efc8ecbd` | NOT RUN | — |
+| P3-16 Authenticated computer viewer | [#57](https://github.com/elewa-git/opencrane-new/issues/57) | Yes 2026-10-04 `bbf0babec` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P3-17 Take control after pausing agents | [#58](https://github.com/elewa-git/opencrane-new/issues/58) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P3-18 Authorised screenshots | [#59](https://github.com/elewa-git/opencrane-new/issues/59) | Yes 2026-10-06 `b4837d6d1` | PARTIAL 2026-10-04 `bd938b53f` | [Receipt](p3-18-live/qualification.json) |
+| P3-19 Permission-scoped audit history | [#60](https://github.com/elewa-git/opencrane-new/issues/60) | Yes 2026-10-03 `b8aee579e` | PASS 2026-11-17 `641f4ef3c` | [Receipt](work-clean-255-s1/journey.md) |
+| P3-20 Package and Git egress | [#61](https://github.com/elewa-git/opencrane-new/issues/61) | Part 2026-11-07 `4c0a4de14` | NOT RUN | — |
+| P3-21 Browser egress isolation | [#62](https://github.com/elewa-git/opencrane-new/issues/62) | No | NOT RUN | — |
+| P3-22 Complete governed-work qualification | [#63](https://github.com/elewa-git/opencrane-new/issues/63) | Part 2026-10-25 `105071aaa` | NOT RUN | — |
 
 ## Phase 4
 
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-05 | Pending (#89) | P4-7 backend first half | Shared creation, private requester threads, fixed payer, long personal chats and per-turn refusals; credential profiles and fresh installation remain pending | PARTIAL | Lint/typecheck/catalogue PASS; requested suites PASS in both root runs; final root FAIL (1,747 passed / 2 failed / 15 skipped): Chromium polling moved to draft #191, and live-view removal returned 4503 instead of 4003; removal case PASS alone on main and this branch; 71 compatibility tests PASS; live profiles and fresh-install checks NOT RUN; draft, not ready to land | [Backend receipt](p4-7-backend-evidence.md) |
-| 2026-10-05 | Pending (#86) | P4-4 direct chat backend | Real-service HTTP/reconnect/removal, immutable mode, replay and bridge guards | PARTIAL | Lint/typecheck/events PASS; direct and legacy chat 20 tests PASS; root FAIL (1,534 passed / 15 skipped / 4 failed); final fixes await owner verification; UI and fresh-install live qualification NOT RUN | [Backend receipt](p4-4-backend-evidence.md) |
-| 2026-10-05 | [#159](https://github.com/elewa-git/opencrane-new/pull/159) | P4-4 direct chat backend | Real-service HTTP/reconnect/removal, immutable mode, replay and bridge guards | PARTIAL | Lint/typecheck/events PASS; direct and legacy chat 20 tests PASS; root FAIL (1,534 passed / 15 skipped / 4 failed); final fixes await owner verification; UI and fresh-install live qualification NOT RUN | [Backend receipt](p4-4-backend-evidence.md) |
-| 2026-10-05 | Pending (#86) | P4-4 direct chat backend | Private chats, bounded access reads, authorised listing, replay and bridge guards | PASS | Lint/typecheck/events PASS (89 types); chat 46 tests PASS in final root run; root 1,644 passed / 15 skipped, start load 7; UI and fresh-install live qualification NOT RUN | [Backend receipt](p4-4-backend-evidence.md) |
-| 2026-10-05 | [#159](https://github.com/elewa-git/opencrane-new/pull/159) | P4-4 direct chat backend | Private chats, bounded access reads, authorised listing, replay and bridge guards | PASS | Lint/typecheck/events PASS (89 types); chat 46 tests PASS in final root run; root 1,644 passed / 15 skipped, start load 7; UI and fresh-install live qualification NOT RUN | [Backend receipt](p4-4-backend-evidence.md) |
-| 2026-10-05 | [#159](https://github.com/elewa-git/opencrane-new/pull/159) | P4-4 direct chat backend | Backend source checks: private chats, access checks, replay and bridge guards | PARTIAL | Focused tests/lint/typecheck/events PASS (95 types); full root FAIL (two cases passed on rerun; gateway missed keep-alive replies); UI and fresh-install journey NOT RUN | [Backend receipt](p4-4-backend-evidence.md) |
-| 2026-10-05 | [#197](https://github.com/elewa-git/opencrane-new/pull/197) | Private team turns, PR 1 | Fresh private processes, context after admission and lost output; live proof pending | PARTIAL | F1 FAIL; F2 host FAIL; F3 NOT RUN; memory admission DISABLED | [Check record](p4-14-private-turns-evidence.md), [probe](evidence/p4-14/private-turns.json) |
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| P4-1 Groups and membership | [#83](https://github.com/elewa-git/opencrane-new/issues/83) | Yes 2026-10-23 `d923f332d` | PASS 2026-10-23 `610f345ab` | [Receipt](p4-journey/runs-2026-10-23/fresh-2/receipt.json) |
+| P4-2 Ownership transfer | [#84](https://github.com/elewa-git/opencrane-new/issues/84) | Yes 2026-10-23 `d923f332d` | PASS 2026-10-23 `610f345ab` | [Receipt](p4-journey/runs-2026-10-23/fresh-2/receipt.json) |
+| P4-3 Member invitations and roles | [#85](https://github.com/elewa-git/opencrane-new/issues/85) | Part 2026-10-18 `c223c73da` | NOT RUN | — |
+| P4-4 Direct person-to-person chats | [#86](https://github.com/elewa-git/opencrane-new/issues/86) | Yes 2026-10-07 `bbb42e287` | PASS 2026-10-23 `610f345ab` | [Receipt](p4-journey/runs-2026-10-23/fresh-2/receipt.json) |
+| P4-5 Human group chats | [#87](https://github.com/elewa-git/opencrane-new/issues/87) | Yes 2026-10-11 `8fbf9e344` | PASS 2026-10-23 `610f345ab` | [Receipt](p4-journey/runs-2026-10-23/fresh-2/receipt.json) |
+| P4-6 Conversation lifecycle | [#88](https://github.com/elewa-git/opencrane-new/issues/88) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-7 Shared group assistants | [#89](https://github.com/elewa-git/opencrane-new/issues/89) | Part 2026-10-06 `4ed6b7a1d` | PARTIAL 2026-10-23 `610f345ab` | [Receipt](p4-journey/runs-2026-10-23/fresh-2/receipt.json) |
+| P4-8 Recoverable child chats | [#90](https://github.com/elewa-git/opencrane-new/issues/90) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-9 Child progress and serial turns | [#91](https://github.com/elewa-git/opencrane-new/issues/91) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-10 Publish child results | [#92](https://github.com/elewa-git/opencrane-new/issues/92) | Part 2026-10-17 `8f10ade77` | NOT RUN | — |
+| P4-11 Delegation allowances and stopping | [#93](https://github.com/elewa-git/opencrane-new/issues/93) | Part 2026-10-23 `71cce9a27` | NOT RUN | — |
+| P4-12 Scoped memory recall | [#94](https://github.com/elewa-git/opencrane-new/issues/94) | Part 2026-10-25 `f34ccba16` | PARTIAL 2026-10-25 `9ddb2b47e` | [Receipt](memory-fresh-personal/receipt.md) |
+| P4-13 Correct and forget memory | [#95](https://github.com/elewa-git/opencrane-new/issues/95) | Part 2026-11-17 `b7288b23c` | PARTIAL 2026-10-25 `9ddb2b47e` | [Receipt](memory-fresh-personal/receipt.md) |
+| P4-14 Private member execution | [#96](https://github.com/elewa-git/opencrane-new/issues/96) | Yes 2026-10-20 `d22d189c0` | NOT RUN | — |
+| P4-15 Isolated preferences and pinned facts | [#97](https://github.com/elewa-git/opencrane-new/issues/97) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-16 Manage knowledge and preferences | [#98](https://github.com/elewa-git/opencrane-new/issues/98) | No | NOT RUN | — |
+| P4-17 Nightly memory dreams | [#99](https://github.com/elewa-git/opencrane-new/issues/99) | Part 2026-11-11 `acc4f934f` | NOT RUN | — |
+| P4-18 Account and personal settings | [#100](https://github.com/elewa-git/opencrane-new/issues/100) | No | NOT RUN | — |
+| P4-19 Onboarding persona | [#101](https://github.com/elewa-git/opencrane-new/issues/101) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-20 Welcome chat | [#102](https://github.com/elewa-git/opencrane-new/issues/102) | Part 2026-11-10 `b3b307b63` | NOT RUN | — |
+| P4-21 Provider connection and verification | [#103](https://github.com/elewa-git/opencrane-new/issues/103) | Yes 2026-10-07 `71c70b873` | PARTIAL 2026-10-23 `610f345ab` | [Receipt](p4-journey/runs-2026-10-23/fresh-2/receipt.json) |
+| P4-22 Model access and provider retirement | [#104](https://github.com/elewa-git/opencrane-new/issues/104) | Part 2026-11-08 `63ede1647` | PARTIAL 2026-10-18 `12e2b1794` | [Receipt](p4-22-managed-dev-stack/receipt.md) |
+| P4-23 Group tools and company connections | [#105](https://github.com/elewa-git/opencrane-new/issues/105) | Part 2026-10-20 `f9dfbc7d5` | NOT RUN | — |
+| P4-24 Routines | [#106](https://github.com/elewa-git/opencrane-new/issues/106) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-25 Routine recovery and approvals | [#107](https://github.com/elewa-git/opencrane-new/issues/107) | Part 2026-11-07 `f61fd9505` | NOT RUN | — |
+| P4-26 Spending and group ceilings | [#108](https://github.com/elewa-git/opencrane-new/issues/108) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-27 Admin overview and change history | [#109](https://github.com/elewa-git/opencrane-new/issues/109) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
+| P4-28 Complete company qualification | [#110](https://github.com/elewa-git/opencrane-new/issues/110) | No | NOT RUN | — |
 
-## Lint size debt
+## Measurements
 
-| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-11-13 | — | #120, slice 1 | Source checks for size limits and recorded debt | PASS | 39 function / 298 parameter suppressions; seven rejected probes; 21 checker and 52 CI script tests; uncached full lint | [Lint receipt](clean-120-s1.md#final-full-lint) |
-| 2026-11-13 | — | #120, slice 1 | Fresh secondary core journey entry | FAIL (main defect) | Bootstrap, provider setup and website ready; fleet-task guard refused core entry; claim released | [Lint receipt](clean-120-s1.md#fresh-secondary-stack) |
+### Lint size debt
 
-## Approval listing reads
+On 13 November 2026, the [size-debt receipt](clean-120-s1.md#final-full-lint)
+recorded 39 function and 298 parameter suppressions, seven rejected probes,
+21 checker tests and 52 CI script tests, and uncached full lint. Source checks passed.
+Its [fresh secondary attempt](clean-120-s1.md#fresh-secondary-stack) reached bootstrap,
+provider setup and website readiness, but the fleet-task guard refused CORE entry;
+the claim was released. That attempt did not qualify a capability.
+
+### Approval listing reads
 
 Measured on 17 November 2026 with real disposable NATS, PostgreSQL and OpenFGA.
 The [read-count tests](../../apps/server/test/approval-listing-reads.test.ts) use the

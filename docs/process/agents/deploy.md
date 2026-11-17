@@ -29,5 +29,6 @@ Do not assume that an accepted ADR or green source check means live completion.
 Return a receipt containing date, source SHA/image digests, environment and freshness,
 command or journey, expected and observed results, durations, safe artefact links and
 PASS, FAIL, PARTIAL or NOT RUN. Name every untested condition and remaining live issue.
-Keep a short ledger index pointing to detailed receipts. Record useful lessons and
-link their eventual fixes. Missing infrastructure or skipped jobs never count as PASS.
+Update live results and receipt links under [orchestration step 8](../orchestration.md#one-change-start-to-finish).
+Record useful lessons and link their eventual fixes.
+Missing infrastructure or skipped jobs never count as PASS.
