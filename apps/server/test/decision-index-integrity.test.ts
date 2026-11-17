@@ -85,6 +85,8 @@ async function refusesUnprovedCoverage(fault: string) {
     expect((await setup.decide()).statusCode).toBe(200);
     if (fault === 'missing') {
       await setup.db.query('DELETE FROM decision_conversation_coverage');
+    } else if (fault === 'count') {
+      await setup.db.query('UPDATE decision_conversation_coverage SET event_count=event_count+1');
     } else {
       await setup.db.query('UPDATE decision_conversation_coverage SET position=position+1');
     }
@@ -97,7 +99,7 @@ async function refusesUnprovedCoverage(fault: string) {
     await setup.close();
   }
 }
-it.each(['missing', 'position'])('refuses %s coverage proof before approval consumption',
+it.each(['missing', 'count', 'position'])('refuses %s coverage proof before approval consumption',
   refusesUnprovedCoverage, 40_000);
 
 async function refusesSelfConsistentGap() {

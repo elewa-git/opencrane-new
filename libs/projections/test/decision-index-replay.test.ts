@@ -96,3 +96,30 @@ async function refusesMissingCoverageReason() {
 }
 it('explains missing coverage proof instead of trusting an empty index',
   refusesMissingCoverageReason);
+
+async function accountsForOtherStreamsWithoutSelectingThem() {
+  const setup = await setupIndex();
+  try {
+    const outside = envelope('test', 'member-outsider-long-id', 'member.joined', {
+      memberId: 'outsider-long-id', email: 'outsider@example.test',
+      displayName: 'Other', role: 'member',
+    });
+    await setup.nats.seed([outside]);
+    await setup.runner.run(conversations);
+    const references = await setup.rows();
+    expect(references).toHaveLength(2);
+    const coverage = await setup.storage.db.query(
+      'SELECT conversation_id, event_count FROM decision_conversation_coverage');
+    expect(coverage.rows).toEqual([{ conversation_id: 'chat', event_count: '1' }]);
+    const lookup = { silo: 'test', conversationId: 'chat', turnId: 'turn',
+      metadataTypes: ['conversation.created'], latestTypes: [], ignoredTypes: [],
+      deadline: performance.now() + 2000, head: await setup.nats.store.head() };
+    const selected = await decisionConversationPositions(setup.storage.db, lookup);
+    expect(selected.rows).toHaveLength(1);
+    expect(selected.rows[0]).toHaveProperty('type', 'conversation.created');
+  } finally {
+    await setup.close();
+  }
+}
+it('proves the full saved range while keeping other streams out of conversation facts',
+  accountsForOtherStreamsWithoutSelectingThem);
