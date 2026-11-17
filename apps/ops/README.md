@@ -71,7 +71,10 @@ Not built yet:
 ## How to run or test it
 
 Run these commands from the repository root with the service settings in
-[README.robot.md](README.robot.md#live-workers). A dry run inspects saved data.
+[README.robot.md](README.robot.md#live-workers).
+The `members` worker writes read tables in PostgreSQL.
+The `dispatcher` worker updates permissions and saves events while running background jobs.
+Only the replay command with `--dry-run` is read-only: it inspects saved event history.
 
 ```sh
 npm run worker -w apps/ops -- members
