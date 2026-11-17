@@ -23,27 +23,33 @@ export const conversations: Projection = {
   },
   async drop(db) {
     const tables = 'conversation_participants, conversations, conversation_feed, ' +
-      'conversation_legacy_participation, conversation_list_state, decision_conversation_events, decision_conversation_coverage';
+      'conversation_legacy_participation, conversation_list_state, ' +
+      'decision_conversation_events, decision_conversation_coverage';
     await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
+    // Keep validation errors ahead of reference conflicts. The runner commits both together.
+    await applyConversationEvent(db, event, position);
     await indexDecisionConversationEvent(db, event, position);
-    if (await applyConversationPreference(db, event, position)) return;
-    const entry = conversationFeedEntry(event);
-    if (!entry) return;
-    const { conversationId, data } = entry;
-    await validateMode(db, event, conversationId);
-    await foldConversation(db, event, conversationId, position);
-    if (event.subject === `conversation-${conversationId}` &&
-        event.type.startsWith('participant.')) {
-      await db.query('INSERT INTO conversation_legacy_participation VALUES ($1,$2,$3,$4)',
-        [event.silo, conversationId, position, event.id]);
-    }
-    await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
-    await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+async function applyConversationEvent(db: Query, event: EventEnvelope, position: number) {
+  if (await applyConversationPreference(db, event, position)) return;
+  const entry = conversationFeedEntry(event);
+  if (!entry) return;
+  const { conversationId, data } = entry;
+  await validateMode(db, event, conversationId);
+  await foldConversation(db, event, conversationId, position);
+  if (event.subject === `conversation-${conversationId}` &&
+      event.type.startsWith('participant.')) {
+    await db.query('INSERT INTO conversation_legacy_participation VALUES ($1,$2,$3,$4)',
+      [event.silo, conversationId, position, event.id]);
+  }
+  await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
+  await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
+}
 
 async function requireDecisionIndexReplay(db: Query) {
   const result = await db.query<{ present: string | null; coverage: string | null; feed: string | null; sequence: string }>(`
