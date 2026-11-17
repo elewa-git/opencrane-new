@@ -546,6 +546,11 @@ try {
     assert(secondary && browser);
     await realModelJourney(browser.ownerPage, browser.memberPages[0]!, origin, events.store, silo);
   } else {
+  if (browser) {
+    await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz, append,
+      { silo, origin, requesterId: member, assistantId: computer!.assistant_id,
+        computerId: computer!.computer_id, generation: computer!.generation });
+  }
   const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
     const failedTransport: string[] = [];
@@ -570,11 +575,6 @@ try {
       console.error(`Browser transport failures: ${failedTransport.join(', ') || 'none'}`);
       throw error;
     } finally { page.off('requestfailed', failed); }
-  }
-  if (browser) {
-    await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz, append,
-      { silo, origin, requesterId: member, assistantId: computer!.assistant_id,
-        computerId: computer!.computer_id, generation: computer!.generation });
   }
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();

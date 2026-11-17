@@ -29,11 +29,14 @@ async function setupIndex() {
   return { nats, storage, logger, runner, append, rows, close };
 }
 
-async function upgradesOldInstallation() {
+async function upgradesOldInstallation(missing: string) {
   const setup = await setupIndex();
   try {
     const before = await setup.rows();
-    await setup.storage.db.query('DROP TABLE decision_conversation_events');
+    const tables = missing === 'both'
+      ? 'decision_conversation_events, decision_conversation_coverage'
+      : 'decision_conversation_coverage';
+    await setup.storage.db.query(`DROP TABLE ${tables}`);
     await expect(setup.runner.initialise(conversations)).rejects.toThrow('need rebuilding');
     await rebuildConversationsProjection(setup.storage.db, setup.nats.reader, setup.logger);
     expect(await setup.rows()).toEqual(before);
@@ -44,7 +47,8 @@ async function upgradesOldInstallation() {
     await setup.close();
   }
 }
-it('builds the decision index on an old installation and repeats offline replay',
+it.each(['both', 'coverage'])(
+  'rebuilds an installation missing %s index tables and repeats offline replay',
   upgradesOldInstallation);
 
 async function matchesReplyBatching() {
@@ -57,6 +61,9 @@ async function matchesReplyBatching() {
     await setup.append('agent.message_delta', data);
     await setup.runner.run(conversations);
     const individual = await setup.rows();
+    const proof = await setup.storage.db.query(
+      'SELECT event_count, position FROM decision_conversation_coverage');
+    expect(proof.rows).toEqual([{ event_count: '3', position: '3' }]);
     const stored = [];
     for await (const row of setup.nats.store.readStream('conversation-chat')) stored.push(row);
     await conversations.drop(setup.storage.db);
@@ -64,6 +71,9 @@ async function matchesReplyBatching() {
     await conversations.apply(setup.storage.db, stored[0]!.event, stored[0]!.sequence);
     await conversations.applyReplies!(setup.storage.db, stored.slice(1));
     expect(await setup.rows()).toEqual(individual);
+    const replayProof = await setup.storage.db.query(
+      'SELECT event_count, position FROM decision_conversation_coverage');
+    expect(replayProof.rows).toEqual(proof.rows);
   } finally {
     await setup.close();
   }
@@ -77,7 +87,7 @@ async function refusesMissingCoverageReason() {
     await setup.storage.db.query('DELETE FROM decision_conversation_coverage');
     const lookup = { silo: 'test', conversationId: 'chat', turnId: 'turn',
       metadataTypes: ['conversation.created'], latestTypes: [], ignoredTypes: [],
-      deadline: Infinity, head: await setup.nats.store.head() };
+      deadline: performance.now() + 2000, head: await setup.nats.store.head() };
     await expect(decisionConversationPositions(setup.storage.db, lookup))
       .rejects.toThrow('Conversation index is incomplete');
   } finally {
