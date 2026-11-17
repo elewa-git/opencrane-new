@@ -94,7 +94,7 @@ async function setup() {
   owned = true;
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = ({ utterance: 'Private routine instructions' });
+  const instructions = 'Private routine instructions';
   const definition = { ...original.definition, instructions };
   const active = { ...created, data: { ...original, definition, status: 'active' } };
   const events = [joinedMember('alice')];
@@ -688,11 +688,14 @@ async function handsOffOnce() {
     expect(rootTotals(actor.state, root.rootId)).toEqual({
       settledCents: 0, heldCents: 0, availableCents: 1000 });
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-    expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
     function isInput(row: typeof rows[number]) {
       return row.event.type === 'message.posted';
     }
-    expect(rows.filter(isInput)).toHaveLength(1);
+    const inputs = rows.filter(isInput);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]?.event.data).toMatchObject({
+      utterance: 'Routine instructions (user data):\n\nPrivate routine instructions',
+    });
   } finally { await computer.close(); }
 }
 it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
@@ -816,9 +819,12 @@ async function refusesChangedStart(field: string) {
   const computer = await recordingComputer();
   const link = await computer.wake();
   const send = link.socket.send.bind(link.socket);
+  let altered = false;
   function alter(bytes: Parameters<typeof send>[0]) {
     const text = z.string().parse(bytes);
     const frame = frameSchema.parse(JSON.parse(text));
+    expect(frame['type']).toBe('turn');
+    altered = true;
     frame[field] = 'different';
     send(JSON.stringify(frame));
   }
@@ -828,6 +834,7 @@ async function refusesChangedStart(field: string) {
   }
   try {
     await authority.send(computer.wake);
+    expect(altered).toBe(true);
     await until(closed);
     expect(await savedStarts()).toEqual([]);
     expect(computer.starts).toBe(0);

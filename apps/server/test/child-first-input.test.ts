@@ -2,6 +2,8 @@ import { readConversationProse } from '@opencrane/events';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
@@ -21,6 +23,7 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let options: Parameters<typeof addChildFirstInput>[0];
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
+let directory: string;
 let counter = 0;
 const creationSchema = eventEnvelopeSchema(conversationCreatedDataSchema);
 const sourceText = '  Reviewed **source**\nwith exact spacing.  ';
@@ -44,6 +47,7 @@ async function initialiseWithNats(fixture: typeof nats) {
   nats = fixture;
   storage = await databases();
   fga = await openfga();
+  directory = await mkdtemp(`${tmpdir()}/child-first-input-`);
   const db = pgDb(storage.queue);
   const binding = await createStore(fga.apiUrl, 'test');
   options = { silo: 'test', store: nats.store, db, binding };
@@ -67,6 +71,7 @@ async function close() {
   await nats?.close();
   await storage?.close();
   await fga?.close();
+  if (directory) await rm(directory, { recursive: true, force: true });
 }
 afterAll(close);
 afterEach(vi.restoreAllMocks);

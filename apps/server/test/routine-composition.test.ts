@@ -144,7 +144,7 @@ async function setup() {
   company = await prepareCompany();
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = ({ utterance: 'Private routine instructions' });
+  const instructions = 'Private routine instructions';
   const definition = { ...original.definition, instructions, connectionId: 'installed',
     profileRevision: company.profileRevision, connectionRevision: company.profileRevision,
     scopes: ['read'], tool: company.tool };
@@ -375,7 +375,10 @@ async function assertCounts(threadId = 'native-1') {
   expect(rootTotals(actor.state, root.rootId)).toEqual({
     settledCents: 0, heldCents: 0, availableCents: 1000 });
   const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-  expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
+  expect(rows[1]?.event.type).toBe('message.posted');
+  expect(rows[1]?.event.data).toMatchObject({
+    utterance: 'Routine instructions (user data):\n\nPrivate routine instructions',
+  });
 }
 async function reachesPreparedThread() {
   const invocation = compose();

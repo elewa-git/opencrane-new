@@ -104,7 +104,7 @@ async function setup() {
   now = Date.parse('2026-10-11T07:00:00Z');
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = ({ utterance: 'Private routine instructions' });
+  const instructions = 'Private routine instructions';
   const definition = { ...original.definition, instructions };
   const active = { ...created, data: { ...original, definition, status: 'active' } };
   const events = [joinedMember('alice')];
@@ -534,11 +534,20 @@ async function runState() {
 }
 async function assertSingleRun() {
   const run = (await runState()).activeRun!;
-  const subjects = [`conversation-${run.conversationId}`, 'budget-test', 'routine-orders'];
+  const conversationSubject = `conversation-${run.conversationId}`;
+  const subjects = [conversationSubject, 'budget-test', 'routine-orders'];
   const counts = new Map<string, number>();
   for (const subject of subjects) {
     const rows = await history(nats.store, subject, 'test');
-    expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
+    if (subject === conversationSubject) {
+      expect(rows[1]?.event.type).toBe('message.posted');
+      expect(rows[1]?.event.data).toMatchObject({
+        utterance: 'Routine instructions (user data):\n\nPrivate routine instructions',
+      });
+    }
+    if (subject === 'budget-test') {
+      expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
+    }
     for (const row of rows) {
       counts.set(row.event.type, (counts.get(row.event.type) ?? 0) + 1);
     }
