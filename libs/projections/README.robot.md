@@ -812,7 +812,7 @@ real NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.
 TypeScript folds this activity from creation, visible posted/completed messages and the
 first close. Ordinary late joins start at zero; shared-child joins retain their released
 history. An index supports the ordered member query. The server authorises each candidate
-before displaying metadata, applying private choices or searching decrypted titles.
+before displaying metadata, applying private choices or searching readable titles.
 `conversationListRevision` reads one generation record and includes only the supplied
 candidates, which the server must authorise first. It uses their activity, join, latest
 participation and archive positions. Read markers and internal reports leave these
@@ -1072,7 +1072,7 @@ run pages. Terminal updates change data only, preserving the original paging pos
 Skipped dates and missed ranges are single rows. A missed range is identified within
 its silo/routine by schedule revision and first/last local dates. It is never expanded.
 Legacy facts remain `legacy-needs-migration` with `executionAvailable: false`.
-Instructions remain ciphertext; projection and replay accept no decryption port.
+Instructions remain bounded plaintext; projection and replay need no instruction keys.
 
 `rebuildRoutineProjection` holds the runner lock and uses the ordinary runner inside
 one PostgreSQL transaction. Drop/create, receipts, checkpoint and generation roll back

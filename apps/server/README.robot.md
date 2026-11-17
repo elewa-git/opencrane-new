@@ -7573,5 +7573,7 @@ checks. The server refuses non-GET and non-HEAD API calls with HTTP 503 and
 recovery, live view or ownership seed. The restore chart omits the models container
 and holds workers and scheduled backup. Authentication still uses the normal OIDC
 routes and restored membership. The restore Job opens this mode only after checking
-events, replayed tables, rights and files. `test/restored-read-only.test.ts` checks
+events, replayed tables, rights and files. Its NATS identity permits reads only.
+Approval cards calculate cancellation or expiry without appending a terminal event.
+`test/restored-read-only.test.ts` checks
 read admission, held writes and owner-claim refusal.

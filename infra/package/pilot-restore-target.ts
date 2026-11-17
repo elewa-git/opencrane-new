@@ -121,14 +121,17 @@ class PackageRestoreTarget implements PilotRestoreTarget {
       if (item.spec.replicas > allowed) throw new Error('Restore admission is active');
       if (item.metadata.name !== 'server') continue;
       let readOnly = false;
+      let readerSeed = false;
       for (const entry of item.spec.template.spec.containers) {
         if (entry.name === 'models') throw new Error('Restore effects are active');
         if (entry.name !== 'server') continue;
         for (const setting of entry.env ?? []) {
+          if (setting.name === 'NATS_NKEY_SEED_FILE' &&
+              setting.value === '/run/opencrane/files/projection.seed') readerSeed = true;
           if (setting.name === 'PILOT_RESTORE_READ_ONLY' && setting.value === 'true') readOnly = true;
         }
       }
-      if (!readOnly) throw new Error('Restore read-only admission is absent');
+      if (!readOnly || !readerSeed) throw new Error('Restore read-only admission is absent');
     }
     const stopped = allowServer ? held.slice(1) : held;
     const selector = `app in (${stopped.join(',')})`;

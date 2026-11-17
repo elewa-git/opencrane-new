@@ -100,6 +100,12 @@ spec:
           image: {{ required "server pin" .Values.images.server | quote }}
           command: [node, --experimental-strip-types, apps/server/src/main.ts]
           env:
+            {{- if .Values.pilotRestore.enabled }}
+            - { name: NATS_CERT_FILE, value: /run/opencrane/files/projection.crt }
+            - { name: NATS_KEY_FILE, value: /run/opencrane/files/projection.key }
+            - { name: NATS_NKEY_SEED_FILE, value: /run/opencrane/files/projection.seed }
+            - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
+            {{- end }}
             - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }

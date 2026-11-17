@@ -3,7 +3,7 @@
 Backend API for [private direct chats / #86](https://github.com/elewa-git/opencrane-new/issues/86).
 The direct chat screen uses these routes. Conversation mode and its two participants are
 recorded together in `conversation.created`; they cannot be edited. Messages are
-encrypted at rest with the conversation key; the server decrypts authorised reads.
+saved as bounded plaintext in events; the server checks access before returning it.
 
 All HTTP reads require a signed-in active silo member. Writes also require the
 configured browser Origin. Silo and caller come from server configuration and
@@ -19,7 +19,7 @@ without appending. Public creation bodies cannot supply `routinePreparation`.
 | `POST /api/conversations` | `{ id, conversationId, mode: "direct", colleagueId }` | `{ status: "appended", sequence }`. Exactly caller plus the selected active colleague. Refuses self, assistant, payer, explicit audience or identity fields. |
 | `POST /api/conversations/:conversationId/messages` | `{ id, text }` | Same append response. Trimmed non-empty text, ≤32,000 characters. Only the two current silo members may send. Plain `@agent` remains text. |
 | `GET /api/conversations` | Optional section, q, limit and cursor; see [list paging](../../apps/server/README.robot.md#chat-ui-reads-and-stop) | `{ rows, nextCursor }`. Authorised rows with `conversationId`, `createdBy`, immutable `mode`, `participantIds`, `createdAt`, derived `title` and `status`. Direct rows have no `assistantId`; ordinary activity remains `open`. |
-| `GET /api/conversations/:conversationId/messages` | Optional `since` (non-negative position, default 0) | `{ rows, position, generation, computerState, computerRecovered }`. Up to 100 events after `since`, ordered by position. Direct `computerState` is `not_applicable` and `computerRecovered` is false. Message rows expose decrypted text and recorded author. |
+| `GET /api/conversations/:conversationId/messages` | Optional `since` (non-negative position, default 0) | `{ rows, position, generation, computerState, computerRecovered }`. Up to 100 events after `since`, ordered by position. Direct `computerState` is `not_applicable` and `computerRecovered` is false. Message rows expose readable text and recorded author. |
 | `GET /api/conversations/:conversationId/changes/:commandId` | The original send `id`, or a persisted creation `id` to inspect projection progress | `{ status: "appended", conversationId, commandId, type, sequence, projection: { content, iam } }`, where each projection is `current` or `applying`. Current participants can check a creation before OpenFGA applies its permissions. No text or new append. |
 | WebSocket `/ws` | `{ type: "subscribe", topic: "conversation", conversationId, since, generation? }` | Existing version-1 `event`, `ready`, `resync`, `refused` envelopes. Cookie and configured Origin required. Direct `ready` reports `computerState: "not_applicable"` and `computerRecovered: false`. |
 
@@ -151,5 +151,5 @@ rows until it
 has 100 visible rows or reaches its captured boundary. Continue from the last returned
 row while a page is full. A shorter page is complete through its `position`.
 Later closes do not replace the first close. Late terminal reports cannot change the
-list's Closed status. HTTP checks current access after loading and before decrypting.
+list's Closed status. HTTP checks current access after loading and before returning prose.
 The public close action remains unavailable pending execution cleanup.

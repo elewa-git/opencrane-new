@@ -103,7 +103,8 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
   }
 }
 
-export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
+export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
+  options?: ChatOptions, readOnly = false) {
   registerOriginalCallStatusRoute(app, config, options);
   const route = { method: ['GET', 'POST'] as ('GET' | 'POST')[],
     url: '/api/conversations/:conversationId/approvals', handler };
@@ -128,7 +129,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         const deadline = performance.now() + 10_000;
         const approvalRows = await approvalRequestEvents(configured, conversationId,
           access.historyPosition, deadline);
-        const readOptions = { deadline, approvalRows,
+        const readOptions = { deadline, approvalRows, readOnly,
           requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
           configured.store, configured.silo, conversationId, memberId, readOptions);

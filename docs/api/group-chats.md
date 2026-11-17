@@ -90,7 +90,7 @@ text hash, kind, publisher, silo, parent, child, optional result id/position/tur
 parent access position. A sourced interim review becomes stale when its turn completes.
 
 `POST /api/conversations/:child/publications` accepts strict `{id, review, text}`.
-It records one `conversation.child_result_published` encrypted with the parent's key
+It records one `conversation.child_result_published` with bounded plaintext `utterance`
 and returns `{status: "appended", sequence}`. The recorded origin chooses the parent.
 The existing parent `changes/:id` GET confirms the save after projection.
 

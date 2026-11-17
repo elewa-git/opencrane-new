@@ -12,7 +12,7 @@
     "opt/native/node_modules/@openai/codex-linux-x64/package.json": "64bcf4ada80b1236fbc20de2a41f10cd91ede666e50350148a931e221eb5c25f",
     "opt/native/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex": "1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e",
     "app/apps/computer/src/private-codex.ts": "97f8dfee3ca713a5b759d62c9d0adfa4a99eff78c383a658b8f3726ec63b62c9",
-    "app/apps/computer/src/codex-config.ts": "19ea31191d80fb6731f9ce1dc66eb41b2f28a38758b21d042e3ed5a639b3868e",
+    "app/apps/computer/src/codex-config.ts": "93ffc2aa84e312c1b1008a3b2af93f89b9e1c7525a7a38e0faded0d7850c7507",
     "app/apps/computer/src/codex-connection.ts": "b3ad1d74cabc65151eacac402f42a71f779287b1a017ae50e37e0774c6a9f330",
     "app/apps/computer/src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6"
   },

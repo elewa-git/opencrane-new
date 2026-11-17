@@ -1254,10 +1254,8 @@ leadership cancellation and original turn id into that composition. The test run
 this callback through `runRoutineScheduler`; the worker still supplies none of its
 runtime dependencies. Public routine reads still report `executionAvailable: false`. See
 [the build record](../../docs/process/p4-24-pr10i/README.robot.md).
-`test/routine-custody.test.ts` checks restart decryption with the existing key
-format, wrong-silo refusal and missing files. `test/routine-dispatch.test.ts`
-checks that an enabled worker refuses missing custody and still makes no claim,
-hold or send when custody is present.
+`test/routine-dispatch.test.ts` checks that an enabled worker refuses a missing silo
+and still makes no claim, hold or send when the silo is present.
 `test/routine-dispatch.test.ts` starts the real worker with absent, false, true
 and invalid settings. It checks continued projection work when off and startup
 refusal without claims when on or invalid. It also checks the helper's exact

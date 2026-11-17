@@ -132,7 +132,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerAuditRoutes(app, authConfig, options.audit);
   registerLiveView(app, authConfig, options.liveView);
 
-  registerApprovalRoutes(app, authConfig, options.chat);
+  registerApprovalRoutes(app, authConfig, options.chat, options.readOnly);
   registerBudgetStopRoutes(app, authConfig, options.chat);
   registerFileRoutes(app, authConfig, options.files);
   registerScreenshots(app, authConfig, options.files, options.liveView);

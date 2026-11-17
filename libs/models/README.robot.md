@@ -1557,9 +1557,11 @@ check whether that turn stopped. Callers must supply `approvalRows` containing
 the discovered approval request events; this function never discovers them by
 scanning the silo log.
 `approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
-record expiry/cancellation through conditional appends. Shared child callers set
+record expiry/cancellation through conditional appends. With `readOnly: true`, cards
+use the same checks to display terminal state without saving or granting retry.
+Shared child callers set
 `requesterOnly: true` on `approvalCards`. It excludes other requesters before
-loading approval history or decrypting their review. Existing callers retain their
+loading approval history or reading their review. Existing callers retain their
 current behaviour. Safe shared approval metadata is deferred to a later contract.
 A request is bound to silo,
 requester, conversation, logical turn, assistant, server, tool/schema revision,
@@ -1821,7 +1823,7 @@ tests retain their original security checks.
 
 The synthetic reader in `test/summary-memory.ts` supplies a posted message, a turn
 start and a turn completion for every turn. Each message carries a distinct
-32,000-character ciphertext placeholder. Source rows are not kept by the reader.
+32,000-character prose placeholder. Source rows are not kept by the reader.
 Ids are 36-character UUIDs. Events include request, conversation and turn
 correlation ids, with strings copied as on decoding. Node 22.23.3 uses `--expose-gc`
 and a 256 MiB heap cap. Collected heap with and without the store gives retained

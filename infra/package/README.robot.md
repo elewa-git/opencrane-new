@@ -2057,6 +2057,7 @@ New uploads on ordinary installations keep the normal scanner checks.
 Final verification repeats native history, projection, rights and file comparisons.
 Only then does the Job open the server for authenticated reads and mark completion.
 The server refuses API writes, including owner claims, with `restore_read_only`.
+Its NATS identity cannot append. Approval reads compute terminal state without saving it.
 Dispatcher, models, tools, routines, computers and scheduled backups remain held.
 Sign-in uses the restored membership and does not create another owner. Use the
 normal conversation and file routes to verify authorised and denied reads.

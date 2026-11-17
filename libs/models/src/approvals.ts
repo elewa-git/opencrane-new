@@ -26,6 +26,7 @@ interface ApprovalReadOptions {
 interface ApprovalCardsOptions extends ApprovalReadOptions {
   approvalRows: StoredEvent[];
   requesterOnly?: boolean;
+  readOnly?: boolean;
 }
 
 // Build the id before writing so a mismatched retry cannot create another card.
@@ -360,7 +361,7 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   memberId: string, options: ApprovalCardsOptions): Promise<ApprovalCard[]> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
-  const readOptions = { now, deadline };
+  const readOptions = { now, deadline, deferInvalidation: options.readOnly === true };
   const ids: string[] = [];
   for (const { event } of options.approvalRows) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;
@@ -372,6 +373,10 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   const cards: ApprovalCard[] = [];
   for (const id of ids) {
     const current = await readApproval(store, silo, id, readOptions);
+    if (options.readOnly && current.invalidation) {
+      current.state = current.invalidation.type === 'approval.expired' ? 'expired' : 'cancelled';
+      current.canRetry = false;
+    }
     const { request } = current;
     const text = request.review;
     if (sha256Hex(text) !== request.reviewDigest) throw new Error('Review digest mismatch');

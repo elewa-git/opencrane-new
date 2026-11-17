@@ -76,7 +76,7 @@ async function suppliesDispatchNetwork() {
   const context = { stageBNetwork, acknowledged, mcpRoutes: [], requireDispatchLeader,
     watch, childStart };
   const options = runInNewContext(`(${declaration[1]})`, context) as
-    NonNullable<Parameters<typeof startDecision>[6]>;
+    NonNullable<Parameters<typeof startDecision>[5]>;
   assert.equal(options.remoteNetwork, stageBNetwork);
 }
 test('the complete models entrypoint supplies the dispatch service transport',
