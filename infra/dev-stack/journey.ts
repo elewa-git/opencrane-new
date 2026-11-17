@@ -340,9 +340,10 @@ async function append(type: string, subject: string, data: Record<string, unknow
     time: new Date().toISOString(), principal: { kind: 'human', id: principalId },
     data: { ...example, ...data } });
   assert(parsed.success);
-  let expectedSequence = 0;
-  for await (const stored of events.store.readStream(subject)) expectedSequence = stored.sequence;
-  const result = await events.store.append({ event: parsed.event, expectedSequence });
+  // Use the fresh command id above; no earlier retry can have used it.
+  const expectedSequence = await events.store.head(subject);
+  const result = await events.store.append({ event: parsed.event, expectedSequence,
+    historyChecked: true });
   assert.equal(result.status, 'appended');
 }
 function headers(memberId: string) {
