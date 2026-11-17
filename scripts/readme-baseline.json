@@ -27,20 +27,6 @@
     "count": 275
   },
   {
-    "file": "apps/server/README.md",
-    "rule": "headings"
-  },
-  {
-    "file": "apps/server/README.md",
-    "rule": "summary",
-    "count": 212
-  },
-  {
-    "file": "apps/server/README.md",
-    "rule": "length",
-    "count": 807
-  },
-  {
     "file": "apps/server/README.robot.md",
     "rule": "robot-length",
     "count": 7454
@@ -82,16 +68,6 @@
   {
     "file": "libs/event-store/README.md",
     "rule": "opening"
-  },
-  {
-    "file": "libs/events/README.md",
-    "rule": "summary",
-    "count": 54
-  },
-  {
-    "file": "libs/events/README.md",
-    "rule": "length",
-    "count": 266
   },
   {
     "file": "libs/handlers/README.md",
