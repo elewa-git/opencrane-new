@@ -1,3 +1,4 @@
+import { conversationHistoryFixture } from '@opencrane/models/testing';
 import { freePort } from '@opencrane/event-store/testing';
 import { z } from 'zod';
 import { budgetCallDispatchAdmittedDataSchema, decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
@@ -94,7 +95,8 @@ async function initialise() {
   secrets = providerSecrets(secretDirectory);
   const verificationOptions = { secrets,
     gatewayUrl: `http://127.0.0.1:${port}` };
-  decision = await startDecision(actor, { issuer, jwks: tokens.jwks }, binding,
+  const conversationHistory = conversationHistoryFixture(nats.store, 'acme');
+  decision = await startDecision(actor, { issuer, jwks: tokens.jwks, conversationHistory }, binding,
     0, verificationOptions);
   await writeFile(`${secretDirectory}/legacy-key`, 'fixture-only');
   const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');

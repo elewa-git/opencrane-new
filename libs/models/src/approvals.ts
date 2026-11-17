@@ -11,6 +11,7 @@ import { approvalGrantRevoked, approvalPolicyChange, approvalTakenOver }
 import { approvalRecord } from './approval-record.ts';
 import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
+import type { DecisionConversationReader } from './decision-conversation.ts';
 
 
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
@@ -22,6 +23,7 @@ interface ApprovalReadOptions {
   now?: Date;
   deadline?: number;
   conversationRows?: StoredEvent[] | undefined;
+  conversationHistory?: DecisionConversationReader | undefined;
 }
 
 interface ApprovalCardsOptions extends ApprovalReadOptions {
@@ -150,8 +152,9 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   let canRetry = dispatch.canRetry;
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
+    const conversationRows = await approvalConversationRows(store, request, options);
     const checked = await invalidated(store, silo, request, rows[0]!.sequence,
-      deadline, options.conversationRows);
+      deadline, conversationRows);
     conversationPosition = checked.conversationPosition;
     let terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
     if (checked.cancelReason === 'takeover' && permitId) {
@@ -171,12 +174,26 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       }
       const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
-      const readOptions = { now, deadline, conversationRows: options.conversationRows };
+      const readOptions = { now, deadline, conversationRows,
+        conversationHistory: options.conversationHistory };
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
   return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
     conversationPosition, canRetry, toolReplied, retryRequested };
+}
+
+async function approvalConversationRows(store: EventStore, request: Request,
+  options: ApprovalReadOptions) {
+  if (options.conversationRows || !options.conversationHistory) {
+    return options.conversationRows;
+  }
+  const deadline = options.deadline ?? Infinity;
+  const head = await store.head(undefined, deadline);
+  const lookup = { conversationId: request.conversationId, turnId: request.turnId,
+    deadline, head };
+  const result = await options.conversationHistory(lookup);
+  return result.conversation;
 }
 
 async function verifiedDispatch(store: EventStore, silo: string, approvalId: string,
@@ -362,7 +379,8 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   memberId: string, options: ApprovalCardsOptions): Promise<ApprovalCard[]> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
-  const readOptions = { now, deadline, deferInvalidation: options.readOnly === true };
+  const readOptions = { now, deadline, conversationHistory: options.conversationHistory,
+    deferInvalidation: options.readOnly === true };
   const ids: string[] = [];
   for (const { event } of options.approvalRows) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;

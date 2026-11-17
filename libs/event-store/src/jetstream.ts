@@ -414,9 +414,10 @@ export class EventStore {
     fromSequence = 1,
     deadline = Infinity,
     includeConversationCloses = false,
+    throughSequence = Infinity,
   ): AsyncGenerator<StoredEvent> {
     const wire = conversationReadSubject(subject, includeConversationCloses);
-    const head = await this.readHead(deadline);
+    const head = Math.min(await this.readHead(deadline), throughSequence);
     let sequence = Math.max(1, fromSequence);
     while (sequence <= head) {
       if (this.clock.now() >= deadline) {

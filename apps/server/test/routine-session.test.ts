@@ -4,6 +4,7 @@ import { expectRoutineInputAuthorityCycles } from './support/routine-input-autho
 import { readConversationProse } from '@opencrane/events';
 import { holdFixtureClock, withRoutineFixtureClock }
   from '../../ops/test/support/routine-clock.ts';
+import { conversationHistoryFixture } from '@opencrane/models/testing';
 /* eslint max-lines: ["error", { max: 2512, skipBlankLines: true, skipComments: true }] */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { once, once as onceEvent } from 'node:events';
@@ -1918,7 +1919,8 @@ function routineRootTests() {
         turn: turnId, thread: selection.threadId, task: 'chat_turn', model: 'gpt-6.1-sol',
         requester: 'alice', computerTokenId: 'token:dispatch', delegation: ['alice'] },
       'decision-service');
-      const identity = { jwks: { keys: [jwk] }, issuer };
+      const conversationHistory = conversationHistoryFixture(nats.store, 'test');
+      const identity = { jwks: { keys: [jwk] }, issuer, conversationHistory };
       const upstream = await routineTool();
       const logger = createLogger('routine-decision-test', { level: 'silent' });
       const decision = await startDecision(actor, identity, binding, 0, undefined, upstream.options, undefined, logger);

@@ -672,11 +672,29 @@ The existing conditional append and readback save one `approval.cancelled` with
 result. Used consent retains dispatch evidence and cannot retry during matching control.
 History loads do not add conversation or computer streams to access watches.
 
+## Conversation records for gateway decisions
+
+The models process supplies `decisionConversationReader` to `startDecision`.
+The reader uses the conversation projection's event index to load creation,
+participation and closing records, the current turn's records and queued message,
+and the latest message and turn start. It excludes the shared list of output reports.
+It checks every returned reference against the saved NATS event. These records retain
+requester, payer, turn, approval and shared-child checks without replaying earlier messages.
+The reader then reads only conversation activity after the projection's saved global
+position, through the request's captured position. Later confirmations retain the
+same access deadline and read only activity after that captured position.
+
+Approval cards, held-call status and commands use this reader too. `readFirstEvent` shares the saved
+creation position with participation and private-session checks. A lost or changed
+creation still refuses the operation; no private content or access result is cached.
+The bounded-reader test records both single-event and stream reads at 100, 1,500 and
+5,000 earlier messages. Restoring the whole-history path must fail its read-count limit.
+
 ## Tool history and the shared request deadline
 
 Ordinary MCP decisions keep the original two-second deadline from request start.
-They read full conversation history before taking the access snapshot, then check
-only later activity and the small access streams. They do not restart the clock
+They read the indexed conversation records before taking the access snapshot, then
+check only later activity and the small access streams. They do not restart the clock
 after history. The gateway keeps its original two-second authorisation timeout.
 Managed-model and memory preparation retain main's separate deadlines, including
 the fifteen-second memory gateway wait.
@@ -688,7 +706,7 @@ uncertain hold. `apps/server/test/integration-access-gateway.test.ts` also advan
 the monotonic clock by 2,100 ms after history, or by 1,900 ms after history and
 200 ms during access. Both must return 503 with no remote call. Its ordinary call
 still requires 200, one remote call and the same request bytes. All cases require
-full history to load before access reads.
+the bounded history read to finish before access reads.
 
 ## Gateway configuration checks and call usage
 
