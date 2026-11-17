@@ -48,5 +48,12 @@ then reads only activity saved after the request's captured position.
   events. It now answers HTTP 200 and stays within eight conversation events.
 - PASS: bypassing creation validation made the first-event test accept another silo.
   Its refusal assertion failed. Validation was restored.
+- PASS: after 1,000 output reports, approval confirmation first read 709 conversation
+  events and failed its limit of sixteen. Keeping the snapshot's checked position
+  makes confirmation succeed within the bound even when reports are omitted.
+- PASS: an unrelated participant change awaiting its IAM receipt initially prevented
+  the requester from getting an approval card. Reusing the event store's conversation
+  selection guard preserves the existing separation between conversation history
+  and participant access checks. The regression now gets a requested card.
 - Existing assertions remain unchanged. Read observers forward the new optional
   upper position so instrumentation preserves the event-store contract.

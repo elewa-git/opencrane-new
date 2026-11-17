@@ -1,3 +1,5 @@
+import { conversations } from '@opencrane/projections';
+import { envelope } from '@opencrane/models';
 import { countConversationReads } from './support/conversation-reads.ts';
 import { appendFile } from 'node:fs/promises';
 import { expect, it, vi } from 'vitest';
@@ -56,3 +58,57 @@ async function readsLongConversationCallStatus() {
 }
 it('reads original call status after 5,000 messages without replaying the conversation',
   readsLongConversationCallStatus, 40_000);
+
+async function boundsApprovalAfterOutputReports() {
+  const setup = await approvalFixture();
+  try {
+    const headers = await seedLongConversation(setup);
+    const encrypted = setup.keys.encrypt('test', 'conversation', 'Earlier output');
+    const reports = [];
+    for (let index = 0; index < 1000; index++) {
+      const data = { conversationId: 'conversation', turnId: 'long-turn',
+        messageId: 'long-output', contentType: 'text', ...encrypted };
+      reports.push(envelope('test', 'conversation-conversation', 'agent.message_delta', data));
+    }
+    await setup.nats.seed(reports);
+    await setup.runner.run(conversations);
+    const response = await setup.call(undefined, headers);
+    expect(response.status, response.text).toBe(403);
+    const session = setup.headers();
+    const { cards, csrf } = await setup.read(session);
+    const counts = countConversationReads(setup.nats.store, 'conversation-conversation');
+    const decision = await setup.app.inject({ method: 'POST',
+      url: '/api/conversations/conversation/approvals',
+      headers: { ...session, 'x-csrf-token': csrf },
+      payload: { approvalId: cards[0]!.approvalId, decision: 'approved' } });
+    expect(counts.conversationEvents).toBeLessThanOrEqual(16);
+    expect(decision.statusCode, decision.body).toBe(200);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('keeps approval confirmation bounded after 1,000 output reports in a long chat',
+  boundsApprovalAfterOutputReports, 40_000);
+
+async function ignoresAnotherParticipantsPendingReceipt() {
+  const setup = await approvalFixture();
+  try {
+    const joined = await setup.append('member-bob', 'member.joined', {
+      memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'member',
+    });
+    await setup.auth.handler.handle(joined, setup.db);
+    await setup.append('participation-conversation', 'participant.added', {
+      conversationId: 'conversation', participantId: 'bob', addedBy: 'alice',
+    });
+    const response = await setup.call();
+    expect(response.status, response.text).toBe(403);
+    const { cards } = await setup.read();
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ state: 'requested', canDecide: true });
+  } finally {
+    await setup.close();
+  }
+}
+it('does not make an unchanged requester wait for another participant’s IAM receipt',
+  ignoresAnotherParticipantsPendingReceipt, 40_000);

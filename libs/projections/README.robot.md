@@ -506,7 +506,9 @@ uses the same read-only custody as rebuild.
 ## Conversation decision index
 
 The `conversations` projection also writes `decision_conversation_events` in its
-existing transaction. The index stores only silo, conversation, position, event id,
+existing transaction. It uses the event store’s conversation-read guard, including
+participation closes and keeping other participation changes separate. The index
+stores only silo, conversation, position, event id,
 type and turn id. Its indexes support metadata, exact turn and queued-message lookups,
 and the latest record of each requested type. Selection returns saved event positions;
 business checks remain in TypeScript in the models library.
