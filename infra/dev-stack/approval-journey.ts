@@ -35,6 +35,18 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
   const tokens = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${input.origin}/` });
   const serverId = 'approval-journey', connectionId = 'installed';
   const upstream = `http://127.0.0.1:${settings['MODEL_STUB_PORT']}`;
+  const until = async (check: () => Promise<boolean>) => {
+    const deadline = Date.now() + 90_000;
+    while (!await check()) { assert(Date.now() < deadline, 'Approval journey timeout'); await delay(100); }
+  };
+  const conversationId = randomUUID();
+  const firstPage = pages[0]!;
+  const response = await firstPage.request.post(`${input.origin}/api/conversations`,
+    { headers: { origin: input.origin },
+      data: { id: randomUUID(), conversationId, assistantId: input.assistantId } });
+  assert.equal(response.status(), 200, 'Requester creates the conversation');
+  await until(async () => (await auth.conversation(input.requesterId, conversationId, 'post')).allowed);
+  await seedApprovalChat(store, input.silo, conversationId, input.assistantId);
   await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: `${upstream}/mcp`, registeredBy: 'zitadel-owner' });
   const writeTool = approvalJourneyTool();
   await reviewJourneyTools(ownerPage, store, input.silo, input.origin, append,
@@ -42,10 +54,6 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
   for (const [granteeId, granteeKind] of [[input.requesterId, 'member'], [input.assistantId, 'assistant']]) {
     await append('grant.given', grantStream('mcp_server', serverId), { resourceType: 'mcp_server', resourceId: serverId, granteeId, granteeKind, grantedBy: 'zitadel-owner' });
   }
-  const until = async (check: () => Promise<boolean>) => {
-    const deadline = Date.now() + 90_000;
-    while (!await check()) { assert(Date.now() < deadline, 'Approval journey timeout'); await delay(100); }
-  };
   const grants = await history(store, grantStream('mcp_server', serverId), input.silo);
   await until(async () => (await Promise.all(grants.map(row => auth.applied(row.event.id)))).every(Boolean));
   await until(async () => (await Promise.all([
@@ -57,14 +65,6 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
     return z.array(z.object({ body: z.string(), requestId: z.uuid() })).parse(await response.json());
   };
   await mkdir('docs/process/p3-2-live', { recursive: true });
-  const conversationId = randomUUID();
-  const firstPage = pages[0]!;
-  const response = await firstPage.request.post(`${input.origin}/api/conversations`,
-    { headers: { origin: input.origin },
-      data: { id: randomUUID(), conversationId, assistantId: input.assistantId } });
-  assert.equal(response.status(), 200, 'Requester creates the conversation');
-  await until(async () => (await auth.conversation(input.requesterId, conversationId, 'post')).allowed);
-  await seedApprovalChat(store, input.silo, conversationId, input.assistantId);
   for (const page of pages) {
     const width = page.viewportSize()!.width;
     const turnId = randomUUID();
