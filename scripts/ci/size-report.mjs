@@ -22,7 +22,8 @@ export function parseNumstat(text) {
     if (!match) continue;
     let path = match[3];
     if (path.startsWith('"')) path = JSON.parse(path);
-    changes.push({ path, added: Number(match[1]), deleted: Number(match[2]) });
+    const change = { path, added: Number(match[1]), deleted: Number(match[2]) };
+    changes.push(change);
   }
   return changes;
 }
@@ -70,12 +71,14 @@ function packageCounts(paths) {
   for (const path of paths) {
     if (!/^(apps|libs)\/[^/]+\/package.json$/u.test(path)) continue;
     const name = path.slice(0, -'/package.json'.length);
-    packages.set(name, { name, source: 0, tests: 0 });
+    const counts = { name, source: 0, tests: 0 };
+    packages.set(name, counts);
   }
   for (const path of paths) {
     const category = classify(path);
     if (category !== 'source' && category !== 'tests') continue;
-    const name = path.split('/').slice(0, 2).join('/');
+    const segments = path.split('/');
+    const name = `${segments[0]}/${segments[1]}`;
     const counts = packages.get(name);
     if (!counts) continue;
     const content = readFileSync(path);

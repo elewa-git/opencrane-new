@@ -86,8 +86,10 @@ function reportsWithoutGate() {
     assert.match(result.stdout, /\| apps\/server \| 2 \| 10 \| 5.0 \|/);
     assert.match(result.stdout, /Pull request changes/);
     assert.equal(readFileSync(summary, 'utf8'), result.stdout);
-    const lines = result.stdout.trim().split('\n');
-    const report = JSON.parse(lines.at(-1).slice('size-report:'.length));
+    const trimmed = result.stdout.trim();
+    const lines = trimmed.split('\n');
+    const jsonLine = lines.at(-1);
+    const report = JSON.parse(jsonLine.slice('size-report:'.length));
     assert.deepEqual(report.pullRequest.source, { added: 1, deleted: 0 });
     assert.equal(report.packages.length, 1);
     const localEnv = { ...env, BASE_SHA: '', HEAD_SHA: '' };
