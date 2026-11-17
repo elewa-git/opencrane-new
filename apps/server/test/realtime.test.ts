@@ -34,9 +34,11 @@ beforeEach(async () => {
   await runner.initialise(members);
   await runner.initialise(groups);
   authz = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
-  await append('alice', 'member.invited', { invitationId: 'invite-alice',
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } });
-  await append('alice', 'member.joined', { invitationId: 'invite-alice', role: 'admin' });
+  await appendAndProject({ memberId: 'alice', type: 'member.invited', data: { invitationId: 'invite-alice',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'alice', type: 'member.joined', data: { invitationId: 'invite-alice', role: 'admin' },
+    project: true, authorise: true });
   server = await startRealtimeServer();
 // Fixture setup includes certificates, PostgreSQL and a real server process.
 }, 60_000);
@@ -138,16 +140,19 @@ it('replays, streams committed changes, and reconnects without gaps or duplicate
   client.subscribe();
   await until(() => client.messages.some((message) => message.type === 'ready'));
   expect(client.messages.filter((message) => message.type === 'member').map((message) => message.position)).toEqual([1, 2]);
-  await append('bob');
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: {},
+    project: true, authorise: true });
   await until(() => client.messages.some((message) => message.position === 3));
   const closed = once(client.ws, 'close');
   client.ws.close();
   await closed;
-  await append('carol');
+  await appendAndProject({ memberId: 'carol', type: 'member.joined', data: {},
+    project: true, authorise: true });
   const resumed = await connect();
   resumed.subscribe(3);
   // Include an event saved during the initial read exactly once.
-  await append('dan');
+  await appendAndProject({ memberId: 'dan', type: 'member.joined', data: {},
+    project: true, authorise: true });
   await until(() => resumed.messages.some((message) => message.position === 5));
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.position)).toEqual([4, 5]);
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.member.memberId)).toEqual(['carol', 'dan']);
@@ -164,7 +169,8 @@ it('keeps a subscriber live while replay catches an arriving event and switches 
         yield stored;
         if (!appended) {
           appended = true;
-          await append('carol', 'member.joined', {}, false);
+          await appendAndProject({ memberId: 'carol', type: 'member.joined', data: {},
+    project: false, authorise: true });
         }
       }
     },
@@ -177,7 +183,8 @@ it('keeps a subscriber live while replay catches an arriving event and switches 
   );
   expect(result).toMatchObject({ previousSequence: 2, sequence: 3, verified: true, changed: false });
   await until(() => client.messages.some((message) => message.position === 3));
-  await append('dan');
+  await appendAndProject({ memberId: 'dan', type: 'member.joined', data: {},
+    project: true, authorise: true });
   await until(() => client.messages.some((message) => message.position === 4));
   expect(client.ws.readyState).toBe(WebSocket.OPEN);
   expect(client.messages.filter((message) => message.type === 'member').map((message) => message.member.memberId))
@@ -215,7 +222,8 @@ it('keeps uncommitted and rolled-back rows off the socket', async () => {
   const client = await connect();
   client.subscribe(2);
   await until(() => client.messages.some((message) => message.type === 'ready'));
-  await append('bob', 'member.joined', {}, false);
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: {},
+    project: false, authorise: true });
   let release: () => void = () => { throw new Error('No transaction'); };
   const held = new Promise<void>((resolve) => { release = resolve; });
   let applied = false;
@@ -240,12 +248,14 @@ it('fails closed when OpenFGA is unavailable, and closes an existing socket on r
   client.subscribe();
   await until(() => client.messages.some((message) => message.type === 'ready'));
   const removed = once(client.ws, 'close');
-  await append('alice', 'member.removed');
+  await appendAndProject({ memberId: 'alice', type: 'member.removed', data: {},
+    project: true, authorise: true });
   expect((await removed)[0]).toBe(1008);
   await fga.pause();
   try {
     // Restore the SQL identity from events so this exercises the actual unavailable check.
-    await append('alice', 'member.invited', { invitationId: 'again', invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } });
+    await appendAndProject({ memberId: 'alice', type: 'member.invited', data: { invitationId: 'again', invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } },
+    project: true, authorise: true });
     const raw = event(`realtime-${++sequence}`, 'member-alice');
     await nats.store.append({ expectedSequence: 4, event: { ...raw, principal: { kind: 'human', id: 'oidc-alice' }, data: { ...raw.data, role: 'admin', invitationId: 'again' } } });
     await runner.run(members);
@@ -274,7 +284,8 @@ it('drops live deltas for a paused consumer and replays every missing position o
   // Stop at 16 MB so a broken backpressure check fails without unbounded memory use.
   while (!backpressured() && changeCount < 256) {
     for (let i = 0; i < 32; i++) {
-      await append(`slow-${changeCount++}`, 'member.joined', { displayName: 'x'.repeat(64_000) }, false);
+      await appendAndProject({ memberId: `slow-${changeCount++}`, type: 'member.joined', data: { displayName: 'x'.repeat(64_000) },
+    project: false, authorise: true });
     }
     await runner.run(members);
   }
@@ -317,12 +328,14 @@ async function checksHeartbeatPeers() {
 it('terminates a peer that does not answer heartbeats', checksHeartbeatPeers, 20_000);
 
 async function refusesStaleAuthority(change: 'member.role_changed' | 'member.removed') {
-  await append('bob');
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: {},
+    project: true, authorise: true });
   let data = {};
   if (change === 'member.role_changed') {
     data = { previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
   }
-  await append('alice', change, data, false, false);
+  await appendAndProject({ memberId: 'alice', type: change, data: data,
+    project: false, authorise: false });
   expect((await authz.check('alice', 'admin')).allowed).toBe(true);
   const client = await connect();
   const closed = once(client.ws, 'close');
@@ -358,9 +371,11 @@ it('refuses member reads when OpenFGA has revoked access but membership events a
 });
 
 it('admits the allowed owner from another organisation to member reads and the live feed', async () => {
-  await append('owner', 'member.invited', { invitationId: 'invite-owner',
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-owner' } });
-  await append('owner', 'member.joined', { invitationId: 'invite-owner', role: 'owner' });
+  await appendAndProject({ memberId: 'owner', type: 'member.invited', data: { invitationId: 'invite-owner',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-owner' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'owner', type: 'member.joined', data: { invitationId: 'invite-owner', role: 'owner' },
+    project: true, authorise: true });
   const directory = await fetch(`http://127.0.0.1:${server.port}/api/members`,
     { headers: headers('oidc-owner', 'org-owner-home') });
   expect(directory.status).toBe(200);
@@ -382,14 +397,20 @@ it('refuses member reads from a different organisation', async () => {
 });
 
 it('returns not found for removed and pending member headers', async () => {
-  await append('bob', 'member.invited', { invitationId: 'invite-bob',
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } });
-  await append('bob', 'member.joined', { invitationId: 'invite-bob' });
-  await append('bob', 'member.removed');
-  await append('pending', 'member.invited', { invitationId: 'invite-pending' });
-  await append('carol', 'member.invited', { invitationId: 'invite-carol',
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-carol' } });
-  await append('carol', 'member.joined', { invitationId: 'invite-carol' });
+  await appendAndProject({ memberId: 'bob', type: 'member.invited', data: { invitationId: 'invite-bob',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: { invitationId: 'invite-bob' },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'bob', type: 'member.removed', data: {},
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'pending', type: 'member.invited', data: { invitationId: 'invite-pending' },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'carol', type: 'member.invited', data: { invitationId: 'invite-carol',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-carol' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'carol', type: 'member.joined', data: { invitationId: 'invite-carol' },
+    project: true, authorise: true });
 
   const removed = await memberRead('/api/members/bob', 'oidc-carol');
   expect(removed.status).toBe(404);
@@ -411,9 +432,11 @@ it('returns unavailable when a stored membership event has an invalid role', asy
 });
 
 async function refusesOrdinaryMember() {
-  await append('bob', 'member.invited', { invitationId: 'invite-bob',
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } });
-  await append('bob', 'member.joined', { invitationId: 'invite-bob' });
+  await appendAndProject({ memberId: 'bob', type: 'member.invited', data: { invitationId: 'invite-bob',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: { invitationId: 'invite-bob' },
+    project: true, authorise: true });
   const client = await connect('oidc-bob');
   const closed = once(client.ws, 'close');
   client.subscribe();
@@ -428,9 +451,11 @@ async function memberRead(path: string, sub = 'oidc-alice') {
   return fetch(`http://127.0.0.1:${server.port}${path}`, { headers: headers(sub) });
 }
 async function readsMinimalHeader() {
-  await append('bob', 'member.invited', { invitationId: 'invite-bob',
-    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } });
-  await append('bob', 'member.joined', { invitationId: 'invite-bob' });
+  await appendAndProject({ memberId: 'bob', type: 'member.invited', data: { invitationId: 'invite-bob',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: { invitationId: 'invite-bob' },
+    project: true, authorise: true });
   const before = await nats.store.head();
   const response = await memberRead('/api/members/alice', 'oidc-bob');
   expect(response.status).toBe(200);
@@ -445,12 +470,17 @@ it('gives a Member only the header and false management flags, never the directo
   readsMinimalHeader);
 
 async function readsBoundedDirectory() {
-  await append('pending', 'member.invited', { expiresAt: '2099-01-01T00:00:00Z' });
-  await append('pending', 'member.invited', { invitationId: 'latest',
-    expiresAt: '2099-01-01T00:00:00Z' });
-  await append('expired', 'member.invited', { expiresAt: new Date().toISOString() });
-  await append('bob', 'member.joined', { email: 'bob@example.test' });
-  await append('carol', 'member.joined', { email: 'carol@example.test' });
+  await appendAndProject({ memberId: 'pending', type: 'member.invited', data: { expiresAt: '2099-01-01T00:00:00Z' },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'pending', type: 'member.invited', data: { invitationId: 'latest',
+    expiresAt: '2099-01-01T00:00:00Z' },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'expired', type: 'member.invited', data: { expiresAt: new Date().toISOString() },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: { email: 'bob@example.test' },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'carol', type: 'member.joined', data: { email: 'carol@example.test' },
+    project: true, authorise: true });
   const before = await nats.store.head();
   const response = await memberRead('/api/members?after=&limit=1');
   expect(response.status).toBe(200);
@@ -472,7 +502,8 @@ async function readsBoundedDirectory() {
   for (const query of ['limit=51', 'q=' + 'x'.repeat(101), 'after=*']) {
     expect((await memberRead('/api/members?' + query)).status).toBe(400);
   }
-  await append('bob', 'member.removed', {}, false, false);
+  await appendAndProject({ memberId: 'bob', type: 'member.removed', data: {},
+    project: false, authorise: false });
   const delayed = await memberRead('/api/members');
   expect(await delayed.json()).toMatchObject({ rows: [
     { memberId: 'alice' }, { memberId: 'carol' },
@@ -484,11 +515,13 @@ it('pages the member projection, searches contact email and never calls page len
   readsBoundedDirectory);
 
 it('sets management flags from current roles without writing an event', async () => {
-  await append('bootstrap-owner', 'silo.owner_bootstrapped', {
+  await appendAndProject({ memberId: 'bootstrap-owner', type: 'silo.owner_bootstrapped', data: {
     memberId: 'bootstrap-owner', role: 'owner',
     email: 'owner@example.test', displayName: 'Owner',
-    identity: { issuer: config.issuerUrl, sub: 'oidc-bootstrap-owner' } });
-  await append('bob', 'member.joined', { email: 'bob@example.test' });
+    identity: { issuer: config.issuerUrl, sub: 'oidc-bootstrap-owner' } },
+    project: true, authorise: true });
+  await appendAndProject({ memberId: 'bob', type: 'member.joined', data: { email: 'bob@example.test' },
+    project: true, authorise: true });
   const before = await nats.store.head();
   const ordinary = memberDetailSchema.parse(await (await memberRead('/api/members/bob')).json());
   expect(ordinary.permissions).toEqual({ changeRole: true, remove: true,
@@ -513,7 +546,8 @@ async function closesWithDelayedContent(change: 'member.role_changed' | 'member.
     if (change === 'member.role_changed') {
       data = { previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
     }
-    await append('alice', change, data, false, false);
+    await appendAndProject({ memberId: 'alice', type: change, data: data,
+    project: false, authorise: false });
     const recordedAt = performance.now();
     await until(() => client.ws.readyState === WebSocket.CLOSED, 2100);
     expect(performance.now() - recordedAt).toBeLessThanOrEqual(2000);

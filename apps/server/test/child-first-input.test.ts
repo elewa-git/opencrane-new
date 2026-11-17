@@ -36,7 +36,11 @@ async function append(saved: StoredEvent['event'], apply = true) {
 }
 async function save(subject: string, type: string, data: unknown, apply = true) {
   const saved = { ...event(`fixture-${++counter}`, subject, type), data };
-  return append(saved, apply);
+  return appendAndAuthorise({
+    silo: saved.silo, subject: saved.subject, type: saved.type, data: saved.data,
+    id: saved.id, principal: saved.principal, time: saved.time,
+    commandId: saved.commandId, apply: apply,
+  });
 }
 async function initialise() {
   const fixture = await natsFixture();
@@ -80,7 +84,11 @@ async function post(conversationId: string, authorId: string, text: string) {
     ...encrypted };
   const saved = { ...event(`message-${++counter}`, `conversation-${conversationId}`, 'message.posted'),
     principal: { kind: 'human' as const, id: authorId }, data };
-  return append(saved);
+  return appendAndAuthorise({
+    silo: saved.silo, subject: saved.subject, type: saved.type, data: saved.data,
+    id: saved.id, principal: saved.principal, time: saved.time,
+    commandId: saved.commandId, apply: true,
+  });
 }
 async function prepare(create = true) {
   const conversationId = `parent-${++counter}`;
@@ -292,7 +300,11 @@ async function refusesDifferentInput(patch: string) {
     saved.type = 'agent.turn_stop_requested';
     saved.data = { conversationId: data.childConversationId, turnId: 'turn', requestedBy: 'alice' };
   }
-  await append(saved, false);
+  await appendAndAuthorise({
+    silo: saved.silo, subject: saved.subject, type: saved.type, data: saved.data,
+    id: saved.id, principal: saved.principal, time: saved.time,
+    commandId: saved.commandId, apply: false,
+  });
   const before = await nats.store.head();
   await expect(addChildFirstInput(options, 'alice', input)).rejects.toThrow(ChatConflict);
   expect(await nats.store.head()).toBe(before);

@@ -89,101 +89,182 @@ async function initialise() {
     expect(result.status).toBe('appended');
     await auth.handler.handle(joined, database);
   }
-  await append('team-sales', 'team.created', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-sales', type: 'team.created', data: {
     teamId: 'sales', name: 'Sales team', createdBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-support', 'team.created', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-support', type: 'team.created', data: {
     teamId: 'support', name: 'Support team', createdBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-sales', 'team.member_added', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-sales', type: 'team.member_added', data: {
     teamId: 'sales', memberId: 'owner', addedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-sales', 'team.member_added', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-sales', type: 'team.member_added', data: {
     teamId: 'sales', memberId: 'bob', addedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-sales', 'team.member_added', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-sales', type: 'team.member_added', data: {
     teamId: 'sales', memberId: 'removed', addedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-sales', 'team.member_added', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-sales', type: 'team.member_added', data: {
     teamId: 'sales', memberId: 'invited', addedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-sales', 'team.member_added', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-sales', type: 'team.member_added', data: {
     teamId: 'sales', memberId: 'invited', addedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('member-invited', 'member.invited', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-invited', type: 'member.invited', data: {
     memberId: 'invited', role: 'member', invitationId: 'invite-invited',
     email: 'invited@example.test', invitedBy: 'owner',
     invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invited' },
     expiresAt: '2026-10-08T00:00:00Z',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('member-removed', 'member.joined', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-removed', type: 'member.joined', data: {
     memberId: 'removed', email: 'removed@example.test', displayName: 'Removed Name',
     role: 'member', invitationId: 'invite-removed',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('member-removed', 'member.removed', { memberId: 'removed', removedBy: 'owner' });
-  await append('assistant-bob-assistant', 'assistant.created', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-removed', type: 'member.removed', data: { memberId: 'removed', removedBy: 'owner' },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'assistant-bob-assistant', type: 'assistant.created', data: {
     assistantId: 'bob-assistant', ownerId: 'bob', kind: 'personal',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('assistant-shared-helper', 'assistant.created', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'assistant-shared-helper', type: 'assistant.created', data: {
     assistantId: 'shared-helper', ownerId: 'owner', kind: 'team', name: 'Shared helper',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  const directGrant = await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  const directGrant = await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'owner',
     granteeKind: 'member', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   directGrantId = directGrant.id;
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'sales',
     granteeKind: 'team', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'bob-assistant',
     granteeKind: 'assistant', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'former-member',
     granteeKind: 'member', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  const historicalRevoke = await append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+  const historicalRevoke = await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.revoked', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'former-member',
     revokedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   historicalRevokeId = historicalRevoke.id;
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'sales',
     granteeKind: 'team', grantedBy: 'owner',
-  }, 'other-silo');
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'foreign-team',
     granteeKind: 'team', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'foreign',
     granteeKind: 'member', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'foreign-assistant',
     granteeKind: 'assistant', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  await append('team-sales', 'team.created', {
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: 'team-sales', type: 'team.created', data: {
     teamId: 'sales', name: 'Foreign sales team', createdBy: 'owner',
-  }, 'other-silo');
-  await append('team-sales', 'team.member_added', {
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: 'team-sales', type: 'team.member_added', data: {
     teamId: 'sales', memberId: 'foreign', addedBy: 'owner',
-  }, 'other-silo');
-  await append('team-foreign-team', 'team.created', {
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: 'team-foreign-team', type: 'team.created', data: {
     teamId: 'foreign-team', name: 'Leaked foreign team', createdBy: 'owner',
-  }, 'other-silo');
-  await append('assistant-bob-assistant', 'assistant.created', {
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: 'assistant-bob-assistant', type: 'assistant.created', data: {
     assistantId: 'bob-assistant', ownerId: 'bob', kind: 'personal',
-  }, 'other-silo');
-  await append('assistant-foreign-assistant', 'assistant.created', {
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: 'assistant-foreign-assistant', type: 'assistant.created', data: {
     assistantId: 'foreign-assistant', ownerId: 'foreign', kind: 'personal',
-  }, 'other-silo');
-  await append('member-foreign', 'member.joined', {
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'other-silo', subject: 'member-foreign', type: 'member.joined', data: {
     memberId: 'foreign', email: 'foreign@example.test', displayName: 'Foreign Name',
     role: 'member', invitationId: 'invite-foreign',
-  }, 'other-silo');
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
   await runner.run(members);
   await runner.run(groups);
   await runner.run(modelAccess);
@@ -315,10 +396,13 @@ it('accepts every active model id in the shared response schema',
 
 async function grantsHaveAnExactTotalAndAOneHundredRowLimit() {
   for (let index = 0; index < 101; index++) {
-    await append(grantStream('model', 'gpt-6-sol'), 'grant.given', {
+    await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-sol'), type: 'grant.given', data: {
       resourceType: 'model', resourceId: 'gpt-6-sol', granteeId: `person-${index}`,
       granteeKind: 'member', grantedBy: 'owner',
-    });
+    },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
   }
   await runner.run(modelAccess);
   const response = await request('/api/org/models/gpt-6-sol/access');
@@ -369,8 +453,11 @@ async function adminsMayReadButRemovedAndDemotedCallersMayNot() {
     'https://app.example.test', 'gpt-5.6-sol');
   expect(saved.statusCode).toBe(200);
 
-  await append('member-admin', 'member.role_changed', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-admin', type: 'member.role_changed', data: {
     memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const demotedResponse = await request('/api/org/models/gpt-6-luna/access', 'idp-admin');
   expect(demotedResponse.statusCode).toBe(403);
@@ -460,9 +547,12 @@ it('returns 400 for invalid model ids and candidate queries', badModelAndCandida
 
 async function grantRowsShowWhetherTheProjectionHasAppliedThem() {
   const modelId = 'gpt-6-astra';
-  await append(grantStream('model', modelId), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', modelId), type: 'grant.given', data: {
     resourceType: 'model', resourceId: modelId, granteeId: 'unprojected-member',
     granteeKind: 'member', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const applying = await request(`/api/org/models/${modelId}/access`);
   expect(applying.statusCode).toBe(200);
@@ -608,15 +698,21 @@ async function refusesChange(name: string, sub: string, org: string, origin: str
 it.each(refusedChanges)('refuses %s without writing', refusesChange);
 
 async function refusesDemotionDuringTheWrite() {
-  await append('member-admin', 'member.role_changed', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-admin', type: 'member.role_changed', data: {
     memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const read = nats.store.readStream.bind(nats.store);
   nats.store.readStream = async function* readWithDemotion(subject, from, deadline) {
     if (subject === 'member-bob') {
-      await append('member-admin', 'member.role_changed', {
+      await appendAndAuthorise({
+    silo: 'acme', subject: 'member-admin', type: 'member.role_changed', data: {
         memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
-      });
+      },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
     }
     yield* read(subject, from, deadline);
   };
@@ -633,16 +729,28 @@ async function refusesDemotionDuringTheWrite() {
 it('refuses an admin demoted during a write', refusesDemotionDuringTheWrite);
 
 async function revokesOnlyTheChosenKindAndKeepsDefaultRevocation() {
-  await append('team-bob', 'team.created', { teamId: 'bob', name: 'Bob group', createdBy: 'owner' });
-  await append('team-bob', 'team.member_added', { teamId: 'bob', memberId: 'owner', addedBy: 'owner' });
-  await append('assistant-bob', 'assistant.created', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-bob', type: 'team.created', data: { teamId: 'bob', name: 'Bob group', createdBy: 'owner' },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-bob', type: 'team.member_added', data: { teamId: 'bob', memberId: 'owner', addedBy: 'owner' },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'assistant-bob', type: 'assistant.created', data: {
     assistantId: 'bob', ownerId: 'owner', kind: 'personal',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   for (const granteeKind of ['member', 'team', 'assistant']) {
-    await append(grantStream('model', 'gpt-6-astra'), 'grant.given', {
+    await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-astra'), type: 'grant.given', data: {
       resourceType: 'model', resourceId: 'gpt-6-astra', granteeId: 'bob',
       granteeKind, grantedBy: 'installation',
-    });
+    },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
   }
   const expected = await nats.store.head(grantStream('model', 'gpt-6-astra'));
   const body = changeBody('revoke-default', 'revoke', 'member', 'bob', expected);
@@ -666,8 +774,11 @@ async function revokesOnlyTheChosenKindAndKeepsDefaultRevocation() {
   expect(groupContent[0]?.access.grants).toContainEqual({
     resourceType: 'model', resourceId: 'gpt-6-astra', relation: 'use',
   });
-  await append(grantStream('model', 'gpt-6-astra'), 'grant.revoked', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-astra'), type: 'grant.revoked', data: {
     resourceType: 'model', resourceId: 'gpt-6-astra', granteeId: 'bob', revokedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   expect((await auth.use('person', 'owner', 'model', 'gpt-6-astra')).allowed).toBe(false);
   expect((await auth.use('assistant', 'bob', 'model', 'gpt-6-astra')).allowed).toBe(false);
@@ -764,9 +875,12 @@ async function targetProblemsHaveReasons(name: string, modelId: string, kind: st
 it.each(unavailableTargets)('returns a target conflict for %s', targetProblemsHaveReasons);
 
 async function staleNewCommandDoesNotAppend() {
-  await append(grantStream('model', 'gpt-6-sol'), 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: grantStream('model', 'gpt-6-sol'), type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-6-sol', granteeId: 'bob',
     granteeKind: 'member', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const before = await nats.store.head();
   const response = await writeAccess(changeBody('stale-new-command'));
@@ -777,9 +891,12 @@ it('refuses a new command with a stale expectedSequence', staleNewCommandDoesNot
 
 async function departedMemberGrantCanBeRevoked() {
   const subject = grantStream('model', 'gpt-5-nano');
-  await append(subject, 'grant.given', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: subject, type: 'grant.given', data: {
     resourceType: 'model', resourceId: 'gpt-5-nano', granteeKind: 'member',
     granteeId: 'removed', grantedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const expected = await nats.store.head(subject);
   const body = changeBody('revoke-departed', 'revoke', 'member', 'removed', expected);
@@ -826,9 +943,12 @@ async function targetChangeHasItsOwnConflict() {
     yield* read(subject, from, deadline);
     if (subject === 'member-bob' && !changed) {
       changed = true;
-      await append('member-bob', 'member.role_changed', {
+      await appendAndAuthorise({
+    silo: 'acme', subject: 'member-bob', type: 'member.role_changed', data: {
         memberId: 'bob', previousRole: 'member', newRole: 'member', changedBy: 'owner',
-      });
+      },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
+  });
     }
   };
   try {
@@ -918,8 +1038,11 @@ it('reads grant history before the short check and appends once with historyChec
   grantHistoryFinishesBeforeTheShortCheck);
 
 async function teamHistoryIsReadOnceBeforeTheCheck() {
-  await append('team-support', 'team.member_added', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'team-support', type: 'team.member_added', data: {
     teamId: 'support', memberId: 'owner', addedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const read = nats.store.readStream.bind(nats.store);
   const head = nats.store.head.bind(nats.store);
@@ -970,16 +1093,25 @@ it('reads only the team creation and allows membership activity during the check
 
 async function keepsUnseededStartingGrantsRevoked() {
   const modelId = 'gpt-5.4-pro';
-  const memberJoined = await append('member-invited', 'member.joined', {
+  const memberJoined = await appendAndAuthorise({
+    silo: 'acme', subject: 'member-invited', type: 'member.joined', data: {
     memberId: 'invited', email: 'invited@example.test', displayName: 'New member',
     role: 'member', invitationId: 'invite-invited',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  const teamCreated = await append('team-unseeded-team', 'team.created', {
+  const teamCreated = await appendAndAuthorise({
+    silo: 'acme', subject: 'team-unseeded-team', type: 'team.created', data: {
     teamId: 'unseeded-team', name: 'Unseeded team', createdBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
-  const sharedCreated = await append('assistant-unseeded-shared', 'assistant.created', {
+  const sharedCreated = await appendAndAuthorise({
+    silo: 'acme', subject: 'assistant-unseeded-shared', type: 'assistant.created', data: {
     assistantId: 'unseeded-shared', ownerId: 'unseeded-team', kind: 'team',
     grants: [{ resourceType: 'model', resourceId: modelId }],
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   const startingNats = await natsFixture();
   const startingApp = buildServer(config, {
@@ -1097,8 +1229,11 @@ async function aReadUsesTheAuthorityCheckedWhenItStarted() {
 
   const pendingRead = request('/api/org/models/gpt-6-luna/access');
   await grantReadStarted;
-  await append('member-owner', 'member.role_changed', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-owner', type: 'member.role_changed', data: {
     memberId: 'owner', previousRole: 'owner', newRole: 'member', changedBy: 'bob',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   releaseGrantRead();
   const response = await pendingRead;
@@ -1115,8 +1250,11 @@ function resolveMemberId(_silo: string, _issuer: string, subject: string) {
 }
 
 async function refusesAllModelAccessRoutesAfterRemoval() {
-  await append('member-admin', 'member.role_changed', {
+  await appendAndAuthorise({
+    silo: 'acme', subject: 'member-admin', type: 'member.role_changed', data: {
     memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  },
+    id: `model-access-${++sequence}`, principal: { kind: 'human', id: 'owner' },
   });
   await runner.run(members);
   const base = '/api/org/models/gpt-6.1-sol/access';
