@@ -3,7 +3,7 @@
 ## What this is
 
 These scripts share the root tests between GitHub Actions jobs and find the base
-commit for debt checks. Separate jobs run
+commit for debt checks, and report test size. Separate jobs run
 tests that need the computer image and tests that need Chromium. Other test jobs
 avoid that setup.
 
@@ -16,6 +16,7 @@ commit for lint debt checks. Vitest runs the root tests.
 flowchart LR
   actions["GitHub Actions<br/>repository checks"] -->|chooses jobs and tests| ci["scripts/ci<br/>test jobs"]
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
+  ci -->|reports line counts| summary["Job summary<br/>test size and weekly changes"]
   debt["scripts/check-lint-debt<br/>size limits"] -->|reads base commit| ci
   ci -->|runs files| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
@@ -77,6 +78,14 @@ and ownership controls, running those two browser files one at a time.
 
 Documentation checks also require folder guides and reject ticket and phase
 references in those guides. The README check uses Node and Git without extra installs.
+
+The checks job reports size without a limit or failing check. Source means tracked
+`.ts`, `.html` and `.css` under `apps/*/src` and `libs/*/src`, except test files.
+Tests mean `*.test.ts` and `*.spec.ts` anywhere under `apps` and `libs`, plus all
+other files under `apps/*/test` and `libs/*/test`. Evidence means `docs/process/**`;
+other paths count as other. Counts match `wc -l`. Test/source has one decimal place
+or `n/a` when source is zero. Main changes cover two seven-day periods through the
+PR base (the main merge base locally); PR changes compare the selected base and head.
 
 ## How to run or test it
 
