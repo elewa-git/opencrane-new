@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { testAuthConfig } from '@opencrane/auth/testing';
+import { approvalFixture } from './support/approval-fixture.ts';
 import { buildServer } from '../src/server.ts';
 
 async function keepsRestoredEffectsHeld() {
@@ -23,3 +24,24 @@ async function keepsRestoredEffectsHeld() {
   }
 }
 it('holds writes and owner claims while allowing restored reads', keepsRestoredEffectsHeld);
+
+
+async function readsExpiredReviewsWithoutWriting() {
+  const setup = await approvalFixture(false, undefined, true);
+  try {
+    expect((await setup.call()).text).toContain('approvalId');
+    const before = await setup.read();
+    const position = await setup.nats.store.head();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.parse(before.cards[0]!.expiresAt) + 1);
+    const restored = await setup.read();
+    expect(await setup.nats.store.head()).toBe(position);
+    expect(restored.cards[0]?.state).toBe('cancelled');
+    expect(restored.cards[0]?.canApprove).toBe(false);
+  } finally {
+    vi.useRealTimers();
+    await setup.close();
+  }
+}
+it('reads an expired restored approval without recording a new event',
+  readsExpiredReviewsWithoutWriting);

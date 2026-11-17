@@ -19,7 +19,7 @@ export async function approvalFixture(stepUp = false,
   retainedCall?: () => Promise<{ approvalId: string; turnId: string;
     callId: string; conversationId: string; computerId: string; generation: number;
     serverId: string; connectionId: string; toolName: string;
-    expiresAt: string } | undefined>) {
+    expiresAt: string } | undefined>, readOnly = false) {
   const f = await fixture();
   await f.runner.initialise(conversations);
   await f.runner.run(conversations);
@@ -31,10 +31,10 @@ export async function approvalFixture(stepUp = false,
   function identity(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
   }
-  let app = buildServer(config, { chat });
+  let app = buildServer(config, { chat, readOnly });
   async function restartReader() {
     await app.close();
-    app = buildServer(config, { chat });
+    app = buildServer(config, { chat, readOnly });
   }
   const headers = (sub = 'alice', authTime = 0, approval?: string) => ({ origin: new URL(config.redirectUri).origin,
     cookie: `${config.cookieName}=${encodeSession(config, { sub, orgId: 'org-test', roles: [], authTime,

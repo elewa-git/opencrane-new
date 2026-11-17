@@ -895,6 +895,7 @@ test('restore installation holds bootstrap, writers and models until verified ad
     assert.equal(server.spec.template.spec.containers.some(isModelsContainer), false);
     const api = server.spec.template.spec.containers.find(isServerContainer);
     assert.ok(api.env.some(isRestoreReadOnly));
+    assert.equal(api.env.find(isNatsCertificate)?.value, '/run/opencrane/files/projection.crt');
     assert.equal(namedResource('CronJob', 'pilot-backup').spec.suspend, true);
     const restore = namedResource('CronJob', 'pilot-restore');
     assert.equal(restore.spec.suspend, true);
@@ -919,3 +920,5 @@ function isRestoreReadOnly(setting) {
 function isReadOnlyBackup(mount) {
   return mount.name === 'backups' && mount.readOnly === true;
 }
+
+function isNatsCertificate(setting) { return setting.name === 'NATS_CERT_FILE'; }
