@@ -1,5 +1,6 @@
 /* eslint max-lines: ["error", { max: 1558, skipBlankLines: true, skipComments: true }] */
 import { preflightFixture } from '../../computer/test/private-recall-preflight-fixture.ts';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
 import { privateToolOffer } from './support/private-catalogue.ts';
 import { recallTool } from '../src/memory/mcp.ts';
 import { losslessJson } from '@opencrane/events/lossless-json';
@@ -145,9 +146,8 @@ async function setup() {
     computerId: 'computer', generation: 1, podUid: 'pod' });
   await append('conversation-chat', 'conversation.created', { conversationId: 'chat',
     createdBy: 'alice', assistantId: 'assistant', mode: 'agent_session' });
-  const encrypted = ({ utterance: 'Hello' });
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
-    authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted }, 'turn');
+    authorId: 'alice', authorKind: 'human', contentType: 'text', utterance: 'Hello' }, 'turn');
   await append('computer-assistant', 'computer.turn_started', { conversationId: 'chat',
     turnId: 'turn', requesterId: 'alice', assistantId: 'assistant', computerId: 'computer',
     threadId: 'thread-1', task: 'chat_turn', executionMode: 'restricted' });
@@ -175,8 +175,11 @@ async function setup() {
   const input = { url: computer.socket.url, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test' };
   link = await connectBridge(options, input, computer.issuer);
+  // Keep preparation time out of the access-change scenarios below.
+  const setupClock = holdFixtureClock();
   await startTurn();
   await link.settled();
+  setupClock.mockRestore();
   expect(link.rejection).toBeUndefined();
   sessions.length = 0;
   sessions.push({ conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice',
@@ -1411,9 +1414,8 @@ async function prepareRecallTurn() {
   await append('mcp-memory', 'mcp.server_reviewed', reviewed);
   const published = { serverId: 'memory', publishedBy: 'alice' };
   await append('mcp-memory', 'mcp.server_published', published);
-  const encrypted = ({ utterance: 'Recall my fact' });
   const message = { conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...encrypted };
+    contentType: 'text', utterance: 'Recall my fact' };
   await append('conversation-chat', 'message.posted', message, 'recall-turn');
   const started = { conversationId: 'chat', turnId: 'recall-turn', requesterId: 'alice',
     assistantId: 'assistant', computerId: 'computer', threadId: 'returned-native-1',
@@ -1574,6 +1576,7 @@ async function refusesLostRecall() {
 it('abandons a lost recall discovery reply without resending or releasing a grant', refusesLostRecall);
 
 async function offersQualifiedRecall() {
+  holdFixtureClock();
   const test = await prepareRecallTurn();
   link.sentTurns.delete('chat');
   const rows = await history(nats.store, 'computer-assistant', 'test');
