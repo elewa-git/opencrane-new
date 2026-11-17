@@ -25,7 +25,8 @@ Before migration: PASS, two files / 41 tests, 74.40 seconds.
 The original test cases remain: 24 departure cases and 17 nightly-memory cases.
 The four builder cases add four tests. No full root suite was run, as instructed.
 All 82 departure assertion lines and 50 nightly-memory assertion lines are
-unchanged. The two removed helper assertions now live in `appendEvent`.
+unchanged. The departure helper assertion lives in `appendEvent`. The nightly
+helper keeps its append-status assertion beside its specific envelope construction.
 
 The first combined run caught a return-shape error in the migrated
 `computerEvent`: five departure cases failed on an invalid subject. Return the
@@ -45,15 +46,18 @@ saved event rather than its row. Preserve all assertions and rerun both files.
 - NOT RUN: full root suite, full root lint and independent review, as instructed.
   Web tests/build do not apply: no web files changed.
 - Whole-file local `append` declarations: 36 before, 34 after, all remaining
-  in the server folder. No ops test retains a local `append` declaration.
+  in the server folder. No ops test retains a helper named only `append`.
+  Nightly-memory retains a specifically named fixture writer for its different
+  envelope contract.
 - Duplication score: NOT RUN; the optional tool was not installed for this slice.
 
 Made right: share the append decision once; reuse the event envelope factory,
 existing session codec, OpenFGA store creation and member authorisation. Derive
 member fields from the shared schema. Keep nightly event construction local to
-preserve its identifiers and timestamps, with all saves through `appendEvent`.
-Delete both ops append helpers. Keep existing projection and permission delivery
-steps in their tests. Add no dependency, raised limit or product rule.
+preserve its identifiers, source, actor and timestamps. Save that different
+envelope locally through `appendNightlyEvent`; the shared builder accepts only
+the issue's minimal contract. Delete the departure append helper. Keep existing
+projection and permission delivery steps in their tests. Add no dependency, raised limit or product rule.
 
 Fresh CORE: PASS at `0e762c212d088fbdcd11796fdb6e6f1e3373052b`.
 See the [journey receipt and screenshots](journey.md). Slot 1 is released.
@@ -94,3 +98,34 @@ See the [journey receipt and screenshots](journey.md). Slot 1 is released.
 - `apps/server/test/shared-assistant.test.ts`
 - `apps/server/test/spending-effects.test.ts`
 - `apps/server/test/spending.test.ts`
+
+## Fix round 1
+
+- BLOCKING journey finding: no change, as instructed by the orchestrator's
+  [answer](https://github.com/elewa-git/opencrane-new/pull/1151#issuecomment-6957470216).
+  Clean-code changes use the fresh CORE journey. Product source still matches
+  `0e762c212d088fbdcd11796fdb6e6f1e3373052b`, so that PASS still covers it.
+- FIX options contract: the type-level regression in `c31d4598b` first failed
+  with TS2578 (unused `@ts-expect-error`), proving callers could override
+  `commandId`. Restrict options to `silo`, `subject`, `type`, `data` and optional
+  `id`; explicitly construct the saved envelope from those fields. The same
+  package typecheck then passed. Departure callers now name those fields.
+  Nightly-memory builds and saves its specific envelope locally, preserving its
+  source, human principal, identifiers, times and `historyChecked` setting.
+  No existing test-case assertion was changed or removed.
+- FIX refusal coverage: add a case returning `conflict`. Remove both status
+  checks temporarily: the new test fails because the promise resolves instead
+  of rejecting. Restore the checks: the case passes. No product code changed.
+- Fetch and rebase: `git fetch origin` completed; `git rebase origin/main`
+  completed with the branch already up to date.
+
+- PASS: the three tests changed in this round, 43 cases twice, in 83.57 and
+  74.38 seconds. Use `nice -n 10`, at most two workers and the supplied disposable
+  PostgreSQL control database. All 41 original ops cases pass both times.
+- PASS: `check:events` (174 types), Knip (two existing configuration hints),
+  `lint:changelog`, scoped ESLint with zero warnings, Markdown lint and whitespace.
+- PASS: all 132 original ops test-case assertion lines are unchanged.
+- PASS: full workspace, packaging and dev-stack typecheck; the type-level
+  rejection is included in the event-store package check.
+- PASS: public privacy and secret scans. Product-source diff against the CORE
+  tested commit is empty. No fresh stack was claimed in this round.
