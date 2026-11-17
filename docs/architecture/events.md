@@ -297,12 +297,15 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 ### Conversations and agent activity
 
-The conversations projection also records event ids, types, turn ids and global
-positions for conversation streams and participation closing records. It includes private
-memory and child request records omitted from the public feed. Batched reply deltas
-need no index entries because decisions ignore output reports. Gateway decisions and
-approval reads load the indexed records they need, then read only later unprojected
-activity. Access and refusal rules remain in the typed models code.
+The conversations projection records one reference for every global event position,
+including private memory records and reply deltas. Conversation and participation
+closing records retain their conversation id; other streams cannot enter selected
+conversation facts. Decisions first prove that the covered range has no gaps, then
+check selected references against saved events. Individual and batched replay use
+the same inclusion rule. Gateway decisions and approval reads load the facts they
+need and read at most 64 later unprojected global positions. A longer gap requires
+an already complete summary or returns a visible catch-up refusal. Access and
+refusal rules remain in the typed models code.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |

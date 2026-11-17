@@ -505,11 +505,10 @@ uses the same read-only custody as rebuild.
 
 The `conversations` projection also writes `decision_conversation_events` in its
 existing transaction. It stores one reference for every global event position.
-A unique position index and a count from position one through the covered read position prove
-that this range has no gaps. Other streams use an empty conversation id and never
+A unique position index and a count from position one through the covered read
+position prove that this range has no gaps. Other streams use an empty conversation id and never
 enter the selected conversation facts. Conversation rows use the event store’s
-conversation-read guard, including
-participation closes and keeping other participation changes separate. The index
+conversation-read guard, including participation closes and keeping other participation changes separate. The index
 stores only silo, conversation, position, event id,
 type and turn id. Its indexes support metadata, exact turn and queued-message lookups,
 and the latest record of each requested type. Selection returns saved event positions;
@@ -519,8 +518,8 @@ The checkpoint covers index writes, including private memory records excluded fr
 the visible feed. Each included event also advances a separate coverage count and last
 position. Readers compare this proof with all rows for the conversation before selecting
 facts. Missing rows refuse rather than hiding a stop or close. Both individual and
-batched reply deltas enter the index, even though decisions exclude those reports. An existing conversation projection without this index refuses
-startup and requires the documented stopped-reader conversation replay. Rebuild drops
+batched reply deltas enter the index, even though decisions exclude those reports.
+An existing conversation projection without this index refuses startup and requires the documented stopped-reader conversation replay. Rebuild drops
 and recreates the index with the other conversation tables.
 
 ## Conversation participation
