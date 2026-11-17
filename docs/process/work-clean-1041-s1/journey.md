@@ -48,6 +48,24 @@ The worktree remains available. This failed regression journey does not change a
 historical capability verdict copied into the ledger from committed receipts.
 The draft cannot merge until the required fresh CORE journey passes.
 
+## Load-qualified rerun
+
+Journey on a fresh dev stack: FAIL (core journey)
+
+Tested head: `36b0df1a7fd30ad8e81224d02736beedc8bb8026`. Date: 17 November 2026 UTC.
+After ten consecutive 30-second readings below 6, claimed secondary slot 1 and ran
+`infra/dev-stack/up.sh --fresh`. Load was 5.46 at start and 15.70 when the run
+failed. Bootstrap, managed-provider setup and website readiness passed; readiness
+took 53,277 ms. The 390 px chat proceeded into the upload journey, where the browser
+timed out after 120 seconds waiting for the uploaded-message reply to show Done.
+The browser also reported transport failures. The 1280 px journey and later CORE
+steps were NOT RUN. This does not reproduce the earlier first-chat failure, and it
+does not establish that host load caused this failure.
+
+The startup output and service logs were copied outside the repository before
+teardown. `down.sh` exited 0, and the following status check reported `free`. This
+was the single permitted rerun; no retry or timeout change was made.
+
 ## Own source checks
 
 | Check | Result | Evidence |
