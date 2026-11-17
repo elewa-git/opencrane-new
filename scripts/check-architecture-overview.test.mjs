@@ -57,13 +57,20 @@ const invalidPages = [
   ['26 arrows', validPage.replace('Browser->>Server: Send',
     'Browser-->>Server: Send\n'.repeat(26)), 'arrows'],
   ['26 arrows on one line', validPage.replace('Browser->>Server: Send',
-    'Browser->>Server: Send;'.repeat(26)), 'one statement per line'],
+    'Browser->>Server: Send;'.repeat(26)), 'arrows'],
   ['9 participants on one line', validPage.replace(diagram,
     '```mermaid\nsequenceDiagram\n' +
     'participant A;participant B;participant C;participant D;participant E;' +
     'participant F;participant G;participant H;participant I\n```\n'),
-  'one statement per line'],
-  ['26 arrows with activation', validPage.replace('Browser->>Server: Send',
+  'participants'],
+  ['26 arrows hidden in quotes', validPage.replace('Browser->>Server: Send',
+    'A->>B: "start;' + 'A->>B: Send;'.repeat(24) + 'A->>B: end"'), 'arrows'],
+  ['9 participants hidden in quotes', validPage.replace('Browser->>Server: Send',
+    'Browser->>Server: "start;participant C;participant D;participant E;participant F;' +
+    'participant G;participant H;participant I;Browser->>Server: end"'), 'participants'],
+  ['invalid quoted participant alias', validPage.replace('participant Browser',
+    'participant Browser as "Browser; client";'), 'Parse error'],
+  ['26 arrows with activation' , validPage.replace('Browser->>Server: Send',
     'Browser->>+Server: Send\n'.repeat(26)), 'arrows'],
   ['more than 250 lines', validPage + '\n'.repeat(250), '250 lines'],
 ];
@@ -117,6 +124,25 @@ function acceptsStatementPunctuation(statement) {
 
 test.each([
   'participant Browser;',
-  'participant Browser as "Browser; client";',
   '%% A comment; with punctuation\nparticipant Browser',
 ])('accepts a single statement with punctuation: %s', acceptsStatementPunctuation);
+
+function acceptsMessagePunctuation(message) {
+  const page = validPage.replace('Browser->>Server: Send', message);
+  const result = runCheck(page);
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test.each([
+  'A->>B: hello#59; world',
+  'A->>B: Send;%% comment; with punctuation',
+])('accepts a valid message: %s', acceptsMessagePunctuation);
+
+function acceptsRealOverview() {
+  const result = spawnSync(process.execPath, ['--experimental-strip-types', checker], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8',
+  });
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('accepts the real architecture overview', acceptsRealOverview);
