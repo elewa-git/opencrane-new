@@ -683,6 +683,8 @@ requester, payer, turn, approval and shared-child checks without replaying earli
 The reader then reads only conversation activity after the projection's saved global
 position, through the request's captured position. Later confirmations retain the
 same access deadline and read only activity after that captured position.
+Sparse snapshots keep their checked position even when they omit output reports,
+so approval confirmation cannot replay those reports inside the short write check.
 
 Approval cards, held-call status and commands use this reader too. `readFirstEvent` shares the saved
 creation position with participation and private-session checks. A lost or changed

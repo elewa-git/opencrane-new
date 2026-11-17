@@ -297,6 +297,13 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 ### Conversations and agent activity
 
+The conversations projection also records event ids, types, turn ids and global
+positions for conversation streams and participation closing records. It includes private
+memory and child request records omitted from the public feed. Batched reply deltas
+need no index entries because decisions ignore output reports. Gateway decisions and
+approval reads load the indexed records they need, then read only later unprojected
+activity. Access and refusal rules remain in the typed models code.
+
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant and may carry the internal `routinePreparation` claim/worker binding described below; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; `group` records 2–97 distinct people including the creator on new writes (older 100-person records remain readable) and optional paired group snapshot fields, with no assistant or payer; group creation commands are deferred; missing mode in older assistant events reads as `agent_session`; strict `contextKind: shared_child` binds a fixed payer, origin and 1–97 original parent joins including creator; internal creation checks the saved parent request) | OpenFGA explicit participants and group or shared-child creator; creation and participant jobs share the conversation id |

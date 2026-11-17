@@ -1,3 +1,4 @@
+import { matchesConversationRead } from '@opencrane/event-store';
 import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
 import type { Query } from './db.ts';
@@ -23,6 +24,8 @@ export async function indexDecisionConversationEvent(db: Query, event: EventEnve
   const fields = z.record(z.string(), z.unknown()).parse(event.data);
   const prefix = conversation ? 'conversation-' : 'participation-';
   const conversationId = event.subject.slice(prefix.length);
+  const subject = `conversation-${conversationId}`;
+  if (!matchesConversationRead(event, subject)) return;
   const turnId = typeof fields['turnId'] === 'string' ? fields['turnId'] : null;
   await db.query(`INSERT INTO decision_conversation_events VALUES ($1,$2,$3,$4,$5,$6)`,
     [event.silo, conversationId, position, event.id, event.type, turnId]);

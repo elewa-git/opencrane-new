@@ -59,7 +59,8 @@ export function decisionConversationReader(store: EventStore, db: Query,
         conversation.push(row);
       }
     }
-    return { conversation, sequence: conversation.at(-1)?.sequence ?? 0 };
+    // Keep the checked position even when the snapshot omits irrelevant output rows.
+    return { conversation, sequence: through };
   }
   return read;
 }
