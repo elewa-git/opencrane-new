@@ -10,7 +10,7 @@ const repository = resolve(import.meta.dirname, '../../..');
 
 async function recordFixtureBaseline(directory: string) {
   const applications = [
-    'apps/demo-mcp/src', 'apps/odoo-mcp/src', 'apps/computer/src',
+    'apps/demo-mcp/src', 'apps/computer/src',
     'apps/ops/src', 'apps/server/src', 'apps/web/src', 'libs',
   ];
   const args = [

@@ -23,6 +23,29 @@ old full-input-body comparison: 2 failed, 8 unselected, in 29.24 seconds.
 The later fix must keep exact argument-to-credential binding and verify both requests.
 No assertion, access window or production credential handling has changed yet.
 
+### Fixes and assertion sensitivity
+
+Removed only the stale Odoo directory from the dependency fixture baseline inputs.
+The existing test still checks rejection for every cross-application source import,
+including source specifications and imports hidden by a source baseline.
+
+The concurrency tests now use distinct business arguments and require the complete
+expected request body together with its exact personal credential. The two expected
+pairs must each occur once, independent of arrival order. Expected bodies name only
+the permitted protocol metadata; the production sanitiser is not used to build them.
+Existing release-audit, read-count, status and one-use assertions remain.
+
+No production credential-mixing defect was demonstrated. The cause is the fixture’s
+reliance on private metadata deliberately stripped by this PR’s `toolServerBody`.
+Production credential handling, access checks and their time limits are unchanged.
+
+The first full run of the two changed test files passed all 11 tests in 105.63 seconds.
+A temporary fixture mutation returned Alice’s synthetic key for Bob’s request.
+Both concurrency tests failed at the complete body/credential-pair assertion, in
+24.58 seconds. The original fixture bytes were restored before the second full run.
+The second full run passed all 11 tests in 95.45 seconds.
+No mutation is committed. No timeout, retry or assertion was loosened.
+
 ## Rework round 5 continued, 16 November 2026
 
 Result: PARTIAL. Source gates: PASS. Fresh-stack journey: FAIL during shared startup.
