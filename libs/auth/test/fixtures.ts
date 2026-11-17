@@ -1,4 +1,12 @@
 import type { AuthConfig } from '../src/config.ts';
+import { encodeSession, type SessionData } from '../src/session.ts';
+
+export function sessionCookie(config: AuthConfig, overrides: Partial<SessionData> = {}) {
+  const session: SessionData = { sub: 'owner', orgId: 'org-acme', roles: [],
+    authTime: Math.floor(Date.now() / 1000), exp: 2000000000, ...overrides };
+  const encoded = encodeSession(config, session);
+  return { cookie: `${config.cookieName}=${encoded}` };
+}
 
 /**
  * Flips one real bit of an encrypted cookie's ciphertext, for tamper tests.
