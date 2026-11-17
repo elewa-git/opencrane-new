@@ -501,6 +501,20 @@ Fresh-install customer journeys and power-loss qualification remain NOT RUN.
 The [live memory worker](../../apps/ops/README.robot.md#run-the-live-memory-worker)
 uses the same read-only custody as rebuild.
 
+## Conversation decision index
+
+The `conversations` projection also writes `decision_conversation_events` in its
+existing transaction. The index stores only silo, conversation, position, event id,
+type and turn id. Its indexes support metadata, exact turn and queued-message lookups,
+and the latest record of each requested type. Selection returns saved event positions;
+business checks remain in TypeScript in the models library.
+
+The checkpoint covers index writes, including private memory records excluded from
+the visible feed. Batched reply deltas do not need index rows because decisions exclude
+those output reports. An existing conversation projection without this index refuses
+startup and requires the documented stopped-reader conversation replay. Rebuild drops
+and recreates the index with the other conversation tables.
+
 ## Conversation participation
 
 The projection builds `conversations` metadata and `conversation_participants`

@@ -627,7 +627,7 @@
   },
   "libs/models/src/decision-activity.ts": {
     "max-params": {
-      "count": 3
+      "count": 2
     }
   },
   "libs/models/src/decision-maintenance.ts": {

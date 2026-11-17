@@ -626,9 +626,10 @@ async function keepsApprovalHistoryOutsideShortCheck() {
     const approvalId = cards[0]!.approvalId;
     const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
     async function* refuseFullHistoryDuringShortCheck(
-      subject: string, fromSequence = 1, deadline = Infinity,
+      ...parameters: Parameters<typeof originalRead>
     ) {
-      for await (const row of originalRead(subject, fromSequence, deadline)) {
+      const [subject, fromSequence = 1, deadline = Infinity] = parameters;
+      for await (const row of originalRead(...parameters)) {
         if (subject === 'conversation-conversation' && fromSequence === 1 &&
             row.event.type !== 'conversation.created' &&
             deadline - performance.now() < 2100) {
@@ -1015,9 +1016,9 @@ async function refusesAnotherCallsObservation() {
     const foreignObservation = { ...observation };
     const foreign = envelope('foreign', `decision-${permitId}`,
       'tool.dispatch_recorded', foreignObservation);
-    async function* readWithForeignObservation(subject: string, fromSequence = 1,
-      deadline = Infinity, includeConversationCloses = false) {
-      yield* originalRead(subject, fromSequence, deadline, includeConversationCloses);
+    async function* readWithForeignObservation(...parameters: Parameters<typeof originalRead>) {
+      const [subject] = parameters;
+      yield* originalRead(...parameters);
       if (subject === `decision-${permitId}`) {
         yield { sequence: Number.MAX_SAFE_INTEGER, event: foreign };
       }

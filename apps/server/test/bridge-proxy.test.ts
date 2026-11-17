@@ -1,3 +1,4 @@
+import { conversationHistoryFixture } from '@opencrane/models/testing';
 import { createServer, request } from 'node:http';
 import { once } from 'node:events';
 import { generateKeyPairSync } from 'node:crypto';
@@ -135,7 +136,9 @@ it('passes the actual proxy thread to admission even when a grant is installed w
     await memberAuthorisation(binding).handler.handle(event, { query: () => Promise.resolve({ rows: [] }) });
   }
   const actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000);
-  const decision = await startDecision(actor, { jwks: tokens.jwks, issuer }, binding);
+  const conversationHistory = conversationHistoryFixture(nats.store, 'test');
+  const decision = await startDecision(actor, { jwks: tokens.jwks, issuer,
+    conversationHistory }, binding);
   // Relay only the HTTP gateway boundary; admission, signed credentials and NATS are real.
   let forwarded: unknown;
   const gateway = createServer((req, res) => {

@@ -138,3 +138,4 @@ export { savePersonalKey, type PersonalKeyDependencies, type PersonalKeySaveInpu
 export { assistantMayUsePersonalKey, savedAssistantConsent } from './personal-key-consent.ts';
 
 export { readStoredApprovalReview } from './approvals.ts';
+export { decisionConversationReader } from './decision-conversation.ts';

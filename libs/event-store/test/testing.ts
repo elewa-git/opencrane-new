@@ -283,10 +283,11 @@ export interface ReadCall {
 export function countReads(store: Pick<EventStore, 'readStream'>) {
   const calls: ReadCall[] = [];
   const read = store.readStream.bind(store);
-  async function* countedRead(subject: string, fromSequence = 1, deadline = Infinity) {
+  async function* countedRead(...parameters: Parameters<typeof read>) {
+    const [subject, fromSequence = 1] = parameters;
     const call = { subject, fromSequence, rows: 0 };
     calls.push(call);
-    for await (const row of read(subject, fromSequence, deadline)) {
+    for await (const row of read(...parameters)) {
       call.rows++;
       yield row;
     }

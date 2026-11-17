@@ -8,6 +8,8 @@ import type { Logger } from '@opencrane/observability';
 import type { Db, Query } from './db.ts';
 import { createConversationListState, applyConversationPreference }
   from './conversation-list-state.ts';
+import { createDecisionConversationIndex, indexDecisionConversationEvent }
+  from './decision-conversation-index.ts';
 
 export const conversations: Projection = {
   name: 'conversations',
@@ -15,15 +17,18 @@ export const conversations: Projection = {
   async create(db) {
     await requireLegacyReplay(db);
     await requireActivityReplay(db);
+    await requireDecisionIndexReplay(db);
     await createConversationTables(db);
+    await createDecisionConversationIndex(db);
     await refuseMissingParticipation(db);
   },
   async drop(db) {
     const tables = 'conversation_participants, conversations, conversation_feed, ' +
-      'conversation_legacy_participation, conversation_list_state';
+      'conversation_legacy_participation, conversation_list_state, decision_conversation_events';
     await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
+    await indexDecisionConversationEvent(db, event, position);
     if (await applyConversationPreference(db, event, position)) return;
     const entry = conversationFeedEntry(event);
     if (!entry) return;
@@ -40,6 +45,18 @@ export const conversations: Projection = {
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+async function requireDecisionIndexReplay(db: Query) {
+  const result = await db.query<{ present: string | null; feed: string | null; sequence: string }>(`
+    SELECT to_regclass('decision_conversation_events')::text AS present,
+      to_regclass('conversation_feed')::text AS feed, sequence
+      FROM projection_checkpoints WHERE name='conversations'`);
+  const saved = result.rows[0];
+  if (saved?.feed && !saved.present && Number(saved.sequence) > 0) {
+    throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
+      + 'then run npm run replay -- conversations --confirm-conversations-stopped');
+  }
+}
 
 async function requireActivityReplay(db: Query): Promise<void> {
   const result = await db.query<{ name: string | null }>(

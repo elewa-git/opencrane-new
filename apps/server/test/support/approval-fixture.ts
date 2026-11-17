@@ -92,14 +92,15 @@ export async function approvalFixture(stepUp = false,
 
 type ApprovalFixture = Awaited<ReturnType<typeof approvalFixture>>;
 
-export async function prepareLongConversation(setup: ApprovalFixture) {
+export async function seedLongConversation(setup: ApprovalFixture, messageCount = 5000) {
   const messages = [];
-  for (let index = 0; index < 5000; index++) {
+  for (let index = 0; index < messageCount; index++) {
     const data = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
       contentType: 'text', utterance: 'Earlier message' };
     messages.push(envelope('test', 'conversation-conversation', 'message.posted', data));
   }
   await setup.nats.seed(messages);
+  await seedMessageProjection(setup, messages);
   const turn = { assistantId: 'assistant', computerId: 'computer',
     conversationId: 'conversation', turnId: 'long-turn', threadId: 'thread',
     requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default' };
@@ -110,6 +111,45 @@ export async function prepareLongConversation(setup: ApprovalFixture) {
   const claims = { ...setup.t, turn: 'long-turn' };
   const token = await setup.sign(claims, 'decision-service');
   const headers = { 'x-turn-token': token };
+  return headers;
+}
+
+async function seedMessageProjection(setup: ApprovalFixture,
+  messages: ReturnType<typeof envelope>[]) {
+  const throughPosition = await setup.nats.store.head();
+  const fromPosition = throughPosition - messages.length;
+  const rows: { position: number; event_id: string; type: string;
+    data: unknown; time: string }[] = [];
+  for (const [index, event] of messages.entries()) {
+    const row = { position: fromPosition + index + 1, event_id: event.id,
+      type: event.type, data: event.data, time: event.time };
+    rows.push(row);
+  }
+  // Seed identical earlier messages in bulk. The measured decision still reads real NATS events.
+  // Keep these fixture tables and their position together, as the projection runner does.
+  async function saveProjection(tx: Parameters<Parameters<typeof setup.db.transaction>[0]>[0]) {
+    const parameters = [JSON.stringify(rows)];
+    await tx.query(`INSERT INTO conversation_feed
+      SELECT 'test', 'conversation', position, event_id, type, data, time
+      FROM jsonb_to_recordset($1::jsonb)
+        AS row(position BIGINT, event_id TEXT, type TEXT, data JSONB, time TEXT)`, parameters);
+    await tx.query(`INSERT INTO decision_conversation_events
+      SELECT 'test', 'conversation', position, event_id, type, NULL
+      FROM jsonb_to_recordset($1::jsonb) AS row(position BIGINT, event_id TEXT, type TEXT)`,
+    parameters);
+    await tx.query(`INSERT INTO projection_events
+      SELECT 'conversations', event_id FROM jsonb_to_recordset($1::jsonb)
+        AS row(event_id TEXT)`, parameters);
+    const saved = await tx.query(`UPDATE projection_checkpoints SET sequence=$1
+      WHERE name='conversations' AND sequence=$2 RETURNING sequence`,
+    [throughPosition, fromPosition]);
+    expect(saved.rows).toHaveLength(1);
+  }
+  await setup.db.transaction(saveProjection);
+}
+
+export async function prepareLongConversation(setup: ApprovalFixture) {
+  const headers = await seedLongConversation(setup);
   const response = await setup.call(undefined, headers);
   expect(response.status, response.text).toBe(403);
   const rows = await history(setup.nats.store, 'conversation-conversation', 'test');
@@ -119,4 +159,3 @@ export async function prepareLongConversation(setup: ApprovalFixture) {
   const savedMessages = rows.filter(isMessage);
   expect(savedMessages).toHaveLength(5000);
 }
-

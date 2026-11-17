@@ -1,3 +1,4 @@
+import { conversationHistoryFixture } from '@opencrane/models/testing';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
@@ -198,7 +199,10 @@ async function signedDecisionRoute() {
     return Promise.resolve({ accepted: true });
   }
   const dispatch = { routes: [], requireLeader, childStart };
-  const identity = { issuer: 'https://child.test/', jwks: context.tokens.jwks };
+  const conversationHistory = conversationHistoryFixture(
+      context.options.store, context.options.silo);
+    const identity = { issuer: 'https://child.test/', jwks: context.tokens.jwks,
+      conversationHistory };
   const decision = await startDecision(actor, identity, context.options.binding,
     0, undefined, dispatch);
   try {

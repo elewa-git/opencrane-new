@@ -1,3 +1,4 @@
+import type { DecisionConversationReader } from './decision-conversation.ts';
 import { decisionAccessStarted } from './decision-activity.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
@@ -46,7 +47,7 @@ async function requestMemoryPreparation(claims: Identity, raw: string,
 export async function prepareMemoryDecision(memoryRoute: boolean, store: EventStore,
   binding: Binding, claims: Identity, raw: string, headers: IncomingHttpHeaders,
   requestId: string, options: McpDispatchOptions | undefined,
-  identity: { memory?: { memoryContext:
+  identity: { conversationHistory?: DecisionConversationReader; memory?: { memoryContext:
     (claims: Record<string, unknown>, expiresAt: number) => Promise<string> } }) {
   let preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>;
   let reads: Awaited<ReturnType<typeof prepareMemoryReads>> | undefined;
@@ -55,7 +56,7 @@ export async function prepareMemoryDecision(memoryRoute: boolean, store: EventSt
       options, identity.memory?.memoryContext);
     if (preparation) {
       const parsed = parseMemoryRequest(raw, headers);
-      reads = await prepareMemoryReads(store, binding, claims, parsed);
+      reads = await prepareMemoryReads(store, binding, claims, parsed, identity.conversationHistory);
     }
   }
   return { preparation, reads };

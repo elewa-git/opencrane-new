@@ -24,7 +24,7 @@ for local NATS services.
 flowchart LR
   parent["libs/<br/>shared libraries"] --> store["libs/event-store<br/>saved event log"]
   server["apps/server<br/>back end"] -->|checks positions and saves changes| store
-  models["libs/models<br/>AI access and spending"] <-->|saves changes and checks their outcome| store
+  models["libs/models<br/>AI access and spending"] <-->|reads saved ranges and checks changes| store
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
   projections["libs/projections<br/>read tables"] -.->|reads the log| store
   store -->|stores the log| nats["NATS JetStream<br/>saved copies and recovery"]
@@ -38,6 +38,7 @@ flowchart LR
   check the whole log position as well as one item's history.
 - Check that saved memory facts belong to the right person or group before saving them.
 - Accept hosted image scan claims and results only from the models system writer.
+- Read saved ranges and recheck creation events from their recorded positions.
 - Stop retrying when the caller cancels or its access time limit runs out.
   Repeat the caller's access check before saving when requested.
 - Distinguish a saved change, a definite refusal and an uncertain reply. Keep earlier

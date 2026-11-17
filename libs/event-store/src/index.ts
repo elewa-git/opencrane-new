@@ -11,5 +11,6 @@ export {
   type StoredEvent,
 } from "./contract.ts";
 export { readEventAt } from './read-event-at.ts';
+export { readFirstEvent, FirstEventRefused, type FirstEventRead } from './read-first-event.ts';
 export { snapshotPositions } from './snapshot-positions.ts';
 export { readStreamSummary, WrongSiloError, type SummaryKind } from './stream-summary.ts';
