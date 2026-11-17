@@ -49,7 +49,7 @@ function validFixture() {
   for (const key of fields.split(/\s+/u)) runtime[key] = canary;
   secrets.runtime = secret(runtime);
   const files = {};
-  const fileNames = `conversation-wrap-key token-signing-key.pem zitadel-client-secret
+  const fileNames = `token-signing-key.pem zitadel-client-secret
     model-jwks.json model-stub-key scanner-ca.crt`;
   for (const key of fileNames.split(/\s+/u)) files[key] = canary;
   secrets.runtimefiles = secret(files);
@@ -174,6 +174,12 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
         }
       }
       assert.deepEqual(helmCommands, ['template', 'install']);
+      if (fixture.values.pilotRestore?.enabled) {
+        for (const call of calls) {
+          assert.equal(call.args.includes('job') && call.args.includes('bootstrap'), false,
+            'An empty restore target must never run or wait for owner bootstrap');
+        }
+      }
       assert.equal(result.stderr, '');
     } else {
       assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
@@ -732,3 +738,13 @@ async function localApplicationCannotReachRendering() {
 }
 test('matching builder-written application pins refuse before Helm rendering',
   localApplicationCannotReachRendering);
+
+async function installsEmptyRestoreTargetWithoutBootstrap() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.values.pilotRestore = { enabled: true, backupId: 'pilot-backup' };
+  fixture.install = true;
+  await runFixture(fixture, undefined, true);
+}
+test('restore package installation never waits for or runs owner bootstrap',
+  installsEmptyRestoreTargetWithoutBootstrap);

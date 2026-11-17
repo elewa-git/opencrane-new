@@ -877,3 +877,45 @@ function credentialReadinessChecksLease() {
   assert.equal(container.readinessProbe.timeoutSeconds, 5);
 }
 test('storage credential readiness checks the lease validity', credentialReadinessChecksLease);
+
+
+test('restore installation holds bootstrap, writers and models until verified admission', () => {
+  values.pilotRestore = { enabled: true, backupId: '11111111-1111-4111-8111-111111111111' };
+  try {
+    const restored = resources();
+    assert.equal(restored.some(isBootstrapJob), false);
+    for (const resource of restored) {
+      if (resource?.kind !== 'Deployment') continue;
+      const name = resource.metadata.name;
+      if (name === 'server' || name === 'openfga' || name.startsWith('worker-')) {
+        assert.equal(resource.spec.replicas, 0, name);
+      }
+    }
+    const server = namedResource('Deployment', 'server');
+    assert.equal(server.spec.template.spec.containers.some(isModelsContainer), false);
+    const api = server.spec.template.spec.containers.find(isServerContainer);
+    assert.ok(api.env.some(isRestoreReadOnly));
+    assert.equal(namedResource('CronJob', 'pilot-backup').spec.suspend, true);
+    const restore = namedResource('CronJob', 'pilot-restore');
+    assert.equal(restore.spec.suspend, true);
+    const job = restore.spec.jobTemplate.spec.template.spec;
+    assert.equal(job.enableServiceLinks, false);
+    assert.ok(job.containers[0].command.includes('infra/package/pilot-restore-run.ts'));
+    assert.ok(job.containers[0].volumeMounts.some(isReadOnlyBackup));
+    assert.ok(namedResource('PersistentVolumeClaim', 'pilot-restore'));
+  } finally {
+    delete values.pilotRestore;
+  }
+});
+
+function isBootstrapJob(resource) {
+  return resource?.kind === 'Job' && resource.metadata.name === 'bootstrap';
+}
+function isModelsContainer(container) { return container.name === 'models'; }
+function isServerContainer(container) { return container.name === 'server'; }
+function isRestoreReadOnly(setting) {
+  return setting.name === 'PILOT_RESTORE_READ_ONLY' && setting.value === 'true';
+}
+function isReadOnlyBackup(mount) {
+  return mount.name === 'backups' && mount.readOnly === true;
+}

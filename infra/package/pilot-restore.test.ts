@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { members, mcpCatalogue, computers, conversations, files, auditTrail,
@@ -6,8 +6,8 @@ import { members, mcpCatalogue, computers, conversations, files, auditTrail,
   childRequests } from '@opencrane/projections';
 import { budgets } from '@opencrane/models';
 import { hashBackupBytes } from './backup-bytes.ts';
-import { captureScheduledBackup } from './scheduled-backup.ts';
-import { restorePilotBackup, type PilotRestoreTarget } from './pilot-restore.ts';
+import { captureScheduledBackup, manifestSchema } from './scheduled-backup.ts';
+import { restorePilotBackup, PilotRestoreRefused, type PilotRestoreTarget } from './pilot-restore.ts';
 
 const directories: string[] = [];
 afterEach(async function clean() {
@@ -48,7 +48,8 @@ async function backupFixture() {
   }
   async function database(destination: string) {
     await writeFile(destination, '-- a stopped database dump', { mode: 0o600 });
-    return { databases: ['handlers', 'openfga', 'postgres', 'projections'], lsn: '0/1' };
+    return { databases: ['handlers', 'openfga', 'postgres', 'projections'], lsn: '0/1',
+      access: { storeId: 'saved-store', modelId: 'saved-model' } };
   }
   async function uploadedFiles(destination: string) {
     await writeFile(destination, '', { mode: 0o600 });
@@ -63,21 +64,30 @@ async function backupFixture() {
 function emptyTarget() {
   const stages: string[] = [];
   let admitted = false;
-  async function release() {}
-  async function acquire() { return release; }
+  let locked = false;
+  async function release() { locked = false; }
+  async function acquire() {
+    if (locked) throw new PilotRestoreRefused('concurrent', 'lock');
+    locked = true;
+    return release;
+  }
   async function identity() { return { namespace: 'fresh-namespace', nats: 'fresh-volume' }; }
   async function requireIsolated() { expect(admitted).toBe(false); }
+  async function hold() { admitted = false; }
   async function empty() { return true; }
-  async function events() { stages.push('events'); }
-  async function database() { stages.push('database'); }
-  async function files() { stages.push('files'); }
-  async function verify() { stages.push('verify'); }
+  function record(stage: string) {
+    if (!stages.includes(stage)) stages.push(stage);
+  }
+  async function events() { record('events'); }
+  async function database() { record('database'); }
+  async function files() { record('files'); }
+  async function verify() { record('verify'); }
   async function open() {
-    expect(stages).toEqual(['events', 'database', 'files', 'verify']);
-    stages.push('open');
+    expect(stages.slice(0, 4)).toEqual(['events', 'database', 'files', 'verify']);
+    record('open');
     admitted = true;
   }
-  const target: PilotRestoreTarget = { acquire, identity, requireIsolated, empty,
+  const target: PilotRestoreTarget = { acquire, identity, requireIsolated, hold, empty,
     events, database, files, verify, open };
   return { target, stages, admitted: () => admitted };
 }
@@ -93,3 +103,148 @@ async function restoresAnEmptyInstallationBeforeAdmission() {
 }
 it('restores all three parts into an empty installation before opening reading',
   restoresAnEmptyInstallationBeforeAdmission);
+
+async function refusesAnUnboundAccessStore() {
+  const options = await backupFixture();
+  const path = join(options.directory, options.id, 'manifest.json');
+  const manifest = manifestSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+  delete manifest.parts.database.details['access'];
+  await writeFile(path, JSON.stringify(manifest), { mode: 0o600 });
+  const runtime = emptyTarget();
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'invalid_backup',
+  });
+  expect(runtime.stages).toEqual([]);
+}
+it('refuses an unbound access store before changing the target', refusesAnUnboundAccessStore);
+
+async function refusesNonEmptyTarget() {
+  const options = await backupFixture();
+  const runtime = emptyTarget();
+  async function nonEmpty() { return false; }
+  runtime.target.empty = nonEmpty;
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'non_empty',
+  });
+  expect(runtime.stages).toEqual([]);
+}
+it('refuses a non-empty target without restoring any part', refusesNonEmptyTarget);
+
+async function refusesInvalidSet(kind: string) {
+  const options = await backupFixture();
+  const path = join(options.directory, options.id, 'manifest.json');
+  const manifest = manifestSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+  if (kind === 'mixed') manifest.parts.events.backupId = 'another-backup';
+  if (kind === 'version') manifest.images['server'] = 'other-version';
+  if (kind === 'point') manifest.parts.events.details['lastSequence'] = 2;
+  if (kind === 'ahead') manifest.point.checkpoints['members'] = 2;
+  if (kind === 'missing checkpoint') delete manifest.point.checkpoints['members'];
+  if (kind === 'dates') manifest.stoppedAt = '2000-01-01T00:00:00Z';
+  if (kind === 'tampered') {
+    await writeFile(join(options.directory, options.id, 'events'), 'changed bytes');
+  }
+  await writeFile(path, JSON.stringify(manifest), { mode: 0o600 });
+  const runtime = emptyTarget();
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'invalid_backup',
+  });
+  expect(runtime.stages).toEqual([]);
+}
+it.each(['mixed', 'version', 'point', 'ahead', 'missing checkpoint', 'dates', 'tampered'])(
+  'refuses %s evidence before restoring anything', refusesInvalidSet);
+
+async function resumesEachStage(stage: 'events' | 'database' | 'files' | 'verify' | 'open') {
+  const options = await backupFixture();
+  const runtime = emptyTarget();
+  const original = runtime.target[stage];
+  async function interrupted(backup: Parameters<typeof original>[0]) {
+    await original(backup);
+    throw new Error('Simulated crash after the operation');
+  }
+  runtime.target[stage] = interrupted;
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'stage_failed', stage,
+  });
+  if (stage !== 'open') expect(runtime.admitted()).toBe(false);
+  runtime.target[stage] = original;
+  await expect(restorePilotBackup(options, runtime.target)).resolves.toMatchObject({
+    status: 'complete', sequence: 1,
+  });
+  expect(runtime.stages).toEqual(['events', 'database', 'files', 'verify', 'open']);
+}
+it.each(['events', 'database', 'files', 'verify', 'open'] as const)(
+  'resumes the same set after interruption at %s', resumesEachStage);
+
+async function acceptsCheckedRerun() {
+  const options = await backupFixture();
+  const runtime = emptyTarget();
+  const result = await restorePilotBackup(options, runtime.target);
+  async function mustNotReset() { throw new Error('Must not reset restored state'); }
+  runtime.target.events = mustNotReset;
+  runtime.target.database = mustNotReset;
+  runtime.target.files = mustNotReset;
+  expect(await restorePilotBackup(options, runtime.target)).toEqual(result);
+}
+it('verifies a completed same-set rerun without restoring over it', acceptsCheckedRerun);
+
+async function refusesChangedTarget() {
+  const options = await backupFixture();
+  const runtime = emptyTarget();
+  await restorePilotBackup(options, runtime.target);
+  async function replacedVolume() { return { namespace: 'fresh-namespace', nats: 'foreign-volume' }; }
+  runtime.target.identity = replacedVolume;
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'target_changed',
+  });
+}
+it('refuses a journal belonging to replaced target storage', refusesChangedTarget);
+
+async function refusesConcurrentRunner() {
+  const options = await backupFixture();
+  const runtime = emptyTarget();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const events = runtime.target.events;
+  async function held(backup: Parameters<typeof events>[0]) {
+    started.resolve();
+    await release.promise;
+    await events(backup);
+  }
+  runtime.target.events = held;
+  const first = restorePilotBackup(options, runtime.target);
+  await started.promise;
+  try {
+    await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+      reason: 'concurrent',
+    });
+  } finally {
+    release.resolve();
+    await first;
+  }
+}
+it('refuses a concurrent runner while the first restore owns the target', refusesConcurrentRunner);
+
+async function refusesInvalidFiles(kind: string) {
+  const options = await backupFixture();
+  const path = join(options.directory, options.id, 'manifest.json');
+  const manifest = manifestSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+  const bytes = Buffer.from('A saved file');
+  const entry = { key: 'saved-file', byteCount: bytes.length, sha256: hashBackupBytes(bytes) };
+  const objects = [entry];
+  let data = bytes.toString('base64');
+  if (kind === 'duplicate') objects.push(entry);
+  if (kind === 'corrupt') data = Buffer.from('Different bytes').toString('base64');
+  const archived = Buffer.from(JSON.stringify({ ...entry, data }));
+  manifest.parts.files.details = { bucket: 'files', objects };
+  manifest.parts.files.byteCount = archived.length;
+  manifest.parts.files.sha256 = hashBackupBytes(archived);
+  await writeFile(join(options.directory, options.id, 'files'), archived);
+  await writeFile(path, JSON.stringify(manifest));
+  const runtime = emptyTarget();
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'invalid_backup',
+  });
+  expect(runtime.stages).toEqual([]);
+}
+it.each(['duplicate', 'corrupt'])('refuses %s file bytes before changing the target',
+  refusesInvalidFiles);
