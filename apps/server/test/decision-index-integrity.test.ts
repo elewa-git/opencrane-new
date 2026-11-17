@@ -10,7 +10,7 @@ const terminalFacts = [
   ['conversation.closed', { closedBy: 'alice' }],
 ] as const;
 
-async function refusesMissingFact([type, fields]: typeof terminalFacts[number]) {
+async function refusesMissingFact(type: string, fields: object) {
   const setup = await approvalFixture();
   try {
     expect((await setup.call()).status).toBe(403);
@@ -18,6 +18,8 @@ async function refusesMissingFact([type, fields]: typeof terminalFacts[number]) 
     const subject = type === 'conversation.closed'
       ? 'participation-conversation' : 'conversation-conversation';
     const saved = await setup.append(subject, type, { conversationId: 'conversation', ...fields });
+    await setup.append('conversation-conversation', 'agent.output_lost', {
+      conversationId: 'conversation', turnId: 'turn' });
     const checkpoint = await setup.runner.checkpoint(conversations);
     await setup.db.query('DELETE FROM decision_conversation_events WHERE event_id=$1', [saved.id]);
     expect(await setup.runner.checkpoint(conversations)).toBe(checkpoint);
@@ -35,7 +37,7 @@ async function refusesMissingFact([type, fields]: typeof terminalFacts[number]) 
   }
 }
 it.each(terminalFacts)('refuses an approved call when the index omits %s',
-  async (type, fields) => refusesMissingFact([type, fields] as typeof terminalFacts[number]), 40_000);
+  refusesMissingFact, 40_000);
 
 async function boundsUnprojectedTail() {
   const setup = await approvalFixture();
@@ -49,9 +51,10 @@ async function boundsUnprojectedTail() {
     await setup.nats.seed(messages);
     const read = setup.nats.store.readStream.bind(setup.nats.store);
     let decisionRows = 0;
+    const accessDeadline = performance.now() + 2000;
     async function* observe(...args: Parameters<typeof read>) {
       for await (const row of read(...args)) {
-        if (args[0] === 'conversation-conversation' && args[2] !== Infinity) decisionRows++;
+        if (args[0] === 'conversation-conversation' && (args[2] ?? Infinity) <= accessDeadline) decisionRows++;
         yield row;
       }
     }
@@ -69,3 +72,24 @@ async function boundsUnprojectedTail() {
 }
 it('refuses clearly without reading a long unprojected tail inside the decision deadline',
   boundsUnprojectedTail, 40_000);
+
+async function refusesUnprovedCoverage(fault: string) {
+  const setup = await approvalFixture();
+  try {
+    expect((await setup.call()).status).toBe(403);
+    expect((await setup.decide()).statusCode).toBe(200);
+    if (fault === 'missing') {
+      await setup.db.query('DELETE FROM decision_conversation_coverage');
+    } else {
+      await setup.db.query('UPDATE decision_conversation_coverage SET position=position+1');
+    }
+    const result = await setup.call();
+    expect(result.status, result.text).toBeGreaterThanOrEqual(400);
+    expect(setup.received()).toBe(0);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+  } finally {
+    await setup.close();
+  }
+}
+it.each(['missing', 'position'])('refuses %s coverage proof before approval consumption',
+  refusesUnprovedCoverage, 40_000);
