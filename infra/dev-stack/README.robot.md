@@ -2486,3 +2486,9 @@ The disposable ownership fixture lasts until stack teardown. Always run
 `infra/dev-stack/down.sh` after the journey, including on failure.
 Screenshots mask email text and credential inputs. The
 [receipt](../../docs/process/work-pilot-1045-s1/journey.md) records the run and pictures.
+
+## Folders
+
+| Folder | What it does |
+| --- | --- |
+| [systemd](systemd/README.md) | Schedules the daily check on a fresh spare stack. |

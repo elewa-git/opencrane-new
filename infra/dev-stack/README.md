@@ -3,170 +3,68 @@
 ## What this is
 
 This package starts a full local copy of OpenCrane for development and testing.
-It brings the apps and services together and checks product journeys such as
-signing in, chatting, uploading files and changing organisation settings.
+It brings the apps and services together and checks product journeys.
+The checks use a browser to sign in, chat and reload saved replies.
+Developers can also check files, spending and organisation settings.
 
 ## Where it fits
 
-This is infrastructure that connects the apps to their local services. Docker
-Compose runs services in [containers](../../GLOSSARY.md#container-and-pod).
-[infra/devbox](../devbox/README.md) prepares the local Kubernetes system where
-assistant computers run.
+This package belongs to infrastructure. Docker Compose runs the local services;
+[infra/devbox](../devbox/README.md) prepares Kubernetes for assistant computers.
+The launcher starts the apps with their service connections and private settings.
+[Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) provides test sign-in.
 
 ```mermaid
 flowchart LR
-  packaging["GitHub packaging job"] -->|supplies approved scanner and application images| stack["infra/dev-stack<br/>local OpenCrane"]
-  stack -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts services; checks listeners; sets up sign-in; can issue short backup credentials| services["Local services<br/>jobs, content and access"]
-  stack -->|starts the daemon and HTTPS service| clamav["infra/clamav<br/>virus scanner"]
-  stack -->|shares installation settings, memory, account custody and readiness| apps["Server, workers, website and demo tools<br/>OpenCrane apps"]
-  stack -->|checks ownership, nodes and backup leases| package["infra/package<br/>Helm install"]
-  stack -->|checks the selected computer and reports refusals| collector["scripts/private-memory-qualification<br/>deployment checks"]
-  stack -->|uses local cluster; creates and removes owned test nodes| devbox
+  stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
+  stack -->|starts services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
+  stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
+  stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
+  stack -->|checks and launches| package["infra/package<br/>Helm install"]
 ```
-
-The services include [PostgreSQL](../../GLOSSARY.md#postgresql-database) for read
-tables and a separate jobs database, [NATS](../../GLOSSARY.md#nats) for the event log,
-[OpenFGA](../../GLOSSARY.md#openfga-permissions-service) for permissions and
-[MinIO](../../GLOSSARY.md#minio-file-storage) for files.
-Local setup uses the event store's certificate issuer to give NATS services private keys.
-Personal tool keys use the existing Kubernetes secret store through a separate,
-limited dev identity. The server and models process share its private connection.
-[Zitadel](../../GLOSSARY.md#zitadel-sign-in-service) provides test sign-in.
-Secondary stacks reuse their own sign-in app, test users and private credentials.
-After a successful setup, each slot also remembers the supplied key file's location
-for later fresh starts. It refuses linked reference files so one slot cannot read or
-replace another slot's saved location. Setup reports missing keys and safe provider error codes.
-
-The dispatcher uses the server's read-only content connection to coordinate gateway
-configuration changes. Its background jobs keep their own database.
-The routines worker keeps routine read tables current. Provider settings use those
-tables to check whether an existing routine would be affected by a change.
-When the owner enables memory, startup gives the same memory key directory to the
-memory worker, server and dispatcher. This lets the nightly job scan due work.
-Uploads use a separate authenticated scanner service. Each stack starts that service
-with private certificates and the local ClamAV daemon. Startup makes a signed clean
-scan before it starts the server. It also checks that the routines worker is running.
-The local scanner uses a development virus list marker. The server checks that
-marker in every scan reply.
-The private memory caller checks that its server and computer both belong to
-the claimed secondary slot before it starts a native attempt.
 
 ## What it is responsible for
 
-- Starts and stops local services and apps with private local credentials.
-- Stops every worker recorded by this stack before checking subscription changes.
-- Starts the scanner for uploads and checks one signed scan before the server starts.
-- Checks that stack listeners use loopback or this machine's Tailscale addresses.
-- Builds and serves the website with the installation's public organisation name.
-- Waits for the website to answer before starting browser checks.
-- Prepares Kubernetes so background workers can start one
-  [computer](../../GLOSSARY.md#computer) per assistant, including shared group assistants.
-- Checks the computer recorded by the deployment owner before collecting private memory results.
-- Checks that a private memory storage attempt belongs to this stack's claimed
-  secondary slot before the collector can send its test text.
-- Sets up test sign-in and a free stand-in AI provider; real providers need an explicit choice.
-  The stand-in also runs on its own for computer startup checks.
-  A disposable computer test can keep one synthetic private tool reply open while
-  the process checker measures the proxy.
-- Runs browser checks for chat, files, people, groups, shared assistants and spending.
-  Checks category selection and reference search in admin Change history.
-  Checks money there and keeps it out of member action history.
-  Scrolls waiting approvals into view before saving desktop and phone pictures.
-  Saves a private picture if the spending editor fails to load.
-- Checks ownership handover and refuses a last owner’s departure in manual named journeys.
-- Waits for each new rehearsal reply to finish, checks its facts and checks the saved
-  text after a reload. Uses separate messages and invitations for each screen width and
-  attempt, and saves step pictures before recording success. It records failed browser
-  reads privately so the request can be checked after a stopped run.
-- Checks CI-approved application and scanner pins again before reviewing the rendered install.
-- Refuses incomplete controller or credential settings for an optional PostgreSQL standby.
-  Checks password format and conflicting database connections before installation.
-  Checks backup Service ownership, named Secret entries and the endpoint certificate internally.
-  Verifies the Service hostname against the named CA. Uses the referenced identity to
-  create, read and remove one temporary marker in the named backup folder.
-  Includes the short-lived session token from the owned Secret in those requests.
-  Accepts the local marker check only with the short-lived credential record issued
-  by this installation. Checks the destination and the Secret used for the credential.
-  Refuses the check if the marker changes or cannot be removed.
-  Stops the check on cancellation or timeout, then gives marker cleanup its own short deadline.
-  Checks deletion permission before writing.
-  Backup and recovery installation remain blocked.
-  The local helper issues that credential for the silo recorded by this installation
-  and checks the policy signed into it.
-  A renewal closes the earlier credential record before requesting a new lease.
-  The new lease needs a fresh token and Secret generation for the same owned storage.
-  If renewal fails, the earlier record cannot approve another check.
-  The marker check reads that record again after its final Kubernetes read. It refuses
-  if a renewal or expiry closed the record while the read was waiting.
-  The installer still blocks backup and recovery settings.
-  Requires runtime and setup replica settings to match the chart before Helm runs.
-  Checks mounted event-log certificates and keys, connection settings and account rules.
-  Checks three-node eligibility, prepared certificates and image compatibility for
-  a three-peer event log. The shipped image review still refuses that mode.
-- Keeps two spare test stacks separate from the owner's copy and from each other.
-- Checks sign-in, personal memory reads, saves, correction and forgetting on an
-  empty installation. Checks supplied memory receipts and records incomplete
-  journeys honestly.
-- Checks the claimed slot and protected deployment target before memory collection.
-  Refuses incomplete results before the calling journey can continue.
-  Reports failed host safety checks with a reminder to disable swap and core dumps.
-- Keeps original receipts and separates browser checks from untested native
-  memory.
-- Lets a spare slot own a three-node Kubernetes test cluster. Saved ownership
-  keeps the slot reserved until the cluster and its data are removed.
-- Removes the nodes it created before reporting a failed start.
-- Keeps package commands on their recorded cluster. A missing target stops the command
-  before it can connect to the shared cluster. Ownership checks and forwarding keep the private
-  connection filename in the child environment rather than its command arguments.
-- Runs preflight and Helm beside the values file to keep private paths out of arguments.
-- Provides demo preparation and screen measurements, while refusing automated coding
-  jobs that try to run the owner's commands. Coding jobs can run fresh journeys on
-  claimed spare stacks with the free stand-in model; real providers are refused.
-- Checks the demo tool server through local TLS. Requires saved tool definitions and
-  linked approval and dispatch records in event-log order.
-  A disposable computer also checks that the free model can call a published read
-  tool and answer with its result in the same chat turn.
-  A guarded test launch keeps the full server and models processes and connects both
-  to one local demo server. It shares only the slot claim and demo socket with models;
-  personal and memory keys stay outside that container.
-  The collector saves each reply from the demo quote checks and each original event
-  before continuing. Closing the browser keeps the saved evidence. The receipt states
-  which browser steps were checked.
+- Start and stop local services and apps with private credentials.
+- Keep two spare test stacks separate from each other and the owner's stack.
+- Check listener addresses, upload scanning and worker readiness before browser checks.
+- Prepare test sign-in and a free stand-in AI provider.
+- Preserve private survey and memory keys across restarts of the same stack.
+- Apply safe background subscription changes while services are stopped.
+- Run browser journeys and keep screenshots and original results.
+- Check the claimed stack and protected target before private memory collection.
+- Keep package operations on their recorded cluster and remove only owned resources.
+- Provide guarded demo checks and a daily fresh-stack check.
+
+Not built yet:
+
+- Qualify native private memory through ordinary browser checks alone.
+- Enable the package's blocked database recovery and three-peer event-log options.
 
 ## Processes it handles
 
-1. **A fresh stack connects the AI.** Startup connects a free stand-in provider as
-   the owner would through the product's settings APIs. It checks the provider and
-   switches it on before chat checks run. On a spare stack, it allows the background
-   worker two minutes to record the first provider choice. Startup waits up to five minutes for the
-   website to answer and stops if its process exits.
-2. **A developer checks a change.** A browser signs in, sends a message and checks
-   the saved reply after reloading. Other journeys cover files, spending, the screen
-   and organisation settings; the approval journey remains skipped.
-3. **A developer runs a separate stack.** A
-   [claim](../../GLOSSARY.md#slot-spare-dev-stack) reserves one of two spare copies.
-   Each has its own ports, data and separate private key directories for surveys and
-   memory. Restart keeps those keys. Models and computers cannot read those directories;
-   cleanup removes only that claimed copy.
-4. **A journey prepares memory collection.** The launcher checks one claimed slot,
-   then waits for the existing collector and its cleanup. It does not set up an owner;
-   the collector’s runner may already have populated the installation.
-5. **The daily check runs.** A timer updates a separate checkout of the main branch,
-   starts a fresh spare stack with the free model and runs the browser journeys.
-   It saves the result and private failure logs outside the repository, then removes
-   that stack. If both spare stacks are busy, it records a skipped run.
+1. **A developer claims a stack.** A claim reserves one of two spare copies.
+   Each copy has its own ports, data and private keys. Cleanup removes only that copy.
+2. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
+   provider, then starts the apps. It waits for the website and dispatcher before
+   running the core browser journey.
+3. **A developer checks a change.** The browser signs in, sends a message and checks
+   the saved reply after reloading. Separate journeys cover files, spending,
+   desktop viewing and organisation settings.
+4. **An unsafe command is requested.** The launcher refuses automated coding jobs
+   that try to run owner commands or use real providers. Fresh journeys use a claimed
+   spare stack and the free stand-in model.
+5. **The daily check runs.** A timer starts a fresh spare stack from a separate main
+   checkout, runs browser checks and saves results. It removes its stack afterwards;
+   if both slots are busy, it records that the run was skipped.
 
 ## How to run or test it
 
-The development owner email is configured in a private file outside the repository.
-The [operator notes](README.robot.md#private-owner-email) explain that setting.
-
 The machine needs Docker, Node 22 and the cluster prepared by
-[infra/devbox](../devbox/README.md). These commands claim and use a spare stack:
-
-`npm run typecheck` checks the TypeScript in this folder as well as the apps and libraries.
-`npm run typecheck:dev-stack` checks this folder on its own.
+[infra/devbox](../devbox/README.md). Configure the
+[private owner setting](README.robot.md#private-owner-email) before starting.
+From the repository root, claim a spare stack and use its returned id:
 
 ```sh
 DEV_STACK_ID=$(infra/dev-stack/claim.sh) || exit 1
@@ -176,38 +74,16 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
-A fresh start replaces that stack's local data and credentials. A new spare stack
-prepares its survey and memory directories automatically. On repeat starts, the launcher
-checks changes to background work before starting apps. It applies changes with no matching
-events or only new event types while services are stopped. Changes that remove types with
-history need a manual upgrade. The stack reports ready only after the dispatcher starts
-reading events. For packaged checks, preparation fetches the scanner image and
-approval from the successful GitHub packaging job for the current source commit. The
-[package guide](../package/README.robot.md#packaged-upload-services) describes the
-image review and publication steps.
-
-Detailed recovery steps, real-provider choices and daily timer settings
-are in the operator notes.
-See [README.robot.md](README.robot.md#starting-and-stopping-the-stack) for the readiness marker.
-
-The owner stack builds the website for production when its website process starts.
-To show a new website change on the owner stack, stop it with
-`infra/dev-stack/down.sh`, then start it with `infra/dev-stack/up.sh --owner-run`.
-The start builds the website again and keeps the owner stack's saved data.
-Spare stacks use Angular’s development server and update the website while they run.
-Both paths read the saved installation name through the shared page function.
-
-## Folders
-
-| Folder | What it does |
-| --- | --- |
-| [systemd](systemd/README.md) | Schedules the daily check on a fresh spare stack. |
+A fresh start replaces that stack's data and credentials. Always stop the claimed
+stack when finished, including after a failure.
+[README.robot.md](README.robot.md#starting-and-stopping-the-stack) explains readiness,
+restart behaviour and focused tests. Type checks run with
+`nice -n 10 npm run typecheck:dev-stack`.
 
 ## Where to read more
 
-- [Local operator guide](README.robot.md#local-operator-guide): commands, evidence and recovery limits.
-- [README.robot.md](README.robot.md): settings, stack ownership, commands and detailed checks.
-- [Demo guide](../../docs/process/demo/README.md): demo preparation and current limits.
-- [infra/package](../package/README.md): the local Helm installation trial.
-- [infra/nats](../nats/README.md): event log connection rules.
+- [README.robot.md](README.robot.md): settings, folders, ownership and detailed checks.
+- [Local operator guide](README.robot.md#local-operator-guide): commands and recovery limits.
+- [infra/package](../package/README.md): the Helm installation trial.
+- [infra/nats](../nats/README.md): event-log connections.
 - [infra/clamav](../clamav/README.md): upload scanning.

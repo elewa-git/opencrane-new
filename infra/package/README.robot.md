@@ -924,6 +924,14 @@ Live rotation and three-node installation remain NOT RUN.
 
 ## Packaged bootstrap
 
+`chart.test.mjs` checks that backup cancellation stops a real child process.
+Its controlled clock checks that ownership checks reduce the time available
+for later commands. Run without a dev stack:
+
+```sh
+nice -n 10 node --experimental-strip-types --test infra/package/chart.test.mjs
+```
+
 P5-4 PR 5a carries one replica choice through preparation and bootstrap. The private
 settings writer chooses `1` when `natsCluster` is absent or explicitly disabled.
 It chooses `3` when `enabled` is `true` and `renderOnly` is a boolean. Missing or
@@ -1970,3 +1978,10 @@ Apache-2.0; MinIO SDK: Apache-2.0; pg: MIT), PostgreSQL image and its dump tool
 See `licence-inventory.json`, `package-debian-main.json` and
 `object-notices.json`. Every changed application image still needs the usual
 source, layer, licence and promotion checks before installation.
+
+## Folders
+
+| Folder | What it does |
+| --- | --- |
+| [chart](chart/README.md) | Describes the local installation and its required settings. |
+| [chart/templates](chart/templates/README.md) | Describes the programs, storage and network rules to install. |

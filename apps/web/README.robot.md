@@ -30,9 +30,9 @@ its open row by conversation and activity id so another chat cannot reuse it.
 
 ## Folder guides
 
-The package README names the browser startup files and test helpers. The top-level
+The Folders table below names the browser startup files and test helpers. The top-level
 `src` folder and test folders have no README of their own. Other website folders have
-short guides for people, linked from the package README. These guides keep the
+short guides for people, linked from that table. These guides keep the
 behaviour explanations moved out of the package overview.
 
 ## Upload refusal wording
@@ -1611,3 +1611,32 @@ The page shows a small loading row during an older read. `workspace.spec.ts`
 checks both 1280 px and 390 px.
 `npm run visual:chat-tail-window` saves tail and older-page pictures at both
 widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.
+
+## Folders
+
+| Folder | What it contains |
+| --- | --- |
+| [src](src/) | Browser startup in `main.ts`, `csp.ts` and `startup.ts`, the page in `index.html` and shared styles in `styles.css`. |
+| [test](test/) | `chat-browser.test.ts`, `chat-state.test.ts` and `theme.test.ts`; example pages in `live-view-main.ts` and `overlays-main.ts`; and the `chat-state.ts` transcript helper used by server recovery tests. |
+| [src/app](src/app/README.md) | Selects pages and puts them inside shared menus. |
+| [audit](src/app/audit/README.md) | Organisation changes and conversation action history. |
+| [chat](src/app/chat/README.md) | Assistant sessions, colleague chats, files and conversation lists. |
+| [claim](src/app/claim/README.md) | First-owner setup for a new installation. |
+| [core](src/app/core/README.md) | Browser navigation and the live server connection. |
+| [integrations](src/app/integrations/README.md) | Tool-server lists, details, changed tools and publication. |
+| [live-view](src/app/live-view/README.md) | Read-only viewing of an assistant's computer. |
+| [mcp-install](src/app/mcp-install/README.md) | Remote tool-server registration and package safety checks. |
+| [memory](src/app/memory/README.md) | Search, saving and forgetting of permitted memory facts. |
+| [models](src/app/models/README.md) | Provider setup, model choices and model permissions. |
+| [organisation](src/app/organisation/README.md) | Shared navigation for organisation settings. |
+| [people](src/app/people/README.md) | Members, groups, invitations, shared assistants and owners. |
+| [settings](src/app/settings/README.md) | Account identity, personal connections and settings navigation. |
+| [shared-state](src/app/shared-state/README.md) | Reusable progress, result and access messages. |
+| [sign-in](src/app/sign-in/README.md) | Company sign-in and its waiting and rejection pages. |
+| [spending](src/app/spending/README.md) | Budgets, charges and review of held amounts. |
+| [tool-policy](src/app/tool-policy/README.md) | Tool rules and initial person and assistant access. |
+| [ui](src/app/ui/README.md) | Shared dialogs, menus and paper effects. |
+| [ui/fold-loader](src/app/ui/fold-loader/README.md) | Folding-paper activity animation. |
+| [welcome](src/app/welcome/README.md) | Saved welcome-survey answers and progress. |
+| [public](public/README.md) | Files the browser loads directly. |
+| [public/chat](public/chat/README.md) | The paper background texture. |

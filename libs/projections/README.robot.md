@@ -278,6 +278,32 @@ The members worker also maintains the flat-group view (`groups`, `group_members`
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
 
+## PostgreSQL runner example
+
+This example connects the event store and the database, then fills the member
+tables. Before you run it, set `DATABASE_URL`, set the NATS settings described
+in [the event-store details](../event-store/README.robot.md), and create the
+event log once with `npm run provision`.
+
+```ts
+import { connectEventStore } from '@opencrane/event-store';
+import { createLogger } from '@opencrane/observability';
+import { connectProjectionDb, ProjectionRunner, members } from '@opencrane/projections';
+
+const logger = createLogger('members');
+function logDatabaseError(error: Error): void {
+  logger.error({ err: error }, 'Projection database connection failed');
+}
+
+const eventStore = await connectEventStore();
+const database = connectProjectionDb(process.env['DATABASE_URL']!, logDatabaseError);
+const runner = new ProjectionRunner(database.db, eventStore.store, logger);
+await runner.initialise(members);
+await runner.run(members);
+await database.close();
+await eventStore.close();
+```
+
 ## Personal connection list index
 
 `connectionProfiles` indexes valid personal `connection.created` records by silo,
