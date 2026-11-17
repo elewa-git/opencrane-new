@@ -3,7 +3,7 @@ import { toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { grantStream } from '@opencrane/authz';
 import { expect, onTestFinished } from 'vitest';
 import { z } from 'zod';
-import { readToolPolicy } from '../../src/index.ts';
+import { readToolPolicy, readApproval, decideApproval } from '../../src/index.ts';
 import { reviewToolPolicy, publishToolPolicy } from '../../src/tool-policy.ts';
 import { prepareGatewayConfiguration } from '../../src/gateway-generation.ts';
 import { gatewayDelivery } from '../../src/gateway-delivery.ts';
@@ -196,4 +196,31 @@ export function requestFromPermit(value: string) {
   const encoded = value.split('.')[0]!;
   const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString());
   return z.object({ requestId: z.string() }).parse(decoded).requestId;
+}
+
+export async function grantToolApproval(setup: Fixture, headers: Record<string, string>, approve = true) {
+  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
+    toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
+  const publication = { serverId: 'fixture', publishedBy: 'alice' };
+  await setup.append('mcp-fixture', 'mcp.server_published', publication);
+  const request = { method: 'POST', headers, body };
+  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
+    request);
+  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
+  const current = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  if (!approve) return answer.approvalId;
+  async function fresh() {}
+  const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
+    'alice', 'approved', true, fresh, current, setup.actor.now());
+  expect(result.status).toBe('appended');
+  const approved = await readApproval(setup.nats.store, 'test', answer.approvalId);
+  expect(approved.state).toBe('approved');
+  return answer.approvalId;
+}
+
+export async function approvalPermit(setup: Fixture, headers: Record<string, string>, approvalId: string) {
+  const approvalHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
+  const request = { method: 'POST', headers: approvalHeaders, body };
+  return fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
 }

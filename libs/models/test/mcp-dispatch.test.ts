@@ -1,4 +1,5 @@
-import { body, catalogue, tool, prepare, permit, send, reviewRestoration,
+import { body, catalogue, tool, prepare, permit, send, grantToolApproval, approvalPermit,
+  reviewRestoration,
   publishRestoration, restorationDelivery, generationHeaders, publishedFixture,
   selectedPersonalFixture, requestFromPermit } from './support/mcp-dispatch-fixture.ts';
 /* eslint max-lines: ["error", { max: 3622, skipBlankLines: true, skipComments: true }] */
@@ -740,33 +741,6 @@ async function watchesCatalogue(failure: 'drift append' | 'drift saved' | 'faile
 it.each(['drift append', 'drift saved', 'failed', 'stalled', 'replacement'] as const)(
   'holds recording upstream through %s and recaptures on worker replacement', watchesCatalogue, 60_000);
 
-async function grantToolApproval(setup: Fixture, headers: Record<string, string>, approve = true) {
-  const mode = { serverId: 'fixture', connectionId: 'installed', toolName: 'write',
-    toolRevision: tool.revision, mode: 'ask', setBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.tool_mode_set', mode);
-  const publication = { serverId: 'fixture', publishedBy: 'alice' };
-  await setup.append('mcp-fixture', 'mcp.server_published', publication);
-  const request = { method: 'POST', headers, body };
-  const response = await fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`,
-    request);
-  const answer = z.object({ approvalId: z.string() }).parse(await response.json());
-  const current = await readApproval(setup.nats.store, 'test', answer.approvalId);
-  if (!approve) return answer.approvalId;
-  async function fresh() {}
-  const result = await decideApproval(setup.nats.store, 'test', answer.approvalId,
-    'alice', 'approved', true, fresh, current, setup.actor.now());
-  expect(result.status).toBe('appended');
-  const approved = await readApproval(setup.nats.store, 'test', answer.approvalId);
-  expect(approved.state).toBe('approved');
-  return answer.approvalId;
-}
-
-async function approvalPermit(setup: Fixture, headers: Record<string, string>, approvalId: string) {
-  const approvalHeaders = { ...headers, 'x-opencrane-approval-id': approvalId };
-  const request = { method: 'POST', headers: approvalHeaders, body };
-  return fetch(`${setup.options.decisionUrl}/authorize/mcp/fixture/installed`, request);
-}
-
 const renewalCases = ['fresh', 'expired observed', 'expired unread', 'expired during append'] as const;
 async function checksApprovalAfterRenewal(renewal: typeof renewalCases[number]) {
   const setup = await fixture();
@@ -979,6 +953,11 @@ async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApproval
   try {
     const headers = await prepare(setup);
     const initial = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+    // Advance the intended capture timeout without timing real fixture service replies.
+    const timerOptions: Parameters<typeof vi.useFakeTimers>[0] = {
+      toFake: ['setTimeout', 'clearTimeout', 'performance'], shouldClearNativeTimers: true,
+    };
+    vi.useFakeTimers(timerOptions);
     const capture = vi.fn();
     capture.mockResolvedValue(initial.catalogue);
     const options = { serverIds: ['fixture'], capture, timeoutMs: 500,
@@ -990,12 +969,22 @@ async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApproval
     if (testCase.retry) await verifyApprovalRetry(setup, headers, approvalId);
     const before = await readToolPolicy(setup.nats.store, 'test', 'fixture');
     const stalled = Promise.withResolvers<NonNullable<typeof initial.catalogue>>();
+    const captureStarted = Promise.withResolvers<void>();
+    function stalledCapture() {
+      captureStarted.resolve();
+      return stalled.promise;
+    }
     if (testCase.failure === 'failed') {
       capture.mockRejectedValue(new Error('Upstream unavailable'));
     } else {
-      capture.mockReturnValue(stalled.promise);
+      capture.mockImplementation(stalledCapture);
     }
-    await expect(watch.check('fixture')).rejects.toThrow();
+    const failedCheck = expect(watch.check('fixture')).rejects.toThrow();
+    if (testCase.failure === 'stalled') {
+      await captureStarted.promise;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    await failedCheck;
     expect(() => watch!.requireCurrent('fixture')).toThrow();
     capture.mockResolvedValue(initial.catalogue);
     await watch.check('fixture');
@@ -1008,6 +997,7 @@ async function refusesOldApprovalAfterRecovery(testCase: typeof recoveryApproval
     expect.soft(response.headers.get('x-opencrane-mcp-permit')).toBeNull();
     expect.soft(setup.received()).toBe(0);
   } finally {
+    vi.useRealTimers();
     watch?.close();
     await setup.close();
   }
