@@ -147,7 +147,8 @@ export function buildProductionServer(config: AuthConfig, options: BuildServerOp
 }
 
 async function holdRestoredWrites(request: FastifyRequest, reply: FastifyReply) {
-  if (request.url.startsWith('/api/') && request.method !== 'GET' && request.method !== 'HEAD') {
+  const signOut = request.url.split('?')[0] === '/auth/logout';
+  if (request.method !== 'GET' && request.method !== 'HEAD' && !signOut) {
     return reply.code(503).send({ status: 'unavailable', reason: 'restore_read_only' });
   }
   return;

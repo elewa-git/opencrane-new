@@ -7568,7 +7568,7 @@ Independent review was not run.
 ## Reading after pilot restore
 
 `PILOT_RESTORE_READ_ONLY=true` keeps normal authenticated reads and their access
-checks. The server refuses non-GET and non-HEAD API calls with HTTP 503 and
+checks. The server refuses non-GET and non-HEAD requests, apart from sign-out, with HTTP 503 and
 `restore_read_only`, including owner claims. It starts no bridge watcher, child
 recovery, live view or ownership seed. The restore chart omits the models container
 and holds workers and scheduled backup. Authentication still uses the normal OIDC

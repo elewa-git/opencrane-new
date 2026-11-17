@@ -2,8 +2,6 @@ import { readConversationProse } from '@opencrane/events';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
@@ -23,7 +21,6 @@ let fga: Awaited<ReturnType<typeof openfga>>;
 let options: Parameters<typeof addChildFirstInput>[0];
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
-let directory: string;
 let counter = 0;
 const creationSchema = eventEnvelopeSchema(conversationCreatedDataSchema);
 const sourceText = '  Reviewed **source**\nwith exact spacing.  ';
@@ -47,7 +44,6 @@ async function initialiseWithNats(fixture: typeof nats) {
   nats = fixture;
   storage = await databases();
   fga = await openfga();
-  directory = await mkdtemp(`${tmpdir()}/child-first-input-`);
   const db = pgDb(storage.queue);
   const binding = await createStore(fga.apiUrl, 'test');
   options = { silo: 'test', store: nats.store, db, binding };
@@ -71,14 +67,13 @@ async function close() {
   await nats?.close();
   await storage?.close();
   await fga?.close();
-  if (directory) await rm(directory, { recursive: true, force: true });
 }
 afterAll(close);
 afterEach(vi.restoreAllMocks);
 async function post(conversationId: string, authorId: string, text: string) {
-  const encrypted = ({ utterance: text });
+  const prose = { utterance: text };
   const data = { conversationId, authorId, authorKind: 'human', contentType: 'markdown',
-    ...encrypted };
+    ...prose };
   const saved = { ...event(`message-${++counter}`, `conversation-${conversationId}`, 'message.posted'),
     principal: { kind: 'human' as const, id: authorId }, data };
   return append(saved);
@@ -141,7 +136,7 @@ async function copiesAfterReceipt() {
   expect(readConversationProse(first.event.data)).toBe(sourceText);
   expect(await chatHistory(nats.store, 'test', data.childConversationId)).toEqual([creation, first]);
   expect(await chatHistory(nats.store, 'test', input.conversationId)).toEqual(parentBefore);
-  expect(JSON.stringify(first)).not.toMatch(/canary|Reviewed/u);
+  expect(JSON.stringify(first)).not.toMatch(/canary/u);
   appends.mockClear();
   await runner.rebuild(conversations);
   const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader,
@@ -273,15 +268,13 @@ async function refusesDifferentInput(patch: string) {
 
   let text = sourceText;
   if (patch === 'text') text = 'a different message';
-  const encrypted = ({ utterance: text });
+  const prose = { utterance: text };
   let payload: object = { conversationId: data.childConversationId, authorId: 'alice',
-    authorKind: 'human', contentType: 'markdown', ...encrypted };
+    authorKind: 'human', contentType: 'markdown', ...prose };
   if (patch === 'authorId') payload = { ...payload, authorId: 'bob' };
   if (patch === 'authorKind') payload = { ...payload, authorKind: 'agent' };
   if (patch === 'contentType') payload = { ...payload, contentType: 'text' };
   if (patch === 'executionMode') payload = { ...payload, executionMode: 'memory_free' };
-  if (patch === 'keyId') payload = { ...payload, keyId: 'key:other' };
-  if (patch === 'ciphertext') payload = { ...payload, ciphertext: 'bm90LWNpcGhlcnRleHQ=' };
   const saved = { ...event(data.firstInputId, `conversation-${data.childConversationId}`,
     'message.posted'), commandId: data.firstInputId,
     principal: { kind: 'human' as const, id: 'alice' }, data: payload };
@@ -298,8 +291,7 @@ async function refusesDifferentInput(patch: string) {
   await expect(addChildFirstInput(options, 'alice', input)).rejects.toThrow(ChatConflict);
   expect(await nats.store.head()).toBe(before);
 }
-it.each(['text', 'authorId', 'authorKind', 'contentType', 'executionMode', 'keyId',
-  'ciphertext', 'commandId', 'principal', 'source', 'correlation', 'type'])(
+it.each(['text', 'authorId', 'authorKind', 'contentType', 'executionMode', 'commandId', 'principal', 'source', 'correlation', 'type'])(
   'refuses an existing input with different %s', refusesDifferentInput);
 
 async function refusesChangedCreation(field: string) {

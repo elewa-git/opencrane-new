@@ -1,3 +1,4 @@
+import type { PackageReview } from './package-review.ts';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -78,11 +79,6 @@ type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
   images: Record<string, string>;
   natsCluster?: { enabled: boolean };
   pilotRestore?: { enabled: boolean; backupId: string };
-};
-type PackageReview = {
-  requiredSecrets: string[];
-  chartVersion: string;
-  images: Record<string, string>;
 };
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
@@ -510,8 +506,12 @@ export async function installPackage(valuesFile: string) {
   await saveOwner(owner);
   await configureComputerGateway(owner);
   if (!values.pilotRestore?.enabled) await waitForBootstrap(owner);
-  await checkedKubectl(['-n', namespace, 'rollout', 'status', 'statefulset/objects',
-    '--timeout=120s'], 150_000);
+  const storage = ['objects'];
+  if (values.pilotRestore?.enabled) storage.push('nats', 'postgres');
+  for (const service of storage) {
+    await checkedKubectl(['-n', namespace, 'rollout', 'status', `statefulset/${service}`,
+      '--timeout=120s'], 150_000);
+  }
   const deployments = [
     'scanner', 'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
     'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
