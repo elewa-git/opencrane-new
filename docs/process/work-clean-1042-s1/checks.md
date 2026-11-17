@@ -55,6 +55,9 @@ preserve its identifiers and timestamps, with all saves through `appendEvent`.
 Delete both ops append helpers. Keep existing projection and permission delivery
 steps in their tests. Add no dependency, raised limit or product rule.
 
+Fresh CORE: PASS at `0e762c212d088fbdcd11796fdb6e6f1e3373052b`.
+See the [journey receipt and screenshots](journey.md). Slot 1 is released.
+
 ## Remaining server helpers
 
 - `apps/server/test/audit-child-publication.test.ts`
