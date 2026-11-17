@@ -1305,6 +1305,12 @@ P3-14/P3-15 own hard-stop cascades and evidence-based uncertainty resolution.
 
 ## Run and test
 
+With `PG_TEST_URL` set to a disposable test database, run the focused accounting checks:
+
+```sh
+nice -n 10 npx vitest run libs/models/test/accounting.test.ts --maxWorkers=1
+```
+
 `apps/server/src/models-main.ts` is the supervised process entrypoint; the dev
 stack supplies its NATS command credentials, projection database, silo/OpenFGA
 binding, lifecycle public JWKS file, `TOKEN_ISSUER`, state directory and three ports. On a fresh stream, the model process explicitly
@@ -1895,6 +1901,15 @@ identical names. No refused request reaches the tool server. Valid single-header
 requests still keep their original body bytes and public headers.
 
 ## Member reads
+
+A new owner counts only after `member.ownership_confirmed` matches the saved
+appointment. `currentMembership` reads the person's own member stream and the
+ownership stream. `currentOwnershipMembership` also reads other appointed members'
+confirmations when a command needs the full owner list. The ops worker uses
+`ownershipConfirmationHandler` to save the confirmation.
+
+Invitation acceptance uses these membership checks to recheck the sender's authority.
+The server owns the [bound invitation checks](../../apps/server/README.robot.md#bound-invitation-checks).
 
 `readActiveMember(..., requiredRole = 'member')` checks events, ownership and IAM once.
 `'admin'` requires Owner/Admin; reads use no `authorityFence` or conversation activity.
