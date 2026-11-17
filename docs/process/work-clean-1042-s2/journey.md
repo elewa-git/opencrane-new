@@ -62,3 +62,26 @@ shows the read-only computer view. This differs from the earlier attachment-repl
 failure; neither run proves a product defect or qualifies the slice for merge.
 The 1280 px checks and later CORE steps were NOT RUN. No passing-run screenshots
 were produced. Paid-provider and approval journeys remain NOT RUN.
+
+## Fresh rerun 2
+
+Journey on a fresh dev stack: FAIL
+
+- Date: 17 November 2026.
+- Tested head: `90e88b1682a615c3037cbc6d343432867729e4b9`.
+- Fresh secondary slot: 1; managed calls enabled with the free stand-in provider.
+- Before claiming the slot, the one-minute load stayed below 6 for five minutes.
+  Samples at 30-second intervals ranged from 2.08 to 4.67; the five-minute sample
+  was 3.41.
+- `infra/dev-stack/up.sh --fresh`: FAIL, exit 1 during the browser journey.
+- `infra/dev-stack/down.sh --id 1`: PASS; final slot status was `free`.
+- Sanitised startup and service logs are in the private rerun receipt. The failure
+  capture is [the read-only computer view](screenshots/rerun-2-chat-failure-390.png).
+
+The 390 px workspace, upload, preview and attachment checks completed. The later
+computer live-view check timed out after 30 seconds waiting for the fourth agent
+reply's “Done” marker. The capture shows the computer view and does not establish
+that reply completion passed. The 1280 px checks and later CORE steps were NOT RUN.
+The attachment reply did not reproduce its earlier failure in this attempt. This
+run does not qualify the slice for merge. Paid-provider and approval journeys remain
+NOT RUN.
