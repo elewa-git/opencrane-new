@@ -40,3 +40,56 @@ function acceptsValidOverview() {
 }
 
 test('accepts three small diagrams with a registered event and tracked file', acceptsValidOverview);
+
+const invalidPages = [
+  ['a made-up event', validPage + '`approval.requested`', 'Unknown event: approval.requested'],
+  ['a missing file', validPage + '`apps/server/missing.ts`', 'Untracked path'],
+  ['a missing diagram', diagram.repeat(2), 'exactly 3 sequence diagrams'],
+  ['an extra diagram', diagram.repeat(4), 'exactly 3 sequence diagrams'],
+  ['9 participants', validPage.replace('participant Browser',
+    'participant A\nparticipant B\nparticipant C\nparticipant D\nparticipant E\n' +
+    'participant F\nparticipant G\nparticipant H\nparticipant Browser'), 'participants'],
+  ['9 implicit participants', validPage.replace('Browser->>Server: Send',
+    'A->>B: Send\nB->>C: Send\nC->>D: Send\nD->>E: Send\nE->>F: Send\n' +
+    'F->>G: Send\nG->>H: Send\nH->>I: Send'), 'participants'],
+  ['26 arrows', validPage.replace('Browser->>Server: Send',
+    'Browser-->>Server: Send\n'.repeat(26)), 'arrows'],
+  ['more than 250 lines', validPage + '\n'.repeat(250), '250 lines'],
+];
+
+function refusesInvalidOverview(_name, markdown, message) {
+  const result = runCheck(markdown);
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain(message);
+}
+
+test.each(invalidPages)('refuses %s', refusesInvalidOverview);
+
+function acceptsTrackedFolderAndOtherNames() {
+  const result = runCheck(validPage + '`apps/server/` and `config.json` and `unknown.word`.');
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('accepts tracked folders and names outside the event families', acceptsTrackedFolderAndOtherNames);
+
+function refusesExistingUntrackedFile() {
+  writeFileSync(join(repository, 'apps/server/untracked.ts'), '');
+  const result = runCheck(validPage + '`apps/server/untracked.ts`');
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('Untracked path');
+}
+
+test('refuses an existing file which git does not track', refusesExistingUntrackedFile);
+
+function acceptsLimits() {
+  const participants = 'participant A\nparticipant B\nparticipant C\nparticipant D\n' +
+    'participant E\nparticipant F\nparticipant G\nparticipant H\n';
+  const maximumDiagram = '```mermaid\nsequenceDiagram\n' + participants +
+    'A->>H: Send\n'.repeat(25) + '```\n';
+  const page = '# Overview\n' + maximumDiagram.repeat(3);
+  const lineCount = page.trimEnd().split('\n').length;
+  const result = runCheck(page + '\n'.repeat(250 - lineCount));
+  expect(result.status, result.stderr).toBe(0);
+}
+
+test('accepts exactly 250 lines, 8 participants and 25 arrows per diagram', acceptsLimits);
