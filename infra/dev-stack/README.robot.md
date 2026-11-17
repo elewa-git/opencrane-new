@@ -628,7 +628,11 @@ infra/dev-stack/journey.sh
 infra/dev-stack/down.sh
 ```
 
-`up` includes the core journey. Every command also accepts `--id 1` or `--id 2`,
+`up` includes the core journey, including a tool approval and denial after 3,000
+saved messages at both browser widths. The approval driver uses a scripted active
+turn and the recording stand-in tool through the real gateway; it makes no paid
+model call. It checks one approved send, single use and zero sends after denial.
+ Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
 
 Secondary Zitadel setup verifies the fixed OpenCrane 2 Dev organisation and project
