@@ -1,8 +1,9 @@
 # Capability-ledger fresh CORE journey
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: PASS (core journey)
 
-Tested head: `9bf27f7e62b2080602a95d247b536e3b7cc529c7`.
+Latest tested head: `c51db8f86d99f9d4e02543d786bff1634f27b3b2`.
+The first attempt below tested `9bf27f7e62b2080602a95d247b536e3b7cc529c7`.
 Date: 17 November 2026 UTC. Branch: `work/clean-1041-s1`.
 The later receipt commit changes documents and the failure picture only.
 
@@ -46,7 +47,7 @@ provide a confirmed cause either. No retry, longer timeout or access change was 
 `infra/dev-stack/down.sh` exited 0. A subsequent status check reported `free`.
 The worktree remains available. This failed regression journey does not change any
 historical capability verdict copied into the ledger from committed receipts.
-The draft cannot merge until the required fresh CORE journey passes.
+At that point the draft could not merge until a fresh CORE journey passed.
 
 ## Load-qualified rerun
 
@@ -65,6 +66,43 @@ does not establish that host load caused this failure.
 The startup output and service logs were copied outside the repository before
 teardown. `down.sh` exited 0, and the following status check reported `free`. This
 was the single permitted rerun; no retry or timeout change was made.
+
+## Load-qualified CORE rerun
+
+Journey on a fresh dev stack: PASS (core journey)
+
+Tested head: `c51db8f86d99f9d4e02543d786bff1634f27b3b2`. Date: 17 November 2026 UTC.
+After eleven readings at 30-second intervals stayed below 6 for over five minutes,
+claimed secondary slot 1 and ran `infra/dev-stack/up.sh --fresh`. The readings ran
+from 16:19:26 to 16:24:51 UTC; each 1-minute load average was below 6. Load at startup
+was 5.28. Bootstrap, managed-provider setup and website readiness passed; readiness
+took 55,077 ms.
+
+| UTC | 1-minute load average |
+| --- | ---: |
+| 16:19:26 | 3.64 |
+| 16:20:02 | 3.04 |
+| 16:20:32 | 3.23 |
+| 16:21:06 | 3.54 |
+| 16:21:36 | 3.80 |
+| 16:22:11 | 4.29 |
+| 16:22:41 | 3.80 |
+| 16:23:14 | 4.34 |
+| 16:23:44 | 3.67 |
+| 16:24:21 | 3.15 |
+| 16:24:51 | 4.70 |
+
+The 390 px and 1280 px browser journeys passed. Both chats streamed a stub reply,
+survived reload and retained Stop text. Both uploads passed after one upload retry;
+the runner logged `net::ERR_FAILED` during upload transport twice. Live view, sign-in,
+session and organisation refusals, audit, budget, replay, token-boundary, sign-out,
+reauthentication and loopback-listener checks passed. The approval journey was skipped
+because it waits for #45 rows 4, 5 and 14; it is not part of this CORE result.
+
+No journey step failed, so there is no failure load. Load at the runner's completion
+was 16.00. The stack was stopped with `down.sh`, which exited 0; the following status
+check reported `free`. The start and teardown record is in the private task receipt
+directory. This passing rerun does not remove either earlier failure record above.
 
 ## Own source checks
 
