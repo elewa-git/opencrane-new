@@ -4,7 +4,8 @@ Journey on a fresh dev stack: PASS
 
 Tested head: `641f4ef3c3535cf32fae10ae0c954da2cbeaf105`.
 Date: 17 November 2026 UTC. Branch: `work/clean-255-s1`.
-The later receipt commit changes documents and images only.
+Later commits change tests, documents, measurements and images only.
+The fix round changes no shipped code, so this CORE PASS still covers the product code.
 
 ## Fresh stack and browser steps
 
@@ -85,11 +86,44 @@ took 504.68 ms and 385.33 ms, with 50 indexed reads and 266 NATS requests each.
 
 Reused the existing audit discovery route and shared service fixture. Deleted the
 silo-scan fallback, its import and the unused starting-position option. Separated
-listing options from single-approval read options. Updated only the four direct
-calls named in the issue review; their assertions are unchanged. Both server
-access test files are unchanged. Added no dependency, event type, authority stream,
+listing options from single-approval read options. The four direct listing
+calls named in the issue review discover requests across every `approval-*` stream;
+their assertions are unchanged. Both server access test files are unchanged. Added no dependency, event type, authority stream,
 catch, retry or raised limit. Existing current-access and saved-state checks remain.
 The shipped-code diff is 28 lines: eight added and 20 deleted.
 
 The gateway timeout on a 5,000-message conversation is outside this slice and was
 not exercised. New volume tests call listing and seed saved events directly.
+
+## Fix round 1 checks
+
+The gateway listing checks now discover request events from every candidate
+`approval-*` stream with the existing bounded event reader. They retain the
+one-card and original-id assertions. The test change was committed first as
+`63c15f8d8`.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Approval mismatch guard mutation | FAIL (expected) | Disabled `policy.expectedApproval !== prepared.approvalId` once. The real-gateway `bytes` case found two cards instead of one (11.52 s). Restored the guard before the regression batches. |
+| Requested regression batch, first run | PASS | `approvals.test.ts`, `bridge-approvals.test.ts` and `codex-mcp.test.ts`: 150 passed, one existing opt-in skipped; 376.25 s. |
+| Requested regression batch, second run | PASS | The same three files: 150 passed, one existing opt-in skipped; 323.63 s. |
+| Typecheck | PASS | All workspaces, package and dev-stack. |
+| Event catalogue | PASS | 174 event types agree. |
+| Scoped ESLint | PASS | Changed test file; zero warnings. |
+| Knip and changelog | PASS | Two existing Knip configuration hints; no unused-code failure. |
+| Markdown | PASS | Repository check with no file arguments; zero issues. |
+
+Both batches used `nice -n 10`, at most two workers and the supplied disposable
+PostgreSQL database. No full root suite ran. The product code matches the
+CORE-tested source at `641f4ef3c`, so the existing fresh CORE PASS still applies.
+A fresh journey rerun is NOT RUN because this fix changes tests only.
+Live approval and real-provider qualification remain NOT RUN.
+
+Reviewed the changes against the engineering cleanup table: reused `readEvents`,
+kept one named discovery helper and retained all assertions. Added no dependency,
+product abstraction, timeout, retry or catch. `origin/main` was still the existing
+base `aa5c2506e` after fetching; no rebase was needed or left in progress.
+
+The earlier browser CI job failed while pulling pinned images, before its tests
+ran. The workflow is unchanged. Fresh CI results belong to the pushed head and
+are reported on the PR rather than claimed by this local receipt.
