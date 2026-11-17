@@ -7,7 +7,7 @@ Run date: 17 November 2026. Qualified source:
 Images came from the successful CI
 [application approval](https://github.com/elewa-git/opencrane-new/actions/runs/44175150216)
 and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/44175157986).
-The pull request records the later repeat using images for its final receipt commit.
+See the pull request for the final-head image approvals and repeat.
 The model uses the local stand-in; this does not qualify a real provider.
 
 ## Steps observed
