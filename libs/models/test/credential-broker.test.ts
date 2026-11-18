@@ -1,11 +1,11 @@
 import { seedKeyAssistant } from './support/connection-release.ts';
-import { credentialReleaseEvidence } from '../src/credential-release.ts';
+import { confirmPreparedCredentialRelease, credentialReleaseEvidence } from '../src/credential-release.ts';
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { databases, until } from '@opencrane/authz/testing';
 import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
@@ -629,3 +629,65 @@ async function changedConsentInvalidatesPass() {
 }
 it('refuses an old revision pass after the list changes even if the assistant stays allowed',
   changedConsentInvalidatesPass);
+
+async function timedFixture() {
+  const clock = manualClock(performance.now() + 5000);
+  const previous = nats;
+  nats = await natsFixture({ clock });
+  async function restoreFixture() {
+    await nats.close();
+    nats = previous;
+  }
+  onTestFinished(restoreFixture);
+  const test = await fixture();
+  return { clock, test };
+}
+
+async function releaseDeadline(expired: boolean) {
+  const { clock, test } = await timedFixture();
+  const evidence = await credentialReleaseEvidence(nats.store, 'test', test.decision.id,
+    test.release, test.loadConfiguration);
+  const prepared = { release: test.release, evidence };
+  const started = clock.now();
+  async function checkAccess() {
+    if (expired) clock.advance(2001);
+  }
+  const access = { deadline: Infinity, checkAccess };
+  const append = vi.spyOn(nats.store, 'append');
+  const result = confirmPreparedCredentialRelease(nats.store, 'test', prepared, access, 'claim');
+  if (expired) {
+    await expect(result).rejects.toThrow('Release unavailable');
+    expect(append).not.toHaveBeenCalled();
+  } else {
+    await result;
+    expect(append.mock.calls[0]?.[0].deadline).toBe(started + 2000);
+  }
+}
+it.each([false, true])('uses manual time for release confirmation (expired: %s)', releaseDeadline);
+
+async function brokerDeadline(expired: boolean) {
+  const { clock, test } = await timedFixture();
+  const started = clock.now();
+  async function checkAccess() {}
+  async function prepareAccess() {
+    return { deadline: Infinity, checkAccess };
+  }
+  const read = test.custody.readAccessMaterial.bind(test.custody);
+  async function readMaterial(...args: Parameters<typeof read>) {
+    const material = await read(...args);
+    if (expired) clock.advance(2001);
+    return material;
+  }
+  vi.spyOn(test.custody, 'readAccessMaterial').mockImplementation(readMaterial);
+  const append = vi.spyOn(nats.store, 'append');
+  const result = test.broker(test.context, test.send, prepareAccess).send();
+  if (expired) {
+    await expect(result).rejects.toThrow('Release unavailable');
+    expect(test.sends).toEqual([]);
+  } else {
+    await result;
+    expect(test.sends).toEqual(['synthetic-access']);
+  }
+  expect(append.mock.calls[0]?.[0].deadline).toBe(started + 2000);
+}
+it.each([false, true])('uses manual time before sending credentials (expired: %s)', brokerDeadline);
