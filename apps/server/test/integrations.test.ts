@@ -1,3 +1,5 @@
+import { chooseToolMode, expectReviewedTools, waitForToolPolicy } from './support/tool-policy-choice.ts';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
 /* eslint max-lines: ["error", { max: 2189, skipBlankLines: true, skipComments: true }] */
 import type { AppendCommand } from '@opencrane/event-store';
 import { Writable } from 'node:stream';
@@ -221,6 +223,7 @@ it('refuses another organisation and a cookie role without projected membership'
 });
 
 it('loads through the dev proxy and preserves the accessible refresh journey in Chromium', async () => {
+  const fixtureClock = holdFixtureClock();
   const remote = await remoteFixture();
   installWorker(app, nats.store, 'test', remote.network).start();
   await prepareReviewedOdooCatalogue();
@@ -322,18 +325,12 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('link', { name: 'Integrations', exact: true }).click();
     await page.locator('.register-row').first().waitFor();
 
-    const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
+    const toolsLoaded = waitForToolPolicy(page, base, 'odoo');
     await page.goto(`${base}/org/integrations/odoo/tools`);
-    expect((await toolsLoaded).status()).toBe(200);
+    const toolsResponse = await toolsLoaded;
+    await expectReviewedTools(toolsResponse);
     await page.getByRole('heading', { name: 'Tools & access' }).waitFor();
-    await page.getByRole('group', { name: 'write' })
-      .locator('label').filter({ hasText: 'Allow automatically' }).click();
-    const saved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/odoo/tools'));
-    // Angular enables Save after rendering the choice; press() does not wait for enabled controls.
-    await page.getByRole('button', { name: 'Save mode for write', disabled: false })
-      .press('Enter');
-    expect((await saved).status()).toBe(200);
-    await page.getByText('Saved write: Allow automatically').waitFor();
+    await chooseToolMode(page, 'odoo', 'write', 'Allow automatically');
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
@@ -496,6 +493,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     }
     await context.close();
   } finally {
+    fixtureClock.mockRestore();
     config.redirectUri = originalRedirect;
     await remote.close();
     await browser.close();

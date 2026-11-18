@@ -10,7 +10,7 @@ import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalog
 import { WebSocket } from 'ws';
 import { encodeSession, computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
-import { connectMemberFeed, conversations, computers, ProjectionRunner, readConversation }
+import { connectMemberFeed, conversationKeys, conversations, computers, ProjectionRunner, readConversation }
   from '@opencrane/projections';
 import { until } from '@opencrane/authz/testing';
 import { buildServer } from '../src/server.ts';
@@ -27,7 +27,6 @@ import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { createEventStore, type AppendCommand, type StoredEvent } from '@opencrane/event-store';
 import { event } from '@opencrane/event-store/testing';
 import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
-import { conversationKeys } from '@opencrane/projections';
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { TupleClient, objectId } from '../../../libs/authz/src/client.ts';
@@ -35,7 +34,7 @@ import { database } from '../../../libs/projections/test/database.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { calculateRoutineOccurrence } from '@opencrane/events/routine-schedule';
-import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
+import { withHeldFixtureClock } from '../../ops/test/support/routine-clock.ts';
 import { claimScheduledRoutine } from '../../ops/test/support/routine-claim.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { applyRoutineStop } from '../src/routine-stop-budget.ts';
@@ -166,15 +165,6 @@ function prepare(store = nats.store, request: unknown = input, workerId = 'routi
   if (rootMode) return allocateRoutineRoot(store, keys, worker, request, actor, selection);
   if (inputMode) return prepareRoutineInput(store, keys, worker, request);
   return prepareRoutineSession(store, keys, worker, request);
-}
-async function prepareWithHeldClock() {
-  // Keep fixture admission valid while real services reply. Test bodies control expiry.
-  const heldClock = holdFixtureClock();
-  try {
-    return await prepare();
-  } finally {
-    heldClock.mockRestore();
-  }
 }
 async function rows() {
   const saved: StoredEvent[] = [];
@@ -618,7 +608,7 @@ function routineInputTests() {
   async function preparedSession() {
     encryption.mockRestore();
     decryption.mockRestore();
-    await prepareWithHeldClock();
+    await withHeldFixtureClock(prepare);
     inputMode = true;
   }
   beforeEach(preparedSession);
@@ -1175,12 +1165,12 @@ function routineRootTests() {
   async function preparedInput() {
     encryption.mockRestore();
     decryption.mockRestore();
-    await prepareWithHeldClock();
+    await withHeldFixtureClock(prepare);
     const auth = memberAuthorisation(binding, nats.store);
     const saved = await rows();
     await auth.handler.handle(saved[0]!.event, db);
     inputMode = true;
-    await prepareWithHeldClock();
+    await withHeldFixtureClock(prepare);
     for (const [granteeKind, granteeId] of [['member', 'alice'], ['assistant', 'sales-assistant']]) {
       const grant = record(`grant-${granteeKind}`, grantStream('model', 'gpt-6.1-sol'),
         'grant.given', { resourceType: 'model', resourceId: 'gpt-6.1-sol',
@@ -1714,7 +1704,7 @@ function routineRootTests() {
 
   function activationTests() {
     async function allocated() {
-      await prepareWithHeldClock();
+      await withHeldFixtureClock(prepare);
       activationMode = true;
     }
     beforeEach(allocated);

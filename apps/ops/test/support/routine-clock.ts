@@ -21,3 +21,13 @@ export async function withRoutineFixtureClock<Result>(work: () => Promise<Result
     vi.useRealTimers();
   }
 }
+
+export async function withHeldFixtureClock<Result>(work: () => Promise<Result>) {
+  // Keep fixture admission valid while real services reply. Test bodies control expiry.
+  const heldClock = holdFixtureClock();
+  try {
+    return await work();
+  } finally {
+    heldClock.mockRestore();
+  }
+}
