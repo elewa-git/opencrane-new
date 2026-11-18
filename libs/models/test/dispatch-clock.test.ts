@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { expect, it, onTestFinished, vi } from 'vitest';
 import { manualClock } from '@opencrane/event-store/testing';
 import { fixture } from './fixture.ts';
 import { permit, prepare, send } from './support/mcp-dispatch-fixture.ts';
@@ -28,6 +28,7 @@ async function dispatchWithClock(expired: boolean) {
       clock.advance(expired ? 2000 : 1999);
     }
     const admission = vi.spyOn(store, 'append').mockImplementation(appendAdmission);
+    onTestFinished(admission.mockRestore.bind(admission));
     setup.dispatchOptions.requireCatalogue = checkFinalRoute;
     const response = await send(setup, value);
     const text = await response.text();

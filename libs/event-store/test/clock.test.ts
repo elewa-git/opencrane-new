@@ -84,26 +84,30 @@ async function independentFixtureClocks() {
   try {
     const second = await natsFixture();
     try {
-      const firstNow = first.store.clock.now;
-      const secondNow = second.store.clock.now;
-      const adapterNow = systemClock.now;
+      const firstClock = first.store.clock;
+      const secondClock = second.store.clock;
+      const firstReader = Object.getOwnPropertyDescriptor(firstClock, 'now');
+      const secondReader = Object.getOwnPropertyDescriptor(secondClock, 'now');
+      const adapterReader = Object.getOwnPropertyDescriptor(systemClock, 'now');
       const firstTime = manualStoreTime(first.store, 1_000_000);
-      const secondTime = manualStoreTime(second.store, 2_000_000);
       firstTime.advance(2000);
+      expect(Object.getOwnPropertyDescriptor(secondClock, 'now')).toEqual(secondReader);
+      expect(Object.getOwnPropertyDescriptor(systemClock, 'now')).toEqual(adapterReader);
+      const secondTime = manualStoreTime(second.store, 2_000_000);
       expect(first.store.clock.now()).toBe(1_002_000);
       expect(first.reader.clock.now()).toBe(1_002_000);
       expect(second.store.clock.now()).toBe(2_000_000);
       expect(second.reader.clock.now()).toBe(2_000_000);
-      expect(systemClock.now).toBe(adapterNow);
+      expect(Object.getOwnPropertyDescriptor(systemClock, 'now')).toEqual(adapterReader);
       firstTime.restore();
-      expect(first.store.clock.now).toBe(firstNow);
+      expect(Object.getOwnPropertyDescriptor(firstClock, 'now')).toEqual(firstReader);
       expect(second.store.clock.now()).toBe(2_000_000);
       secondTime.advance(1000);
       expect(second.store.clock.now()).toBe(2_001_000);
       secondTime.restore();
-      expect(second.store.clock.now).toBe(secondNow);
-      expect(first.store.clock.now).toBe(firstNow);
-      expect(systemClock.now).toBe(adapterNow);
+      expect(Object.getOwnPropertyDescriptor(secondClock, 'now')).toEqual(secondReader);
+      expect(Object.getOwnPropertyDescriptor(firstClock, 'now')).toEqual(firstReader);
+      expect(Object.getOwnPropertyDescriptor(systemClock, 'now')).toEqual(adapterReader);
     } finally {
       await second.close();
     }

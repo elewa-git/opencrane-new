@@ -398,7 +398,10 @@ async function lateSuccessBeforeWatchdog() {
   const clock = manualClock(1_000_000);
   const watchdog = manualClock(1_000_000);
   // Hold watchdog delivery while the permission reply observes the later time.
-  const clockOptions = { clock: { now: clock.now, sleep: watchdog.sleep } };
+  const now = clock.now.bind(clock);
+  const sleep = watchdog.sleep.bind(watchdog);
+  const proofClock = { now, sleep };
+  const clockOptions = { clock: proofClock };
   const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });

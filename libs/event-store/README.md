@@ -72,6 +72,7 @@ flowchart LR
 
 Timing tests can supply a manual clock to advance deadlines without waiting.
 For an existing store, `manualStoreTime` controls its current-time readings during a test.
+Each default fixture owns its clock, so advancing one leaves other fixtures unchanged.
 Tests can save an event with named fields through `appendEvent` from
 `@opencrane/event-store/testing`. The calling test applies any read tables afterwards.
 
