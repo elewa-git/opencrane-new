@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./ids": "./src/ids.ts",
+    "./digest": "./src/digest.ts",
     "./tool-call": "./src/tool-call.ts",
     "./command-activity-label": "./src/command-activity-label.ts",
     "./lossless-json": "./src/lossless-json.ts",

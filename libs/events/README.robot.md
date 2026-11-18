@@ -115,6 +115,18 @@ Unchanged checks preserve the approval rule revision while advancing the write p
 The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
 records snapshot and expiry rules for #48 PR 1.
 
+## SHA-256 hex digests
+
+`@opencrane/events/digest` exports `sha256Hex(value: string | Uint8Array): string`
+and `sha256HexOfJson(value: unknown): string`. The first hashes UTF-8 strings or
+the exact supplied bytes with Node crypto and returns lowercase hexadecimal.
+The second hashes `JSON.stringify(value)` without sorting keys or normalising text.
+It preserves stringify errors and rejects values whose stringify result is undefined.
+Neither helper changes the format of existing stored digests. This entrypoint is
+absent from `index.ts`, so browser contracts do not load Node crypto.
+
+## JSON catalogue digests
+
 The Node entrypoints `@opencrane/events/lossless-json` and
 `@opencrane/events/mcp-catalogue` share the existing JSON hash format across discovery,
 append validation and policy replay. They use Node's built-in SHA-256 implementation.

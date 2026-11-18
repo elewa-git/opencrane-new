@@ -1,6 +1,7 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { sha256Hex, sha256HexOfJson } from '../src/digest.js';
+import { sha256Hex, sha256HexOfJson } from '../src/digest.ts';
 
 function oldHex(value: string | Uint8Array) {
   const hash = createHash('sha256');
@@ -9,6 +10,16 @@ function oldHex(value: string | Uint8Array) {
 }
 
 describe('shared SHA-256 hex digests', () => {
+  it('loads the Node entrypoints without a bundler', () => {
+    const source = "import '@opencrane/events/lossless-json'; " +
+      "import { sha256Hex } from '@opencrane/events/digest'; " +
+      "process.stdout.write(sha256Hex('abc'));";
+    const output = execFileSync(process.execPath, [
+      '--experimental-strip-types', '--input-type=module', '--eval', source,
+    ], { encoding: 'utf8' });
+    expect(output).toBe(oldHex('abc'));
+  });
+
   it('matches the published SHA-256 abc vector', () => {
     expect(sha256Hex('abc')).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
