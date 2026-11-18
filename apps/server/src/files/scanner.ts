@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256Hex as hash } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { request } from 'node:https';
 import { tokenIssuer } from '@opencrane/auth';
@@ -28,11 +29,6 @@ interface ScannerSettings {
 }
 interface UploadBinding { silo: string; fileId: string }
 
-function hash(bytes: Buffer) {
-  const digest = createHash('sha256');
-  digest.update(bytes);
-  return digest.digest('hex');
-}
 function requireScan(condition: unknown): asserts condition {
   if (!condition) {
     throw new FileUnavailable('scanner');

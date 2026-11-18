@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { authorityFence, readActiveMember, memoryReferences } from '@opencrane/models';
 import { memoryErasureHistory, memoryIdentity, memoryKeys } from '@opencrane/projections';
@@ -201,10 +201,8 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   const journal = commandJournal(options.keyDirectory!, reference);
   const factReference = commandReference(options.silo, scope.scopeId, requester, memoryId);
   const reservation = commandJournal(options.keyDirectory!, `fact-${factReference}`);
-  const fingerprint = createHash('sha256');
   const metadata = { operation: 'forget', memoryId, ...input };
-  fingerprint.update(JSON.stringify(metadata));
-  const inputDigest = fingerprint.digest('hex');
+  const inputDigest = sha256HexOfJson(metadata);
   function historyDeadline() {
     const deadline = performance.now() + 100;
     return agent ? Math.min(fresh.deadline, deadline) : deadline;

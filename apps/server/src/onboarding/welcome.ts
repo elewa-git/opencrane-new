@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberJoinedDataSchema, siloOwnerBootstrappedDataSchema,
   assistantCreatedDataSchema, parseEventByType,
@@ -27,10 +28,8 @@ type History = Awaited<ReturnType<typeof surveyHistory>>;
 type Saved = NonNullable<Awaited<ReturnType<typeof savedCommand>>>;
 
 function assignedAssistantId(silo: string, memberId: string) {
-  const hash = createHash('sha256');
   const identity = [silo, memberId].join('\0');
-  hash.update(identity);
-  const digest = hash.digest('hex');
+  const digest = sha256Hex(identity);
   return `personal-${digest.slice(0, 32)}`;
 }
 
@@ -138,9 +137,7 @@ function checkInput(input: Input, history: History) {
 function encryptedAnswer(options: ChatOptions, memberId: string, value: string) {
   const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
   const bytes = Buffer.from(encrypted.ciphertext, 'base64');
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  const encryptedDigest = hash.digest('hex');
+  const encryptedDigest = sha256Hex(bytes);
   return { encrypted: encrypted.ciphertext, encryptedDigest, keyRef: encrypted.keyId };
 }
 

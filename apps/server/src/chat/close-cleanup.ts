@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { WebSocket } from 'ws';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -82,9 +82,7 @@ function postedInputs(rows: ChatRows) {
 }
 
 function failureId(conversationId: string, turnId: string) {
-  const digest = createHash('sha256');
-  digest.update(`conversation-closed:${conversationId}:${turnId}`);
-  return digest.digest('hex');
+  return sha256Hex(`conversation-closed:${conversationId}:${turnId}`);
 }
 
 function savedTurns(rows: ChatRows, assistant: Assistant): SavedTurns {

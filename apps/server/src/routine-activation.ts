@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { StoredEvent } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema, budgetExhaustedDataSchema,
@@ -40,9 +40,7 @@ async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[
   const budgetRows = await history(store, budgetSubject, worker.silo, performance.now() + 10_000);
   const checked = await loadRoutineRootPreparation(store, keys, worker, raw, selection, true);
   const { run, binding, deadline, preparation } = checked;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([worker.silo, run.conversationId, run.turnId]));
-  const rootId = hash.digest('hex');
+  const rootId = sha256HexOfJson([worker.silo, run.conversationId, run.turnId]);
   let allocation: StoredEvent | undefined;
   let releaseChanged = false;
   function affectsRootScope(scope: 'global' | 'paying_group' | 'assistant',

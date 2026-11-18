@@ -1,5 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, createHmac } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { authorityFence, history, readActiveMember } from '@opencrane/models';
@@ -83,10 +84,8 @@ function safeRun(secret: string, row: SavedRun) {
 
 function cursorBinding(options: MemoryOptions, scope: Scope, requester: string,
   snapshot: Awaited<ReturnType<typeof memorySnapshot>>) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(['maintenance', options.silo, scope.scopeId, requester,
-    snapshot.position, snapshot.generation]));
-  return hash.digest('hex');
+  return sha256HexOfJson(['maintenance', options.silo, scope.scopeId, requester,
+    snapshot.position, snapshot.generation]);
 }
 
 async function confirmSnapshot(options: MemoryOptions, scope: Scope,
@@ -374,12 +373,11 @@ export async function bindMaintenance(options: MemoryOptions, requester: string,
   if (state.revision !== input.expectedRevision) {
     throw new MemoryConflict();
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([options.silo, requester, scope.scopeId, input.commandId]));
   const data = { ...scope, memberId: requester, assistantId: input.assistantId,
     payingGroupId: input.payingGroupId, enabled: input.enabled,
     acceptedCapCents: input.acceptedCapCents, revision: state.revision + 1 };
-  const event = { id: hash.digest('hex'), type: 'memory.maintenance_bound',
+  const eventId = sha256HexOfJson([options.silo, requester, scope.scopeId, input.commandId]);
+  const event = { id: eventId, type: 'memory.maintenance_bound',
     source: 'opencrane-server', subject: `scope-${scope.scopeId}`, silo: options.silo,
     time: new Date().toISOString(), commandId: input.commandId,
     principal: { kind: 'human' as const, id: requester }, correlation: {}, data };

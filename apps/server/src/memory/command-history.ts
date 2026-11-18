@@ -1,13 +1,11 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import type { StoredEvent } from '@opencrane/event-store';
 import type { MemoryOptions } from './access.ts';
 
 type PrincipalKind = 'human' | 'agent';
 export function commandReference(silo: string, scopeId: string, requester: string, commandId: string,
   principalKind: PrincipalKind = 'human') {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, principalKind, requester, scopeId, commandId]));
-  return hash.digest('hex');
+  return sha256HexOfJson([silo, principalKind, requester, scopeId, commandId]);
 }
 export async function commandHistory(options: MemoryOptions, scopeId: string,
   requester: string, commandId: string, deadline = performance.now() + 10_000,

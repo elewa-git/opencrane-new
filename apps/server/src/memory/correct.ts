@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { authorityFence, memoryReferences, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
@@ -178,9 +178,7 @@ async function correctLocked(options: MemoryOptions, requester: string, scope: S
     return receipt;
   }
   const { text: _text, ...metadata } = input;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify({ memoryId, ...metadata }));
-  const inputDigest = hash.digest('hex');
+  const inputDigest = sha256HexOfJson({ memoryId, ...metadata });
   const pending = journal.read();
   if (pending) {
     // Recover uncertain agent commands through status, without accepting another replacement.

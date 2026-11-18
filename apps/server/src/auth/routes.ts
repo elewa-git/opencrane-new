@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { closeSessionSockets } from './session-sockets.ts';
 // The four browser-facing auth routes: start a login, finish it, log out,
 // and report who (if anyone) is signed in. All the OIDC and cookie logic
@@ -69,7 +69,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     const session = sessionFor(request, config, new Date());
     if (approval.data.approval && !session) return reply.code(401).send({ error: 'No session' });
     const stepUp = approval.data.approval && session ? { approvalId: approval.data.approval, sub: session.sub,
-      sessionDigest: createHash('sha256').update(readCookie(request, config.cookieName) ?? '').digest('hex') } : undefined;
+      sessionDigest: sha256Hex(readCookie(request, config.cookieName) ?? '') } : undefined;
     let redirect;
     try { redirect = await buildLoginRedirect(config, !!stepUp); }
     catch { return rejectLogin(request, reply, config, 'identity provider unavailable'); }
@@ -117,7 +117,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
 
     if (flow.stepUp) {
       const previous = sessionFor(request, config, new Date());
-      const digest = createHash('sha256').update(readCookie(request, config.cookieName) ?? '').digest('hex');
+      const digest = sha256Hex(readCookie(request, config.cookieName) ?? '');
       if (!validStepUp(previous, result.session, flow.stepUp, digest)) {
         return rejectLogin(request, reply, config, 'Recent sign-in for the same requester is required');
       }

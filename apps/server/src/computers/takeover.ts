@@ -1,6 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -220,9 +220,7 @@ async function saveIntent(options: ChatOptions, memberId: string, input: Control
     leaseId: input.commandId, reason: 'requester_requested', affectedTurnIds };
   const data = takeoverRequestedDataSchema.parse(requested);
   const event = envelope(options.silo, subject, 'takeover.requested', data);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([assistantId, input.commandId]));
-  event.id = hash.digest('hex');
+  event.id = sha256HexOfJson([assistantId, input.commandId]);
   event.commandId = input.commandId;
   event.source = 'opencrane-server';
   event.principal = { kind: 'human', id: memberId };

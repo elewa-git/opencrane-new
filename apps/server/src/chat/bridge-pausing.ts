@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { ComputerControl } from '@opencrane/auth';
@@ -71,9 +71,7 @@ async function appendControl(store: EventStore, silo: string, control: Control,
   position: number, phase: 'pausing' | 'paused' | 'failed', data: unknown) {
   const subject = `computer-${control.assistantId}`;
   const event = envelope(silo, subject, `takeover.${phase}`, data);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, subject, control.takeoverId, phase]));
-  event.id = hash.digest('hex');
+  event.id = sha256HexOfJson([silo, subject, control.takeoverId, phase]);
   event.commandId = event.id;
   event.source = 'opencrane-server';
   event.principal = { kind: 'system', id: 'opencrane-server' };

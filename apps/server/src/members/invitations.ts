@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { getEventDefinition, legacyMemberRole, memberInvitedDataSchema,
   memberCommandRefusedSchema } from '@opencrane/events';
@@ -14,12 +14,6 @@ type Input = z.infer<typeof invitationCommandSchema>;
 const newInvitationId = z.uuid({ version: 'v4' });
 const memberFields = z.object({ memberId: z.string(), email: z.string().optional() });
 export class InvitationConflict extends Error {}
-
-function digest(parts: string[]) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(parts));
-  return hash.digest('hex');
-}
 
 function receipt(row: StoredEvent) {
   const data = memberInvitedDataSchema.parse(row.event.data);

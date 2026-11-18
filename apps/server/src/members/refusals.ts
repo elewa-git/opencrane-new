@@ -1,13 +1,11 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { memberCommandRefusedSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 type RefusalStore = Pick<EventStore, 'readStream' | 'append' | 'head'>;
 
 export function refusalDigest(value: unknown): string {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
+  return sha256HexOfJson(value);
 }
 
 export async function refusalHistory(store: RefusalStore, silo: string,

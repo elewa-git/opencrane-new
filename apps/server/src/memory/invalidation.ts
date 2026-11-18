@@ -1,7 +1,7 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
 import { lostMemoryAccess } from './access-loss.ts';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { memoryContextRecordedEventSchema, memoryCorrectedEventSchema,
@@ -135,9 +135,7 @@ function withdrawalCause(options: Options, rows: StoredEvent[], request: Request
 }
 
 function invalidationId(binding: string, causeId: string | undefined) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([binding, causeId]));
-  return `memory-invalidation-${hash.digest('hex')}`;
+  return `memory-invalidation-${sha256HexOfJson([binding, causeId])}`;
 }
 
 function canWithdraw(state: MemoryContextState) {

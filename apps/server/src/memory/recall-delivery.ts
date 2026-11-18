@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256Hex as digest } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
 import { type memoryReferences, foldMemoryContext, type MemoryContext,
   type memoryRights, type MemoryContextState } from '@opencrane/models';
@@ -9,11 +10,6 @@ import { memorySnapshot, type listFacts } from './reads.ts';
 type Rights = Awaited<ReturnType<typeof memoryRights>>;
 type Snapshot = Awaited<ReturnType<typeof memorySnapshot>>;
 type Page = Awaited<ReturnType<typeof listFacts>>;
-function digest(value: string) {
-  const hash = createHash('sha256');
-  hash.update(value);
-  return hash.digest('hex');
-}
 export async function readRecallContext(options: MemoryOptions, context: MemoryContext,
   isolate = false) {
   // Read history before starting the final short access checks.

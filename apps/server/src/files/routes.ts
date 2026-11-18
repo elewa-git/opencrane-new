@@ -1,5 +1,5 @@
+import { sha256Hex as sha256Digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import type {
   FastifyBodyParser,
   FastifyError,
@@ -308,12 +308,6 @@ async function inspectUpload(name: string, bytes: Buffer) {
     const details = { reason: inspectionReason(error) };
     throw new FileRefusal('unsupported_file', details);
   }
-}
-
-function sha256Digest(value: string | Buffer) {
-  const hash = createHash('sha256');
-  hash.update(value);
-  return hash.digest('hex');
 }
 
 function findPreviousUpload(rows: StoredEvent[], fileId: string) {

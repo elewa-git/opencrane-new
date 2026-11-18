@@ -10,7 +10,7 @@ import { memoryBridge } from '../memory/bridge.ts';
 import { releaseTurnCredentials, sendAcknowledgement } from './turn-credentials.ts';
 import { prepareRoutineThread } from './routine-thread.ts';
 import { admitBridgeTurn, checkedReportStage } from './bridge-turn-admission.ts';
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
 import { ownConversation, fileCommand } from '../files/commands.ts';
@@ -138,8 +138,7 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
     delivered.add(file.fileId);
     return;
   }
-  const hash = createHash('sha256');
-  const digest = hash.update(bytes).digest('hex');
+  const digest = sha256Hex(bytes);
   if (bytes.length !== file.size || digest !== file.sha256) {
     throw new Error('Stored file digest mismatch');
   }

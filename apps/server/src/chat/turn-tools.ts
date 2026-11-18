@@ -1,5 +1,5 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import type { TurnSummary } from '@opencrane/auth';
 import { computerTurnStartedDataSchema, sessionConfiguration } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
@@ -425,7 +425,7 @@ function makeTurnToolServer(state: TurnToolServerState,
   selected: ReturnType<typeof reviewedDefinitions>): TurnToolServer {
   if (!state.connectionId) throw new Error('Tool server connection is unavailable');
   const result: TurnToolServer = {
-    key: `oc_${createHash('sha256').update(state.serverId).digest('hex').slice(0, 10)}`,
+    key: `oc_${sha256Hex(state.serverId).slice(0, 10)}`,
     serverId: state.serverId,
     connectionId: state.connectionId,
     definitions: selected.definitions,

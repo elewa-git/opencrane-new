@@ -1,6 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { providerIdSchema, providerModelIdSchema, providerKeySchema } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
-import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig, type tokenIssuer } from '@opencrane/auth';
@@ -132,9 +132,7 @@ async function verify(request: FastifyRequest, reply: FastifyReply,
   if (!options.verification) {
     throw new Error('Verification unavailable');
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(raw));
-  const commandDigest = hash.digest('hex');
+  const commandDigest = sha256HexOfJson(raw);
   const capability = { silo: options.silo, memberId, commandDigest };
   const token = await options.verification.tokens.providerVerification(capability);
   const headers = { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' };

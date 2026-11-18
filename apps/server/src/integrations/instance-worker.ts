@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { sha256Hex as credentialDigest } from '@opencrane/events/digest';
+import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { EventStore } from '@opencrane/event-store';
 import { z } from 'zod';
@@ -14,12 +15,6 @@ interface Lease {
   expiryTimer?: NodeJS.Timeout;
 }
 const parameters = z.strictObject({ instanceId: idSchema.regex(/^[a-f0-9]{64}$/u) });
-
-function credentialDigest(authorization: string) {
-  const hash = createHash('sha256');
-  hash.update(authorization);
-  return hash.digest('hex');
-}
 
 export function registerMcpInstanceWorkerRoutes(app: FastifyInstance, store: EventStore,
   silo: string) {

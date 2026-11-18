@@ -1,5 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -56,9 +57,7 @@ function sameOwner(control: Pick<Return, 'assistantId' | 'computerId' | 'generat
     && control.takeoverId === input.takeoverId && control.leaseId === input.leaseId;
 }
 function commandId(eventId: string, subject: string) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([subject, eventId]));
-  return hash.digest('hex');
+  return sha256HexOfJson([subject, eventId]);
 }
 async function append(store: EventStore, silo: string, subject: string,
   type: string, data: Record<string, unknown>, input: Return,

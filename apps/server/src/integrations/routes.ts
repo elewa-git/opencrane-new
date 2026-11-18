@@ -1,3 +1,4 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { readToolModeChange } from '@opencrane/models';
 import { readIntegrationFacts } from './facts.ts';
@@ -12,7 +13,6 @@ import { activeMember, readActiveMember, GroupRefused } from '../members/groups.
 import { installWorker } from './install-worker.ts';
 import type { RemoteNetwork } from './remote.ts';
 import { registerRemote, discoveryStatus, remoteReference } from './registration.ts';
-import { createHash } from 'node:crypto';
 import { budgetCommandSchema } from '@opencrane/protocol';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
@@ -316,7 +316,8 @@ async function setBudget(request: FastifyRequest, reply: FastifyReply, config: A
   const command = budgetCommandSchema.parse(request.body);
   if (!options.budget) return reply.code(503).send({ status: 'unavailable' });
   const body = JSON.stringify(command);
-  const token = await options.budget.tokens.budget({ silo: options.silo, memberId, commandDigest: createHash('sha256').update(body).digest('hex') });
+  const commandDigest = sha256Hex(body);
+  const token = await options.budget.tokens.budget({ silo: options.silo, memberId, commandDigest });
   const headers = { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' };
   // Never follow a redirect: it would send the budget token and the change to another server.
   const budgetRequest: RequestInit = { method: 'POST', headers, body, redirect: 'manual',

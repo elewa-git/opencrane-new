@@ -1,8 +1,8 @@
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { rmSync } from 'node:fs';
 import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { authorityFence, isAuthorityChanged, MemoryToolRefused, memoryReferences,
   readActiveMember } from '@opencrane/models';
@@ -74,11 +74,6 @@ function originalReceipt(row: StoredEvent, keys: ReturnType<typeof memoryKeys>, 
     throw new MemoryConflict();
   }
   return receipt;
-}
-function digest(input: Input) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(input));
-  return hash.digest('hex');
 }
 function statementSources(input: Input, requester: string) {
   if (input.sources.length > 0) {
@@ -182,10 +177,8 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
     return originalReceipt(state.original, keys, input, state.rows, audience);
   }
   const { text: _text, ...metadata } = input;
-  const hash = createHash('sha256');
   // Leave text out so a forgotten fact cannot be guessed from a saved fingerprint.
-  hash.update(JSON.stringify(metadata));
-  const inputDigest = hash.digest('hex');
+  const inputDigest = digest(metadata);
   const pending = journal.read();
   if (pending && pending.inputDigest !== inputDigest) {
     throw new MemoryConflict();

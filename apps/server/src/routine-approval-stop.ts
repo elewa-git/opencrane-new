@@ -1,5 +1,6 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { foldRoutineHistory } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -44,11 +45,9 @@ function requireRun(state: RoutineState | undefined, input: z.infer<typeof input
 export async function stopRoutineAfterApproval(store: EventStore, silo: string, raw: unknown) {
   try {
     const input = inputSchema.parse(raw);
-    const hash = createHash('sha256');
     const identity = [silo, input.routineId, input.occurrenceId];
     const identityText = JSON.stringify(identity);
-    hash.update(identityText);
-    const commandId = `routine-approval:${hash.digest('hex')}`;
+    const commandId = `routine-approval:${sha256Hex(identityText)}`;
     const subject = `routine-${input.routineId}`;
     const deadline = performance.now() + 10_000;
     const rows = await history(store, subject, silo, deadline);

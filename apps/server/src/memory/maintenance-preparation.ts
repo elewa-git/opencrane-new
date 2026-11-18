@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 import { memoryMaintenanceBoundDataSchema, memoryMaintenanceRecordedDataSchema,
@@ -13,12 +13,6 @@ type Binding = ReturnType<typeof memoryMaintenanceBoundDataSchema.parse>;
 type Reason = 'binding_changed' | 'input_changed' | 'provider_unavailable' |
   'scope_occupied' | 'window_missed' | 'access_denied' | 'access_unavailable' |
   'budget_unavailable' | 'price_unavailable';
-
-function digest(value: unknown): string {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
 
 function savedReceipt(run: Run) {
   if (run.action === 'prepared') {

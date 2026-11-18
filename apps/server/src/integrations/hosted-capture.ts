@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { hostedImageCheckedSchema, mcpHostedRunSchema, mcpHostedStartObservedSchema,
   mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -30,7 +30,7 @@ function hostedStartId(silo: string, serverId: string, run: HostedRun) {
   // Include the Pod UID so a new workload attempt cannot reuse an earlier event ID.
   // Keep the ID stable so a lost reply can be found after the worker restarts.
   const identity = JSON.stringify([silo, serverId, run.podUid, run.runGeneration]);
-  const digest = createHash('sha256').update(identity).digest('hex');
+  const digest = sha256Hex(identity);
   return `hosted-start-${digest}`;
 }
 
