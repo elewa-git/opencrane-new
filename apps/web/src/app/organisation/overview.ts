@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/protocol';
 import { ChangeDetectionStrategy, Component, output, signal, type OnInit } from '@angular/core';
 import { permittedOrganisationPages, type OrganisationPage } from './pages';
 
@@ -71,7 +72,7 @@ function validDate(value: string | null | undefined): value is string {
 }
 
 function safeReference(value: string): boolean {
-  return /^[\w-]{1,200}$/u.test(value);
+  return recordIdPattern.test(value);
 }
 
 function providerReference(row: OverviewRow): string | undefined {

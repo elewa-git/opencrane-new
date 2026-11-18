@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/protocol';
 import type { EffectDetail, EffectStatus } from '@opencrane/protocol';
 import { money } from './spending-money';
 
@@ -201,7 +202,7 @@ export function parseCents(text: string): number | undefined {
 }
 
 export function validReference(text: string): boolean {
-  return /^[\w-]{1,200}$/u.test(text.trim());
+  return recordIdPattern.test(text.trim());
 }
 
 export function normaliseDigest(text: string): string | undefined {

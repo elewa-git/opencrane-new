@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/protocol';
 import type { BudgetEditorLoadState } from './budget-limit-editor';
 import type { EffectStatus } from '@opencrane/protocol';
 import { utcClockTime } from './effect-rules';
@@ -21,7 +22,7 @@ export function staleRead(
 
 export function linkedEffectId(): string | null {
   const effect = new URLSearchParams(globalThis.location.search).get('effect');
-  if (!effect || !/^[\w-]{1,200}$/u.test(effect)) return null;
+  if (!effect || !recordIdPattern.test(effect)) return null;
   return effect;
 }
 

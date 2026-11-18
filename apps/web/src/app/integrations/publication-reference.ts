@@ -1,8 +1,8 @@
+import { recordIdPattern } from '@opencrane/protocol';
 const publicationStoragePrefix = 'integration-publication:';
-const publicationIdentifier = /^[\w-]{1,200}$/u;
 
 export function isPublicationIdentifier(value: unknown): value is string {
-  return typeof value === 'string' && publicationIdentifier.test(value);
+  return typeof value === 'string' && recordIdPattern.test(value);
 }
 
 export function readStoredPublication(serverId: string): string {
