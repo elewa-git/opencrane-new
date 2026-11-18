@@ -3,13 +3,14 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { egressObservationId, parseEventByType } from '@opencrane/events';
 import { startEgress } from '../src/egress-startup.ts';
 import { history } from '../src/event-history.ts';
 
 async function setup(fakeTimeouts = false) {
-  const nats = await natsFixture();
+  const clock = fakeTimeouts ? manualClock(1_000_000) : undefined;
+  const nats = await natsFixture({ clock });
   const directory = await mkdtemp(join(tmpdir(), 'egress-startup-'));
   let refusals = 0;
   function refused() {
@@ -18,7 +19,7 @@ async function setup(fakeTimeouts = false) {
   // Install before startup so the test also owns the normal receipt retry interval.
   if (fakeTimeouts) {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout',
-      'clearTimeout', 'performance', 'Date'] });
+      'clearTimeout', 'Date'] });
   } else {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   }
@@ -39,7 +40,7 @@ async function setup(fakeTimeouts = false) {
     await runtime.registry.register(request);
     return permitId;
   }
-  return { nats, directory, runtime, register, refused, refusalCount };
+  return { nats, directory, runtime, register, refused, refusalCount, clock };
 }
 
 async function recoveredPendingAndTerminal(refused: boolean) {
@@ -144,11 +145,14 @@ async function shutdownClearsOwnedTimers() {
   const request = { host: 'registry.npmjs.org', port: 443, permitId: randomUUID(),
     expiresAt: Date.now() + 60_000, recheck };
   await test.runtime.registry.register(request);
-  // Count the receipt retry, access check, proof watchdog and permit expiry timers.
-  expect(vi.getTimerCount()).toBe(4);
+  // Count the native receipt retry, access check and permit expiry timers.
+  // Advance the proof watchdog with the injected clock.
+  expect(vi.getTimerCount()).toBe(3);
+  test.clock!.advance(500);
   await vi.advanceTimersByTimeAsync(500);
   const closing = test.runtime.close();
   await test.runtime.flush();
+  test.clock!.advance(2000);
   await vi.advanceTimersByTimeAsync(2000);
   await closing;
   expect(vi.getTimerCount()).toBe(0);

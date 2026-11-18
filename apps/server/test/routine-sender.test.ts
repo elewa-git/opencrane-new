@@ -26,7 +26,7 @@ import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, foldRoutineHistory, grantStream, memberAuthorisation } from '@opencrane/authz';
-import { natsFixture, event } from '@opencrane/event-store/testing';
+import { natsFixture, event, manualClock } from '@opencrane/event-store/testing';
 import { foldRoutine, routineActivationSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
@@ -145,14 +145,10 @@ async function projectPreparedSession() {
   afterProjection();
 }
 async function prepareSenderFixture() {
-  const fixtureStartedAt = performance.now();
-  let elapsedFixtureTime = 0;
-  function advanceClock(milliseconds: number) {
-    elapsedFixtureTime += milliseconds;
-  }
+  const fixtureClock = manualClock(performance.now());
   const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(() => fixtureStartedAt + elapsedFixtureTime);
-  advanceFixtureClock = advanceClock;
+  monotonicClock.mockImplementation(fixtureClock.now);
+  advanceFixtureClock = fixtureClock.advance;
   const prepareSession = routineSession.prepareRoutineSession;
   let stage = 'preparation';
   async function projectSession(...args: Parameters<typeof prepareSession>) {
@@ -879,7 +875,14 @@ async function wrongComputerLink() {
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
+function stopSendTime() {
+  const sendClock = manualClock(performance.now());
+  // Keep server deadlines and the system clock adapter on the same test time.
+  vi.spyOn(performance, 'now').mockImplementation(sendClock.now);
+}
+
 async function refusesLateChange(kind: string) {
+  stopSendTime();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -1011,6 +1014,7 @@ function preparationIdentity(id = turnId) {
     expiresAt: Date.now() + 50_000 };
 }
 async function keepsNativeSession() {
+  stopSendTime();
   const computer = preparedComputer;
   const link = await computer.wake();
   const second = await link.prepareRoutineThread(preparationIdentity('other-turn'));

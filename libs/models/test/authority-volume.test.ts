@@ -18,17 +18,23 @@ function unrelated(index: number): EventEnvelope {
   }
 }
 
+function reportVolumeStep(seeded: number, step: string) {
+  console.info(`Authority volume ${seeded}: ${step}`);
+}
+
 it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events', async () => {
   const counts: Record<string, number[]> = {};
   const latencies: { times: number[]; bound: number }[] = [];
   for (const seeded of [0, 100_000]) {
     // Keep access time stopped while real request latency is measured below.
     const clock = manualClock(performance.now() + 3_600_000);
+    reportVolumeStep(seeded, 'starting fixture');
     const f = await fixture(1_000_000, 1_000_000, false, 'gpt-6-luna', false,
       'manual', 'sales', undefined, { modelClock: clock });
     try {
       // Equal local history in each run; background replay is outside admission timing.
       await f.stopDispatch(); await f.runtime.stop();
+      reportVolumeStep(seeded, 'background work stopped');
       await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
       const tool = toolEvidence({ name: 'read', reviewed: true, readOnly: true, costCents: 0 });
       const catalogue = catalogueEvidence([tool]);
@@ -54,6 +60,7 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
         await f.nats.seed(Array.from({ length: 100 }, (_, i) => unrelated(offset + i)));
       }
       expect(await f.nats.store.head()).toBe(before + seeded);
+      reportVolumeStep(seeded, 'history seeded');
       const readStream = f.nats.store.readStream.bind(f.nats.store);
       let reads: string[] = [], rows = 0;
       const probe = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
@@ -106,7 +113,11 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
           latencies.push({ times, bound: route === 'destinationAuthority' ? 1000 : 2000 });
         }
       } finally { probe.mockRestore(); }
-    } finally { await f.close(); }
+    } finally {
+      reportVolumeStep(seeded, 'closing fixture');
+      await f.close();
+      reportVolumeStep(seeded, 'fixture closed');
+    }
   }
   for (const route of ['model', 'mcp', 'destinationAuthority']) expect(counts[`100000:${route}`]).toEqual(counts[`0:${route}`]);
   for (const { times, bound } of latencies) {
