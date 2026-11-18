@@ -570,6 +570,11 @@ it('keeps the native root turn on actor retry and refuses changed bindings witho
 
 async function recoversNativeHold() {
   const context = await setup();
+  // Hold the original permission's clocks while real services recover its saved hold.
+  // Keep deadlines ahead of the PostgreSQL adapter's separate real clock.
+  manualStoreTime(context.store, performance.now() + 3_600_000);
+  const wallTime = Date.now();
+  vi.spyOn(Date, 'now').mockReturnValue(wallTime);
   try {
     const binding = child(context, 'lost-hold');
     await admit(context, binding);
@@ -582,9 +587,9 @@ async function recoversNativeHold() {
       }
       return result;
     }
-    vi.spyOn(context.actor.store, 'append').mockImplementation(loseReply);
+    const lostReply = vi.spyOn(context.actor.store, 'append').mockImplementation(loseReply);
     await expect(reserve(context, binding, 110)).rejects.toThrow();
-    vi.restoreAllMocks();
+    lostReply.mockRestore();
     await context.restartActor();
     const original = context.actor.state.reservations[0]!;
     expect(await reserve(context, binding, 110)).toBe(original.id);
