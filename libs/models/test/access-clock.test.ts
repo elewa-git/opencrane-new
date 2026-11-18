@@ -34,7 +34,7 @@ async function authorityDeadline(expired: boolean) {
 it.each([false, true])('uses manual time for authority confirmation (expired: %s)',
   authorityDeadline);
 
-async function payingDeadline(expired: boolean, milliseconds = expired ? 2001 : 0) {
+async function payingAfterRead(expired: boolean, milliseconds: number) {
   const clock = manualClock(performance.now() + 5000);
   nats = await natsFixture({ clock });
   const joined = event('joined');
@@ -60,6 +60,9 @@ async function payingDeadline(expired: boolean, milliseconds = expired ? 2001 : 
   } else {
     await expect(fresh()).resolves.toBeUndefined();
   }
+}
+function payingDeadline(expired: boolean) {
+  return payingAfterRead(expired, expired ? 2001 : 0);
 }
 it.each([false, true])('uses manual time for group authority (expired: %s)', payingDeadline);
 
@@ -222,7 +225,7 @@ async function actorReadBoundary(milliseconds: number) {
 it.each([1999, 2000])('checks actor expiry after an awaited read at %i ms', actorReadBoundary);
 
 function payingBoundary(milliseconds: number) {
-  return payingDeadline(milliseconds >= 2000, milliseconds);
+  return payingAfterRead(milliseconds >= 2000, milliseconds);
 }
 it.each([1999, 2000])('checks paying-group expiry after a head read at %i ms', payingBoundary);
 
@@ -230,7 +233,9 @@ function separateStorageDeadline(store: EventStore) {
   const append = store.append.bind(store);
   const readEvent = store.readEvent.bind(store);
   function appendWithStorageClock(command: Parameters<typeof append>[0]) {
-    return append({ ...command, deadline: undefined });
+    const storageCommand = { ...command };
+    delete storageCommand.deadline;
+    return append(storageCommand);
   }
   function readWithStorageClock(sequence: number) {
     return readEvent(sequence);
