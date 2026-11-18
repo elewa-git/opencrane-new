@@ -1,0 +1,33 @@
+# Sanitised service logs
+
+Captured before teardown. Retained the last 100 lines of each service log.
+Startup and browser assertions are in [up.log](up.log).
+
+- [audit.log](services/audit.log)
+- [budgets.log](services/budgets.log)
+- [computers.log](services/computers.log)
+- [connection-custody.log](services/connection-custody.log)
+- [conversations.log](services/conversations.log)
+- [dispatcher.log](services/dispatcher.log)
+- [docker-opencrane-dev-1-clamav-1.log](services/docker-opencrane-dev-1-clamav-1.log)
+- [docker-opencrane-dev-1-minio-1.log](services/docker-opencrane-dev-1-minio-1.log)
+- [docker-opencrane-dev-1-models-1.log](services/docker-opencrane-dev-1-models-1.log)
+- [docker-opencrane-dev-1-nats-1.log](services/docker-opencrane-dev-1-nats-1.log)
+- [docker-opencrane-dev-1-openfga-1.log](services/docker-opencrane-dev-1-openfga-1.log)
+- [docker-opencrane-dev-1-openfga-migrate-1.log](services/docker-opencrane-dev-1-openfga-migrate-1.log)
+- [docker-opencrane-dev-1-postgres-1.log](services/docker-opencrane-dev-1-postgres-1.log)
+- [docker-opencrane-dev-1-scanner-1.log](services/docker-opencrane-dev-1-scanner-1.log)
+- [files.log](services/files.log)
+- [mcp-catalogue.log](services/mcp-catalogue.log)
+- [members.log](services/members.log)
+- [memory.log](services/memory.log)
+- [minio-tokens.log](services/minio-tokens.log)
+- [pod-computer-293ad9e1dca7393714fd36f884ee8ee5.log](services/pod-computer-293ad9e1dca7393714fd36f884ee8ee5.log)
+- [pod-computer-530750581c929c9e05a1a2bcff59adce.log](services/pod-computer-530750581c929c9e05a1a2bcff59adce.log)
+- [pod-computer-8758be48bf6edde9f441c77886319c13.log](services/pod-computer-8758be48bf6edde9f441c77886319c13.log)
+- [pod-computer-ccf18945713e0068514ea91eb6009712.log](services/pod-computer-ccf18945713e0068514ea91eb6009712.log)
+- [replay-mcp-catalogue.log](services/replay-mcp-catalogue.log)
+- [replay-members.log](services/replay-members.log)
+- [routines.log](services/routines.log)
+- [server.log](services/server.log)
+- [web.log](services/web.log)

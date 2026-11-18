@@ -1,0 +1,82 @@
+LibClamAV Warning: **************************************************
+LibClamAV Warning: ***  The virus database is older than 7 days!  ***
+LibClamAV Warning: ***   Please update it as soon as possible.    ***
+LibClamAV Warning: **************************************************
+Wed Nov 18 21:30:57 2026 -> Limits: Global time limit set to 120000 milliseconds.
+Wed Nov 18 21:30:57 2026 -> Limits: Global size limit set to 83886080 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: File size limit set to 22020096 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: Recursion level limit set to 16.
+Wed Nov 18 21:30:57 2026 -> Limits: Files limit set to 2000.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxEmbeddedPE limit set to 41943040 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxHTMLNormalize limit set to 41943040 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxHTMLNoTags limit set to 8388608 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxScriptNormalize limit set to 20971520 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxZipTypeRcg limit set to 1048576 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxPartitions limit set to 50.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxIconsPE limit set to 100.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxRecHWP3 limit set to 16.
+Wed Nov 18 21:30:57 2026 -> Limits: PCREMatchLimit limit set to 100000.
+Wed Nov 18 21:30:57 2026 -> Limits: PCRERecMatchLimit limit set to 2000.
+Wed Nov 18 21:30:57 2026 -> Limits: PCREMaxFileSize limit set to 104857600.
+Wed Nov 18 21:30:57 2026 -> Archive support enabled.
+Wed Nov 18 21:30:57 2026 -> Image (graphics) scanning support enabled.
+Wed Nov 18 21:30:57 2026 -> Detection using image fuzzy hash enabled.
+Wed Nov 18 21:30:57 2026 -> Alerting of encrypted archives _and_ documents enabled.
+Wed Nov 18 21:30:57 2026 -> Heuristic alerting enabled for scans that exceed set maximums.
+Wed Nov 18 21:30:57 2026 -> Heuristic alerts enabled.
+Wed Nov 18 21:30:57 2026 -> Portable Executable support enabled.
+Wed Nov 18 21:30:57 2026 -> ELF support enabled.
+Wed Nov 18 21:30:57 2026 -> Mail files support enabled.
+Wed Nov 18 21:30:57 2026 -> OLE2 support enabled.
+Wed Nov 18 21:30:57 2026 -> PDF support enabled.
+Wed Nov 18 21:30:57 2026 -> SWF support enabled.
+Wed Nov 18 21:30:57 2026 -> HTML support enabled.
+Wed Nov 18 21:30:57 2026 -> XMLDOCS support enabled.
+Wed Nov 18 21:30:57 2026 -> HWP3 support enabled.
+Wed Nov 18 21:30:57 2026 -> OneNote support enabled.
+Wed Nov 18 21:30:57 2026 -> Self checking every 600 seconds.
+Wed Nov 18 21:34:53 2026 -> instream(172.21.0.7@38966): Eicar-Test-Signature FOUND
+Wed Nov 18 21:37:02 2026 -> instream(172.21.0.7@47476): Eicar-Test-Signature FOUND
+Wed Nov 18 21:38:12 2026 -> instream(172.21.0.7@34106): Eicar-Test-Signature FOUND
+Wed Nov 18 21:41:02 2026 -> SelfCheck: Database status OK.
+LibClamAV Warning: **************************************************
+LibClamAV Warning: ***  The virus database is older than 7 days!  ***
+LibClamAV Warning: ***   Please update it as soon as possible.    ***
+LibClamAV Warning: **************************************************
+Wed Nov 18 21:30:57 2026 -> Limits: Global time limit set to 120000 milliseconds.
+Wed Nov 18 21:30:57 2026 -> Limits: Global size limit set to 83886080 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: File size limit set to 22020096 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: Recursion level limit set to 16.
+Wed Nov 18 21:30:57 2026 -> Limits: Files limit set to 2000.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxEmbeddedPE limit set to 41943040 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxHTMLNormalize limit set to 41943040 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxHTMLNoTags limit set to 8388608 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxScriptNormalize limit set to 20971520 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxZipTypeRcg limit set to 1048576 bytes.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxPartitions limit set to 50.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxIconsPE limit set to 100.
+Wed Nov 18 21:30:57 2026 -> Limits: MaxRecHWP3 limit set to 16.
+Wed Nov 18 21:30:57 2026 -> Limits: PCREMatchLimit limit set to 100000.
+Wed Nov 18 21:30:57 2026 -> Limits: PCRERecMatchLimit limit set to 2000.
+Wed Nov 18 21:30:57 2026 -> Limits: PCREMaxFileSize limit set to 104857600.
+Wed Nov 18 21:30:57 2026 -> Archive support enabled.
+Wed Nov 18 21:30:57 2026 -> Image (graphics) scanning support enabled.
+Wed Nov 18 21:30:57 2026 -> Detection using image fuzzy hash enabled.
+Wed Nov 18 21:30:57 2026 -> Alerting of encrypted archives _and_ documents enabled.
+Wed Nov 18 21:30:57 2026 -> Heuristic alerting enabled for scans that exceed set maximums.
+Wed Nov 18 21:30:57 2026 -> Heuristic alerts enabled.
+Wed Nov 18 21:30:57 2026 -> Portable Executable support enabled.
+Wed Nov 18 21:30:57 2026 -> ELF support enabled.
+Wed Nov 18 21:30:57 2026 -> Mail files support enabled.
+Wed Nov 18 21:30:57 2026 -> OLE2 support enabled.
+Wed Nov 18 21:30:57 2026 -> PDF support enabled.
+Wed Nov 18 21:30:57 2026 -> SWF support enabled.
+Wed Nov 18 21:30:57 2026 -> HTML support enabled.
+Wed Nov 18 21:30:57 2026 -> XMLDOCS support enabled.
+Wed Nov 18 21:30:57 2026 -> HWP3 support enabled.
+Wed Nov 18 21:30:57 2026 -> OneNote support enabled.
+Wed Nov 18 21:30:57 2026 -> Self checking every 600 seconds.
+Wed Nov 18 21:34:53 2026 -> instream(172.21.0.7@38966): Eicar-Test-Signature FOUND
+Wed Nov 18 21:37:02 2026 -> instream(172.21.0.7@47476): Eicar-Test-Signature FOUND
+Wed Nov 18 21:38:12 2026 -> instream(172.21.0.7@34106): Eicar-Test-Signature FOUND
+Wed Nov 18 21:41:02 2026 -> SelfCheck: Database status OK.

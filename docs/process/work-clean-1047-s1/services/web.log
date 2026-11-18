@@ -1,0 +1,100 @@
+    ../../libs/protocol/src/index.ts:92:51:
+      92 │   memberDetailSchema, memberDirectorySchema } from './members.ts';
+         ╵                                                    ~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/model-access.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:108:7:
+      108 │ } from './model-access.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/member-inventory.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:109:80:
+      109 │ ...rtureSchema, type MemberAccessRow } from './member-inventory.ts';
+          ╵                                             ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/child-requests.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:116:7:
+      116 │   from './child-requests.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/spending.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:118:61:
+      118 │ ...ingCallsQuery, type SpendingCallsResponse } from './spending.ts';
+          ╵                                                     ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/spending-effects.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:120:65:
+      120 │ ...ery, type SpendingEffectsResponse } from './spending-effects.ts';
+          ╵                                             ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/current-effects.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:122:63:
+      122 │ ...Query, type CurrentEffectsResponse } from './current-effects.ts';
+          ╵                                              ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/personal-connections.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:126:103:
+      126 │ ... type PersonalProfileMetadata } from './personal-connections.ts';
+          ╵                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/session-defaults.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:128:32:
+      128 │ export { sessionDefaults } from './session-defaults.ts';
+          ╵                                 ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/index.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:130:48:
+      130 │ export { recordIdPattern, recordIdSchema } from '@opencrane/events';
+          ╵                                                 ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+  ➜  Local:   [REDACTED]

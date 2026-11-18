@@ -97,6 +97,10 @@ guides, release notes and receipts are excluded.
     170 before and one after; no copy remains outside `ids.ts`. Repeated all web
     tests twice and checked the updated spec types and lint.
 
+12. Ran the fresh CORE journey after source checks. Copied 37 screenshots and
+    sanitised logs before teardown. Both secondary slots reported free afterwards.
+    Approval and optional provider qualification remain NOT RUN.
+
 ## Complete package batch
 
 | Package | Cases passed in the complete batch | Failed | Opt-in cases NOT RUN |
@@ -114,11 +118,12 @@ The batch ran with two workers and the prescribed shared disposable PostgreSQL
 fixture. Web qualification is separate below. The two failed setup tests are
 retained in the batch evidence; later results do not relabel that run as PASS.
 
-## Remaining qualification
+## Live qualification
 
 All default source-suite cases have passed across the complete batch and the
 repaired-file reruns above. The original batch remains a FAIL result. The live
-CORE journey is recorded in [journey.md](journey.md). Standalone computer image qualification and optional
+CORE journey is [PASS](journey.md) on a fresh secondary stack at head
+`44f739f458e67fe8c6f1cf4c1411373b2a4e7314`; startup, status and teardown all exited 0. Standalone computer image qualification and optional
 native-provider qualification are separate from the source test suites and CORE.
 
 ## Gate results

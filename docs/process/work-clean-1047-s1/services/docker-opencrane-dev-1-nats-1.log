@@ -1,0 +1,54 @@
+[1] 2026/11/18 21:30:25.257204 [INF] Starting nats-server
+[1] 2026/11/18 21:30:25.257388 [INF]   Version:  2.15.0
+[1] 2026/11/18 21:30:25.257394 [INF]   Git:      [eb76367]
+[1] 2026/11/18 21:30:25.257399 [INF]   Name:     NAFVNVISR6YNVN2V2OZZYHQS4SVK4UX3UDUNJWEIR4NFQ6PR4CYEWGII
+[1] 2026/11/18 21:30:25.258191 [INF]   Node:     JmhuwNGt
+[1] 2026/11/18 21:30:25.258197 [INF]   ID:       NAFVNVISR6YNVN2V2OZZYHQS4SVK4UX3UDUNJWEIR4NFQ6PR4CYEWGII
+[1] 2026/11/18 21:30:25.258231 [INF] Using configuration file: /etc/nats/nats.conf (sha256:dedafb876ad6f22a1461fc1d212cd2a1a12e85b1f21fd04d7c7f6702e90fb64e)
+[1] 2026/11/18 21:30:25.259042 [INF] Starting JetStream
+[1] 2026/11/18 21:30:25.259513 [INF]     _ ___ _____ ___ _____ ___ ___   _   __  __
+[1] 2026/11/18 21:30:25.259525 [INF]  _ | | __|_   _/ __|_   _| _ \ __| /_\ |  \/  |
+[1] 2026/11/18 21:30:25.259528 [INF] | || | _|  | | \__ \ | | |   / _| / _ \| |\/| |
+[1] 2026/11/18 21:30:25.259531 [INF]  \__/|___| |_| |___/ |_| |_|_\___/_/ \_\_|  |_|
+[1] 2026/11/18 21:30:25.259533 [INF] 
+[1] 2026/11/18 21:30:25.259536 [INF]          https://docs.nats.io/jetstream
+[1] 2026/11/18 21:30:25.259538 [INF] 
+[1] 2026/11/18 21:30:25.259540 [INF] ---------------- JETSTREAM ----------------
+[1] 2026/11/18 21:30:25.259543 [INF]   Strict:          true
+[1] 2026/11/18 21:30:25.259550 [INF]   Max Memory:      11.71 GB
+[1] 2026/11/18 21:30:25.259554 [INF]   Max Storage:     49.19 GB
+[1] 2026/11/18 21:30:25.259557 [INF]   Store Directory: "/data/jetstream"
+[1] 2026/11/18 21:30:25.259560 [INF]   API Level:       5
+[1] 2026/11/18 21:30:25.259563 [INF] -------------------------------------------
+[1] 2026/11/18 21:30:25.260322 [INF] Took 1.255049ms to start JetStream
+[1] 2026/11/18 21:30:25.260727 [INF] Listening for client connections on 0.0.0.0:4222
+[1] 2026/11/18 21:30:25.260740 [INF] TLS required for client connections
+[1] 2026/11/18 21:30:25.260744 [WRN] Clients that are not using "TLS Handshake First" option will fail to connect
+[1] 2026/11/18 21:30:25.261092 [INF] Server is ready
+[1] 2026/11/18 21:30:25.257204 [INF] Starting nats-server
+[1] 2026/11/18 21:30:25.257388 [INF]   Version:  2.15.0
+[1] 2026/11/18 21:30:25.257394 [INF]   Git:      [eb76367]
+[1] 2026/11/18 21:30:25.257399 [INF]   Name:     NAFVNVISR6YNVN2V2OZZYHQS4SVK4UX3UDUNJWEIR4NFQ6PR4CYEWGII
+[1] 2026/11/18 21:30:25.258191 [INF]   Node:     JmhuwNGt
+[1] 2026/11/18 21:30:25.258197 [INF]   ID:       NAFVNVISR6YNVN2V2OZZYHQS4SVK4UX3UDUNJWEIR4NFQ6PR4CYEWGII
+[1] 2026/11/18 21:30:25.258231 [INF] Using configuration file: /etc/nats/nats.conf (sha256:dedafb876ad6f22a1461fc1d212cd2a1a12e85b1f21fd04d7c7f6702e90fb64e)
+[1] 2026/11/18 21:30:25.259042 [INF] Starting JetStream
+[1] 2026/11/18 21:30:25.259513 [INF]     _ ___ _____ ___ _____ ___ ___   _   __  __
+[1] 2026/11/18 21:30:25.259525 [INF]  _ | | __|_   _/ __|_   _| _ \ __| /_\ |  \/  |
+[1] 2026/11/18 21:30:25.259528 [INF] | || | _|  | | \__ \ | | |   / _| / _ \| |\/| |
+[1] 2026/11/18 21:30:25.259531 [INF]  \__/|___| |_| |___/ |_| |_|_\___/_/ \_\_|  |_|
+[1] 2026/11/18 21:30:25.259533 [INF] 
+[1] 2026/11/18 21:30:25.259536 [INF]          https://docs.nats.io/jetstream
+[1] 2026/11/18 21:30:25.259538 [INF] 
+[1] 2026/11/18 21:30:25.259540 [INF] ---------------- JETSTREAM ----------------
+[1] 2026/11/18 21:30:25.259543 [INF]   Strict:          true
+[1] 2026/11/18 21:30:25.259550 [INF]   Max Memory:      11.71 GB
+[1] 2026/11/18 21:30:25.259554 [INF]   Max Storage:     49.19 GB
+[1] 2026/11/18 21:30:25.259557 [INF]   Store Directory: "/data/jetstream"
+[1] 2026/11/18 21:30:25.259560 [INF]   API Level:       5
+[1] 2026/11/18 21:30:25.259563 [INF] -------------------------------------------
+[1] 2026/11/18 21:30:25.260322 [INF] Took 1.255049ms to start JetStream
+[1] 2026/11/18 21:30:25.260727 [INF] Listening for client connections on 0.0.0.0:4222
+[1] 2026/11/18 21:30:25.260740 [INF] TLS required for client connections
+[1] 2026/11/18 21:30:25.260744 [WRN] Clients that are not using "TLS Handshake First" option will fail to connect
+[1] 2026/11/18 21:30:25.261092 [INF] Server is ready
