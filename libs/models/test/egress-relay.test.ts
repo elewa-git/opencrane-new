@@ -396,7 +396,9 @@ it('does not apply a proof watchdog to a registration without rechecks', noReche
 
 async function lateSuccessBeforeWatchdog() {
   const clock = manualClock(1_000_000);
-  const clockOptions = { clock };
+  const watchdog = manualClock(1_000_000);
+  // Hold watchdog delivery while the permission reply observes the later time.
+  const clockOptions = { clock: { now: clock.now, sleep: watchdog.sleep } };
   const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
@@ -410,7 +412,7 @@ async function lateSuccessBeforeWatchdog() {
   await advanceClock(clock, 500);
   clock.advance(1500);
   held.resolve();
-  await advanceClock(clock, 0);
+  await setup.registry.waitForChecks();
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
 }
