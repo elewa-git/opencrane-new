@@ -38,7 +38,7 @@ async function loadMetadata(store: EventStore, silo: string, memberId: string,
   reference: z.infer<typeof referenceSchema>) {
   const { serverId, profileId } = reference;
   const subject = `connection-${memberId}-${serverId}-${profileId}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const rows = await history(store, subject, silo, deadline);
   const control = await history(store, `connection-control-${memberId}-${serverId}`, silo, deadline);
   const serverRows = await history(store, `mcp-${serverId}`, silo, deadline);

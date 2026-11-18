@@ -46,7 +46,7 @@ export async function startEgress(store: EventStore, silo: string, stateDirector
     const id = egressObservationId(silo, record.permitId);
     if (!receipts.get(id)?.capture(record)) refused();
   }
-  const registry = new EgressRelayRegistry(capture, transport, prepare);
+  const registry = new EgressRelayRegistry(capture, transport, prepare, { clock: store.clock });
   let flushing: Promise<void> | undefined;
   async function retry(receipt: Awaited<ReturnType<typeof createEgressReceipt>>) {
     const status = await receipt.retry();

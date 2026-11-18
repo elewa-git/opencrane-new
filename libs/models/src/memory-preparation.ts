@@ -10,7 +10,7 @@ type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'comput
 
 export async function prepareMemoryReads(store: EventStore, binding: Binding,
   claims: Identity, parsed: ReturnType<typeof parseMemoryRequest>) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const activity = await prepareMemoryActivity(store, binding, claims, parsed, deadline);
   const readScopes: string[] = [];
   const writeScopes: string[] = [];
@@ -57,7 +57,7 @@ export async function prepareMemoryReceipts(store: EventStore, binding: Binding,
         !['conversation.created', 'participant.added', 'participant.removed']
           .includes(row.event.type)) continue;
     const applied = await auth.applied(row.event.id);
-    if (performance.now() >= deadline) throw new Error('Memory preparation expired');
+    if (store.clock.now() >= deadline) throw new Error('Memory preparation expired');
     receipts.set(row.event.id, applied);
   }
   function applied(eventId: string) {

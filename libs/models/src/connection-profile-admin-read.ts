@@ -44,7 +44,7 @@ export async function loadPersonalProfileMetadata(store: EventStore, silo: strin
   const subject = `connection-${userId}-${serverId}-${profileId}`;
   const controlSubject = `connection-control-${userId}-${serverId}`;
   const serverSubject = `mcp-${serverId}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const rows = await history(store, subject, silo, deadline);
   const control = await history(store, controlSubject, silo, deadline);
   const serverRows = await history(store, serverSubject, silo, deadline);

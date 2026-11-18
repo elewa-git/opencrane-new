@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
@@ -138,16 +139,17 @@ export function changesDecisionActivity(event: EventEnvelope, turnId: string, ne
 }
 
 export function decisionHistoryDeadline(managedRoute: boolean, decisionDeadline: number,
-  routineSession = false) {
+  routineSession = false, { clock = systemClock }: { clock?: Clock } = {}) {
   if (managedRoute || routineSession) {
-    return performance.now() + 10_000;
+    return clock.now() + 10_000;
   }
   return decisionDeadline;
 }
 
-export function decisionAccessStarted(managedRoute: boolean, loadedMemory: boolean, started: number) {
+export function decisionAccessStarted(managedRoute: boolean, loadedMemory: boolean, started: number,
+  { clock = systemClock }: { clock?: Clock } = {}) {
   if (managedRoute || loadedMemory) {
-    return performance.now();
+    return clock.now();
   }
   return started;
 }

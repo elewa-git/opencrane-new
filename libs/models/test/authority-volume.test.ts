@@ -1,3 +1,4 @@
+import { manualClock } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
@@ -21,7 +22,10 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
   const counts: Record<string, number[]> = {};
   const latencies: { times: number[]; bound: number }[] = [];
   for (const seeded of [0, 100_000]) {
-    const f = await fixture(1_000_000, 1_000_000);
+    // Keep access time stopped while real request latency is measured below.
+    const clock = manualClock(performance.now() + 3_600_000);
+    const f = await fixture(1_000_000, 1_000_000, false, 'gpt-6-luna', false,
+      'manual', 'sales', undefined, { clock });
     try {
       // Equal local history in each run; background replay is outside admission timing.
       await f.stopDispatch(); await f.runtime.stop();

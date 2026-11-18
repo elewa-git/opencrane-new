@@ -32,7 +32,7 @@ export function respondBudgetRefusal(response: ServerResponse, error: unknown) {
 
 export async function budgetScope(store: EventStore, silo: string, raw: unknown) {
   const command = budgetCommandSchema.parse(raw);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const positions = new Map<string, number>();
   async function checkResource(kind: 'paying_group' | 'assistant', id: string) {
     const choice = await readBudgetResource(store, silo, kind, id, deadline, positions);

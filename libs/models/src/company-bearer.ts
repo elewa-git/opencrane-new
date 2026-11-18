@@ -135,7 +135,7 @@ async function prepare(store: EventStore, silo: string, input: Input) {
   }
 }
 async function prepareHistory(store: EventStore, silo: string, input: Input) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const subject = subjectFor(input.serverId, input.profileId);
   const rows = await history(store, subject, silo, deadline);
   const serverSubject = `mcp-${input.serverId}`;
@@ -231,7 +231,7 @@ async function saveLocked(store: EventStore, binding: Binding, custodianId: stri
   custody: Custody, input: Input | null, material: string) {
   const prepared = input ? await prepare(store, binding.silo, input) : null;
   const membership = await currentMembership(store, binding.silo, custodianId,
-    undefined, performance.now() + 10_000);
+    undefined, store.clock.now() + 10_000);
   const options = { requiredRole: 'admin' as const, membership };
   await activeMember(store, binding, custodianId, options);
   // Report a permission refusal before any validation or history failure.
@@ -261,14 +261,14 @@ async function saveLocked(store: EventStore, binding: Binding, custodianId: stri
     return receipt(original);
   }
   const deadline = Math.min(fresh.deadline,
-    performance.now() + Math.min(appendUntil, server.expiresAt) - Date.now());
+    store.clock.now() + Math.min(appendUntil, server.expiresAt) - Date.now());
   const command = { event, expectedSequence: input.expectedSequence, checkAccess,
     historyChecked: true as const, deadline };
   const appended = await store.append(command);
   if (appended.status !== 'appended') {
     throw new Error('Company connection append unconfirmed');
   }
-  const saved = await history(store, subject, binding.silo, performance.now() + 10_000);
+  const saved = await history(store, subject, binding.silo, store.clock.now() + 10_000);
   if (foldCompanyConnection(saved).status !== 'saved_unverified' ||
       !isDeepStrictEqual(saved.at(-1)?.event.data, data)) {
     throw new Error('Company connection append unconfirmed');

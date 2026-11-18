@@ -180,6 +180,7 @@ async function refusesTimeoutAfterAllowRecord() {
     const result = await append(command);
     if (result.status === 'appended' && modelAllowSchema.safeParse(command.event).success) {
       auditDelayed = true;
+      // real wait: Hold the NATS reply across the real gateway admission timeout.
       await delay(2200);
     }
     return result;
@@ -461,6 +462,7 @@ async function finishesFirstAssistantReadBeforeWarmUp() {
     if (args[0] === 'assistant-assistant' && !assistantReadDelayed) {
       assistantReadDelayed = true;
       // Reproduce a cold lookup taking longer than the HTTP admission budget.
+      // real wait: Hold the NATS reply across the real gateway admission timeout.
       await delay(2200);
     }
     yield* read(...args);

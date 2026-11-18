@@ -794,7 +794,7 @@
   },
   "libs/models/src/provider-retirement-preview.ts": {
     "max-params": {
-      "count": 8
+      "count": 7
     }
   },
   "libs/models/src/provider-verification.ts": {

@@ -25,7 +25,7 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
   async function reconcile() {
     // Read under the lock before rebuilding missing private records from saved identities.
     const subject = `connection-${stage.userId}-${stage.serverId}-${stage.profileId}`;
-    let rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
+    let rows = await history(store, subject, stage.siloId, store.clock.now() + 10_000);
     if (stage.attemptId !== undefined) {
       return retireExpiredAccess(custody, rows, stage);
     }
@@ -51,7 +51,7 @@ export async function reconcileConnectionStage(store: EventStore, db: Pick<Db, '
       if (!await closeOperation(store, stage, subject, rows)) {
         return retained;
       }
-      rows = await history(store, subject, stage.siloId, performance.now() + 10_000);
+      rows = await history(store, subject, stage.siloId, store.clock.now() + 10_000);
       state = foldConnection(rows);
     }
     // Require a saved conflict, not a timeout. It defeats even a publish still in flight.
@@ -112,7 +112,7 @@ async function closeOperation(store: EventStore, stage: ConnectionStage,
     return false;
   }
   const command = { event, expectedSequence: stage.expectedSequence,
-    historyChecked: true as const, deadline: performance.now() + 10_000 };
+    historyChecked: true as const, deadline: store.clock.now() + 10_000 };
   const result = await store.append(command);
   return result.status === 'appended';
 }

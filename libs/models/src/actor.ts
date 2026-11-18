@@ -108,10 +108,10 @@ export class BudgetActor {
   async configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number,
     fresh?: () => Promise<void>) {
     const originalDeadline = knownAccessDeadline(fresh);
-    const preparationDeadline = Math.min(originalDeadline ?? Infinity, performance.now() + 10_000);
-    const preparing = prepareCeilingChange(this, raw, commandId,
+    const preparationDeadline = Math.min(originalDeadline ?? Infinity,
+      this.store.clock.now() + 10_000);
+    const prepared = await prepareCeilingChange(this, raw, commandId,
       fresh, preparationDeadline);
-    const prepared = await withinBudgetDeadline(preparing, preparationDeadline);
     const save = async () => {
       if (prepared.status !== 'ready') return prepared;
       const saved = await readQueuedCeilingReceipt(this, prepared.payload, commandId,
@@ -197,13 +197,13 @@ export class BudgetActor {
   async requireCurrent(deadline: number) {
     for (;;) {
       const commands = this.queue;
-      await withinBudgetDeadline(commands, deadline);
-      if (this.writer.status !== 'ready' || performance.now() >= deadline) {
+      await withinBudgetDeadline(commands, deadline, { clock: this.store.clock });
+      if (this.writer.status !== 'ready' || this.store.clock.now() >= deadline) {
         throw new Error('Budget writer unavailable');
       }
       // Read outside the money queue so slow proof reads cannot delay a reservation or Stop.
       const position = await this.store.head(`budget-${this.silo}`, deadline);
-      if (performance.now() >= deadline) throw new Error('Budget writer unavailable');
+      if (this.store.clock.now() >= deadline) throw new Error('Budget writer unavailable');
       // Wait for and recheck any local command that overlapped this read, including lost replies.
       if (commands !== this.queue) continue;
       if (this.writer.status !== 'ready' || position !== this.writer.sequence) {

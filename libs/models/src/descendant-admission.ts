@@ -99,10 +99,10 @@ async function verifyAdmissionDecision(access: Binding,
 /** Save both admission records without granting call or spending authority. */
 export async function admitDescendant(store: EventStore, access: Binding,
   verifier: ReturnType<typeof tokenVerifier>, signedDecision: string) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const binding = await verifyAdmissionDecision(access, verifier, signedDecision);
   const subject = `computer-${binding.assistantId}`;
-  for (let attempt = 0; attempt < 10 && performance.now() < deadline; attempt++) {
+  for (let attempt = 0; attempt < 10 && store.clock.now() < deadline; attempt++) {
     function take(summary: AdmissionSummary, sequence: number) {
       return { summary: structuredClone(summary), sequence };
     }
@@ -160,7 +160,7 @@ export async function descendantAccess(store: EventStore, access: Binding, bindi
   }
   const grants = await readDecisionGrants(store, access.silo, binding.model!, deadline);
   const subjects = [`member-${binding.requesterId}`, `assistant-${binding.assistantId}`];
-  const authority = await decisionAuthorityFence(store, started ?? performance.now(), subjects,
+  const authority = await decisionAuthorityFence(store, started ?? store.clock.now(), subjects,
     binding.requesterId, binding.assistantId, grants, deadline);
   async function confirmAccess() {
     while (true) {
@@ -243,7 +243,7 @@ async function saveDelegationStart(store: EventStore, admission: StoredEvent,
 
 /** Read matching records only. Callers must still check root, access and spending rules. */
 export async function readDescendantAgreement(store: EventStore, silo: string,
-  assistantId: string, delegationId: string, deadline = performance.now() + 10_000) {
+  assistantId: string, delegationId: string, deadline = store.clock.now() + 10_000) {
   function take(summary: AdmissionSummary) {
     return structuredClone(summary.descendants.get(delegationId));
   }

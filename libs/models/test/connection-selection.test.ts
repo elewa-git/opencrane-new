@@ -284,6 +284,7 @@ async function retries() {
     fault.mockRestore();
   }
   const recovered = await test.select();
+  // real wait: Let the NATS duplicate window expire before retrying saved history.
   await delay(1100);
   expect(await test.select()).toEqual(recovered);
   const changed = { ...test.command, profileId: 'different' };
@@ -1253,6 +1254,7 @@ async function delayedReleaseHistory() {
     if (subject === `decision-${test.release.requestId}` && !delayed) {
       expect(accessStarted).toBe(false);
       delayed = true;
+      // real wait: Hold the NATS history reply beyond the short access window.
       await delay(2100);
     }
     yield* readStream(subject, ...rest);

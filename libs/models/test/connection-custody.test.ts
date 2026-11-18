@@ -3894,6 +3894,7 @@ async function checksRefreshHistory(mode: string) {
         if (args[0] === test.subject && row.event.type === 'connection.created') {
           if (mode === 'slow') {
             expect(args[2]! - performance.now()).toBeGreaterThan(2000);
+            // real wait: Hold the NATS history reply beyond the short access window.
             await delay(2100);
             delayed = true;
           } else {
@@ -5641,6 +5642,7 @@ async function companyHistoryDeadline() {
   async function* slowHistory(subject: string, from?: number, deadline?: number) {
     if (subject === test.subject) {
       expect(deadline! - performance.now()).toBeGreaterThan(8000);
+      // real wait: Hold the NATS history reply beyond the short access window.
       await delay(2100);
     }
     yield* read(subject, from, deadline);

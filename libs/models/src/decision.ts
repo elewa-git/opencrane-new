@@ -160,7 +160,7 @@ export async function startDecision(
       // Read managed history before starting the short access check.
       const routineSession = turnToken.conversation.startsWith('routine-session-');
       const historyDeadline = decisionHistoryDeadline(
-        managedRoute || memoryRoute, decisionDeadline, routineSession);
+        managedRoute || memoryRoute, decisionDeadline, routineSession, { clock: actor.store.clock });
       stage = 'turn_history';
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
@@ -179,7 +179,7 @@ export async function startDecision(
       const routine = await prepareRoutineDispatch(actor, memoryClaims, conversation, turn);
       stage = 'memory';
       const memory = await prepareLoadedMemory(actor.store, binding, memoryClaims,
-        conversation, performance.now() + 10_000);
+        conversation, actor.store.clock.now() + 10_000);
       const raw = await readBody(req);
       let preparedPersonal: PersonalToolContext | undefined;
       if (route === 'mcp' && !memoryRoute) {
@@ -191,8 +191,8 @@ export async function startDecision(
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
       const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = preparedPersonal ? performance.now() :
-        memoryAccessStarted(managedRoute, memory.loaded, started, preparation, routine !== undefined);
+      const accessStarted = preparedPersonal ? actor.store.clock.now() :
+        memoryAccessStarted(managedRoute, memory.loaded, started, preparation, { clock: actor.store.clock, routine: routine !== undefined });
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
@@ -344,7 +344,7 @@ export async function startDecision(
       const routineRefused = error instanceof RoutineDispatchRefused;
       const accessRefused = error instanceof AuthorityRefused;
       const reason = capped ? 'budget_exhausted' : privateDecisionReason(error);
-      const elapsedMs = Math.round(performance.now() - started);
+      const elapsedMs = Math.round(actor.store.clock.now() - started);
       const diagnostic = { requestId, route, stage, reason, elapsedMs };
       logger.warn(diagnostic, 'Gateway request refused');
       try {

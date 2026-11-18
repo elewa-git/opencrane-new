@@ -6,7 +6,7 @@ import { publicationDigest, publicationEntry } from './publication.ts';
 
 type Configuration = ReturnType<typeof gatewayConfigurationSchema.parse>;
 type PreparationLimits = { signal: AbortSignal; deadline: number };
-type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
+type ConfigurationStore = Pick<EventStore, 'clock' | 'append' | 'head' | 'readEvent' | 'readStream'>;
 
 export class PublicationUnavailable extends Error {
   constructor() {
@@ -97,7 +97,7 @@ export function gatewayMemberCurrent(rows: StoredEvent[], member: Configuration[
 }
 
 export async function gatewayConfigurationCurrent(store: ConfigurationStore, silo: string,
-  record: Configuration, deadline = performance.now() + 10_000) {
+  record: Configuration, deadline = store.clock.now() + 10_000) {
   const configurationSubject = `gateway-config-${silo}`;
   wireSubject(configurationSubject);
   for (const member of record.members) {
@@ -133,8 +133,8 @@ async function currentCarriedMembers(store: ConfigurationStore, silo: string,
 
 export async function prepareGatewayConfiguration(store: ConfigurationStore, silo: string,
   serverId: string, changeRef: string, attempt?: PreparationLimits): Promise<Configuration> {
-  const deadline = attempt?.deadline ?? performance.now() + 60_000;
-  const timeout = AbortSignal.timeout(Math.max(0, Math.ceil(deadline - performance.now())));
+  const deadline = attempt?.deadline ?? store.clock.now() + 60_000;
+  const timeout = AbortSignal.timeout(Math.max(0, Math.ceil(deadline - store.clock.now())));
   const signal = attempt ? AbortSignal.any([attempt.signal, timeout]) : timeout;
   const limits = { signal, deadline };
   const subject = `gateway-config-${silo}`;

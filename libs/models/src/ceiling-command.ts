@@ -1,8 +1,15 @@
+import { withinBudgetDeadline } from './budget-writer.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema } from '@opencrane/events';
 import { history } from './event-history.ts';
 import { applyBudget, emptyBudget, type BudgetState } from './state.ts';
+
+export interface CeilingChangeActor {
+  store: EventStore;
+  silo: string;
+  state: BudgetState;
+}
 
 export function ceilingReceipt(row: StoredEvent, state: BudgetState) {
   const payload = budgetCeilingSetDataSchema.parse(row.event.data);
@@ -25,11 +32,17 @@ export function ceilingReceiptFromHistory(row: StoredEvent, rows: StoredEvent[])
   return ceilingReceipt(row, state);
 }
 
-export async function prepareCeilingChange(
-  actor: { store: EventStore; silo: string; state: BudgetState },
+export function prepareCeilingChange(
+  actor: CeilingChangeActor,
   raw: unknown, commandId: string,
-  fresh?: (newCommand?: boolean) => Promise<void>, deadline = performance.now() + 10_000,
+  fresh?: (newCommand?: boolean) => Promise<void>, deadline = actor.store.clock.now() + 10_000,
 ) {
+  const reading = readCeilingChange(actor, raw, commandId, fresh, deadline);
+  return withinBudgetDeadline(reading, deadline, { clock: actor.store.clock });
+}
+
+async function readCeilingChange(actor: CeilingChangeActor, raw: unknown, commandId: string,
+  fresh: ((newCommand?: boolean) => Promise<void>) | undefined, deadline: number) {
   const payload = budgetCeilingSetDataSchema.parse(raw);
   const subject = `budget-${actor.silo}`;
   const rows = await history(actor.store, subject, actor.silo, deadline);
@@ -52,7 +65,7 @@ export async function prepareCeilingChange(
 }
 
 export async function readQueuedCeilingReceipt(
-  actor: { store: EventStore; silo: string; state: BudgetState },
+  actor: CeilingChangeActor,
   payload: unknown, commandId: string, preparedSequence: number, deadline: number,
 ) {
   if (preparedSequence >= actor.state.sequence) return undefined;

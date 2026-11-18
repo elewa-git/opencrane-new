@@ -108,7 +108,7 @@ async function saveCompanyOptIn(store: EventStore, binding: Binding,
   }
   async function prepare() {
     try {
-      const deadline = performance.now() + 10_000;
+      const deadline = store.clock.now() + 10_000;
       const rows = await history(store, subject, binding.silo, deadline);
       const original = rows.find(matches);
       const serverRows = await history(store, serverSubject, binding.silo, deadline);
@@ -119,7 +119,7 @@ async function saveCompanyOptIn(store: EventStore, binding: Binding,
     }
   }
   const prepared = await prepare();
-  const fresh = await authorityFence(store, performance.now());
+  const fresh = await authorityFence(store, store.clock.now());
   await activeMember(store, binding, memberId, { requiredRole: 'admin', fresh });
   // Check membership before reporting even a failed history read or conflicting retry.
   if (!prepared) {
@@ -147,7 +147,7 @@ async function saveCompanyOptIn(store: EventStore, binding: Binding,
   if (result.status === 'unavailable') {
     throw new Error('Company opt-in unavailable');
   }
-  const saved = await history(store, subject, binding.silo, performance.now() + 10_000);
+  const saved = await history(store, subject, binding.silo, store.clock.now() + 10_000);
   const receipt = saved.find(matches);
   if (!receipt) {
     throw new CompanyOptInConflict('Company opt-in conflict');

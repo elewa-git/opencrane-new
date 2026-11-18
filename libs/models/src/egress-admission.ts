@@ -162,7 +162,7 @@ async function recordRefusedDispatch(actor: BudgetActor, claims: EgressCapabilit
   // Save the existing error outcome without relay fields: no listener was registered.
   const event = envelope(actor.silo, `egress-${claims.jti}`, 'egress.observed',
     details, observationId);
-  const command = { event, expectedSequence: 0, deadline: performance.now() + 1000 };
+  const command = { event, expectedSequence: 0, deadline: actor.store.clock.now() + 1000 };
   const result = await actor.store.append(command);
   if (result.status !== 'appended') throw new Error('Egress refused');
 }
@@ -191,7 +191,7 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
       ...(outcome === 'allow' ? { permitId: requestId } : {}) };
     const event = envelope(actor.silo, `decision-${requestId}`, 'decision.recorded', details);
     const command = { event, expectedSequence: 0, historyChecked: true as const,
-      deadline: performance.now() + 2000, ...(fresh ? { checkAccess: fresh } : {}) };
+      deadline: actor.store.clock.now() + 2000, ...(fresh ? { checkAccess: fresh } : {}) };
     const saved = await actor.store.append(command);
     if (saved.status !== 'appended') throw new Error('Egress refused');
     return event.id;
@@ -213,10 +213,10 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     digest.update(JSON.stringify(checked));
     contextDigest = digest.digest('hex');
     const activity = await approvalActivity(actor.store, actor.silo, checked.assistant,
-      checked.conversation, checked.turn, performance.now() + 10_000);
+      checked.conversation, checked.turn, actor.store.clock.now() + 10_000);
     const work = activeWork(checked, activity);
     const subjects = [`member-${checked.requester}`, `assistant-${checked.assistant}`];
-    const proofStartedAt = performance.now();
+    const proofStartedAt = actor.store.clock.now();
     const fresh = await authorityFence(actor.store, proofStartedAt, subjects);
     const access = egressHistory(actor.store, actor.silo);
     await checkAccess(actor, binding, checked, activity, fresh, access.read);
@@ -259,7 +259,7 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     await confirmRegistration();
     async function checkCurrent() {
       const subjects = [...access.positions.keys()];
-      const started = performance.now();
+      const started = actor.store.clock.now();
       for (;;) {
         const current = await authorityFence(actor.store, started, subjects);
         try {

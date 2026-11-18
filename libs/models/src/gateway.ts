@@ -7,7 +7,7 @@ import { appendFile, open, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { connect } from 'node:net';
-import { setTimeout as delay } from 'node:timers/promises';
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { z } from 'zod';
 import { envelope, history, type BudgetActor } from './actor.ts';
 
@@ -294,6 +294,7 @@ function safeGatewayStderr(line: string) {
 }
 
 export async function startGateway(options: GatewayModelRoute & {
+  clock?: Clock;
   binary: string; configFile: string; usageFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string;
   mcpRoutes?: McpRoute[];
@@ -358,7 +359,7 @@ export async function startGateway(options: GatewayModelRoute & {
           return { stop, healthy: () => child.exitCode === null && child.signalCode === null && !failed };
         }
       } catch { /* Listener is still starting. */ }
-      await delay(50);
+      await (options.clock ?? systemClock).sleep(50);
     }
     throw new Error('Gateway readiness timed out');
   } catch (error) { await stop(); throw error; }

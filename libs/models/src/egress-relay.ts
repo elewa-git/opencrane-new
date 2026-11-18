@@ -1,3 +1,5 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
+import { clockTimer } from './clock-timer.ts';
 import { once } from 'node:events';
 import { createServer, type Socket } from 'node:net';
 import { egressDestinationSchema } from '@opencrane/events';
@@ -46,7 +48,7 @@ class Relay {
   private checking = false;
   private pending: Promise<void> | undefined;
   private readonly watch: NodeJS.Timeout;
-  private watchdog: NodeJS.Timeout | undefined;
+  private watchdog: (() => void) | undefined;
   expiry: NodeJS.Timeout | undefined;
   private proofDeadline: number;
 
@@ -54,10 +56,12 @@ class Relay {
   private readonly registeredAt: number;
   private readonly onClose: CloseRecord;
   private readonly transport: EgressTransport;
+  private readonly clock: Clock;
 
   constructor(registration: Registration, registeredAt: number,
-    onClose: CloseRecord, transport: EgressTransport) {
-    const started = registration.proofStartedAt ?? performance.now();
+    onClose: CloseRecord, transport: EgressTransport, clock: Clock) {
+    this.clock = clock;
+    const started = registration.proofStartedAt ?? this.clock.now();
     this.proofDeadline = started + proofLifetimeMs;
     this.registration = registration;
     this.registeredAt = registeredAt;
@@ -74,7 +78,7 @@ class Relay {
     }
     this.closed = true;
     clearInterval(this.watch);
-    clearTimeout(this.watchdog);
+    this.watchdog?.();
     // Keep valid receipt times when the wall clock moves backwards.
     const closedAt = Math.max(Date.now(), this.registeredAt, this.connectedAt ?? 0);
     const record: EgressCloseRecord = {
@@ -101,32 +105,32 @@ class Relay {
   }
 
   private watchProof = () => {
-    const remaining = this.proofDeadline - performance.now();
+    const remaining = this.proofDeadline - this.clock.now();
     if (remaining <= 0) {
       this.close('unavailable');
       return;
     }
-    this.watchdog = setTimeout(this.watchProof, remaining);
-    this.watchdog.unref();
+    this.watchdog = clockTimer({ clock: this.clock, milliseconds: remaining,
+      elapsed: this.watchProof, unref: true });
   };
 
   private check = () => {
     if (this.checking || this.closed || !this.registration.recheck) return;
     this.checking = true;
-    const started = performance.now();
+    const started = this.clock.now();
     const checking = this.refresh(started).catch(this.recheckFailed);
     this.pending = checking.finally(this.checked);
   };
   private async refresh(started: number) {
     await this.registration.recheck!();
     if (this.closed) return;
-    if (performance.now() >= this.proofDeadline) {
+    if (this.clock.now() >= this.proofDeadline) {
       this.close('unavailable');
       return;
     }
     // Date proof from the start of its reads, never from a delayed reply.
     this.proofDeadline = started + proofLifetimeMs;
-    clearTimeout(this.watchdog);
+    this.watchdog?.();
     this.watchProof();
   }
   private recheckFailed = (error: unknown) => {
@@ -204,9 +208,11 @@ export class EgressRelayRegistry {
   private readonly transport: EgressTransport;
 
   private readonly prepare: Prepare | undefined;
+  private readonly clock: Clock;
 
   constructor(onClose: CloseRecord, transport = systemTransport,
-    prepare?: Prepare) {
+    prepare?: Prepare, { clock = systemClock }: { clock?: Clock } = {}) {
+    this.clock = clock;
     this.onClose = onClose;
     this.transport = transport;
     this.prepare = prepare;
@@ -232,7 +238,7 @@ export class EgressRelayRegistry {
       throw error;
     }
     const registration = { ...request, ...destination };
-    const relay = new Relay(registration, registeredAt, this.onClose, this.transport);
+    const relay = new Relay(registration, registeredAt, this.onClose, this.transport, this.clock);
     this.relays.set(request.permitId, relay);
     const relays = this.relays;
     function expire() {

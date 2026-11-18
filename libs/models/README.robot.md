@@ -2,14 +2,21 @@
 
 ## Access timing
 
-The authority, paying-group, ordinary decision, credential-release and credential-send
-checks use `store.clock` for their two-second access limits. The budget actor uses the
-same clock for serial admission and the fallback access deadline. These checks retain
-all existing lengths. Other models timing remains on the real clock until its separate
-migration. Tests that combine both paths start their manual clock near the real monotonic time.
+Model deadlines read `store.clock` wherever an event store is available. Narrowed
+store types include `clock` when they create or check a deadline. Helpers without
+a store take a named `clock` option and default to `systemClock`. All deadline
+lengths remain unchanged, including the two-second access checks.
 `fixture` accepts `{ clock }` in a named trailing options object after `executionMode`.
 The default fixture still uses real time. `accessDeadline` takes named options
 `{ clock, checkAccess?, deadline? }`; budget waiting helpers accept a named clock option.
+Spending readers accept `{ clock, deadline? }` in their final options argument;
+an existing numeric deadline is still accepted. Wall-clock timestamps and token
+expiry continue to use `Date.now()`.
+
+Credential deadline waits and the relay proof watchdog use the injected clock.
+Native timers retain their original reference behaviour with the system clock.
+Fixed service timeouts and periodic checks still use native timers. ESLint refuses
+`performance.now` in model and event-store source, except the system clock adapter.
 
 For people, read [README.md](README.md) first.
 

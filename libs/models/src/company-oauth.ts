@@ -26,7 +26,7 @@ async function loadPreparation(store: EventStore, silo: string, raw: unknown,
   try {
     const input = inputSchema.parse(raw);
     const session = sessionSchema.parse(rawSession);
-    const deadline = performance.now() + 10_000;
+    const deadline = store.clock.now() + 10_000;
     const subject = `connection-company:${input.serverId}:${input.profileId}`;
     const profile = await history(store, subject, silo, deadline);
     const serverSubject = `mcp-${input.serverId}`;
@@ -69,7 +69,7 @@ export async function prepareCompanyOAuthAttempt(store: EventStore, binding: Bin
   try {
     const loaded = await loadPreparation(store, binding.silo, raw, rawSession, loadConfiguration);
     const membership = await currentMembership(store, binding.silo, custodianId,
-      undefined, performance.now() + 10_000);
+      undefined, store.clock.now() + 10_000);
     const options = { requiredRole: 'admin' as const, membership };
     await activeMember(store, binding, custodianId, options);
     if (!loaded || loaded.session.memberRevision !==
@@ -100,7 +100,7 @@ export async function prepareCompanyOAuthAttempt(store: EventStore, binding: Bin
       }
       const checked = await store.head(undefined, fresh.deadline);
       const expiresAt = Math.min(prepared.stage.appendUntil, serverExpiresAt);
-      if (performance.now() >= fresh.deadline || !Number.isFinite(expiresAt) ||
+      if (store.clock.now() >= fresh.deadline || !Number.isFinite(expiresAt) ||
           Date.now() >= expiresAt) {
         return { status: 'unknown' as const };
       }

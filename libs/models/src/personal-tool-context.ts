@@ -40,7 +40,7 @@ export async function personalToolContext(store: EventStore, binding: Binding,
       selected.sequence !== boundSelection.selectionRevision) {
     throw new Error('Personal tool unavailable');
   }
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const assistantRows = await readPersonalKeyAssistant(store, binding.silo, assistantId, deadline);
   const consent = { ...selected, userId: requesterId };
   if (!assistantMayUsePersonalKey(consent, assistantId, assistantRows)) {
@@ -96,7 +96,7 @@ export async function preparePersonalCall(store: EventStore, binding: Binding,
   const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(request.url ?? '');
   if (!match) throw new Error('Unknown MCP route');
   const serverId = match[1]!;
-  const rows = await readServerRows(store, binding.silo, serverId, performance.now() + 10_000);
+  const rows = await readServerRows(store, binding.silo, serverId, store.clock.now() + 10_000);
   const policy = toolPolicyFromRows(rows);
   if (policy.accountMode !== 'personal') return undefined;
   if (!request.loadConfiguration) throw new Error('Personal tool unavailable');

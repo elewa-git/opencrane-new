@@ -24,7 +24,7 @@ type Choice = { serverId: string; connectionId: string; profileId: string; profi
 
 export async function companySelectionFacts(store: EventStore, silo: string, choice: Choice,
   loadConfiguration?: OAuthConfigurationLoader, readProfile: CompanyProfileReader = foldCompanyConnection) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const subject = `connection-company:${choice.serverId}:${choice.profileId}`;
   const rows = await history(store, subject, silo, deadline);
   const evidence = evidenceSchema.safeParse(await readProfile(rows));

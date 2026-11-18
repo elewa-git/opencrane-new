@@ -1,3 +1,5 @@
+import { systemClock } from '@opencrane/event-store';
+import { manualClock, type ManualClock } from '@opencrane/event-store/testing';
 import { once } from 'node:events';
 import { connect, createServer, Socket } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -7,7 +9,7 @@ import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay
 import { clientHello } from './egress-hello-fixture.ts';
 
 const destination = { host: 'registry.npmjs.org', port: 443 };
-async function fixture(stage = 'open', throwing = false, prepare?: () => Promise<void>) {
+async function fixture(stage = 'open', throwing = false, prepare?: () => Promise<void>, clock = systemClock) {
   const records: EgressCloseRecord[] = [];
   const sockets: Socket[] = [];
   let lookups = 0;
@@ -50,7 +52,7 @@ async function fixture(stage = 'open', throwing = false, prepare?: () => Promise
     if (throwing) throw new Error('Callback failed');
   }
   const transport = { resolve, connect: connector };
-  const registry = new EgressRelayRegistry(closed, transport, prepare);
+  const registry = new EgressRelayRegistry(closed, transport, prepare, { clock });
   async function register(permitId = 'permit', expiresAt = Date.now() + 400) {
     return registry.register({ ...destination, permitId, expiresAt });
   }
@@ -237,6 +239,17 @@ async function matchesExactDestination() {
 it('normalises the host and closes only the exact destination port', matchesExactDestination);
 
 
+async function advanceClock(clock: ManualClock, milliseconds: number) {
+  let remaining = milliseconds;
+  while (remaining > 0) {
+    const step = Math.min(100, remaining);
+    clock.advance(step);
+    await vi.advanceTimersByTimeAsync(step);
+    remaining -= step;
+  }
+  await vi.advanceTimersByTimeAsync(0);
+}
+
 async function preparationKeepsExpiry() {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
@@ -244,7 +257,8 @@ async function preparationKeepsExpiry() {
     entered.resolve();
     await release.promise;
   }
-  const setup = await fixture('open', false, prepare);
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, prepare, clock);
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   function restoreTimers() {
     vi.useRealTimers();
@@ -252,12 +266,12 @@ async function preparationKeepsExpiry() {
   onTestFinished(restoreTimers);
   const registering = setup.register('permit', Date.now() + 60_000);
   await entered.promise;
-  await vi.advanceTimersByTimeAsync(30_000);
+  await advanceClock(clock, 30_000);
   release.resolve();
   const client = await setup.dial(await registering);
   await once(client, 'data');
   const closed = once(client, 'close', { signal: AbortSignal.timeout(1000) });
-  await vi.advanceTimersByTimeAsync(30_000);
+  await advanceClock(clock, 30_000);
   await closed;
   expect(setup.counts().connections).toBe(1);
   expect(setup.records).toHaveLength(1);
@@ -266,9 +280,10 @@ async function preparationKeepsExpiry() {
 it('keeps the original expiry when receipt preparation takes time', preparationKeepsExpiry);
 
 async function watchdogClosure(lateFailure: boolean) {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   const held = Promise.withResolvers<void>();
   let checks = 0;
@@ -284,18 +299,18 @@ async function watchdogClosure(lateFailure: boolean) {
   const other = await setup.dial(await setup.registry.register(neighbour));
   await once(other, 'data');
   vi.setSystemTime(Date.now() - 60_000);
-  await vi.advanceTimersByTimeAsync(1500);
+  await advanceClock(clock, 1500);
   expect(checks).toBe(1);
   expect(client.destroyed).toBe(false);
   const closed = once(client, 'close', { signal: AbortSignal.timeout(1000) });
-  await vi.advanceTimersByTimeAsync(500);
+  await advanceClock(clock, 500);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ permitId: 'permit', reason: 'unavailable' });
   expect(egressCloseSchema.safeParse(setup.records[0]).success).toBe(true);
   await closed;
   if (lateFailure) held.reject(new Error('private-canary'));
   else held.resolve();
-  await vi.advanceTimersByTimeAsync(3000);
+  await advanceClock(clock, 3000);
   expect(checks).toBe(1);
   expect(setup.records).toHaveLength(1);
   expect(other.destroyed).toBe(false);
@@ -306,9 +321,10 @@ async function watchdogClosure(lateFailure: boolean) {
 it.each([false, true])('closes a hung recheck by two seconds; late failure: %s', watchdogClosure);
 
 async function slowSerialChecks() {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   const held = Promise.withResolvers<void>();
   let checks = 0;
@@ -318,12 +334,12 @@ async function slowSerialChecks() {
   }
   const expiresAt = Date.now() + 4000;
   await setup.registry.register({ ...destination, permitId: 'permit', expiresAt, recheck });
-  await vi.advanceTimersByTimeAsync(1500);
+  await advanceClock(clock, 1500);
   expect(checks).toBe(1);
   held.resolve();
-  await vi.advanceTimersByTimeAsync(2499);
+  await advanceClock(clock, 2499);
   expect(setup.records).toHaveLength(0);
-  await vi.advanceTimersByTimeAsync(1);
+  await advanceClock(clock, 1);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ reason: 'expired' });
   expect(vi.getTimerCount()).toBe(0);
@@ -335,9 +351,10 @@ function restoreClock() {
 }
 
 async function lateCheckAfterRevocation() {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   const held = Promise.withResolvers<void>();
   function recheck() {
@@ -345,10 +362,10 @@ async function lateCheckAfterRevocation() {
   }
   const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
   await setup.registry.register(request);
-  await vi.advanceTimersByTimeAsync(500);
+  await advanceClock(clock, 500);
   setup.registry.closePermit('permit');
   held.resolve();
-  await vi.advanceTimersByTimeAsync(0);
+  await advanceClock(clock, 0);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ reason: 'revoked' });
   // Keep only the expiry timer that reserves the used listener's port.
@@ -360,20 +377,22 @@ it('does not restart the watchdog after a closed relay receives a late success',
   lateCheckAfterRevocation);
 
 async function noRecheckWatchdog() {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   await setup.register('permit', Date.now() + 60_000);
-  await vi.advanceTimersByTimeAsync(2000);
+  await advanceClock(clock, 2000);
   expect(setup.records).toHaveLength(0);
 }
 it('does not apply a proof watchdog to a registration without rechecks', noRecheckWatchdog);
 
 async function lateSuccessBeforeWatchdog() {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   const held = Promise.withResolvers<void>();
   function recheck() {
@@ -381,20 +400,20 @@ async function lateSuccessBeforeWatchdog() {
   }
   const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
   await setup.registry.register(request);
-  await vi.advanceTimersByTimeAsync(500);
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(2000);
-  onTestFinished(clock.mockRestore.bind(clock));
+  await advanceClock(clock, 500);
+  clock.advance(1500);
   held.resolve();
-  await vi.advanceTimersByTimeAsync(0);
+  await advanceClock(clock, 0);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
 }
 it('rejects a late successful check before the watchdog gets CPU time', lateSuccessBeforeWatchdog);
 
 async function refreshedProofStartsAtRead() {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   const first = Promise.withResolvers<void>();
   const later = Promise.withResolvers<void>();
@@ -405,11 +424,11 @@ async function refreshedProofStartsAtRead() {
   }
   const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
   await setup.registry.register(request);
-  await vi.advanceTimersByTimeAsync(1500);
+  await advanceClock(clock, 1500);
   first.resolve();
-  await vi.advanceTimersByTimeAsync(899);
+  await advanceClock(clock, 899);
   expect(setup.records).toHaveLength(0);
-  await vi.advanceTimersByTimeAsync(1);
+  await advanceClock(clock, 1);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
   later.resolve();
@@ -418,16 +437,17 @@ it('dates refreshed proof from the read start even when its reply is delayed',
   refreshedProofStartsAtRead);
 
 async function untypedRejection() {
-  const setup = await fixture();
+  const clock = manualClock(1_000_000);
+  const setup = await fixture('open', false, undefined, clock);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
-    'clearInterval', 'performance', 'Date'] });
+    'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
   function recheck() {
     return Promise.reject(new Error('private-canary'));
   }
   const request = { ...destination, permitId: 'permit', expiresAt: Date.now() + 60_000, recheck };
   await setup.registry.register(request);
-  await vi.advanceTimersByTimeAsync(500);
+  await advanceClock(clock, 500);
   expect(setup.records).toHaveLength(1);
   expect(setup.records[0]).toMatchObject({ reason: 'unavailable' });
 }

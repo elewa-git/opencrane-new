@@ -312,7 +312,7 @@ async function saveApprovalInvalidation(store: EventStore, event: EventEnvelope,
 export async function decideApproval(store: EventStore, silo: string, approvalId: string,
   memberId: string, decision: 'approved' | 'rejected' | 'retry', recentAuth: boolean,
   fresh: FreshAuthority, current: Awaited<ReturnType<typeof readApproval>>, now = new Date()) {
-  const beganAt = performance.now();
+  const beganAt = store.clock.now();
   if (current.request.approvalId !== approvalId || current.request.requesterId !== memberId) {
     throw new Error('Requester only');
   }
@@ -330,7 +330,7 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
   if (await approvalChangedSinceRead(store, silo, current, deadline)) {
     return { status: 'conflict' } as const;
   }
-  const checkedAt = new Date(now.getTime() + performance.now() - beganAt);
+  const checkedAt = new Date(now.getTime() + store.clock.now() - beganAt);
   if (Date.parse(current.request.expiresAt) <= checkedAt.getTime()) {
     const event = envelope(silo, `approval-${approvalId}`, 'approval.expired', { approvalId });
     const command: AppendCommand = { event, expectedSequence: current.sequence };

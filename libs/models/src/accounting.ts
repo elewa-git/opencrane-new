@@ -1,9 +1,23 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { z } from 'zod';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 import { applyBudget, data, emptyBudget, stateSchema, totals, type BudgetState } from './state.ts';
 import { createCurrentEffects, currentEffectFields, currentEffectSchema,
   currentEffectBudget, updateCurrentEffectEvidence } from './current-effects.ts';
+
+export interface AccountingReadOptions {
+  clock?: Clock;
+  deadline?: number | undefined;
+}
+
+function accountingDeadline(options: AccountingReadOptions | number) {
+  if (typeof options === 'number') {
+    return options;
+  }
+  const clock = options.clock ?? systemClock;
+  return options.deadline ?? clock.now() + 2000;
+}
 
 export const budgetProjectionVersion = 6;
 type Reservation = BudgetState['reservations'][number];
@@ -75,7 +89,8 @@ function spendingEffect(row: Record<string, unknown>) {
 
 /** Read saved records only. Callers must check finance access after loading, including failures. */
 export async function readSpendingEffects(db: Query, silo: string,
-  input: z.input<typeof effectPageSchema> = {}, deadline = performance.now() + 2000) {
+  input: z.input<typeof effectPageSchema> = {}, readOptions: AccountingReadOptions | number = {}) {
+  const deadline = accountingDeadline(readOptions);
   const page = effectPageSchema.parse(input);
   const options = { deadline };
   const progress = await db.query<{ version: number; sequence: string; generation: string }>(
@@ -148,7 +163,8 @@ function spendingCall(input: Record<string, unknown>): SpendingCall {
 
 /** Read internal accounting only. Callers must check current finance access after loading. */
 export async function readSpendingCalls(db: Query, silo: string,
-  input: z.input<typeof pageSchema> = {}, deadline = performance.now() + 2000) {
+  input: z.input<typeof pageSchema> = {}, readOptions: AccountingReadOptions | number = {}) {
+  const deadline = accountingDeadline(readOptions);
   const page = pageSchema.parse(input);
   const options = { deadline };
   const progress = await db.query<{ version: number; sequence: string; generation: string }>(
@@ -278,7 +294,8 @@ function currentEffect(row: Record<string, unknown>) {
 }
 /** Capture the required log position first; check finance access after loading, even on failure. */
 export async function readCurrentEffects(db: Query, silo: string, requiredSequence: number,
-  input: z.input<typeof currentPageSchema> = {}, deadline = performance.now() + 2000) {
+  input: z.input<typeof currentPageSchema> = {}, readOptions: AccountingReadOptions | number = {}) {
+  const deadline = accountingDeadline(readOptions);
   z.int().nonnegative().parse(requiredSequence);
   const page = currentPageSchema.parse(input);
   const progress = await currentEffectProgress(db, requiredSequence, deadline);

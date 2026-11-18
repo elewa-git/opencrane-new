@@ -972,6 +972,7 @@ async function delayedDispatchProof() {
       lostAt = performance.now();
       const iam = vi.spyOn(test.facts.auth, 'checkApplied').mockImplementation(hang);
       restoreIam = iam.mockRestore.bind(iam);
+      // real wait: Let the NATS dispatch append consume real relay proof time.
       await delay(1200);
     }
     return result;

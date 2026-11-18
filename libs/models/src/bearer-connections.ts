@@ -258,7 +258,7 @@ function sameBindings(first: Saved, second: Saved) {
     first.activation.endpointDigest === second.activation.endpointDigest;
 }
 async function eligibleServer(store: EventStore, silo: string, input: Command) {
-  const rows = await history(store, `mcp-${input.serverId}`, silo, performance.now() + 10_000);
+  const rows = await history(store, `mcp-${input.serverId}`, silo, store.clock.now() + 10_000);
   const server = connectionServer(rows, input.connectionId);
   if (!server.available || server.endpointDigest === undefined) {
     throw new Error('Connection server unavailable');
@@ -300,7 +300,7 @@ export async function saveBearerConnection(store: EventStore, binding: Binding,
 async function saveLocked(store: EventStore, binding: Binding, memberId: string,
   custody: Custody, input: Command, material: string) {
   const subject = `connection-${memberId}-${input.serverId}-${input.profileId}`;
-  const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+  const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
   const state = foldConnection(rows);
   const operationId = connectionOperationId(binding.silo, subject, input.changeRef);
   function originalOperation(row: StoredEvent) {
@@ -319,7 +319,7 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
   requireCurrent(expectedState, input);
   const server = await eligibleServer(store, binding.silo, input);
   await readActiveMember(store, binding, memberId);
-  await requireConnectionEnabled(store, memberId, input.serverId, performance.now() + 10_000);
+  await requireConnectionEnabled(store, memberId, input.serverId, store.clock.now() + 10_000);
   const stage: ConnectionStage = { siloId: binding.silo, userId: memberId,
     serverId: input.serverId, connectionId: input.connectionId, profileId: input.profileId,
     purpose: 'personal', generation: expectedState.lastGeneration + 1, operationId,
@@ -381,7 +381,7 @@ export async function changePersonalConnection(store: EventStore, binding: Bindi
     commandId: input.changeRef, source: 'opencrane-server',
     principal: { kind: 'human' as const, id: actorId } };
   // Check current permission once after preparation, including when history failed.
-  const fresh = await authorityFence(store, performance.now(), [`member-${actorId}`]);
+  const fresh = await authorityFence(store, store.clock.now(), [`member-${actorId}`]);
   const options = { requiredRole, fresh };
   await activeMember(store, binding, actorId, options);
   if (loaded.status === 'failed') {
@@ -396,10 +396,10 @@ async function prepareControl(store: EventStore, silo: string,
   input: z.infer<typeof controlSchema>, profileSubject: string, subject: string,
   operationId: string) {
   try {
-    const profileRows = await history(store, profileSubject, silo, performance.now() + 10_000);
+    const profileRows = await history(store, profileSubject, silo, store.clock.now() + 10_000);
     let rows = profileRows;
     if (subject !== profileSubject) {
-      rows = await history(store, subject, silo, performance.now() + 10_000);
+      rows = await history(store, subject, silo, store.clock.now() + 10_000);
     }
     function originalOperation(row: StoredEvent) {
       return row.event.id === operationId;
@@ -442,7 +442,7 @@ async function appendControl(store: EventStore, event: EventEnvelope, expectedSe
   if (result.status !== 'appended') {
     throw new Error('Connection append unconfirmed');
   }
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) {
     throw new Error('Connection append unconfirmed');
   }

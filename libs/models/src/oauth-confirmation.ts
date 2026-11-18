@@ -31,7 +31,7 @@ export async function confirmPersonalOAuth(store: EventStore, binding: Binding,
     const profile = { ...input, siloId: session.siloId };
     const subject = `connection-${session.userId}-${input.serverId}-${input.profileId}`;
     async function confirm() {
-      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+      const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
       // Recover a receipt before touching expired consent. A receipt grants no credential use.
       const original = savedReceipt(rows, input);
       if (original) {
@@ -122,7 +122,7 @@ async function appendGeneration(store: EventStore, evidence: Evidence,
   async function checkAccess() {
     // Recheck settings at publication as well as membership, without extending this deadline.
     await evidence.saved.checkCurrent(evidence.claimed.sequence);
-    if (performance.now() >= checked.deadline || Date.now() >= prepared.identityUntil) {
+    if (store.clock.now() >= checked.deadline || Date.now() >= prepared.identityUntil) {
       throw new Error('OAuth confirmation expired');
     }
   }
@@ -134,7 +134,7 @@ async function appendGeneration(store: EventStore, evidence: Evidence,
     throw new Error('OAuth activation unconfirmed');
   }
   const rows = await history(store, prepared.event.subject, prepared.event.silo,
-    performance.now() + 10_000);
+    store.clock.now() + 10_000);
   const saved = rows[2];
   if (rows.length !== 3 || !saved || saved.sequence !== result.sequence ||
       !isDeepStrictEqual(saved.event, prepared.event) || !foldConnection(rows).data) {

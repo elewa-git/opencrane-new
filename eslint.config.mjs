@@ -59,6 +59,16 @@ export default tseslint.config(
     extends: [...tseslint.configs.strictTypeChecked],
   },
   {
+    files: ['libs/event-store/src/**/*.ts', 'libs/models/src/**/*.ts'],
+    ignores: ['libs/event-store/src/clock.ts'],
+    rules: {
+      'no-restricted-properties': ['error', {
+        object: 'performance', property: 'now',
+        message: 'Read the injected clock so tests can control deadlines.',
+      }],
+    },
+  },
+  {
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
     ignores: ['**/*.spec.ts'],
     rules: {

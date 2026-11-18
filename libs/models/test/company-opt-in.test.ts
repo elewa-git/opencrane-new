@@ -146,6 +146,7 @@ async function replayAndRetries() {
   await expect(test.change()).rejects.toThrow('Company opt-in unavailable');
   fault.mockRestore();
   const original = await test.change();
+  // real wait: Let the NATS duplicate window expire before retrying saved history.
   await delay(1100);
   expect(await test.change()).toEqual(original);
   await expect(test.change({ ...test.input, enabled: false }))

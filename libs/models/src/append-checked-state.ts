@@ -3,12 +3,12 @@ import type { AppendCommand, AppendResult, EventStore } from '@opencrane/event-s
 // Keep the global condition for atomic checks across streams. Retry a definite conflict
 // only after checking the original state and access again, within the original deadline.
 export async function appendCheckedState(
-  store: Pick<EventStore, 'append' | 'head'>,
+  store: Pick<EventStore, 'clock' | 'append' | 'head'>,
   command: AppendCommand & { expectedGlobalSequence: number; deadline: number },
   unchanged: () => Promise<boolean>,
 ): Promise<AppendResult> {
   let expectedGlobalSequence = command.expectedGlobalSequence;
-  while (performance.now() < command.deadline) {
+  while (store.clock.now() < command.deadline) {
     if (!await unchanged()) {
       return { status: 'conflict' };
     }

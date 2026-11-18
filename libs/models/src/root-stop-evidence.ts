@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
-import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { readEventAt, type EventStore, type StoredEvent, type Clock } from '@opencrane/event-store';
 import { parseEventByType, routineActivationSchema, routineControlSchema, routineStopSchema,
   type EventEnvelope, type RoutineState } from '@opencrane/events';
 import { readRoutineApproval } from './routine-approval-evidence.ts';
@@ -14,13 +14,13 @@ type StopEvidence = StoredEvent & { routine?: RoutineState };
 type Append = (type: string, payload: unknown) => Promise<void>;
 
 export async function readRootStopEvidence(store: EventStore, subject: string, position: number,
-  deadline = performance.now() + 10_000) {
+  deadline = store.clock.now() + 10_000) {
   try {
     if (!Number.isSafeInteger(position) || position < 1) {
       throw new Error('Invalid position');
     }
     const reading = readEvidence(store, subject, position, deadline);
-    return await withinBudgetDeadline(reading, deadline);
+    return await withinBudgetDeadline(reading, deadline, { clock: store.clock });
   } catch {
     // Keep store errors and evidence identities out of the caller's error.
     throw new Error('Root stop evidence refused');
@@ -146,7 +146,7 @@ async function requireAdminPause(store: EventStore, source: StoredEvent, deadlin
   // Read authority as it stood at the pause. Later demotion must not prevent cleanup.
   async function* readStream(subject: string, from = 1) {
     for await (const row of store.readStream(subject, from, deadline)) {
-      if (performance.now() >= deadline) {
+      if (store.clock.now() >= deadline) {
         throw new Error('Admin history unavailable');
       }
       if (row.sequence >= source.sequence) {
@@ -202,10 +202,11 @@ function accessPauseRun(state: RoutineState | undefined, position: number, claim
   }
   return state.activeRun;
 }
-function requireMemberRow(row: StoredEvent, silo: string, subject: string, deadline: number) {
+function requireMemberRow(row: StoredEvent, silo: string, subject: string,
+  { clock, deadline }: { clock: Clock; deadline: number }) {
   const parsed = parseEventByType(row.event);
   if (!parsed.success || row.event.silo !== silo || row.event.subject !== subject ||
-      performance.now() >= deadline) {
+      clock.now() >= deadline) {
     throw new Error('Invalid routine removal');
   }
   return data(parsed.event);
@@ -219,7 +220,7 @@ export async function readRoutineRemoval(store: EventStore, state: RoutineState 
   let verified = false;
   let position = 0;
   for await (const row of store.readStream(subject, 1, deadline)) {
-    const fields = requireMemberRow(row, state!.silo, subject, deadline);
+    const fields = requireMemberRow(row, state!.silo, subject, { clock: store.clock, deadline });
     position = row.sequence;
     // Keep later membership changes from erasing removal of the original admission.
     if (row.sequence > cause.position) {
@@ -258,7 +259,7 @@ export async function readRoutineDeactivation(store: EventStore, state: RoutineS
   if (!saved || !parsed.success || saved.event.id !== cause.eventId ||
       saved.event.silo !== state!.silo || saved.event.subject !== subject ||
       saved.event.type !== 'assistant.settings_changed' ||
-      state!.definition!.definition.assistantId !== assistantId || performance.now() >= deadline) {
+      state!.definition!.definition.assistantId !== assistantId || store.clock.now() >= deadline) {
     throw new Error('Invalid routine deactivation');
   }
   const fields = data(parsed.event);
@@ -274,7 +275,7 @@ async function readRoutineThroughStop(store: EventStore, source: StoredEvent, de
   let claimPosition = 0;
   const completedRuns = new Map<string, NonNullable<RoutineState['activeRun']>>();
   for await (const row of store.readStream(source.event.subject, 1, deadline)) {
-    if (performance.now() >= deadline || row.sequence > source.sequence) {
+    if (store.clock.now() >= deadline || row.sequence > source.sequence) {
       break;
     }
     if (row.sequence === source.sequence && row.event.id === source.event.id) {

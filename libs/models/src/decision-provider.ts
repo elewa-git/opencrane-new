@@ -2,8 +2,7 @@ import type { z } from 'zod';
 import type { ModelCall } from './state.ts';
 import type { legacyTurnSchema } from './decision-turn-token.ts';
 import type { ProviderVerificationOptions } from './provider-verification.ts';
-import { setTimeout as wait } from 'node:timers/promises';
-import { readStreamSummary, type EventStore, type StoredEvent,
+import { readStreamSummary, type EventStore, type StoredEvent, type Clock,
   type SummaryKind } from '@opencrane/event-store';
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { providerSecretRef } from './providers.ts';
@@ -61,9 +60,9 @@ export async function decisionProvider(store: EventStore, silo: string,
   }
   async function credential(secrets: ProviderSecrets | undefined, deadline: number) {
     if (!secrets) throw new Error('Provider custody unavailable');
-    const value = await readCredential(secrets, reference, deadline);
+    const value = await readCredential(secrets, reference, deadline, { clock: store.clock });
     // Reject unusable credentials before holding money or constructing response headers.
-    if (!value || /[^\x21-\x7e]/u.test(value) || performance.now() >= deadline) {
+    if (!value || /[^\x21-\x7e]/u.test(value) || store.clock.now() >= deadline) {
       throw new Error('Provider custody unavailable');
     }
     return value;
@@ -71,14 +70,15 @@ export async function decisionProvider(store: EventStore, silo: string,
   return { confirm, credential };
 }
 
-async function readCredential(secrets: ProviderSecrets, reference: string, deadline: number) {
-  const remaining = deadline - performance.now();
+async function readCredential(secrets: ProviderSecrets, reference: string, deadline: number,
+  { clock }: { clock: Clock }) {
+  const remaining = deadline - clock.now();
   if (remaining <= 0) throw new Error('Provider custody unavailable');
   const cancelled = new AbortController();
   function expired(): never {
     throw new Error('Provider custody unavailable');
   }
-  const timer = wait(remaining, undefined, { signal: cancelled.signal });
+  const timer = clock.sleep(remaining, cancelled.signal);
   const timeout = timer.then(expired);
   try {
     return await Promise.race([secrets.read(reference), timeout]);

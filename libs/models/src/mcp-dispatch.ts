@@ -1,3 +1,4 @@
+import type { Clock } from '@opencrane/event-store';
 import type { BudgetBinding, McpAccessCheck, MemorySend, Permit, Route }
   from './mcp-dispatch-contract.ts';
 import { consumePermit, dispatchRemoteTarget, dispatchDigest as digest,
@@ -166,16 +167,17 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse, body: string) {
-    const startedAt = performance.now();
+    const startedAt = store.clock.now();
     const permit = consumePermit(req, body, consumer);
     const expectedPath = `/dispatch/mcp/${permit.route.serverId}/${permit.route.connectionId}`;
     if (req.url !== expectedPath) throw new Error('MCP dispatch route refused');
     const route = requireCurrentRoute(permit);
     const remaining = Math.max(0, permit.expiresAt - Date.now());
-    const deadline = Math.min(performance.now() + remaining, permit.accessDeadline);
+    const deadline = Math.min(store.clock.now() + remaining, permit.accessDeadline);
     // Prepare immutable history and receipts before entering the shared budget queue.
     await permit.confirmAccess.prepare?.(deadline);
-    const target = await dispatchRemoteTarget(route, deadline, options?.remoteNetwork ?? {});
+    const target = await dispatchRemoteTarget(route, deadline,
+      options?.remoteNetwork ?? {}, { clock: store.clock });
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
@@ -217,7 +219,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
         acknowledged, deadline);
       requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
+      requireFreshDispatch(req, res, permit, { clock: store.clock });
     }
     let observe: RemoteObserver | undefined;
     let stage = 'dispatch_start';
@@ -238,7 +240,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         stage = 'dispatch_start';
         await requirePublishedPositions(permit, admittedPosition, deadline);
         requireCurrentRoute(permit);
-        requireFreshDispatch(req, res, permit);
+        requireFreshDispatch(req, res, permit, { clock: store.clock });
         observe = await recordStarted(permit, deadline);
       }
       stage = 'final_access';
@@ -251,7 +253,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       // gateway-position read: that replacement is not live yet. Refuse changes visible
       // at that read, then check local state and send without another read or a lock.
       requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
+      requireFreshDispatch(req, res, permit, { clock: store.clock });
     } catch (error) {
       await reportRefusal(permit, observe, startedAt, stage, deadline, error);
       throw error;
@@ -262,14 +264,14 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   async function reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
     startedAt: number, stage: string, deadline: number, error: unknown) {
     const diagnostic = { stage, reason: privateDecisionReason(error),
-      elapsedMs: Math.ceil(performance.now() - startedAt),
-      accessRemainingMs: Math.max(0, Math.floor(deadline - performance.now())) };
+      elapsedMs: Math.ceil(store.clock.now() - startedAt),
+      accessRemainingMs: Math.max(0, Math.floor(deadline - store.clock.now())) };
     logger.warn(diagnostic, 'MCP dispatch refused');
     try {
       await recordRefusedStart(permit, observe, startedAt);
     } catch {
       const evidence = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
-        elapsedMs: Math.ceil(performance.now() - startedAt) };
+        elapsedMs: Math.ceil(store.clock.now() - startedAt) };
       logger.warn(evidence, 'MCP dispatch refused');
     }
   }
@@ -277,7 +279,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   async function recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
     startedAt: number) {
     // Allow one second to save evidence only. This cannot extend permission to send.
-    const deadline = performance.now() + 1000;
+    const deadline = store.clock.now() + 1000;
     if (permit.route.locator) {
       // Record proof only after a confirmed start and before opening any connection.
       if (observe) {
@@ -291,7 +293,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     // Close the saved start before replying. No upstream connection has been opened.
     const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
       evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
-      durationMs: Math.ceil(performance.now() - startedAt) };
+      durationMs: Math.ceil(store.clock.now() - startedAt) };
     await recordToolObservation(actor, observation, deadline);
   }
 
@@ -335,7 +337,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     if (result.status !== 'appended') {
       throw new Error('Tool dispatch start unavailable');
     }
-    const startedAt = performance.now();
+    const startedAt = store.clock.now();
     const adapter = { silo: permit.silo, decisionId: permit.budget.decisionId,
       startId: event.id, connectionId: payload.connectionId, generation: payload.generation,
       recordDigest: payload.recordDigest, reviewRevision: payload.reviewRevision! };
@@ -344,7 +346,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       const evidence = remoteEvidence(outcome);
       const observation = { id: permit.requestId, toolOutcome: outcome, evidence,
         observedAt: new Date().toISOString(),
-        durationMs: Math.ceil(performance.now() - startedAt) } as const;
+        durationMs: Math.ceil(store.clock.now() - startedAt) } as const;
       await recordAdapterObservation(actor, adapter, observation, evidenceDeadline);
     }
     return observe;
@@ -382,7 +384,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
         acknowledged, deadline);
       requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit);
+      requireFreshDispatch(req, res, permit, { clock: store.clock });
       // Order admission with Block and quarantine writes on the same server stream.
       // Published calls also recheck this position after saving their start.
       const command = { event, expectedSequence, deadline, historyChecked: true as const };
@@ -403,8 +405,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
 }
 
 function requireFreshDispatch(req: IncomingMessage, res: ServerResponse,
-  permit: Permit) {
-  if (permit.expiresAt <= Date.now() || performance.now() >= permit.accessDeadline ||
+  permit: Permit, { clock }: { clock: Clock }) {
+  if (permit.expiresAt <= Date.now() || clock.now() >= permit.accessDeadline ||
       req.socket.destroyed || res.destroyed) {
     throw new Error('MCP dispatch expired');
   }

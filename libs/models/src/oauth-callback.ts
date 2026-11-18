@@ -60,7 +60,7 @@ export async function claimPersonalOAuthCallback(store: EventStore, binding: Bin
     // Generate this identity here so another invocation or restarted worker cannot inherit it.
     const workerId = randomUUID();
     async function claim() {
-      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+      const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
       if (rows.length !== 1 || rows[0]!.event.type !== 'connection.oauth_started') {
         throw new Error('OAuth callback refused');
       }
@@ -139,7 +139,7 @@ async function appendClaim(store: EventStore, event: EventEnvelope,
     expectedSubject: 'connection-*', historyChecked: true as const,
     deadline: checked.deadline, checkAccess: checked.checkAccess };
   await store.append(command);
-  const rows = await history(store, event.subject, event.silo, performance.now() + 10_000);
+  const rows = await history(store, event.subject, event.silo, store.clock.now() + 10_000);
   const saved = rows.at(-1);
   if (!saved || !isDeepStrictEqual(saved.event, event)) {
     throw new Error('OAuth claim unconfirmed');

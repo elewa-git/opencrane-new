@@ -10,7 +10,7 @@ export function ownershipConfirmationHandler(store: EventStore) {
     const transfer = ownershipTransferredSchema.parse(event.data);
     if (!transfer.awaitingConfirmation) return;
     const subject = `member-${transfer.memberId}`;
-    const deadline = performance.now() + 10_000;
+    const deadline = store.clock.now() + 10_000;
     const rows = await history(store, subject, event.silo, deadline);
     for (const row of rows) {
       if (row.event.type !== 'member.ownership_confirmed') continue;

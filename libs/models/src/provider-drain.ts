@@ -22,7 +22,7 @@ const commandSchema = z.object({
 
 async function readDrain(store: EventStore, silo: string, providerId: string) {
   providerIdSchema.parse(providerId);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const globalSequence = await store.head(undefined, deadline);
   const enabled = await managedProviderCallsEnabled(store, silo, deadline);
   const rows = await history(store, 'provider-*', silo, deadline);
@@ -118,7 +118,7 @@ export async function providerDrainCommand(store: EventStore, binding: Binding,
   if (result.status !== 'appended') {
     throw new Error('Drain append unavailable');
   }
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) {
     throw new Error('Saved drain unavailable');
   }

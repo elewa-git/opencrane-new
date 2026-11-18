@@ -38,9 +38,9 @@ export async function configureBudget(actor: BudgetActor, binding: Binding,
         }
       }
       const membership = await currentMembership(actor.store, actor.silo, checked.memberId,
-        undefined, performance.now() + 10_000);
+        undefined, actor.store.clock.now() + 10_000);
       const subjects = [...membership.positions.keys(), ...scopePositions.keys()];
-      fresh = await authorityFence(actor.store, performance.now(), subjects);
+      fresh = await authorityFence(actor.store, actor.store.clock.now(), subjects);
       // Refuse changes saved between loading the choices and starting the write check.
       for (const [subject, position] of scopePositions) {
         if (await actor.store.head(subject, fresh.deadline) !== position) {

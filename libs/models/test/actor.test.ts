@@ -565,6 +565,7 @@ async function recoversCeilingAfterRestart() {
   } });
   await reserve();
   await actor.configure({ ...payload, ceilingCents: 250 }, 'later-ceiling');
+  // real wait: Let the NATS duplicate window expire before retrying saved history.
   await delay(1100);
   actor = new BudgetActor(nats.store, 'test', now);
   await actor.start();

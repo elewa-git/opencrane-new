@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { prepareRemote, type RemoteNetwork } from './remote-https.ts';
@@ -54,9 +55,10 @@ export interface PersonalDispatchRequest {
   network: RemoteNetwork;
 }
 
-export async function dispatchRemoteTarget(route: Route, deadline: number, network: RemoteNetwork) {
+export async function dispatchRemoteTarget(route: Route, deadline: number, network: RemoteNetwork,
+  { clock = systemClock }: { clock?: Clock } = {}) {
   if (!route.locator) return undefined;
-  const duration = Math.max(0, Math.floor(Math.min(1000, deadline - performance.now())));
+  const duration = Math.max(0, Math.floor(Math.min(1000, deadline - clock.now())));
   const signal = AbortSignal.timeout(duration);
   return prepareRemote(route.locator, network, signal);
 }

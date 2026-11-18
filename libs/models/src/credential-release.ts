@@ -77,7 +77,7 @@ export async function credentialReleaseEvidence(store: EventStore, silo: string,
   decisionId: string, release: Release, loadConfiguration?: OAuthConfigurationLoader,
   readCompanyProfile?: CompanyProfileReader) {
   requireLifetime(release);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const positions = new Map<string, number>();
   async function read(subject: string) {
     const rows = await history(store, subject, silo, deadline);

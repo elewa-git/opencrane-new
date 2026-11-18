@@ -114,7 +114,7 @@ export async function prepareLoadedMemory(store: EventStore, binding: Binding | 
         // Catch access revoked during the last scope read, within the original deadline.
         // Leave memory saved during this final access read for the next confirmation.
         await fresh();
-        if (performance.now() >= fresh.deadline) throw new LoadedMemoryRefused();
+        if (store.clock.now() >= fresh.deadline) throw new LoadedMemoryRefused();
         confirmReferences(scopes.values(), references, claims.silo);
       } catch (error) {
         if (error instanceof MemberAccessRefused) throw error;

@@ -31,7 +31,7 @@ export class ProviderUnpriced extends ProviderRefused {}
 export class ProviderConflict extends Error {}
 
 export async function providerAuthority(store: EventStore, binding: Binding, memberId: string) {
-  const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
+  const fresh = await authorityFence(store, store.clock.now(), [`member-${memberId}`]);
   const authority = { requiredRole: 'admin' as const, fresh };
   try {
     await activeMember(store, binding, memberId, authority);
@@ -147,7 +147,7 @@ export async function appendProvider(store: EventStore, silo: string, providerId
   const result = await store.append({ expectedSequence, event });
   if (result.status === 'appended') {
     // Check the saved event because another operation can use the same command id.
-    const deadline = performance.now() + 10_000;
+    const deadline = store.clock.now() + 10_000;
     const saved = await readEventAt(store, subject, result.sequence, deadline);
     if (!saved) {
       throw new Error('Saved provider change unavailable');
