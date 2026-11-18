@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
 import { manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { databases, until } from '@opencrane/authz/testing';
-import { pgDb } from '@opencrane/projections';
+import { pgDb, type Db } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
 import { foldConnection } from '../src/bearer-connections.ts';
 import { authorityFence } from '../src/authority.ts';
@@ -698,3 +698,48 @@ async function brokerDeadline(expired: boolean) {
   expect(append.mock.calls[0]?.[0].deadline).toBe(started + 2000);
 }
 it.each([false, true])('uses manual time before sending credentials (expired: %s)', brokerDeadline);
+
+async function brokerFinalQueryDeadline(milliseconds: number) {
+  const { clock, test } = await timedFixture();
+  const lock = test.db.lock!.bind(test.db);
+  let finalQueryCompleted = false;
+  async function timedLock<Result>(name: string, work: (db: Db) => Promise<Result>,
+    options?: { timeoutMs: number; signal?: AbortSignal }) {
+    async function withQueryBoundary(locked: Db) {
+      const query = locked.query.bind(locked);
+      async function timedQuery<Row extends Record<string, unknown>>(
+        sql: string, parameters?: unknown[], queryOptions?: { deadline: number }) {
+        const result = await query<Row>(sql, parameters, queryOptions);
+        if (sql === 'SELECT 1') {
+          // Expire only after tracked positions and the locked session check have completed.
+          clock.advance(milliseconds);
+          finalQueryCompleted = true;
+        }
+        return result;
+      }
+      return work({ ...locked, query: timedQuery });
+    }
+    return lock(name, withQueryBoundary, options);
+  }
+  vi.spyOn(test.db, 'lock').mockImplementation(timedLock);
+  async function checkAccess() {}
+  function prepareAccess() {
+    return Promise.resolve({ deadline: Infinity, checkAccess });
+  }
+  const sent: string[] = [];
+  function sendAccess(material: string) {
+    sent.push(material);
+    return Promise.resolve();
+  }
+  const result = test.broker(test.context, sendAccess, prepareAccess).send();
+  if (milliseconds >= 2000) {
+    await expect(result).rejects.toThrow('Release unavailable');
+    expect(sent).toEqual([]);
+  } else {
+    await expect(result).resolves.toBeUndefined();
+    expect(sent).toEqual(['synthetic-access']);
+  }
+  expect(finalQueryCompleted).toBe(true);
+}
+it.each([0, 1999, 2000])('checks credential expiry after the final locked query at %i ms',
+  brokerFinalQueryDeadline);
