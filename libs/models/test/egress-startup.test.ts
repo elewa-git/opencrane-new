@@ -10,7 +10,8 @@ import { history } from '../src/event-history.ts';
 
 async function setup(fakeTimeouts = false) {
   const clock = fakeTimeouts ? manualClock(1_000_000) : undefined;
-  const nats = await natsFixture({ clock });
+  const fixtureOptions = clock ? { clock } : {};
+  const nats = await natsFixture(fixtureOptions);
   const directory = await mkdtemp(join(tmpdir(), 'egress-startup-'));
   let refusals = 0;
   function refused() {

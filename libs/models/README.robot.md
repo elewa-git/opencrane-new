@@ -10,7 +10,7 @@ lengths remain unchanged, including the two-second access checks.
 The default fixture still uses real time. Pass `{ modelClock }` instead when only
 model checks should use controlled time. This keeps the event store's I/O and retry
 waits on their real clock. The volume test uses this option so a transient transport
-failure can recover while access time stays stopped. A forced NATS timeout test
+failure can recover while access time stays stopped. A forced transient NATS failure test
 checks both retry recovery and an expired model access check.
 `accessDeadline` takes named options
 `{ clock, checkAccess?, deadline? }`; budget waiting helpers accept a named clock option.
