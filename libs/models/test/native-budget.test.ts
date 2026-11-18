@@ -100,7 +100,7 @@ async function nativeGrant(context: Context, binding: ReturnType<typeof child>,
   const checked = await context.credentials.check(context.headers);
   const turn = parseTurnToken(claims(context, binding));
   const computer = { assistant: 'assistant', computer: 'computer', generation: 1 };
-  const started = performance.now();
+  const started = store.clock.now();
   return reserveNativeCall(actor, store, context.binding, computer, turn,
     checked.sequence, started, started + 10_000, raw, callId, allow);
 }

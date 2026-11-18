@@ -22,7 +22,7 @@ export async function withRoutineFixtureClock<Result>(work: () => Promise<Result
   }
 }
 
-export async function withHeldFixtureClock<Result>(work: () => Promise<Result>) {
+export async function withHeldFixtureClock<Result>(work: () => Result) {
   // Keep fixture admission valid while real services reply. Test bodies control expiry.
   const heldClock = holdFixtureClock();
   try {
