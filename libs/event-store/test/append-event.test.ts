@@ -68,3 +68,21 @@ async function savesNamedEnvelopeField(field: OptionalEnvelopeField) {
 
 const optionalFields: OptionalEnvelopeField[] = ['principal', 'time', 'commandId'];
 it.each(optionalFields)('saves the explicitly named %s field', savesNamedEnvelopeField);
+
+async function savesNamedSource() {
+  const nats = await natsFixture();
+  try {
+    const options = {
+      silo: 'acme', subject: 'member-alice', type: 'member.joined',
+      data: { memberId: 'alice', role: 'owner', email: 'alice@example.test',
+        displayName: 'Alice' }, source: 'opencrane-server',
+    };
+    const saved = await appendEvent(nats.store, options);
+    const stored = await nats.reader.readEvent(saved.sequence);
+    expect(stored?.event.source).toBe(options.source);
+  } finally {
+    await nats.close();
+  }
+}
+
+it('preserves the named source when saving fixture events', savesNamedSource);
