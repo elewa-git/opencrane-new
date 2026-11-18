@@ -11,7 +11,7 @@ import { envelope } from '@opencrane/models';
 import type { EventEnvelope } from '@opencrane/events';
 import { processConversation, assistantSnapshot, type AgentSession,
   type WatchOptions } from '../src/chat/bridge-conversation.ts';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { systemClock, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import type { IntegrationRow } from '@opencrane/protocol';
 import { agentSessionData } from '../src/chat/reports.ts';
 
@@ -98,6 +98,7 @@ function bridgeFixture(options: {
   rowsBySubject.set('member-person', [storedEvent(1, joined)]);
   const reads: string[] = [];
   const store = {
+    clock: systemClock,
     head(subject: string) {
       const events = rowsBySubject.get(subject) ?? [];
       return Promise.resolve(events.at(-1)?.sequence ?? 0);

@@ -20,3 +20,17 @@ No new product behaviour or weaker assertion is needed to expose this failure.
 Command: `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres
 nice -n 10 npx vitest run apps/server/test/bridge-turn-tools.test.ts --maxWorkers=2`.
 Local output: `/tmp/clean-1043-round2-reproduce.log`.
+
+FAIL as expected: the test-first fixture contract produces TypeScript error
+TS1360 because `clock` is missing. This was checked before adding the clock.
+
+## Fix
+
+Supply `systemClock` on the fake store. The existing Vitest fake timers still
+control the server's tool-build and resend timers, and `systemClock.now()` reads
+that same faked `performance.now()`. The default clock is the correct fixture
+choice here because server timing has not yet moved to an injected clock.
+The system-clock implementation and every product file remain unchanged.
+
+PASS: the bridge suite's 14 existing tests pass in 9.28 seconds with this fix.
+No deadline, assertion, service timer or test timeout changed.
