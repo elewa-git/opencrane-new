@@ -65,20 +65,20 @@ MCP, a shared standard for describing and calling tools.
 ### Today's system
 
 Arrows show calls made while the system runs. Storage and file services share one
-box, and sign-in and permissions share another. The server box includes the separate
-models process.
+box, and sign-in and permissions share another.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>website"] -->|requests| server["apps/server<br/>back end and models"]
+  web["apps/web<br/>website"] -->|requests| server["apps/server/src/main.ts<br/>web-facing server"]
   server -->|sign-in and access| access["Zitadel + OpenFGA<br/>sign-in and permissions"]
   server -->|stores and reads| data["NATS, PostgreSQL, MinIO + ClamAV<br/>events, tables and files"]
-  ops["apps/ops<br/>background workers"] -->|reads and saves| data
-  ops -->|updates permissions| access
-  ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
-  server -->|sends chat turns| computer
-  computer -->|AI and reviewed tools| gateway["agentgateway<br/>AI call checks"]
-  gateway -->|asks permission| server
+  server -->|sends chat turns| computer["apps/computer<br/>assistant computers"]
+  server -->|budget checks and child starts| models["apps/server/src/models-main.ts<br/>models process"]
+  models -->|events and budgets| data
+  models -->|checks access| access
+  models -->|starts| gateway["agentgateway<br/>AI call checks"]
+  computer -->|AI and reviewed tools| gateway
+  gateway -->|asks permission| models
   gateway -->|sends allowed calls| upstream["Model provider or tool server"]
 ```
 
