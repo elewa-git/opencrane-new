@@ -1,5 +1,5 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
-import { TimeoutError } from '@nats-io/transport-node';
+import { JetStreamApiError } from '@nats-io/jetstream';
 import { manualClock } from '@opencrane/event-store/testing';
 import { fixture } from './fixture.ts';
 import { authorityFence } from '../src/authority.ts';
@@ -12,7 +12,9 @@ async function separateModelTime() {
     expect(setup.actor.store.clock).toBe(clock);
     const request = vi.spyOn(setup.nats.connection, 'request');
     onTestFinished(request.mockRestore.bind(request));
-    request.mockRejectedValueOnce(new TimeoutError());
+    const unavailable = new JetStreamApiError({ code: 503, err_code: 10008,
+      description: 'Fixture storage unavailable' });
+    request.mockRejectedValueOnce(unavailable);
     await expect(setup.actor.store.head()).resolves.toBeGreaterThan(0);
     expect(clock.now()).toBe(1_000_000);
     expect(request.mock.calls.length).toBeGreaterThan(1);
