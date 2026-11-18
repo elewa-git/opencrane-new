@@ -32,7 +32,7 @@ export async function savePersonalOAuthRefresh(store: EventStore, binding: Bindi
     const profile = { ...input, siloId: binding.silo };
     const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
     async function recover() {
-      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+      const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
       for (let index = 0; index < rows.length; index++) {
         const row = rows[index]!;
         if (row.event.type !== 'connection.refreshed') {
@@ -124,7 +124,7 @@ async function appendGeneration(store: EventStore, binding: Binding, custody: Cu
     expectedSubject: 'connection-*', historyChecked: true as const,
     deadline: checked.deadline, checkAccess };
   await store.append(command);
-  const rows = await history(store, prepared.subject, binding.silo, performance.now() + 10_000);
+  const rows = await history(store, prepared.subject, binding.silo, store.clock.now() + 10_000);
   const saved = rows.at(-1);
   if (!saved || !isDeepStrictEqual(saved.event, event) || !foldConnection(rows).data) {
     throw new Error('OAuth refresh save unconfirmed');

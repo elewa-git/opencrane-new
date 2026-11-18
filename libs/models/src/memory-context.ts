@@ -89,7 +89,7 @@ export async function memoryRights(store: EventStore, binding: Binding,
   return { ...rights, confirm, writeAuthority };
 
   async function check(checkDeadline = deadline) {
-    const authority = writeAuthority ?? await decisionAuthorityFence(store, performance.now(), [],
+    const authority = writeAuthority ?? await decisionAuthorityFence(store, store.clock.now(), [],
       claims.requester, claims.assistant, undefined, checkDeadline);
     readAuthority = authority;
     // Keep the original write check so removing and restoring a grant still refuses the write.

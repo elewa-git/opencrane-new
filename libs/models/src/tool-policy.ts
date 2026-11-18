@@ -44,7 +44,7 @@ export async function reviewToolPolicy(store: EventStore, binding: Binding, memb
   const { commandId, expectedSequence, ...review } = command;
   const payload = { ...review, serverId, reviewedBy: memberId };
   // Read definitions before starting the short access check.
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const rows = await history(store, `mcp-${serverId}`, binding.silo, deadline);
   const state = foldPolicy(rows);
   const tools = reviewedToolChoices(state, payload, Date.now());
@@ -65,7 +65,7 @@ const publicationInput = z.strictObject({ ...commandFields, reviewRevision: z.in
 export async function publishToolPolicy(store: EventStore, binding: Binding, memberId: string,
   serverId: string, raw: unknown) {
   const command = publicationInput.parse(raw);
-  const rows = await history(store, `mcp-${serverId}`, binding.silo, performance.now() + 10_000);
+  const rows = await history(store, `mcp-${serverId}`, binding.silo, store.clock.now() + 10_000);
   const state = foldPolicy(rows);
   const entry = publicationEntry(state);
   function matchesCommand(row: StoredEvent) {
@@ -94,7 +94,7 @@ export async function publishToolPolicy(store: EventStore, binding: Binding, mem
 export async function setToolPolicy(store: EventStore, binding: Binding, memberId: string,
   serverId: string, raw: unknown) {
   const command = input.parse(raw);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const rows = await history(store, `mcp-${serverId}`, binding.silo, deadline);
   const state = foldPolicy(rows);
   const payload = { serverId, connectionId: command.connectionId, toolName: command.toolName,
@@ -124,7 +124,7 @@ async function savedToolPolicyResult(store: EventStore, silo: string, memberId: 
   payload: Record<string, unknown>,
   rows: StoredEvent[], sequence: number) {
   // Read the stored event so broker deduplication cannot confirm a different save.
-  const saved = await store.readEvent(sequence, performance.now() + 10_000);
+  const saved = await store.readEvent(sequence, store.clock.now() + 10_000);
   const receipt = toolChangeReceipt(saved, silo, serverId, memberId, command.commandId);
   const prior = referencedToolChanges(rows, command.commandId);
   if (prior.length > 1 || (prior[0] && publicationDigest(prior[0]) !== publicationDigest(saved))) {
@@ -225,7 +225,7 @@ export async function readToolModeChange(store: EventStore, binding: Binding, me
 
 async function loadToolModeChange(store: EventStore, silo: string, memberId: string,
   serverId: string, changeRef: string) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const rows: StoredEvent[] = [];
   for await (const row of store.readStream(`mcp-${serverId}`, 1, deadline)) {
     if (row.event.silo !== silo || row.event.subject !== `mcp-${serverId}`) {
@@ -233,7 +233,7 @@ async function loadToolModeChange(store: EventStore, silo: string, memberId: str
     }
     rows.push(row);
   }
-  if (performance.now() > deadline) {
+  if (store.clock.now() > deadline) {
     throw new Error('Tool change unavailable');
   }
   const matching = referencedToolChanges(rows, changeRef);
@@ -262,7 +262,7 @@ export async function saveToolCommand(store: EventStore, binding: Binding, membe
   if (!permission.allowed) {
     throw new Error('Access changed');
   }
-  const fresh = await authorityFence(store, performance.now());
+  const fresh = await authorityFence(store, store.clock.now());
   const membership = await currentMembership(store, binding.silo, memberId, fresh);
   if (!['owner', 'admin'].includes(membership.role)) {
     throw new Error('Access changed');
@@ -297,7 +297,7 @@ export async function saveToolCommand(store: EventStore, binding: Binding, membe
   if (Date.now() >= expiresAt) {
     return { status: 'conflict' };
   }
-  const deadline = Math.min(fresh.deadline, performance.now() + expiresAt - Date.now());
+  const deadline = Math.min(fresh.deadline, store.clock.now() + expiresAt - Date.now());
   // Reuse the history already read and recheck access immediately before publishing.
   const append = { event, expectedSequence: command.expectedSequence, deadline,
     historyChecked: true as const, checkAccess: fresh };

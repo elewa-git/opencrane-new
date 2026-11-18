@@ -1,3 +1,4 @@
+import type { EventStore } from '@opencrane/event-store';
 import { setTimeout as delay } from 'node:timers/promises';
 import { OpenFgaClient } from '@openfga/sdk';
 import { Server } from 'node:net';
@@ -13,7 +14,7 @@ import { egressGrantStream } from '@opencrane/projections';
 import { z } from 'zod';
 import { decodeJwt } from 'jose';
 import { verifyEgressCapability } from '@opencrane/auth';
-import { failingPublishStore } from '@opencrane/event-store/testing';
+import { manualStoreTime, failingPublishStore } from '@opencrane/event-store/testing';
 import { history } from '../src/event-history.ts';
 import { BudgetActor } from '../src/actor.ts';
 import { fixture } from './fixture.ts';
@@ -253,7 +254,7 @@ async function changesDuringDispatchRetry(change: string, timing: string) {
   onTestFinished(maps.mockRestore.bind(maps));
   onTestFinished(registration.mockRestore.bind(registration));
   async function expiredRegistration(input: Parameters<typeof register>[0]) {
-    expireAuthority();
+    expireAuthority(test.facts.nats.store);
     return register(input);
   }
   if (change === 'registration-deadline') registration.mockImplementation(expiredRegistration);
@@ -279,7 +280,7 @@ async function changesDuringDispatchRetry(change: string, timing: string) {
         task: 'chat_turn', status: 'completed' };
       await test.facts.append('computer-assistant', 'computer.turn_closed', closed);
     } else if (change === 'deadline') {
-      expireAuthority();
+      expireAuthority(test.facts.nats.store);
     } else if (change === 'expiry') {
       const now = Date.now;
       function afterExpiry() {
@@ -375,13 +376,9 @@ it.each([
   ['none', 'before retry'],
 ])('rechecks %s %s of the real budget dispatch append', changesDuringDispatchRetry);
 
-function expireAuthority() {
-  const now = performance.now.bind(performance);
-  function afterDeadline() {
-    return now() + 2100;
-  }
-  const clock = vi.spyOn(performance, 'now').mockImplementation(afterDeadline);
-  onTestFinished(clock.mockRestore.bind(clock));
+function expireAuthority(store: Pick<EventStore, 'clock'>) {
+  const clock = manualStoreTime(store);
+  clock.advance(2100);
 }
 
 async function closeObservation(test: Awaited<ReturnType<typeof setup>>, bearer: string) {
@@ -972,6 +969,7 @@ async function delayedDispatchProof() {
       lostAt = performance.now();
       const iam = vi.spyOn(test.facts.auth, 'checkApplied').mockImplementation(hang);
       restoreIam = iam.mockRestore.bind(iam);
+      // real wait: Let the NATS dispatch append consume real relay proof time.
       await delay(1200);
     }
     return result;

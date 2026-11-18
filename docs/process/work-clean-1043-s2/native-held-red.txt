@@ -1,0 +1,36 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/native-budget.test.ts -t recovers one native hold --maxWorkers=1
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ libs/models/test/native-budget.test.ts (46 tests | 1 failed | 45 skipped) 7490ms
+   × recovers one native hold and its original ids after a lost append reply and writer restart 6025ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/native-budget.test.ts > recovers one native hold and its original ids after a lost append reply and writer restart
+Error: Delegation agreement unavailable
+ ❯ refuseAgreementRead libs/models/src/descendant-admission.ts:210:9
+    208| }
+    209| function refuseAgreementRead(): never {
+    210|   throw new Error('Delegation agreement unavailable');
+       |         ^
+    211| }
+    212|
+ ❯ readDescendantAgreement libs/models/src/descendant-admission.ts:250:20
+ ❯ prepareNativeCall libs/models/src/native-call-check.ts:66:21
+ ❯ reserveNativeCall libs/models/src/native-call-check.ts:115:30
+ ❯ reserve libs/models/test/native-budget.test.ts:86:5
+ ❯ recoversNativeHold libs/models/test/native-budget.test.ts:595:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 45 skipped (46)
+   Start at  13:18:14
+   Duration  16.81s (tests 45%, transform 40%, import 14%)
+
+  Transform  transforming modules took 6.66s · 40% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

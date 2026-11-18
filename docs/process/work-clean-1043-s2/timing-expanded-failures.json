@@ -1,0 +1,112 @@
+[
+  {
+    "file": "apps/server/test/integrations.test.ts",
+    "test": "loads through the dev proxy and preserves the accessible refresh journey in Chromium",
+    "failure": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('group', { name: 'write' }).locator('label').filter({ hasText: 'Allow automatically' })\u001b[22m\n\n    at <worktree>/apps/server/test/integrations.test.ts:330:68\n    at <worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/actor.test.ts",
+    "test": "refuses current-writer proof whose matching position arrives at the deadline",
+    "failure": "Error: expected [Function] to throw error including 'Budget writer unavailable' but got '(0 , __vite_ssr_import_0__.manualStor\u2026'\n    at _Assertion.__VITEST_REJECTS__ (file://<worktree>/node_modules/vitest/dist/chunks/index.C4tKZ0yW.js:2463:33)\n    at _Assertion.propertyGetter (file://<worktree>/node_modules/chai/index.js:1570:27)\n    at Object.proxyGetter [as get] (file://<worktree>/node_modules/chai/index.js:1659:22)\n    at currentProofDeadline (<worktree>/libs/models/test/actor.test.ts:660:46)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/actor.test.ts",
+    "test": "checks every budget conflict and keeps the original deadline: unchanged",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at admitsAfterRepeatedConflicts (<worktree>/libs/models/test/actor.test.ts:757:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/actor.test.ts",
+    "test": "checks every budget conflict and keeps the original deadline: revoked",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at admitsAfterRepeatedConflicts (<worktree>/libs/models/test/actor.test.ts:757:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/actor.test.ts",
+    "test": "checks every budget conflict and keeps the original deadline: expired",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at admitsAfterRepeatedConflicts (<worktree>/libs/models/test/actor.test.ts:757:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/actor.test.ts",
+    "test": "checks every budget conflict and keeps the original deadline: writer",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at admitsAfterRepeatedConflicts (<worktree>/libs/models/test/actor.test.ts:757:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/actor.test.ts",
+    "test": "keeps the writer usable when the original deadline expires before retry publish",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at remainsUsableAfterPublishDeadline (<worktree>/libs/models/test/actor.test.ts:825:25)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/authority-standalone.test.ts",
+    "test": "refuses standalone authority after its original two-second deadline",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at refusesStandaloneExpiry (<worktree>/libs/models/test/authority-standalone.test.ts:34:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/bearer-connections.test.ts",
+    "test": "refuses revoke when final access is expired",
+    "failure": "Error: expected [Function] to throw error including 'Authority snapshot expired' but got '(0 , __vite_ssr_import_0__.manualStor\u2026'\n    at _Assertion.__VITEST_REJECTS__ (file://<worktree>/node_modules/vitest/dist/chunks/index.C4tKZ0yW.js:2463:33)\n    at _Assertion.propertyGetter (file://<worktree>/node_modules/chai/index.js:1570:27)\n    at Reflect.get (<anonymous>)\n    at Object.proxyGetter [as get] (file://<worktree>/node_modules/chai/index.js:1659:22)\n    at finalRevokeCheck (<worktree>/libs/models/test/bearer-connections.test.ts:322:79)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/dispatch.test.ts",
+    "test": "starts the two-second dispatch check after the queue, expires: false",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at startsAccessAfterQueue (<worktree>/libs/models/test/dispatch.test.ts:279:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/dispatch.test.ts",
+    "test": "starts the two-second dispatch check after the queue, expires: true",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at startsAccessAfterQueue (<worktree>/libs/models/test/dispatch.test.ts:279:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/dispatch.test.ts",
+    "test": "keeps serial budget ownership until expired access work finishes",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at holdsQueueUntilExpiredWorkFinishes (<worktree>/libs/models/test/dispatch.test.ts:324:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/hold-recovery.test.ts",
+    "test": "recovers an unsent hold after the access check inside the budget queue fails (read_outage)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at recoversAfterLastAccessCheckFails (<worktree>/libs/models/test/hold-recovery.test.ts:247:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/hold-recovery.test.ts",
+    "test": "recovers an unsent hold after the access check inside the budget queue fails (time_limit)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at recoversAfterLastAccessCheckFails (<worktree>/libs/models/test/hold-recovery.test.ts:247:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/hold-recovery.test.ts",
+    "test": "returns only the receipt until a request without a reservation is old enough",
+    "failure": "TypeError: clock.restore is not a function\n    at waitsForRequestWithoutReservationToAge (<worktree>/libs/models/test/hold-recovery.test.ts:345:13)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/mcp-instance.test.ts",
+    "test": "replay and own status reads cannot wake, release material or make a 404 terminal",
+    "failure": "TypeError: clock.restore is not a function\n    at replayAndReadsHaveNoEffects (<worktree>/libs/models/test/mcp-instance.test.ts:201:11)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/mcp-instance.test.ts",
+    "test": "loads slow ownership history before the admin write deadline",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at slowOwnershipHistoryBeforeAdminWrite (<worktree>/libs/models/test/mcp-instance.test.ts:510:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/reconcile.test.ts",
+    "test": "keeps the final resolution access check and conditional append strong (removal)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at keepsFinalResolutionChecks (<worktree>/libs/models/test/reconcile.test.ts:221:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/reconcile.test.ts",
+    "test": "keeps the final resolution access check and conditional append strong (expiry)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at keepsFinalResolutionChecks (<worktree>/libs/models/test/reconcile.test.ts:221:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/reconcile.test.ts",
+    "test": "keeps the final resolution access check and conditional append strong (race)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at keepsFinalResolutionChecks (<worktree>/libs/models/test/reconcile.test.ts:221:17)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  },
+  {
+    "file": "libs/models/test/root-append-retry.test.ts",
+    "test": "refuses a root when a failed publish passes the original deadline (switch-on: false)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at refusesRetryPastDeadline (<worktree>/libs/models/test/root-append-retry.test.ts:88:17)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2869:63\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:1628:35\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:26\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3321:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3316:10)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3301:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3259:10)"
+  },
+  {
+    "file": "libs/models/test/root-append-retry.test.ts",
+    "test": "refuses a root when a failed publish passes the original deadline (switch-on: true)",
+    "failure": "TypeError: (0 , __vite_ssr_import_0__.manualStoreClock) is not a function\n    at refusesRetryPastDeadline (<worktree>/libs/models/test/root-append-retry.test.ts:88:17)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2869:63\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:1628:35\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:26\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3321:20\n    at new Promise (<anonymous>)\n    at runWithCancel (file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3316:10)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3301:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:3259:10)"
+  }
+]

@@ -52,7 +52,7 @@ export function personalToolAccess(store: EventStore, binding: Binding,
   async function confirm() {
     if (!prepared) throw new Error('Personal authority not prepared');
     const snapshot = { deadline: Infinity, positions: prepared.positions };
-    const current = await decisionAuthorityFence(store, performance.now(),
+    const current = await decisionAuthorityFence(store, store.clock.now(),
       prepared.subjects, request.requesterId, request.assistantId, undefined, snapshot);
     async function checkCurrent() {
       await current();

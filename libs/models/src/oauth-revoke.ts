@@ -29,9 +29,9 @@ export async function revokePersonalOAuth(store: EventStore, binding: Binding,
       const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
       const prepared = await prepareRevoke(store, binding.silo, subject, input);
       const membership = await currentMembership(store, binding.silo, actorId,
-        undefined, performance.now() + 10_000);
+        undefined, store.clock.now() + 10_000);
       const subjects = [...membership.positions.keys()];
-      const fresh = await authorityFence(store, performance.now(), subjects);
+      const fresh = await authorityFence(store, store.clock.now(), subjects);
       const options = { requiredRole: 'member' as const, membership, fresh };
       // Decide access once, even when loading the target failed. Keep any refusal final.
       await activeMember(store, binding, actorId, options);
@@ -48,7 +48,7 @@ export async function revokePersonalOAuth(store: EventStore, binding: Binding,
       if (result.status !== 'appended') {
         throw new Error('OAuth revoke unavailable');
       }
-      const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+      const saved = await readEventAt(store, subject, result.sequence, store.clock.now() + 10_000);
       if (!saved || !isDeepStrictEqual(saved.event, prepared.event)) {
         throw new Error('OAuth revoke unavailable');
       }
@@ -67,7 +67,7 @@ export async function revokePersonalOAuth(store: EventStore, binding: Binding,
 
 export async function prepareRevoke(store: EventStore, siloId: string, subject: string, input: Input) {
   try {
-    const rows = await history(store, subject, siloId, performance.now() + 10_000);
+    const rows = await history(store, subject, siloId, store.clock.now() + 10_000);
     const last = rows.at(-1);
     const original = last?.event.type === 'connection.revoked' ? last : undefined;
     const preceding = original ? rows.slice(0, -1) : rows;

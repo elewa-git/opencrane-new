@@ -1,3 +1,4 @@
+import { withSlowConnections } from './support/slow-connections.ts';
 /* eslint max-lines: ["error", { max: 6104, skipBlankLines: true, skipComments: true }] */
 import { saveCompanyBearerConnection, foldCompanyConnection } from '../src/company-bearer.ts';
 import { prepareCompanyOAuthAttempt } from '../src/company-oauth.ts';
@@ -25,7 +26,7 @@ import { once } from 'node:events';
 import { mkdtemp, rm, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -553,7 +554,8 @@ async function expiresCallbackAfterWait(point: string) {
       if (point === 'expiry') {
         vi.spyOn(Date, 'now').mockReturnValue(test.started.appendUntil);
       } else {
-        vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
+        const clock = manualStoreTime(events.store);
+        clock.advance(2001);
       }
     }
     return result;
@@ -2751,43 +2753,17 @@ async function pagedScan(restart: boolean) {
 }
 it.each([false, true])('scan examines all 53 candidates, with mid-page restart: %s', pagedScan);
 
-async function withSlowConnections(work: () => Promise<void>, count = 2) {
-  const realNow = performance.now.bind(performance);
-  let elapsed = 0;
-  let slowConnections = 0;
-  function now() {
-    return realNow() + elapsed;
-  }
-  function acquired() {
-    if (slowConnections < count) {
-      // Model connections arriving after the production acquisition deadline.
-      // Advance the clock instead of sleeping or depending on machine load.
-      elapsed += 101;
-      slowConnections += 1;
-    }
-  }
-  const clock = vi.spyOn(performance, 'now');
-  clock.mockImplementation(now);
-  storage.queue.on('acquire', acquired);
-  try {
-    await work();
-    expect(slowConnections).toBe(count);
-  } finally {
-    storage.queue.off('acquire', acquired);
-    clock.mockRestore();
-  }
-}
 async function pagedScanWithSlowConnections() {
   async function scan() {
     await pagedScan(false);
   }
-  await withSlowConnections(scan);
+  await withSlowConnections(storage.queue, scan);
 }
 it('scan examines all 53 candidates once after two slow database connections',
   pagedScanWithSlowConnections);
 
 async function closesWithSlowConnection() {
-  await withSlowConnections(closesUnknownAppend, 1);
+  await withSlowConnections(storage.queue, closesUnknownAppend, 1);
 }
 it('closes an expired idle stage after a slow database connection', closesWithSlowConnection);
 
@@ -3816,7 +3792,8 @@ async function refusesRefreshDuringWait(point: string, change: string) {
         });
         await events.seed([event]);
       } else if (change === 'deadline') {
-        vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
+        const clock = manualStoreTime(events.store);
+        clock.advance(2001);
       } else {
         await changeConsentAccess(test, change);
       }
@@ -3894,6 +3871,7 @@ async function checksRefreshHistory(mode: string) {
         if (args[0] === test.subject && row.event.type === 'connection.created') {
           if (mode === 'slow') {
             expect(args[2]! - performance.now()).toBeGreaterThan(2000);
+            // real wait: Hold the NATS history reply beyond the short access window.
             await delay(2100);
             delayed = true;
           } else {
@@ -4870,7 +4848,7 @@ async function checksRevokePublication(change: string) {
         await append({ event: removed,
           expectedSequence: await events.store.head(removed.subject) });
       } else if (change === 'deadline') {
-        vi.spyOn(performance, 'now').mockReturnValue(command.deadline! + 1);
+        manualStoreTime(events.store, command.deadline! + 1);
       } else {
         const activity = envelope('test', 'conversation-unrelated', 'conversation.created', {
           conversationId: 'unrelated', assistantId: 'assistant', createdBy: test.session.userId,
@@ -5641,6 +5619,7 @@ async function companyHistoryDeadline() {
   async function* slowHistory(subject: string, from?: number, deadline?: number) {
     if (subject === test.subject) {
       expect(deadline! - performance.now()).toBeGreaterThan(8000);
+      // real wait: Hold the NATS history reply beyond the short access window.
       await delay(2100);
     }
     yield* read(subject, from, deadline);
@@ -6284,7 +6263,7 @@ it('keeps company OAuth unknown when a lost create reply never pinned its identi
 async function companyConsentFinalWait(kind: string) {
   const test = await companyConsentFixture();
   const head = events.store.head.bind(events.store);
-  const clock = vi.spyOn(performance, 'now');
+  const clock = manualStoreTime(events.store);
   let finalRead = false;
   let changed = false;
   async function wait(...args: Parameters<typeof head>) {
@@ -6293,7 +6272,7 @@ async function companyConsentFinalWait(kind: string) {
     if (args[0] === undefined && finalRead && !changed) {
       changed = true;
       if (kind === 'deadline') {
-        clock.mockReturnValue(args[1]! + 1);
+        clock.advance(args[1]! + 1 - clock.now());
         return position;
       }
       if (kind === 'admin') await test.removeAdmin();
@@ -6313,7 +6292,7 @@ async function companyConsentFinalWait(kind: string) {
     const result = await test.prepare();
     expect(changed).toBe(true);
     expect(result.status).toBe(kind === 'activity' ? 'prepared' : 'unknown');
-  } finally { fault.mockRestore(); clock.mockRestore(); }
+  } finally { fault.mockRestore(); clock.restore(); }
 }
 it.each(['deadline', 'admin', 'activity'])(
   'rechecks company OAuth after final position wait: %s', companyConsentFinalWait);

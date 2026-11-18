@@ -142,7 +142,7 @@ function same(first: unknown, second: unknown) {
 }
 async function rowsFor(store: EventStore, serverId: string) {
   const rows: StoredEvent[] = [];
-  for await (const row of store.readStream(`mcp-${serverId}`, 1, performance.now() + 10_000)) {
+  for await (const row of store.readStream(`mcp-${serverId}`, 1, store.clock.now() + 10_000)) {
     rows.push(row);
   }
   return rows;

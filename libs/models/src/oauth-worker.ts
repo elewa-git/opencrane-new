@@ -46,7 +46,7 @@ export async function exchangePersonalOAuth(store: EventStore, binding: Binding,
     const profile = { ...input, siloId: session.siloId };
     const subject = `connection-${session.userId}-${input.serverId}-${input.profileId}`;
     async function exchange() {
-      const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+      const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
       const claimed = rows[1];
       if (rows.length !== 2 || claimed?.event.type !== 'connection.oauth_exchange_claimed') {
         throw new Error('OAuth exchange refused');

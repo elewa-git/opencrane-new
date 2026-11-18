@@ -10,7 +10,7 @@ export async function budgetChange(store: EventStore, binding: Binding,
   const subject = `budget-${binding.silo}`;
   let rows: StoredEvent[] | undefined;
   try {
-    rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+    rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
   } catch {
     // Keep an incomplete read unknown; it cannot prove that a command was not saved.
   }

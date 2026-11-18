@@ -1,3 +1,4 @@
+import { clockTimer } from './clock-timer.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { EventStore } from '@opencrane/event-store';
 import type { Db } from '@opencrane/projections';
@@ -42,7 +43,7 @@ async function binding(store: EventStore, silo: string,
     refuse();
   }
   const rows = await history(store, `decision-${context.data.requestId}`, silo,
-    performance.now() + 10_000);
+    store.clock.now() + 10_000);
   const release = decisionRecordedDataSchema.parse(rows[0]?.event.data).release;
   if (!release || release.ownerKind !== 'personal' ||
       release.ownerId !== context.data.userId) {
@@ -164,12 +165,14 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
     expectedSequence: activation.expectedSequence, appendUntil: activation.appendUntil };
   const identity = { reference: saved.secretRef.slice('secret:'.length),
     uid: activation.uid, resourceVersion: activation.resourceVersion };
-  const until = performance.now() + Math.min(30_000, release.expiresAt - Date.now());
+  const until = store.clock.now() + Math.min(30_000, release.expiresAt - Date.now());
   let material: string | undefined;
   function discard() {
     material = undefined;
   }
-  const timer = setTimeout(discard, Math.max(0, until - performance.now()));
+  const discardTimer = { clock: store.clock,
+    milliseconds: until - store.clock.now(), elapsed: discard };
+  const cancelDiscard = clockTimer(discardTimer);
   try {
     let access: Access | undefined;
     async function prepare() {
@@ -189,7 +192,7 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
     // Save the release audit before reading any material, even if custody later fails.
     const format = activation.reason === 'oauth_confirmed' ? 'oauth' : 'bearer';
     material = await custody.readAccessMaterial(stage, identity, format);
-    if (material === undefined || performance.now() >= until) {
+    if (material === undefined || store.clock.now() >= until) {
       refuse();
     }
     await access.checkAccess();
@@ -218,7 +221,7 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
     }
     return undefined;
   } finally {
-    clearTimeout(timer);
+    cancelDiscard();
     discard();
   }
 }

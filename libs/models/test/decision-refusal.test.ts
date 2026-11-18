@@ -189,6 +189,7 @@ async function reportsPermissionsUnavailable(relation: typeof permissionFailures
     const target = relation === 'slow_member' ? 'member' : relation;
     if (failing && check.tuple_key.relation === target) {
       injected = true;
+      // real wait: Hold the OpenFGA proxy reply past the gateway access window.
       if (relation === 'slow_member') await delay(1500);
       res.writeHead(503);
       res.end('{"error":"Private permission backend canary"}');

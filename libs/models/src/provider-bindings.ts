@@ -43,7 +43,7 @@ export function choiceKey(choice: Pick<Choice, 'kind' | 'dependantId' | 'task'>)
 }
 
 export async function inventory(store: EventStore, silo: string) {
-  const rows = await history(store, 'provider-*', silo, performance.now() + 10_000);
+  const rows = await history(store, 'provider-*', silo, store.clock.now() + 10_000);
   const providers = new Map<string, ProviderState>();
   const bindings = new Map<string, Choice>();
   let firstVerified: string | undefined;
@@ -109,7 +109,7 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
     }
   } else {
     const assistants = await history(store, `assistant-${input.dependantId}`,
-      binding.silo, performance.now() + 10_000);
+      binding.silo, store.clock.now() + 10_000);
     const created = assistants.find(isAssistantCreation);
     if (!created) {
       throw new ProviderRefused();
@@ -151,7 +151,7 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
     throw new Error('Binding append unavailable');
   }
   // Read the saved event because duplicate recovery can return an earlier request's position.
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) {
     throw new Error('Saved binding unavailable');
   }
@@ -242,7 +242,7 @@ export async function checkedHistory(store: EventStore, silo: string, subject: s
 
 export async function providerCreation(store: EventStore, silo: string, providerId: string) {
   const subject = `provider-${providerId}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   // Read only the creation record needed for permission, even if the inventory fails.
   for await (const row of store.readStream(subject, 1, deadline)) {
     if (row.event.silo !== silo || row.event.subject !== subject ||
@@ -256,7 +256,7 @@ export async function providerCreation(store: EventStore, silo: string, provider
 
 async function prepareDependencies(store: EventStore, db: Query, silo: string) {
   const current = await inventory(store, silo);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const assistants = await checkedHistory(store, silo, 'assistant-*', deadline);
   const routines = await providerRoutinePresence(store, db, silo, deadline);
   if (await store.head('provider-*', deadline) !== current.position) {

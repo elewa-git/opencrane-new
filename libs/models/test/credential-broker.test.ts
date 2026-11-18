@@ -5,7 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import { afterAll, afterEach, beforeAll, expect, it, onTestFinished, vi } from 'vitest';
-import { manualClock, natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { databases, until } from '@opencrane/authz/testing';
 import { pgDb, type Db } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
@@ -342,8 +342,8 @@ async function finalInvalidation(kind: string) {
     if (kind === 'lease') {
       vi.spyOn(Date, 'now').mockReturnValue(test.release.expiresAt);
     } else if (kind === 'authority') {
-      const now = performance.now();
-      vi.spyOn(performance, 'now').mockReturnValue(now + 2001);
+      const clock = manualStoreTime(nats.store);
+      clock.advance(2001);
     } else {
       const removed = envelope('test', `member-${test.userId}`, 'member.removed',
         { memberId: test.userId, removedBy: 'admin' });
@@ -493,7 +493,8 @@ async function refusalSurvivesLaterFailures(laterFailure: string) {
       throw new Error('private-audit');
     }
     if (laterFailure === 'expiry') {
-      vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 30_001);
+      const clock = manualStoreTime(nats.store);
+      clock.advance(30_001);
     }
     return result;
   }

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { setImmediate } from 'node:timers/promises';
 import { readBeforeDeadline, systemClock } from '../src/index.ts';
-import { manualClock, natsFixture } from './testing.ts';
+import { manualClock, manualStoreTime, natsFixture } from './testing.ts';
 
 async function manualSleep() {
   const clock = manualClock();
@@ -78,3 +78,42 @@ async function realClock() {
   await expect(systemClock.sleep(1000, controller.signal)).rejects.toThrow();
 }
 it('uses the existing monotonic time and cancellable real timers by default', realClock);
+
+async function independentFixtureClocks() {
+  const first = await natsFixture();
+  try {
+    const second = await natsFixture();
+    try {
+      const firstClock = first.store.clock;
+      const secondClock = second.store.clock;
+      const firstReader = Object.getOwnPropertyDescriptor(firstClock, 'now');
+      const secondReader = Object.getOwnPropertyDescriptor(secondClock, 'now');
+      const adapterReader = Object.getOwnPropertyDescriptor(systemClock, 'now');
+      const firstTime = manualStoreTime(first.store, 1_000_000);
+      firstTime.advance(2000);
+      expect(Object.getOwnPropertyDescriptor(secondClock, 'now')).toEqual(secondReader);
+      expect(Object.getOwnPropertyDescriptor(systemClock, 'now')).toEqual(adapterReader);
+      const secondTime = manualStoreTime(second.store, 2_000_000);
+      expect(first.store.clock.now()).toBe(1_002_000);
+      expect(first.reader.clock.now()).toBe(1_002_000);
+      expect(second.store.clock.now()).toBe(2_000_000);
+      expect(second.reader.clock.now()).toBe(2_000_000);
+      expect(Object.getOwnPropertyDescriptor(systemClock, 'now')).toEqual(adapterReader);
+      firstTime.restore();
+      expect(Object.getOwnPropertyDescriptor(firstClock, 'now')).toEqual(firstReader);
+      expect(second.store.clock.now()).toBe(2_000_000);
+      secondTime.advance(1000);
+      expect(second.store.clock.now()).toBe(2_001_000);
+      secondTime.restore();
+      expect(Object.getOwnPropertyDescriptor(secondClock, 'now')).toEqual(secondReader);
+      expect(Object.getOwnPropertyDescriptor(firstClock, 'now')).toEqual(firstReader);
+      expect(Object.getOwnPropertyDescriptor(systemClock, 'now')).toEqual(adapterReader);
+    } finally {
+      await second.close();
+    }
+  } finally {
+    await first.close();
+  }
+}
+it('keeps default fixture clocks independent through advances and restoration',
+  independentFixtureClocks);

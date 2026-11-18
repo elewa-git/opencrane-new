@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { decisionAccessStarted } from './decision-activity.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
@@ -61,7 +62,15 @@ export async function prepareMemoryDecision(memoryRoute: boolean, store: EventSt
   return { preparation, reads };
 }
 
+export interface MemoryAccessClockOptions {
+  clock?: Clock;
+  routine?: boolean;
+}
+
 export function memoryAccessStarted(managedRoute: boolean, loaded: boolean, started: number,
-  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>, routine = false) {
-  return decisionAccessStarted(managedRoute || preparation !== undefined || routine, loaded, started);
+  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>,
+  { clock = systemClock, routine = false }: MemoryAccessClockOptions = {}) {
+  const prepared = managedRoute || preparation !== undefined || routine;
+  const clockOptions = { clock };
+  return decisionAccessStarted(prepared, loaded, started, clockOptions);
 }

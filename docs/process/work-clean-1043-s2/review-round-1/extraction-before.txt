@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/egress-startup.test.ts libs/models/test/mcp-dispatch.test.ts --maxWorkers=2 -t recovered receipts|joins retry batches|clears every startup|saves tool.dispatch_started|sends nothing after tool.dispatch_started|keeps remote adapter failure unknown|checks remote adapter evidence without resending
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  2 passed (2)
+      Tests  31 passed | 195 skipped (226)
+   Start at  15:25:15
+   Duration  135.67s (tests 91%, transform 6%, import 3%)

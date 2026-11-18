@@ -23,7 +23,7 @@ export async function appendConnection(store: EventStore, binding: Binding, memb
   const subjects = [`member-${memberId}`, controlSubject];
   let fresh: Awaited<ReturnType<typeof authorityFence>>;
   if (append.confirmAccess) fresh = await append.confirmAccess();
-  else fresh = await authorityFence(store, performance.now(), subjects);
+  else fresh = await authorityFence(store, store.clock.now(), subjects);
   fresh.include(...subjects);
   const connectionSequence = await store.head('connection-*', fresh.deadline);
   const options = { requiredRole: 'member' as const, fresh };
@@ -49,13 +49,13 @@ export async function appendConnection(store: EventStore, binding: Binding, memb
     throw new Error('Connection append unconfirmed');
   }
   await fresh();
-  const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
+  const deadline = Math.min(fresh.deadline, store.clock.now() + appendUntil - Date.now());
   const command = { event, expectedSequence: connectionSequence,
     ...(append.confirmAccess ? { checkAccess } : {}),
     expectedSubject: 'connection-*', historyChecked: true as const, deadline };
   const result = await store.append(command);
   if (result.status !== 'appended') throw new Error('Connection append unconfirmed');
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) throw new Error('Connection append unconfirmed');
   requireSameConnectionEvent(saved, event);
   return connectionReceipt(saved);

@@ -32,7 +32,7 @@ export async function readOwnConnectionChange(store: EventStore, binding: Bindin
   let result: z.infer<typeof receiptSchema> | null = null;
   let failure: Error | undefined;
   try {
-    const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+    const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
     result = originalReceipt(rows, binding.silo, subject, memberId, reference);
   } catch (error) {
     failure = new Error('Change history unavailable', { cause: error });

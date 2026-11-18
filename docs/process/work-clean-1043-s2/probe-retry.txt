@@ -1,0 +1,58 @@
+npm notice run npx
+npm notice run 'vitest' run --config <worktree>/.tools/clock-probes/vitest.config.mjs -t uses the store clock --maxWorkers=1
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ .tools/clock-probes/probe.test.ts (4 tests | 2 failed | 2 skipped) 52ms
+   × uses the store clock at the retry boundary after 1999 ms 45ms
+   × uses the store clock at the retry boundary after 2000 ms 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  .tools/clock-probes/probe.test.ts > uses the store clock at the retry boundary after 1999 ms
+AssertionError: expected +0 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 0
+
+ ❯ .tools/clock-probes/probe.test.ts:28:18
+     26|   const command = { event, expectedSequence: 0, expectedGlobalSequence…
+     27|   const result = await appendCheckedState(store, command, unchanged);
+     28|   expect(checks).toBe(elapsed < 2000 ? 2 : 1);
+       |                  ^
+     29|   expect(result.status).toBe(elapsed < 2000 ? 'conflict' : 'unavailabl…
+     30| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  .tools/clock-probes/probe.test.ts > uses the store clock at the retry boundary after 2000 ms
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ .tools/clock-probes/probe.test.ts:28:18
+     26|   const command = { event, expectedSequence: 0, expectedGlobalSequence…
+     27|   const result = await appendCheckedState(store, command, unchanged);
+     28|   expect(checks).toBe(elapsed < 2000 ? 2 : 1);
+       |                  ^
+     29|   expect(result.status).toBe(elapsed < 2000 ? 'conflict' : 'unavailabl…
+     30| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 skipped (4)
+   Start at  08:24:05
+   Duration  3.57s (transform 76%, import 22%, tests 2%)
+
+  Transform  transforming modules took 2.44s · 76% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

@@ -3,7 +3,7 @@ import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz
 import { providerIdSchema, providerModelIdSchema,
   assistantCreatedDataSchema, budgetCeilingSetDataSchema } from '@opencrane/events';
 import { readStreamSummary, type EventStore, type StoredEvent,
-  type SummaryKind } from '@opencrane/event-store';
+  type SummaryKind, type Clock } from '@opencrane/event-store';
 import type { ProviderState, Query } from '@opencrane/projections';
 import { readActiveMember } from './member-authority.ts';
 import { MemberAccessRefused } from './member-authority.ts';
@@ -16,7 +16,7 @@ import { choiceKey, checkedHistory, inventory, providerCreation, type Choice } f
 
 const sequence = z.int().nonnegative();
 type Inventory = Awaited<ReturnType<typeof inventory>>;
-type WorkLimit = { remaining: number; deadline: number; incomplete: boolean };
+type WorkLimit = { clock: Clock; remaining: number; deadline: number; incomplete: boolean };
 type BudgetStatus = { configured: boolean; defaultPayer: string | undefined;
   dailyCents: number; monthlyCents: number };
 type BudgetConfiguration = { defaultPayer?: string; dailyCents: number; monthlyCents: number };
@@ -107,7 +107,7 @@ function pricedModel(modelId: string) {
 }
 
 function takeWork(limit: WorkLimit) {
-  if (limit.remaining === 0 || performance.now() >= limit.deadline) {
+  if (limit.remaining === 0 || limit.clock.now() >= limit.deadline) {
     limit.incomplete = true;
     return false;
   }
@@ -117,7 +117,7 @@ function takeWork(limit: WorkLimit) {
 
 async function readBudgetStatus(store: EventStore, silo: string): Promise<BudgetStatus> {
   const subject = `budget-${silo}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   function take(summary: BudgetConfiguration) {
     const configured = Boolean(summary.defaultPayer) &&
       summary.dailyCents > 0 && summary.monthlyCents > 0;
@@ -296,8 +296,8 @@ async function loadSources(store: EventStore, binding: Binding, memberId: string
   providerId: string, db: Query) {
   const prepared = await Promise.allSettled([
     inventory(store, binding.silo),
-    checkedHistory(store, binding.silo, 'assistant-*', performance.now() + 10_000),
-    providerRoutinePresence(store, db, binding.silo, performance.now() + 10_000),
+    checkedHistory(store, binding.silo, 'assistant-*', store.clock.now() + 10_000),
+    providerRoutinePresence(store, db, binding.silo, store.clock.now() + 10_000),
     providerCreation(store, binding.silo, providerId),
   ]);
   // Check current rights after loading so a late reply cannot reveal dependencies.
@@ -319,20 +319,28 @@ async function loadSources(store: EventStore, binding: Binding, memberId: string
   return { current, assistants, routine, source, blockers };
 }
 
-async function readUnresolvedRoutines(db: Query, silo: string, after: number,
+export interface UnresolvedRoutineReadOptions {
+  db: Query;
+  silo: string;
+  after: number;
+  clock: Clock;
+}
+
+async function readUnresolvedRoutines(options: UnresolvedRoutineReadOptions,
   routine: RoutinePresence) {
+  const { db, silo, after, clock } = options;
   const result = await db.query<{ routine_id: string; name: string | null;
     position: string }>(`SELECT routine_id,
       state #>> '{definition,definition,name}' AS name, position FROM routines
       WHERE silo = $1 ORDER BY routine_id LIMIT 51 OFFSET $2`,
-  [silo, after], { deadline: performance.now() + 10_000 });
+  [silo, after], { deadline: clock.now() + 10_000 });
   const page = result.rows.slice(0, 50);
   function routineRow(row: (typeof page)[number]) {
     return { routineId: row.routine_id, name: row.name,
       position: Number(row.position) };
   }
   const rows = page.map(routineRow);
-  if (!await routine.checkCurrent(performance.now() + 10_000)) {
+  if (!await routine.checkCurrent(clock.now() + 10_000)) {
     throw new Error('Routine projection changed');
   }
   const nextCursor = result.rows.length > 50 ? after + 50 : null;
@@ -358,7 +366,7 @@ async function preparePairs(store: EventStore, current: Inventory, binding: Bind
   if (!budget.configured || source.assistants !== 'complete') {
     return new Map<string, Awaited<ReturnType<typeof replacements>>>();
   }
-  const limit: WorkLimit = { remaining: 200, deadline: performance.now() + 10_000,
+  const limit: WorkLimit = { clock: store.clock, remaining: 200, deadline: store.clock.now() + 10_000,
     incomplete: false };
   const pairs = await collectPairs(store, current, binding, memberId,
     providerId, rows, owners, limit);
@@ -388,12 +396,12 @@ function checkPage(after: number, current: Inventory, routinePosition: number | 
     expectedPositions.routine !== routinePosition) throw new ProviderConflict();
 }
 
-async function unresolvedRoutinePage(db: Query, silo: string, after: number,
+async function unresolvedRoutinePage(options: UnresolvedRoutineReadOptions,
   source: PreviewSource, blockers: string[], routine?: RoutinePresence) {
   const empty = { rows: [], nextCursor: null };
   if (source.routines !== 'not_available' || !routine) return empty;
   try {
-    return await readUnresolvedRoutines(db, silo, after, routine);
+    return await readUnresolvedRoutines(options, routine);
   } catch {
     source.routines = 'unavailable';
     blockers.push('Could not load routine dependencies');
@@ -418,14 +426,14 @@ export async function providerRetirementPreview(store: EventStore, binding: Bind
     providerId, candidates, owners, budget, source, blockers);
   if (rows.length > 200) blockers.push('Too many dependencies to review at once');
   blockers.push('Retirement is not available yet');
-  const unresolvedRoutines = await unresolvedRoutinePage(db, binding.silo, after,
-    source, blockers, routine);
+  const routineRead = { db, silo: binding.silo, after, clock: store.clock };
+  const unresolvedRoutines = await unresolvedRoutinePage(routineRead, source, blockers, routine);
   const latestBudget = await readBudgetStatus(store, binding.silo);
   if (!sameBudget(budget, latestBudget)) {
     source.assistants = 'unavailable';
     blockers.push('Spending settings changed during the review');
   }
-  if (routine && !await routine.checkCurrent(performance.now() + 10_000)) {
+  if (routine && !await routine.checkCurrent(store.clock.now() + 10_000)) {
     source.routines = 'unavailable';
     blockers.push('Could not load routine dependencies');
   }

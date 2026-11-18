@@ -1,0 +1,6 @@
+[
+  {
+    "test": "loads through the dev proxy and preserves the accessible refresh journey in Chromium",
+    "failure": "AssertionError: \u276f Building...\n: expected '' not to be '' // Object.is equality\n    at __vite_ssr_import_17__.vi.waitFor.timeout (<worktree>/apps/server/test/integrations.test.ts:256:32)\n    at Timeout.checkCallback (file://<worktree>/node_modules/vitest/dist/chunks/index.C4tKZ0yW.js:7163:20)\n    at listOnTimeout (node:internal/timers:585:17)\n    at processTimers (node:internal/timers:521:7)"
+  }
+]

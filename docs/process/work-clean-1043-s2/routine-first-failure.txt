@@ -1,0 +1,83 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/routine-composition.test.ts > sends one checked due to its native thread, despite duplicate invocation and restart
+AssertionError: expected [ { status: 'unknown' }, …(1) ] to deep equally contain { status: 'sent' }
+
+- Expected:
+{
+  "status": "sent",
+}
+
++ Received:
+[
+  {
+    "status": "unknown",
+  },
+  {
+    "status": "unknown",
+  },
+]
+
+ ❯ reachesPreparedThread apps/server/test/routine-composition.test.ts:391:19
+    390|     invocation.send(wake), invocation.send(wake),
+    391|   ]);
+    392|   expect(results).toContainEqual({ status: 'sent' });
+       |             ^
+    393|   await until(preparedComputer.executed);
+    394|   expect(preparedComputer.executedThreads).toEqual(['native-1']);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  apps/server/test/routine-composition.test.ts > refuses a company change inside the conditional send authorisation
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ refusesCompanyChangeInsideSendAuthorisation apps/server/test/routine-composition.test.ts:861:21
+    859|   }
+    860|   try {
+    861|     const composition = compose({ enabled: true, companyPreflight });
+       |                     ^
+    862|     expect(await composition.send(preparedComputer.wake)).toEqual({ st…
+    863|     expect(changed).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > refuses changed threadId through real report admission
+ FAIL  apps/server/test/routine-sender.test.ts > refuses changed conversationId through real report admission
+Error: Timed out waiting for service outcome
+ ❯ until libs/authz/test/services.ts:46:13
+     44|   while (!(await check())) {
+     45|     if (performance.now() >= deadline) {
+     46|       throw new Error("Timed out waiting for service outcome");
+       |             ^
+     47|     }
+     48|     await delay(20);
+ ❯ refusesChangedStart apps/server/test/routine-sender.test.ts:831:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > retries an unsaved start after another computer thread advances its stream
+Error: Timed out waiting for service outcome
+ ❯ until libs/authz/test/services.ts:46:13
+     44|   while (!(await check())) {
+     45|     if (performance.now() >= deadline) {
+     46|       throw new Error("Timed out waiting for service outcome");
+       |             ^
+     47|     }
+     48|     await delay(20);
+ ❯ acceptsOtherThread apps/server/test/routine-sender.test.ts:953:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  2 failed | 3 passed (5)
+      Tests  5 failed | 674 passed (679)
+   Start at  10:14:27
+   Duration  2381.13s (tests 99%, transform 1%)
+
+JSON report written to /tmp/clean-shared-clock1.json

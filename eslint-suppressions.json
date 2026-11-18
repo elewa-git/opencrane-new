@@ -661,11 +661,6 @@
       "count": 2
     }
   },
-  "libs/models/src/egress-startup.ts": {
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "libs/models/src/gateway-admission.ts": {
     "max-params": {
       "count": 1
@@ -701,7 +696,7 @@
       "count": 1
     },
     "max-params": {
-      "count": 6
+      "count": 5
     }
   },
   "libs/models/src/mcp-position.ts": {
@@ -794,7 +789,7 @@
   },
   "libs/models/src/provider-retirement-preview.ts": {
     "max-params": {
-      "count": 8
+      "count": 7
     }
   },
   "libs/models/src/provider-verification.ts": {

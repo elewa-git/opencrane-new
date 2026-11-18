@@ -1,3 +1,4 @@
+import type { EventStore } from '@opencrane/event-store';
 import { createConnection, createServer, type Socket } from 'node:net';
 import { once } from 'node:events';
 import { dirname } from 'node:path';
@@ -428,7 +429,8 @@ async function refusesObservationRace(race: typeof observationRaces[number]) {
     }
     yield* rows;
   }
-  const store = { append, readStream, head, readEvent };
+  const store = { clock: setup.options.store.clock, append, readStream, head, readEvent } satisfies Pick<EventStore,
+    'clock' | 'append' | 'head' | 'readStream' | 'readEvent'>;
   const options = { ...setup.options, store };
   const delivery = gatewayDelivery(options);
   async function change() {
@@ -678,9 +680,9 @@ async function recoversLostMemberReply() {
     }
     return result;
   }
-  const store = { append, head: setup.options.store.head.bind(setup.options.store),
+  const store = { clock: setup.options.store.clock, append, head: setup.options.store.head.bind(setup.options.store),
     readStream: setup.options.store.readStream.bind(setup.options.store),
-    readEvent: setup.options.store.readEvent.bind(setup.options.store) };
+    readEvent: setup.options.store.readEvent.bind(setup.options.store) } satisfies Pick<EventStore, 'clock' | 'append' | 'head' | 'readStream' | 'readEvent'>;
   const delivery = gatewayDelivery({ ...setup.options, store });
   await delivery.deliver(setup.record);
   await waitForDeliveredWitness(setup);
@@ -778,9 +780,9 @@ async function changedStateRefusesMemberAppend(change: 'withdrawal' | 'preparati
     }
     return setup.options.store.append(command);
   }
-  const store = { append, head: setup.options.store.head.bind(setup.options.store),
+  const store = { clock: setup.options.store.clock, append, head: setup.options.store.head.bind(setup.options.store),
     readStream: setup.options.store.readStream.bind(setup.options.store),
-    readEvent: setup.options.store.readEvent.bind(setup.options.store) };
+    readEvent: setup.options.store.readEvent.bind(setup.options.store) } satisfies Pick<EventStore, 'clock' | 'append' | 'head' | 'readStream' | 'readEvent'>;
   const delivery = gatewayDelivery({ ...setup.options, store });
   await delivery.deliver(setup.record);
   await waitForDeliveredWitness(setup);
@@ -1130,9 +1132,9 @@ async function savesReceiptAfterComputerReadiness() {
     }
     return setup.options.store.append(command);
   }
-  const store = { append, head: setup.options.store.head.bind(setup.options.store),
+  const store = { clock: setup.options.store.clock, append, head: setup.options.store.head.bind(setup.options.store),
     readStream: setup.options.store.readStream.bind(setup.options.store),
-    readEvent: setup.options.store.readEvent.bind(setup.options.store) };
+    readEvent: setup.options.store.readEvent.bind(setup.options.store) } satisfies Pick<EventStore, 'clock' | 'append' | 'head' | 'readStream' | 'readEvent'>;
   const delivery = gatewayDelivery({ ...setup.options, store });
   await delivery.deliver(setup.record);
   await waitForDeliveredWitness(setup);

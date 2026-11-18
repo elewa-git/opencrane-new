@@ -1,0 +1,44 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run libs/models/test --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+sha256sum: .tools/syft: No such file or directory
+sha256sum: .tools/osi.json: No such file or directory
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"model","samples":30,"p50Ms":157.99586500000078,"p95Ms":342.02145999999993,"authorityEvents":2,"authorityStreamReads":7}
+
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"mcp","samples":30,"p50Ms":131.22977399999945,"p95Ms":163.92719299999953,"authorityEvents":16,"authorityStreamReads":9}
+
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"destinationAuthority","samples":30,"p50Ms":34.08455700000013,"p95Ms":43.89390000000094,"authorityEvents":6,"authorityStreamReads":5}
+
+ ❯ libs/models/test/authority-volume.test.ts (1 test | 1 failed) 301309ms
+   × keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events 300091ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+Error: Test timed out in 300000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ libs/models/test/authority-volume.test.ts:21:1
+     19| }
+     20|
+     21| it('keeps decisions below the egress and ext_authz bounds with 100,000…
+       | ^
+     22|   const counts: Record<string, number[]> = {};
+     23|   const latencies: { times: number[]; bound: number }[] = [];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 103 passed (104)
+      Tests  1 failed | 2827 passed | 2 skipped (2830)
+   Start at  08:12:50
+   Duration  3110.36s (tests 97%, import 3%)
+
+    Isolate  104 workers spawned · ~255ms startup each (spawn + environment, per file)
+             at least ~12.99s faster with isolate: false — reuses workers across files instead of one per file

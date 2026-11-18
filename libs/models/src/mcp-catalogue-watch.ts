@@ -143,7 +143,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
 
   async function refresh(serverId: string, state: ReturnType<typeof newWatch>,
     signal: AbortSignal) {
-    const deadline = performance.now() + timeoutMs;
+    const deadline = store.clock.now() + timeoutMs;
     await options.requireLeader();
     let policy = await readToolPolicy(store, silo, serverId, deadline);
     // Keep startup closed until a real capture succeeds, without inventing a failed check.
@@ -228,7 +228,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   }
 
   async function saveFailure(serverId: string, signal?: AbortSignal) {
-    const deadline = performance.now() + 2000;
+    const deadline = store.clock.now() + 2000;
     const policy = await readToolPolicy(store, silo, serverId, deadline);
     if (!policy.catalogue) throw new Error('Saved catalogue unavailable');
     await options.requireLeader();

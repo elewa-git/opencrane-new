@@ -287,6 +287,7 @@ async function reportsHistoryAndAccessTimeout(route: 'model' | 'mcp') {
   async function* delayHistoryAndAccess(...args: Parameters<typeof read>) {
     if (args[0] === 'conversation-conversation' && args[1] === 1 && !historyDelayed) {
       historyDelayed = true;
+      // real wait: Hold the NATS reply across the real gateway admission timeout.
       await delay(1900);
     }
     if (args[0] === 'member-alice' && !accessDelayed) {
@@ -399,10 +400,12 @@ async function refusesAfterGatewayTimeout(route: 'model' | 'mcp') {
   async function* delayDecisionPastGatewayTimeout(...args: Parameters<typeof read>) {
     if (args[0] === 'conversation-conversation' && args[1] === 1 && !historyDelayed) {
       historyDelayed = true;
+      // real wait: Hold the NATS reply across the real gateway admission timeout.
       await delay(1100);
     }
     if (args[0] === 'member-alice' && !accessDelayed) {
       accessDelayed = true;
+      // real wait: Hold the NATS reply across the real gateway admission timeout.
       await delay(1100);
     }
     yield* read(...args);

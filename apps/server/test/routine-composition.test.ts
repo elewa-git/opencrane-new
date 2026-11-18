@@ -15,6 +15,7 @@ import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
 import { oauthSelectionFixture } from '../../../libs/models/test/support/oauth-selection.ts';
 import { connectionOperationId } from '../../../libs/models/src/bearer-connections.ts';
 import { oauthConfigurationDigest } from '../../../libs/models/src/oauth-attempt.ts';
@@ -826,6 +827,7 @@ it('refuses a tool policy blocked while activation admission is saved',
   refusesToolPolicyChangeDuringAdmission);
 
 async function refusesCompanyChangeInsideSendAuthorisation() {
+  holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let authorisingSend = false;
   let changed = false;
@@ -1292,22 +1294,8 @@ async function change(kind: string) {
   }
 }
 function advanceWake() {
-  const monotonic = performance.now.bind(performance);
-  function afterWake() {
-    return monotonic() + 14_000;
-  }
   now += 14_000;
-  const clockSpy = vi.spyOn(performance, 'now');
-  clockSpy.mockImplementation(afterWake);
-}
-function holdFixtureClock() {
-  const started = performance.now();
-  function fixedTime() {
-    return started;
-  }
-  const clockSpy = vi.spyOn(performance, 'now');
-  clockSpy.mockImplementation(fixedTime);
-  return clockSpy;
+  holdFixtureClock(14_000);
 }
 async function refusesChangedAccess(kind: string, late: boolean) {
   if (kind === 'worker' && late) holdFixtureClock();

@@ -8,18 +8,7 @@ import type { EgressTransport } from './egress-guard.ts';
 
 export async function startEgress(store: EventStore, silo: string, stateDirectory: string,
   refused: () => void, transport?: EgressTransport) {
-  const directory = join(stateDirectory, 'egress');
-  let retained: string[];
-  try {
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    const details = await lstat(directory);
-    if (!details.isDirectory() || (details.mode & 0o777) !== 0o700) {
-      throw new Error('egress_directory_refused');
-    }
-    retained = await readdir(directory);
-  } catch {
-    throw new Error('egress_directory_refused');
-  }
+  const { directory, retained } = await readEgressDirectory(stateDirectory);
   const receipts = new Map<string, Awaited<ReturnType<typeof createEgressReceipt>>>();
   for (const name of retained) {
     try {
@@ -46,7 +35,8 @@ export async function startEgress(store: EventStore, silo: string, stateDirector
     const id = egressObservationId(silo, record.permitId);
     if (!receipts.get(id)?.capture(record)) refused();
   }
-  const registry = new EgressRelayRegistry(capture, transport, prepare);
+  const clockOptions = { clock: store.clock };
+  const registry = new EgressRelayRegistry(capture, transport, prepare, clockOptions);
   let flushing: Promise<void> | undefined;
   async function retry(receipt: Awaited<ReturnType<typeof createEgressReceipt>>) {
     const status = await receipt.retry();
@@ -89,4 +79,20 @@ export async function startEgress(store: EventStore, silo: string, stateDirector
     }
   }
   return { registry, flush, close };
+}
+
+async function readEgressDirectory(stateDirectory: string) {
+  const directory = join(stateDirectory, 'egress');
+  let retained: string[];
+  try {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const details = await lstat(directory);
+    if (!details.isDirectory() || (details.mode & 0o777) !== 0o700) {
+      throw new Error('egress_directory_refused');
+    }
+    retained = await readdir(directory);
+  } catch {
+    throw new Error('egress_directory_refused');
+  }
+  return { directory, retained };
 }

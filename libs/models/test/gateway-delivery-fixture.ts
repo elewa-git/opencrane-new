@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 export { freePort } from '@opencrane/event-store/testing';
 import { freePort } from '@opencrane/event-store/testing';
 import type { ChildProcess } from 'node:child_process';
@@ -18,7 +19,11 @@ export async function acquireGatewayTestLock(session: Pick<Db, 'query'>, lockNam
   return true;
 }
 
-export async function gatewayFixture() {
+export interface GatewayFixtureOptions {
+  clock?: Clock;
+}
+
+export async function gatewayFixture({ clock = systemClock }: GatewayFixtureOptions = {}) {
   const directory = await mkdtemp(`${tmpdir()}/gateway-reload-`);
   const pair = await generateKeyPair('ES256', { extractable: true });
   const jwk = await exportJWK(pair.publicKey);
@@ -78,6 +83,7 @@ export async function gatewayFixture() {
   let port = await freePort();
   let readinessPort = await freePort();
   const options = {
+    clock,
     binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`,
     keyFile: `${directory}/provider`, port, readinessPort,

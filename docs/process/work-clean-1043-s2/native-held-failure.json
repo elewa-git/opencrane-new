@@ -1,0 +1,7 @@
+[
+  {
+    "file": "libs/models/test/native-budget.test.ts",
+    "test": "recovers one native hold and its original ids after a lost append reply and writer restart",
+    "failure": "Error: Model call retry refused\n    at grantModelCall (<worktree>/libs/models/src/call-retry.ts:72:11)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at recoversNativeHold (<worktree>/libs/models/test/native-budget.test.ts:596:21)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  }
+]

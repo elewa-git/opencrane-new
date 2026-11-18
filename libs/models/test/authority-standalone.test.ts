@@ -1,3 +1,4 @@
+import { manualStoreTime } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import { currentAuthority, payingGroupAuthority } from '../src/index.ts';
 import { fixture } from './fixture.ts';
@@ -30,14 +31,13 @@ it('refuses standalone authority revoked after its member history was read', ref
 const refusesStandaloneExpiry = async () => {
   const setup = await fixture();
   const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
-  const started = performance.now();
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  const clock = manualStoreTime(setup.nats.store);
   let expired = false;
   async function* expireAfterHistory(...args: Parameters<typeof originalRead>) {
     yield* originalRead(...args);
     if (args[0] === 'member-alice' && !expired) {
       expired = true;
-      clock.mockReturnValue(started + 2001);
+      clock.advance(2001);
     }
   }
   const delay = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(expireAfterHistory);
@@ -46,7 +46,7 @@ const refusesStandaloneExpiry = async () => {
       'alice', 'assistant', 'conversation', 'model', 'gpt-6-luna');
     await expect(authority).rejects.toThrow('Authority snapshot expired');
   } finally {
-    clock.mockRestore();
+    clock.restore();
     delay.mockRestore();
     await setup.close();
   }

@@ -378,6 +378,7 @@ async function recoversLostReply(type: string) {
     await expect(admitDescendant(context.nats.store, context.binding, verifier, decision))
       .rejects.toThrow('unavailable');
     const before = await context.nats.store.head();
+    // real wait: Let the NATS duplicate window expire before retrying saved history.
     await delay(1100);
     const other = await createEventStore(await context.nats.client('command'));
     const result = await admitDescendant(other, context.binding, verifier, decision);

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import type { AppendCommand } from '@opencrane/event-store';
 import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
@@ -506,27 +506,22 @@ it.each(adminAccessChanges)('$name', changesDuringAdminWrite);
 async function slowOwnershipHistoryBeforeAdminWrite() {
   const fixture = await adminAccessFixture('admin');
   const originalRead = nats.store.readStream.bind(nats.store);
-  const originalNow = performance.now.bind(performance);
-  let elapsed = 0;
-  function currentTime() {
-    return originalNow() + elapsed;
-  }
+  const clock = manualStoreTime(nats.store);
+  const started = clock.now();
   async function* slowOwnershipRead(subject: string, from?: number, deadline?: number) {
     yield* originalRead(subject, from, deadline);
-    if (subject === 'ownership-test') elapsed += 2_100;
+    if (subject === 'ownership-test') clock.advance(2_100);
   }
-  const clock = vi.spyOn(performance, 'now');
   const read = vi.spyOn(nats.store, 'readStream');
-  clock.mockImplementation(currentTime);
   read.mockImplementation(slowOwnershipRead);
   try {
     const result = await mcpAdminInstanceStop(nats.store, binding, fixture.actorId,
       fixture.reference, fixture.command);
     expect(result).toMatchObject({ status: 'applied', reason: 'admin_stop' });
-    expect(elapsed).toBeGreaterThan(2_000);
+    expect(clock.now() - started).toBeGreaterThan(2_000);
   } finally {
     read.mockRestore();
-    clock.mockRestore();
+    clock.restore();
   }
   expect(await history(nats.store, fixture.event.subject, 'test')).toHaveLength(2);
 }

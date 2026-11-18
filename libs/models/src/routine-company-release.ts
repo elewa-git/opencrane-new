@@ -158,7 +158,7 @@ async function activeRun(store: EventStore, silo: string, release: Release, dead
   const position = rows.at(-1)?.sequence ?? 0;
   async function executionCurrent() {
     // Check the saved run separately from the short access watch.
-    const latest = await store.head(subject, performance.now() + 10_000);
+    const latest = await store.head(subject, store.clock.now() + 10_000);
     if (latest !== position) {
       refuse();
     }
@@ -269,7 +269,7 @@ async function requireCurrentProfileAndTool(store: EventStore, silo: string,
 export async function routineCompanyReleaseFacts(store: EventStore, silo: string,
   release: Release, loadConfiguration: OAuthConfigurationLoader,
   readProfile: CompanyProfileReader) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const run = await activeRun(store, silo, release, deadline);
   const selection = await selectedChoice(store, silo, release, deadline);
   const facts = await checkedCompany(store, silo, release, selection.choice,

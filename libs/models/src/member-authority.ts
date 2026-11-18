@@ -16,13 +16,13 @@ export async function activeMember(
   },
 ) {
   // Keep an existing write deadline when the caller has already started its access check.
-  const historyDeadline = options.fresh?.deadline ?? performance.now() + 10_000;
+  const historyDeadline = options.fresh?.deadline ?? store.clock.now() + 10_000;
   const membership = options.membership ?? await currentMembership(
     store, binding.silo, memberId, options.fresh, historyDeadline);
   // Preserve a saved refusal before position reads can fail.
   requireSavedRole(membership.role, options.requiredRole === 'admin');
   const subjects = [...membership.positions.keys()];
-  const fresh = options.fresh ?? await authorityFence(store, performance.now(), subjects);
+  const fresh = options.fresh ?? await authorityFence(store, store.clock.now(), subjects);
   for (const [subject, position] of membership.positions) {
     fresh.include(subject);
     if (await store.head(subject, fresh.deadline) !== position) {
@@ -38,7 +38,7 @@ export async function readActiveMember(store: EventStore, binding: Binding, memb
   applied?: (eventId: string) => Promise<boolean>,
 ) {
   const membership = await currentMembership(store, binding.silo, memberId,
-    undefined, performance.now() + 10_000);
+    undefined, store.clock.now() + 10_000);
   requireSavedRole(membership.role, requiredRole === 'admin');
   await requireMember(binding, memberId, requiredRole === 'admin', membership, applied);
   return membership.role;

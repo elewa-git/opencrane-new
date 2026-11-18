@@ -104,7 +104,7 @@ async function saveStop(store: EventStore, trigger: EventEnvelope, work: Work,
 
 export function budgetStopHandler(store: EventStore) {
   async function stopBudgetTurns(event: EventEnvelope, db: Query) {
-    const deadline = performance.now() + 10_000;
+    const deadline = store.clock.now() + 10_000;
     const state = await budgetAtStop(store, event, deadline);
     if (state.stops.length === 0) return;
     await requireIndex(db, state.sequence);

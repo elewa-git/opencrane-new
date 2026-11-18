@@ -13,6 +13,7 @@ import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
 import { routineAsk } from './support/routine-ask.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
@@ -26,7 +27,7 @@ import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, foldRoutineHistory, grantStream, memberAuthorisation } from '@opencrane/authz';
-import { natsFixture, event } from '@opencrane/event-store/testing';
+import { natsFixture, event, manualClock } from '@opencrane/event-store/testing';
 import { foldRoutine, routineActivationSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
@@ -145,14 +146,11 @@ async function projectPreparedSession() {
   afterProjection();
 }
 async function prepareSenderFixture() {
-  const fixtureStartedAt = performance.now();
-  let elapsedFixtureTime = 0;
-  function advanceClock(milliseconds: number) {
-    elapsedFixtureTime += milliseconds;
-  }
+  const fixtureClock = manualClock(performance.now());
   const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(() => fixtureStartedAt + elapsedFixtureTime);
-  advanceFixtureClock = advanceClock;
+  const fixtureNow = fixtureClock.now.bind(fixtureClock);
+  monotonicClock.mockImplementation(fixtureNow);
+  advanceFixtureClock = fixtureClock.advance.bind(fixtureClock);
   const prepareSession = routineSession.prepareRoutineSession;
   let stage = 'preparation';
   async function projectSession(...args: Parameters<typeof prepareSession>) {
@@ -456,6 +454,7 @@ it('refuses a direct sender without a credential-use check before authorisation'
   missingCredentialUseCheck);
 
 async function refusesCredentialVersionChangedBeforeReleaseReply() {
+  holdFixtureClock();
   function confirmCompany() {
     return Promise.resolve();
   }
@@ -815,6 +814,7 @@ it.each(['routine.run_activation_admitted', 'send', 'computer.turn_started'])(
 
 
 async function refusesChangedStart(field: string) {
+  holdFixtureClock();
   const authority = sender();
   const computer = await recordingComputer();
   const link = await computer.wake();
@@ -880,6 +880,7 @@ async function wrongComputerLink() {
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
 async function refusesLateChange(kind: string) {
+  holdFixtureClock();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -929,6 +930,7 @@ it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused',
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function acceptsOtherThread() {
+  holdFixtureClock();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -1011,6 +1013,7 @@ function preparationIdentity(id = turnId) {
     expiresAt: Date.now() + 50_000 };
 }
 async function keepsNativeSession() {
+  holdFixtureClock();
   const computer = preparedComputer;
   const link = await computer.wake();
   const second = await link.prepareRoutineThread(preparationIdentity('other-turn'));
@@ -1118,8 +1121,7 @@ async function pollRoutine() {
 async function runningProhibition(
   kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin',
 ) {
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  await until(preparedComputer.executed);
+  const link = await startRunning();
   await saveProhibition(kind);
   const observed = performance.now();
   await pollRoutine();
@@ -1130,7 +1132,6 @@ async function runningProhibition(
   expect(performance.now() - observed).toBeLessThan(2000);
   await Promise.all([pollRoutine(), pollRoutine()]);
   interrupted();
-  const link = await preparedComputer.wake();
   expect(link.socket.readyState).toBe(link.socket.OPEN);
   expect(preparedComputer.closedSessions).toBe(0);
   const rows = await history(nats.store, 'routine-orders', 'test');
@@ -1144,12 +1145,7 @@ it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as c
 
 
 async function startRunning() {
-  const fixtureTime = performance.now();
-  function fixedFixtureTime() {
-    return fixtureTime;
-  }
-  const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(fixedFixtureTime);
+  const monotonicClock = holdFixtureClock();
   try {
     expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
   } finally {
@@ -1325,8 +1321,7 @@ it.each(['unknown_response', 'missing_settlement', 'unmatched_permit'] as const)
   'holds a checked run when its company proof has %s', incompleteCompanyResult, 25_000);
 
 async function ceilingChangeAtFinalRelease(scope: 'paying_group' | 'assistant') {
-  const fixtureTime = performance.now();
-  vi.spyOn(performance, 'now').mockImplementation(() => fixtureTime);
+  holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let changed = false;
   async function saveLimitBeforeRelease(...args: Parameters<typeof append>) {

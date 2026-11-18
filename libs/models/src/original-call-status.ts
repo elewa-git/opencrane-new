@@ -154,7 +154,7 @@ function retryResult(current: Awaited<ReturnType<typeof readApproval>>,
 
 export async function readOriginalCallStatus(store: EventStore, silo: string,
   logicalRequestId: string, retained: RetainedCall | undefined,
-  deadline = performance.now() + 10_000, now?: Date) {
+  deadline = store.clock.now() + 10_000, now?: Date) {
   // Read saved work before the caller's final access check. This read never writes.
   const readOptions = { deadline, ...(now ? { now } : {}), deferInvalidation: true };
   const current = await readApproval(store, silo, logicalRequestId,

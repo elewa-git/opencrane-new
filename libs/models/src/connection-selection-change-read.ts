@@ -29,7 +29,7 @@ export async function readOwnSelectionChange(store: EventStore, binding: Binding
   let result: z.infer<typeof receiptSchema> | null = null;
   let failure: Error | undefined;
   try {
-    const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+    const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
     result = originalReceipt(rows, binding.silo, subject, memberId, reference);
   } catch (error) {
     failure = new Error('Selection history unavailable', { cause: error });

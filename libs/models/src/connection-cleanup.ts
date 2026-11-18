@@ -75,7 +75,7 @@ export function connectionCleanupHandler(store: EventStore, db: Pick<Db, 'lock'>
       if (trigger.subject !== subject) {
         return;
       }
-      const rows = await history(store, subject, silo, performance.now() + 10_000);
+      const rows = await history(store, subject, silo, store.clock.now() + 10_000);
       const confirmed = confirmedChange(rows, trigger);
       // Keep OAuth material for the separate provider revocation and retirement worker.
       if (confirmed === 'oauth_revoke') {

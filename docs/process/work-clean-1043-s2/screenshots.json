@@ -1,0 +1,230 @@
+{
+  "sourceCommit": "9d715a3845dfd3c693c1a556f2d526b782d853c1",
+  "copiedBeforeTeardown": true,
+  "count": 37,
+  "uniqueImages": 33,
+  "captures": [
+    {
+      "file": "screenshots/preview-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "f274c5ee2410240767b8fb6f274103b16b02c03f1c027dd041f838417773973e"
+    },
+    {
+      "file": "screenshots/preview-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "0a8dc70d9899a06cf5a449e80c3f1c6a129ef349e49bee67c0b1bc323197df43"
+    },
+    {
+      "file": "screenshots/shared/docs/process/live-view/conversation-entry-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "9952265049b51dd584a7793c3bbbc949043e678b0f8b2fa2b392b1ceeeb63716"
+    },
+    {
+      "file": "screenshots/shared/docs/process/live-view/conversation-entry-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "4d5ae849bc80094731ff000bb8cf8ba366e2c428a46cd538e3f4d81cc3b4ac8c"
+    },
+    {
+      "file": "screenshots/shared/docs/process/live-view/conversation-revoked-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "ff7fa8fce02dcf79e815b68a61b2c3449908a0247118861f9092aa32534ceb3a"
+    },
+    {
+      "file": "screenshots/shared/docs/process/live-view/conversation-revoked-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "390d6b858c586d35275bea9c1f183420ca24a23fe7dbcd2db1f004e065986d3e"
+    },
+    {
+      "file": "screenshots/shared/docs/process/live-view/conversation-viewer-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "02ce72877a6d16f209795ef875c8400168eedbff10512ec6455faf14808985a9"
+    },
+    {
+      "file": "screenshots/shared/docs/process/live-view/conversation-viewer-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "6b3d52db14f788418566673cadb9421654dcd4390f8068186b0363b44f8db03b"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-assistant-1280.png",
+      "width": 1280,
+      "height": 1758,
+      "sha256": "341e87f4ad015fb62deeda5294a8e6e8bd63890a424680cd7caea062818549ca"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-assistant-390.png",
+      "width": 390,
+      "height": 2655,
+      "sha256": "c90c405119d353e3f1cd81ebf3473bb688ad69173b583298db62b306697a3135"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-assistant-refusal-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "d17e25e3df22848377983ddc4e730144afe80b994f56b1b1f529a6e51c6933b0"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-assistant-refusal-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "51d1fa4ab9a6d99ba925e25c7fad6a551aadd589bdb0d3676d3698829265620b"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-paying_group-1280.png",
+      "width": 1280,
+      "height": 1758,
+      "sha256": "3486f7f776c72bc4def24a49516b48eb292eef1b0c52f8cf8b03404e1dee3174"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-paying_group-390.png",
+      "width": 390,
+      "height": 2655,
+      "sha256": "0bc939e52f3cfcbb700bdf7b04eed0495d3b72e0283bdbecfefc81dce9ea01fb"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-paying_group-refusal-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "2ba6e6e35c045c7cc77ef60016c9d669136a455b1c3a2267c312ce97fe617a32"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-paying_group-refusal-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "c0eaa1ea76f930bfcb2b6d79c6d1ff8e1ef8e1f85a3a29e5be3af950c8210a64"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-repeat-headroom-390.png",
+      "width": 390,
+      "height": 2743,
+      "sha256": "4d54d7146e1dc04488b175bbe0bd2be6748205322231081951b81e97b567288c"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-stub-chat-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "62be6eb933e84c1a5e6902abd2604a76aeb8ed51fc3490e97a6f09d80ab641c1"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-13-live/fresh-stub-chat-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "1e2e26fcaf8b17ce3affda3d0857bb45c05e624361f9b710db1a2c43b3183ff2"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-action-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "8cf38da23e3e3d742e5b2e0f83320c21b22b72bf27b454c4042abb3164436e0e"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-action-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "0c5ddce9347beb4ac0a60a42ceebb871819675e82b7741904ebe87aeac81ab1a"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-category-1280.png",
+      "width": 1280,
+      "height": 1215,
+      "sha256": "ad4029dc05528aecadc8f59a98c4e30f1c74a60bc7dce6df30899f5273e7a3e6"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-category-390.png",
+      "width": 390,
+      "height": 2105,
+      "sha256": "093ef4b7878c991459b068bf781a7a5f2bf0ca7d86294f6d1b122c691b59fe5c"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-change-1280.png",
+      "width": 1280,
+      "height": 1215,
+      "sha256": "8fd8dd4f27d7dbabeed027466a9fbaaa0190dd61dda16190c6cc1acc0d0cf4f4"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-change-390.png",
+      "width": 390,
+      "height": 2105,
+      "sha256": "63d42f49b8451e6193cb2538560a9a0d09dc456f98f16f10655962cb0ad95566"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-refused-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "16411de1cb258a9e3f8e46dacb04dbdd7fdc23dc95ae99fedb7f404877fb8b0d"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-refused-390.png",
+      "width": 390,
+      "height": 900,
+      "sha256": "2aeebfd644b04e56bb6bbafc0a8e718b55690d868960ddcaa6efc0a3bb9c3294"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-stub-chat-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "62be6eb933e84c1a5e6902abd2604a76aeb8ed51fc3490e97a6f09d80ab641c1"
+    },
+    {
+      "file": "screenshots/shared/docs/process/p3-19-live/fresh-stub-chat-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "1e2e26fcaf8b17ce3affda3d0857bb45c05e624361f9b710db1a2c43b3183ff2"
+    },
+    {
+      "file": "screenshots/upload-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "29f745734c03859cf759549f6976cfddc1ac3ac42cc909aa2bd55d5505ab4ed2"
+    },
+    {
+      "file": "screenshots/upload-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "feb287675c07ca554605ac5973db73ecee82b5843a5a053feff0d8b0236686c4"
+    },
+    {
+      "file": "screenshots/upload-preparing-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "b717a3465bb8f3758cdff0a52c5c80728c24e2ae0dc80e0d9b7cb3ab01beaa47"
+    },
+    {
+      "file": "screenshots/upload-preparing-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "a0746fff845400a79c02c6f7b9c85db5f7cabdc08da31d573daf802acd7d02b2"
+    },
+    {
+      "file": "screenshots/upload-ready-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "275c67a21308637c615b495dc172aeb4604f4e2feb9c86a114a5459dfec5c694"
+    },
+    {
+      "file": "screenshots/upload-ready-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "7b9ea25a1319c1754e9d18473e5af75ffe99bace36c4e3765eaf40148966eaa4"
+    },
+    {
+      "file": "screenshots/workspace-1280.png",
+      "width": 1280,
+      "height": 900,
+      "sha256": "62be6eb933e84c1a5e6902abd2604a76aeb8ed51fc3490e97a6f09d80ab641c1"
+    },
+    {
+      "file": "screenshots/workspace-390.png",
+      "width": 390,
+      "height": 844,
+      "sha256": "1e2e26fcaf8b17ce3affda3d0857bb45c05e624361f9b710db1a2c43b3183ff2"
+    }
+  ]
+}

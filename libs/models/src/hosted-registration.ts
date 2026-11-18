@@ -29,7 +29,7 @@ export async function registerHosted(store: EventStore, binding: Binding, member
     registeredBy: memberId, installation };
   const parsed = getEventDefinition('mcp.server_registered')!.dataSchema.parse(fields);
   const payload = z.record(z.string(), z.unknown()).parse(parsed);
-  const rows = await history(store, `mcp-${serverId}`, binding.silo, performance.now() + 10_000);
+  const rows = await history(store, `mcp-${serverId}`, binding.silo, store.clock.now() + 10_000);
   const expected = { commandId: command.commandId, expectedSequence: 0 };
   const result = await saveToolCommand(store, binding, memberId, serverId,
     'mcp.server_registered', payload, expected, rows, rows.length === 0);
@@ -48,7 +48,7 @@ export async function registerHosted(store: EventStore, binding: Binding, member
 export async function hostedRegistrationChange(store: EventStore, silo: string, raw: unknown) {
   const commandId = commandIdSchema.parse(raw);
   const ref = reference(silo, commandId);
-  const rows = await history(store, `mcp-${ref.serverId}`, silo, performance.now() + 10_000);
+  const rows = await history(store, `mcp-${ref.serverId}`, silo, store.clock.now() + 10_000);
   for (const row of rows) {
     if (matchesRegistration(row, silo, ref.serverId, commandId)) {
       return { ...ref, status: 'applied', operation: 'register', sequence: row.sequence,

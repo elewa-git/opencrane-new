@@ -108,7 +108,7 @@ async function appendRefreshClaim(store: EventStore, event: EventEnvelope,
     expectedSubject: 'connection-*', historyChecked: true as const,
     deadline: checked.deadline, checkAccess };
   await store.append(command);
-  const rows = await history(store, event.subject, event.silo, performance.now() + 10_000);
+  const rows = await history(store, event.subject, event.silo, store.clock.now() + 10_000);
   const saved = foldConnection(rows).refreshClaim;
   if (!saved || !isDeepStrictEqual(saved.event, event)) {
     throw new Error('OAuth refresh claim unconfirmed');
@@ -154,7 +154,7 @@ type Prepared = Awaited<ReturnType<typeof prepareRefresh>>;
 export async function prepareRefresh(store: EventStore, binding: Binding, session: Session,
   input: Input, loadConfiguration: Loader) {
   const subject = `connection-${input.userId}-${input.serverId}-${input.profileId}`;
-  const historyDeadline = performance.now() + 10_000;
+  const historyDeadline = store.clock.now() + 10_000;
   const rows = await history(store, subject, binding.silo, historyDeadline);
   const serverRows = await history(store, `mcp-${input.serverId}`, binding.silo, historyDeadline);
   const membership = await currentMembership(store, binding.silo, input.userId,
@@ -228,7 +228,7 @@ export async function refreshAccess(store: EventStore, binding: Binding, prepare
   const { input, subject, membership, configuration, server } = prepared;
   // Finish history and private reads before starting the original two-second access check.
   const subjects = [...membership.positions.keys()];
-  const fresh = await authorityFence(store, performance.now(), subjects);
+  const fresh = await authorityFence(store, store.clock.now(), subjects);
   const options = { requiredRole: 'member' as const, membership, fresh };
   await activeMember(store, binding, input.userId, options);
   const control = `connection-control-${input.userId}-${input.serverId}`;
@@ -264,7 +264,7 @@ async function appendRefresh(store: EventStore, siloId: string, prepared: Prepar
   if (result.status !== 'appended') {
     throw new Error('OAuth refresh unconfirmed');
   }
-  const savedRows = await history(store, subject, siloId, performance.now() + 10_000);
+  const savedRows = await history(store, subject, siloId, store.clock.now() + 10_000);
   const attempt = foldConnection(savedRows).refreshAttempt;
   if (!attempt || attempt.sequence !== result.sequence || !isDeepStrictEqual(attempt.event, event)) {
     throw new Error('OAuth refresh unconfirmed');

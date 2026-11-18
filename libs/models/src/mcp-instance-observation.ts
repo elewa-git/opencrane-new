@@ -93,7 +93,7 @@ export async function mcpInstanceObservation(store: EventStore, silo: string,
     throw new McpInstanceRefused('conflict', 'Observation does not match the saved run');
   }
   const remainingLifetime = Math.max(0, permission.expiresAt - Date.now());
-  const deadline = performance.now() + remainingLifetime;
+  const deadline = store.clock.now() + remainingLifetime;
   const command = { event, expectedSequence: current.state.sequence,
     historyChecked: true as const, deadline, signal: permission.signal };
   const result = await store.append(command);
@@ -101,7 +101,7 @@ export async function mcpInstanceObservation(store: EventStore, silo: string,
     throw new McpInstanceRefused('conflict', 'Observation revision mismatch');
   }
   if (result.status !== 'appended') throw new Error('Observation append unconfirmed');
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) throw new Error('Saved observation unavailable');
   return checkSavedObservation(saved, event);
 }

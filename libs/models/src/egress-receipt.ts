@@ -94,7 +94,7 @@ function checkedEvidence(raw: unknown, silo: string, binding: Binding,
   return event;
 }
 
-export async function createEgressReceipt(store: Pick<EventStore, 'append' | 'readStream'>,
+export async function createEgressReceipt(store: Pick<EventStore, 'clock' | 'append' | 'readStream'>,
   silo: string, requested: Binding, directory: string) {
   const requestedDestination = { host: requested.host, port: requested.port };
   const destination = egressDestinationSchema.parse(requestedDestination);
@@ -137,7 +137,7 @@ export async function createEgressReceipt(store: Pick<EventStore, 'append' | 're
     }
   }
   async function saved() {
-    for await (const row of store.readStream(subject, 1, performance.now() + 1000)) {
+    for await (const row of store.readStream(subject, 1, store.clock.now() + 1000)) {
       const event = checkedEvidence(row.event, silo, binding, destinationDigest);
       if (JSON.stringify(event) !== JSON.stringify(pending)) {
         return 'refused' as const;
@@ -156,7 +156,7 @@ export async function createEgressReceipt(store: Pick<EventStore, 'append' | 're
       if (status !== 'pending') {
         return status;
       }
-      const command = { event: pending, expectedSequence: 0, deadline: performance.now() + 1000 };
+      const command = { event: pending, expectedSequence: 0, deadline: store.clock.now() + 1000 };
       await store.append(command);
       status = await saved();
     } catch {

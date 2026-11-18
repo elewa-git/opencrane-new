@@ -12,7 +12,13 @@ Tests import `manualClock` and `natsFixture` from `@opencrane/event-store/testin
 `manualClock(started = 0)` returns `now`, `sleep` and `advance(milliseconds)`.
 Advancing time wakes sleeps whose target time has arrived; cancellation removes a
 pending sleep. `natsFixture({ clock })` uses it for both command and reader stores.
-The fixture keeps real time unless a test supplies a clock.
+Each fixture owns a separate real-time clock unless a test supplies a clock.
+Its command and reader stores share that selected clock. Changing one default
+fixture clock does not change another fixture or `systemClock`.
+`manualStoreTime(store, started = store.clock.now())` controls `store.clock.now`
+for an existing fixture. It returns `now()`, `advance(milliseconds)` and `restore()`.
+It restores the clock method when the test finishes. It leaves the existing sleep
+implementation in place; use `natsFixture({ clock })` when waits also need manual time.
 
 For people, read [README.md](README.md) first.
 

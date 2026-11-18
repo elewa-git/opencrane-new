@@ -4,6 +4,7 @@ import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { conversations, readConversation, readEvents } from '@opencrane/projections';
 import type { StoredEvent } from '@opencrane/event-store';
+import { manualClock } from '@opencrane/event-store/testing';
 import { grantStream } from '@opencrane/authz';
 import { approvalCards, decideApproval, envelope, history, losslessJson, readApproval } from '../src/index.ts';
 import { fixture, reviewCatalogue } from './fixture.ts';
@@ -443,7 +444,9 @@ async function bindsHeldApproval(change: string) {
     const options = { method: 'POST', headers, body: JSON.stringify(capture.body) };
     const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
     const asked = await fetch(url, options);
-    const decision = z.object({ approvalId: z.string() }).parse(await asked.json());
+    const askedText = await asked.text();
+    expect(asked.status, askedText).toBe(403);
+    const decision = z.object({ approvalId: z.string() }).parse(JSON.parse(askedText));
     if (change === 'unchanged') {
       const checkedAt = new Date().toISOString();
       const check = { serverId: 'fixture', outcome: 'unchanged', schemaDigest: catalogueDigest,
@@ -649,3 +652,38 @@ async function refusesForgedEvidence(attack: 'revision' | 'server') {
 it.each(['revision', 'server'] as const)(
   'refuses forged %s evidence and leaves the approval unused at the real gateway',
   refusesForgedEvidence, 40_000);
+
+async function savesApprovalAtManualBoundary(elapsedMs: number, outcome: string) {
+  const clock = manualClock(1_000_000);
+  const options = { clock };
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', false,
+    'manual', 'sales', undefined, options);
+  try {
+    const headers = await prepareCapturedCall(setup, 'ask');
+    const request = { method: 'POST', headers, body: JSON.stringify(capture.body) };
+    const url = `${setup.options.decisionUrl}/authorize/mcp/fixture/installed`;
+    const response = await fetch(url, request);
+    expect(response.status).toBe(403);
+    const approval = z.object({ approvalId: z.string() }).parse(await response.json());
+    const current = await readApproval(setup.nats.store, 'test', approval.approvalId);
+    const decisionTime = new Date(Date.parse(current.request.expiresAt) - 2000);
+    function fresh() {
+      clock.advance(elapsedMs);
+      return Promise.resolve();
+    }
+    const result = await decideApproval(setup.nats.store, 'test', approval.approvalId,
+      'alice', 'approved', true, fresh, current, decisionTime);
+    const rows = await history(setup.nats.store, `approval-${approval.approvalId}`, 'test');
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.event.type).toBe(outcome);
+    expect(result.status).toBe(outcome === 'approval.decided' ? 'appended' : 'conflict');
+    if (outcome === 'approval.decided') {
+      expect(rows[1]?.event.data).toMatchObject({ decision: 'approved', decidedBy: 'alice' });
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each([[1999, 'approval.decided'], [2000, 'approval.expired']] as const)(
+  'saves the approval outcome at %i ms of manual decision time: %s',
+  savesApprovalAtManualBoundary);

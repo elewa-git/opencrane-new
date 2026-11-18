@@ -69,13 +69,13 @@ async function recordStart(store: EventStore, binding: Binding, session: Session
 export async function checkPersonalOAuthStart(store: EventStore, binding: Binding, session: Session,
   custody: Custody, input: Input, loadConfiguration: ConfigurationLoader, claimed?: StoredEvent) {
   const subject = `connection-${session.userId}-${input.serverId}-${input.profileId}`;
-  const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+  const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
   const configuration = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));
   const serverRows = await history(store, `mcp-${input.serverId}`, binding.silo,
-    performance.now() + 10_000);
+    store.clock.now() + 10_000);
   const server = connectionServer(serverRows, input.connectionId);
   const membership = await currentMembership(store, binding.silo, session.userId,
-    undefined, performance.now() + 10_000);
+    undefined, store.clock.now() + 10_000);
   if (membership.positions.get(`member-${session.userId}`) !== session.memberRevision) {
     throw new Error('OAuth membership changed');
   }
@@ -86,7 +86,7 @@ export async function checkPersonalOAuthStart(store: EventStore, binding: Bindin
   if (claimed && (rows.length !== 2 || !isDeepStrictEqual(rows[1], claimed))) {
     throw new Error('OAuth claim changed');
   }
-  if (await store.head(controlSubject, performance.now() + 10_000) !== 0 ||
+  if (await store.head(controlSubject, store.clock.now() + 10_000) !== 0 ||
       rows.length > expectedRows) {
     throw new Error('OAuth start refused');
   }
@@ -125,7 +125,7 @@ export async function checkPersonalOAuthStart(store: EventStore, binding: Bindin
   }
   async function checkCurrent(sequence: number) {
     const subjects = [...membership.positions.keys(), controlSubject, `mcp-${input.serverId}`];
-    const fresh = await authorityFence(store, performance.now(), subjects);
+    const fresh = await authorityFence(store, store.clock.now(), subjects);
     const categorySequence = await store.head('connection-*', fresh.deadline);
     const access = { ...options, fresh };
     await activeMember(store, binding, session.userId, access);
@@ -141,11 +141,11 @@ export async function checkPersonalOAuthStart(store: EventStore, binding: Bindin
       // Let unrelated activity pass without extending the original two-second deadline.
       checkedPosition = currentPosition;
     }
-    if (performance.now() >= fresh.deadline || !Number.isFinite(appendUntil) ||
+    if (store.clock.now() >= fresh.deadline || !Number.isFinite(appendUntil) ||
         Date.now() >= appendUntil) {
       throw new Error('OAuth attempt expired');
     }
-    const deadline = Math.min(fresh.deadline, performance.now() + appendUntil - Date.now());
+    const deadline = Math.min(fresh.deadline, store.clock.now() + appendUntil - Date.now());
     return { categorySequence, deadline, checkAccess: fresh };
   }
   if (original && !sameStart(original.event, event)) {
@@ -169,7 +169,7 @@ async function appendStart(store: EventStore, event: EventEnvelope,
     if (result.status !== 'appended') {
       throw new Error('OAuth append unconfirmed');
     }
-    saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+    saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   }
   if (!saved || !sameStart(saved.event, event)) {
     throw new Error('OAuth append unconfirmed');

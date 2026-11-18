@@ -280,6 +280,7 @@ async function recoversLostReply(source = evidence[0]!) {
   expect(await nats.store.head()).toBe(before + 1);
   expect(await stop(source, saved.position)).toMatchObject({ sourceEventId: saved.event.id });
   expect(await nats.store.head()).toBe(before + 1);
+  // real wait: Let the NATS duplicate window expire before retrying saved history.
   await delay(1100);
   actor = new BudgetActor(nats.store, 'test', now);
   await actor.start();

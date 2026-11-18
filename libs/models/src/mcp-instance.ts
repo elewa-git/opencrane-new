@@ -32,7 +32,7 @@ export async function readMcpInstance(store: EventStore, silo: string, raw: unkn
   let rows: StoredEvent[];
   try {
     rows = await history(store, `mcp-instance-${reference.instanceId}`, silo,
-      performance.now() + 10_000);
+      store.clock.now() + 10_000);
   } catch (error) {
     // Hide another silo's stream in the same way as a missing instance.
     if (error instanceof Error && error.message === 'Wrong silo') {
@@ -121,7 +121,7 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
   memberId: string, reference: unknown, raw: unknown) {
   const input = commandSchema.parse(raw);
   const current = await ownInstance(store, binding, memberId, reference);
-  const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
+  const fresh = await authorityFence(store, store.clock.now(), [`member-${memberId}`]);
   const authority = { requiredRole: 'member' as const, fresh };
   await activeMember(store, binding, memberId, authority);
   // Keep all installation on the shared hosted path until its admission and profiles are usable.
@@ -169,7 +169,7 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
   const result = await store.append(command);
   if (result.status !== 'appended') throw new Error('Instance append unconfirmed');
   // Check the saved stop because concurrent recovery can return another request's position.
-  const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) throw new Error('Saved instance change unavailable');
   reconcileStop(saved, event);
   return receipt(saved);
@@ -215,12 +215,12 @@ export async function mcpAdminInstanceStop(store: EventStore, binding: Binding,
   await readActiveMember(store, binding, adminId, 'admin');
   const current = await readMcpInstance(store, binding.silo, reference);
   const membership = await currentMembership(store, binding.silo, adminId,
-    undefined, performance.now() + 10_000);
+    undefined, store.clock.now() + 10_000);
   // Keep ownership current for Owners. An Admin's role changes on their own member stream.
   if (membership.role !== 'owner') {
     membership.positions.delete(ownershipSubject(binding.silo));
   }
-  const fresh = await authorityFence(store, performance.now(), [`member-${adminId}`]);
+  const fresh = await authorityFence(store, store.clock.now(), [`member-${adminId}`]);
   await activeMember(store, binding, adminId, { requiredRole: 'admin', fresh, membership });
   const original = findChange(current.rows, input.changeRef);
   if (original) {
@@ -253,7 +253,7 @@ export async function mcpAdminInstanceStop(store: EventStore, binding: Binding,
   const result = await store.append({ event, expectedSequence: current.state.sequence,
     historyChecked: true, deadline: fresh.deadline });
   if (result.status !== 'appended') throw new Error('Instance append unconfirmed');
-  const saved = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) throw new Error('Saved instance change unavailable');
   reconcileStop(saved, event);
   return adminReceipt(saved);

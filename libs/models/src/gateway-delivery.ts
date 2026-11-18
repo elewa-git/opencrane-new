@@ -32,7 +32,7 @@ async function replaceConfiguration(file: string, config: unknown,
 }
 
 export function gatewayDelivery(options: {
-  store: Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
+  store: Pick<EventStore, 'clock' | 'append' | 'head' | 'readEvent' | 'readStream'>;
   db: Db; silo: string; child: ChildProcess; configFile: string; controlPort: number;
   settings: GatewayRenderSettings; mode: 'live' | 'replay';
   requireLeader?: () => Promise<void>;
@@ -92,7 +92,7 @@ export function gatewayDelivery(options: {
           }
           // Check the gateway lock connection after all other waits. Budget leadership
           // uses a different session and cannot prove this lock is still held.
-          const checkOptions = { deadline: performance.now() + 1000 };
+          const checkOptions = { deadline: options.store.clock.now() + 1000 };
           await locked.query('SELECT 1', [], checkOptions);
           if (!alive()) throw new Error('Gateway delivery unavailable');
           // Avoid yielding between the final check and the atomic file replacement.
@@ -136,7 +136,7 @@ export function gatewayDelivery(options: {
   async function saveMemberReceipt(delivered: NonNullable<typeof active>,
     member: Configuration['members'][number], observation: StoredEvent) {
     const subject = `mcp-${member.entry.serverId}`;
-    const deadline = performance.now() + 10_000;
+    const deadline = options.store.clock.now() + 10_000;
     const expectedGlobalSequence = await options.store.head(undefined, deadline);
     const rows = await history(options.store, subject, options.silo, deadline);
     if (!gatewayMemberCurrent(rows, member)) return false;

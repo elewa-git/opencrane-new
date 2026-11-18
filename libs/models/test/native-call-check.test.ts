@@ -145,6 +145,7 @@ async function refusesRead(change: string) {
     expect(args[2]).toBeLessThanOrEqual(performance.now() + 2000);
     if (change === 'unavailable') throw new Error('private values');
     if (change === 'missing') return;
+    // real wait: Hold the NATS history reply beyond the short access window.
     if (change === 'late') await delay(2050);
     for await (const row of original(...args)) {
       const data = storedFields.parse(row.event.data);

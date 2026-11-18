@@ -1,0 +1,38 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/dispatch-clock.test.ts --maxWorkers=2 -t uses manual time
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ libs/models/test/dispatch-clock.test.ts (2 tests | 1 failed) 5753ms
+   × uses manual time through tool admission and send (expired: true) 1940ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/dispatch-clock.test.ts > uses manual time through tool admission and send (expired: true)
+AssertionError: {"jsonrpc":"2.0","id":1,"result":{"content":[]}}: expected 200 to be 403 // Object.is equality
+
+- Expected
++ Received
+
+- 403
++ 200
+
+ ❯ dispatchWithClock libs/models/test/dispatch-clock.test.ts:41:35
+     39|     expect(admitted).toBe(true);
+     40|     expect(finalChecks).toBe(1);
+     41|     expect(response.status, text).toBe(expired ? 403 : 200);
+       |                                   ^
+     42|     expect(setup.received()).toBe(expired ? 0 : 1);
+     43|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  15:41:45
+   Duration  11.73s (tests 50%, transform 36%, import 14%)
+
+  Transform  transforming modules took 4.08s · 36% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

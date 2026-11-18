@@ -1,11 +1,11 @@
 import { vi } from 'vitest';
+import { manualClock } from '@opencrane/event-store/testing';
 
-export function holdFixtureClock() {
-  const fixedTime = performance.now();
-  function fixedClock() {
-    return fixedTime;
-  }
-  vi.spyOn(performance, 'now').mockImplementation(fixedClock);
+export function holdFixtureClock(elapsed = 0) {
+  const clock = manualClock(performance.now());
+  clock.advance(elapsed);
+  const now = clock.now.bind(clock);
+  return vi.spyOn(performance, 'now').mockImplementation(now);
 }
 
 export async function withRoutineFixtureClock<Result>(work: () => Promise<Result>) {
@@ -19,5 +19,15 @@ export async function withRoutineFixtureClock<Result>(work: () => Promise<Result
     return await work();
   } finally {
     vi.useRealTimers();
+  }
+}
+
+export async function withHeldFixtureClock<Result>(work: () => Result) {
+  // Keep fixture admission valid while real services reply. Test bodies control expiry.
+  const heldClock = holdFixtureClock();
+  try {
+    return await work();
+  } finally {
+    heldClock.mockRestore();
   }
 }

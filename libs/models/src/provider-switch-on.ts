@@ -219,7 +219,7 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
   memberId: string, providerId: string, raw: unknown) {
   providerIdSchema.parse(providerId);
   const input = inputSchema.parse(raw);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   // Capture the position before history reads so later state changes refuse switch-on.
   const globalSequence = await store.head(undefined, deadline);
   const current = await readStreamSummary(store, binding.silo, 'provider-*',
@@ -285,7 +285,7 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
   if (result.status !== 'appended') {
     throw new Error('Switch-on append unavailable');
   }
-  const saved = await readEventAt(store, event.subject, result.sequence, performance.now() + 10_000);
+  const saved = await readEventAt(store, event.subject, result.sequence, store.clock.now() + 10_000);
   if (!saved) {
     throw new Error('Saved switch-on unavailable');
   }

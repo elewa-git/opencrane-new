@@ -59,13 +59,13 @@ export function foldConnectionSelection(rows: StoredEvent[]) {
 }
 async function facts(store: EventStore, silo: string, selection: Selection,
   loadConfiguration?: OAuthConfigurationLoader, toolName?: string) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const serverSubject = `mcp-${selection.serverId}`;
   const rows = await history(store, serverSubject, silo, deadline);
   const server = connectionServer(rows, selection.connectionId);
   const policy = toolPolicyFromRows(rows);
   async function currentServerExpiry() {
-    const currentRows = await history(store, serverSubject, silo, performance.now() + 10_000);
+    const currentRows = await history(store, serverSubject, silo, store.clock.now() + 10_000);
     const currentServer = connectionServer(currentRows, selection.connectionId);
     const currentPolicy = toolPolicyFromRows(currentRows);
     if (!currentServer.available || currentPolicy.policyRevision !== policy.policyRevision) {
@@ -104,7 +104,7 @@ function profileMatchesSelection(profile: ReturnType<typeof foldConnection>,
     saved.activation.connectionId === selection.connectionId;
 }
 async function grantFacts(store: EventStore, binding: Binding, userId: string, serverId: string) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const subject = grantStream('mcp_server', serverId);
   const grants = await history(store, subject, binding.silo, deadline);
   const positions = new Map([[subject, grants.at(-1)?.sequence ?? 0]]);
@@ -183,7 +183,7 @@ async function access(store: EventStore, binding: Binding, userId: string, serve
   let fresh: Awaited<ReturnType<typeof authorityFence>> | undefined;
   try {
     if (writing && grants) {
-      fresh = await authorityFence(store, performance.now(), [...grants.positions.keys()]);
+      fresh = await authorityFence(store, store.clock.now(), [...grants.positions.keys()]);
       const options = { requiredRole: 'member' as const, fresh };
       await activeMember(store, binding, userId, options);
       await confirmPositions(store, grants.positions, fresh.deadline);
@@ -327,7 +327,7 @@ async function saveSelection(store: EventStore, binding: Binding, userId: string
   }
   let deadline = fresh.deadline;
   if (input.action === 'select') {
-    deadline = Math.min(deadline, performance.now() + checked.expiresAt - Date.now());
+    deadline = Math.min(deadline, store.clock.now() + checked.expiresAt - Date.now());
   }
   // Repeat exact checks inside the append; the store binds them to the atomic log position.
   const command = { event, expectedSequence: input.expectedSequence, checkAccess,
@@ -337,7 +337,7 @@ async function saveSelection(store: EventStore, binding: Binding, userId: string
     throw new Error('Selection append unconfirmed');
   }
   // Read saved identity even for a broker duplicate or a concurrent identical command.
-  const savedRows = await history(store, subject, binding.silo, performance.now() + 10_000);
+  const savedRows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
   const saved = savedRows.find(matches);
   if (!saved) {
     throw new SelectionConflict('Selection conflict');
@@ -356,7 +356,7 @@ async function prepareSelection(store: EventStore, silo: string, userId: string,
     return row.event.id === operationId || row.event.commandId === changeRef;
   }
   try {
-    const rows = await history(store, subject, silo, performance.now() + 10_000);
+    const rows = await history(store, subject, silo, store.clock.now() + 10_000);
     const original = rows.find(matches);
     let company;
     let companyBinding;
@@ -406,7 +406,7 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
   }
   const subject = selectionSubject(userId, serverId);
   async function prepare() {
-    const rows = await history(store, subject, binding.silo, performance.now() + 10_000);
+    const rows = await history(store, subject, binding.silo, store.clock.now() + 10_000);
     const state = foldConnectionSelection(rows);
     let checked;
     if (state.selected?.userId === userId && state.selected.serverId === serverId) {
@@ -443,7 +443,7 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
       return unavailable;
     }
     try {
-      await confirmPositions(store, checked.positions, performance.now() + 10_000);
+      await confirmPositions(store, checked.positions, store.clock.now() + 10_000);
     } catch (error) {
       if (error instanceof SelectionConflict) {
         return unavailable;

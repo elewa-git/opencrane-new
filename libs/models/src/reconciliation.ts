@@ -23,10 +23,10 @@ export async function readEffectChange(store: EventStore, silo: string, permitId
   changeRef: string) {
   id.parse(permitId);
   id.parse(changeRef);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const subject = `effect-${permitId}`;
   const rows = await history(store, subject, silo, deadline);
-  if (performance.now() >= deadline) throw new Error('Effect read expired');
+  if (store.clock.now() >= deadline) throw new Error('Effect read expired');
   return savedResolutionReceipt(rows, silo, permitId, changeRef);
 }
 
@@ -94,7 +94,7 @@ async function applyNewBudgetEvents(store: EventStore, silo: string, state: Budg
 /** Reads recorded evidence only. No provider call or external-action retry belongs here. */
 export async function readEffect(store: EventStore, silo: string, permitId: string) {
   id.parse(permitId);
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const records = await effectRecords(store, silo, permitId, deadline);
   if (!records) return undefined;
   const resolutionReceipt = originalResolutionReceipt(records.rows, silo, permitId);
@@ -105,7 +105,7 @@ async function effectRecords(store: EventStore, silo: string, permitId: string, 
   const { held, state, sequence } = await reservation(store, silo, permitId, deadline);
   if (!held) return undefined;
   const rows = await history(store, `effect-${permitId}`, silo, deadline);
-  if (performance.now() >= deadline) throw new Error('Effect read expired');
+  if (store.clock.now() >= deadline) throw new Error('Effect read expired');
   return { current: effectStatus(held, rows), rows, held, budget: state, budgetSequence: sequence };
 }
 
@@ -129,7 +129,7 @@ function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[
 }
 
 export async function listEffects(store: EventStore, silo: string) {
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const budget = emptyBudget();
   const budgetRows = await history(store, `budget-${silo}`, silo, deadline);
   for (const row of budgetRows) {
@@ -141,7 +141,7 @@ export async function listEffects(store: EventStore, silo: string) {
     const rows = await history(store, `effect-${reservation.id}`, silo, deadline);
     effects.push(effectStatus(reservation, rows));
   }
-  if (performance.now() >= deadline) {
+  if (store.clock.now() >= deadline) {
     throw new Error('Effect read expired');
   }
   return effects;
@@ -152,11 +152,11 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
   fresh?: () => Promise<void>) {
   id.parse(permitId);
   const command = resolutionCommandSchema.parse(resolutionInput(raw));
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const records = await effectRecords(store, silo, permitId, deadline);
   // Start HTTP access checks after history; call them again immediately before saving.
   await fresh?.();
-  const memberFresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
+  const memberFresh = await authorityFence(store, store.clock.now(), [`member-${memberId}`]);
   const membership = await currentMembership(store, silo, memberId, memberFresh);
   if (!['owner', 'admin'].includes(membership.role)) {
     throw new Error('Access changed');

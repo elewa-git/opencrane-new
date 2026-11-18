@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, onTestFinished } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
-import type { Clock } from '@opencrane/event-store';
+import type { Clock, EventStore } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -66,6 +66,19 @@ export async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisa
 }
 export interface FixtureOptions {
   clock?: Clock;
+  modelClock?: Clock;
+}
+
+function modelClockStore(store: EventStore, clock: Clock): EventStore {
+  function get(target: EventStore, property: string | symbol): unknown {
+    if (property === 'clock') return clock;
+    const member: unknown = Reflect.get(target, property);
+    if (typeof member === 'function') return member.bind(target);
+    return member;
+  }
+  // Bind I/O to the real store so stopping model time cannot stop NATS retry waits.
+  const handler = { get };
+  return new Proxy(store, handler);
 }
 
 export async function fixture(daily = 2000, monthly = 20000, real = false,
@@ -74,6 +87,9 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   executionMode?: 'restricted' | 'memory_free', fixtureOptions: FixtureOptions = {}) {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture(fixtureOptions);
+  if (fixtureOptions.modelClock) {
+    nats.store = modelClockStore(nats.store, fixtureOptions.modelClock);
+  }
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);

@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/decision-clock.test.ts apps/server/test/memory-dispatch.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  2 passed (2)
+      Tests  100 passed (100)
+   Start at  15:32:36
+   Duration  481.94s (tests 95%, transform 3%, import 1%)

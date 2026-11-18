@@ -20,7 +20,7 @@ function completionId(silo: string, memberId: string, answerId: string): string 
 
 async function personalHistory(store: Store, subject: string): Promise<StoredEvent[]> {
   const rows: StoredEvent[] = [];
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   for await (const row of store.readStream(subject, 1, deadline)) rows.push(row);
   return rows;
 }
@@ -55,7 +55,7 @@ async function checkAssistant(store: Store, silo: string, memberId: string,
   const expectedId = `personal-${suffix}`;
   if (assistantId !== expectedId) throw new Error('Invalid welcome assistant');
   const subject = `assistant-${assistantId}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const position = await store.head(subject, deadline);
   for await (const row of store.readStream(subject, 1, deadline)) {
     const event = row.event;
@@ -190,7 +190,7 @@ async function completeWelcome(store: Store, trigger: EventEnvelope) {
     answer.memberId, intent.start);
   const subjects = [`member-${answer.memberId}`];
   if (assistantSubject) subjects.push(assistantSubject.subject);
-  const fresh = await authorityFence(store, performance.now(), subjects);
+  const fresh = await authorityFence(store, store.clock.now(), subjects);
   if (assistantSubject) {
     const position = await store.head(assistantSubject.subject, fresh.deadline);
     if (position !== assistantSubject.position) throw new Error('Welcome assignment changed');

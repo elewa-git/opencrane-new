@@ -28,7 +28,7 @@ export async function preparePersonalCredential(store: EventStore, silo: string,
   const { decisionId, release, deadline, confirmAccess, sendAccess } = request;
   const context = credentialBrokerContext(release);
   function prepareAccess() {
-    const access = { deadline: Math.min(deadline, performance.now() + 2000),
+    const access = { deadline: Math.min(deadline, store.clock.now() + 2000),
       checkAccess: confirmAccess };
     return Promise.resolve(access);
   }

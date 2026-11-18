@@ -81,7 +81,7 @@ function confirmOwner(event: StoredEvent['event'], pending: Map<string, string>,
 /** Each attempt rescans behind a fresh global fence; unrelated writers may win the first append. */
 export async function seedOwnership(store: EventStore, silo: string) {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const deadline = performance.now() + 10_000;
+    const deadline = store.clock.now() + 10_000;
     if (await seedAttempt(store, silo, deadline)) {
       return;
     }
@@ -232,8 +232,8 @@ function memberOwnership(rows: StoredEvent[], confirmations: StoredEvent[], memb
 }
 
 /** Read the complete owner set only for operations that need every owner. */
-export async function currentOwnershipMembership(store: Pick<EventStore, 'readStream'>,
-  silo: string, memberId: string, deadline = performance.now() + 10_000,
+export async function currentOwnershipMembership(store: Pick<EventStore, 'clock' | 'readStream'>,
+  silo: string, memberId: string, deadline = store.clock.now() + 10_000,
   checkedMembership?: Awaited<ReturnType<typeof currentMembership>>) {
   const membership = checkedMembership ?? await currentMembership(
     store, silo, memberId, undefined, deadline);

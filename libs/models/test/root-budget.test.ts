@@ -204,6 +204,7 @@ async function recoversLostReply() {
   }
   nats.store.append = loseReply;
   await expect(actor.setRootAllowance(binding, 1)).rejects.toThrow();
+  // real wait: Let the NATS duplicate window expire before retrying saved history.
   await delay(1100);
   actor = new BudgetActor(nats.store, 'test', now);
   await actor.start();

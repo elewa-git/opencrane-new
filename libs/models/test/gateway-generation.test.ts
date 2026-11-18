@@ -1,3 +1,4 @@
+import { manualClock } from '@opencrane/event-store/testing';
 import { expect, it } from 'vitest';
 import { type AppendCommand, type AppendResult, type EventStore,
   type StoredEvent } from '@opencrane/event-store';
@@ -9,9 +10,10 @@ import { prepareGatewayConfiguration, gatewayConfigurationCurrent } from '../src
 import { publicationDigest, publicationEntry } from '../src/publication.ts';
 import { toolPolicyFromRows } from '../src/tool-policy.ts';
 
-type ConfigurationStore = Pick<EventStore, 'append' | 'head' | 'readEvent' | 'readStream'>;
+type ConfigurationStore = Pick<EventStore, 'clock' | 'append' | 'head' | 'readEvent' | 'readStream'>;
 
 function conditionalStore() {
+  const clock = manualClock(1_000_000);
   const rows: StoredEvent[] = [];
   function position(subject?: string) {
     for (let index = rows.length - 1; index >= 0; index--) {
@@ -22,10 +24,12 @@ function conditionalStore() {
     }
     return 0;
   }
-  function head(subject?: string) {
+  function head(subject?: string, deadline = Infinity) {
+    requireDeadline(deadline);
     return Promise.resolve(position(subject));
   }
   function append(command: AppendCommand): Promise<AppendResult> {
+    requireDeadline(command.deadline ?? Infinity);
     const parsed = parseEventByType(command.event);
     if (!parsed.success) {
       throw new Error('Invalid fixture event');
@@ -37,7 +41,8 @@ function conditionalStore() {
     rows.push({ event: parsed.event, sequence });
     return Promise.resolve({ status: 'appended', sequence });
   }
-  async function* readStream(subject: string, fromSequence = 1) {
+  async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
+    requireDeadline(deadline);
     for (const row of rows) {
       await Promise.resolve();
       if (row.event.subject === subject && row.sequence >= fromSequence) {
@@ -45,14 +50,18 @@ function conditionalStore() {
       }
     }
   }
-  function readEvent(sequence: number) {
+  function readEvent(sequence: number, deadline = Infinity) {
+    requireDeadline(deadline);
     const row = rows[sequence - 1];
     if (!row) {
       throw new Error('Missing fixture event');
     }
     return Promise.resolve(row);
   }
-  const store = { append, head, readStream, readEvent };
+  function requireDeadline(deadline: number) {
+    if (clock.now() >= deadline) throw new Error('Fixture deadline expired');
+  }
+  const store = { clock, append, head, readStream, readEvent } satisfies ConfigurationStore;
   return store;
 }
 

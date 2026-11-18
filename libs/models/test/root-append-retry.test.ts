@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { JetStreamApiError, jetstream, jetstreamManager,
   type JetStreamClient } from '@nats-io/jetstream';
 import { EventStore } from '@opencrane/event-store';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, history } from '../src/index.ts';
 import { authorityFence } from '../src/authority.ts';
 
@@ -84,7 +84,7 @@ it.each([false, true])(
 async function refusesRetryPastDeadline(switchOn: boolean) {
   const started = performance.now();
   const deadline = started + 2000;
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  const clock = manualStoreTime(store, started);
   if (switchOn) await saveSwitchOn();
   const before = await nats.store.head('budget-test');
   const publish = client.publish.bind(client);
@@ -97,7 +97,7 @@ async function refusesRetryPastDeadline(switchOn: boolean) {
     }
     if (!failed) {
       failed = true;
-      clock.mockReturnValue(deadline + 1);
+      clock.advance(deadline + 1 - clock.now());
       throw publishUnavailable();
     }
     return publish(...args);
@@ -106,7 +106,7 @@ async function refusesRetryPastDeadline(switchOn: boolean) {
   try {
     await expect(actor.setRootAllowance(binding, 1, undefined, deadline)).rejects.toThrow();
   } finally {
-    clock.mockRestore();
+    clock.restore();
   }
   expect(failed).toBe(true);
   expect(await nats.store.head('budget-test')).toBe(before);

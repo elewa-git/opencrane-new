@@ -45,7 +45,7 @@ async function loadReceipt(store: EventStore, silo: string, actorId: string,
   const { userId, serverId, profileId, changeRef } = reference;
   const profileSubject = `connection-${userId}-${serverId}-${profileId}`;
   const controlSubject = `connection-control-${userId}-${serverId}`;
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const profileRows = await history(store, profileSubject, silo, deadline);
   const controlRows = await history(store, controlSubject, silo, deadline);
   if (!isPersonalProfile(profileRows, profileSubject, reference)) {

@@ -1,0 +1,2 @@
+NOT RUN: token bootstrap mode skipped CORE.
+Teardown exit: 0; slot 1 verified free.

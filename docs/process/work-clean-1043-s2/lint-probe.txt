@@ -1,0 +1,7 @@
+npm notice run npx
+npm notice run 'eslint' libs/models/src/clock-lint-probe.ts
+
+<worktree>/libs/models/src/clock-lint-probe.ts
+  2:10  error  'performance.now' is restricted from being used. Read the injected clock so tests can control deadlines  no-restricted-properties
+
+✖ 1 problem (1 error, 0 warnings)
