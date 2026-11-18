@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
@@ -32,11 +33,11 @@ type Handoff = (due: DueReceipt & { routineId: string },
 
 function requireInput(worker: Worker, checkedAt: number) {
   const continuation = worker.continuation;
-  if (!Number.isFinite(checkedAt) || !/^[\w-]{1,200}$/u.test(worker.silo) ||
+  if (!Number.isFinite(checkedAt) || !recordIdPattern.test(worker.silo) ||
       (continuation && (continuation.silo !== worker.silo ||
         !Number.isSafeInteger(continuation.afterCreatedPosition) ||
         continuation.afterCreatedPosition < 1 ||
-        !/^[\w-]{1,200}$/u.test(continuation.afterRoutineId)))) {
+        !recordIdPattern.test(continuation.afterRoutineId)))) {
     throw new Error('Routine scan refused');
   }
 }

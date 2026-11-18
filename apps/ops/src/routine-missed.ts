@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory, memberAuthorisation } from '@opencrane/authz';
@@ -34,7 +35,7 @@ function requireInput(input: Input) {
       throw new MissedRefused();
     }
   }
-  if (typeof input.routineId !== 'string' || !/^[\w-]{1,200}$/u.test(input.routineId) ||
+  if (typeof input.routineId !== 'string' || !recordIdPattern.test(input.routineId) ||
       typeof input.localDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(input.localDate)) {
     throw new MissedRefused();
   }
