@@ -65,34 +65,41 @@ MCP, a shared standard for describing and calling tools.
 ### Today's system
 
 Arrows show calls made while the system runs. Storage and file services share one
-box, and sign-in and permissions share another. The server box includes the separate
-models process.
+box, and sign-in and permissions share another.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>website"] -->|requests| server["apps/server<br/>back end and models"]
+  web["apps/web<br/>website"] -->|requests| server["apps/server<br/>web-facing server"]
   server -->|sign-in and access| access["Zitadel + OpenFGA<br/>sign-in and permissions"]
   server -->|stores and reads| data["NATS, PostgreSQL, MinIO + ClamAV<br/>events, tables and files"]
-  ops["apps/ops<br/>background workers"] -->|reads and saves| data
-  ops -->|updates permissions| access
-  ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
-  server -->|sends chat turns| computer
-  computer -->|AI and reviewed tools| gateway["agentgateway<br/>AI call checks"]
-  gateway -->|asks permission| server
-  gateway -->|sends allowed calls| upstream["Model provider or tool server"]
+  server -->|sends chat turns| computer["apps/computer<br/>assistant computers"]
+  server -->|budget changes and child task starts| models["apps/server models process<br/>AI and tool decisions"]
+  models -->|reads tables and records budget events| data
+  models -->|checks permissions through OpenFGA| access
+  models -->|starts| gateway["agentgateway<br/>checks and forwards AI and tool calls"]
+  computer -->|AI and reviewed tools| gateway
+  gateway -->|asks permission| models
+  workers["apps/ops<br/>background workers"] -->|reads and saves data| data
+  workers -->|updates permissions| access
+  workers -->|starts and pauses computers| computer
 ```
 
 NATS JetStream keeps the event log, the lasting record of each change. PostgreSQL,
 the database, holds read tables: copies of the events arranged so screens load quickly.
 Workers can throw them away and rebuild them from the log.
+Background workers update the tables and permissions from new events, and start or
+pause computers as needed.
 OpenFGA answers permission questions. [Zitadel](GLOSSARY.md#zitadel-sign-in-service)
 handles company sign-in.
 MinIO stores files, and ClamAV scans them for viruses.
-agentgateway checks every AI model call and calls to reviewed, [published](GLOSSARY.md#publication) MCP tools
-before forwarding them. The current chat connection offers reviewed tools that need
-no account credentials, on personal assistants. Local shell and file tools run inside
-the computer and do not pass through the gateway. Routing all browser and other
-outside traffic through it remains planned. Tests can use a fake model provider.
+agentgateway checks every AI model call and every call to reviewed,
+[published](GLOSSARY.md#publication) MCP tools before forwarding them. For MCP
+calls, it sends the dispatch back through the models process, which forwards the
+call to the selected tool server. The current chat connection offers reviewed
+tools that need no account credentials, on personal assistants. Local shell and
+file tools run inside the computer and do not pass through the gateway. Routing
+all browser and other outside traffic through it remains planned. Tests can use a
+fake model provider.
 
 ## What it is responsible for
 
