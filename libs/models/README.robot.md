@@ -7,7 +7,12 @@ store types include `clock` when they create or check a deadline. Helpers withou
 a store take a named `clock` option and default to `systemClock`. All deadline
 lengths remain unchanged, including the two-second access checks.
 `fixture` accepts `{ clock }` in a named trailing options object after `executionMode`.
-The default fixture still uses real time. `accessDeadline` takes named options
+The default fixture still uses real time. Pass `{ modelClock }` instead when only
+model checks should use controlled time. This keeps the event store's I/O and retry
+waits on their real clock. The volume test uses this option so a transient transport
+failure can recover while access time stays stopped. A forced NATS timeout test
+checks both retry recovery and an expired model access check.
+`accessDeadline` takes named options
 `{ clock, checkAccess?, deadline? }`; budget waiting helpers accept a named clock option.
 Spending readers accept `{ clock, deadline? }` in their final options argument;
 an existing numeric deadline is still accepted. Wall-clock timestamps and token

@@ -25,7 +25,7 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
     // Keep access time stopped while real request latency is measured below.
     const clock = manualClock(performance.now() + 3_600_000);
     const f = await fixture(1_000_000, 1_000_000, false, 'gpt-6-luna', false,
-      'manual', 'sales', undefined, { clock });
+      'manual', 'sales', undefined, { modelClock: clock });
     try {
       // Equal local history in each run; background replay is outside admission timing.
       await f.stopDispatch(); await f.runtime.stop();

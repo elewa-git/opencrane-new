@@ -75,6 +75,7 @@ Not built yet:
 ## How to run or test it
 
 Timing tests can use the event store’s manual clock to control deadlines and retry waits.
+The volume check can stop access time while real storage calls keep running.
 Tests can join people with `joinMembers` from `@opencrane/models/testing/members`.
 Named options can also apply permissions and read tables after each saved event.
 
