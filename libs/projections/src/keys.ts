@@ -1,10 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 
 function reference(silo: string, conversation: string) {
   const identity = JSON.stringify([silo, conversation]);
-  return createHash('sha256').update(identity).digest('hex');
+  return sha256Hex(identity);
 }
 
 function encryptBytes(key: Buffer, identity: Buffer, plaintext: Buffer) {

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { AuditRecord, AuditRow } from '@opencrane/protocol';
@@ -24,7 +24,7 @@ export function routineAuditData(event: EventEnvelope): Record<string, unknown> 
 }
 
 export function routineReference(eventId: string): string {
-  return createHash('sha256').update(eventId).digest('hex').slice(0, 32);
+  return sha256Hex(eventId).slice(0, 32);
 }
 
 export function routineOccurrenceKey(event: EventEnvelope,
@@ -36,9 +36,7 @@ export function routineOccurrenceKey(event: EventEnvelope,
     occurrenceId = `missed:${missed.scheduleRevision}:` +
       `${missed.firstLocalDate}:${missed.lastLocalDate}`;
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([event.silo, data['routineId'], occurrenceId]));
-  return `routine:${hash.digest('hex')}`;
+  return `routine:${sha256HexOfJson([event.silo, data['routineId'], occurrenceId])}`;
 }
 
 export function routineIsAnchor(type: string): boolean {

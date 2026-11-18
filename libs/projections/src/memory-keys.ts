@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
 import {
   closeSync, existsSync, fsyncSync, linkSync, openSync, readFileSync, renameSync,
   rmSync, statSync, writeFileSync,
@@ -14,9 +15,7 @@ const scopeOwnership = memoryRevisionIdentitySchema.pick({
 export function memoryScopeId(silo: string, kind: MemoryIdentity['scopeKind'], ownerId: string) {
   const ownership = { silo, scopeKind: kind, ownerId };
   scopeOwnership.parse(ownership);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, kind, ownerId]));
-  return hash.digest('hex');
+  return sha256HexOfJson([silo, kind, ownerId]);
 }
 export function memoryIdentity(event: unknown): MemoryIdentity | null {
   const identity = memoryWrittenIdentity(event);
@@ -46,9 +45,7 @@ function binding(identity: MemoryIdentity): Buffer {
   return Buffer.from(JSON.stringify(fields));
 }
 function reference(identity: MemoryIdentity): string {
-  const hash = createHash('sha256');
-  hash.update(binding(identity));
-  return hash.digest('hex');
+  return sha256Hex(binding(identity));
 }
 function requireDirectory(directory: string): void {
   let details: ReturnType<typeof statSync>;
