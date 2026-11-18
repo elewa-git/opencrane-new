@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { history } from './actor.ts';
@@ -8,7 +9,7 @@ import { oauthConfigurationDigest, oauthConfigurationSchema } from './oauth-atte
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const digest = z.string().regex(/^[0-9a-f]{64}$/u);
 const evidenceSchema = z.strictObject({
   status: z.literal('verified'), siloId: id, serverId: id, profileId: id,

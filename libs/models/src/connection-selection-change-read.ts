@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -6,7 +7,7 @@ import { validSelectionIdentity } from './connection-selection.ts';
 import { history } from './event-history.ts';
 import { readActiveMember } from './member-authority.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const referenceSchema = z.strictObject({ serverId: id, changeRef: id });
 const receiptFields = {
   status: z.literal('confirmed'), changeRef: id, eventId: z.string().regex(/^[0-9a-f]{64}$/u),

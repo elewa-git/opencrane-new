@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { publicationEntry, publicationDigest } from './publication.ts';
 import { authorityFence } from './authority.ts';
 import { currentMembership } from './ownership.ts';
@@ -30,7 +31,7 @@ export async function readToolPolicy(store: EventStore, silo: string, serverId: 
   const rows = await history(store, `mcp-${serverId}`, silo, deadline);
   return toolPolicyFromRows(rows);
 }
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const commandFields = { commandId: id, expectedSequence: z.int().nonnegative() };
 const input = z.object({ ...commandFields, connectionId: id,
   toolName: z.string().min(1).max(200), toolRevision: z.string().regex(/^[a-f0-9]{64}$/u),

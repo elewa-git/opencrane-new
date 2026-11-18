@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
@@ -10,7 +11,7 @@ import { authorityFence } from './authority.ts';
 import { activeMember, readActiveMember } from './member-authority.ts';
 import { currentMembership, ownershipSubject } from './ownership.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const referenceSchema = z.strictObject({ instanceId: z.string().regex(/^[a-f0-9]{64}$/u),
   profileId: id, serverId: id });
 const commandSchema = z.strictObject({ action: z.enum(['wake', 'stop']), changeRef: id,

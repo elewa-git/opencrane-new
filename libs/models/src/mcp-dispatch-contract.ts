@@ -1,10 +1,11 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { toolCredentialReleaseSchema } from '@opencrane/events';
 import type { MemoryDispatch } from './memory-context.ts';
 import type { ModelCall } from './state.ts';
 import type { mcpPolicy } from './mcp.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 export const mcpDispatchRouteSchema = z.strictObject({
   serverId: identifier, connectionId: identifier,
   upstream: z.string().regex(/^[\w.-]+:\d{1,5}$/u),

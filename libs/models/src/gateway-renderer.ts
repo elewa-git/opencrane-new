@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { gatewayConfigurationSchema } from '@opencrane/events';
 import { gatewayConfig, mcpRoute, type GatewayModelRoute } from './gateway.ts';
@@ -23,7 +24,6 @@ const DECISION_HEADERS = {
   connectionId: 'x-opencrane-connection-id',
   reviewRevision: 'x-opencrane-review-revision',
 };
-const SEGMENT = /^[\w-]{1,200}$/u;
 const TOOL_NAME = /^[a-zA-Z0-9_.-]{1,128}$/u;
 
 function refused(): never {
@@ -59,7 +59,7 @@ function validSettings(settings: GatewayRenderSettings) {
 
 function reserveRoute(route: Pick<Entry, 'serverId' | 'connectionId'>,
   servers: Set<string>, paths: Set<string>, names: Set<string>) {
-  if (!SEGMENT.test(route.serverId) || !SEGMENT.test(route.connectionId)) {
+  if (!recordIdPattern.test(route.serverId) || !recordIdPattern.test(route.connectionId)) {
     refused();
   }
   const path = `/mcp/${route.serverId}/${route.connectionId}`;

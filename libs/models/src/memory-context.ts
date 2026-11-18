@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -22,7 +23,7 @@ type PreparedMemoryReads = {
 const savedExecutionModeSchema = computerTurnStartedDataSchema.options[0].shape.executionMode
   .catch('memory_free');
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const dispatchSchema = z.object({ permitDigest: digest, backendGeneration: identifier,
   schemaDigest: digest, policyRevision: z.int().nonnegative() });

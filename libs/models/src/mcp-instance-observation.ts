@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { mcpInstanceStartSchema, mcpInstanceObservedSchema,
@@ -6,7 +7,7 @@ import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event
 import { applyMcpInstance, type McpInstanceState } from '@opencrane/projections';
 import { McpInstanceRefused, readMcpInstance } from './mcp-instance.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const registrationSchema = mcpInstanceStartSchema.pick({ instanceId: true, siloId: true,
   userId: true, profileId: true, serverId: true, startupAccessGeneration: true,
   runGeneration: true, workloadSpecDigest: true }).extend({

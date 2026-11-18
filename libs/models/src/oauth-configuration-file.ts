@@ -1,8 +1,9 @@
+import { recordIdSchema } from '@opencrane/events';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { oauthConfigurationSchema } from './oauth-attempt.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 
 /** Read current operator settings on each check so a changed file closes old calls. */
 export function oauthConfigurationFromFile(filename: string | undefined) {

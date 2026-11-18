@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { connectionSelectionCommandSchema as inputSchema } from '@opencrane/protocol';
@@ -19,7 +20,7 @@ import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 export class SelectionInputInvalid extends Error {}
 export class SelectionConflict extends Error {}
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 type Selection = z.infer<typeof connectionSelectedDataSchema>;
 function digest(value: unknown) {
   const hash = createHash('sha256');

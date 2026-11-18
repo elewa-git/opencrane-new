@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { toolObservation, toolObservationSchema, recordToolObservation } from './tool-dispatch.ts';
 import { providerGatewayRoutes } from './provider-gateway.ts';
@@ -45,7 +46,7 @@ function logNumber(line: string, field: string): number | undefined {
 }
 interface McpRoute { serverId: string; connectionId: string; upstream: string }
 export function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
-  const segment = z.string().regex(/^[\w-]{1,200}$/u);
+  const segment = recordIdSchema;
   segment.parse(route.serverId); segment.parse(route.connectionId);
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
   let preparationWait: { http: { requestTimeout: string } } | undefined;

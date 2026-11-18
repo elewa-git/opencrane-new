@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
@@ -13,7 +14,7 @@ import { connectionServer } from './connection-server.ts';
 import { withConnectionStage } from './connection-stage-lock.ts';
 import { oauthConfigurationSchema, oauthConsentUrl, prepareOAuthAttempt } from './oauth-attempt.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 export const sessionSchema = z.strictObject({ siloId: id, userId: id,
   sessionDigest: z.string().regex(/^[a-f0-9]{64}$/u), memberRevision: z.int().positive() });
 export const inputSchema = z.strictObject({ userId: id, serverId: id, connectionId: id, profileId: id,
