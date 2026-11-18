@@ -1,6 +1,7 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 export const personalProfileMetadataSchema = z.object({
   serverId: identifier, profileId: identifier, profileRevision: z.int().positive(),
   status: z.enum(['saved_unverified', 'verified', 'unavailable']),

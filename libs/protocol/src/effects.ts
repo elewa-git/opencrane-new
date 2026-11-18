@@ -1,6 +1,7 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const priceTableId = z.string().min(1);
 const cents = z.number().int().nonnegative().safe();
 const usageSchema = z.object({

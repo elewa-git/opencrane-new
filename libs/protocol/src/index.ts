@@ -126,3 +126,5 @@ export { personalProfileMetadataSchema, personalConnectionSettingsSchema,
   connectionSelectionBodySchema, connectionSelectionCommandSchema, type PersonalProfileMetadata } from './personal-connections.ts';
 
 export { sessionDefaults } from './session-defaults.ts';
+
+export { recordIdPattern, recordIdSchema } from '@opencrane/events';

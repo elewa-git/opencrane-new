@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { hostedImageCheckedSchema, mcpConfigurationObservationSchema,
   mcpPublicationIntentDataSchema } from '@opencrane/events';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -74,7 +75,7 @@ export const hostedAdmissionSchema = z.strictObject({
 });
 
 
-const factId = z.string().regex(/^[\w-]{1,200}$/u);
+const factId = recordIdSchema;
 const factDate = z.iso.datetime({ offset: true });
 const factProgress = z.enum(['current', 'applying']);
 const savedGrantFact = z.strictObject({

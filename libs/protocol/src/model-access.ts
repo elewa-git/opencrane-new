@@ -1,6 +1,7 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const modelId = z.string().regex(/^[\w.-]{1,200}$/u);
 const kind = z.enum(['member', 'team', 'assistant']);
 const projectionState = z.object({

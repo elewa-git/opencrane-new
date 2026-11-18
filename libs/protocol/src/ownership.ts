@@ -1,6 +1,7 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 
-const memberId = z.string().regex(/^[\w-]{1,200}$/u);
+const memberId = recordIdSchema;
 
 export const ownershipOwnerSchema = z.object({
   memberId,

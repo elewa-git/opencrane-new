@@ -47,7 +47,7 @@ still reads, and the browser gives it a neutral one.
 
 ## Where it fits
 
-This shared library is used by the browser app (`apps/web`), the back end (`apps/server`), the [read-table](../../GLOSSARY.md#read-table-projection) library (`libs/projections`) and the models library (`libs/models`). It depends on Zod, a library for checking data. It does not store [events](../../GLOSSARY.md#event) or decide who may act.
+This shared library is used by the browser app (`apps/web`), the back end (`apps/server`), the [read-table](../../GLOSSARY.md#read-table-projection) library (`libs/projections`) and the models library (`libs/models`). It depends on Zod for checking data and reuses record ID checks from `libs/events`. It does not store [events](../../GLOSSARY.md#event) or decide who may act.
 
 ```mermaid
 flowchart LR
@@ -56,11 +56,12 @@ flowchart LR
   projections["libs/projections<br/>read tables"] -.->|safe history and family filters| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
+  protocol -.->|record ID checks| events["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
 
-- Define shared reply shapes.
+- Define shared reply shapes and share the record ID checks used by the browser.
 - Choose the default chat mode from whether its assistant is personal or shared.
 - Check the optional close permission in authorised conversation list rows.
 - Check the safe assistant service readiness field on chat history and live updates.
