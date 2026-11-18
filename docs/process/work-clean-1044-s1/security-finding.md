@@ -2,6 +2,9 @@
 
 STOPPED under the issue's security rule. No PR opened. No access behaviour changed.
 
+Reproducer head: `4baef3a2ede903d8b4547f8c1fa9fe439475147d`.
+The final receipt commit changes only this evidence.
+
 ## Observed failure
 
 - Route: `POST /api/conversations/:conversationId/view`.
@@ -9,7 +12,7 @@ STOPPED under the issue's security rule. No PR opened. No access behaviour chang
 - Path parameter: 64 lowercase `a` characters, a well-formed identifier.
 - Real disposable NATS event store global head: **0 before, 1 after** this request.
 - The assertion failed on event-log movement. No successful HTTP access is claimed.
-- Original sanitised output: [security-probe.log](security-probe.log).
+- Original sanitised output: [security-probe.txt](security-probe.txt).
 
 The existing handler in `apps/server/src/computers/view.ts` records
 `computer.view_refused` through its refusal helper, including for an anonymous
