@@ -37,6 +37,9 @@ async function checksPackagedRecordIds() {
   const directory = await mkdtemp(join(tmpdir(), 'computer-record-id-'));
   const code = `
     import assert from 'node:assert/strict';
+    import { sha256Hex } from '@opencrane/events/digest';
+    assert.equal(sha256Hex('abc'),
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
     import { isSafeId } from './src/file-rules.ts';
     assert.equal(isSafeId('record-1'), true);
     assert.equal(isSafeId('../record'), false);
@@ -53,5 +56,5 @@ async function checksPackagedRecordIds() {
   }
 }
 
-it('checks upload IDs using only event modules included in the computer image',
+it('checks upload IDs and digests using only event modules included in the computer image',
   checksPackagedRecordIds);
