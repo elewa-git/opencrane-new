@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
+import { randomBytes } from 'node:crypto';
 import { history, memoryReferences } from '@opencrane/models';
 import { memoryErasureHistory, selectMaintenanceInputs,
   shouldReplaceMemoryRevision } from '@opencrane/projections';
@@ -18,13 +19,6 @@ const logger = createLogger('nightly-memory');
 
 function currentTime(): Date {
   return new Date();
-}
-
-function digest(value: unknown): string {
-  const hash = createHash('sha256');
-  const encoded = JSON.stringify(value);
-  hash.update(encoded);
-  return hash.digest('hex');
 }
 
 function metadataCustodyStatus() {

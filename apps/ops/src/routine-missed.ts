@@ -1,5 +1,5 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory, memberAuthorisation } from '@opencrane/authz';
 import { ownershipWriteAccess } from '@opencrane/models';
@@ -229,9 +229,7 @@ function missedData(state: RoutineState | undefined, input: Input,
 }
 function envelope(silo: string, input: Input, data: Missed, time: string): EventEnvelope {
   const identity = JSON.stringify([silo, input.expectedPosition, data]);
-  const hash = createHash('sha256');
-  hash.update(identity);
-  const id = `routine-missed-${hash.digest('hex')}`;
+  const id = `routine-missed-${sha256Hex(identity)}`;
   let type = 'routine.occurrences_missed';
   if (data.reason === 'dst') {
     type = 'routine.occurrence_skipped';

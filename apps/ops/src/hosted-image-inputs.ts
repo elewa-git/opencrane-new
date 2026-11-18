@@ -1,5 +1,5 @@
+import { sha256Hex as hash } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { EventStore } from '@opencrane/event-store';
@@ -38,12 +38,6 @@ const imageConfigSchema = z.object({ rootfs: z.object({ diff_ids: z.array(z.stri
 
 function requireInput(condition: unknown): asserts condition {
   if (!condition) throw new Error(refusal);
-}
-
-function hash(value: Uint8Array | string) {
-  const digestValue = createHash('sha256');
-  digestValue.update(value);
-  return digestValue.digest('hex');
 }
 
 async function configuration(path: string, silo: string) {

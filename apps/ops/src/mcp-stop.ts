@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import type { EventStore } from '@opencrane/event-store';
 import { mcpInstanceStopSchema, type EventEnvelope } from '@opencrane/events';
@@ -34,9 +34,7 @@ export function stopMcpInstanceHandler(store: EventStore, silo: string, kube: Mc
     const state = await currentStop(store, silo, trigger);
     if (!state) return;
     await kube.stop(state, trigger.id);
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify([silo, trigger.id]));
-    const id = hash.digest('hex');
+    const id = sha256HexOfJson([silo, trigger.id]);
     for (let attempt = 0; attempt < 3; attempt++) {
       // Recheck the run after Kubernetes waits so a later start can never receive this absence.
       const current = await currentStop(store, silo, trigger);
