@@ -53,27 +53,34 @@ export class BudgetActor {
     if (!this.writer.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation', ...(defaultPayingGroupId ? { defaultPayingGroupId } : {}) });
     await this.append('budget.period_started', { periodStart: this.monthStart() });
   }
-  private serial<T>(work: () => Promise<T>, deadline = performance.now() + 2000,
+  private serial<T>(work: () => Promise<T>, deadline = this.store.clock.now() + 2000,
     startAccessAfterQueue = false): Promise<T> {
     const admitted = Promise.withResolvers<number>();
     const run = async () => {
-      if (performance.now() >= deadline) throw new Error('Budget append unavailable');
+      if (this.store.clock.now() >= deadline) throw new Error('Budget append unavailable');
       await this.writer.recover(deadline);
       this.commandDeadline = startAccessAfterQueue
-        ? Math.min(deadline, performance.now() + 2000) : deadline;
+        ? Math.min(deadline, this.store.clock.now() + 2000) : deadline;
       admitted.resolve(this.commandDeadline);
       return work();
     };
     const result = this.queue.then(run);
     function finished() {}
     this.queue = result.then(finished, finished);
-    if (startAccessAfterQueue) return withinAdmissionDeadline(result, admitted.promise, deadline);
-    return withinBudgetDeadline(result, deadline);
+    const options = { clock: this.store.clock };
+    if (startAccessAfterQueue) {
+      return withinAdmissionDeadline(result, admitted.promise, deadline, options);
+    }
+    return withinBudgetDeadline(result, deadline, options);
+  }
+  private accessDeadline(checkAccess?: () => Promise<void>, deadline?: number) {
+    const options = { clock: this.store.clock, checkAccess, deadline };
+    return accessDeadline(options);
   }
   private async append(type: string, payload: unknown, id: string = randomUUID(),
     confirmAccess?: () => Promise<void>, deadline?: number) {
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
-    const expires = Math.min(this.commandDeadline, accessDeadline(confirmAccess, deadline));
+    const expires = Math.min(this.commandDeadline, this.accessDeadline(confirmAccess, deadline));
     const validate = this.requireReservationWrites.bind(this, event, confirmAccess);
     await this.writer.append(event, expires, validate, confirmAccess);
   }
@@ -120,7 +127,7 @@ export class BudgetActor {
       await this.append('budget.ceiling_set', prepared.payload, commandId, fresh);
       return this.ceilingReceipts.receipt(this.state);
     };
-    return this.serial(save, accessDeadline(fresh, originalDeadline));
+    return this.serial(save, this.accessDeadline(fresh, originalDeadline));
   }
   setRootAllowance(raw: unknown, firstCallBoundCents: number, fresh?: () => Promise<void>,
     deadline?: number) {
@@ -133,7 +140,7 @@ export class BudgetActor {
       await fresh?.();
       return setRootAllowance(this.state, this.silo, this.now(), raw, firstCallBoundCents, append);
     };
-    return this.serial(save, accessDeadline(fresh, deadline));
+    return this.serial(save, this.accessDeadline(fresh, deadline));
   }
   async stopRoot(rootId: string, reason: RootStopReason, subject: string, position: number) {
     const source = await readRootStopEvidence(this.store, subject, position);
@@ -180,12 +187,12 @@ export class BudgetActor {
         payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call,
         dispatchGate: 1, ...retry, ...(rootId === undefined ? {} : { rootId }) }, undefined, fresh);
       return id;
-    }, accessDeadline(fresh));
+    }, this.accessDeadline(fresh));
   }
   checkBudget(call: ModelCall, fresh: () => Promise<void>, admittedAt: number, rootId?: string) {
     const check = () => checkBudgetRefusal(this.state, call, fresh, admittedAt,
       rootId, this.now, this.append.bind(this));
-    return this.serial(check, accessDeadline(fresh));
+    return this.serial(check, this.accessDeadline(fresh));
   }
   async requireCurrent(deadline: number) {
     for (;;) {
@@ -238,7 +245,7 @@ export class BudgetActor {
         originalDeadline);
     };
     // Bound queue waiting by the single-use permit; start live write checks when admitted.
-    const waitDeadline = queueDeadline ?? accessDeadline(fresh, originalDeadline);
+    const waitDeadline = queueDeadline ?? this.accessDeadline(fresh, originalDeadline);
     return this.serial(admit, waitDeadline, queueDeadline !== undefined);
   }
   releaseUndispatched(id: string) {

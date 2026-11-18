@@ -30,7 +30,7 @@ export type ComputerControl = (Omit<z.infer<typeof takeoverRequestedDataSchema>,
   canStartNewWork?: boolean;
   position: number; commandId: string; requestedAt: string;
 }) | { phase: 'unverified'; position: number };
-export async function readComputerControl(store: Pick<EventStore, 'readStream'>,
+export async function readComputerControl(store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string, assistantId: string, deadline = performance.now() + 10_000) {
   function take(summary: ComputerSummary) {
     return structuredClone(summary.control);

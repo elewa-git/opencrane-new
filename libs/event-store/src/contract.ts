@@ -19,7 +19,7 @@ export interface StoredEvent {
 export interface AppendCommand {
   event: unknown;
   expectedSequence: number;
-  /** Stop retries when the caller's access check expires. Use performance.now(). */
+  /** Stop retries when the caller's access check expires. Use store.clock.now(). */
   deadline?: number;
   /** Recheck the caller's original access snapshot inside the conditional append. */
   checkAccess?: () => Promise<unknown>;

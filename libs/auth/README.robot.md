@@ -101,7 +101,7 @@ An optional active turn token id further narrows `check`; model admission
 requires a server-owned first `computer.turn_started` and refuses a
 `computer.turn_closed` from any source
 and checks live permissions before reserving money. A closed turn cannot reopen.
-`check(headers, activeTurnId, deadline)` also accepts an absolute `performance.now()`
+`check(headers, activeTurnId, deadline)` also accepts an absolute `store.clock.now()`
 deadline so its event reads stop retrying with the caller's authority check.
 Old readiness events without a generation fail closed until the reconciler observes
 and records readiness again. Token values never enter events or projections.

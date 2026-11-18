@@ -22,7 +22,7 @@ export async function readRecallContext(options: MemoryOptions, context: MemoryC
     if (prepared && args[1] === 1) throw new Error('Memory history unavailable');
     yield* options.store.readStream(...args);
   }
-  const store = isolate ? { readStream } : options.store;
+  const store = isolate ? { readStream, clock: options.store.clock } : options.store;
   function refresh() {
     return readChatFacts(store, options.silo, context.conversation, context.turn);
   }

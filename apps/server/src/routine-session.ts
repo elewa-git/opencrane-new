@@ -143,7 +143,7 @@ export async function prepareRoutineSession(store: EventStore,
       const checked = { ...change, event, checkAccess: saved.checkCurrent };
       return store.append(checked);
     }
-    const guarded = { readStream: saved.readStream, append };
+    const guarded = { readStream: saved.readStream, append, clock: store.clock };
     const result = await chatCommand(guarded, keys, saved.context,
       saved.command, saved.checkFresh);
     if (result.status !== 'appended') {

@@ -157,6 +157,7 @@ it.each(['alice', 'bob'])('refuses a claim by %s when a member binds after the h
   await app.close();
   app = buildServer(config, { membership: { silo: 'test', now: () => clock, store: {
     head: nats.store.head.bind(nats.store),
+    clock: nats.store.clock,
     readStream: (...args) => nats.store.readStream(...args),
     async append(command) {
       reachedAppend();

@@ -448,7 +448,7 @@ async function replayAndUnrelated() {
     authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted });
   await invalidated();
   const before = [...computer.calls];
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(facts.memoryContext?.status).toBe('invalidated');
   expect(computer.calls).toEqual(before);
@@ -800,7 +800,7 @@ async function reconcilesPollRace(kind: 'recall' | 'completed' | 'closed' | 'los
   await Promise.all([poll(), poll()]);
   await poll();
   await poll();
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const before = [...computer.calls];
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(computer.calls).toEqual(before);
@@ -941,7 +941,7 @@ async function pollsExpiry(transitive: boolean) {
   await poll();
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(1);
   expect(computer.grants.has('thread-1')).toBe(false);
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const before = [...computer.calls];
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'expired',
@@ -1012,7 +1012,7 @@ async function expiredAdditionBeforeCompletedWithdrawal(replace: boolean) {
   expect(computer.calls.filter(targetInterrupt)).toHaveLength(0);
   await completionBeforePoll(replace, true);
   await poll();
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(facts.memoryContext).toMatchObject({ status: 'ended', reason: 'ended',
     references: [{ scopeId, memoryId: 'fact', revision: 1 }, addition],
@@ -1086,7 +1086,7 @@ function accessReceipt() {
   return invalidateMemoryAccess(options, request);
 }
 async function accessEvidence(ended = false) {
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const calls = [...computer.calls];
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(computer.calls).toEqual(calls);
@@ -1204,7 +1204,7 @@ async function unavailableCompletedOutput() {
   send(JSON.stringify({ type: 'resume', since: 0 }));
   await flush();
   await link.settled();
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(stops).toBe(0);
   expect(replayed).toBe(true);

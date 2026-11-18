@@ -1,5 +1,5 @@
 import { sameCommand, type AppendCommand, type AppendOutcome, type AppendResult, type EventStore,
-  type StoredEvent } from '@opencrane/event-store';
+  type StoredEvent, type Clock, systemClock } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 
 // Keep the saved admission with this error. Preserve the error type for access refusals.
@@ -76,7 +76,7 @@ export class BudgetWriter {
   }
 
   private finishRecovery(deadline: number) {
-    if (performance.now() >= deadline) {
+    if (this.store.clock.now() >= deadline) {
       throw new Error('Budget writer unavailable');
     }
     // An empty snapshot cannot rule out a publish still travelling to NATS.
@@ -90,7 +90,7 @@ export class BudgetWriter {
     checkAccess?: () => Promise<void>) {
     for (;;) {
       validate();
-      if (performance.now() >= deadline) {
+      if (this.store.clock.now() >= deadline) {
         throw new Error('Budget append unavailable');
       }
       const command: AppendCommand = { event, expectedSequence: this.sequence,
@@ -179,7 +179,7 @@ export class BudgetWriter {
     }
     try {
       await checkAccess?.();
-      if (performance.now() >= deadline) {
+      if (this.store.clock.now() >= deadline) {
         throw new Error('Budget append unavailable');
       }
     } catch (error) {
@@ -189,20 +189,28 @@ export class BudgetWriter {
   }
 }
 
-export async function withinBudgetDeadline<Value>(work: Promise<Value>, deadline: number) {
+export interface BudgetDeadlineOptions {
+  clock: Clock;
+}
+
+export async function withinBudgetDeadline<Value>(work: Promise<Value>, deadline: number,
+  { clock = systemClock }: Partial<BudgetDeadlineOptions> = {}) {
   const expired = Promise.withResolvers<never>();
   function refuse() {
     expired.reject(new Error('Budget append unavailable'));
   }
-  const timer = setTimeout(refuse, Math.max(0, deadline - performance.now()));
+  const timer = new AbortController();
+  function cancelled() {}
+  const waiting = clock.sleep(Math.max(0, deadline - clock.now()), timer.signal);
+  void waiting.then(refuse, cancelled);
   try {
     const result = await Promise.race([work, expired.promise]);
-    if (performance.now() >= deadline) {
+    if (clock.now() >= deadline) {
       throw new Error('Budget append unavailable');
     }
     return result;
   } finally {
-    clearTimeout(timer);
+    timer.abort();
   }
 }
 
@@ -210,9 +218,14 @@ export interface DispatchQueueDeadline {
   queueDeadline: number;
 }
 
-export function accessDeadline(checkAccess?: () => Promise<void>, deadline?: number) {
+export interface AccessDeadlineOptions extends BudgetDeadlineOptions {
+  checkAccess?: (() => Promise<void>) | undefined;
+  deadline?: number | undefined;
+}
+
+export function accessDeadline({ clock, checkAccess, deadline }: AccessDeadlineOptions) {
   const original = deadline ?? knownAccessDeadline(checkAccess);
-  const fallback = performance.now() + 2000;
+  const fallback = clock.now() + 2000;
   if (typeof original === 'number') return Math.min(original, fallback);
   return fallback;
 }
@@ -225,11 +238,11 @@ export function knownAccessDeadline(checkAccess?: () => Promise<void>) {
 
 /** Bound the caller's wait without releasing ownership of unfinished serial work. */
 export function withinAdmissionDeadline<Value>(work: Promise<Value>,
-  admitted: Promise<number>, queueDeadline: number) {
+  admitted: Promise<number>, queueDeadline: number, options: BudgetDeadlineOptions) {
   async function waitForAdmission() {
     const accessDeadline = await admitted;
-    return withinBudgetDeadline(work, accessDeadline);
+    return withinBudgetDeadline(work, accessDeadline, options);
   }
   const result = Promise.race([work, waitForAdmission()]);
-  return withinBudgetDeadline(result, queueDeadline);
+  return withinBudgetDeadline(result, queueDeadline, options);
 }

@@ -8,7 +8,7 @@ import { registerHandler } from '@opencrane/handlers';
 import { authorityFence } from './authority.ts';
 import { currentMembership } from './ownership.ts';
 
-type Store = Pick<EventStore, 'readStream' | 'head' | 'append'>;
+type Store = Pick<EventStore, 'readStream' | 'head' | 'append' | 'clock'>;
 
 function completionId(silo: string, memberId: string, answerId: string): string {
   const hash = createHash('sha256');

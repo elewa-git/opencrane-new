@@ -1,3 +1,4 @@
+import { systemClock } from '@opencrane/event-store';
 import { expect, it } from 'vitest';
 import { dirname } from 'node:path';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
@@ -23,7 +24,7 @@ async function keepsLongRepliesWarm() {
       if (index + 1 >= from) yield { sequence: index + 1, event };
     }
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   const first = await readChatFacts(store, 'test', 'chat', 'message', 'computer', 1);
   const second = await readChatFacts(store, 'test', 'chat', 'message', 'computer', 1);
   expect(second).toEqual(first);
@@ -99,7 +100,7 @@ async function rebuildsOversizedReportPositions() {
       yield { sequence, event };
     }
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   const first = await readChatFacts(store, 'test', 'chat', 'message', 'computer', 1);
   const second = await readChatFacts(store, 'test', 'chat', 'message', 'computer', 1);
   expect(second).toEqual(first);

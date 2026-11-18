@@ -34,7 +34,7 @@ interface JoinContext {
   emailVerified?: boolean | undefined;
 }
 
-export type JoinStore = Pick<EventStore, 'readStream' | 'append' | 'head'>;
+export type JoinStore = Pick<EventStore, 'readStream' | 'append' | 'head' | 'clock'>;
 type Outcome = JoinResult | { status: 'unavailable'; cause: unknown };
 type Invitation = z.infer<typeof memberInvitedDataSchema>;
 

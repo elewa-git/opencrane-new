@@ -1,10 +1,10 @@
 import { getEventDefinition } from '@opencrane/events';
 import { TimeoutError } from '@nats-io/transport-node';
 import { EventStore, type AppendCommand } from '../src/index.ts';
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 import { JetStreamApiError, jetstream, jetstreamManager } from "@nats-io/jetstream";
-import { event, natsFixture } from "./testing.ts";
+import { event, manualClock, natsFixture } from "./testing.ts";
 
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 afterEach(async () => {
@@ -309,61 +309,65 @@ it("retries no-responder failures through recovery and the full deadline", async
 }, 45_000);
 
 async function stopsRetriesAtTheCallerDeadline() {
-  fixture = await natsFixture();
+  const clock = manualClock();
+  fixture = await natsFixture({ clock });
   const client = jetstream(fixture.connection);
   const manager = await jetstreamManager(fixture.connection);
-  const store = new EventStore(client, manager);
-  const started = performance.now();
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  const store = new EventStore(client, manager, manager, clock);
+  const started = clock.now();
   let attempts = 0;
   function failPublish(): Promise<never> {
     attempts++;
-    clock.mockReturnValue(started + attempts * 2001);
+    clock.advance(2001);
     return Promise.reject(new TimeoutError());
   }
   client.publish = failPublish;
-  try {
-    const result = await store.append({ event: event('expired-grant'), expectedSequence: 0,
-      historyChecked: true, deadline: started + 2000 });
-    expect(result.status).toBe('unavailable');
-    expect(attempts).toBe(1);
-  } finally {
-    clock.mockRestore();
-  }
+  const result = await store.append({ event: event('expired-grant'), expectedSequence: 0,
+    historyChecked: true, deadline: started + 2000 });
+  expect(result.status).toBe('unavailable');
+  expect(attempts).toBe(1);
   expect(await fixture.store.head()).toBe(0);
 }
+
 it('stops append retries at the caller access deadline', stopsRetriesAtTheCallerDeadline);
 
 async function stopsWhenBackoffUsesRemainingPermission() {
-  fixture = await natsFixture();
+  const clock = manualClock();
+  fixture = await natsFixture({ clock });
   const client = jetstream(fixture.connection);
   const manager = await jetstreamManager(fixture.connection);
-  const store = new EventStore(client, manager);
-  const started = performance.now();
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  const store = new EventStore(client, manager, manager, clock);
+  const started = clock.now();
   let attempts = 0;
   function failPublish(): Promise<never> {
     attempts += 1;
     if (attempts === 1) {
       // Reproduce a timer waking just before the last fraction of permission expires.
-      clock.mockReturnValue(started + 9.75);
+      clock.advance(9.75);
     } else {
-      clock.mockReturnValue(started + 11);
+      clock.advance(1.25);
     }
     return Promise.reject(new TimeoutError());
   }
   client.publish = failPublish;
+  const sleeping = Promise.withResolvers<void>();
+  const sleep = clock.sleep.bind(clock);
+  function wait(milliseconds: number, signal?: AbortSignal) {
+    sleeping.resolve();
+    return sleep(milliseconds, signal);
+  }
+  clock.sleep = wait;
   const command: AppendCommand = { event: event('backoff-uses-permission'), expectedSequence: 0,
     historyChecked: true, deadline: started + 10 };
-  try {
-    const result = await store.append(command);
-    expect(result.status).toBe('unavailable');
-    expect(attempts).toBe(1);
-  } finally {
-    clock.mockRestore();
-  }
+  const pending = store.append(command);
+  await sleeping.promise;
+  clock.advance(1);
+  const result = await pending;
+  expect(result.status).toBe('unavailable');
+  expect(attempts).toBe(1);
   expect(await fixture.store.head()).toBe(0);
 }
+
 it('does not publish again when backoff uses the last fraction of permission time',
   stopsWhenBackoffUsesRemainingPermission);
 
@@ -382,22 +386,19 @@ it('refuses an event saved between the append access check and the conditional p
   refusesChangesAfterAccessCheck);
 
 async function refusesExpiryDuringAccessCheck() {
-  fixture = await natsFixture();
-  const started = performance.now();
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  const clock = manualClock();
+  fixture = await natsFixture({ clock });
+  const started = clock.now();
   function checkAccess() {
-    clock.mockReturnValue(started + 2001);
+    clock.advance(2001);
     return Promise.resolve();
   }
   const command = { event: event('expired-access-check'), expectedSequence: 0,
     deadline: started + 2000, historyChecked: true as const, checkAccess };
-  try {
     expect(await fixture.store.append(command)).toMatchObject({ status: 'unavailable' });
-  } finally {
-    clock.mockRestore();
-  }
   expect(await fixture.store.head('member-alice')).toBe(0);
 }
+
 it('refuses an append when its access check exceeds the original deadline',
   refusesExpiryDuringAccessCheck);
 

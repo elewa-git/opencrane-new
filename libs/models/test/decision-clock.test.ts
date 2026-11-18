@@ -20,8 +20,9 @@ async function decisionDeadline(expired: boolean) {
   const reading = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(readComputer);
   try {
     const request = { method: 'POST', headers: setup.headers,
-      body: JSON.stringify({ model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128 }) };
+      body: JSON.stringify({ model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128, stream: true }) };
     const response = await fetch(`${setup.options.decisionUrl}/authorize`, request);
+    const responseText = await response.text();
     expect(deadline).toBe(started + 10_000);
     expect(sleep).toHaveBeenCalledWith(2000, expect.any(AbortSignal));
     // Summary catch-up has its own ten-second limit; its caller still has two seconds.
@@ -29,7 +30,7 @@ async function decisionDeadline(expired: boolean) {
       expect(response.status).toBe(503);
       expect(setup.actor.state.reservations).toHaveLength(0);
     } else {
-      expect(response.status).toBe(200);
+      expect(response.status, responseText).toBe(200);
       expect(setup.actor.state.reservations).toHaveLength(1);
     }
   } finally {

@@ -1,7 +1,7 @@
+import { systemClock, type Clock } from './clock.ts';
 import { appendResult, savedAppend, unavailableAppend, rejectedAppend,
   recoverAppend, previousAppend } from './append-result.ts';
 import { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
-import { setTimeout as delay } from "node:timers/promises";
 import {
   jetstream,
   jetstreamManager,
@@ -124,27 +124,26 @@ function verifyEventsConfig(config: StreamConfig, replicas: number): void {
 
 // Retry temporary failures for at most one second, or until the caller's earlier deadline.
 async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Infinity,
-  signal?: AbortSignal) {
-  const deadline = Math.min(callerDeadline, performance.now() + readMs);
+  signal?: AbortSignal, clock: Clock = systemClock) {
+  const deadline = Math.min(callerDeadline, clock.now() + readMs);
   let cause: unknown = new TimeoutError();
   let backoff = 25;
-  while (performance.now() < deadline) {
+  while (clock.now() < deadline) {
     signal?.throwIfAborted();
     try {
-      return await readBeforeDeadline(read, deadline, signal);
+      return await readBeforeDeadline(read, deadline, signal, clock);
     } catch (error) {
       if (!isEventStoreUnavailable(error)) {
         throw error;
       }
       cause = error;
-      const remaining = deadline - performance.now();
+      const remaining = deadline - clock.now();
       if (remaining <= 0) {
         break;
       }
-      const options = signal ? { signal } : undefined;
       // Jitter retry times so many reads do not all retry together during an outage.
       const jitteredBackoff = backoff / 2 + Math.random() * backoff / 2;
-      await delay(Math.min(jitteredBackoff, remaining), undefined, options);
+      await clock.sleep(Math.min(jitteredBackoff, remaining), signal);
       backoff = Math.min(backoff * 2, 500);
     }
   }
@@ -152,7 +151,7 @@ async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Inf
 }
 
 export async function readBeforeDeadline<Value>(read: () => Promise<Value>, deadline: number,
-  signal?: AbortSignal) {
+  signal?: AbortSignal, clock: Clock = systemClock) {
   const expired = Promise.withResolvers<never>();
   function timeout() {
     expired.reject(new TimeoutError());
@@ -165,7 +164,11 @@ export async function readBeforeDeadline<Value>(read: () => Promise<Value>, dead
     }
     expired.reject(new Error("Event read aborted"));
   }
-  const timer = setTimeout(timeout, Math.max(0, deadline - performance.now()));
+  const timer = new AbortController();
+  const waiting = clock.sleep(Math.max(0, deadline - clock.now()), timer.signal);
+  // Cancelling this timer only cleans up a completed read; caller cancellation is handled below.
+  function timerCancelled() {}
+  void waiting.then(timeout, timerCancelled);
   const listenerOptions = { once: true };
   signal?.addEventListener("abort", abort, listenerOptions);
   try {
@@ -173,23 +176,23 @@ export async function readBeforeDeadline<Value>(read: () => Promise<Value>, dead
     const pendingRead = read();
     const value = await Promise.race([pendingRead, expired.promise]);
     // A stalled event loop can deliver a reply before it runs an expired timer.
-    if (performance.now() >= deadline) {
+    if (clock.now() >= deadline) {
       throw new TimeoutError();
     }
     return value;
   } finally {
-    clearTimeout(timer);
+    timer.abort();
     signal?.removeEventListener("abort", abort);
   }
 }
 
 /** The caller opens and closes this authenticated TLS connection. */
-export async function createEventStore(connection: NatsConnection) {
+export async function createEventStore(connection: NatsConnection, clock: Clock = systemClock) {
   // Use the SDK's normal management timeout when provisioning; keep event reads short.
   const provisioningManager = await jetstreamManager(connection);
   const manager = await jetstreamManager(connection, { timeout: requestMs, checkAPI: false });
   const client = jetstream(connection, { timeout: requestMs });
-  return new EventStore(client, manager, provisioningManager);
+  return new EventStore(client, manager, provisioningManager, clock);
 }
 
 /** Processes use this adapter; operators create the EVENTS stream separately. */
@@ -205,6 +208,7 @@ export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export class EventStore {
+  readonly clock: Clock;
   private readonly client: JetStreamClient;
   private readonly manager: JetStreamManager;
   private readonly provisioningManager: JetStreamManager;
@@ -212,7 +216,9 @@ export class EventStore {
     client: JetStreamClient,
     manager: JetStreamManager,
     provisioningManager: JetStreamManager = manager,
+    clock: Clock = systemClock,
   ) {
+    this.clock = clock;
     this.client = client;
     this.manager = manager;
     this.provisioningManager = provisioningManager;
@@ -242,11 +248,11 @@ export class EventStore {
     if (!event) {
       return rejectedAppend('invalid_event');
     }
-    const deadline = Math.min(performance.now() + appendMs, command.deadline ?? Infinity);
+    const deadline = Math.min(this.clock.now() + appendMs, command.deadline ?? Infinity);
     let cause: unknown;
     const publication = { possible: false };
     let backoff = 25;
-    while (performance.now() < deadline) {
+    while (this.clock.now() < deadline) {
       if (command.signal?.aborted) {
         return unavailableAppend(command.signal.reason, publication.possible);
       }
@@ -262,11 +268,10 @@ export class EventStore {
           return unavailableAppend(error, publication.possible);
         }
         cause = error;
-        const options = command.signal ? { signal: command.signal } : undefined;
         try {
-          const remaining = deadline - performance.now();
+          const remaining = deadline - this.clock.now();
           const waitMs = Math.max(0, Math.min(backoff, remaining));
-          await delay(Math.ceil(waitMs), undefined, options);
+          await this.clock.sleep(Math.ceil(waitMs), command.signal);
           // Stop after the final wait even if its timer wakes a fraction early.
           if (remaining <= backoff) {
             break;
@@ -301,7 +306,7 @@ export class EventStore {
         return previous;
       }
     }
-    if (performance.now() >= deadline) {
+    if (this.clock.now() >= deadline) {
       throw new TimeoutError();
     }
     if (event.type === 'conversation.created') {
@@ -327,7 +332,7 @@ export class EventStore {
     }
     // Recheck after awaited reads, immediately before starting a new publish.
     signal?.throwIfAborted();
-    if (performance.now() >= deadline) {
+    if (this.clock.now() >= deadline) {
       throw new TimeoutError();
     }
     return this.publishConditional(event, expectedSequence, deadline, expectedSubject,
@@ -353,7 +358,7 @@ export class EventStore {
         expect: { streamName, lastSubjectSequence: expectedSequence,
           ...(expectedGlobalSequence !== undefined ? { lastSequence: expectedGlobalSequence } : {}),
           ...(expectedSubject ? { lastSubjectSequenceSubject: readSubject(expectedSubject) } : {}) },
-        timeout: Math.min(requestMs, deadline - performance.now()),
+        timeout: Math.min(requestMs, deadline - this.clock.now()),
         retries: 1,
       });
       acknowledged = true;
@@ -414,7 +419,7 @@ export class EventStore {
     const head = await this.readHead(deadline);
     let sequence = Math.max(1, fromSequence);
     while (sequence <= head) {
-      if (performance.now() >= deadline) {
+      if (this.clock.now() >= deadline) {
         throw new TimeoutError();
       }
       // NATS accepts next_by_subj for MSG.GET, though the SDK types omit it.
@@ -436,7 +441,7 @@ export class EventStore {
     function read() {
       return manager.streams.getMessage(streamName, query);
     }
-    return retryRead(read, deadline, signal);
+    return retryRead(read, deadline, signal, this.clock);
   }
 
   private readInfo(deadline = Infinity, signal?: AbortSignal) {
@@ -444,7 +449,7 @@ export class EventStore {
     function readStreamInfo() {
       return manager.streams.info(streamName);
     }
-    return retryRead(readStreamInfo, deadline, signal);
+    return retryRead(readStreamInfo, deadline, signal, this.clock);
   }
 
   private async readHead(deadline = Infinity, signal?: AbortSignal) {
@@ -478,7 +483,7 @@ export class EventStore {
         }
         if (sequence > head) {
           // Wait only at the live end. Earlier reads have no delay or shared cursor.
-          await delay(100);
+          await this.clock.sleep(100);
           continue;
         }
         // Limit how far reads run ahead and keep event order if replies arrive out of order.
@@ -535,7 +540,7 @@ export class EventStore {
       function readSubjectHead() {
         return manager.streams.getMessage(streamName, query);
       }
-      const message = await retryRead(readSubjectHead, deadline);
+      const message = await retryRead(readSubjectHead, deadline, undefined, this.clock);
       return message?.seq ?? 0;
     }
     return this.readHead(deadline);

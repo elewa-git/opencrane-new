@@ -94,7 +94,7 @@ function finished(): void {
 }
 
 export function readStreamSummary<Summary, Result>(
-  store: Pick<EventStore, 'readStream'>, silo: string, subject: string,
+  store: Pick<EventStore, 'readStream' | 'clock'>, silo: string, subject: string,
   kind: SummaryKind<Summary>, deadline: number,
   take: (summary: Summary, sequence: number) => Result,
 ): Promise<Result> {
@@ -103,7 +103,7 @@ export function readStreamSummary<Summary, Result>(
     if (entry.sequence === 0) {
       logRebuild('Rebuilding %s summary for %s in silo %s', kind.name, subject, silo);
     }
-    const catchUpDeadline = Math.max(deadline, performance.now() + 10_000);
+    const catchUpDeadline = Math.max(deadline, store.clock.now() + 10_000);
     const rows = store.readStream(subject, entry.sequence + 1, catchUpDeadline,
       kind.includeConversationCloses);
     try {
@@ -125,5 +125,5 @@ export function readStreamSummary<Summary, Result>(
   function readResult() {
     return result;
   }
-  return readBeforeDeadline(readResult, deadline);
+  return readBeforeDeadline(readResult, deadline, undefined, store.clock);
 }

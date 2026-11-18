@@ -74,6 +74,7 @@ Not built yet:
 
 ## How to run or test it
 
+Access timing tests can use the event store’s manual clock to control the two-second limit.
 Tests can join people with `joinMembers` from `@opencrane/models/testing/members`.
 Named options can also apply permissions and read tables after each saved event.
 

@@ -1,3 +1,4 @@
+import { systemClock } from '@opencrane/event-store';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { event } from '@opencrane/event-store/testing';
 import { expect, it } from 'vitest';
@@ -12,7 +13,7 @@ function membershipStore(rows: StoredEvent[], failure?: Error) {
     if (failure) throw failure;
     yield* rows;
   }
-  const store = { readStream } satisfies Pick<EventStore, 'readStream'>;
+  const store = { readStream, clock: systemClock } satisfies Pick<EventStore, 'readStream' | 'clock'>;
   return store;
 }
 

@@ -26,7 +26,7 @@ const fileContext = z.object({
 });
 
 export async function ownConversation(
-  store: Pick<EventStore, 'readStream'>,
+  store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string,
   conversationId: string,
   memberId: string,
@@ -78,7 +78,7 @@ async function requireTeamSession(store: Pick<EventStore, 'readStream'>, silo: s
 }
 
 async function verifyCurrentMember(
-  store: Pick<EventStore, 'readStream'>,
+  store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string,
   memberId: string,
 ) {
@@ -108,7 +108,7 @@ function findEventOfType(rows: StoredEvent[], type: string) {
 
 /** Only writes one conditional append. Storage and delivery are IO reactions. */
 export async function fileCommand(
-  store: Pick<EventStore, 'readStream' | 'append'>,
+  store: Pick<EventStore, 'readStream' | 'append' | 'clock'>,
   silo: string,
   memberId: string,
   eventId: string,

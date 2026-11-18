@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { TimeoutError } from '@nats-io/transport-node';
 import { EventStore } from '../src/index.ts';
-import { event, natsFixture } from './testing.ts';
+import { event, manualClock, natsFixture } from './testing.ts';
 
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 let client: ReturnType<typeof jetstream>;
@@ -23,6 +23,11 @@ afterEach(close);
 
 async function outcomeRow([kind, repeated]: [string, boolean]) {
   const saved = event('original');
+  const clock = manualClock();
+  if (kind === 'possibly published') {
+    const manager = await jetstreamManager(fixture.connection);
+    store = new EventStore(client, manager, manager, clock);
+  }
   const command = { event: saved, expectedSequence: 0, historyChecked: true as const,
     deadline: performance.now() + 2000 };
   let injected = false;
@@ -30,7 +35,7 @@ async function outcomeRow([kind, repeated]: [string, boolean]) {
   async function loseReply(...args: Parameters<typeof publish>): Promise<never> {
     await publish(...args);
     injected = true;
-    vi.spyOn(performance, 'now').mockReturnValue(command.deadline);
+    clock.advance(command.deadline);
     throw new TimeoutError();
   }
   let unrelatedCount = 0;

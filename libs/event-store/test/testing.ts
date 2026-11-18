@@ -12,7 +12,7 @@ import { certificates, sharedCertificates } from "./certificates.ts";
 import { jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
-import { createEventStore, connectNats, EventStore } from "../src/index.ts";
+import { createEventStore, connectNats, EventStore, systemClock, type Clock } from "../src/index.ts";
 import { afterAll, expect, onTestFinished } from "vitest";
 
 function registerChildCleanup(child: ChildProcess) {
@@ -139,7 +139,14 @@ export async function appendEvent(store: EventStore, options: AppendEventOptions
   return { event: record, sequence: result.sequence };
 }
 
-export async function natsFixture({ provision = true, freshCertificates = false } = {}) {
+export interface NatsFixtureOptions {
+  provision?: boolean;
+  freshCertificates?: boolean;
+  clock?: Clock;
+}
+
+export async function natsFixture({ provision = true, freshCertificates = false,
+  clock = systemClock }: NatsFixtureOptions = {}) {
   const directory = await mkdtemp(resolve(".tools/nats-test-"));
   if (freshCertificates) {
     await certificates(directory);
@@ -205,8 +212,8 @@ export async function natsFixture({ provision = true, freshCertificates = false 
   const connection = await client("command");
   const readerConnection = await client("projection");
   const dispatcherConnection = await client("dispatcher");
-  const readerStore = await createEventStore(readerConnection);
-  const store = await createEventStore(connection);
+  const readerStore = await createEventStore(readerConnection, clock);
+  const store = await createEventStore(connection, clock);
   async function close() {
     for (const connection of connections) {
       await connection.close();
@@ -348,4 +355,53 @@ export async function failingPublishStore(connection: NatsConnection) {
     return attempts;
   }
   return { store, failNextPublish, publishAttempts };
+}
+
+export interface ManualClock extends Clock {
+  advance(milliseconds: number): void;
+}
+
+export function manualClock(started = 0): ManualClock {
+  let time = started;
+  const sleepers = new Set<() => void>();
+  function now() {
+    return time;
+  }
+  function advance(milliseconds: number) {
+    if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+      throw new Error('Clock advance must be a finite non-negative duration');
+    }
+    time += milliseconds;
+    for (const wake of sleepers) {
+      wake();
+    }
+  }
+  function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
+    const wakeAt = time + Math.max(0, milliseconds);
+    return new Promise<void>(wait);
+    function wait(resolve: () => void, reject: (reason: unknown) => void) {
+      function clean() {
+        sleepers.delete(wake);
+        signal?.removeEventListener('abort', abort);
+      }
+      function wake() {
+        if (time >= wakeAt) {
+          clean();
+          resolve();
+        }
+      }
+      function abort() {
+        clean();
+        reject(signal?.reason);
+      }
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      sleepers.add(wake);
+      signal?.addEventListener('abort', abort, { once: true });
+      wake();
+    }
+  }
+  return { now, advance, sleep };
 }

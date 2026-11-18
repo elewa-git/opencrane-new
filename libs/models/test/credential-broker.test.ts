@@ -648,9 +648,16 @@ async function releaseDeadline(expired: boolean) {
   const evidence = await credentialReleaseEvidence(nats.store, 'test', test.decision.id,
     test.release, test.loadConfiguration);
   const prepared = { release: test.release, evidence };
+  const head = nats.store.head.bind(nats.store);
+  async function savedHead(subject?: string) {
+    return head(subject);
+  }
+  // Let the credential check itself refuse elapsed access, rather than a storage read.
+  vi.spyOn(nats.store, 'head').mockImplementation(savedHead);
   const started = clock.now();
-  async function checkAccess() {
+  function checkAccess() {
     if (expired) clock.advance(2001);
+    return Promise.resolve();
   }
   const access = { deadline: Infinity, checkAccess };
   const append = vi.spyOn(nats.store, 'append');
@@ -669,8 +676,8 @@ async function brokerDeadline(expired: boolean) {
   const { clock, test } = await timedFixture();
   const started = clock.now();
   async function checkAccess() {}
-  async function prepareAccess() {
-    return { deadline: Infinity, checkAccess };
+  function prepareAccess() {
+    return Promise.resolve({ deadline: Infinity, checkAccess });
   }
   const read = test.custody.readAccessMaterial.bind(test.custody);
   async function readMaterial(...args: Parameters<typeof read>) {

@@ -1,5 +1,16 @@
 # Models and silo spending
 
+## Access timing
+
+The authority, paying-group, ordinary decision, credential-release and credential-send
+checks use `store.clock` for their two-second access limits. The budget actor uses the
+same clock for serial admission and the fallback access deadline. These checks retain
+all existing lengths. Other models timing remains on the real clock until its separate
+migration. Tests that combine both paths start their manual clock near the real monotonic time.
+`fixture` accepts `{ clock }` in a named trailing options object after `executionMode`.
+The default fixture still uses real time. `accessDeadline` takes named options
+`{ clock, checkAccess?, deadline? }`; budget waiting helpers accept a named clock option.
+
 For people, read [README.md](README.md) first.
 
 ## Saved welcome completion

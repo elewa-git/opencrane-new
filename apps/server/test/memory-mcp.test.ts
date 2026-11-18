@@ -2307,7 +2307,7 @@ async function completeLoadedWrite() {
   expect(rows[0]?.event.data).toMatchObject({ dependsOn: body.params.arguments.dependsOn });
   const directory = dirname(setup.options.configFile);
   const filesBefore = readdirSync(directory);
-  const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+  const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store), clock: setup.nats.store.clock };
   expect((await readChatFacts(cold, 'test', 'conversation', 'turn')).memoryContext)
     .toEqual(chat.memoryContext);
   await setup.runner.rebuild(projection);

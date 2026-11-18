@@ -81,7 +81,7 @@ export async function groupMembership(store: EventStore, silo: string, requester
 /** Require active silo and group membership before allowing shared spending. */
 export async function payingGroupAuthority(store: EventStore, silo: string,
   requesterId: string, groupId: string, binding?: Binding, callerDeadline = Infinity) {
-  const started = performance.now();
+  const started = store.clock.now();
   const deadline = Math.min(started + 2000, callerDeadline);
   const { groupRows, memberRows } = await readMembership(
     store, silo, requesterId, groupId, deadline);
@@ -94,7 +94,7 @@ export async function payingGroupAuthority(store: EventStore, silo: string,
     // Compare against the histories we authorised, so a concurrent removal fails closed.
     const groupHead = await store.head(`team-${groupId}`, deadline);
     const memberHead = await store.head(`member-${requesterId}`, deadline);
-    const expired = performance.now() >= deadline;
+    const expired = store.clock.now() >= deadline;
     if (groupHead !== groupRows.at(-1)?.sequence || memberHead !== memberRows.at(-1)?.sequence ||
         expired) {
       throw new PayingGroupRefused('Paying group authority changed; try again');

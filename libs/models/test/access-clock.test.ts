@@ -5,6 +5,7 @@ import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { authorityFence } from '../src/authority.ts';
 import { payingGroupAuthority } from '../src/paying-group.ts';
 import { BudgetActor } from '../src/actor.ts';
+import { priceTableId } from '../src/state.ts';
 import { accessDeadline } from '../src/budget-writer.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>> | undefined;
@@ -17,18 +18,20 @@ afterEach(close);
 
 async function authorityDeadline(expired: boolean) {
   const clock = manualClock();
-  async function head() {
-    return 0;
+  function head() {
+    return Promise.resolve(0);
   }
   async function* readStream() {}
   const store = { clock, head, readStream };
   const fresh = await authorityFence(store, clock.now(), ['member-alice']);
+  const now = vi.spyOn(clock, 'now');
   if (expired) clock.advance(2001);
   if (expired) {
     await expect(fresh()).rejects.toThrow('Authority snapshot expired');
   } else {
     await expect(fresh()).resolves.toBeUndefined();
   }
+  expect(now).toHaveBeenCalled();
 }
 it.each([false, true])('uses manual time for authority confirmation (expired: %s)',
   authorityDeadline);
@@ -46,18 +49,20 @@ async function payingDeadline(expired: boolean) {
   const head = nats.store.head.bind(nats.store);
   const teamHead = await head('team-sales');
   const memberHead = await head('member-alice');
-  async function savedHead(subject?: string) {
-    if (subject === 'team-sales') return teamHead;
-    return memberHead;
+  function savedHead(subject?: string) {
+    if (subject === 'team-sales') return Promise.resolve(teamHead);
+    return Promise.resolve(memberHead);
   }
   // Isolate the access check from the event store's own deadline refusal.
   vi.spyOn(nats.store, 'head').mockImplementation(savedHead);
+  const now = vi.spyOn(clock, 'now');
   if (expired) clock.advance(2001);
   if (expired) {
     await expect(fresh()).rejects.toThrow('Paying group authority changed');
   } else {
     await expect(fresh()).resolves.toBeUndefined();
   }
+  expect(now).toHaveBeenCalled();
 }
 it.each([false, true])('uses manual time for group authority (expired: %s)', payingDeadline);
 
@@ -65,21 +70,21 @@ async function actorDeadline(expired: boolean) {
   const clock = manualClock();
   nats = await natsFixture({ clock });
   const actor = new BudgetActor(nats.store, 'test');
-  const append = nats.store.append.bind(nats.store);
-  let deadline: number | undefined;
-  async function save(command: Parameters<typeof append>[0]) {
-    deadline = command.deadline;
-    if (expired) clock.advance(2001);
-    return append(command);
-  }
-  vi.spyOn(nats.store, 'append').mockImplementationOnce(save);
-  const starting = actor.start();
+  await actor.start(100, 100, 'group');
+  const call = { model: 'gpt-6-luna', priceTableId, computerId: 'computer',
+    assistantId: 'assistant', requesterId: 'alice', conversationId: 'conversation',
+    turnId: 'turn', threadId: 'thread', payingGroupId: 'group', contextDigest: '0'.repeat(64) };
+  const reservation = await actor.reserve(call, 1);
+  const sleep = vi.spyOn(clock, 'sleep');
+  const releasing = actor.releaseUndispatched(reservation);
+  if (expired) clock.advance(2001);
   if (expired) {
-    await expect(starting).rejects.toThrow('Budget append unavailable');
+    await expect(releasing).rejects.toThrow('Budget append unavailable');
   } else {
-    await starting;
+    await releasing;
+    expect(actor.state.reservations[0]?.settledCents).toBe(0);
   }
-  expect(deadline).toBe(2000);
+  expect(sleep).toHaveBeenCalledWith(2000, expect.any(AbortSignal));
 }
 it.each([false, true])('uses manual time for the actor queue (expired: %s)', actorDeadline);
 
