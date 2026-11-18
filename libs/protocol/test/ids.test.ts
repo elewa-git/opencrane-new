@@ -3,7 +3,9 @@ import { recordIdPattern, recordIdSchema } from '../src/index.ts';
 import { recordIdPattern as eventPattern, recordIdSchema as eventSchema }
   from '@opencrane/events';
 
-it('exposes the shared ID checks to browser callers', () => {
+function exposesSharedIdChecks() {
   expect(recordIdPattern).toBe(eventPattern);
   expect(recordIdSchema).toBe(eventSchema);
-});
+}
+
+it('exposes the shared ID checks to browser callers', exposesSharedIdChecks);
