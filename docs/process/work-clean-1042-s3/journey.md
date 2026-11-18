@@ -1,5 +1,28 @@
 # Fresh-stack CORE journey
 
+## Passing run
+
+Journey on a fresh dev stack: PASS.
+
+- Date: 18 November 2026.
+- Tested source head: `2edb118cd9c4f24bd42e33424047e7d54c10f6c3`.
+- Fresh secondary slot: 1, with managed calls enabled through the stand-in provider.
+- Load average stayed below 6 for more than five minutes before startup. The 12
+  readings from 00:42:08 to 00:47:15 UTC ranged from 0.51 to 1.19.
+- `infra/dev-stack/up.sh --fresh`: PASS. Website readiness: 38,488 ms.
+- CORE browser journey: PASS at 390 px and 1280 px, including attachment replies,
+  live computer view, session refusal and organisation history refusal.
+- `infra/dev-stack/down.sh`: PASS; final slot status was `free`.
+
+The four captures below were copied from this run and visually checked:
+
+- [Completed attachment chat at 1280 px](pass-chat-1280.png)
+- [Completed attachment chat at 390 px](pass-chat-390.png)
+- [Organisation history refusal at 1280 px](pass-refusal-1280.png)
+- [Organisation history refusal at 390 px](pass-refusal-390.png)
+
+## First attempt (failure retained)
+
 Journey on a fresh dev stack: FAIL
 
 - Date: 18 November 2026.

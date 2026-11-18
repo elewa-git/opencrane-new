@@ -89,5 +89,6 @@ assertion, production append validation or error handling is relaxed.
 Shipped-code changes: zero lines. No runtime dependency or licence changes.
 Independent review is left to the orchestrator.
 
-Fresh-stack CORE: FAIL. The 1280 px image attachment reply did not complete.
-[The journey receipt](journey.md) retains the captures, failed step and teardown result.
+Fresh-stack CORE: the first run failed at the 1280 px image attachment reply; the
+fresh rerun passed. [The journey receipt](journey.md) keeps the failure record and
+links the four visually checked captures from the passing run.
