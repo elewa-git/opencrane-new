@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { RawData, WebSocket } from 'ws';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -13,7 +14,7 @@ type Subscriber = { store: ChatOptions['store']; silo: string; memberId: string;
   conversationId: string; socket: WebSocket; current(): boolean; confirm(): Promise<boolean> };
 const subscribers = new Set<Subscriber>();
 let retained = 0;
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 const replySchema = z.strictObject({ type: z.literal('private_reply'),
   sequence: z.int().positive(), previousSequence: z.int().nonnegative(),
   conversationId: identifier, turnId: identifier, threadId: identifier,

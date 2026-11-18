@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { computerSummary } from '@opencrane/auth';
 import { computerTurnClosedDataSchema, type RoutineState } from '@opencrane/events';
@@ -9,7 +10,7 @@ import { readRootStopEvidence, type BudgetActor } from '@opencrane/models';
 type Options = { enabled?: boolean; replay?: boolean; requireCurrent?: () => Promise<void> };
 type Run = NonNullable<RoutineState['activeRun']>;
 
-const referenceSchema = z.strictObject({ routineId: z.string().regex(/^[\w-]{1,200}$/u),
+const referenceSchema = z.strictObject({ routineId: recordIdSchema,
   eventId: z.string().min(1).max(300), position: z.int().positive() });
 
 /** Apply saved Stop, Pause or Retire intent only in explicitly enabled live work. */

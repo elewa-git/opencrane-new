@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { personalConnectionCreation } from '@opencrane/events';
 import { z } from 'zod';
 import { foldConnectionSelection, history, loadPersonalProfileMetadata,
@@ -5,7 +6,7 @@ import { foldConnectionSelection, history, loadPersonalProfileMetadata,
 import type { GroupOptions } from '../members/group-routes.ts';
 import { conversationListCursor, ConversationListChanged } from '../chat/list-cursor.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 export const profileListQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(50).default(20),
   status: z.enum(['all', 'saved', 'unavailable']).default('all'),

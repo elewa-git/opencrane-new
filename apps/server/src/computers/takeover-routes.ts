@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteOptions } from 'fastify';
@@ -6,7 +7,7 @@ import { sessionFor } from '../members/routes.ts';
 import { isChatRefused, ChatRefused, type ChatOptions } from '../chat/access.ts';
 import { controlStatus, requestControl, ControlConflict, RequesterOnly } from './takeover.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const params = z.object({ conversationId: id });
 const body = z.object({ commandId: id, requesterEventId: id, generation: z.int().positive() }).strict();
 export function registerTakeoverRoutes(app: FastifyInstance, config: AuthConfig,

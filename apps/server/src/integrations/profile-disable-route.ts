@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { changePersonalConnection, MemberAccessRefused }
@@ -8,7 +9,7 @@ import { sessionFor } from '../members/routes.ts';
 import { sameOrigin } from '../members/guard.ts';
 import { invalidBody } from './instance-routes.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id, userId: id, profileId: id });
 const emptyQuery = z.strictObject({});
 const bodySchema = z.strictObject({ changeRef: id, expectedSequence: z.int().nonnegative() });

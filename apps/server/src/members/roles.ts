@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberRoleChangedDataSchema, ownershipTransferredSchema,
@@ -9,7 +10,7 @@ import { activeMember, authorityFence, currentMembership, currentOwnershipMember
   readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import type { GroupOptions } from './group-routes.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 export const roleParams = z.object({ memberId: identifier, commandId: identifier.optional() });
 const roleBody = z.object({ commandId: identifier, newRole: z.enum(['member', 'admin']),
   expectedSequence: z.int().nonnegative().safe() }).strict();

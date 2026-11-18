@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { PersonalKeyDependencies } from '@opencrane/models';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -35,7 +36,7 @@ export function registerGroupRoutes(
     try {
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) throw new GroupRefused('Active membership required');
-      const id = z.string().regex(/^[\w-]{1,200}$/u);
+      const id = recordIdSchema;
       const parameters = z.object({ groupId: id.optional(), commandId: id.optional() });
       const { groupId, commandId } = parameters.parse(request.params);
       if (request.method === 'GET') return await read(reply, options, memberId, groupId, commandId);

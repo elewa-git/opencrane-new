@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import type {
   FastifyBodyParser,
@@ -15,7 +16,7 @@ import type { AuthConfig } from '@opencrane/auth';
 import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
-import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
+import { requireMember, MemberRefusal } from '../members/guard.ts';
 import { fileCommand, ownConversation } from './commands.ts';
 import {
   FileRefusal,
@@ -33,7 +34,7 @@ export interface FileOptions extends Omit<ChatOptions, 'keys'> {
     Promise<() => 'clean' | 'infected'>;
 }
 
-const id = idSchema.regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const limit = 20 * 1024 * 1024;
 const conversationParams = z.object({ conversationId: id });
 const viewQuery = z.object({ path: z.string(), preview: z.string().optional() });

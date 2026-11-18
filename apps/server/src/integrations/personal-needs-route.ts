@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { personalConnectionRefusal, logPersonalConnectionFailure }
   from './personal-connection-failure.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -8,7 +9,7 @@ import { personalConnectionNeeds } from '../chat/personal-connection-needs.ts';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 
-const querySchema = z.object({ assistantId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) }).strict();
+const querySchema = z.object({ assistantId: recordIdSchema }).strict();
 
 export function registerPersonalConnectionNeeds(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {

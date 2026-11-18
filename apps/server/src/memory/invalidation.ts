@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
 import { lostMemoryAccess } from './access-loss.ts';
 import { createHash } from 'node:crypto';
@@ -9,7 +10,7 @@ import { foldMemoryContext, history, memoryReferences, type MemoryContextState }
 import { memoryScopeId } from '@opencrane/projections';
 import { readChatFacts, type ChatFacts } from '../chat/chat-summary.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const requestSchema = z.strictObject({ conversationId: identifier, turnId: identifier,
   threadId: identifier, inputGeneration: identifier, causeId: identifier.optional() });
 type Request = z.infer<typeof requestSchema>;

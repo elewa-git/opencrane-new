@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { routineControlSchema, type EventEnvelope, type RoutineState } from '@opencrane/events';
 import { history, ownershipWriteAccess, readRoutineDeactivation } from '@opencrane/models';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const revision = z.int().positive();
 const inputSchema = z.strictObject({ routineId: id, occurrenceId: id,
   expectedPosition: z.int().nonnegative(), expectedDefinitionRevision: revision,

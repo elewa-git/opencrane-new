@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -151,7 +152,7 @@ async function discoverScopes(request: FastifyRequest, options: MemoryOptions, r
   return { scopes, limits };
 }
 
-const detailIdentifier = z.object({ memoryId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) });
+const detailIdentifier = z.object({ memoryId: recordIdSchema });
 async function readDetail(request: FastifyRequest, options: MemoryOptions, requester: string,
   scope: Awaited<ReturnType<typeof resolveScope>>) {
   const detail = detailIdentifier.safeParse(request.params);

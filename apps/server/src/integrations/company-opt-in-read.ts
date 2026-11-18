@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
@@ -5,7 +6,7 @@ import { foldCompanyOptIn, history, readActiveMember, toolPolicyFromRows }
   from '@opencrane/models';
 import { z } from 'zod';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id });
 const emptyQuery = z.strictObject({});
 function registered(row: StoredEvent) {

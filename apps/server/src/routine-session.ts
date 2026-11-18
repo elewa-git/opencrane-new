@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -17,7 +18,7 @@ interface Worker {
   checkCurrent: (deadline: number) => Promise<boolean>;
   now?: () => number;
 }
-const inputSchema = z.strictObject({ routineId: z.string().regex(/^[\w-]{1,200}$/u),
+const inputSchema = z.strictObject({ routineId: recordIdSchema,
   occurrenceId: z.string().regex(/^[\w-]{1,300}$/u) });
 const assistantSchema = z.object({ kind: z.literal('team'), payingGroupId: z.string() });
 const settingsSchema = z.object({ active: z.boolean().optional() });
@@ -163,7 +164,7 @@ export async function loadRoutinePreparation(store: EventStore,
   keys: ReturnType<typeof conversationKeys>, worker: Worker, raw: unknown, allowActivation = false) {
   try {
     const input = inputSchema.parse(raw);
-    const workerId = z.string().regex(/^[\w-]{1,200}$/u).parse(worker.workerId);
+    const workerId = recordIdSchema.parse(worker.workerId);
     const saved = await loadPreparation(store, worker, input, allowActivation);
     const run = saved.run;
     const ownerId = run.definition.ownerId;

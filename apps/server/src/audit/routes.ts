@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -33,7 +34,7 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
         ? auditFilterSchema.pick({ before: true, requestId: true, turnId: true,
           decision: true }).strict().parse(request.query)
         : auditFilterSchema.parse(request.query);
-      const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u).optional() }).parse(request.params);
+      const { conversationId } = z.object({ conversationId: recordIdSchema.optional() }).parse(request.params);
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) return reply.code(403).send({ status: 'refused' });
       const query = { ...filters,

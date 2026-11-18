@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { computerSummary } from '@opencrane/auth';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -9,7 +10,7 @@ import { creationEvent } from '../chat/private-session.ts';
 import { MemoryRefused, scopeFor, type MemoryOptions, type Scope } from './access.ts';
 import { memorySnapshot } from './reads.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 export const previewParams = z.strictObject({ conversationId: identifier, turnId: identifier });
 const sessionSchema = z.object({ mode: z.literal('agent_session'), createdBy: identifier,
   assistantId: identifier });

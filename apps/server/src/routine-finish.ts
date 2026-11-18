@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -10,7 +11,7 @@ import { budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema,
 import { history } from '@opencrane/models';
 import { proveRoutineSuccess, successEvidenceSchema } from './routine-success.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const inputSchema = z.strictObject({ routineId: id, occurrenceId: id,
   terminalEvidence: z.strictObject({ eventId: z.string().min(1).max(300),
     position: z.int().positive() }), successEvidence: successEvidenceSchema.optional() });

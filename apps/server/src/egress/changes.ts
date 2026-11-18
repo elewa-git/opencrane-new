@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { egressGrantStream } from '@opencrane/projections';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -129,7 +130,7 @@ export async function egressChange(options: EgressOptions, memberId: string,
   return receipt(original);
 }
 
-const changeParameters = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u) }).strict();
+const changeParameters = z.object({ commandId: recordIdSchema }).strict();
 const ruleQuery = egressRuleSchema.extend({ port: z.coerce.number().int().min(1).max(65535)
   .default(443) });
 export async function writeEgress(request: FastifyRequest, reply: FastifyReply,

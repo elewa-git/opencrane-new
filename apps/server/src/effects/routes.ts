@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -10,7 +11,7 @@ import type { IntegrationOptions } from '../integrations/routes.ts';
 import { sessionFor } from '../members/routes.ts';
 
 type EffectOptions = IntegrationOptions & { store: EventStore };
-const changeId = z.string().regex(/^[\w-]{1,200}$/u);
+const changeId = recordIdSchema;
 const effectChangeParamsSchema = z.object({ permitId: changeId, commandId: changeId }).strict();
 export function registerEffectRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions) {
   void app.register((scope, _options, done) => {
@@ -109,7 +110,7 @@ async function authoriseRead(options: EffectOptions, issuer: string, sub: string
 }
 
 function requestPermitId(request: FastifyRequest) {
-  const params = z.object({ permitId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const params = z.object({ permitId: recordIdSchema });
   return params.parse(request.params).permitId;
 }
 

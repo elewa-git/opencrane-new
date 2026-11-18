@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { registerPersonalConnectionNeeds } from './personal-needs-route.ts';
 import { registerPersonalKeyRoutes } from './personal-key-routes.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -12,7 +13,7 @@ import { registerConnectionProfileRevoke } from './profile-revoke-route.ts';
 import { registerConnectionSelection } from './selection-route.ts';
 import { registerConnectionProfileList } from './profile-list-route.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id, profileId: id });
 const adminParameters = parameters.extend({ userId: id });
 const changeParameters = parameters.extend({ changeRef: id });

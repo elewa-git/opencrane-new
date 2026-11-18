@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { EventStore } from '@opencrane/event-store';
 import type { Query } from '@opencrane/projections';
 import { history, mcpCatalogueWatch, toolPolicyFromRows } from '@opencrane/models';
@@ -5,7 +6,7 @@ import { z } from 'zod';
 import { discoverInventory } from './inventory.ts';
 import { remoteRequest, type RemoteNetwork } from './remote.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 const candidate = z.object({ silo: z.string(), server_id: identifier,
   source_kind: z.literal('remote') });
 const registration = z.object({ serverId: identifier, kind: z.literal('remote'),

@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -6,7 +7,7 @@ import { assistantCreatedDataSchema, assistantGrantSchema } from '@opencrane/eve
 import { authorityFence, history, models } from '@opencrane/models';
 import { activeMember, GroupConflict, GroupRefused } from '../members/groups.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const inputSchema = z.object({
   commandId: id, assistantId: z.string().max(200).regex(/^team-[\w-]+$/u),
   groupId: id, payingGroupId: id,

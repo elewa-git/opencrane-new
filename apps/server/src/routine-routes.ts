@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -9,7 +10,7 @@ import { readRoutineRuns, routineRunsQuery } from './routine-runs.ts';
 import { ConversationListChanged } from './chat/list-cursor.ts';
 import { readRoutineList, routineListQuery } from './routine-list.ts';
 
-const parameters = z.object({ routineId: z.string().regex(/^[\w-]{1,200}$/u).optional() }).strict();
+const parameters = z.object({ routineId: recordIdSchema.optional() }).strict();
 
 export function registerRoutineReads(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {

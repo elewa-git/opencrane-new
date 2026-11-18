@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { readEventAt, type EventStore } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
 import { pauseDeadline } from './bridge-pause-time.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 const stopReceipt = z.object({ kind: z.literal('executor_stop'),
   generation: z.int().positive(), podUid: identifier, takeoverId: identifier,
   affectedTurnIds: z.array(identifier).max(64), epoch: identifier,

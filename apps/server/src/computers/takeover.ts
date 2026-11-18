@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -18,7 +19,7 @@ export { RequesterOnly, ControlConflict } from './takeover-refusals.ts';
 class ControlUnavailable extends Error {}
 class ControlBindingConflict extends ControlConflict {}
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const requestSchema = z.object({
   commandId: id, conversationId: id, requesterEventId: id, generation: z.int().positive(),
 }).strict();

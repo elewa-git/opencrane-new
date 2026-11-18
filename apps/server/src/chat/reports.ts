@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { FileRefusal } from '../files/refusals.ts';
 import { artifactListSchema } from '@opencrane/events';
 import { publishArtifacts, type ArtifactPublication } from '../files/artifacts.ts';
@@ -20,7 +21,7 @@ export class ReportRejected extends Error {}
 class MemoryReportRejected extends ReportRejected {}
 
 const existingReportSchema = z.object({
-  artifacts: artifactListSchema.optional(), sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
+  artifacts: artifactListSchema.optional(), sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: recordIdSchema,
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),

@@ -1,6 +1,6 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 import { budgetCeilingSetDataSchema, budgetExhaustedDataSchema,
   budgetRootAllowanceSetDataSchema, budgetRootStoppedDataSchema, routineActivationSchema }
@@ -34,7 +34,7 @@ export async function claimRoutineActivation(...args: Parameters<typeof readRout
 
 async function admit(store: Arguments[0], keys: Arguments[1], worker: Arguments[2],
   raw: unknown, selection: Arguments[4], senderAttemptId: string, recordAdmission: boolean) {
-  z.string().regex(/^[\w-]{1,200}$/u).parse(senderAttemptId);
+  recordIdSchema.parse(senderAttemptId);
   // Read growing budget history before preparation starts its access deadline.
   const budgetSubject = `budget-${worker.silo}`;
   const budgetRows = await history(store, budgetSubject, worker.silo, performance.now() + 10_000);

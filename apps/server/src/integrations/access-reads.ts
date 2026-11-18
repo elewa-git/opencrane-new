@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -10,7 +11,7 @@ import { modelAccessCandidatesQuerySchema, modelAccessCandidatesResponseSchema,
   modelAccessGrantSchema } from '@opencrane/protocol';
 import type { GroupOptions } from '../members/group-routes.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id });
 const emptyQuery = z.strictObject({});
 const registration = z.object({ serverId: id });

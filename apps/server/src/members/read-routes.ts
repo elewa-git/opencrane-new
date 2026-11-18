@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -10,7 +11,7 @@ import { memberCounts } from './read-counts.ts';
 import type { GroupOptions } from './group-routes.ts';
 import { sessionFor } from './routes.ts';
 
-const parameters = z.object({ memberId: z.string().regex(/^[\w-]{1,200}$/u).optional() });
+const parameters = z.object({ memberId: recordIdSchema.optional() });
 
 class InvalidMemberRequest extends Error {
   constructor(error: z.ZodError) {

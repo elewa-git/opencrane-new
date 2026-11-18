@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -11,8 +12,7 @@ import { modelAccessCommandSchema, modelAccessReceiptSchema, modelAccessChangeSc
 import type { GroupOptions as ModelAccessOptions } from '../members/group-routes.ts';
 import { ChangeUnknown, TargetConflict } from '../models/access-changes.ts';
 
-const identifierSchema = z.string();
-const id = identifierSchema.regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id });
 const changeParameters = parameters.extend({ commandId: id });
 const modelIdField = { modelId: true } as const;

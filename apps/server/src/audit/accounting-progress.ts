@@ -1,10 +1,11 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { auditRecordSchema, type AuditRecord } from '@opencrane/protocol';
 import type { Query } from '@opencrane/projections';
 
 const position = z.coerce.number().int().nonnegative().safe();
 const snapshotSchema = z.object({
-  permitId: z.string().regex(/^[\w-]{1,200}$/u), metadata: auditRecordSchema,
+  permitId: recordIdSchema, metadata: auditRecordSchema,
   version: z.number().int().min(5), sequence: position, generation: position,
   callSilo: z.string().nullable(), reservationId: z.string().nullable(),
   callPermitId: z.string().nullable(), callPosition: position.nullable(),

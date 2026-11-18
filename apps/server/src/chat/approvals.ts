@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { approvalReviewSchema } from '@opencrane/protocol';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -11,11 +12,11 @@ import { approvalCards, readApproval, decideApproval, ApprovalNotFound,
   from '@opencrane/models';
 import { readEvents } from '@opencrane/projections';
 import { writeChatAccess, isChatRefused, conversationParticipation, ChatAccessApplying } from './access.ts';
-import { requireMember, MemberRefusal, idSchema, sameOrigin } from '../members/guard.ts';
+import { requireMember, MemberRefusal, sameOrigin } from '../members/guard.ts';
 import { sessionFor } from '../members/routes.ts';
 import type { ChatOptions } from './routes.ts';
 
-const conversationParameters = z.object({ conversationId: idSchema.regex(/^[\w-]{1,200}$/u) });
+const conversationParameters = z.object({ conversationId: recordIdSchema });
 const statusParameters = conversationParameters.extend({
   logicalRequestId: z.string().regex(/^[a-f0-9]{64}$/u),
 });

@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { departureCleanupCompletedSchema, memberRemovedDataSchema } from '@opencrane/events';
@@ -9,7 +10,7 @@ import { memberInventory, reviewedRevision } from './inventory.ts';
 import { projectionProgress } from './roles.ts';
 
 const removalBody = z.object({
-  commandId: z.string().regex(/^[\w-]{1,200}$/u),
+  commandId: recordIdSchema,
   expectedSequence: z.int().nonnegative().safe(),
   reviewRevision: z.string().regex(/^[a-f0-9]{64}$/u),
 }).strict();

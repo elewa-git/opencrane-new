@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
 import type { Binding } from '@opencrane/authz';
@@ -8,7 +9,7 @@ import { changeCompanyOptIn, CompanyOptInConflict, CompanyOptInInputInvalid }
 import { z } from 'zod';
 import { sameOrigin } from '../members/guard.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id });
 const emptyQuery = z.strictObject({});
 const fields = companyOptInSetDataSchema.omit({ serverId: true, changedBy: true });

@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { authorityFence, memoryReferences, readActiveMember } from '@opencrane/models';
@@ -15,7 +16,7 @@ import { changeReceipt } from './forget.ts';
 import { confirmChange, changeRefused, type AgentChange, type WriteAuthority }
   from './change-authority.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const targetParams = z.strictObject({ scopeId: z.string(), memoryId: identifier });
 const fields = memoryWrittenDataSchema.pick({ kind: true, pinned: true, expiresAt: true });
 const inputSchema = fields.extend({ commandId: identifier, expectedRevision: z.int().positive(),

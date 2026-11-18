@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -12,7 +13,7 @@ import { readEventAt, type StoredEvent } from '@opencrane/event-store';
 import type { GroupOptions as ModelAccessOptions } from '../members/group-routes.ts';
 
 const parameters = z.object({ modelId: providerModelIdSchema }).strict();
-const changeParameters = parameters.extend({ commandId: z.string().regex(/^[\w-]{1,200}$/u) });
+const changeParameters = parameters.extend({ commandId: recordIdSchema });
 export class ChangeUnknown extends Error {}
 type TargetReason = 'model_unavailable' | 'target_unavailable' | 'target_changed';
 export class TargetConflict extends Error {

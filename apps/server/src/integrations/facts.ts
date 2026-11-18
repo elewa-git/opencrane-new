@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { readActiveMember, readToolPolicy } from '@opencrane/models';
@@ -6,7 +7,7 @@ import { integrationFactsSchema, type ToolPolicy } from '@opencrane/protocol';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { loadToolAccess } from './access-reads.ts';
 
-const parameters = z.strictObject({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+const parameters = z.strictObject({ serverId: recordIdSchema });
 const emptyQuery = z.strictObject({});
 const registrationFields = parameters.strip();
 const publicationFields = integrationFactsSchema.shape.availability.shape.publication.strip();
