@@ -1,0 +1,27 @@
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/clock.test.ts libs/models/test/egress-relay.test.ts libs/models/test/dispatch-clock.test.ts libs/models/test/codex-mcp.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ libs/models/test/codex-mcp.test.ts (32 tests | 1 failed) 111282ms
+   × uses only this held approval through the real gateway: generation 1571ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/codex-mcp.test.ts > uses only this held approval through the real gateway: generation
+SyntaxError: Unexpected token 'a', "authentica"... is not valid JSON
+ ❯ bindsHeldApproval libs/models/test/codex-mcp.test.ts:447:65
+    445|     const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/in…
+    446|     const asked = await fetch(url, options);
+    447|     const decision = z.object({ approvalId: z.string() }).parse(await …
+       |                                                                 ^
+    448|     if (change === 'unchanged') {
+    449|       const checkedAt = new Date().toISOString();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 77 passed (78)
+   Start at  15:33:13
+   Duration  121.10s (tests 88%, transform 8%, import 4%)

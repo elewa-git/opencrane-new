@@ -137,8 +137,10 @@ Split the PostgreSQL slow-connection fixture into a named helper to keep its cal
 within the existing cap. Extracted the browser tool-policy actions and exact API
 response check, removing the old inline callbacks. No size limit was raised.
 
-Decision and approval changes stay on the existing lines: direct clock swaps and
-named clock forwarding at the existing helper calls. This limits overlap with the
-open decision and approval pull request.
+Approval changes remain direct clock swaps. Decision timing uses named options
+and reuses the request’s existing memory claims. Dispatch evidence and egress
+directory checks have named responsibilities. The [review fixes](review-round-1.md)
+record refusal probes, size reductions and the unchanged behaviour checks.
 
-Shipped code: **609 added plus deleted lines**, including the new timer helper.
+The original reviewed change shipped **609 added plus deleted lines**, including
+the new timer helper. The review fix receipt records the extraction and final gates.

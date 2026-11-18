@@ -1,0 +1,29 @@
+npm notice run typecheck
+npm notice run npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack
+npm notice run typecheck
+npm notice run tsc --noEmit
+npm notice run @opencrane/demo-mcp@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run @opencrane/odoo-mcp@0.1.0 typecheck
+npm notice run @opencrane/ops@0.1.0 typecheck
+npm notice run @opencrane/server@0.1.0 typecheck
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+test/dispatch-clock.test.ts(19,11): error TS18046: 'command.event' is of type 'unknown'.
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 2
+npm error path <worktree>/libs/models
+npm error workspace @opencrane/models@0.1.0
+npm error location <worktree>/libs/models
+npm error command failed
+npm error command sh -c tsc --noEmit -p tsconfig.json
+
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck

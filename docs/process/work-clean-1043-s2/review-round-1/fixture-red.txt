@@ -1,0 +1,34 @@
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/clock.test.ts --maxWorkers=2 -t independent through
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ libs/event-store/test/clock.test.ts (7 tests | 1 failed | 6 skipped) 1298ms
+   × keeps default fixture clocks independent through advances and restoration 1295ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/event-store/test/clock.test.ts > keeps default fixture clocks independent through advances and restoration
+AssertionError: expected 2000000 to be 1002000 // Object.is equality
+
+- Expected
++ Received
+
+- 1002000
++ 2000000
+
+ ❯ independentFixtureClocks libs/event-store/test/clock.test.ts:93:39
+     91|       const secondTime = manualStoreTime(second.store, 2_000_000);
+     92|       firstTime.advance(2000);
+     93|       expect(first.store.clock.now()).toBe(1_002_000);
+       |                                       ^
+     94|       expect(first.reader.clock.now()).toBe(1_002_000);
+     95|       expect(second.store.clock.now()).toBe(2_000_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  15:19:54
+   Duration  3.16s (tests 45%, transform 38%, import 17%)

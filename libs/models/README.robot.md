@@ -20,7 +20,10 @@ expiry continue to use `Date.now()`.
 
 Credential deadline waits and the relay proof watchdog use the injected clock.
 Native timers retain their original reference behaviour with the system clock.
-Fixed service timeouts and periodic checks still use native timers. ESLint refuses
+Fixed service timeouts and periodic checks still use native timers.
+`mcp-dispatch-receipts.ts` saves dispatch starts and refusal evidence. It keeps
+the evidence-only deadline separate from permission to send.
+ESLint refuses
 `performance.now` in model and event-store source, except the system clock adapter.
 
 For people, read [README.md](README.md) first.

@@ -62,3 +62,11 @@ is **NOT RUN** for the journey. Its [startup](attempt-bootstrap/startup.txt),
 [status](attempt-bootstrap/status.txt) and [teardown result](attempt-bootstrap/result.txt)
 were preserved. The corrected attempt above used another fresh startup after a
 new eligibility check. It ran the complete required CORE path.
+
+## Behaviour-preserving review fixes
+
+The [fix receipt](review-round-1.md) records the later test-proof repairs and
+receipt extraction. The extraction preserves production behaviour; the focused
+receipt and dispatch tests pass before and after. This existing CORE PASS remains
+the product journey evidence. No new live journey is claimed for the fixes, and
+the approval qualification above remains NOT RUN.

@@ -1,0 +1,35 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/codex-mcp.test.ts --maxWorkers=2 -t saves the approval outcome
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ libs/models/test/codex-mcp.test.ts (32 tests | 1 failed | 30 skipped) 6590ms
+   × saves the approval outcome at 1999 ms of manual decision time: approval.decided 3416ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/codex-mcp.test.ts > saves the approval outcome at 1999 ms of manual decision time: approval.decided
+AssertionError: expected 'approval.expired' to be 'approval.decided' // Object.is equality
+
+Expected: "approval.decided"
+Received: "approval.expired"
+
+ ❯ savesApprovalAtManualBoundary libs/models/test/codex-mcp.test.ts:676:33
+    674|     const rows = await history(setup.nats.store, `approval-${approval.…
+    675|     expect(rows).toHaveLength(2);
+    676|     expect(rows[1]?.event.type).toBe(outcome);
+       |                                 ^
+    677|     expect(result.status).toBe(outcome === 'approval.decided' ? 'appen…
+    678|     if (outcome === 'approval.decided') {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 30 skipped (32)
+   Start at  15:24:17
+   Duration  14.07s (tests 48%, transform 37%, import 15%)
+
+  Transform  transforming modules took 5.15s · 37% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
