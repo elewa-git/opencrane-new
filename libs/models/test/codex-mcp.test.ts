@@ -444,7 +444,9 @@ async function bindsHeldApproval(change: string) {
     const options = { method: 'POST', headers, body: JSON.stringify(capture.body) };
     const url = `http://127.0.0.1:${setup.options.port}/mcp/fixture/installed`;
     const asked = await fetch(url, options);
-    const decision = z.object({ approvalId: z.string() }).parse(await asked.json());
+    const askedText = await asked.text();
+    expect(asked.status, askedText).toBe(403);
+    const decision = z.object({ approvalId: z.string() }).parse(JSON.parse(askedText));
     if (change === 'unchanged') {
       const checkedAt = new Date().toISOString();
       const check = { serverId: 'fixture', outcome: 'unchanged', schemaDigest: catalogueDigest,

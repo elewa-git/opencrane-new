@@ -1,5 +1,6 @@
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { manualClock } from '@opencrane/event-store/testing';
+import { parseEventByType } from '@opencrane/events';
 import { fixture } from './fixture.ts';
 import { permit, prepare, send } from './support/mcp-dispatch-fixture.ts';
 
@@ -16,7 +17,9 @@ async function dispatchWithClock(expired: boolean) {
     let finalChecks = 0;
     async function appendAdmission(command: Parameters<typeof append>[0]) {
       const result = await append(command);
-      if (command.event.type === 'mcp.dispatch_admitted' && result.status === 'appended') {
+      const parsed = parseEventByType(command.event);
+      if (!parsed.success) throw new Error('Invalid fixture event');
+      if (parsed.event.type === 'mcp.dispatch_admitted' && result.status === 'appended') {
         admitted = true;
       }
       return result;
