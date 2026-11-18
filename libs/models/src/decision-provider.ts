@@ -60,7 +60,8 @@ export async function decisionProvider(store: EventStore, silo: string,
   }
   async function credential(secrets: ProviderSecrets | undefined, deadline: number) {
     if (!secrets) throw new Error('Provider custody unavailable');
-    const value = await readCredential(secrets, reference, deadline, { clock: store.clock });
+    const clockOptions = { clock: store.clock };
+    const value = await readCredential(secrets, reference, deadline, clockOptions);
     // Reject unusable credentials before holding money or constructing response headers.
     if (!value || /[^\x21-\x7e]/u.test(value) || store.clock.now() >= deadline) {
       throw new Error('Provider custody unavailable');

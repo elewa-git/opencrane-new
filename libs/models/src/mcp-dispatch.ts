@@ -59,6 +59,7 @@ function isBuiltInMemory(policy: Policy) {
 
 export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   const { store, silo } = actor;
+  const clockOptions = { clock: store.clock };
   const logger = createLogger('mcp-dispatch');
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
@@ -177,7 +178,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     // Prepare immutable history and receipts before entering the shared budget queue.
     await permit.confirmAccess.prepare?.(deadline);
     const target = await dispatchRemoteTarget(route, deadline,
-      options?.remoteNetwork ?? {}, { clock: store.clock });
+      options?.remoteNetwork ?? {}, clockOptions);
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
     const position = await store.head(`mcp-${route.serverId}`, deadline);
@@ -219,7 +220,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
         acknowledged, deadline);
       requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit, { clock: store.clock });
+      requireFreshDispatch(req, res, permit, clockOptions);
     }
     let observe: RemoteObserver | undefined;
     let stage = 'dispatch_start';
@@ -240,7 +241,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         stage = 'dispatch_start';
         await requirePublishedPositions(permit, admittedPosition, deadline);
         requireCurrentRoute(permit);
-        requireFreshDispatch(req, res, permit, { clock: store.clock });
+        requireFreshDispatch(req, res, permit, clockOptions);
         observe = await recordStarted(permit, deadline);
       }
       stage = 'final_access';
@@ -253,7 +254,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       // gateway-position read: that replacement is not live yet. Refuse changes visible
       // at that read, then check local state and send without another read or a lock.
       requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit, { clock: store.clock });
+      requireFreshDispatch(req, res, permit, clockOptions);
     } catch (error) {
       await reportRefusal(permit, observe, startedAt, stage, deadline, error);
       throw error;
@@ -384,7 +385,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       await requireGatewayPosition(store, silo, permit.gatewayBinding,
         acknowledged, deadline);
       requireCurrentRoute(permit);
-      requireFreshDispatch(req, res, permit, { clock: store.clock });
+      requireFreshDispatch(req, res, permit, clockOptions);
       // Order admission with Block and quarantine writes on the same server stream.
       // Published calls also recheck this position after saving their start.
       const command = { event, expectedSequence, deadline, historyChecked: true as const };

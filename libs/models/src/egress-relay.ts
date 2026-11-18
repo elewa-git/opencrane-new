@@ -48,7 +48,7 @@ class Relay {
   private checking = false;
   private pending: Promise<void> | undefined;
   private readonly watch: NodeJS.Timeout;
-  private watchdog: (() => void) | undefined;
+  private cancelWatchdog: (() => void) | undefined;
   expiry: NodeJS.Timeout | undefined;
   private proofDeadline: number;
 
@@ -78,7 +78,7 @@ class Relay {
     }
     this.closed = true;
     clearInterval(this.watch);
-    this.watchdog?.();
+    this.cancelWatchdog?.();
     // Keep valid receipt times when the wall clock moves backwards.
     const closedAt = Math.max(Date.now(), this.registeredAt, this.connectedAt ?? 0);
     const record: EgressCloseRecord = {
@@ -110,8 +110,9 @@ class Relay {
       this.close('unavailable');
       return;
     }
-    this.watchdog = clockTimer({ clock: this.clock, milliseconds: remaining,
-      elapsed: this.watchProof, unref: true });
+    const timerOptions = { clock: this.clock, milliseconds: remaining,
+      elapsed: this.watchProof, unref: true };
+    this.cancelWatchdog = clockTimer(timerOptions);
   };
 
   private check = () => {
@@ -130,7 +131,7 @@ class Relay {
     }
     // Date proof from the start of its reads, never from a delayed reply.
     this.proofDeadline = started + proofLifetimeMs;
-    this.watchdog?.();
+    this.cancelWatchdog?.();
     this.watchProof();
   }
   private recheckFailed = (error: unknown) => {

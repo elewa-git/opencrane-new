@@ -20,7 +20,8 @@ export async function readRootStopEvidence(store: EventStore, subject: string, p
       throw new Error('Invalid position');
     }
     const reading = readEvidence(store, subject, position, deadline);
-    return await withinBudgetDeadline(reading, deadline, { clock: store.clock });
+    const clockOptions = { clock: store.clock };
+    return await withinBudgetDeadline(reading, deadline, clockOptions);
   } catch {
     // Keep store errors and evidence identities out of the caller's error.
     throw new Error('Root stop evidence refused');
@@ -220,7 +221,8 @@ export async function readRoutineRemoval(store: EventStore, state: RoutineState 
   let verified = false;
   let position = 0;
   for await (const row of store.readStream(subject, 1, deadline)) {
-    const fields = requireMemberRow(row, state!.silo, subject, { clock: store.clock, deadline });
+    const timing = { clock: store.clock, deadline };
+    const fields = requireMemberRow(row, state!.silo, subject, timing);
     position = row.sequence;
     // Keep later membership changes from erasing removal of the original admission.
     if (row.sequence > cause.position) {

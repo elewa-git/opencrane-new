@@ -89,8 +89,9 @@ export async function prepareRoutineDispatch(actor: BudgetActor, claims: Identit
       return undefined;
     }
     const deadline = actor.store.clock.now() + 10_000;
-    return await withinBudgetDeadline(load(actor, claims, saved, turn, deadline),
-      deadline, { clock: actor.store.clock });
+    const clockOptions = { clock: actor.store.clock };
+    const reading = load(actor, claims, saved, turn, deadline);
+    return await withinBudgetDeadline(reading, deadline, clockOptions);
   } catch (error) {
     refuseRoutineDispatch(error);
   }
@@ -135,7 +136,7 @@ async function load(actor: BudgetActor, claims: Identity,
     if (position !== latest) {
       throw new Error('Routine dispatch refused');
     }
-    if (actor.store.clock.now() >= deadline) {
+    if (store.clock.now() >= deadline) {
       throw new Error('Budget append unavailable');
     }
   }
@@ -166,7 +167,8 @@ async function load(actor: BudgetActor, claims: Identity,
   }
   async function confirm(deadline: number) {
     try {
-      await withinBudgetDeadline(check(deadline), deadline, { clock: store.clock });
+      const clockOptions = { clock: store.clock };
+      await withinBudgetDeadline(check(deadline), deadline, clockOptions);
     } catch (error) {
       refuseRoutineDispatch(error);
     }

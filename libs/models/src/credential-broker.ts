@@ -170,7 +170,9 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
   function discard() {
     material = undefined;
   }
-  const timer = clockTimer({ clock: store.clock, milliseconds: until - store.clock.now(), elapsed: discard });
+  const discardTimer = { clock: store.clock,
+    milliseconds: until - store.clock.now(), elapsed: discard };
+  const cancelDiscard = clockTimer(discardTimer);
   try {
     let access: Access | undefined;
     async function prepare() {
@@ -219,7 +221,7 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
     }
     return undefined;
   } finally {
-    timer();
+    cancelDiscard();
     discard();
   }
 }

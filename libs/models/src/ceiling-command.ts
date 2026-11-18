@@ -35,10 +35,12 @@ export function ceilingReceiptFromHistory(row: StoredEvent, rows: StoredEvent[])
 export function prepareCeilingChange(
   actor: CeilingChangeActor,
   raw: unknown, commandId: string,
-  fresh?: (newCommand?: boolean) => Promise<void>, deadline = actor.store.clock.now() + 10_000,
+  fresh?: (newCommand?: boolean) => Promise<void>, originalDeadline?: number,
 ) {
+  const deadline = Math.min(originalDeadline ?? Infinity, actor.store.clock.now() + 10_000);
+  const clockOptions = { clock: actor.store.clock };
   const reading = readCeilingChange(actor, raw, commandId, fresh, deadline);
-  return withinBudgetDeadline(reading, deadline, { clock: actor.store.clock });
+  return withinBudgetDeadline(reading, deadline, clockOptions);
 }
 
 async function readCeilingChange(actor: CeilingChangeActor, raw: unknown, commandId: string,

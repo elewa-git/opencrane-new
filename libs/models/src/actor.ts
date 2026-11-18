@@ -108,10 +108,8 @@ export class BudgetActor {
   async configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number,
     fresh?: () => Promise<void>) {
     const originalDeadline = knownAccessDeadline(fresh);
-    const preparationDeadline = Math.min(originalDeadline ?? Infinity,
-      this.store.clock.now() + 10_000);
     const prepared = await prepareCeilingChange(this, raw, commandId,
-      fresh, preparationDeadline);
+      fresh, originalDeadline);
     const save = async () => {
       if (prepared.status !== 'ready') return prepared;
       const saved = await readQueuedCeilingReceipt(this, prepared.payload, commandId,
@@ -195,9 +193,10 @@ export class BudgetActor {
     return this.serial(check, this.accessDeadline(fresh));
   }
   async requireCurrent(deadline: number) {
+    const clockOptions = { clock: this.store.clock };
     for (;;) {
       const commands = this.queue;
-      await withinBudgetDeadline(commands, deadline, { clock: this.store.clock });
+      await withinBudgetDeadline(commands, deadline, clockOptions);
       if (this.writer.status !== 'ready' || this.store.clock.now() >= deadline) {
         throw new Error('Budget writer unavailable');
       }
