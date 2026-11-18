@@ -1069,7 +1069,9 @@ optional `serverInfo` (`name`, `version`) and string `definitions`. Entries reje
 unknown fields. IDs use `recordIdPattern` from `@opencrane/events/ids`, matching
 `^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`. The image includes that module
 alongside its other selected event modules. The isolated runtime test reads the
-Dockerfile copy list and checks upload IDs without the rest of the event library.
+Dockerfile copy list and checks upload IDs and SHA-256 hex digests without the rest
+of the event library. `@opencrane/events/digest` hashes strings or bytes with Node
+crypto. The image includes that separate entrypoint for file and caller checks.
 The list allows 20 servers and 48 KiB of JSON encoded as UTF-8. Each server
 allows 1,000 definitions of at most 32,768 characters each. Server name and
 version allow 200 characters each. No entry carries `discoverResult`. The server fills
@@ -1770,9 +1772,9 @@ confinement, remaining quotas, scan/publication and a fresh gVisor journey are N
 ## Private proxy callers — P4-15 PR 4a, first part
 
 The caller registry comes from `@opencrane/models/private-callers`.
-Its implementation is unchanged. The Dockerfile copies this dependency-free module
-alongside `routing.ts`. The separate package entry point avoids loading the models
-library's server dependencies in the computer image.
+The Dockerfile copies this module alongside `routing.ts` and includes its shared
+`@opencrane/events/digest` dependency. The separate package entry point avoids
+loading the models library's server dependencies in the computer image.
 The disabled server recall assembler uses the same checks before preparing a tool list.
 The bridge connects private launches to these checks; see the launch contract below.
 
