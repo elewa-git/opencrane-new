@@ -1,0 +1,25 @@
+2026-11-18T14:18:51+00:00 slots_free=True package_count=0 package_containers=0 load=1.50 stable_seconds=0
+2026-11-18T14:19:21+00:00 slots_free=True package_count=0 package_containers=0 load=1.12 stable_seconds=30
+2026-11-18T14:19:51+00:00 slots_free=True package_count=0 package_containers=0 load=1.13 stable_seconds=60
+2026-11-18T14:20:21+00:00 slots_free=True package_count=0 package_containers=0 load=2.28 stable_seconds=90
+2026-11-18T14:20:51+00:00 slots_free=True package_count=0 package_containers=0 load=2.25 stable_seconds=119
+2026-11-18T14:21:21+00:00 slots_free=True package_count=0 package_containers=0 load=1.81 stable_seconds=150
+2026-11-18T14:21:51+00:00 slots_free=True package_count=0 package_containers=0 load=1.61 stable_seconds=180
+2026-11-18T14:22:21+00:00 slots_free=True package_count=0 package_containers=0 load=1.48 stable_seconds=210
+2026-11-18T14:22:50+00:00 slots_free=True package_count=0 package_containers=0 load=1.55 stable_seconds=239
+2026-11-18T14:23:20+00:00 slots_free=True package_count=0 package_containers=0 load=1.69 stable_seconds=269
+2026-11-18T14:23:51+00:00 slots_free=True package_count=0 package_containers=0 load=1.38 stable_seconds=300
+Eligibility guard: PASS
+2026-11-18T14:30:33+00:00 slots_free=True package_count=0 package_containers=0 load=4.01 stable_seconds=0
+2026-11-18T14:31:02+00:00 slots_free=True package_count=0 package_containers=0 load=3.25 stable_seconds=29
+2026-11-18T14:31:32+00:00 slots_free=True package_count=0 package_containers=0 load=2.67 stable_seconds=58
+2026-11-18T14:32:02+00:00 slots_free=True package_count=0 package_containers=0 load=1.79 stable_seconds=89
+2026-11-18T14:32:32+00:00 slots_free=True package_count=0 package_containers=0 load=1.50 stable_seconds=118
+2026-11-18T14:33:02+00:00 slots_free=True package_count=0 package_containers=0 load=1.46 stable_seconds=149
+2026-11-18T14:33:33+00:00 slots_free=True package_count=0 package_containers=0 load=1.15 stable_seconds=179
+2026-11-18T14:34:03+00:00 slots_free=True package_count=0 package_containers=0 load=1.11 stable_seconds=210
+2026-11-18T14:34:31+00:00 slots_free=True package_count=0 package_containers=0 load=0.94 stable_seconds=238
+2026-11-18T14:35:03+00:00 slots_free=True package_count=0 package_containers=0 load=1.11 stable_seconds=270
+2026-11-18T14:35:32+00:00 slots_free=True package_count=0 package_containers=0 load=2.17 stable_seconds=299
+2026-11-18T14:36:02+00:00 slots_free=True package_count=0 package_containers=0 load=2.70 stable_seconds=329
+Eligibility guard: PASS

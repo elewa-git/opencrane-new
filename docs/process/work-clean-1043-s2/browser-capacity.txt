@@ -1,0 +1,13 @@
+2026-11-18T14:02:21+00:00 slots_free=True package_count=0 package_containers=0 load=2.25 stable_seconds=0
+2026-11-18T14:02:51+00:00 slots_free=True package_count=0 package_containers=0 load=1.67 stable_seconds=29
+2026-11-18T14:03:21+00:00 slots_free=True package_count=0 package_containers=0 load=1.29 stable_seconds=59
+2026-11-18T14:03:50+00:00 slots_free=True package_count=0 package_containers=0 load=1.16 stable_seconds=89
+2026-11-18T14:04:20+00:00 slots_free=True package_count=0 package_containers=0 load=0.90 stable_seconds=119
+2026-11-18T14:04:50+00:00 slots_free=True package_count=0 package_containers=0 load=0.74 stable_seconds=149
+2026-11-18T14:05:21+00:00 slots_free=True package_count=0 package_containers=0 load=1.25 stable_seconds=179
+2026-11-18T14:05:51+00:00 slots_free=True package_count=0 package_containers=0 load=1.45 stable_seconds=209
+2026-11-18T14:06:21+00:00 slots_free=True package_count=0 package_containers=0 load=1.09 stable_seconds=239
+2026-11-18T14:06:50+00:00 slots_free=True package_count=0 package_containers=0 load=0.89 stable_seconds=269
+2026-11-18T14:07:21+00:00 slots_free=True package_count=0 package_containers=0 load=0.89 stable_seconds=299
+2026-11-18T14:07:51+00:00 slots_free=True package_count=0 package_containers=0 load=0.81 stable_seconds=329
+Eligibility guard: PASS

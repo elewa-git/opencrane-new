@@ -1,0 +1,119 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > refuses late payer after saving the start and before releasing credentials
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ refusesLateChange apps/server/test/routine-sender.test.ts:919:22
+    917|     const link = await computer.wake();
+    918|     function completed() {
+    919|       return computer.starts > 0 || computer.closedSessions > 0;
+       |                      ^
+    920|     }
+    921|     await until(completed);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > retains the first native session when another start returns a distinct id
+Error: Timed out waiting for service outcome
+ ❯ until libs/authz/test/services.ts:46:13
+     44|   while (!(await check())) {
+     45|     if (performance.now() >= deadline) {
+     46|       throw new Error("Timed out waiting for service outcome");
+       |             ^
+     47|     }
+     48|     await delay(20);
+ ❯ keepsNativeSession apps/server/test/routine-sender.test.ts:1020:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  apps/server/test/routine-session.test.ts > routine input > rechecks routine.paused before input readback
+Error: Hook timed out in 30000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ apps/server/test/routine-session.test.ts:158:1
+    156|   }
+    157| }
+    158| beforeEach(setup, 30_000);
+       | ^
+    159| afterEach(cleanup);
+    160| function prepare(store = nats.store, request: unknown = input, workerI…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  apps/server/test/routine-session.test.ts > routine input > rechecks routine.retired before input readback
+Error: Routine session refused
+ ❯ prepareRoutineSession apps/server/src/routine-session.ts:158:11
+    156|       startBy: saved.run.startBy, executionAvailable: false as const };
+    157|   } catch {
+    158|     throw new Error('Routine session refused');
+       |           ^
+    159|   }
+    160| }
+ ❯ preparedSession apps/server/test/routine-session.test.ts:611:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  apps/server/test/routine-session.test.ts > routine root > routine activation > refuses changed provider, after awaited checks: false
+Error: Routine root refused
+ ❯ allocateRoutineRoot apps/server/src/routine-root.ts:52:11
+     50|     return await allocate(store, keys, worker, raw, actor, selection, …
+     51|   } catch {
+     52|     throw new Error('Routine root refused');
+       |           ^
+     53|   }
+     54| }
+ ❯ allocated apps/server/test/routine-session.test.ts:1707:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  libs/models/test/egress-relay.test.ts > does not restart the watchdog after a closed relay receives a late success
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ lateCheckAfterRevocation libs/models/test/egress-relay.test.ts:377:30
+    375|   expect(setup.records[0]).toMatchObject({ reason: 'revoked' });
+    376|   // Keep only the expiry timer that reserves the used listener's port.
+    377|   expect(vi.getTimerCount()).toBe(1);
+       |                              ^
+    378|   setup.registry.closeAll();
+    379|   expect(vi.getTimerCount()).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  libs/models/test/egress-startup.test.ts > clears every startup and relay timer even when a recheck finishes after shutdown
+AssertionError: expected 2 to be 4 // Object.is equality
+
+- Expected
++ Received
+
+- 4
++ 2
+
+ ❯ shutdownClearsOwnedTimers libs/models/test/egress-startup.test.ts:148:30
+    146|     expiresAt: Date.now() + 60_000, recheck };
+    147|   await test.runtime.registry.register(request);
+    148|   // Count the native receipt retry, access check and permit expiry ti…
+       |                              ^
+    149|   // Advance the proof watchdog with the injected clock.
+    150|   expect(vi.getTimerCount()).toBe(3);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed | 97 passed (101)
+      Tests  7 failed | 5145 passed | 1 skipped (5153)
+   Start at  08:07:37
+   Duration  7484.94s (tests 98%, import 1%)
+
+    Isolate  101 workers spawned · ~268ms startup each (spawn + environment, per file)
+             at least ~13.27s faster with isolate: false — reuses workers across files instead of one per file

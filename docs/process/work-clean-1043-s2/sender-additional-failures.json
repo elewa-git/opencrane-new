@@ -1,0 +1,44 @@
+[
+  {
+    "test": "does not send after the credential version changes before the release reply",
+    "errors": [
+      "AssertionError: expected false to be true // Object.is equality\n    at refusesCredentialVersionChangedBeforeReleaseReply (<worktree>/apps/server/test/routine-sender.test.ts:481:31)\n    at runNextTicks (node:internal/process/task_queues:64:5)\n    at listOnTimeout (node:internal/timers:547:9)\n    at processTimers (node:internal/timers:521:7)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  },
+  {
+    "test": "polls saved Stop and interrupts only the accepted native routine turn once",
+    "errors": [
+      "AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }\n    at runningProhibition (<worktree>/apps/server/test/routine-sender.test.ts:1121:54)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  },
+  {
+    "test": "polls saved Pause and interrupts only the accepted native routine turn once",
+    "errors": [
+      "AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }\n    at runningProhibition (<worktree>/apps/server/test/routine-sender.test.ts:1121:54)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  },
+  {
+    "test": "polls saved Retire and interrupts only the accepted native routine turn once",
+    "errors": [
+      "AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }\n    at runningProhibition (<worktree>/apps/server/test/routine-sender.test.ts:1121:54)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  },
+  {
+    "test": "polls saved Access and interrupts only the accepted native routine turn once",
+    "errors": [
+      "AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }\n    at runningProhibition (<worktree>/apps/server/test/routine-sender.test.ts:1121:54)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  },
+  {
+    "test": "polls saved Denied and interrupts only the accepted native routine turn once",
+    "errors": [
+      "AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }\n    at runningProhibition (<worktree>/apps/server/test/routine-sender.test.ts:1121:54)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  },
+  {
+    "test": "polls saved Expired and interrupts only the accepted native routine turn once",
+    "errors": [
+      "AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }\n    at runningProhibition (<worktree>/apps/server/test/routine-sender.test.ts:1121:54)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+    ]
+  }
+]

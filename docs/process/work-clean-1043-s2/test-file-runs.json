@@ -1,0 +1,562 @@
+{
+  "initialTimingFiles": 100,
+  "timingFiles": 89,
+  "changedTestFiles": 39,
+  "files": {
+    "apps/ops/test/nightly-memory.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/ops/test/routine-dispatch.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/ops/test/routine-due.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/ops/test/routine-leadership.test.ts": [
+      "sensitive-run2",
+      "shared-clock1",
+      "shared-fixed1",
+      "timing first"
+    ],
+    "apps/ops/test/routine-scan.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/approvals.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/bridge-approvals.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/bridge-gate.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/bridge-replay.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/bridge-turn-tools.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/budget-stop-status.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/child-activation.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/child-root-preparation.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/child-root.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/effect-change.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/email-admission.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/file-scanner.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/group-ownership-reads.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/integration-access-gateway.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/integration-changes.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/integration-facts.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/integrations.test.ts": [
+      "integrations-final3",
+      "integrations-final4",
+      "integrations-fixed1",
+      "integrations-full",
+      "timing first"
+    ],
+    "apps/server/test/live-view-admission.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/live-view-unavailable.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/live-view.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/mcp-instance-worker.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/member-joined.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/member-roles.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/member-routine-presence.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory-delivery.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory-dispatch.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory-initial-delivery.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory-invalidation.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory-mcp.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory-write-admission.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/memory.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/model-access.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/ownership-access.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/ownership.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/personal-key-review.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/personal-memory-tools.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/private-output.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/provider-binding-guards.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/provider-bindings.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/provider-drain.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/provider-routine-presence.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/providers.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/realtime-guards.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/recovery-restore.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/remote-catalogue-watch.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-admin-pause.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-approval-expiry.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-assistant-pause.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-company-preflight.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-composition.test.ts": [
+      "sensitive-run2",
+      "shared-fixed1",
+      "shared-fixed2",
+      "timing first"
+    ],
+    "apps/server/test/routine-finish.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-handoff.test.ts": [
+      "sensitive-run2",
+      "shared-clock1",
+      "shared-fixed1",
+      "timing first"
+    ],
+    "apps/server/test/routine-list.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-pause.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-reads.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-reassign.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-retire.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-runs.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/routine-sender.test.ts": [
+      "sensitive-run2",
+      "shared-fixed1",
+      "shared-fixed2"
+    ],
+    "apps/server/test/routine-session.test.ts": [
+      "sensitive-run2",
+      "session-final1",
+      "session-final2",
+      "shared-clock1",
+      "shared-fixed1"
+    ],
+    "apps/server/test/takeover-http.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/view-delivery.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/view-lease.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/view-sessions.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "apps/server/test/writer-lease.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/authz/test/routine-guards.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/event-store/test/cluster-stream.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/event-store/test/computer-volume-export.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/event-store/test/metadata-readiness.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/event-store/test/provision.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/event-store/test/read-retry.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/event-store/test/route-readiness.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/events/test/routine-schedule.test.ts": [
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/actor.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "timing first"
+    ],
+    "libs/models/test/authority-standalone.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "timing first"
+    ],
+    "libs/models/test/authority-volume.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "volume stress 1",
+      "volume stress 2"
+    ],
+    "libs/models/test/bearer-connections.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "timing first"
+    ],
+    "libs/models/test/budget-recovery.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/ceiling-clock.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/clock-deadlines.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/clock-timer.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/company-opt-in.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/connection-custody.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/connection-selection.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/connection-stage-lock.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/credential-broker.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/decision-cost.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/decision-fence.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/decision-refusal.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/descendant-admission.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/dispatch-clock.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/dispatch.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "timing first"
+    ],
+    "libs/models/test/egress-admission.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/egress-relay.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2",
+      "timer-final1",
+      "timer-final2"
+    ],
+    "libs/models/test/egress-startup.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "timer-final1",
+      "timer-final2"
+    ],
+    "libs/models/test/gateway-clock.test.ts": [
+      "gateway-clock",
+      "gateway-clock2",
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/gateway-delivery.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/gateway-generation.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/gateway-renderer.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/hold-recovery.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "timing first"
+    ],
+    "libs/models/test/mcp-dispatch.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/mcp-instance.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "timing first"
+    ],
+    "libs/models/test/memory-context.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/model-clock-fixture.test.ts": [
+      "models-suite2",
+      "sensitive-run2",
+      "timer-final1",
+      "timer-final2"
+    ],
+    "libs/models/test/native-budget.test.ts": [
+      "clock-migration1",
+      "models-suite2",
+      "native-final1",
+      "native-final2",
+      "sensitive-run2",
+      "timing first"
+    ],
+    "libs/models/test/native-call-check.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/provider-clock.test.ts": [
+      "final-focused-1",
+      "final-focused-2",
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/reconcile.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "timing first"
+    ],
+    "libs/models/test/root-append-retry.test.ts": [
+      "clock-migration1",
+      "clock-migration2",
+      "models-suite2",
+      "restored-legacy",
+      "timing first"
+    ],
+    "libs/models/test/root-budget.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ],
+    "libs/models/test/root-stop-evidence.test.ts": [
+      "models-suite2",
+      "sensitive-run2"
+    ]
+  },
+  "missingSecondPass": {}
+}
