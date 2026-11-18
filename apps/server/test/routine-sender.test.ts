@@ -148,8 +148,9 @@ async function projectPreparedSession() {
 async function prepareSenderFixture() {
   const fixtureClock = manualClock(performance.now());
   const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(fixtureClock.now);
-  advanceFixtureClock = fixtureClock.advance;
+  const fixtureNow = fixtureClock.now.bind(fixtureClock);
+  monotonicClock.mockImplementation(fixtureNow);
+  advanceFixtureClock = fixtureClock.advance.bind(fixtureClock);
   const prepareSession = routineSession.prepareRoutineSession;
   let stage = 'preparation';
   async function projectSession(...args: Parameters<typeof prepareSession>) {
