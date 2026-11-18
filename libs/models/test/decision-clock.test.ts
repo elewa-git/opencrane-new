@@ -3,7 +3,7 @@ import { manualClock } from '@opencrane/event-store/testing';
 import { fixture } from './fixture.ts';
 
 async function decisionDeadline(expired: boolean) {
-  const clock = manualClock(performance.now() + 5000);
+  const clock = manualClock(Math.ceil(performance.now()) + 5000);
   const setup = await fixture(2000, 20000, false, 'gpt-6-luna', false,
     'manual', 'sales', undefined, { clock });
   const started = clock.now();
