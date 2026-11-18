@@ -11,7 +11,7 @@ import { envelope } from '@opencrane/models';
 import type { EventEnvelope } from '@opencrane/events';
 import { processConversation, assistantSnapshot, type AgentSession,
   type WatchOptions } from '../src/chat/bridge-conversation.ts';
-import type { StoredEvent } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { IntegrationRow } from '@opencrane/protocol';
 import { agentSessionData } from '../src/chat/reports.ts';
 
@@ -107,7 +107,7 @@ function bridgeFixture(options: {
       reads.push(subject);
       yield* rowsBySubject.get(subject) ?? [];
     },
-  };
+  } satisfies Pick<EventStore, 'head' | 'readStream' | 'clock'>;
   const sent: string[] = [];
   const sentTurns = new Map<string, import('../src/chat/turn-tools.ts').TurnDelivery>();
   const link = {
