@@ -1,11 +1,9 @@
 import { vi } from 'vitest';
+import { manualClock } from '@opencrane/event-store/testing';
 
 export function holdFixtureClock() {
-  const fixedTime = performance.now();
-  function fixedClock() {
-    return fixedTime;
-  }
-  vi.spyOn(performance, 'now').mockImplementation(fixedClock);
+  const clock = manualClock(performance.now());
+  return vi.spyOn(performance, 'now').mockImplementation(clock.now);
 }
 
 export async function withRoutineFixtureClock<Result>(work: () => Promise<Result>) {

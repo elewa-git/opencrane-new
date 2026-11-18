@@ -13,6 +13,7 @@ import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
 import { routineAsk } from './support/routine-ask.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
@@ -875,14 +876,8 @@ async function wrongComputerLink() {
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
-function stopSendTime() {
-  const sendClock = manualClock(performance.now());
-  // Keep server deadlines and the system clock adapter on the same test time.
-  vi.spyOn(performance, 'now').mockImplementation(sendClock.now);
-}
-
 async function refusesLateChange(kind: string) {
-  stopSendTime();
+  holdFixtureClock();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -1014,7 +1009,7 @@ function preparationIdentity(id = turnId) {
     expiresAt: Date.now() + 50_000 };
 }
 async function keepsNativeSession() {
-  stopSendTime();
+  holdFixtureClock();
   const computer = preparedComputer;
   const link = await computer.wake();
   const second = await link.prepareRoutineThread(preparationIdentity('other-turn'));
