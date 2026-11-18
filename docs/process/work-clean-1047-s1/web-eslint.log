@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' --max-warnings 0 eslint.config.mjs apps/web/src/app/chat/screenshot-capture.spec.ts apps/web/src/app/people/group-wording.spec.ts

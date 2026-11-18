@@ -1,0 +1,384 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/memory-mcp.test.ts apps/server/test/routine-sender.test.ts libs/events/test/ids.test.ts libs/protocol/test/ids.test.ts apps/computer/test/record-id-runtime.test.ts libs/projections/test/audit.test.ts --maxWorkers=2 --reporter=verbose
+
+ RUN  v5.0.3 <private-path>
+
+ ✓ apps/computer/test/record-id-runtime.test.ts > checks upload IDs using only event modules included in the computer image 341ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses saved modern budget exhaustion with reasons 6753ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses saved modern budget exhaustion with work 4868ms
+ ✓ apps/server/test/memory-mcp.test.ts > closes an unfinished backend request before removing its service fixtures 6501ms
+ ✓ apps/server/test/memory-mcp.test.ts > stops accepting backend connections before disconnecting clients 4445ms
+ ✓ apps/server/test/routine-sender.test.ts > missing admission cannot create an admission or a sender attempt 3836ms
+ ✓ apps/server/test/memory-mcp.test.ts > removes service fixtures when the gateway cannot finish graceful shutdown 4263ms
+ ✓ apps/server/test/routine-sender.test.ts > duplicate inspections preserve distinct input and turn ids without inferring unsent 5300ms
+ ✓ apps/server/test/memory-mcp.test.ts > replaces a fixture gateway that cannot finish graceful shutdown 5452ms
+ ✓ apps/server/test/routine-sender.test.ts > a different sender attempt cannot adopt the admission 4305ms
+ ✓ apps/server/test/memory-mcp.test.ts > waits for replacement startup after checking the paused gateway has exited 7642ms
+ ✓ apps/server/test/routine-sender.test.ts > a lost admission reply and restart do not grant permission to redeliver 7336ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current member after a fourteen-second preparation wait 5471ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current grant after a fourteen-second preparation wait 4879ms
+ ✓ apps/server/test/memory-mcp.test.ts > recalls only the selected scope with live grants (team=false) 16286ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current worker after a fourteen-second preparation wait 4722ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current expiry after a fourteen-second preparation wait 4118ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current computer after a fourteen-second preparation wait 4389ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current routine.paused after a fourteen-second preparation wait 4360ms
+ ✓ apps/server/test/routine-sender.test.ts > checks current routine.retired after a fourteen-second preparation wait 3909ms
+ ✓ apps/server/test/memory-mcp.test.ts > recalls only the selected scope with live grants (team=true) 21859ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a saved admission with another messageId 4134ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a saved admission with another turnId 4152ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a saved admission with another rootId 3674ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a saved admission with another senderAttemptId 4287ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires a recorded member memory grant of the right kind despite OpenFGA permission 8704ms
+ ✓ apps/server/test/routine-sender.test.ts > inspection preserves the integer-cent allowance and uncertain hold 4406ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires a recorded assistant memory grant of the right kind despite OpenFGA permission 8333ms
+ ✓ apps/server/test/routine-sender.test.ts > reads growing histories before fresh access without watching the conversation 3968ms
+ ✓ apps/server/test/routine-sender.test.ts > sustained unrelated activity does not prevent inspection 4651ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires recorded MCP grants independently of valid memory grants 9333ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses an enabled direct sender without company confirmation 7370ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses memory for a recorded turn with execution mode undefined 10999ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a direct sender without a credential-use check before authorisation 7060ms
+ ✓ apps/server/test/routine-sender.test.ts > does not send after the credential version changes before the release reply 8441ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses memory for a recorded turn with execution mode memory_free 9369ms
+ ✓ apps/server/test/memory-mcp.test.ts > renews an expired credential for the same live turn without extending its lifetime 6790ms
+ ✓ apps/server/test/routine-sender.test.ts > hands an admitted routine to the real bridge and journal once with distinct ids 9736ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and member 4676ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and grant 4926ms
+ ✓ apps/server/test/memory-mcp.test.ts > replaces caller context and returns bounded facts as data through the real gateway 9937ms
+ ✓ apps/server/test/memory-mcp.test.ts > discovers recall and binds method headers to stateless requests 5568ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses direct, forged, altered, expired and wrong-thread backend calls before reading facts 6621ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and expiry 5448ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and routine.paused 4586ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses foreign scopes, mismatched threads, unsupported operations and forged turns upstream 5653ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and computer 4804ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and Stop 4959ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses changed MCP policy at both the gateway and backend 6506ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires OpenFGA memory permission for the member too 6777ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and owner Stop 5173ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and owner Pause 4537ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires OpenFGA memory permission for the assistant too 5624ms
+ ✓ apps/server/test/routine-sender.test.ts > sends nothing after fourteen-second wake and owner Retire 4715ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"silo":"other"} 5612ms
+ ✓ apps/server/test/routine-sender.test.ts > does not wake or send enabled=false replay=false 4147ms
+ ✓ apps/server/test/routine-sender.test.ts > does not wake or send enabled=true replay=true 4416ms
+ ✓ apps/server/test/routine-sender.test.ts > never redelivers after losing routine.run_activation_admitted reply 4769ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"computer":"other"} 5996ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"generation":2} 4658ms
+ ✓ apps/server/test/routine-sender.test.ts > never redelivers after losing send reply 5923ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"requester":"bob"} 5266ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"conversation":"other"} 4689ms
+ ✓ apps/server/test/routine-sender.test.ts > never redelivers after losing computer.turn_started reply 6684ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"assistant":"other"} 4222ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed messageId through real report admission 5625ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed id through real report admission 5419ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a signed backend context with another identity: {"turn":"missing"} 4382ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses preparation whose signed thread differs from the recorded start 4426ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a start saved by another process and a computer that is no longer ready 4471ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed rootId through real report admission 6658ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses conflicting secondary Codex thread metadata at both admission points 6305ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed senderAttemptId through real report admission 7246ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a pending backend memory_read revoke for member 5525ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a pending backend mcp_server revoke for member 5132ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a pending backend mcp_server revoke for assistant 4164ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed threadId through real report admission 15332ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses when signing or verification is unavailable without reading facts 4802ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed conversationId through real report admission 5487ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks changes during backend admission: grant 4448ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed assistantId through real report admission 5336ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks changes during backend admission: computer 4506ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks changes during backend admission: file 4526ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses changed requesterId through real report admission 5193ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks changes during backend admission: deadline 6991ms
+ ✓ apps/server/test/routine-sender.test.ts > rechecks live authority inside the computer start append 6764ms
+ ✓ apps/server/test/routine-sender.test.ts > keeps routine instructions off a connection for another computer 5541ms
+ ✓ apps/server/test/memory-mcp.test.ts > recalls through the thread proxy, real gateway and backend with replaced credentials 6560ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late Stop after saving the start and before releasing credentials 5912ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes shared read preparation before the first gateway recall 9684ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late budget ceiling after saving the start and before releasing credentials 6524ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold access lookup before signing the valid recall control: member-alice 5476ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late grant after saving the start and before releasing credentials 6543ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold access lookup before signing the valid recall control: assistant-assistant 4917ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late payer after saving the start and before releasing credentials 5769ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold access lookup before signing the valid recall control: conversation-conversation 4304ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold access lookup before signing the valid recall control: grant-WyJtY3Bfc2VydmVyIiwibWVtb3J5Il0 4438ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late worker after saving the start and before releasing credentials 5917ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes the projected fact search before signing the valid recall control 5102ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late routine.paused after saving the start and before releasing credentials 6647ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late member after saving the start and before releasing credentials 6567ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses remember when another admission masks a saved write revocation 5926ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps admitted personal commands separate from human commands 6061ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses late computer after saving the start and before releasing credentials 6067ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a selective proof without complete evidence of loaded memory 4432ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: forged 4967ms
+ ✓ apps/server/test/routine-sender.test.ts > retries an unsaved start after another computer thread advances its stream 6290ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses replacement activity while saving the computer start 5328ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: same-length-forgery 4803ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: extra-segment 4622ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses selected thread activity while saving the computer start 5657ms
+ ✓ apps/server/test/routine-sender.test.ts > retains the first native session when another start returns a distinct id 7535ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: missing 4867ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a second preparation for the same turn and closes its private session 3900ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: unrecalled 6760ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: revision 6215ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires signed recalled references before a write: scope 4433ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent claim of a human source before a write 4577ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses delivery after the empty private session expires 15487ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires current write grants for the member 4637ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Stop and interrupts only the accepted native routine turn once 6203ms
+ ✓ apps/server/test/memory-mcp.test.ts > requires current write grants for the assistant 5255ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps personal recall proof out of shared writes and forged shared-only contexts 4198ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Pause and interrupts only the accepted native routine turn once 6201ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Retire and interrupts only the accepted native routine turn once 5709ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks the original capability immediately before saving: expiry 6718ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks the original capability immediately before saving: revocation 5497ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Access and interrupts only the accepted native routine turn once 6163ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a recall proof from another live thread with an otherwise valid signed call 4723ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Denied and interrupts only the accepted native routine turn once 6052ms
+ ✓ apps/server/test/memory-mcp.test.ts > recovers an agent command after a saved append loses its reply 7179ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Expired and interrupts only the accepted native routine turn once 6396ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses remember policy ask without an approval 10589ms
+ ✓ apps/server/test/routine-sender.test.ts > polls saved Admin and interrupts only the accepted native routine turn once 12228ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses remember policy block without an approval 6783ms
+ ✓ apps/server/test/routine-sender.test.ts > links one checked send to a private result and finished run only after native closure 7236ms
+ ✓ apps/server/test/memory-mcp.test.ts > lists recall with blocked remember and slow catalogue reads 5807ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a response saved before its company Allow decision 6859ms
+ ✓ apps/server/test/routine-sender.test.ts > holds a checked run when its company proof has unknown_response 6256ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a valid recalled reference after its revision key is destroyed 6658ms
+ ✓ apps/server/test/routine-sender.test.ts > holds a checked run when its company proof has missing_settlement 6407ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses agent group writes with valid same-scope recall proof and write grants 7182ms
+ ✓ apps/server/test/routine-sender.test.ts > holds a checked run when its company proof has unmatched_permit 7194ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses agent assistant_notes writes with valid same-scope recall proof and write grants 8473ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses another person scope at the command boundary 4627ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a paying_group ceiling change at the final release before native start 5739ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an expired dependency at the command boundary 4992ms
+ ✓ apps/server/test/routine-sender.test.ts > refuses a assistant ceiling change at the final release before native start 5544ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks dependencies after preparing the new revision key 8083ms
+ ✓ apps/server/test/routine-sender.test.ts > retries failed routine Stop send without closing neighbours 8139ms
+ ✓ apps/server/test/routine-sender.test.ts > retries failed routine Stop cleanup without closing neighbours 7229ms
+ ✓ apps/server/test/memory-mcp.test.ts > cleans recovery records only after a definite failure: prepared 6737ms
+ ✓ apps/server/test/memory-mcp.test.ts > cleans recovery records only after a definite failure: unknown 5936ms
+ ✓ apps/server/test/routine-sender.test.ts > cancels a delayed native start reply without executing another turn 6392ms
+ ✓ apps/server/test/memory-mcp.test.ts > cleans recovery records only after a definite failure: legacy 4923ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a turn closed during write preparation 4780ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks stale grants at the backend and refuses an ended turn upstream 5810ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a write grant changed during the final lineage read (restored=false) 4441ms
+ ✓ apps/server/test/routine-sender.test.ts > closes only the uncooperative private routine process after ten seconds 16140ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a write grant changed during the final lineage read (restored=true) 4717ms
+ ✓ apps/server/test/routine-sender.test.ts > does not interrupt a replacement generation binding 6427ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses memory_write withdrawn immediately before the real store append 5078ms
+ ✓ apps/server/test/routine-sender.test.ts > does not interrupt a replacement thread binding 5595ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses assistant_access withdrawn immediately before the real store append 4843ms
+ ✓ apps/server/test/routine-sender.test.ts > does not interrupt a replacement requester binding 5710ms
+ ✓ apps/server/test/routine-sender.test.ts > does not interrupt a replacement payer binding 5840ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves complete lineage across recalls in any order and returns a lost receipt once 8066ms
+ ✓ apps/server/test/memory-mcp.test.ts > binds the first proof to its prepared input generation 5759ms
+ ✓ apps/server/test/routine-sender.test.ts > lost connection and replay cannot resurrect the prohibited routine 7372ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses complete person lineage when the loaded context has superset 4837ms
+ ✓ apps/server/test/routine-sender.test.ts > Stop before the start grant prevents execution even when the old grant arrives 6128ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses complete person lineage when the loaded context has invalidated 4133ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses complete person lineage when the loaded context has ended 4077ms
+ ✓ apps/server/test/routine-sender.test.ts > retains Stopping after an unrelated terminal report and ends only the exact native turn 5493ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses complete person lineage when the loaded context has group 3927ms
+ ✓ apps/server/test/routine-sender.test.ts > prohibition before start admission refuses only the routine and keeps the shared bridge 4146ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses complete person lineage when the loaded context has assistant_notes 3943ms
+ ✓ apps/server/test/routine-sender.test.ts > clears private routine output when completion precedes Stop polling 6042ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a team assistant write after loaded group references 4431ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a team assistant write after loaded assistant_notes references 4694ms
+ ✓ apps/server/test/routine-sender.test.ts > clears private routine output when completion precedes Access polling 6566ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses loaded after reading evidence using only new conversation rows 5025ms
+ ✓ apps/server/test/routine-sender.test.ts > clears private routine output when completion precedes Denied polling 6395ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses invalidated after reading evidence using only new conversation rows 4361ms
+ ✓ apps/server/test/routine-sender.test.ts > clears private routine output when completion precedes Expired polling 6292ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses closed after reading evidence using only new conversation rows 4722ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a loaded fact that is expired before any fact append 4034ms
+ ✓ apps/server/test/routine-sender.test.ts > clears private routine output when completion precedes Admin polling 5565ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a loaded fact that is corrected before any fact append 4162ms
+ ✓ apps/server/test/routine-sender.test.ts > retries completed routine clearance until the exact thread receipt arrives 6020ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a loaded fact that is forgotten before any fact append 5733ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses valid personal proofs with absent loaded evidence 4809ms
+ ✓ apps/server/test/routine-sender.test.ts > interrupts the exact routine within two seconds despite slow Pause prohibition evidence reads 9111ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses valid personal proofs with prepared loaded evidence 3886ms
+ ✓ apps/server/test/routine-sender.test.ts > interrupts the exact routine within two seconds despite error Pause prohibition evidence reads 5216ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses valid personal proofs with empty loaded evidence 3886ms
+ ✓ apps/server/test/routine-sender.test.ts > interrupts the exact routine within two seconds despite slow Access prohibition evidence reads 7752ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold write-grant lookup before signing the valid correct control 6864ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold write-grant lookup before signing the valid forget control 6560ms
+ ✓ apps/server/test/routine-sender.test.ts > interrupts the exact routine within two seconds despite slow Admin prohibition evidence reads 8143ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold IAM receipt lookup before signing the valid correct control 6376ms
+ ✓ apps/server/test/routine-sender.test.ts > finishes only after saved native termination through the bridge: terminal 5934ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes a cold IAM receipt lookup before signing the valid forget control 5944ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_read for member (recorded=true) before forget 4315ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_read for assistant (recorded=true) before forget 4213ms
+ ✓ apps/server/test/routine-sender.test.ts > finishes only after saved native termination through the bridge: timeout 15260ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_write for member (recorded=true) before forget 4513ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_write for assistant (recorded=true) before forget 5337ms
+ ✓ apps/server/test/routine-sender.test.ts > finishes only after saved native termination through the bridge: connection loss 6639ms
+ ✓ apps/server/test/routine-sender.test.ts > delayed fixture projection > prepares the sender after fixture projection takes longer than a write deadline 5017ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_read for member (recorded=false) before forget 6600ms
+ ✓ apps/server/test/routine-sender.test.ts > checks ownership after preparing credentials even without a cancellation notification 7324ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_read for assistant (recorded=false) before forget 4945ms
+ ✓ apps/server/test/routine-sender.test.ts > checks deadline after preparing credentials even without a cancellation notification 5852ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_write for member (recorded=false) before forget 5362ms
+ ✓ apps/server/test/routine-sender.test.ts > saved Stop reaction finishes only its terminated turn and leaves its neighbour running 5878ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks memory_write for assistant (recorded=false) before forget 4342ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses correct when its write grant changes during the lineage read (restored=false) 5161ms
+ ✓ apps/server/test/routine-sender.test.ts > saved Admin reaction finishes only its terminated turn and leaves its neighbour running 7065ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses correct when its write grant changes during the lineage read (restored=true) 5036ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses forget when its write grant changes during the lineage read (restored=false) 4332ms
+ ✓ apps/server/test/routine-sender.test.ts > saved Denied reaction finishes only its terminated turn and leaves its neighbour running 5972ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses forget when its write grant changes during the lineage read (restored=true) 4854ms
+ ✓ apps/server/test/routine-sender.test.ts > saved Stop cancels a held start acknowledgement before credentials escape 5889ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks current IAM permissions during final correct validation 6130ms
+ ✓ apps/server/test/routine-sender.test.ts > saved Admin cancels a held start acknowledgement before credentials escape 6216ms
+ ✓ apps/server/test/memory-mcp.test.ts > rechecks current IAM permissions during final forget validation 5016ms
+ ✓ apps/server/test/routine-sender.test.ts > saved Denied cancels a held start acknowledgement before credentials escape 6166ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes the correct lineage test observations before signing its request 5561ms
+ ✓ apps/server/test/routine-sender.test.ts > recovers Stop and finish after reaction restart and a lost budget.root_stopped reply 6617ms
+ ✓ apps/server/test/memory-mcp.test.ts > finishes the forget lineage test observations before signing its request 5593ms
+ ✓ apps/server/test/routine-sender.test.ts > recovers Stop and finish after reaction restart and a lost routine.run_finished reply 10518ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks correct policy independently of recall: ask 8539ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks correct policy independently of recall: block 6945ms
+ ✓ apps/server/test/routine-sender.test.ts > finishes a turn completed before Stop polling across restart, lost reply and retries 9108ms
+ ✓ libs/events/test/ids.test.ts > preserves both old ID patterns at length and character boundaries 18ms
+ ✓ libs/events/test/ids.test.ts > keeps the provider ID schema as the shared schema alias 1ms
+ ✓ libs/events/test/ids.test.ts > keeps model grant IDs distinct from record IDs 5ms
+ ✓ libs/protocol/test/ids.test.ts > exposes the shared ID checks to browser callers 5ms
+ ✓ libs/projections/test/audit.test.ts > preserves the audit allow-list and includes safe maintenance history 11ms
+ ✓ libs/projections/test/audit.test.ts > includes every provider and routine event in the safe history 2ms
+ ✓ libs/projections/test/audit.test.ts > keeps encrypted command views out of audit rows 704ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses group scope (already loaded=false) for forget 6447ms
+ ✓ libs/projections/test/audit.test.ts > joins forthcoming typed families, withholds private details and keeps absent outcomes unknown through replay 4633ms
+ ✓ libs/projections/test/audit.test.ts > pages indexed requests without truncating evidence and preserves an unverified unknown observation 2450ms
+ ✓ libs/projections/test/audit.test.ts > summarises confirmed egress success and error while keeping missing observations uncertain through replay 1340ms
+ ✓ libs/projections/test/audit.test.ts > records only verified actors and digests, with no private text after replay 1870ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses assistant_notes scope (already loaded=false) for forget 8318ms
+ ✓ libs/projections/test/audit.test.ts > filters indexed anchors and pages evidence without repeating records 8057ms
+ ✓ libs/projections/test/audit.test.ts > keeps an agent matching the command actor field separate from a person 452ms
+ ✓ libs/projections/test/audit.test.ts > ignores data.actor even when it matches the human principal 441ms
+ ✓ libs/projections/test/audit.test.ts > reads every prefix in a history family through one paged query 483ms
+ ✓ libs/projections/test/audit.test.ts > returns exactly the decision type matches across every page 2822ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses group scope (already loaded=true) for forget 9469ms
+ ✓ libs/projections/test/audit.test.ts > returns exactly the gateway type matches across every page 2651ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a target proof with turn evidence 8098ms
+ ✓ libs/projections/test/audit.test.ts > returns exactly the not_dispatched outcome matches across every page 2558ms
+ ✓ libs/projections/test/audit.test.ts > returns exactly the error outcome matches across every page 3380ms
+ ✓ libs/projections/test/audit.test.ts > returns exactly the unknown outcome matches across every page 2870ms
+ ✓ libs/projections/test/audit.test.ts > strictly validates dispatch data without storing arguments, replies or credentials 422ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a target proof with computer evidence 8328ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a target proof with input evidence 7991ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a target proof with old evidence 6633ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a target proof with missing evidence 5698ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a target proof with unloaded evidence 4617ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses self correction dependencies 5152ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses selective correction dependencies 5185ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a human correction saved after signing and before the backend check 4289ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a forget pass with a correct body 4065ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps correct inputs strict 4246ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps forget inputs strict 5015ms
+ ✓ apps/server/test/memory-mcp.test.ts > denies correct when the reviewed catalogue has no correct tool 4857ms
+Memory backend timing: {"operation":"recall","slowStep":"history","revoked":false,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":2200},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"loaded-reference","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > allows recall after a slow backend history read 6496ms
+Memory backend timing: {"operation":"recall","slowStep":"IAM","revoked":false,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"IAM","startedMs":0,"durationMs":2200},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"loaded-reference","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > allows recall after a slow backend IAM read 7941ms
+Memory backend timing: {"operation":"correct","slowStep":"history","revoked":false,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":2200},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"loaded-reference","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > allows correct after a slow backend history read 8186ms
+Memory backend timing: {"operation":"correct","slowStep":"IAM","revoked":false,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"IAM","startedMs":0,"durationMs":2200},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"loaded-reference","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > allows correct after a slow backend IAM read 7017ms
+Memory backend timing: {"operation":"forget","slowStep":"history","revoked":false,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":2200},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"loaded-reference","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > allows forget after a slow backend history read 8661ms
+Memory backend timing: {"operation":"forget","slowStep":"IAM","revoked":false,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"IAM","startedMs":0,"durationMs":2200},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"loaded-reference","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > allows forget after a slow backend IAM read 6317ms
+Memory backend timing: {"operation":"correct","slowStep":"history","revoked":true,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":2200},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > refuses the final correct pass revoked during a slow backend history read 4828ms
+Memory backend timing: {"operation":"correct","slowStep":"IAM","revoked":true,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"IAM","startedMs":0,"durationMs":2200},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > refuses the final correct pass revoked during a slow backend IAM read 4342ms
+Memory backend timing: {"operation":"forget","slowStep":"history","revoked":true,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":2200},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > refuses the final forget pass revoked during a slow backend history read 4983ms
+Memory backend timing: {"operation":"forget","slowStep":"IAM","revoked":true,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"IAM","startedMs":0,"durationMs":2200},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"scope","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > refuses the final forget pass revoked during a slow backend IAM read 4704ms
+Memory backend timing: {"operation":"recall","slowStep":"history","revoked":true,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":2200},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > refuses recall preparation revoked during a slow backend history read 5473ms
+Memory backend timing: {"operation":"recall","slowStep":"IAM","revoked":true,"elapsedMs":2200,"samples":[{"step":"history","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"grant","startedMs":0,"durationMs":0},{"step":"IAM","startedMs":0,"durationMs":2200},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"IAM","startedMs":2200,"durationMs":0},{"step":"grant","startedMs":2200,"durationMs":0}]}
+ ✓ apps/server/test/memory-mcp.test.ts > refuses recall preparation revoked during a slow backend IAM read 4207ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses correct when its original access deadline expires after preparation 4908ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses forget when its original access deadline expires after preparation 4992ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a missing recall preparation 4567ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a reused recall preparation 4441ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a expired recall preparation 34567ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a mismatched recall preparation 4248ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares recall through the real gateway before signing after slow history 4538ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares recall through the real gateway before signing after slow IAM 3661ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares correct through the real gateway before signing after slow history 5358ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares correct through the real gateway before signing after slow IAM 5083ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares forget through the real gateway before signing after slow history 4966ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares forget through the real gateway before signing after slow IAM 5033ms
+ ✓ apps/server/test/memory-mcp.test.ts > uses prepared IAM receipts without loading them inside the signed recall 3794ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a reused Forget preparation with a fresh signed pass 4423ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses revocation during slow Correct preparation with a fresh pass 6149ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses correct with a missing preparation 4083ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses correct with a expired preparation 33856ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses correct with a mismatched preparation 5725ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses forget with a missing preparation 5113ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses forget with a expired preparation 35143ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses forget with a mismatched preparation 5471ms
+ ✓ apps/server/test/memory-mcp.test.ts > uses prepared history and IAM receipts inside the signed correct pass 5752ms
+ ✓ apps/server/test/memory-mcp.test.ts > uses prepared history and IAM receipts inside the signed forget pass 5465ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares loaded receipts before gateway recall access (another scope=false) 5208ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares loaded receipts before gateway correct access (another scope=false) 5285ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares loaded receipts before gateway forget access (another scope=false) 5146ms
+ ✓ apps/server/test/memory-mcp.test.ts > prepares loaded receipts before gateway recall access (another scope=true) 6147ms
+ ✓ apps/server/test/memory-mcp.test.ts > rejects an invalid preparation reply with HTTP 403 before signing 3599ms
+ ✓ apps/server/test/memory-mcp.test.ts > rejects an invalid preparation reply with HTTP 200 before signing 3856ms
+ ✓ apps/server/test/memory-mcp.test.ts > reports a refused preparation before signing a recall pass 4036ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one agent correction and recovers only its receipt (lost=false) 8641ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one agent correction and recovers only its receipt (lost=true) 8486ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction revoked inside the append boundary 4571ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one correction when command attempts race (changed=false) 6025ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one correction when command attempts race (changed=true) 5743ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with proof 3848ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with requester 4220ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with thread 3942ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with generation 3707ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with stale 3689ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with expiry 3840ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with mixed 4451ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with target revision 4696ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with sources 3612ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent correction with lost access 3945ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps a staged correction refused after member removal and a later dependency error 3977ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a correction whose loaded target expires inside append 4650ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses changed input while an agent correction remains unknown 5787ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses a correction that would invalidate another loaded dependency 5187ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks loaded conversation activity before publishing a correction 4424ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks closed conversation activity before publishing a correction 4143ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks unrelated conversation activity before publishing a correction 4808ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps correct refused after closure when a later membership read is unavailable 4911ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps forget refused after closure when a later membership read is unavailable 5019ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps saved removal ahead of publication dependency errors (throws=false) 5760ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps saved removal ahead of publication dependency errors (throws=true) 4156ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one agent Forget and recovers without resending (lost=false) 8454ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one agent Forget and recovers without resending (lost=true) 7367ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks Forget policy independently of recall: ask 5328ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks Forget policy independently of recall: block 5045ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with proof 4436ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with requester 3693ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with thread 4104ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with generation 3690ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with stale 3720ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with expiry 4067ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with mixed 6490ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses an agent Forget with lost access 5117ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks loaded conversation activity before publishing a Forget 5693ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks closed conversation activity before publishing a Forget 5733ms
+ ✓ apps/server/test/memory-mcp.test.ts > checks unrelated conversation activity before publishing a Forget 5946ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps Forget refused after saved removal (throws=false) 5316ms
+ ✓ apps/server/test/memory-mcp.test.ts > keeps Forget refused after saved removal (throws=true) 5344ms
+ ✓ apps/server/test/memory-mcp.test.ts > accepts metadata-proved Forget without the target key 5656ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one change when Forget races forget 5183ms
+ ✓ apps/server/test/memory-mcp.test.ts > saves one change when Forget races correct 5066ms
+ ✓ apps/server/test/memory-mcp.test.ts > refuses Forget with a target proof but no loaded evidence 4312ms
+
+ Test Files  6 passed (6)
+      Tests  361 passed (361)
+   Start at  20:43:11
+   Duration  1369.01s (tests 99%, transform 1%)
+

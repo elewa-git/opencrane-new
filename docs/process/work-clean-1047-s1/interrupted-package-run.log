@@ -1,0 +1,7 @@
+npm notice run npx
+npm notice run 'vitest' run libs/events/test libs/auth/test libs/protocol/test libs/projections/test libs/models/test apps/computer/test apps/ops/test apps/server/test --maxWorkers=2
+
+ RUN  v5.0.3 <private-path>
+
+ ❯ apps/server/test/memory-mcp.test.ts (0 test)
+ ❯ apps/server/test/bridge-replay.test.ts (0 test)

@@ -1,0 +1,9 @@
+npm notice run lint:deps
+npm notice run depcruise apps/demo-mcp/src apps/odoo-mcp/src apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-known-violations.json && depcruise apps --config .dependency-cruiser-tests.mjs && node scripts/check-dependency-baseline.mjs
+
+✔ no dependency violations found (1263 modules, 6771 dependencies cruised)
+‼ 15 known violations ignored. Run with --no-ignore-known to see them.
+
+
+✔ no dependency violations found (1453 modules, 9431 dependencies cruised)
+

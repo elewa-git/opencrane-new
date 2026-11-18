@@ -1,23 +1,28 @@
 # Record ID copy audit
 
-Production TypeScript only; test and spec files are outside the migration scope.
+All TypeScript under `apps/*/src` and `libs/*/src`, including specs there.
+The file inventories are retained [before](id-copies-before.json) and
+[after](id-copies-after.json).
 
 | Package | Before | After outside ids.ts |
 | --- | ---: | ---: |
 | `apps/computer` | 5 | 0 |
 | `apps/ops` | 6 | 0 |
 | `apps/server` | 79 | 0 |
-| `apps/web` | 9 | 0 |
+| `apps/web` | 11 | 0 |
 | `libs/auth` | 4 | 0 |
 | `libs/events` | 26 | 0 |
 | `libs/models` | 29 | 0 |
 | `libs/projections` | 2 | 0 |
 | `libs/protocol` | 8 | 0 |
-| Total | 168 | 0 |
+| Total | 170 | 0 |
 
 The only remaining exact literal is in `libs/events/src/ids.ts`. The card counted
 162 copies at an earlier commit. This branch started at `cdb8b80bf`; it contained
-168 occurrences in 142 production files. Both spellings were counted.
+170 occurrences on 169 matching lines in 144 source files, including two web
+specs. The production-only count is 168 occurrences on 167 lines in 142 files.
+Both spellings were counted. The source grep-style line count is 169 before and 1 after;
+there are zero matching lines outside `ids.ts` after the migration.
 
 ## Patterns retained deliberately
 
@@ -37,8 +42,8 @@ The only remaining exact literal is in `libs/events/src/ids.ts`. The card counte
   OAuth scope patterns allow the protocol's wider ASCII character set.
 - `apps/computer/src/read-attachment.py` and `receive-file.py`: Python expressions
   validate paths and upload metadata; these are outside the TypeScript literal migration.
-- Existing test/spec literals remain unchanged. The new boundary test keeps both
-  old spellings as its comparison values.
+- Existing test literals outside `src/` remain unchanged. The new boundary test
+  keeps both old spellings as its comparison values outside the lint rule's source scope.
 
 ## Lint probe
 
@@ -52,3 +57,6 @@ exited 1 with two `no-restricted-syntax` errors, one per spelling:
 
 The probe was removed. The real `ids.ts` and the changed composite-pattern callers
 are included in the final scoped ESLint check.
+
+The stricter rule also [rejected both existing web-spec copies](src-specs-red.log).
+Those specs now import the shared pattern. Only `ids.ts` is exempt under `src/`.

@@ -1,0 +1,15 @@
+npm notice run npx
+npm notice run 'vitest' run libs/events/test/ids.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <private-path>
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  16:27:54
+   Duration  2.97s (transform 76%, import 22%, tests 1%, worker 1%)
+
+  Transform  transforming modules took 2.02s · 76% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

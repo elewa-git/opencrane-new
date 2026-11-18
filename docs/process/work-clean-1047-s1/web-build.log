@@ -1,0 +1,66 @@
+npm notice run @opencrane/web@0.1.0 build
+npm notice run ng build
+❯ Building...
+✔ Building...
+Initial chunk files | Names            |  Raw size | Estimated transfer size
+chunk-7WRWCSNS.js   | -                | 454.46 kB |                76.66 kB
+styles-UYKAI67L.css | styles           |  13.12 kB |                 3.13 kB
+chunk-QXIBXHVB.js   | -                |   1.16 kB |               502 bytes
+main-5NFQSIW4.js    | main             | 142 bytes |               142 bytes
+
+                    | Initial total    | 468.89 kB |                80.43 kB
+
+Lazy chunk files    | Names            |  Raw size | Estimated transfer size
+mermaid-library.js  | mermaid-library  |   5.49 MB |                 1.17 MB
+chunk-RSRD2XXD.js   | startup          |   1.25 MB |               215.95 kB
+chunk-2CWD4QKJ.js   | -                | 312.56 kB |                82.21 kB
+chunk-XI6W25IW.js   | viewer           | 287.33 kB |                56.63 kB
+chunk-O7LEKKC6.js   | spending         |  55.88 kB |                13.18 kB
+chunk-XQTHCCLD.js   | mermaid-renderer |   2.00 kB |               784 bytes
+
+Application bundle generation complete. [115.925 seconds] - 2026-11-18T16:30:40.557Z
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+▲ [WARNING] src/app/models/model-registry.css exceeded maximum budget. Budget 4.00 kB was not met by 261 bytes with a total of 4.26 kB.
+
+
+▲ [WARNING] src/app/audit/audit.css exceeded maximum budget. Budget 4.00 kB was not met by 147 bytes with a total of 4.15 kB.
+
+
+▲ [WARNING] src/app/ui/controls.css exceeded maximum budget. Budget 4.00 kB was not met by 635 bytes with a total of 4.63 kB.
+
+
+▲ [WARNING] src/app/integrations/integration-register.css exceeded maximum budget. Budget 4.00 kB was not met by 1.30 kB with a total of 5.30 kB.
+
+
+▲ [WARNING] src/app/chat/workspace.css exceeded maximum budget. Budget 4.00 kB was not met by 5.04 kB with a total of 9.04 kB.
+
+
+▲ [WARNING] src/app/people/people.css exceeded maximum budget. Budget 4.00 kB was not met by 4.17 kB with a total of 8.18 kB.
+
+
+▲ [WARNING] src/app/chat/direct-chat.css exceeded maximum budget. Budget 4.00 kB was not met by 4.79 kB with a total of 8.79 kB.
+
+
+▲ [WARNING] src/app/welcome/welcome-chat.css exceeded maximum budget. Budget 4.00 kB was not met by 1.06 kB with a total of 5.06 kB.
+
+
+▲ [WARNING] src/app/welcome/survey.css exceeded maximum budget. Budget 4.00 kB was not met by 727 bytes with a total of 4.73 kB.
+
+
+▲ [WARNING] Module '@novnc/novnc/lib/rfb.js' used by 'src/app/live-view/viewer.ts' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+Output location: <private-path>
+
