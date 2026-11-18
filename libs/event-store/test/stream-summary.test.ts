@@ -1,11 +1,10 @@
 import { TimeoutError } from '@nats-io/transport-node';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { readStreamSummary, WrongSiloError, type SummaryKind, type StoredEvent } from '../src/index.ts';
 import { countReads, event, manualClock, natsFixture } from './testing.ts';
 
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 async function close() {
-  vi.useRealTimers();
   await fixture?.close();
 }
 afterEach(close);
