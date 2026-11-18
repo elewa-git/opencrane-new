@@ -813,6 +813,7 @@ it.each(['routine.run_activation_admitted', 'send', 'computer.turn_started'])(
 
 
 async function refusesChangedStart(field: string) {
+  holdFixtureClock();
   const authority = sender();
   const computer = await recordingComputer();
   const link = await computer.wake();
@@ -928,6 +929,7 @@ it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused',
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function acceptsOtherThread() {
+  holdFixtureClock();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -1144,12 +1146,7 @@ it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as c
 
 
 async function startRunning() {
-  const fixtureTime = performance.now();
-  function fixedFixtureTime() {
-    return fixtureTime;
-  }
-  const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(fixedFixtureTime);
+  const monotonicClock = holdFixtureClock();
   try {
     expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
   } finally {
@@ -1325,8 +1322,7 @@ it.each(['unknown_response', 'missing_settlement', 'unmatched_permit'] as const)
   'holds a checked run when its company proof has %s', incompleteCompanyResult, 25_000);
 
 async function ceilingChangeAtFinalRelease(scope: 'paying_group' | 'assistant') {
-  const fixtureTime = performance.now();
-  vi.spyOn(performance, 'now').mockImplementation(() => fixtureTime);
+  holdFixtureClock();
   const append = nats.store.append.bind(nats.store);
   let changed = false;
   async function saveLimitBeforeRelease(...args: Parameters<typeof append>) {
