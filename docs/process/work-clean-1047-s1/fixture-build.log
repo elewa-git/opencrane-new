@@ -84,7 +84,7 @@
 #23 [base stage-2  9/10] COPY spikes/s0-1b-proxy-gvisor/package.json spikes/s0-1b-proxy-gvisor/package-lock.json ./
 #23 CACHED
 
-#24 [base stage-2 10/10] RUN npm ci --omit=dev --no-audit --no-fund && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex &&     rm -rf /root/.npm /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack
+#24 [base stage-2 10/10] RUN npm ci --omit=dev --no-audit --no-fund && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex &&     rm -rf <npm-cache> /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack
 #24 CACHED
 
 #9 [computer stage-2  1/10] ADD --checksum=sha256:770fd3df51510beecc89666879d82faf411276e68c6e11df612f736b891b5f71 https://github.com/kasmtech/KasmVNC/releases/download/v1.5.0/kasmvncserver_bookworm_1.5.0_amd64.deb /tmp/kasm.deb
@@ -137,7 +137,7 @@
 #20 [computer launcher-build 1/4] RUN printf '%s\n'     'Acquire::http::Timeout "30";'     'Acquire::https::Timeout "30";'     'Acquire::Retries "5";'     'APT::Update::Error-Mode "any";'     > /etc/apt/apt.conf.d/80-opencrane-network
 #20 CACHED
 
-#24 [computer stage-2 10/10] RUN npm ci --omit=dev --no-audit --no-fund && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex &&     rm -rf /root/.npm /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack
+#24 [computer stage-2 10/10] RUN npm ci --omit=dev --no-audit --no-fund && ln -s /spike/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex &&     rm -rf <npm-cache> /usr/local/lib/node_modules /opt/yarn* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/local/bin/corepack
 #24 CACHED
 
 #25 [computer context project] load from client
@@ -245,7 +245,7 @@
 #50 [computer runtime 17/39] RUN rm /opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl/RNG2Schtrn.xsl        /opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl/XSD2Schtrn.xsl
 #50 CACHED
 
-#51 [computer runtime 22/39] RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/npm     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf /root/.npm
+#51 [computer runtime 22/39] RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/npm     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf <npm-cache>
 #51 CACHED
 
 #52 [computer runtime  2/39] COPY --from=project scripts/private-memory-qualification/runner-protection.ts   /scripts/private-memory-qualification/runner-protection.ts
