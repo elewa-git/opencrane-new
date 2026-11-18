@@ -15,7 +15,7 @@ starting either group would cross the requested boundary.
 
 ## Preserved behaviour
 
-A parsed comparison retains all 1,147 assertions outside replaced append helpers.
+A parsed comparison retains all 1,147 assertions outside local append helpers.
 Identifiers, roles, silos, principals, timestamps and command identifiers stay the
 same. The event builder also accepts a named source; correlation remains unsupported.
 
@@ -88,3 +88,6 @@ assertion, production append validation or error handling is relaxed.
 
 Shipped-code changes: zero lines. No runtime dependency or licence changes.
 Independent review is left to the orchestrator.
+
+Fresh-stack CORE: FAIL. The 1280 px image attachment reply did not complete.
+[The journey receipt](journey.md) retains the captures, failed step and teardown result.
