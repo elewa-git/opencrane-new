@@ -27,7 +27,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[],
   grants?: DecisionGrants, applied?: (eventId: string) => Promise<boolean>,
   readHistory?: ReturnType<typeof authorityHistoryReader>, permissions?: AuthorityPermissions) {
-  fresh ??= await authorityFence(store, performance.now());
+  fresh ??= await authorityFence(store, store.clock.now());
   const auth = await permissionReader(binding, permissions);
   const request = { requester, assistant, conversation, resourceType, resourceId,
     fresh, conversationRows, grants, applied, readHistory, permissions };
@@ -294,7 +294,7 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
     }
   } catch (error) {
     // Keep the authority failure reason when its deadline stops a pending store read.
-    if (performance.now() >= deadline) {
+    if (store.clock.now() >= deadline) {
       throw new Error('Authority snapshot expired', { cause: error });
     }
     throw error;
@@ -303,7 +303,7 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
 }
 
 /** Keep watched streams tied to their starting positions and the original deadline. */
-export async function authorityFence(store: Pick<EventStore, 'readStream' | 'head'>, started: number,
+export async function authorityFence(store: Pick<EventStore, 'readStream' | 'head' | 'clock'>, started: number,
   subjects: string[] = [], callerDeadline = Infinity,
   earlierPositions?: ReadonlyMap<string, number>) {
   const authority = await createAuthorityFence(
@@ -319,7 +319,7 @@ export async function conversationAccessFence(store: EventStore, started: number
   return authority.fresh;
 }
 
-async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head'>, started: number,
+async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head' | 'clock'>, started: number,
   subjects: string[], callerDeadline: number, checkChanges: typeof checkOutputReports,
   earlierPositions?: ReadonlyMap<string, number>) {
   const deadline = Math.min(started + 2000, callerDeadline);
@@ -334,7 +334,7 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
   include(...subjects);
   const outputHeads = new Map<string, number>(earlierPositions);
   async function confirm() {
-    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+    if (store.clock.now() >= deadline) throw new Error('Authority snapshot expired');
     async function readSubjectHead(subject: string) {
       const sequence = await store.head(subject, deadline);
       return { subject, sequence };
@@ -345,7 +345,7 @@ async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head
       return sequence > (outputHeads.get(subject) ?? head);
     }
     const changed = current.filter(hasChanged);
-    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+    if (store.clock.now() >= deadline) throw new Error('Authority snapshot expired');
     for (const { subject, sequence } of changed) {
       const fromSequence = (outputHeads.get(subject) ?? head) + 1;
       await checkChanges(store, subject, fromSequence, sequence, deadline);
@@ -483,7 +483,7 @@ function matchesGrantKind(fields: Record<string, unknown>, grantees: Set<string>
 }
 
 export async function ownershipWriteAccess(store: EventStore, positions: ReadonlyMap<string, number>) {
-  const authority = await createAuthorityFence(store, performance.now(), [...positions.keys()],
+  const authority = await createAuthorityFence(store, store.clock.now(), [...positions.keys()],
     Infinity, checkOutputReports);
   const fresh = authority.fresh;
   for (const [subject, position] of positions) {

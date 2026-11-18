@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, onTestFinished } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
+import type { Clock } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -63,12 +64,16 @@ export async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisa
     auth.use('person', memberId, 'model', model.id), auth.use('assistant', assistantId, 'model', model.id),
   ]))).every(result => result.allowed));
 }
+export interface FixtureOptions {
+  clock?: Clock;
+}
+
 export async function fixture(daily = 2000, monthly = 20000, real = false,
   allowedModel = 'gpt-6-luna', team = false,
   grants: 'manual' | 'reactions' | 'legacy' = 'manual', teamPayer: string | null = 'sales',
-  executionMode?: 'restricted' | 'memory_free') {
+  executionMode?: 'restricted' | 'memory_free', fixtureOptions: FixtureOptions = {}) {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
-  const dbs = await databases(), nats = await natsFixture();
+  const dbs = await databases(), nats = await natsFixture(fixtureOptions);
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);

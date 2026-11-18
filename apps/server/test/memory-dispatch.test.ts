@@ -448,7 +448,7 @@ async function recordsBeforeDelivery() {
     const expected = { memoryContext: { recallCalls: 1, references: [
       { scopeId, memoryId: 'private-fact', revision: 1 }], executionAvailable: false } };
     expect(await savedContext()).toMatchObject(expected);
-    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store), clock: setup.nats.store.clock };
     expect(await readChatFacts(cold, 'test', 'conversation', 'turn')).toMatchObject(expected);
   } finally {
     spy.mockRestore();
@@ -627,7 +627,7 @@ async function replaysRecallClosedDuringAppend(order: typeof closeOrders[number]
     const expected = { turnEnded: false, conversationClosed: true, memoryContext: {
       status: 'ended', reason: 'ended', references, recallCalls, executionAvailable: false } };
     // Use the writer's cached summary and a separate store identity for cold replay.
-    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store), clock: setup.nats.store.clock };
     await expect.soft(savedContext()).resolves.toMatchObject(expected);
     await expect.soft(readChatFacts(cold, 'test', 'conversation', 'turn'))
       .resolves.toMatchObject(expected);
@@ -1946,7 +1946,7 @@ async function recallCheckAndTimestampAgree() {
     const input = { conversationId: 'conversation', turnId: 'turn', threadId: 'thread',
       inputGeneration: saved.data.inputGeneration };
     expect(await invalidateMemoryContext(options, input)).toMatchObject({ status: 'invalidated' });
-    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store) };
+    const cold = { readStream: setup.nats.store.readStream.bind(setup.nats.store), clock: setup.nats.store.clock };
     const facts = await readChatFacts(cold, 'test', 'conversation', 'turn');
     expect(facts.memoryContext).toMatchObject({ status: 'invalidated', reason: 'expired',
       executionAvailable: false, recallCalls: 2 });

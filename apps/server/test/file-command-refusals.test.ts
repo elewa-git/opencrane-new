@@ -1,10 +1,11 @@
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { systemClock, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { expect, it } from 'vitest';
 import { fileCommand } from '../src/files/commands.ts';
 import { FileRefusal } from '../src/files/refusals.ts';
 
 async function malformedCommand() {
   const store = {
+    clock: systemClock,
     async *readStream() {
       await Promise.resolve();
       yield* [] as StoredEvent[];
@@ -14,7 +15,7 @@ async function malformedCommand() {
       await Promise.resolve();
       throw new Error('Malformed input must be refused before appending');
     },
-  } satisfies Pick<EventStore, 'readStream' | 'append'>;
+  } satisfies Pick<EventStore, 'readStream' | 'append' | 'clock'>;
   const malformed = { conversationId: 'conversation' };
   const command = fileCommand(store, 'test', 'alice', 'malformed', 'file.uploaded', malformed);
   await expect(command).rejects.toBeInstanceOf(FileRefusal);
@@ -52,6 +53,7 @@ it('returns a typed 403 refusal for delivery without a matching upload', async (
     ['member-alice', [membership]],
   ]);
   const store = {
+    clock: systemClock,
     async *readStream(subject: string) {
       await Promise.resolve();
       for (const row of rowsBySubject.get(subject) ?? []) {
@@ -62,7 +64,7 @@ it('returns a typed 403 refusal for delivery without a matching upload', async (
       await Promise.resolve();
       throw new Error('Delivery refusal must happen before append');
     },
-  } satisfies Pick<EventStore, 'readStream' | 'append'>;
+  } satisfies Pick<EventStore, 'readStream' | 'append' | 'clock'>;
 
   let refusal: unknown;
   try {

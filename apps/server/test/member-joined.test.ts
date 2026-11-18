@@ -115,6 +115,7 @@ async function keepsChoiceAfterLostReply() {
   }
   const transport = {
     head: nats.store.head.bind(nats.store),
+    clock: nats.store.clock,
     readStream: nats.store.readStream.bind(nats.store),
     append: loseReply,
   };
@@ -234,6 +235,7 @@ function racingStore(): JoinStore {
     return result;
   }
   return {
+    clock: nats.store.clock,
     head,
     append,
     async *readStream(subject, from, deadline) {
@@ -371,6 +373,7 @@ it('reports unavailable if NATS stops after validation and before append, with n
   await app.close();
   app = server({
     head: nats.store.head.bind(nats.store),
+    clock: nats.store.clock,
     readStream: (...args) => nats.store.readStream(...args),
     async append(command) {
       await nats.stop();

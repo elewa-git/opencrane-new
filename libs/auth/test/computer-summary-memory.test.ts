@@ -1,3 +1,4 @@
+import { systemClock } from '@opencrane/event-store';
 import { expect, it } from 'vitest';
 import { readStreamSummary } from '@opencrane/event-store';
 import { event } from '@opencrane/event-store/testing';
@@ -32,7 +33,7 @@ async function rebuildsOversizedComputerFacts(open: boolean) {
       if (sequence + 1 >= from) yield { sequence: sequence + 1, event: closed };
     }
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   function refusalFacts(summary: ComputerSummary) {
     return { closed: summary.turns.get('closed-0')?.firstClose?.status,
       openCommandCount: summary.turns.get('open')?.startCommandKeys?.size,
@@ -70,7 +71,7 @@ async function keepsBusyTeamAssistantsWarm() {
       if (sequence + 1 >= from) yield { sequence: sequence + 1, event: closed };
     }
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   function take(summary: ComputerSummary) {
     return { closed: summary.turns.get('closed-0')?.firstClose?.status,
       restrictedTurns: summary.threads.get('thread-0')?.restrictedTurnIds.size,

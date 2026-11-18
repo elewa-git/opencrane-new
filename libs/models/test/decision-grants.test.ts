@@ -1,3 +1,4 @@
+import { systemClock } from '@opencrane/event-store';
 import { randomUUID } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
 import { expect, it } from 'vitest';
@@ -25,7 +26,7 @@ async function keepsOneHundredThousandGranteesWarm() {
       yield { sequence, event };
     }
   }
-  const store = { head, readStream };
+  const store = { head, readStream, clock: systemClock };
   const cold = await readDecisionGrants(store, 'test', modelId, Infinity);
   expect(cold.rows).toHaveLength(count);
   const warm = await readDecisionGrants(store, 'test', modelId, performance.now() + 2000);
@@ -56,7 +57,7 @@ async function refusesMismatchedResource(resource: (typeof wrongResources)[numbe
     const event = envelope('test', subject, 'grant.given', grant);
     yield { sequence: 1, event };
   }
-  const store = { head, readStream };
+  const store = { head, readStream, clock: systemClock };
   await expect(readDecisionGrants(store, 'test', modelId, Infinity))
     .rejects.toThrow('Authority changed');
 }

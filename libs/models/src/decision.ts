@@ -103,7 +103,7 @@ export async function startDecision(
       void dispatchRequest(req, res, mcpSender);
       return;
     }
-    const started = performance.now();
+    const started = actor.store.clock.now();
     let stage = 'credentials';
     let auditedContext: { requesterId: string; assistantId: string } | undefined;
     // This records that a write was started; it does not mean the audit succeeded.

@@ -80,7 +80,7 @@ async function recordsOnlyOwnReference() {
   // Read the observation taken by the backend before it releases the reply.
   expect(test.deliveries).toHaveLength(1);
   expect(test.deliveries[0]?.memoryContext?.references).toEqual(expected);
-  const cold = { readStream: test.setup.nats.store.readStream.bind(test.setup.nats.store) };
+  const cold = { readStream: test.setup.nats.store.readStream.bind(test.setup.nats.store), clock: test.setup.nats.store.clock };
   const saved = await readChatFacts(cold, 'test', 'chat', test.turnId);
   expect(saved.memoryContext?.references).toEqual(expected);
   expect(saved.memoryContext?.recallCalls).toBe(1);

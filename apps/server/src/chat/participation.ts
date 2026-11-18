@@ -45,12 +45,12 @@ const changesKind: SummaryKind<Changes> = {
 };
 
 // Keep verified old changes separately. New changes belong to the small participation stream.
-const legacyReaders = new WeakMap<object, Pick<EventStore, 'readStream'>>();
+const legacyReaders = new WeakMap<object, Pick<EventStore, 'readStream' | 'clock'>>();
 const legacyKind: SummaryKind<Changes> = {
   ...changesKind, name: 'conversation-legacy-participation',
 };
 
-function legacyReader(store: Pick<EventStore, 'readEvent'>, db: Query) {
+function legacyReader(store: Pick<EventStore, 'readEvent' | 'clock'>, db: Query) {
   let reader = legacyReaders.get(store);
   if (reader) return reader;
   async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
@@ -69,20 +69,20 @@ function legacyReader(store: Pick<EventStore, 'readEvent'>, db: Query) {
       yield row;
     }
   }
-  reader = { readStream };
+  reader = { readStream, clock: store.clock };
   legacyReaders.set(store, reader);
   return reader;
 }
 
 // Stop old workers before replay. New commands cannot write to the old subject.
-export function legacyParticipation(store: Pick<EventStore, 'readEvent'>,
+export function legacyParticipation(store: Pick<EventStore, 'readEvent' | 'clock'>,
   db: Query, silo: string, conversationId: string, deadline: number) {
   const reader = legacyReader(store, db);
   const subject = JSON.stringify([silo, conversationId]);
   return readStreamSummary(reader, silo, subject, legacyKind, deadline, copyChanges);
 }
 
-async function participationCreation(store: Pick<EventStore, 'readStream'>,
+async function participationCreation(store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string, conversationId: string, deadline: number): Promise<StoredEvent> {
   let creation: StoredEvent | undefined;
   for await (const row of store.readStream(`conversation-${conversationId}`, 1, deadline)) {
@@ -113,7 +113,7 @@ function legacyChanges(legacy: StoredEvent[] | Changes, silo: string, conversati
   return changes;
 }
 
-export async function participation(store: Pick<EventStore, 'readStream'>,
+export async function participation(store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string, conversationId: string, memberId: string,
   legacy: StoredEvent[] | Changes = [], deadline = performance.now() + 2000) {
   const creation = await participationCreation(store, silo, conversationId, deadline);
@@ -151,7 +151,7 @@ function applyChanges(joins: Map<string, StoredEvent>, changes: Changes,
   return position;
 }
 
-export function participationChanges(store: Pick<EventStore, 'readStream'>,
+export function participationChanges(store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string, conversationId: string, deadline = performance.now() + 2000) {
   return readStreamSummary(store, silo, `participation-${conversationId}`,
     changesKind, deadline, copyChanges);
@@ -173,14 +173,14 @@ function isClosed(closure: Closure) {
 const closureKind: SummaryKind<Closure> = {
   name: 'conversation-closure', keep: 256, empty: emptyClosure, add: addClosure,
 };
-export function participationClosed(store: Pick<EventStore, 'readStream'>,
+export function participationClosed(store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string, conversationId: string, deadline = performance.now() + 2000) {
   return readStreamSummary(store, silo, `participation-${conversationId}`,
     closureKind, deadline, isClosed);
 }
-const closureReaders = new WeakMap<object, Pick<EventStore, 'readStream'>>();
+const closureReaders = new WeakMap<object, Pick<EventStore, 'readStream' | 'clock'>>();
 
-function closureReader(store: Pick<EventStore, 'readStream' | 'readEvent'>, db: Query) {
+function closureReader(store: Pick<EventStore, 'readStream' | 'readEvent' | 'clock'>, db: Query) {
   let reader = closureReaders.get(store);
   if (reader) return reader;
   async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
@@ -188,19 +188,19 @@ function closureReader(store: Pick<EventStore, 'readStream' | 'readEvent'>, db: 
     const [silo, conversationId] = identity;
     yield* closureRecords(store, db, silo, conversationId, fromSequence, deadline);
   }
-  reader = { readStream };
+  reader = { readStream, clock: store.clock };
   closureReaders.set(store, reader);
   return reader;
 }
 
-export function conversationClosed(store: Pick<EventStore, 'readStream' | 'readEvent'>,
+export function conversationClosed(store: Pick<EventStore, 'readStream' | 'readEvent' | 'clock'>,
   db: Query, silo: string, conversationId: string, deadline: number) {
   const reader = closureReader(store, db);
   const subject = JSON.stringify([silo, conversationId]);
   return readStreamSummary(reader, silo, subject, closureKind, deadline, isClosed);
 }
 
-async function* closureRecords(store: Pick<EventStore, 'readStream' | 'readEvent'>,
+async function* closureRecords(store: Pick<EventStore, 'readStream' | 'readEvent' | 'clock'>,
   db: Query, silo: string, conversationId: string, checkedFrom: number, deadline: number) {
   // Confirm older closes by their saved position. Upgrade with old writers stopped
   // and the conversation worker caught up before starting this server.
@@ -247,7 +247,7 @@ function membershipActive(membership: Membership) {
 const membershipKind: SummaryKind<Membership> = {
   name: 'chat-membership', keep: 256, empty: emptyMembership, add: addMembership,
 };
-export async function chatMembership(store: Pick<EventStore, 'readStream'>, silo: string,
+export async function chatMembership(store: Pick<EventStore, 'readStream' | 'clock'>, silo: string,
   memberId: string, deadline = performance.now() + 2000) {
   try {
     return await readStreamSummary(store, silo, `member-${memberId}`, membershipKind,

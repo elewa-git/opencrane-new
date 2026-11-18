@@ -117,7 +117,7 @@ async function evidenceFailure(outcome: 'held' | 'denied' | 'unknown') {
     expect(JSON.stringify(response)).not.toContain(factText);
     expect(test.deliveries).toEqual([]);
   }
-  const coldStore = { readStream: store.readStream.bind(store) };
+  const coldStore = { readStream: store.readStream.bind(store), clock: store.clock };
   const saved = await readChatFacts(coldStore, 'test', 'chat', test.turnId);
   expect(saved.memoryContext?.recallCalls).toBe(outcome === 'denied' ? 0 : 1);
   if (outcome !== 'denied') {

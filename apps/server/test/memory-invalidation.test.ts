@@ -146,7 +146,7 @@ async function dependencyInvalidation(kind: 'corrected' | 'forgotten') {
   await load([derived], { callDigest: 'c'.repeat(64), dispatchDigest: 'd'.repeat(64) });
   await change(kind, 'base');
   expect(await invalidate()).toMatchObject({ status: 'invalidated' });
-  const cold = { readStream: setup.store.readStream.bind(setup.store) };
+  const cold = { readStream: setup.store.readStream.bind(setup.store), clock: setup.store.clock };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
     references: [reference, derived], executionAvailable: false });
@@ -276,7 +276,7 @@ async function laterRecallRace(kind: 'corrected' | 'forgotten') {
   expect(await invalidate()).toEqual(receipt);
   expect(await setup.store.head('conversation-chat')).toBe(position);
   const scopePosition = await setup.store.head(`scope-${scopeId}`);
-  const cold = { readStream: setup.store.readStream.bind(setup.store) };
+  const cold = { readStream: setup.store.readStream.bind(setup.store), clock: setup.store.clock };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
     references: [reference, later], executionAvailable: false, recallCalls: 2,
@@ -351,7 +351,7 @@ async function completedWithdrawalRefusesRecall() {
   expect(receipt).toMatchObject({ status: 'invalidated' });
   expect(await invalidate()).toEqual(receipt);
   const before = await setup.store.head('conversation-chat');
-  const cold = { readStream: setup.store.readStream.bind(setup.store) };
+  const cold = { readStream: setup.store.readStream.bind(setup.store), clock: setup.store.clock };
   expect(await readChatFacts(cold, 'test', 'chat', 'turn')).toMatchObject({
     turnEnded: true, memoryContext: { status: 'ended', executionAvailable: false } });
   expect(await setup.store.head('conversation-chat')).toBe(before);
@@ -523,7 +523,7 @@ async function expiredAtLoadDoesNotBlockForget(transitive: boolean) {
     const receipt = await invalidate();
     expect(receipt).toMatchObject({ status: 'invalidated' });
     expect(await invalidate()).toEqual(receipt);
-    const cold = { readStream: setup.store.readStream.bind(setup.store) };
+    const cold = { readStream: setup.store.readStream.bind(setup.store), clock: setup.store.clock };
     const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
     expect(facts.memoryContext).toMatchObject({ status: 'invalidated',
       reason: 'content_changed', references: [reference, addition], executionAvailable: false });

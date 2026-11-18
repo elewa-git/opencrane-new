@@ -1,11 +1,10 @@
 import { TimeoutError } from '@nats-io/transport-node';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { readStreamSummary, WrongSiloError, type SummaryKind, type StoredEvent } from '../src/index.ts';
-import { countReads, event, natsFixture } from './testing.ts';
+import { countReads, event, manualClock, natsFixture } from './testing.ts';
 
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
 async function close() {
-  vi.useRealTimers();
   await fixture?.close();
 }
 afterEach(close);
@@ -144,21 +143,21 @@ async function continuesAfterCallerTimeout(fail: boolean) {
       yield { sequence: 2, event: event('second') };
     }
   }
-  const store = { readStream };
+  const clock = manualClock();
+  const store = { readStream, clock };
   const snapshots: ReturnType<typeof take>[] = [];
   function inspect(summary: ReturnType<typeof empty>, sequence: number) {
     const copy = take(summary, sequence);
     snapshots.push(copy);
     return copy;
   }
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const started = performance.now();
+  const started = clock.now();
   const pending = readStreamSummary(store, 'test', 'member-alice', kind,
     started + 500, inspect);
   await entered.promise;
   expect(deadlines[0]).toBeGreaterThanOrEqual(started + 10_000);
   const rejection = expect(pending).rejects.toBeInstanceOf(TimeoutError);
-  await vi.advanceTimersByTimeAsync(1000);
+  clock.advance(1000);
   await rejection;
   expect(snapshots).toEqual([]);
   release.resolve();

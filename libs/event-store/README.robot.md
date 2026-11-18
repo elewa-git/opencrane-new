@@ -1,5 +1,19 @@
 # Event store
 
+`Clock` supplies monotonic milliseconds through `now()` and cancellable waits through
+`sleep(milliseconds, signal?)`. `systemClock` keeps the existing real clock and timers.
+`EventStore(client, manager, provisioningManager?, clock?)` exposes the selected clock
+as read-only `store.clock`. `createEventStore(connection, clock?)` uses the same default.
+Reads, append retries and summary catch-up share that clock. The exported
+`readBeforeDeadline` defaults to `systemClock`; callers with a selected store pass
+`store.clock` as its fourth argument.
+
+Tests import `manualClock` and `natsFixture` from `@opencrane/event-store/testing`.
+`manualClock(started = 0)` returns `now`, `sleep` and `advance(milliseconds)`.
+Advancing time wakes sleeps whose target time has arrived; cancellation removes a
+pending sleep. `natsFixture({ clock })` uses it for both command and reader stores.
+The fixture keeps real time unless a test supplies a clock.
+
 For people, read [README.md](README.md) first.
 
 `@opencrane/event-store` owns the JetStream adapter for the silo's `EVENTS`
@@ -55,7 +69,7 @@ owners and key references, unchanged history after refusal, and a valid correcti
 expected subject sequence, `rejected` for invalid input or an unrelated
 duplicate id, or `unavailable` after bounded backoff. Timeouts and server
 unavailability retry for ten seconds; its history reads share that deadline.
-An optional append `deadline` uses `performance.now()` and can shorten that limit.
+An optional append `deadline` uses `store.clock.now()` and can shorten that limit.
 An expired deadline stops further attempts and returns unavailable. If a retry wait
 uses all remaining time, append returns unavailable after that wait even when the
 timer wakes a fraction early. It never shortens the wait to squeeze in another publish.
@@ -97,14 +111,14 @@ capped at 500 ms, for at most one second per NATS read. Each request keeps its
 `readEvent(sequence, deadline)` reads exactly one global position and refuses a
 missing record. It lets readers check a table’s saved event number against the log.
 `readStream(subject, fromSequence, deadline)` and `head(subject, deadline)` accept
-an absolute `performance.now()` deadline; an earlier caller deadline stops retries
+an absolute `store.clock.now()` deadline; an earlier caller deadline stops retries
 and rejects late replies. Reads still throw when their bound expires, and other
 service errors throw immediately. `isEventStoreUnavailable(error)` identifies
 the same transient NATS failures without exposing SDK types to callers.
 A failed authority read proves neither permission nor denial;
 it must never extend a caller's existing permission lease. A failed subscription
 batch cancels its sibling reads so they cannot keep retrying after the failure.
-`readBeforeDeadline(read, deadline, signal)` is also exported for callers that
+`readBeforeDeadline(read, deadline, signal, clock)` is also exported for callers that
 must stop waiting for a pending read or connection. Its signal and absolute
 deadline bound the caller's wait. Callers must still stop any late side effects
 in the work they started.
@@ -217,7 +231,7 @@ needed facts into a plain result; callers must never retain the mutable summary.
 A partial or failed catch-up never runs `take`. Every access check gets its own
 fresh catch-up, including when a previous call is still reading.
 
-The caller's deadline uses absolute `performance.now()`. On expiry, the caller
+The caller's deadline uses absolute `store.clock.now()`. On expiry, the caller
 receives the same NATS `TimeoutError` as a stream read. Catch-up continues with a
 deadline of at least ten seconds from its start, or the caller's later deadline.
 `Infinity` stays unlimited. Background failures have error handlers and release

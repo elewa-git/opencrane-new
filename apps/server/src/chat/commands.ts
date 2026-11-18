@@ -37,7 +37,7 @@ type Input = z.infer<typeof chatInput>;
 type Context = { silo: string; memberId: string };
 export class ChatConflict extends Error {}
 
-type Store = Pick<EventStore, 'readStream' | 'append'>;
+type Store = Pick<EventStore, 'readStream' | 'append' | 'clock'>;
 
 function commandType(input: Input) {
   if ('mode' in input) return 'conversation.created';

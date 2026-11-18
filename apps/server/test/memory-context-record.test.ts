@@ -1,3 +1,4 @@
+import { systemClock } from '@opencrane/event-store';
 import { expect, it } from 'vitest';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -36,7 +37,7 @@ function fixture(events: EventEnvelope[]) {
       }
     }
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   function read(turnId = 'turn') {
     return readChatFacts(store, 'test', 'chat', turnId);
   }
@@ -237,7 +238,7 @@ async function participationClose(lateDelivery: 'initial' | 'recall') {
       conversationId: 'chat', closedBy: 'alice',
     });
     await append(close);
-    const coldStore = { readStream: nats.store.readStream.bind(nats.store) };
+    const coldStore = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
     for (const store of [nats.store, coldStore]) {
       const facts = await readChatFacts(store, 'test', 'chat', 'turn');
       expect.soft(facts).toMatchObject({ turnEnded: false, conversationClosed: true,
@@ -285,7 +286,7 @@ async function savedAppendRace() {
     const statuses = results.map(status);
     expect(statuses.sort()).toEqual(['appended', 'conflict']);
     // Discard the successful reply and rebuild from the event store alone.
-    const coldStore = { readStream: nats.store.readStream.bind(nats.store) };
+    const coldStore = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
     const facts = await readChatFacts(coldStore, 'test', 'chat', 'turn');
     expect(facts).toMatchObject({ memoryContext: { recallCalls: 1, references: [personal],
       executionAvailable: false } });

@@ -158,7 +158,7 @@ export function memoryJourney(store: EventStore, silo: string, conversationId = 
     assert.deepEqual(await invalidateMemoryContext(options, otherInput), { status: expectedStatus });
     assert.equal(await store.head(other.subject), otherPosition);
     // Rebuild from stored events too, so an unchanged cache cannot hide a cross-session write.
-    const cold = { readStream: store.readStream.bind(store) };
+    const cold = { readStream: store.readStream.bind(store), clock: store.clock };
     const after = await readChatFacts(cold, silo, other.conversationId, 'turn');
     assert.deepEqual(after.memoryContext, before.memoryContext);
   }
@@ -180,7 +180,7 @@ export function memoryJourney(store: EventStore, silo: string, conversationId = 
     const targetPosition = await store.head(subject);
     await checkRecordedStops(store, silo, saved, other.preparation, replacementPreparation);
     // Rebuild all three contexts after failed delivery and retry, without cached summaries.
-    const cold = { readStream: store.readStream.bind(store) };
+    const cold = { readStream: store.readStream.bind(store), clock: store.clock };
     const target = await readChatFacts(cold, silo, conversationId, 'turn');
     assert.equal(target.memoryContext?.status, 'invalidated');
     assert.equal(target.memoryContext.executionAvailable, false);
@@ -203,7 +203,7 @@ export function memoryJourney(store: EventStore, silo: string, conversationId = 
     const nextBefore = await readChatFacts(store, silo, conversationId, nextTurn);
     const position = await store.head();
     // Rebuild from events alone. Saved references never grant execution or contain private input.
-    const cold = { readStream: store.readStream.bind(store) };
+    const cold = { readStream: store.readStream.bind(store), clock: store.clock };
     const after = await readChatFacts(cold, silo, conversationId, 'turn');
     assert.equal(after.memoryContext?.status, 'loaded');
     assert.equal(after.memoryContext.executionAvailable, false);

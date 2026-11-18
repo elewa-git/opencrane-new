@@ -15,7 +15,7 @@ const state = z.object({ assistantId: z.string(), computerId: z.string(), genera
 const grant = state.extend({ generation: z.int().positive().optional(), tokenId: z.string().min(1) });
 
 /** Current event-backed computer grant; shared by lifecycle issuance and model admission. */
-export function computerCredentials(store: Pick<EventStore, 'readStream'>, tokens: Verifier, silo: string) {
+export function computerCredentials(store: Pick<EventStore, 'readStream' | 'clock'>, tokens: Verifier, silo: string) {
   async function active(assistantId: string, deadline = Infinity) {
     function take(summary: ComputerSummary) {
       return { control: summary.control, lifecycle: summary.lifecycle,
@@ -90,7 +90,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
 }
 
 async function checkRecordedProviderChoice(
-  store: Pick<EventStore, 'readStream'>, silo: string, input: {
+  store: Pick<EventStore, 'readStream' | 'clock'>, silo: string, input: {
     assistantId: string; turnId: string; model: string; task: string;
     providerId?: string | undefined; bindingSequence?: number | undefined;
   },

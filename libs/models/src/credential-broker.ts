@@ -174,7 +174,7 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
     let access: Access | undefined;
     async function prepare() {
       const current = await prepareAccess();
-      const deadline = Math.min(current.deadline, performance.now() + 2000, until);
+      const deadline = Math.min(current.deadline, store.clock.now() + 2000, until);
       access = { ...current, deadline };
       return access;
     }
@@ -203,7 +203,7 @@ async function sendCurrent(store: EventStore, locked: Db, custody: Custody,
     // Check the session that owns the lock, not a different pooled connection.
     const queryOptions = { deadline: access.deadline };
     await locked.query('SELECT 1', [], queryOptions);
-    if (material === undefined || performance.now() >= access.deadline ||
+    if (material === undefined || store.clock.now() >= access.deadline ||
         Date.now() >= Math.min(release.expiresAt, evidence.expiresAt)) {
       refuse();
     }

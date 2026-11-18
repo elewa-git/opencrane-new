@@ -199,7 +199,7 @@ function memorySize(summary: ChatSummary) {
   return bytes;
 }
 
-export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo: string,
+export async function readChatFacts(store: Pick<EventStore, 'readStream' | 'clock'>, silo: string,
   conversationId: string, turnId: string, computerId?: string, reportSequence?: number,
   deadline = performance.now() + 10_000) {
   function take(summary: ChatSummary): ChatFacts {
@@ -237,7 +237,7 @@ export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo:
   }
 }
 
-export function readChatCommandFacts(store: Pick<EventStore, 'readStream'>, silo: string,
+export function readChatCommandFacts(store: Pick<EventStore, 'readStream' | 'clock'>, silo: string,
   conversationId: string, commandId: string, turnId?: string) {
   function isCreation(row: StoredEvent) { return row.event.type === 'conversation.created'; }
   function isClose(row: StoredEvent) { return row.event.type === 'conversation.closed'; }
@@ -253,7 +253,7 @@ export function readChatCommandFacts(store: Pick<EventStore, 'readStream'>, silo
     performance.now() + 10_000, take);
 }
 
-export function readChatStopRows(store: Pick<EventStore, 'readStream'>, silo: string,
+export function readChatStopRows(store: Pick<EventStore, 'readStream' | 'clock'>, silo: string,
   conversationId: string) {
   function take(summary: ChatSummary) { return [...summary.stopRows]; }
   return readStreamSummary(store, silo, `conversation-${conversationId}`, chat,

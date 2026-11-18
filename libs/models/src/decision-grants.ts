@@ -95,7 +95,7 @@ const decisionGrantSummary: SummaryKind<GrantSummary> = {
   budget: { limit: 16 * 1024 * 1024, size: grantSize },
 };
 
-export async function readDecisionGrants(store: Pick<EventStore, 'head' | 'readStream'>,
+export async function readDecisionGrants(store: Pick<EventStore, 'head' | 'readStream' | 'clock'>,
   silo: string, modelId: string, deadline: number) {
   const subject = grantStream('model', modelId);
   const capturedPosition = await store.head(undefined, deadline);

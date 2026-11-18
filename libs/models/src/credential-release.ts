@@ -262,8 +262,8 @@ async function confirm(store: EventStore, silo: string, requesterId: string,
 export async function confirmPreparedCredentialRelease(store: EventStore, silo: string,
   prepared: PreparedCredentialRelease, access: Access, action: 'append' | 'recover' | 'claim') {
   const { release, evidence } = prepared;
-  const deadline = Math.min(access.deadline, performance.now() + 2000,
-    performance.now() + release.expiresAt - Date.now());
+  const deadline = Math.min(access.deadline, store.clock.now() + 2000,
+    store.clock.now() + release.expiresAt - Date.now());
   if (!Number.isFinite(deadline)) {
     refuse();
   }
@@ -280,7 +280,7 @@ export async function confirmPreparedCredentialRelease(store: EventStore, silo: 
     }
     requireLifetime(release);
     if (!Number.isFinite(evidence.expiresAt) || Date.now() >= evidence.expiresAt ||
-        performance.now() >= deadline) {
+        store.clock.now() >= deadline) {
       refuse();
     }
   }

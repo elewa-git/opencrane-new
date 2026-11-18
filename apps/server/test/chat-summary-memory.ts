@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { randomUUID } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -66,7 +67,7 @@ async function heap() {
   globalThis.gc();
   return process.memoryUsage().heapUsed;
 }
-let store: { readStream: typeof readStream } | undefined = { readStream };
+let store: { readStream: typeof readStream; clock: Clock } | undefined = { readStream, clock: systemClock };
 function read(chat: string, computerId?: string, reportSequence?: number) {
   if (!store) throw new Error('Measurement store was released');
   return readChatFacts(store, silo, chat, 'unused', computerId, reportSequence);

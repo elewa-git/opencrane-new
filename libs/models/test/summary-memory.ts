@@ -1,3 +1,4 @@
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { readStreamSummary, type StoredEvent } from '@opencrane/event-store';
@@ -100,7 +101,7 @@ function computerSize(summary: ComputerSummary) {
 function chatSize(summary: StoredEvent[]) {
   return summary.length;
 }
-let measuredStore: { readStream: typeof readStream } | undefined = { readStream };
+let measuredStore: { readStream: typeof readStream; clock: Clock } | undefined = { readStream, clock: systemClock };
 async function read(subject: string, reader = measuredStore) {
   if (!reader) throw new Error('Measurement store was released');
   if (measuresComputer) {
@@ -109,7 +110,7 @@ async function read(subject: string, reader = measuredStore) {
   return readStreamSummary(reader, silo, subject, chatKind, Infinity, chatSize);
 }
 async function warmEngine() {
-  const temporaryStore = { readStream };
+  const temporaryStore = { readStream, clock: systemClock };
   await read(uuid('warm'), temporaryStore);
 }
 async function heap() {

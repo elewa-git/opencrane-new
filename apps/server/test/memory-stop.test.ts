@@ -143,7 +143,7 @@ async function stopsExactTurn(kind: 'corrected' | 'forgotten', requester: string
   expect(computer.calls).not.toContain('turn/interrupt:thread-2');
   await expect(computer.channel.renew('thread-1')).rejects.toThrow('Turn ended');
   const before = [...computer.calls];
-  const cold = { readStream: nats.store.readStream.bind(nats.store) };
+  const cold = { readStream: nats.store.readStream.bind(nats.store), clock: nats.store.clock };
   const facts = await readChatFacts(cold, 'test', 'chat', 'turn');
   expect(facts.memoryContext).toMatchObject({ status: 'invalidated', executionAvailable: false });
   expect(facts.memoryContext?.references).toHaveLength(1);

@@ -1,3 +1,4 @@
+import { systemClock } from '@opencrane/event-store';
 import { expect, it, vi } from 'vitest';
 import { countReads, event, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { readStreamSummary, type StoredEvent } from '@opencrane/event-store';
@@ -191,7 +192,7 @@ async function boundsRetainedDecisionRows() {
       if (index + 1 >= from) yield { sequence: index + 1, event };
     }
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   function decisionFacts(rows: StoredEvent[]) {
     return { count: rows.length, first: rows[0]?.event.id, last: rows.at(-1)?.event.id };
   }
