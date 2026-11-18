@@ -1,4 +1,4 @@
-import { systemClock } from '@opencrane/event-store';
+import { systemClock, type Clock } from '@opencrane/event-store';
 import { manualClock, type ManualClock } from '@opencrane/event-store/testing';
 import { once } from 'node:events';
 import { connect, createServer, Socket } from 'node:net';
@@ -9,7 +9,8 @@ import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay
 import { clientHello } from './egress-hello-fixture.ts';
 
 const destination = { host: 'registry.npmjs.org', port: 443 };
-async function fixture(stage = 'open', throwing = false, prepare?: () => Promise<void>, clock = systemClock) {
+async function fixture(stage = 'open', throwing = false, prepare?: () => Promise<void>,
+  { clock = systemClock }: { clock?: Clock } = {}) {
   const records: EgressCloseRecord[] = [];
   const sockets: Socket[] = [];
   let lookups = 0;
@@ -258,7 +259,8 @@ async function preparationKeepsExpiry() {
     await release.promise;
   }
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, prepare, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, prepare, clockOptions);
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   function restoreTimers() {
     vi.useRealTimers();
@@ -281,7 +283,8 @@ it('keeps the original expiry when receipt preparation takes time', preparationK
 
 async function watchdogClosure(lateFailure: boolean) {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
@@ -322,7 +325,8 @@ it.each([false, true])('closes a hung recheck by two seconds; late failure: %s',
 
 async function slowSerialChecks() {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
@@ -352,7 +356,8 @@ function restoreClock() {
 
 async function lateCheckAfterRevocation() {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
@@ -378,7 +383,8 @@ it('does not restart the watchdog after a closed relay receives a late success',
 
 async function noRecheckWatchdog() {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
@@ -390,7 +396,8 @@ it('does not apply a proof watchdog to a registration without rechecks', noReche
 
 async function lateSuccessBeforeWatchdog() {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
@@ -411,7 +418,8 @@ it('rejects a late successful check before the watchdog gets CPU time', lateSucc
 
 async function refreshedProofStartsAtRead() {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
@@ -438,7 +446,8 @@ it('dates refreshed proof from the read start even when its reply is delayed',
 
 async function untypedRejection() {
   const clock = manualClock(1_000_000);
-  const setup = await fixture('open', false, undefined, clock);
+  const clockOptions = { clock };
+  const setup = await fixture('open', false, undefined, clockOptions);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval',
     'clearInterval', 'Date'] });
   onTestFinished(restoreClock);
