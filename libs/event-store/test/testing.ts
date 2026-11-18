@@ -146,7 +146,7 @@ export interface NatsFixtureOptions {
 }
 
 export async function natsFixture({ provision = true, freshCertificates = false,
-  clock = systemClock }: NatsFixtureOptions = {}) {
+  clock = { ...systemClock } }: NatsFixtureOptions = {}) {
   const directory = await mkdtemp(resolve(".tools/nats-test-"));
   if (freshCertificates) {
     await certificates(directory);
