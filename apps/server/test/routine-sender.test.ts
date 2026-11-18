@@ -454,6 +454,7 @@ it('refuses a direct sender without a credential-use check before authorisation'
   missingCredentialUseCheck);
 
 async function refusesCredentialVersionChangedBeforeReleaseReply() {
+  holdFixtureClock();
   function confirmCompany() {
     return Promise.resolve();
   }
@@ -1120,8 +1121,7 @@ async function pollRoutine() {
 async function runningProhibition(
   kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin',
 ) {
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  await until(preparedComputer.executed);
+  const link = await startRunning();
   await saveProhibition(kind);
   const observed = performance.now();
   await pollRoutine();
@@ -1132,7 +1132,6 @@ async function runningProhibition(
   expect(performance.now() - observed).toBeLessThan(2000);
   await Promise.all([pollRoutine(), pollRoutine()]);
   interrupted();
-  const link = await preparedComputer.wake();
   expect(link.socket.readyState).toBe(link.socket.OPEN);
   expect(preparedComputer.closedSessions).toBe(0);
   const rows = await history(nats.store, 'routine-orders', 'test');
