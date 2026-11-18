@@ -1,7 +1,8 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
 
-const memberId = z.string().regex(/^[\w-]{1,200}$/u);
+const memberId = recordIdSchema;
 export const ownershipSeededSchema = z.object({
   ownerIds: z.array(memberId).min(1),
 }).strict();

@@ -1,3 +1,4 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import * as connections from './connections.ts';
 import { hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
@@ -12,7 +13,7 @@ const scanReceipt = { ...receipt, databaseDigest: DIGEST_EXAMPLE,
   databaseUpdatedAt: receipt.checkedAt };
 
 const oauthChangeFields = {
-  serverId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+  serverId: recordIdSchema,
   changeId: z.uuid(),
 };
 const changingConfigurationFields = { ...oauthChangeFields,

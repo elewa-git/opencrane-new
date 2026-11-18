@@ -1,3 +1,4 @@
+import { recordIdSchema } from './ids.ts';
 // Organisation membership events; the main registry preserves their catalogue order.
 import { z } from 'zod';
 import type { EventEnvelope } from './envelope.ts';
@@ -12,7 +13,7 @@ export const siloOwnerBootstrappedDataSchema = memberJoinedDataSchema.omit({
   identity: z.object({ issuer: z.url(), sub: z.string().min(1) }).strict(),
 }).strict();
 
-const safeReference = z.string().regex(/^[\w-]{1,200}$/u);
+const safeReference = recordIdSchema;
 export const memberCommandRefusedSchema = z.object({
   memberId: safeReference,
   originalCommandDigest: z.string().regex(/^[a-f0-9]{64}$/u),

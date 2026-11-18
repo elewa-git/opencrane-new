@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { recordIdPattern, recordIdSchema } from '../src/index.ts';
+import { providerIdSchema, recordIdPattern, recordIdSchema } from '../src/index.ts';
+import { assistantGrantSchema } from '../src/data.ts';
 
 const oldPatterns = [/^[\w-]{1,200}$/u, /^[A-Za-z0-9_-]{1,200}$/u];
 const cases = [
@@ -28,4 +29,17 @@ it('preserves both old ID patterns at length and character boundaries', () => {
       expect(recordIdSchema.safeParse(value).success, value).toBe(oldPattern.test(value));
     }
   }
+});
+
+it('keeps the provider ID schema as the shared schema alias', () => {
+  expect(providerIdSchema).toBe(recordIdSchema);
+});
+
+it('keeps model grant IDs distinct from record IDs', () => {
+  expect(assistantGrantSchema.safeParse({ resourceType: 'model', resourceId: 'model.v1' })
+    .success).toBe(true);
+  expect(assistantGrantSchema.safeParse({ resourceType: 'mcp_server', resourceId: 'server-1' })
+    .success).toBe(true);
+  expect(assistantGrantSchema.safeParse({ resourceType: 'mcp_server', resourceId: 'server.v1' })
+    .success).toBe(false);
 });

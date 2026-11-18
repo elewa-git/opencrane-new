@@ -1,9 +1,10 @@
+import { recordIdSchema } from './ids.ts';
 /// <reference lib="dom" />
 import { z } from 'zod';
 import { event } from './definition.ts';
 import { eventEnvelopeSchema } from './envelope.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const reference = z.strictObject({ scopeId: digest, memoryId: identifier,
   revision: z.int().positive() });

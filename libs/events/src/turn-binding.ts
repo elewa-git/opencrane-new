@@ -1,8 +1,9 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 
 // Keep both fields together so a record cannot name a provider without its saved choice.
 export const providerTurnBindingSchema = z.object({
-  providerId: z.string().regex(/^[\w-]{1,200}$/u),
+  providerId: recordIdSchema,
   bindingSequence: z.int().positive(),
 }).strict();
 

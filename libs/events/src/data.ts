@@ -1,3 +1,5 @@
+import { assistantGrantSchema } from './assistant-grant.ts';
+import { recordIdSchema } from './ids.ts';
 import { artifactRefusalSchema } from './file-events.ts';
 import { credentialReleaseSchema } from './credential-release.ts';
 import { budgetCallRetrySchema } from './budget-root.ts';
@@ -8,6 +10,7 @@ import { groupConversationSchema, sharedChildConversationSchema,
   childParticipantAddedSchema, childParticipantRemovedSchema } from './conversation.ts';
 import { isToolCallText } from './tool-call.ts';
 import { toolCallFields } from './tool-dispatch.ts';
+export { assistantGrantSchema } from './assistant-grant.ts';
 export { toolDispatchRecordedDataSchema } from './tool-dispatch.ts';
 import { nativeDelegationBindingSchema, hasDistinctDelegationChild } from './delegation.ts';
 import { routineApprovalBindingSchema } from './routine-approval.ts';
@@ -172,12 +175,6 @@ export const teamMemberRemovedDataSchema = z
 // persists across Pod replacements; `computerId` below names the current
 // Pod/claim, but the stream subject is always the assistant's id.
 
-export const assistantGrantSchema = z.discriminatedUnion('resourceType', [
-  z.object({ resourceType: z.literal('model'),
-    resourceId: z.string().regex(/^[\w.-]{1,200}$/u) }).strict(),
-  z.object({ resourceType: z.literal('mcp_server'),
-    resourceId: z.string().regex(/^[\w-]{1,200}$/u) }).strict(),
-]);
 export const assistantCreatedDataSchema = z.object({
   assistantId: id, ownerId: id, kind: z.enum(['personal', 'team']),
   payingGroupId: id.optional(),
@@ -412,7 +409,7 @@ export const effectUncertainDataSchema = z
   .strict();
 
 // Evidence contains opaque receipt ids and hashes, never raw provider bodies or credentials.
-const evidenceFields = { reference: z.string().regex(/^[\w-]{1,200}$/u), digest: digestSchema };
+const evidenceFields = { reference: recordIdSchema, digest: digestSchema };
 export const effectResolvedDataSchema = z.object({
   permitId: id, reservationId: id, resolvedBy: id, outcome: z.enum(['settled', 'released']), settledCents: centsSchema,
   evidence: z.array(z.discriminatedUnion('kind', [
@@ -447,10 +444,10 @@ function validCatalogueDates(value: { checkedAt?: string | undefined; expiresAt?
 }
 
 export const mcpDispatchAdmittedDataSchema = z.strictObject({
-  serverId: z.string().regex(/^[\w-]{1,200}$/u),
-  connectionId: z.string().regex(/^[\w-]{1,200}$/u), requestId: id,
+  serverId: recordIdSchema,
+  connectionId: recordIdSchema, requestId: id,
   toolName: z.string().min(1).max(200), toolRevision: digestSchema,
-  schemaDigest: digestSchema, generation: z.string().regex(/^[\w-]{1,200}$/u),
+  schemaDigest: digestSchema, generation: recordIdSchema,
 });
 
 export const mcpCatalogueCheckedDataSchema = z.discriminatedUnion('outcome', [

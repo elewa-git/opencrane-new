@@ -1,6 +1,7 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const screenshot = z.object({ computerId: id, generation: z.int().positive(), capturedAt: z.iso.datetime(),
   width: z.int().positive().max(4096), height: z.int().positive().max(4096) }).strict();
 const identity = { turnId: id.optional(), conversationId: id, fileId: id, uploadedBy: id, name: z.string().regex(/^[\w][\w .()-]{0,119}$/u),

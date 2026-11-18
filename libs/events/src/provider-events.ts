@@ -1,9 +1,10 @@
+import { recordIdSchema } from './ids.ts';
 import { centsSchema } from './data.ts';
 import { connectionCreatedDataSchema } from './connections.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
 
-export const providerIdSchema = z.string().regex(/^[\w-]{1,200}$/u);
+export const providerIdSchema = recordIdSchema;
 export const providerModelIdSchema = z.string().regex(/^[\w.-]{1,200}$/u);
 const id = providerIdSchema;
 const modelId = providerModelIdSchema;

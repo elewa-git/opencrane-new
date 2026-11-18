@@ -1,8 +1,9 @@
+import { recordIdSchema } from './ids.ts';
 /// <reference lib="dom" />
 import { z } from 'zod';
 import { eventEnvelopeSchema } from './envelope.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const scopeKind = z.enum(['person', 'assistant_notes', 'group']);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const revision = z.int().positive();

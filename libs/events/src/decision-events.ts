@@ -1,11 +1,12 @@
+import { recordIdSchema } from './ids.ts';
 import { event } from './definition.ts';
 import { decisionRecordedDataSchema } from './data.ts';
 import { z } from 'zod';
 
 const toolDispatchStartedDataSchema = z.strictObject({
   requestId: z.uuid(),
-  serverId: z.string().regex(/^[\w-]{1,200}$/u),
-  connectionId: z.string().regex(/^[\w-]{1,200}$/u),
+  serverId: recordIdSchema,
+  connectionId: recordIdSchema,
   generation: z.int().positive(),
   recordDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   reviewRevision: z.int().positive(),

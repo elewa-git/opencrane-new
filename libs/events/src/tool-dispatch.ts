@@ -1,11 +1,12 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import { isToolCallText } from './tool-call.ts';
 
 export const toolCallFields = {
-  conversationId: z.string().regex(/^[\w-]{1,200}$/u),
-  turnId: z.string().regex(/^[\w-]{1,200}$/u),
+  conversationId: recordIdSchema,
+  turnId: recordIdSchema,
   callId: z.string().refine(isToolCallText),
-  serverId: z.string().regex(/^[\w-]{1,200}$/u),
+  serverId: recordIdSchema,
   toolName: z.string().refine(isToolCallText),
 };
 export const toolDispatchRecordedDataSchema = z.object({
@@ -19,7 +20,7 @@ export const toolDispatchRecordedDataSchema = z.object({
   adapter: z.strictObject({
     decisionId: z.uuid(),
     startId: z.string().regex(/^[a-f0-9-]{36}:tool-dispatch-started$/u),
-    connectionId: z.string().regex(/^[\w-]{1,200}$/u),
+    connectionId: recordIdSchema,
     generation: z.int().positive(), recordDigest: z.string().regex(/^[a-f0-9]{64}$/u),
     reviewRevision: z.int().positive(),
   }).optional(),

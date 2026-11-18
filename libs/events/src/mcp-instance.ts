@@ -1,8 +1,9 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
 import type { EventEnvelope } from './envelope.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const identitySchema = z.strictObject({ siloId: id, userId: id, profileId: id,
   serverId: id, startupAccessGeneration: z.int().positive() });
