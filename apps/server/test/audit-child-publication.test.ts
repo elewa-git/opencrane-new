@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { Client } from 'minio/dist/esm/minio.mjs';
 import type { FastifyRequest } from 'fastify';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -47,7 +47,7 @@ function refuseDecrypt(): never {
 function headers(memberId: string) {
   const now = Math.floor(Date.now() / 1000);
   const session = { sub: memberId, orgId: 'org-test', roles: [], authTime: now, exp: now + 600 };
-  return { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  return { cookie: sessionCookie(config, session).cookie };
 }
 
 async function append(subject: string, type: string, data: object, id: string) {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { Writable } from 'node:stream';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -40,7 +40,7 @@ async function append(saved: EventEnvelope) {
 function headers(member = 'admin', orgId = 'org-acme') {
   const now = Math.floor(Date.now() / 1000);
   const session = { sub: member, orgId, roles: [], authTime: now, exp: now + 600 };
-  return { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
+  return { cookie: sessionCookie(config, session).cookie,
     authorization: `Bearer ${canary}` };
 }
 async function setup() {

@@ -270,6 +270,7 @@ an `appended` result. It returns `{ event, sequence }` and applies no projection
 Optional named fields retain the default from `event` when omitted:
 
 - `id` supplies the event identifier instead of generating one.
+- `source` supplies the service that produced the event.
 - `principal` supplies the person or system responsible for the event.
 - `time` supplies the event timestamp.
 - `commandId` supplies the command identifier independently of the event identifier.
