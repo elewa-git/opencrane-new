@@ -6,10 +6,9 @@ import { consumePermit, dispatchRemoteTarget, dispatchDigest as digest,
   from './mcp-dispatch-request.ts';
 import { credentialPatterns, containsCredentialText } from './credential-patterns.ts';
 /* eslint max-lines: ["error", { max: 672, skipBlankLines: true, skipComments: true }] */
-import { createLogger } from '@opencrane/observability';
-import { privateDecisionReason } from './decision-refusal.ts';
-import { exchangeRemote, remoteEvidence, type RemoteNetwork } from './remote-https.ts';
-import { recordAdapterObservation, recordToolObservation } from './tool-dispatch.ts';
+import { exchangeRemote, type RemoteNetwork } from './remote-https.ts';
+import { recordDispatchStarted, reportDispatchRefusal, type DispatchObserver }
+  from './mcp-dispatch-receipts.ts';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
 import { requireGatewayAcknowledgement, requireGatewayPosition } from './gateway-admission.ts';
@@ -32,8 +31,6 @@ export interface McpDispatchOptions {
   credentialDispatch?: PersonalCredentialDispatch;
 }
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
-type RemoteObserver = (outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
-  deadline?: number) => Promise<void>;
 const remoteErrorSchema = z.strictObject({
   code: z.int(), message: z.string(), data: z.unknown().optional(),
 });
@@ -60,7 +57,6 @@ function isBuiltInMemory(policy: Policy) {
 export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
   const { store, silo } = actor;
   const clockOptions = { clock: store.clock };
-  const logger = createLogger('mcp-dispatch');
   const signingKey = randomBytes(32);
   const pending = new Map<string, Permit>();
   const consumer = { pending, silo };
@@ -198,7 +194,8 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       try {
         await personal.send(observe!);
       } catch (error) {
-        await reportRefusal(permit, observe, startedAt, 'credential_release', deadline, error);
+        const refusal = { permit, observe, startedAt, stage: 'credential_release', deadline, error };
+        await reportDispatchRefusal(actor, refusal);
         throw error;
       }
       return;
@@ -222,12 +219,12 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit, clockOptions);
     }
-    let observe: RemoteObserver | undefined;
+    let observe: DispatchObserver | undefined;
     let stage = 'dispatch_start';
     try {
       // Save the HTTPS start before budget admission, so an unsent refusal has exact proof.
       if (route.locator) {
-        observe = await recordStarted(permit, deadline);
+        observe = await recordDispatchStarted(actor, permit, deadline);
       }
       stage = 'credential_preparation';
       await permit.prepareCredential?.();
@@ -242,7 +239,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
         await requirePublishedPositions(permit, admittedPosition, deadline);
         requireCurrentRoute(permit);
         requireFreshDispatch(req, res, permit, clockOptions);
-        observe = await recordStarted(permit, deadline);
+        observe = await recordDispatchStarted(actor, permit, deadline);
       }
       stage = 'final_access';
       if (permit.gatewayBinding) {
@@ -256,46 +253,11 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       requireCurrentRoute(permit);
       requireFreshDispatch(req, res, permit, clockOptions);
     } catch (error) {
-      await reportRefusal(permit, observe, startedAt, stage, deadline, error);
+      const refusal = { permit, observe, startedAt, stage, deadline, error };
+      await reportDispatchRefusal(actor, refusal);
       throw error;
     }
     return observe;
-  }
-
-  async function reportRefusal(permit: Permit, observe: RemoteObserver | undefined,
-    startedAt: number, stage: string, deadline: number, error: unknown) {
-    const diagnostic = { stage, reason: privateDecisionReason(error),
-      elapsedMs: Math.ceil(store.clock.now() - startedAt),
-      accessRemainingMs: Math.max(0, Math.floor(deadline - store.clock.now())) };
-    logger.warn(diagnostic, 'MCP dispatch refused');
-    try {
-      await recordRefusedStart(permit, observe, startedAt);
-    } catch {
-      const evidence = { stage: 'refusal_evidence', reason: 'evidence_unavailable',
-        elapsedMs: Math.ceil(store.clock.now() - startedAt) };
-      logger.warn(evidence, 'MCP dispatch refused');
-    }
-  }
-
-  async function recordRefusedStart(permit: Permit, observe: RemoteObserver | undefined,
-    startedAt: number) {
-    // Allow one second to save evidence only. This cannot extend permission to send.
-    const deadline = store.clock.now() + 1000;
-    if (permit.route.locator) {
-      // Record proof only after a confirmed start and before opening any connection.
-      if (observe) {
-        await observe('not_dispatched', deadline);
-      }
-      return;
-    }
-    if (!permit.gatewayBinding) {
-      return;
-    }
-    // Close the saved start before replying. No upstream connection has been opened.
-    const observation = { id: permit.requestId, toolOutcome: 'not_dispatched' as const,
-      evidence: 'dispatch_refused' as const, observedAt: new Date().toISOString(),
-      durationMs: Math.ceil(store.clock.now() - startedAt) };
-    await recordToolObservation(actor, observation, deadline);
   }
 
   async function requirePublishedPositions(permit: Permit, admittedPosition: number,
@@ -312,45 +274,6 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
     // Catch a saved replacement while the MCP read waited, even with an unchanged member.
     await requireGatewayPosition(store, silo, permit.gatewayBinding,
       acknowledged, deadline);
-  }
-
-  async function recordStarted(permit: Permit, deadline: number) {
-    const binding = permit.gatewayBinding;
-    if (!binding) {
-      return;
-    }
-    const subject = `decision-${permit.requestId}`;
-    const expectedSequence = await store.head(subject, deadline);
-    // Keep any saved outcome last, including one written after a gateway timeout.
-    const decision = await store.readEvent(expectedSequence, deadline);
-    if (decision.event.id !== permit.budget.decisionId) {
-      throw new Error('Tool dispatch decision changed');
-    }
-    const payload = { requestId: permit.requestId, serverId: permit.route.serverId,
-      connectionId: permit.route.connectionId, generation: binding.generation,
-      recordDigest: binding.recordDigest, reviewRevision: permit.reviewRevision,
-      ...(permit.route.locator ? { adapter: 'remote_https' } : {}) };
-    const eventId = `${permit.requestId}:tool-dispatch-started`;
-    const event = envelope(silo, subject, 'tool.dispatch_started', payload, eventId);
-    // Consume once in this process. Never recover a failed save reply by sending later.
-    const command = { event, expectedSequence, deadline, historyChecked: true as const };
-    const result = await store.append(command);
-    if (result.status !== 'appended') {
-      throw new Error('Tool dispatch start unavailable');
-    }
-    const startedAt = store.clock.now();
-    const adapter = { silo: permit.silo, decisionId: permit.budget.decisionId,
-      startId: event.id, connectionId: payload.connectionId, generation: payload.generation,
-      recordDigest: payload.recordDigest, reviewRevision: payload.reviewRevision! };
-    async function observe(outcome: 'responded' | 'outcome_unknown' | 'not_dispatched',
-      evidenceDeadline?: number) {
-      const evidence = remoteEvidence(outcome);
-      const observation = { id: permit.requestId, toolOutcome: outcome, evidence,
-        observedAt: new Date().toISOString(),
-        durationMs: Math.ceil(store.clock.now() - startedAt) } as const;
-      await recordAdapterObservation(actor, adapter, observation, evidenceDeadline);
-    }
-    return observe;
   }
 
   function requireCurrentRoute(permit: Permit) {
@@ -453,7 +376,7 @@ function forward(route: Route, permit: Permit, body: string, res: ServerResponse
 }
 
 async function forwardRemote(target: RemoteTarget, permit: Permit,
-  raw: string, res: ServerResponse, network: RemoteNetwork, observe: RemoteObserver,
+  raw: string, res: ServerResponse, network: RemoteNetwork, observe: DispatchObserver,
   material?: string) {
   if (material !== undefined && !/^[\x21-\x7e]+$/u.test(material)) {
     throw new Error('MCP credential refused');
@@ -617,7 +540,7 @@ function personalDispatch(store: BudgetActor['store'], silo: string,
   const release = permit.release;
   if (!target || !release) return undefined;
   if (!dispatch) throw new Error('Personal tool unavailable');
-  let observer: RemoteObserver | undefined;
+  let observer: DispatchObserver | undefined;
   let sendCredential: (() => Promise<void>) | undefined;
   async function sendAccess(material: string) {
     if (!observer) throw new Error('Personal tool unavailable');
@@ -628,7 +551,7 @@ function personalDispatch(store: BudgetActor['store'], silo: string,
       deadline, confirmAccess: permit.confirmAccess, sendAccess };
     sendCredential = await preparePersonalCredential(store, silo, dispatch!, credentialRequest);
   }
-  async function send(observe: RemoteObserver) {
+  async function send(observe: DispatchObserver) {
     if (!sendCredential) throw new Error('Personal tool unavailable');
     observer = observe;
     await sendCredential();

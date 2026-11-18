@@ -191,8 +191,9 @@ export async function startDecision(
         memoryClaims, raw, req.headers, requestId, dispatchOptions, identity);
       const { preparation, reads: memoryReads } = preparedMemory;
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
+      const accessClockOptions = { clock: actor.store.clock, routine: routine !== undefined };
       const accessStarted = preparedPersonal ? actor.store.clock.now() :
-        memoryAccessStarted(managedRoute, memory.loaded, started, preparation, { clock: actor.store.clock, routine: routine !== undefined });
+        memoryAccessStarted(managedRoute, memory.loaded, started, preparation, accessClockOptions);
       stage = 'authority';
       const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant, grants);
@@ -216,10 +217,7 @@ export async function startDecision(
       stage = 'request';
       async function memoryDecision() {
         if (!identity.memory) throw new Error('Memory signing unavailable');
-        const claims = { silo: actor.silo, requester: turnToken.requester,
-          assistant: computer.assistant, computer: computer.computer, generation: computer.generation,
-          conversation: turnToken.conversation, turn: turnToken.turn, thread: turnToken.thread };
-        const memory = await prepareMemoryContext(actor.store, binding, claims, raw,
+        const memory = await prepareMemoryContext(actor.store, binding, memoryClaims, raw,
           req.headers, fresh.deadline, requestId, fresh.include, memoryReads);
         const policy = mcpSender.bindPolicy(memory.policy);
         contextDigest = memory.contextDigest;

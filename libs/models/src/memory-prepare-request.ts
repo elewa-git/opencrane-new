@@ -63,6 +63,9 @@ export async function prepareMemoryDecision(memoryRoute: boolean, store: EventSt
 }
 
 export function memoryAccessStarted(managedRoute: boolean, loaded: boolean, started: number,
-  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>, { clock = systemClock, routine = false }: { clock?: Clock; routine?: boolean } = {}) {
-  return decisionAccessStarted(managedRoute || preparation !== undefined || routine, loaded, started, { clock });
+  preparation: Awaited<ReturnType<typeof requestMemoryPreparation>>,
+  { clock = systemClock, routine = false }: { clock?: Clock; routine?: boolean } = {}) {
+  const prepared = managedRoute || preparation !== undefined || routine;
+  const clockOptions = { clock };
+  return decisionAccessStarted(prepared, loaded, started, clockOptions);
 }
