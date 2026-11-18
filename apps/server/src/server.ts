@@ -93,6 +93,14 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
     return { status: 'ok' };
   });
 
+  registerRoutes(app, authConfig, options);
+
+  return app;
+}
+
+export function registerRoutes(
+  app: FastifyInstance, authConfig: AuthConfig, options: BuildServerOptions,
+): void {
   // The auth routes log through app.log, the observability logger above, so
   // the callback URL's entire query is dropped from logs.
   registerAuthRoutes(app, authConfig);
@@ -141,7 +149,6 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerFileRoutes(app, authConfig, options.files);
   registerScreenshots(app, authConfig, options.files, options.liveView);
 
-  return app;
 }
 
 // Keep production requests off until return and recovery are available.

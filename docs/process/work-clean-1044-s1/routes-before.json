@@ -1,0 +1,1067 @@
+[
+  {
+    "method": "GET",
+    "url": "/healthz"
+  },
+  {
+    "method": "HEAD",
+    "url": "/healthz"
+  },
+  {
+    "method": "GET",
+    "url": "/auth/login"
+  },
+  {
+    "method": "HEAD",
+    "url": "/auth/login"
+  },
+  {
+    "method": "GET",
+    "url": "/auth/callback"
+  },
+  {
+    "method": "HEAD",
+    "url": "/auth/callback"
+  },
+  {
+    "method": "POST",
+    "url": "/auth/logout"
+  },
+  {
+    "method": "GET",
+    "url": "/auth/me"
+  },
+  {
+    "method": "HEAD",
+    "url": "/auth/me"
+  },
+  {
+    "method": "POST",
+    "url": "/members/join"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/groups"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/groups"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/groups/:groupId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/groups/:groupId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/groups/:groupId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/groups/:groupId/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/members/:memberId/access"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/members/:memberId/access"
+  },
+  {
+    "method": "GET",
+    "url": "/api/members/:memberId/departure"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/members/:memberId/departure"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/integrations/:serverId/access/explanation"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/access/explanation"
+  },
+  {
+    "method": "GET",
+    "url": "/api/members"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/members"
+  },
+  {
+    "method": "GET",
+    "url": "/api/members/:memberId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/members/:memberId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/routines"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/routines"
+  },
+  {
+    "method": "GET",
+    "url": "/api/routines/:routineId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/routines/:routineId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/routines/:routineId/runs"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/routines/:routineId/runs"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/:serverId/connection"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/:serverId/connection"
+  },
+  {
+    "method": "POST",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/key"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/needs"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/needs"
+  },
+  {
+    "method": "POST",
+    "url": "/api/my/tools/:serverId/selection"
+  },
+  {
+    "method": "POST",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/revoke"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/:serverId/profiles"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/:serverId/profiles"
+  },
+  {
+    "method": "GET",
+    "url": "/api/integrations/:serverId/members/:userId/profiles/:profileId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/integrations/:serverId/members/:userId/profiles/:profileId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/integrations/:serverId/members/:userId/profiles/:profileId/disable/changes/:changeRef"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/integrations/:serverId/members/:userId/profiles/:profileId/disable/changes/:changeRef"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/:serverId/profiles/:profileId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/:serverId/profiles/:profileId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/changes/:changeRef"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/changes/:changeRef"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/:serverId/selection/changes/:changeRef"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/:serverId/selection/changes/:changeRef"
+  },
+  {
+    "method": "POST",
+    "url": "/api/integrations/:serverId/members/:userId/profiles/:profileId/disable"
+  },
+  {
+    "method": "POST",
+    "url": "/api/members/:memberId/role"
+  },
+  {
+    "method": "POST",
+    "url": "/api/members/:memberId/remove"
+  },
+  {
+    "method": "GET",
+    "url": "/api/members/:memberId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/members/:memberId/changes/:commandId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/invitations/identity"
+  },
+  {
+    "method": "POST",
+    "url": "/api/invitations"
+  },
+  {
+    "method": "GET",
+    "url": "/api/invitations/:memberId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/invitations/:memberId/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/invitations/:memberId/command-changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/invitations/:memberId/command-changes/:commandId"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/ownership"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/ownership"
+  },
+  {
+    "method": "GET",
+    "url": "/api/ownership/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/ownership/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers/:providerId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers/:providerId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers/:providerId/drain"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers/:providerId/drain"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers/:providerId/drain"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers/:providerId/switch-on"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers/:providerId/bindings"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers/:providerId/bindings"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers/:providerId/dependencies"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers/:providerId/dependencies"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers/:providerId/dependencies/preview"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers/:providerId/bindings"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers/:providerId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers/:providerId/changes/:commandId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers/:providerId/key"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/providers/:providerId/verify"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/providers/:providerId/verify"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/providers/:providerId/verify"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/overview"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/overview"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/models/:modelId/access"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/models/:modelId/access"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/models/:modelId/access/candidates"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/models/:modelId/access/candidates"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/models/:modelId/access"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/models/:modelId/access/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/models/:modelId/access/changes/:commandId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/egress/destinations"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/egress/destinations/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/egress/destinations/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/integrations/:serverId/access"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/access"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/integrations/:serverId/access/candidates"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/access/candidates"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/integrations/:serverId/access/changes"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/integrations/:serverId/access/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/access/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/scopes"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/scopes"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/turns/:conversationId/:turnId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/turns/:conversationId/:turnId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/:scopeId/facts"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/:scopeId/facts"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/:scopeId/maintenance"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/:scopeId/maintenance"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/:scopeId/maintenance/:runId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/:scopeId/maintenance/:runId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/:scopeId/facts/:memoryId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/:scopeId/facts/:memoryId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/:scopeId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/:scopeId/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/memory/:scopeId/agent-changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/memory/:scopeId/agent-changes/:commandId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/memory/:scopeId/facts"
+  },
+  {
+    "method": "POST",
+    "url": "/api/memory/:scopeId/facts/:memoryId/forget"
+  },
+  {
+    "method": "POST",
+    "url": "/api/memory/:scopeId/facts/:memoryId/correct"
+  },
+  {
+    "method": "POST",
+    "url": "/api/memory/:scopeId/maintenance/binding"
+  },
+  {
+    "method": "POST",
+    "url": "/api/silo/claim"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/org/integrations"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/org/models"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/models"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/models/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/models/changes/:commandId"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/org/integrations/:serverId/tools"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/tools"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/org/integrations/:serverId/review"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/review"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/org/integrations/:serverId/publication"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/publication"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/integrations/:serverId/discovery"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/discovery"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/integrations/:serverId/admission"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/admission"
+  },
+  {
+    "method": [
+      "POST"
+    ],
+    "url": "/api/org/integrations/:serverId/checks"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/integrations/discovery"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/discovery"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/integrations/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/changes/:commandId"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/org/integrations/:serverId/company-opt-in"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/company-opt-in"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/integrations/:serverId/facts"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/facts"
+  },
+  {
+    "method": [
+      "GET"
+    ],
+    "url": "/api/org/integrations/:serverId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/models/scope-choices"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/models/scope-choices"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/spending"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/spending"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/spending/effects"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/spending/effects"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/spending/current-effects"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/spending/current-effects"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/instance"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/instance"
+  },
+  {
+    "method": "GET",
+    "url": "/api/my/tools/changes/:changeRef"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/my/tools/changes/:changeRef"
+  },
+  {
+    "method": "POST",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/instance/stop"
+  },
+  {
+    "method": "POST",
+    "url": "/api/my/tools/:serverId/profiles/:profileId/instance/wake"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/integrations/:serverId/instances/:instanceId/stop"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/integrations/:serverId/instances/:instanceId/changes/:changeRef"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/integrations/:serverId/instances/:instanceId/changes/:changeRef"
+  },
+  {
+    "method": "POST",
+    "url": "/internal/mcp/instances/:instanceId/observations"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/computers"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/computers"
+  },
+  {
+    "method": "GET",
+    "url": "/api/chat"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/chat"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/origin"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/origin"
+  },
+  {
+    "method": "GET",
+    "url": "/api/chat/colleagues"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/chat/colleagues"
+  },
+  {
+    "method": "GET",
+    "url": "/api/chat/groups"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/chat/groups"
+  },
+  {
+    "method": "GET",
+    "url": "/api/chat/groups/:groupId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/chat/groups/:groupId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/changes/:commandId"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/conversations"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/messages"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/messages"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/messages"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/conversations/:conversationId/participants"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/participants"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/state"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/close"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/publication-review"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/publications"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/child-review"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/children"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/children/:requestId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/children/:requestId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/children/:requestId/retry"
+  },
+  {
+    "method": "GET",
+    "url": "/api/onboarding"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/onboarding"
+  },
+  {
+    "method": "GET",
+    "url": "/api/personal/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/personal/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/onboarding/persona/revisions"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/onboarding/persona/revisions"
+  },
+  {
+    "method": "GET",
+    "url": "/api/onboarding/persona/revisions/:revisionId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/onboarding/persona/revisions/:revisionId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/onboarding/welcome"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/onboarding/welcome"
+  },
+  {
+    "method": "POST",
+    "url": "/api/onboarding/survey"
+  },
+  {
+    "method": "POST",
+    "url": "/api/onboarding/persona"
+  },
+  {
+    "method": "POST",
+    "url": "/api/onboarding/welcome"
+  },
+  {
+    "method": "POST",
+    "url": "/api/onboarding/welcome/archive"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/assistants"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/assistants"
+  },
+  {
+    "method": "GET",
+    "url": "/api/assistants/:assistantId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/assistants/:assistantId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/assistants/:assistantId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/assistants/:assistantId/changes/:commandId"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/history"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/history"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/history"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/history"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/history/:auditId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/history/:auditId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/view"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/tool-requests/:logicalRequestId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/tool-requests/:logicalRequestId"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/conversations/:conversationId/approvals"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/approvals"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/budget-stops"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/budget-stops"
+  },
+  {
+    "method": "GET",
+    "url": "/api/conversations/:conversationId/files/view"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/files/view"
+  },
+  {
+    "method": "POST",
+    "url": "/api/conversations/:conversationId/screenshots"
+  },
+  {
+    "method": "POST",
+    "url": "/mcp/memory/server"
+  },
+  {
+    "method": "POST",
+    "url": "/mcp/memory/server/prepare"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/effects"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/effects"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/effects/:permitId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/effects/:permitId"
+  },
+  {
+    "method": "POST",
+    "url": "/api/org/effects/:permitId/resolve"
+  },
+  {
+    "method": "GET",
+    "url": "/api/org/effects/:permitId/changes/:commandId"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/org/effects/:permitId/changes/:commandId"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/conversations/:conversationId/takeover"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/takeover"
+  },
+  {
+    "method": [
+      "GET",
+      "POST"
+    ],
+    "url": "/api/conversations/:conversationId/files"
+  },
+  {
+    "method": "HEAD",
+    "url": "/api/conversations/:conversationId/files"
+  }
+]
