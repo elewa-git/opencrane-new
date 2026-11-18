@@ -71,7 +71,7 @@ export default tseslint.config(
   },
   {
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
-    ignores: ['**/*.test.ts', '**/*.spec.ts', 'libs/events/src/ids.ts'],
+    ignores: ['libs/events/src/ids.ts'],
     rules: {
       'no-restricted-syntax': ['error', {
         selector: 'Literal[regex.pattern="^[\\\\w-]{1,200}$"][regex.flags="u"], ' +

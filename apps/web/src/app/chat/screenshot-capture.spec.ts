@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/protocol';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ScreenshotCapture, captureView, type CaptureState } from './screenshot-capture';
@@ -99,17 +100,22 @@ it('sends the same key after an unknown outcome and replaces it for Screenshot',
   expect(fetchKey(requests, 2)).not.toBe(firstKey);
 });
 
-it('sends the required headers without a request body', async () => {
-  const requests = stubFetch([reply(201, '{"status":"appended","fileId":"file"}')]);
+async function sendsRequiredHeaders() {
+  const responses = [reply(201, '{"status":"appended","fileId":"file"}')];
+  const requests = stubFetch(responses);
   const capture = createCapture();
   await capture.start('chat / one', []);
   const request = requests[0];
+  const requestHeaders = new Headers(request?.options?.headers);
+  const viewHeader = requestHeaders.get('x-opencrane-view');
+  const idempotencyKey = requestHeaders.get('idempotency-key');
   expect(request?.options?.method).toBe('POST');
-  expect(new Headers(request?.options?.headers).get('x-opencrane-view')).toBe('1');
-  expect(new Headers(request?.options?.headers).get('idempotency-key')).toMatch(/^[\w-]{1,200}$/u);
+  expect(viewHeader).toBe('1');
+  expect(idempotencyKey).toMatch(recordIdPattern);
   expect(request?.options?.body).toBeUndefined();
   expect(request?.url).toBe('/api/conversations/chat%20%2F%20one/screenshots');
-});
+}
+it('sends the required headers without a request body', sendsRequiredHeaders);
 
 it('does not send another request while the capture is saving', async () => {
   let finish!: (response: Response) => void;
