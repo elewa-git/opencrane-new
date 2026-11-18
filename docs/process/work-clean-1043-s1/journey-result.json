@@ -1,0 +1,26 @@
+{
+  "head": "f5076116416ffc4ea39c0ce1292b31eb69c5b108",
+  "slot": "1",
+  "startup_exit": 0,
+  "status_exit": 0,
+  "verdict": "PASS",
+  "screenshots": [
+    "screenshots/upload-preparing-390.png",
+    "screenshots/upload-ready-390.png",
+    "screenshots/upload-preparing-1280.png",
+    "screenshots/upload-390.png",
+    "screenshots/workspace-390.png",
+    "screenshots/workspace-1280.png",
+    "screenshots/preview-390.png",
+    "screenshots/preview-1280.png",
+    "screenshots/upload-1280.png",
+    "screenshots/upload-ready-1280.png"
+  ],
+  "copied_before_teardown": true,
+  "down_exit": 0,
+  "released_status_exit": 0,
+  "enclosing_tool_session_exit": 143,
+  "released_status": "free",
+  "repository_screenshots_copied_before_teardown": 27,
+  "total_screenshots": 37
+}
