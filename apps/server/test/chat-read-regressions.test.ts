@@ -8,10 +8,10 @@ import { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, natsFixture, type AppendEventOptions } from '@opencrane/event-store/testing';
 import { envelope, history } from '@opencrane/models';
 import {
   computers, conversations, members, connectMemberFeed, pgDb,
@@ -35,18 +35,25 @@ let runner: ProjectionRunner;
 let directory: string;
 let chat: NonNullable<Parameters<typeof buildServer>[1]>['chat'];
 let counter = 0;
-async function append(subject: string, type: string, data: unknown) {
+export type AuthorisedFixtureOptions = Pick<AppendEventOptions, 'subject' | 'type' | 'data'>;
+
+async function appendAndAuthorise(options: AuthorisedFixtureOptions) {
+  const { subject, type, data } = options;
   const record = envelope('test', subject, type, data, `read-fixture-${++counter}`);
   record.source = 'opencrane-server';
   if (type === 'member.joined') {
     const joined = z.object({ memberId: z.string() }).parse(data);
     record.principal = { kind: 'human', id: joined.memberId };
   }
-  const result = await nats.store.append({ event: record,
-    expectedSequence: await nats.store.head(subject) });
-  expect(result.status).toBe('appended');
-  if (auth.handler.eventTypes.includes(type)) await auth.handler.handle(record, pgDb(dbs.queue));
-  return record;
+  const saved = await appendEvent(nats.store, {
+    silo: record.silo, subject, type, data: record.data, id: record.id,
+    source: record.source, principal: record.principal, time: record.time,
+    commandId: record.commandId,
+  });
+  if (auth.handler.eventTypes.includes(type)) {
+    await auth.handler.handle(saved.event, pgDb(dbs.queue));
+  }
+  return saved.event;
 }
 function memberId(_silo: string, _issuer: string, sub: string) {
   return Promise.resolve(sub);
@@ -54,8 +61,8 @@ function memberId(_silo: string, _issuer: string, sub: string) {
 function request(method: 'GET' | 'POST', url: string, payload?: unknown, sub = 'owner') {
   const headers = {
     origin: 'https://app.example.test', 'content-type': 'application/json',
-    cookie: `${config.cookieName}=${encodeSession(config, { sub, orgId: 'org-test',
-      roles: [], authTime: 1790856000, exp: 2000000000 })}`,
+    cookie: sessionCookie(config, { sub, orgId: 'org-test',
+      roles: [], authTime: 1790856000, exp: 2000000000 }).cookie,
   };
   return app.inject({ method, url, headers, ...(payload ? { payload: JSON.stringify(payload) } : {}) });
 }
@@ -71,23 +78,33 @@ async function initialise() {
   await runner.initialise(members);
   await runner.initialise(computers);
   await runner.initialise(conversations);
-  await append('member-alice', 'member.invited', {
-    memberId: 'alice', role: 'member', email: 'alice@example.test', invitedBy: 'owner',
-    invitationId: 'invite-alice', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' },
+  await appendAndAuthorise({
+    subject: 'member-alice', type: 'member.invited', data: {
+      memberId: 'alice', role: 'member', email: 'alice@example.test', invitedBy: 'owner',
+      invitationId: 'invite-alice', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' },
+    }
   });
-  await append('member-alice', 'member.joined', {
-    memberId: 'alice', role: 'member', email: 'alice@example.test', displayName: 'Alice',
-    invitationId: 'invite-alice',
+  await appendAndAuthorise({
+    subject: 'member-alice', type: 'member.joined', data: {
+      memberId: 'alice', role: 'member', email: 'alice@example.test', displayName: 'Alice',
+      invitationId: 'invite-alice',
+    }
   });
-  await append('assistant-personal', 'assistant.created', {
-    assistantId: 'personal', ownerId: 'alice', kind: 'personal',
+  await appendAndAuthorise({
+    subject: 'assistant-personal', type: 'assistant.created', data: {
+      assistantId: 'personal', ownerId: 'alice', kind: 'personal',
+    }
   });
-  await append('computer-personal', 'computer.claimed', {
-    assistantId: 'personal', computerId: 'personal-computer', generation: 1,
-    tokenId: 'token:test',
+  await appendAndAuthorise({
+    subject: 'computer-personal', type: 'computer.claimed', data: {
+      assistantId: 'personal', computerId: 'personal-computer', generation: 1,
+      tokenId: 'token:test',
+    }
   });
-  await append('computer-personal', 'computer.ready', {
-    assistantId: 'personal', computerId: 'personal-computer', generation: 1, podUid: 'pod',
+  await appendAndAuthorise({
+    subject: 'computer-personal', type: 'computer.ready', data: {
+      assistantId: 'personal', computerId: 'personal-computer', generation: 1, podUid: 'pod',
+    }
   });
   const budget = new BudgetActor(nats.store, 'test');
   await budget.start(2000, 20000, 'personal-default');
@@ -145,11 +162,15 @@ async function readsDuringTurnChanges() {
     let turn = 0;
     while (!stopped) {
       const turnId = `http-turn-${++turn}`;
-      await append('conversation-personal-0', 'agent.turn_started', {
-        conversationId: 'personal-0', turnId, assistantId: 'personal',
+      await appendAndAuthorise({
+        subject: 'conversation-personal-0', type: 'agent.turn_started', data: {
+          conversationId: 'personal-0', turnId, assistantId: 'personal',
+        }
       });
-      await append('conversation-personal-0', 'agent.turn_completed', {
-        conversationId: 'personal-0', turnId,
+      await appendAndAuthorise({
+        subject: 'conversation-personal-0', type: 'agent.turn_completed', data: {
+          conversationId: 'personal-0', turnId,
+        }
       });
       await delay(5);
     }
@@ -168,6 +189,19 @@ async function readsDuringTurnChanges() {
 }
 it('reads a transcript while turns start and end', readsDuringTurnChanges);
 
+async function reportSocketTurn(turnId: string) {
+  await appendAndAuthorise({
+    subject: 'conversation-personal-1', type: 'agent.turn_started', data: {
+      conversationId: 'personal-1', turnId, assistantId: 'personal',
+    }
+  });
+  await appendAndAuthorise({
+    subject: 'conversation-personal-1', type: 'agent.turn_completed', data: {
+      conversationId: 'personal-1', turnId,
+    }
+  });
+}
+
 async function streamsDuringTurnChanges() {
   if (!chat) throw new Error('Missing chat fixture');
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
@@ -177,7 +211,7 @@ async function streamsDuringTurnChanges() {
   const session = { sub: 'alice', orgId: 'org-test', roles: [],
     authTime: 1790856000, exp: 2000000000 };
   const headers = { origin: 'https://app.example.test',
-    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    cookie: sessionCookie(config, session).cookie };
   const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers });
   const messages: z.infer<typeof socketMessageSchema>[] = [];
   function collect(raw: Buffer) {
@@ -203,12 +237,7 @@ async function streamsDuringTurnChanges() {
     let turn = 0;
     while (!stopped) {
       const turnId = `socket-turn-${++turn}`;
-      await append('conversation-personal-1', 'agent.turn_started', {
-        conversationId: 'personal-1', turnId, assistantId: 'personal',
-      });
-      await append('conversation-personal-1', 'agent.turn_completed', {
-        conversationId: 'personal-1', turnId,
-      });
+      await reportSocketTurn(turnId);
       await delay(5);
     }
   }
@@ -223,8 +252,10 @@ async function streamsDuringTurnChanges() {
     expect(socket.readyState).toBe(WebSocket.OPEN);
     await delay(500);
     expect(socket.readyState).toBe(WebSocket.OPEN);
-    await append('member-alice', 'member.role_changed', {
-      memberId: 'alice', previousRole: 'member', newRole: 'member', changedBy: 'owner',
+    await appendAndAuthorise({
+      subject: 'member-alice', type: 'member.role_changed', data: {
+        memberId: 'alice', previousRole: 'member', newRole: 'member', changedBy: 'owner',
+      }
     });
     await delay(200);
     expect(socket.readyState).toBe(WebSocket.OPEN);

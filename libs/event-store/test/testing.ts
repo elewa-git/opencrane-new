@@ -112,6 +112,7 @@ export function event(
 
 export type AppendEventOptions = Pick<EventEnvelope, 'silo' | 'subject' | 'type' | 'data'> & {
   id?: string;
+  source?: EventEnvelope['source'];
   principal?: EventEnvelope['principal'];
   time?: EventEnvelope['time'];
   commandId?: EventEnvelope['commandId'];
@@ -124,6 +125,7 @@ export async function appendEvent(store: EventStore, options: AppendEventOptions
   const defaults = event(id, subject, type);
   const record = {
     ...defaults, silo, data,
+    source: options.source ?? defaults.source,
     principal: options.principal ?? defaults.principal,
     time: options.time ?? defaults.time,
     commandId: options.commandId ?? defaults.commandId,

@@ -1,9 +1,9 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition } from '@opencrane/events';
 import { BudgetActor, budgets, initialiseBudgetProjection, priceTableId,
   rebuildBudgetProjection } from '@opencrane/models';
@@ -38,19 +38,21 @@ function noCalls(): Promise<never> {
   outsideCalls += 1;
   throw new Error('private-outside-call');
 }
-async function append(subject: string, type: string, data: unknown, silo = 'acme') {
-  const record = { ...event(`current-effect-${++serial}`, subject, type), silo, data,
-    source: 'opencrane-server', commandId: `change-${serial}`,
-    principal: { kind: 'human' as const, id: 'owner' }, correlation: {} };
-  await nats.seed([record]);
-  return record;
-}
+
 async function resolution(permitId: string, cents: number) {
-  return append(`effect-${permitId}`, 'effect.resolved', {
-    permitId, reservationId: permitId, resolvedBy: 'owner', outcome: 'settled',
-    settledCents: cents, evidence: [{ kind: 'provider_receipt', reference: 'private-receipt',
-      digest: '0'.repeat(64), amountCents: cents }],
+  const saved = await appendEvent(nats.store, {
+    silo: 'acme', subject: `effect-${permitId}`,
+    type: 'effect.resolved', data: {
+      permitId, reservationId: permitId, resolvedBy: 'owner', outcome: 'settled',
+      settledCents: cents, evidence: [{
+        kind: 'provider_receipt', reference: 'private-receipt',
+        digest: '0'.repeat(64), amountCents: cents
+      }],
+    },
+    id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
   });
+  return saved.event;
 }
 async function initialise() {
   nats = await natsFixture();
@@ -63,14 +65,29 @@ async function initialise() {
   const auth = memberAuthorisation(binding);
   for (const id of ['owner', 'admin', 'removed', 'demoted', 'denied']) {
     const role = id === 'owner' ? 'owner' : 'admin';
-    const joined = await append(`member-${id}`, 'member.joined', {
-      memberId: id, role, email: `${id}@example.test`, displayName: id,
+    const { event: joined } = await appendEvent(nats.store, {
+      silo: 'acme', subject: `member-${id}`,
+      type: 'member.joined', data: {
+        memberId: id, role, email: `${id}@example.test`, displayName: id,
+      },
+      id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+      source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
     });
     if (id !== 'denied') await auth.handler.handle(joined, database);
   }
-  await append('member-removed', 'member.removed', { memberId: 'removed', removedBy: 'owner' });
-  await append('member-demoted', 'member.role_changed', {
-    memberId: 'demoted', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+  await appendEvent(nats.store, {
+    silo: 'acme', subject: 'member-removed',
+    type: 'member.removed', data: { memberId: 'removed', removedBy: 'owner' },
+    id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
+  });
+  await appendEvent(nats.store, {
+    silo: 'acme', subject: 'member-demoted',
+    type: 'member.role_changed', data: {
+      memberId: 'demoted', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    },
+    id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
   });
   actor = new BudgetActor(nats.store, 'acme', now);
   await actor.start(20_000, 20_000, 'sales');
@@ -116,7 +133,7 @@ async function close() {
 }
 async function request(query = '', sub = 'owner', orgId = 'org-acme', route = '/current-effects') {
   const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const headers = { cookie: sessionCookie(config, session).cookie };
   const response = await app.inject({ method: 'GET', url: `/api/org/spending${route}?${query}`, headers });
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.body).not.toContain('private-');
@@ -175,9 +192,14 @@ async function continuations() {
   expect((await page(`limit=1&continuation=${first.next}`)).rows).toEqual([expected[1]]);
   const originalBinding = options.binding;
   const foreignBinding = await createStore(fga.apiUrl, 'foreign');
-  const joined = await append('member-foreign-owner', 'member.joined', {
-    memberId: 'foreign-owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
-  }, 'foreign');
+  const { event: joined } = await appendEvent(nats.store, {
+    silo: 'foreign', subject: 'member-foreign-owner',
+    type: 'member.joined', data: {
+      memberId: 'foreign-owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
+    },
+    id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
+  });
   await memberAuthorisation(foreignBinding).handler.handle(joined, pgDb(dbs.queue));
   options.silo = 'foreign';
   options.binding = foreignBinding;
@@ -229,14 +251,30 @@ async function duringRead(action: string) {
       } else if (action === 'rebuild') {
         await original('UPDATE projection_generations SET generation = generation + 1');
       } else if (action === 'chat') {
-        await append('conversation-private', 'conversation.created',
-          getEventDefinition('conversation.created')!.example);
+        // Seed unrelated fixture history without passing it through command validation.
+        const record = {
+          ...event(`current-effect-${++serial}`, 'conversation-private', 'conversation.created'),
+          silo: 'acme', data: getEventDefinition('conversation.created')!.example,
+          commandId: `change-${serial}`, source: 'opencrane-server',
+          principal: { kind: 'human' as const, id: 'owner' },
+        };
+        await nats.seed([record]);
       } else if (action.startsWith('remove')) {
-        await append('member-admin', 'member.removed', { memberId: 'admin', removedBy: 'owner' });
+        await appendEvent(nats.store, {
+          silo: 'acme', subject: 'member-admin',
+          type: 'member.removed', data: { memberId: 'admin', removedBy: 'owner' },
+          id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+          source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
+        });
         if (action === 'remove-failed') throw new Error('private-load-error');
       } else {
-        await append('member-admin', 'member.role_changed', {
-          memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+        await appendEvent(nats.store, {
+          silo: 'acme', subject: 'member-admin',
+          type: 'member.role_changed', data: {
+            memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+          },
+          id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+          source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
         });
         if (action === 'demote-failed') throw new Error('private-load-error');
       }
@@ -253,8 +291,13 @@ async function duringRead(action: string) {
     expect(response.statusCode).toBe(statuses[action]);
   } finally {
     database.query = original;
-    await append('member-admin', 'member.joined', {
-      memberId: 'admin', role: 'admin', email: 'admin@example.test', displayName: 'Admin',
+    await appendEvent(nats.store, {
+      silo: 'acme', subject: 'member-admin',
+      type: 'member.joined', data: {
+        memberId: 'admin', role: 'admin', email: 'admin@example.test', displayName: 'Admin',
+      },
+      id: `current-effect-${++serial}`, commandId: `change-${serial}`,
+      source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
     });
     await runner.run(budgets);
   }

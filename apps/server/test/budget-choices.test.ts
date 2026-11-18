@@ -1,10 +1,10 @@
 import { clearTimeout, setTimeout } from 'node:timers';
 import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition } from '@opencrane/events';
 import { budgets, BudgetActor } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
@@ -29,15 +29,7 @@ type Page = {
   status: string;
 };
 
-async function append(subject: string, type: string, data: unknown, silo = 'acme') {
-  const record = { ...event(`choice-${++serial}`, subject, type), silo, data,
-    principal: { kind: 'human' as const, id: 'owner' }, correlation: {} };
-  const result = await nats.store.append({
-    event: record, expectedSequence: await nats.store.head(subject),
-  });
-  expect(result.status).toBe('appended');
-  return record;
-}
+
 async function project() {
   for (const projection of [members, groups, modelAccess, budgets]) {
     await runner.run(projection);
@@ -65,32 +57,36 @@ async function initialise() {
   const auth = memberAuthorisation(binding);
   for (const [id, role] of [['owner', 'owner'], ['admin', 'admin'],
     ['member', 'member'], ['removed', 'admin'], ['denied', 'admin']] as const) {
-    const joined = await appendEvent(nats.store, {
-    silo: 'acme', subject: `member-${id}`, type: 'member.joined', data: {
-      memberId: id, role, email: `${id}@example.test`, displayName: id,
-    },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
-  });
+    const { event: joined } = await appendEvent(nats.store, {
+      silo: 'acme', subject: `member-${id}`,
+      type: 'member.joined', data: {
+        memberId: id, role, email: `${id}@example.test`, displayName: id,
+      },
+      id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
+    });
     if (id !== 'denied') await auth.handler.handle(joined, database);
   }
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'member-removed', type: 'member.removed', data: { memberId: 'removed', removedBy: 'owner' },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'member-removed',
+    type: 'member.removed', data: { memberId: 'removed', removedBy: 'owner' },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   for (let index = 0; index < 51; index++) {
     const id = `group-${String(index).padStart(2, '0')}`;
     await appendEvent(nats.store, {
-    silo: 'acme', subject: `team-${id}`, type: 'team.created', data: {
-      teamId: id, name: `Group ${index}`, createdBy: 'owner',
-    },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
-  });
+      silo: 'acme', subject: `team-${id}`,
+      type: 'team.created', data: {
+        teamId: id, name: `Group ${index}`, createdBy: 'owner',
+      },
+      id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
+    });
   }
   await appendEvent(nats.store, {
-    silo: 'other', subject: 'team-foreign', type: 'team.created', data: {
-    teamId: 'foreign', name: 'Foreign protected name', createdBy: 'owner',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'other', subject: 'team-foreign',
+    type: 'team.created', data: {
+      teamId: 'foreign', name: 'Foreign protected name', createdBy: 'owner',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   const actor = new BudgetActor(nats.store, 'acme');
   await actor.start(100, 1000, 'installation-default');
@@ -106,7 +102,7 @@ async function close() {
 function request(query = 'kind=paying_group', sub = 'owner', orgId = 'org-acme',
   server = app) {
   const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const headers = { cookie: sessionCookie(config, session).cookie };
   return server.inject({ method: 'GET', url: `/api/org/models/scope-choices?${query}`, headers });
 }
 beforeAll(initialise, 120_000);
@@ -186,30 +182,34 @@ it('returns unavailable when IAM cannot be reached', iamUnavailable);
 async function assistantPages() {
   for (const id of ['a-personal', 'b-inactive', 'c-retired', 'd-shared', 'e-shared']) {
     await appendEvent(nats.store, {
-    silo: 'acme', subject: `assistant-${id}`, type: 'assistant.created', data: {
-      assistantId: id, kind: id === 'a-personal' ? 'personal' : 'team',
-      ownerId: 'group-00', name: id,
-    },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
-  });
+      silo: 'acme', subject: `assistant-${id}`,
+      type: 'assistant.created', data: {
+        assistantId: id, kind: id === 'a-personal' ? 'personal' : 'team',
+        ownerId: 'group-00', name: id,
+      },
+      id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
+    });
   }
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'assistant-b-inactive', type: 'assistant.settings_changed', data: {
-    assistantId: 'b-inactive', active: false, changedBy: 'owner', changedFields: ['active'],
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'assistant-b-inactive',
+    type: 'assistant.settings_changed', data: {
+      assistantId: 'b-inactive', active: false, changedBy: 'owner', changedFields: ['active'],
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'computer-c-retired', type: 'computer.retired', data: {
-    assistantId: 'c-retired', computerId: 'retired-computer',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'computer-c-retired',
+    type: 'computer.retired', data: {
+      assistantId: 'c-retired', computerId: 'retired-computer',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'assistant-d-shared', type: 'assistant.settings_changed', data: {
-    assistantId: 'd-shared', changedBy: 'owner', changedFields: ['model'],
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'assistant-d-shared',
+    type: 'assistant.settings_changed', data: {
+      assistantId: 'd-shared', changedBy: 'owner', changedFields: ['model'],
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   await project();
   const ids: string[] = [];
@@ -230,10 +230,11 @@ it('pages only active shared assistants and excludes personal and retired choice
 
 async function capsAreExplicit() {
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'budget-acme', type: 'budget.ceiling_set', data: {
-    scope: 'paying_group', scopeId: 'group-00', ceilingCents: 0, setBy: 'owner',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'budget-acme',
+    type: 'budget.ceiling_set', data: {
+      scope: 'paying_group', scopeId: 'group-00', ceilingCents: 0, setBy: 'owner',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   await project();
   const response = await request();
@@ -246,10 +247,11 @@ async function capsAreExplicit() {
   expect(budgetChoicesResponseSchema.safeParse({ ...page, total: 51 }).success).toBe(false);
   expect(budgetChoicesQuerySchema.safeParse({ kind: 'assistant', extra: true }).success).toBe(false);
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'budget-acme', type: 'budget.ceiling_set', data: {
-    scope: 'paying_group', scopeId: 'group-00', ceilingCents: 100, setBy: 'owner',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'budget-acme',
+    type: 'budget.ceiling_set', data: {
+      scope: 'paying_group', scopeId: 'group-00', ceilingCents: 100, setBy: 'owner',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   const lagging = await request();
   expect(lagging.json<Page>().rows[0]?.cap).toEqual({ status: 'unavailable' });
@@ -281,10 +283,11 @@ it('never substitutes zero or no cap when the budget read fails', failedBudgetRe
 
 async function applyingIsNotEmpty() {
   await appendEvent(nats.store, {
-    silo: 'acme', subject: 'team-z-new', type: 'team.created', data: {
-    teamId: 'z-new', name: 'New group', createdBy: 'owner',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: 'team-z-new',
+    type: 'team.created', data: {
+      teamId: 'z-new', name: 'New group', createdBy: 'owner',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   const response = await request('kind=paying_group&after=group-50');
   expect(response.statusCode).toBe(200);
@@ -314,17 +317,19 @@ async function changesDuringLoad(demote: boolean) {
     await loaded.promise;
     if (demote) {
       await appendEvent(nats.store, {
-    silo: 'acme', subject: 'member-admin', type: 'member.role_changed', data: {
-        memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
-      },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
-  });
+        silo: 'acme', subject: 'member-admin',
+        type: 'member.role_changed', data: {
+          memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+        },
+        id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
+      });
     } else {
       for (const type of ['conversation.created', 'file.uploaded']) {
         await appendEvent(nats.store, {
-    silo: 'acme', subject: 'conversation-conv_1', type: type, data: getEventDefinition(type)!.example,
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
-  });
+          silo: 'acme', subject: 'conversation-conv_1',
+          type: type, data: getEventDefinition(type)!.example,
+          id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
+        });
       }
     }
     const beforeReply = await nats.store.head();
@@ -343,17 +348,19 @@ it.each([false, true])('checks access after blocked load; demotion=%s', changesD
 async function seedBusyAssistant() {
   const assistantId = 'z-busy';
   await appendEvent(nats.store, {
-    silo: 'acme', subject: `assistant-${assistantId}`, type: 'assistant.created', data: {
-    assistantId, kind: 'team', ownerId: 'group-00', name: 'Busy assistant',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: `assistant-${assistantId}`,
+    type: 'assistant.created', data: {
+      assistantId, kind: 'team', ownerId: 'group-00', name: 'Busy assistant',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   await project();
   const claim = z.record(z.string(), z.unknown()).parse(
     getEventDefinition('computer.claimed')!.example);
   await appendEvent(nats.store, {
-    silo: 'acme', subject: `computer-${assistantId}`, type: 'computer.claimed', data: { ...claim, assistantId },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: `computer-${assistantId}`,
+    type: 'computer.claimed', data: { ...claim, assistantId },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   const turns = [];
   for (let index = 0; index < 500; index++) {
@@ -381,10 +388,11 @@ async function listsBusyAssistant() {
     }]);
   }
   await appendEvent(nats.store, {
-    silo: 'acme', subject: `computer-${assistantId}`, type: 'computer.retired', data: {
-    assistantId, computerId: 'busy-computer',
-  },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
+    silo: 'acme', subject: `computer-${assistantId}`,
+    type: 'computer.retired', data: {
+      assistantId, computerId: 'busy-computer',
+    },
+    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
   });
   const retired = await request('kind=assistant&after=z-a');
   expect(retired.statusCode).toBe(200);
@@ -401,9 +409,10 @@ async function listsStoredGroupValues() {
   const longName = 'N'.repeat(201);
   for (const [teamId, name] of [['zz-a:group', 'Colon group'], ['zz-b-long', longName]]) {
     await appendEvent(nats.store, {
-    silo: 'acme', subject: `team-${teamId}`, type: 'team.created', data: { teamId, name, createdBy: 'owner' },
-    id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' },
-  });
+      silo: 'acme', subject: `team-${teamId}`,
+      type: 'team.created', data: { teamId, name, createdBy: 'owner' },
+      id: `choice-${++serial}`, principal: { kind: 'human', id: 'owner' }
+    });
   }
   await project();
   const first = await request('kind=paying_group&after=zz&limit=1');

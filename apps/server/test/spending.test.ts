@@ -1,10 +1,10 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition } from '@opencrane/events';
 import { BudgetActor, budgets, initialiseBudgetProjection, priceTableId,
   rebuildBudgetProjection, type SpendingCall } from '@opencrane/models';
@@ -41,12 +41,7 @@ function noCalls(): Promise<never> {
   upstreamCalls += 1;
   throw new Error('GET must not call tools or models');
 }
-async function append(subject: string, type: string, data: unknown) {
-  const record = { ...event(`spending-${++serial}`, subject, type), silo: 'acme', data,
-    principal: { kind: 'human' as const, id: 'owner' }, correlation: {} };
-  await nats.seed([record]);
-  return record;
-}
+
 async function reserve(index: number, writer = actor) {
   const payingGroupId = index % 3 === 0 ? 'sales' : 'support';
   const assistantId = index % 3 === 2 ? 'support-assistant' : 'sales-assistant';
@@ -73,12 +68,20 @@ async function initialise() {
   for (const [id, role] of [['owner', 'owner'], ['admin', 'admin'], ['member', 'member'],
     ['removed', 'admin'], ['denied', 'admin'], ['demote', 'admin'], ['revoke', 'admin'],
     ['demote-failed', 'admin'], ['revoke-failed', 'admin']]) {
-    const joined = await append(`member-${id}`, 'member.joined', {
-      memberId: id, role, email: `${id}@example.test`, displayName: id,
+    const { event: joined } = await appendEvent(nats.store, {
+      silo: 'acme', subject: `member-${id}`,
+      type: 'member.joined', data: {
+        memberId: id, role, email: `${id}@example.test`, displayName: id,
+      },
+      id: `spending-${++serial}`, principal: { kind: 'human', id: 'owner' }
     });
     if (id !== 'denied') await auth.handler.handle(joined, database);
   }
-  await append('member-removed', 'member.removed', { memberId: 'removed', removedBy: 'owner' });
+  await appendEvent(nats.store, {
+    silo: 'acme', subject: 'member-removed',
+    type: 'member.removed', data: { memberId: 'removed', removedBy: 'owner' },
+    id: `spending-${++serial}`, principal: { kind: 'human', id: 'owner' }
+  });
   actor = new BudgetActor(nats.store, 'acme', now);
   await actor.start(20_000, 20_000, 'sales');
   for (let index = 0; index < 63; index++) {
@@ -103,7 +106,7 @@ async function close() {
 }
 function request(query = '', sub = 'owner', orgId = 'org-acme', server = app) {
   const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const headers = { cookie: sessionCookie(config, session).cookie };
   return server.inject({ method: 'GET', url: `/api/org/spending?${query}`, headers });
 }
 async function page(query = '', sub = 'owner') {
@@ -229,16 +232,30 @@ async function changesDuringRead(action: string) {
   try {
     await Promise.race([loaded.promise, delay(3000)]);
     if (action.startsWith('demote')) {
-      await append(`member-${sub}`, 'member.role_changed', {
-        memberId: sub, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+      await appendEvent(nats.store, {
+        silo: 'acme', subject: `member-${sub}`,
+        type: 'member.role_changed', data: {
+          memberId: sub, previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+        },
+        id: `spending-${++serial}`, principal: { kind: 'human', id: 'owner' }
       });
     } else if (action.startsWith('revoke')) {
-      await append(`member-${sub}`, 'member.removed', { memberId: sub, removedBy: 'owner' });
+      await appendEvent(nats.store, {
+        silo: 'acme', subject: `member-${sub}`,
+        type: 'member.removed', data: { memberId: sub, removedBy: 'owner' },
+        id: `spending-${++serial}`, principal: { kind: 'human', id: 'owner' }
+      });
     } else if (action === 'rebuild') {
       await original(`UPDATE projection_generations SET generation = generation + 1
         WHERE name = 'model-budgets'`);
     } else {
-      await append('conversation-private', 'conversation.created', getEventDefinition('conversation.created')!.example);
+      // Seed unrelated fixture history without passing it through command validation.
+      const record = {
+        ...event(`spending-${++serial}`, 'conversation-private', 'conversation.created'),
+        silo: 'acme', data: getEventDefinition('conversation.created')!.example,
+        principal: { kind: 'human' as const, id: 'owner' },
+      };
+      await nats.seed([record]);
     }
     resume.resolve();
     const response = await pending;
@@ -341,10 +358,16 @@ async function accountingEvidence() {
   const [zero, released, unknown, late] = expected;
   clock = new Date('2026-11-01T00:01:00.000Z');
   async function settle(id: string, cents: number) {
-    const receipt = await append(`effect-${id}`, 'effect.resolved', {
-      reservationId: id, permitId: id, settledCents: cents, outcome: 'settled',
-      resolvedBy: 'owner', evidence: [{ kind: 'provider_receipt', reference: 'receipt',
-        digest: '0'.repeat(64), amountCents: cents }],
+    const { event: receipt } = await appendEvent(nats.store, {
+      silo: 'acme', subject: `effect-${id}`,
+      type: 'effect.resolved', data: {
+        reservationId: id, permitId: id, settledCents: cents, outcome: 'settled',
+        resolvedBy: 'owner', evidence: [{
+          kind: 'provider_receipt', reference: 'receipt',
+          digest: '0'.repeat(64), amountCents: cents
+        }],
+      },
+      id: `spending-${++serial}`, principal: { kind: 'human', id: 'owner' }
     });
     await actor.settleRecorded(id, receipt.id);
   }
@@ -430,8 +453,8 @@ it('reads limit plus one with one deadline, no private history, totals or writes
 async function overviewAccess() {
   const before = await nats.store.head();
   const owner = await app.inject({ method: 'GET', url: '/api/org/overview',
-    headers: { cookie: `${config.cookieName}=${encodeSession(config, { sub: 'owner',
-      orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000 })}` } });
+    headers: { cookie: sessionCookie(config, { sub: 'owner',
+      orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000 }).cookie } });
   expect(owner.statusCode).toBe(200);
   expect(owner.headers['cache-control']).toBe('no-store');
   const body = JSON.stringify(owner.json());
@@ -445,19 +468,19 @@ async function overviewAccess() {
   const adminSession = { sub: 'admin', orgId: 'org-acme', roles: [],
     authTime: 1790856000, exp: 2000000000 };
   const admin = await app.inject({ method: 'GET', url: '/api/org/overview',
-    headers: { cookie: `${config.cookieName}=${encodeSession(config, adminSession)}` } });
+    headers: { cookie: sessionCookie(config, adminSession).cookie } });
   expect(admin.statusCode).toBe(200);
   expect(admin.json()).toMatchObject({ capabilities: { ownership: { manage: false } } });
   const foreignSession = { sub: 'owner', orgId: 'other-org', roles: [],
     authTime: 1790856000, exp: 2000000000 };
   const foreign = await app.inject({ method: 'GET', url: '/api/org/overview',
-    headers: { cookie: `${config.cookieName}=${encodeSession(config, foreignSession)}` } });
+    headers: { cookie: sessionCookie(config, foreignSession).cookie } });
   expect(foreign.statusCode).toBe(403);
   expect(body).toContain('"name":"people","status":"unavailable"');
   for (const sub of ['member', 'removed', 'denied']) {
     const session = { sub, orgId: 'org-acme', roles: [],
       authTime: 1790856000, exp: 2000000000 };
-    const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
+    const cookie = sessionCookie(config, session).cookie;
     const response = await app.inject({ method: 'GET', url: '/api/org/overview',
       headers: { cookie } });
     expect(response.statusCode).toBe(403);
@@ -499,7 +522,7 @@ it('keeps source failure, lag, missing progress and deadline expiry explicit', o
 async function overviewReplay() {
   const session = { sub: 'owner', orgId: 'org-acme', roles: [],
     authTime: 1790856000, exp: 2000000000 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const headers = { cookie: sessionCookie(config, session).cookie };
   const before = await app.inject({ method: 'GET', url: '/api/org/overview', headers });
   expect(before.statusCode).toBe(200);
   const safeRows = z.object({ rows: z.array(z.object({ source: z.string(), id: z.string(),

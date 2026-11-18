@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -77,8 +77,8 @@ async function memberId(_silo: string, _issuer: string, sub: string) {
 function request(method: 'GET' | 'POST', url: string, payload?: unknown, sub = 'owner') {
   const headers = {
     origin: 'https://app.example.test', 'content-type': 'application/json',
-    cookie: `${config.cookieName}=${encodeSession(config, { sub, orgId: 'org-test',
-      roles: [], authTime: 1790856000, exp: 2000000000 })}`,
+    cookie: sessionCookie(config, { sub, orgId: 'org-test',
+      roles: [], authTime: 1790856000, exp: 2000000000 }).cookie,
   };
   return app.inject({ method, url, headers, ...(payload ? { payload: JSON.stringify(payload) } : {}) });
 }
@@ -275,7 +275,7 @@ async function refusesPrivateWebSocketRead() {
   const session = { sub: 'bob', orgId: 'org-test', roles: [],
     authTime: 1790856000, exp: 2000000000 };
   const headers = { origin: 'https://app.example.test',
-    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    cookie: sessionCookie(config, session).cookie };
   const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers });
   const messages: string[] = [];
   function collect(raw: unknown) {
@@ -389,7 +389,7 @@ async function retriesOwnPendingMembership() {
   const session = { sub: 'alice', orgId: 'org-test', roles: [],
     authTime: 1790856000, exp: 2000000000 };
   const headers = { origin: 'https://app.example.test',
-    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    cookie: sessionCookie(config, session).cookie };
   const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers });
   const messages: string[] = [];
   function collect(raw: Buffer) {

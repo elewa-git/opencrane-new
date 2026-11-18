@@ -1,9 +1,9 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { encodeSession } from '@opencrane/auth';
+import { sessionCookie } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition } from '@opencrane/events';
 import { BudgetActor, budgets, initialiseBudgetProjection, priceTableId,
   rebuildBudgetProjection } from '@opencrane/models';
@@ -34,13 +34,7 @@ function noCalls(): Promise<never> {
   outsideCalls += 1;
   throw new Error('private-outside-call');
 }
-async function append(subject: string, type: string, data: unknown, silo = 'acme') {
-  const record = { ...event(`spending-effect-${++serial}`, subject, type), silo, data,
-    source: 'opencrane-server', commandId: `change-${serial}`,
-    principal: { kind: 'human' as const, id: 'owner' }, correlation: {} };
-  await nats.seed([record]);
-  return record;
-}
+
 async function saveEffect(index: number, silo = 'acme') {
   const permitId = permits[index % 2]!;
   const types = ['effect.observed', 'effect.uncertain', 'effect.resolved'];
@@ -54,7 +48,12 @@ async function saveEffect(index: number, silo = 'acme') {
       settledCents: 0, evidence: [{ kind: 'provider_receipt', reference: 'private-receipt',
         digest: '0'.repeat(64), amountCents: 0 }] },
   ];
-  const record = await append(`effect-${permitId}`, type, payloads[index % 3], silo);
+  const { event: record } = await appendEvent(nats.store, {
+    silo: silo, subject: `effect-${permitId}`,
+    type: type, data: payloads[index % 3],
+    id: `spending-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
+  });
   const row = { eventId: record.id, permitId, position: await nats.store.head(),
     time: record.time, type, outcome: null as string | null, costCents: null as number | null,
     settledCents: null as number | null, resolvedBy: null as string | null,
@@ -81,14 +80,29 @@ async function initialise() {
   const auth = memberAuthorisation(binding);
   for (const id of ['owner', 'admin', 'removed', 'demoted', 'denied']) {
     const role = id === 'owner' ? 'owner' : 'admin';
-    const joined = await append(`member-${id}`, 'member.joined', {
-      memberId: id, role, email: `${id}@example.test`, displayName: id,
+    const { event: joined } = await appendEvent(nats.store, {
+      silo: 'acme', subject: `member-${id}`,
+      type: 'member.joined', data: {
+        memberId: id, role, email: `${id}@example.test`, displayName: id,
+      },
+      id: `spending-effect-${++serial}`, commandId: `change-${serial}`,
+      source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
     });
     if (id !== 'denied') await auth.handler.handle(joined, database);
   }
-  await append('member-removed', 'member.removed', { memberId: 'removed', removedBy: 'owner' });
-  await append('member-demoted', 'member.role_changed', {
-    memberId: 'demoted', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+  await appendEvent(nats.store, {
+    silo: 'acme', subject: 'member-removed',
+    type: 'member.removed', data: { memberId: 'removed', removedBy: 'owner' },
+    id: `spending-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
+  });
+  await appendEvent(nats.store, {
+    silo: 'acme', subject: 'member-demoted',
+    type: 'member.role_changed', data: {
+      memberId: 'demoted', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+    },
+    id: `spending-effect-${++serial}`, commandId: `change-${serial}`,
+    source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
   });
   actor = new BudgetActor(nats.store, 'acme');
   await actor.start(20_000, 20_000, 'sales');
@@ -112,7 +126,7 @@ async function close() {
 }
 function request(query = '', sub = 'owner', orgId = 'org-acme', route = '/effects') {
   const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000 };
-  const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const headers = { cookie: sessionCookie(config, session).cookie };
   return app.inject({ method: 'GET', url: `/api/org/spending${route}?${query}`, headers });
 }
 async function page(query = '', sub = 'owner') {
@@ -212,11 +226,22 @@ async function duringRead(action: string) {
       } else if (action === 'rebuild') {
         await original('UPDATE projection_generations SET generation = generation + 1');
       } else if (action === 'chat') {
-        await append('conversation-private', 'conversation.created',
-          getEventDefinition('conversation.created')!.example);
+        // Seed unrelated fixture history without passing it through command validation.
+        const record = {
+          ...event(`spending-effect-${++serial}`, 'conversation-private', 'conversation.created'),
+          silo: 'acme', data: getEventDefinition('conversation.created')!.example,
+          commandId: `change-${serial}`, source: 'opencrane-server',
+          principal: { kind: 'human' as const, id: 'owner' },
+        };
+        await nats.seed([record]);
       } else {
-        await append('member-admin', 'member.role_changed', {
-          memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+        await appendEvent(nats.store, {
+          silo: 'acme', subject: 'member-admin',
+          type: 'member.role_changed', data: {
+            memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+          },
+          id: `spending-effect-${++serial}`, commandId: `change-${serial}`,
+          source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
         });
         if (action === 'demote-failed') throw new Error('private-load-error');
       }
@@ -231,8 +256,13 @@ async function duringRead(action: string) {
     expect(response.statusCode).toBe(statuses[action]);
   } finally {
     database.query = original;
-    await append('member-admin', 'member.role_changed', {
-      memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+    await appendEvent(nats.store, {
+      silo: 'acme', subject: 'member-admin',
+      type: 'member.role_changed', data: {
+        memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+      },
+      id: `spending-effect-${++serial}`, commandId: `change-${serial}`,
+      source: 'opencrane-server', principal: { kind: 'human', id: 'owner' }
     });
     await runner.run(budgets);
   }
