@@ -21,7 +21,7 @@ const cases = [
   { value: 'e\u0301', accepted: false },
 ];
 
-it('preserves both old ID patterns at length and character boundaries', () => {
+function preservesOldIdPatterns() {
   for (const { value, accepted } of cases) {
     for (const oldPattern of oldPatterns) {
       expect(oldPattern.test(value), value).toBe(accepted);
@@ -29,17 +29,21 @@ it('preserves both old ID patterns at length and character boundaries', () => {
       expect(recordIdSchema.safeParse(value).success, value).toBe(oldPattern.test(value));
     }
   }
-});
+}
 
-it('keeps the provider ID schema as the shared schema alias', () => {
+function sharesProviderIdSchema() {
   expect(providerIdSchema).toBe(recordIdSchema);
-});
+}
 
-it('keeps model grant IDs distinct from record IDs', () => {
+function distinguishesModelGrantIds() {
   expect(assistantGrantSchema.safeParse({ resourceType: 'model', resourceId: 'model.v1' })
     .success).toBe(true);
   expect(assistantGrantSchema.safeParse({ resourceType: 'mcp_server', resourceId: 'server-1' })
     .success).toBe(true);
   expect(assistantGrantSchema.safeParse({ resourceType: 'mcp_server', resourceId: 'server.v1' })
     .success).toBe(false);
-});
+}
+
+it('preserves both old ID patterns at length and character boundaries', preservesOldIdPatterns);
+it('keeps the provider ID schema as the shared schema alias', sharesProviderIdSchema);
+it('keeps model grant IDs distinct from record IDs', distinguishesModelGrantIds);

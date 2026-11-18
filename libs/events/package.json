@@ -8,6 +8,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./ids": "./src/ids.ts",
     "./tool-call": "./src/tool-call.ts",
     "./command-activity-label": "./src/command-activity-label.ts",
     "./lossless-json": "./src/lossless-json.ts",
