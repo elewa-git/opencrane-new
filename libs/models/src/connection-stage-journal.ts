@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { z } from 'zod';
 import { providerSecrets } from './provider-secrets.ts';
@@ -18,9 +19,7 @@ interface Record {
 export function connectionStageJournal(directory: string) {
   const files = providerSecrets(directory);
   function reference(kind: string, name: string) {
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify([kind, name]));
-    return `secret:provider-${hash.digest('hex')}`;
+    return `secret:provider-${sha256HexOfJson([kind, name])}`;
   }
   async function publish(path: string, value: string) {
     await files.save(path, value);

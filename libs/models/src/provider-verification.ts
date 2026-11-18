@@ -1,6 +1,6 @@
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { providerIdSchema, providerModelIdSchema,
   providerDispatchedSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -175,10 +175,8 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
     turnId: input.commandId, threadId: input.commandId,
     payingGroupId: actor.state.defaultPayingGroupId, contextDigest: '0'.repeat(64),
   };
-  const hash = createHash('sha256');
-  hash.update(body);
   const decisionId = reservationId ? `${requested.event.id}:allow` : requested.event.id;
-  const dispatch = { callId: requested.event.id, decisionId, bodyDigest: hash.digest('hex'),
+  const dispatch = { callId: requested.event.id, decisionId, bodyDigest: sha256Hex(body),
     reservationId, modelCall };
   await actor.admitDispatch(dispatch, current.fresh);
   const payload = { ...data, ...(reservationId ? { reservationId } : {}) };
@@ -349,9 +347,7 @@ async function reserveProviderTest(actor: BudgetActor, binding: Binding, memberI
   if (!payingGroupId) {
     throw new ProviderRefused('Paying group unavailable');
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(raw));
-  const contextDigest = hash.digest('hex');
+  const contextDigest = sha256HexOfJson(raw);
   const call = { requestId: requestedEventId, model: input.model, priceTableId,
     computerId: `provider-${input.providerId}`, assistantId: 'provider-verification',
     requesterId: memberId, conversationId: `provider-${input.providerId}`,

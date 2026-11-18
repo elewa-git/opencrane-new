@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import type { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -22,11 +22,6 @@ type Release = z.infer<typeof credentialReleaseSchema>;
 type Access = { deadline: number; checkAccess: () => Promise<void> };
 type Activation = NonNullable<ReturnType<typeof foldConnection>['data']>['activation'];
 
-function digest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
 function refuse(): never {
   throw new Error('Release unavailable');
 }

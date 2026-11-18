@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { computerSummary, type ComputerSummary, type tokenVerifier } from '@opencrane/auth';
@@ -29,9 +29,7 @@ export function descendantId(silo: string, binding: Pick<Descendant,
   'rootId' | 'computerId' | 'generation' | 'spawnItemId' | 'threadId'>) {
   const identity = [silo, binding.rootId, binding.computerId, binding.generation,
     binding.spawnItemId, binding.threadId];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(identity));
-  return hash.digest('hex');
+  return sha256HexOfJson(identity);
 }
 function emptyAdmissions(): AdmissionSummary {
   return { computer: computerSummary.empty(), descendants: new Map() };

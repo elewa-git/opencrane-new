@@ -1,7 +1,8 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { activeMember, MemberAccessRefused } from './member-authority.ts';
 import { parseEventByType, providerIdSchema, providerModelIdSchema,
   type EventEnvelope } from '@opencrane/events';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -51,9 +52,7 @@ export function providerReceipt(row: StoredEvent) {
 }
 export function providerSecretRef(silo: string, providerId: string, commandId: string) {
   const identity = JSON.stringify([silo, providerId, commandId]);
-  const hash = createHash('sha256');
-  hash.update(identity);
-  const digest = hash.digest('hex');
+  const digest = sha256Hex(identity);
   return `secret:provider-${digest}`;
 }
 export async function providerHistory(store: EventStore, silo: string,

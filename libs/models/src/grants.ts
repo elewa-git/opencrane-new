@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
-import { createHash } from 'node:crypto';
 import type { EventStore } from '@opencrane/event-store';
 import { assistantCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
@@ -33,9 +33,7 @@ async function seedGrant(store: EventStore, trigger: EventEnvelope, resourceId: 
   }
   if (rows.some(matchesGrantee)) return;
   const identity = [trigger.silo, resourceType, granteeKind, granteeId, resourceId];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(identity));
-  const digest = hash.digest('hex');
+  const digest = sha256HexOfJson(identity);
   const id = `initial-model-grant-${digest}`;
   let grantedBy = 'installation';
   if (explicit && trigger.principal) grantedBy = trigger.principal.id;

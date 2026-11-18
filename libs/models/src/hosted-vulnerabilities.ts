@@ -1,5 +1,5 @@
+import { sha256Hex as hash } from '@opencrane/events/digest';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -39,12 +39,6 @@ const reportSchema = z.object({
   descriptor: z.object({ name: z.literal('grype'), version: z.literal('0.121.0'),
     db: z.object({ built: z.string(), schemaVersion: z.string() }) }),
 });
-
-function hash(bytes: Buffer) {
-  const hasher = createHash('sha256');
-  hasher.update(bytes);
-  return hasher.digest('hex');
-}
 
 function record(value: unknown): Object {
   return objectSchema.parse(value);

@@ -1,5 +1,5 @@
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { connectionSelectionCommandSchema as inputSchema } from '@opencrane/protocol';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -22,11 +22,6 @@ export class SelectionConflict extends Error {}
 
 const id = recordIdSchema;
 type Selection = z.infer<typeof connectionSelectedDataSchema>;
-function digest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
 function selectionSubject(userId: string, serverId: string) {
   return `connection-selection-${userId}-${serverId}`;
 }

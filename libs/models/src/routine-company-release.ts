@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -19,12 +19,6 @@ type Ask = z.infer<typeof toolApprovalRequestedDataSchema>;
 
 function refuse(): never {
   throw new Error('Release unavailable');
-}
-
-function digest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
 }
 
 function matchesDefinition(run: NonNullable<RoutineState['activeRun']>, release: Release) {

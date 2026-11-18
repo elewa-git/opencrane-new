@@ -1,7 +1,7 @@
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import type { z } from 'zod';
 import type { legacyTurnSchema } from './decision-turn-token.ts';
 import { parseMcpCall } from './mcp.ts';
-import { createHash } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { history } from './actor.ts';
@@ -13,12 +13,6 @@ import { assistantMayUsePersonalKey, readPersonalKeyAssistant } from './personal
 import { connectionAccount } from './connection-account.ts';
 import type { OAuthConfigurationLoader } from './oauth-selection.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
-
-function digest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
 
 /** Bind one verified choice to the authenticated requester before the short access check. */
 export interface PersonalToolRequest {

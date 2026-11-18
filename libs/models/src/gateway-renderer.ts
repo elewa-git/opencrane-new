@@ -1,5 +1,5 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { gatewayConfigurationSchema } from '@opencrane/events';
 import { gatewayConfig, mcpRoute, type GatewayModelRoute } from './gateway.ts';
 import { publicationDigest } from './publication.ts';
@@ -146,8 +146,6 @@ export function renderGatewayConfiguration(input: unknown, settings: GatewayRend
     settings.managedCalls);
   config.routes.push(...routes);
   const configBytes = Buffer.from(JSON.stringify(config), 'utf8');
-  const hash = createHash('sha256');
-  hash.update(configBytes);
-  const configDigest = hash.digest('hex');
+  const configDigest = sha256Hex(configBytes);
   return { configBytes, configDigest };
 }

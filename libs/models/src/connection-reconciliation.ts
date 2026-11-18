@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { connectionCreatedDataSchema } from '@opencrane/events';
 import type { Db } from '@opencrane/projections';
@@ -97,15 +97,14 @@ function currentOrPending(state: ReturnType<typeof foldConnection>, reference: s
 
 async function closeOperation(store: EventStore, stage: ConnectionStage,
   subject: string, rows: StoredEvent[]) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([stage.siloId, subject, 'connection.operation_closed',
-    stage.operationId]));
+  const eventId = sha256HexOfJson([stage.siloId, subject, 'connection.operation_closed',
+    stage.operationId]);
   const data = { userId: stage.userId, serverId: stage.serverId, profile: stage.profileId,
     operationId: stage.operationId, generation: stage.generation,
     expectedSequence: stage.expectedSequence, appendUntil: stage.appendUntil,
     reason: 'append_deadline_passed' };
   const event = envelope(stage.siloId, subject, 'connection.operation_closed', data,
-    hash.digest('hex'), new Date(Date.now()));
+    eventId, new Date(Date.now()));
   const proposed = { event, sequence: stage.expectedSequence + 1 };
   const state = foldConnection([...rows, proposed]);
   if (!state.closedOperations.includes(stage.operationId)) {

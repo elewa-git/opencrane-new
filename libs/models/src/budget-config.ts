@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { activeMember, MemberAccessRefused } from './member-authority.ts';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import { tokenVerifier } from '@opencrane/auth';
@@ -81,9 +81,7 @@ export async function verifyCommand(identity: { jwks: JSONWebKeySet; issuer: str
     const verifier = tokenVerifier(identity.jwks, identity.issuer);
     const token = authorization?.replace(/^Bearer /u, '') ?? '';
     const checked = claims.parse(await verifier.verify(token, audience));
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify(raw));
-    const digest = hash.digest('hex');
+    const digest = sha256HexOfJson(raw);
     if (checked.typ !== audience || checked.silo !== silo || checked.commandDigest !== digest) {
       throw new BudgetAccessRefused('Access changed');
     }

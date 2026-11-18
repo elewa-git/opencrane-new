@@ -1,5 +1,5 @@
+import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -18,11 +18,6 @@ type Choice = z.infer<typeof companyOptInSetDataSchema>;
 type Installation = Pick<Choice, 'serverId' | 'connectionId' | 'registrationRevision'> & {
   silo: string;
 };
-function digest(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
-}
 function subjectFor(serverId: string) {
   return `connection-company-${serverId}`;
 }

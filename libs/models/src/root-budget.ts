@@ -1,6 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import type { EventStore } from '@opencrane/event-store';
 import { history } from './event-history.ts';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { budgetRootAllowanceSetDataSchema, type budgetCallDispatchAdmittedDataSchema,
@@ -24,9 +24,7 @@ export class RootBudgetRefused extends Error {
   }
 }
 function rootIdentity(silo: string, conversationId: string, turnId: string) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, conversationId, turnId]));
-  return hash.digest('hex');
+  return sha256HexOfJson([silo, conversationId, turnId]);
 }
 export function rootTotals(state: BudgetState, rootId: string) {
   const root = findRoot(state, rootId);

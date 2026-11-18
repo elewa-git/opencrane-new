@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { JSONWebKeySet } from 'jose';
 import { tokenVerifier, verifyEgressCapability, type EgressCapability } from '@opencrane/auth';
@@ -153,9 +154,7 @@ async function checkRules(actor: BudgetActor, claims: EgressCapability, fresh: F
 }
 
 async function recordRefusedDispatch(actor: BudgetActor, claims: EgressCapability) {
-  const digest = createHash('sha256');
-  digest.update(JSON.stringify([claims.host, claims.port]));
-  const destinationDigest = digest.digest('hex');
+  const destinationDigest = sha256HexOfJson([claims.host, claims.port]);
   const details = { requestId: claims.jti, permitId: claims.jti, channel: claims.channel,
     destinationDigest, outcome: 'error' };
   const observationId = egressObservationId(actor.silo, claims.jti);
@@ -209,9 +208,7 @@ export async function authoriseEgress(req: IncomingMessage, res: ServerResponse,
     }
     claims = checked;
     requestId = checked.jti;
-    const digest = createHash('sha256');
-    digest.update(JSON.stringify(checked));
-    contextDigest = digest.digest('hex');
+    contextDigest = sha256HexOfJson(checked);
     const activity = await approvalActivity(actor.store, actor.silo, checked.assistant,
       checked.conversation, checked.turn, performance.now() + 10_000);
     const work = activeWork(checked, activity);

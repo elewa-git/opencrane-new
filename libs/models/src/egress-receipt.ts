@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { link, lstat, open, unlink } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { join } from 'node:path';
@@ -102,9 +103,7 @@ export async function createEgressReceipt(store: Pick<EventStore, 'append' | 're
   const observationId = egressObservationId(silo, binding.permitId);
   const subject = `egress-${binding.requestId}`;
   const file = join(directory, `${observationId}.jsonl`);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([binding.host, binding.port]));
-  const destinationDigest = hash.digest('hex');
+  const destinationDigest = sha256HexOfJson([binding.host, binding.port]);
   let pending: EventEnvelope | undefined;
   let status: Status = 'pending';
   let writing: Promise<Status> | undefined;

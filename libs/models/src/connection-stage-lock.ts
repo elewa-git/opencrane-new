@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import type { Db } from '@opencrane/projections';
 import type { ConnectionStage, CompanyConnectionStage } from './connection-custody.ts';
 
@@ -16,9 +16,7 @@ export async function withConnectionStage<Result>(db: Pick<Db, 'lock'>,
     owner = profile.userId;
   }
   const coordinates = [profile.siloId, owner, profile.serverId, profile.profileId];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(coordinates));
-  const name = `connection-stage:${hash.digest('hex')}`;
+  const name = `connection-stage:${sha256HexOfJson(coordinates)}`;
   let refusal: { error: unknown } | undefined;
   async function execute(locked: Db) {
     try {

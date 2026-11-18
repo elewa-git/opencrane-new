@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import type { EventEnvelope } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
@@ -37,9 +37,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   await permissions?.confirm();
   await fresh();
   const input = { facts: facts.facts, permissions: decisions, memoryScopes: [], credential: null };
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(input));
-  return hash.digest('hex');
+  return sha256HexOfJson(input);
 }
 
 export interface AuthorityFactsRequest {

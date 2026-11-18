@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { sha256Hex as digest } from '@opencrane/events/digest';
+import { randomBytes } from 'node:crypto';
 
 interface Binding {
   turnId: string;
@@ -11,12 +12,6 @@ interface Caller extends Binding {
   digest: string;
   thread?: string;
   timer: NodeJS.Timeout;
-}
-
-function digest(value: string) {
-  const hash = createHash('sha256');
-  hash.update(value);
-  return hash.digest('hex');
 }
 
 export function privateCallers(dropped: (turnId: string, thread?: string) => void) {

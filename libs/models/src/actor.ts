@@ -1,8 +1,9 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { BudgetWriter, withinBudgetDeadline, withinAdmissionDeadline, accessDeadline, knownAccessDeadline,
   type DispatchQueueDeadline } from './budget-writer.ts';
 import { prepareCeilingChange, readQueuedCeilingReceipt } from './ceiling-command.ts';
 import { CeilingReceiptRecovery } from './ceiling-receipt-recovery.ts';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { budgetCallDispatchAdmittedDataSchema,
@@ -367,9 +368,7 @@ export class BudgetActor {
     }
     let suffix = '';
     if (rows.some(matchesType)) {
-      const hash = createHash('sha256');
-      hash.update(payloadText);
-      suffix = `:${hash.digest('hex')}`;
+      suffix = `:${sha256Hex(payloadText)}`;
     }
     const eventId = `${id}:${type}${suffix}`;
     const event = envelope(this.silo, `effect-${id}`, type, payload, eventId);
