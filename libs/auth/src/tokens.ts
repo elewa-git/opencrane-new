@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { egressDestinationSchema, optionalProviderTurnBindingSchema,
   sessionConfiguration } from '@opencrane/events';
@@ -7,8 +8,8 @@ import { createLocalJWKSet, exportJWK, importPKCS8, importSPKI, jwtVerify, SignJ
 
 const turnClaimsSchema = optionalProviderTurnBindingSchema.safeExtend({
   sharingClass: z.literal('shared_only').optional(),
-  personalSelections: z.array(z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u),
-    profileId: z.string().regex(/^[\w-]{1,200}$/u),
+  personalSelections: z.array(z.object({ serverId: recordIdSchema,
+    profileId: recordIdSchema,
     selectionRevision: z.int().positive() })).max(20).optional(),
 });
 export type PersonalTurnSelection = NonNullable<z.infer<typeof turnClaimsSchema>['personalSelections']>[number];
@@ -20,7 +21,7 @@ export const scannerTokenAudience = 'scanner';
 
 const scannerIdentitySchema = z.strictObject({
   service: z.enum(['server', 'image-worker']),
-  silo: z.string().regex(/^[\w-]{1,200}$/u),
+  silo: recordIdSchema,
 });
 const scannerRequestSchema = z.strictObject({
   purpose: z.enum(['upload', 'image']),
@@ -45,7 +46,7 @@ function scannerPurpose(service: ScannerIdentity['service']) {
   return 'image';
 }
 
-const egressId = z.string().regex(/^[\w-]{1,200}$/u);
+const egressId = recordIdSchema;
 const egressInput = egressDestinationSchema.extend({
   silo: egressId, requester: egressId, assistant: egressId, computer: egressId,
   generation: z.int().positive(), conversation: egressId, thread: egressId, turn: egressId,

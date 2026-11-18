@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -8,7 +9,7 @@ import { extendToolAvailability } from '../integrations/access-explanation.ts';
 import { sessionFor } from './routes.ts';
 import { memberInventory, reviewedRevision } from './inventory.ts';
 
-const parameters = z.object({ memberId: z.string().regex(/^[\w-]{1,200}$/u) }).strict();
+const parameters = z.object({ memberId: recordIdSchema }).strict();
 export function registerMemberInventory(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   app.get('/api/members/:memberId/access', handler);

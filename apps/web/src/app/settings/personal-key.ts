@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/protocol';
 import { ChangeDetectionStrategy, Component, ElementRef, input, output, signal, ViewChild,
   type OnChanges, type OnDestroy, type OnInit, type SimpleChanges } from '@angular/core';
 import { personalConnectionSettingsSchema, personalProfileMetadataSchema, personalKeyCommandSchema,
@@ -5,7 +6,7 @@ import { personalConnectionSettingsSchema, personalProfileMetadataSchema, person
 import { z } from 'zod';
 
 const pendingSchema = z.object({ kind: z.enum(['key', 'selection']),
-  profileId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u), changeRef: z.string().uuid() });
+  profileId: recordIdSchema, changeRef: z.string().uuid() });
 const savedSchema = z.object({ status: z.enum(['verified', 'saved_unverified']),
   sequence: z.int().positive(), changeRef: z.string() });
 const changeSchema = z.object({ status: z.literal('confirmed'), changeRef: z.string() });

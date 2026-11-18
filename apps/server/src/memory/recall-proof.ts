@@ -1,9 +1,10 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { MemoryContext } from '@opencrane/models';
 import { MemoryRefused } from './access.ts';
 
-const referenceSchema = z.tuple([z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u), z.int().positive()]);
+const referenceSchema = z.tuple([recordIdSchema, z.int().positive()]);
 const proofSchema = z.tuple([z.string(), z.array(referenceSchema).max(20)]);
 type Dependency = { scopeId: string; memoryId: string; revision: number };
 type Fact = { memoryId: string; revision: number; reason?: string };

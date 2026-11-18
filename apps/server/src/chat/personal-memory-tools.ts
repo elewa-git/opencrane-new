@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { memoryScopeId } from '@opencrane/projections';
 import { readDeploymentQualification } from
@@ -184,7 +185,7 @@ async function confirmPositions(input: Input, positions: ReadonlyMap<string, num
 }
 
 const stopIdentity = z.object({ turnId: z.string() });
-const receiptId = z.string().regex(/^[\w-]{1,200}$/u);
+const receiptId = recordIdSchema;
 export const recallReceipt = z.strictObject({
   type: z.enum(['recall_pending', 'recall_loaded']), loadId: z.uuid(),
   silo: receiptId, requesterId: receiptId, assistantId: receiptId, computerId: receiptId,

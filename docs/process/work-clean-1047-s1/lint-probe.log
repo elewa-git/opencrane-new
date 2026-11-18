@@ -1,0 +1,9 @@
+npm notice run npx
+npm notice run 'eslint' apps/server/src/id-pattern-probe.ts
+
+<private-path>
+  1:22  error  Import recordIdSchema or recordIdPattern instead of copying the ID pattern  no-restricted-syntax
+  2:23  error  Import recordIdSchema or recordIdPattern instead of copying the ID pattern  no-restricted-syntax
+
+✖ 2 problems (2 errors, 0 warnings)
+

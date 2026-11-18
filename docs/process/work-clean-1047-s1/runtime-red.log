@@ -1,0 +1,45 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/record-id-runtime.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <private-path>
+
+ ❯ apps/computer/test/record-id-runtime.test.ts (1 test | 1 failed) 201ms
+   × checks upload IDs using only event modules included in the computer image 198ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/computer/test/record-id-runtime.test.ts > checks upload IDs using only event modules included in the computer image
+Error: Command failed: /usr/bin/node --experimental-strip-types --input-type=module -e 
+    import assert from 'node:assert/strict';
+    import { isSafeId } from './src/file-rules.ts';
+    assert.equal(isSafeId('record-1'), true);
+    assert.equal(isSafeId('../record'), false);
+    assert.equal(isSafeId('é'), false);
+    console.log('PASS packaged record IDs');
+  
+node:internal/modules/esm/resolve:275
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/tmp/computer-record-id-Grwqxc/node_modules/@opencrane/events/src/index.ts' imported from /tmp/computer-record-id-Grwqxc/src/file-rules.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:275:11)
+    at moduleResolve (node:internal/modules/esm/resolve:865:10)
+    at defaultResolve (node:internal/modules/esm/resolve:989:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
+    at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
+    at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///tmp/computer-record-id-Grwqxc/node_modules/@opencrane/events/src/index.ts'
+}
+
+Node.js v22.23.3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:42:17
+   Duration  602ms (tests 61%, transform 27%, import 9%, worker 3%)
+

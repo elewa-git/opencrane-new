@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/protocol';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -207,7 +208,7 @@ export class OwnershipScreen implements OnInit, OnDestroy {
   }
 
   protected validMemberId(memberId: string): boolean {
-    return /^[\w-]{1,200}$/u.test(memberId);
+    return recordIdPattern.test(memberId);
   }
 
   protected showInvalidMemberId(): boolean {

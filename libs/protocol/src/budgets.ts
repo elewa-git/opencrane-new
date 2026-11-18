@@ -1,7 +1,8 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { teamCreatedDataSchema } from '@opencrane/events';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const cents = z.int().nonnegative();
 const fields = { commandId: id, expectedSequence: z.int().nonnegative(), ceilingCents: cents };
 export const budgetCommandSchema = z.discriminatedUnion('scope', [

@@ -1,0 +1,11 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/memory-mcp.test.ts apps/server/test/routine-sender.test.ts -t refuses a reused Forget preparation|polls saved --maxWorkers=2
+
+ RUN  v5.0.3 <private-path>
+
+
+ Test Files  2 passed (2)
+      Tests  8 passed | 331 skipped (339)
+   Start at  20:41:58
+   Duration  55.55s (tests 71%, transform 22%, import 7%)
+

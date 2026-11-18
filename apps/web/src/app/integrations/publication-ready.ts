@@ -1,9 +1,10 @@
+import { recordIdSchema } from '@opencrane/protocol';
 import type { ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const readySchema = z.object({ status: z.literal('ready'),
-  changeRef: z.string().regex(/^[\w-]{1,200}$/u), generation: z.int().positive(),
+  changeRef: recordIdSchema, generation: z.int().positive(),
   fragmentDigest: digest, recordDigest: digest, configDigest: digest,
   requestedAt: z.iso.datetime(), observedAt: z.iso.datetime() });
 

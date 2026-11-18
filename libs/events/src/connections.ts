@@ -1,3 +1,4 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import type { EventEnvelope } from './envelope.ts';
 
@@ -11,7 +12,7 @@ const secretRefSchema = z
   );
 
 // Keep old profiles readable. Require all activation details together for new generations.
-const connectionId = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const connectionId = recordIdSchema;
 const activationFields = z.strictObject({
   connectionId, ownerKind: z.literal('personal'), purpose: z.literal('personal'),
   generation: z.int().positive(), uid: connectionId, resourceVersion: connectionId,

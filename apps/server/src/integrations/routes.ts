@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { readToolModeChange } from '@opencrane/models';
 import { readIntegrationFacts } from './facts.ts';
 import { readCompanyOptIn } from './company-opt-in-read.ts';
@@ -37,7 +38,7 @@ export interface IntegrationOptions {
 }
 
 const budgetChangeParameters = z.object({
-  commandId: z.string().regex(/^[\w-]{1,200}$/u),
+  commandId: recordIdSchema,
 }).strict();
 
 export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions): void {
@@ -115,7 +116,7 @@ async function checkedIntegrationRequest(path: string, request: FastifyRequest,
     return readCompanyOptIn(request, reply, options, memberId);
   }
   if (path === '/api/org/integrations/:serverId/changes/:commandId') {
-    const id = z.string().regex(/^[\w-]{1,200}$/u);
+    const id = recordIdSchema;
     const parameters = z.strictObject({ serverId: id, commandId: id });
     const { serverId, commandId } = parameters.parse(request.params);
     z.strictObject({}).parse(request.query);
@@ -167,7 +168,7 @@ async function authorisedRequest(path: string, request: FastifyRequest, reply: F
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         const { serverId } = path === '/api/org/integrations/discovery'
           ? remoteReference(options.silo, z.object({ locator: z.string().max(2048) }).parse(request.query).locator)
-          : z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(request.params);
+          : z.object({ serverId: recordIdSchema }).parse(request.params);
         const status = await discoveryStatus(options.store, options.silo, serverId);
         return reply.code(status ? 200 : 404).send(status ?? { status: 'not_found' });
       }
@@ -197,7 +198,7 @@ function isStatusRead(path: string, method: string) {
 
 async function publicationStatus(request: FastifyRequest, reply: FastifyReply,
   options: IntegrationOptions) {
-  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const params = z.object({ serverId: recordIdSchema });
   const { serverId } = params.parse(request.params);
   if (!options.modelDb || !options.store) {
     return reply.send({ status: 'unknown', stage: 'read', reason: 'unavailable' });
@@ -210,7 +211,7 @@ async function integrationStatus(path: string, request: FastifyRequest, reply: F
   if (path.endsWith('/publication')) return publicationStatus(request, reply, options);
   if (!options.store) return reply.code(503).send({ status: 'unavailable' });
   if (path.endsWith('/:commandId')) {
-    const params = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u) })
+    const params = z.object({ commandId: recordIdSchema })
       .parse(request.params);
     let registration: Awaited<ReturnType<typeof hostedRegistrationChange>> | undefined;
     try {
@@ -226,7 +227,7 @@ async function integrationStatus(path: string, request: FastifyRequest, reply: F
     if (registration) return reply.send(registration);
     return reply.send({ status: 'unknown', stage: 'read', reason: 'unavailable' });
   }
-  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const params = z.object({ serverId: recordIdSchema });
   const { serverId } = params.parse(request.params);
   const admission = await readHostedAdmission(options.store, options.silo, serverId);
   if (!admission) return reply.code(404).send({ status: 'not_found' });
@@ -256,7 +257,7 @@ async function registerIntegration(request: FastifyRequest, reply: FastifyReply,
 }
 
 async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string) {
-        const { serverId } = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(request.params);
+        const { serverId } = z.object({ serverId: recordIdSchema }).parse(request.params);
         if (request.method === 'GET') return reply.send(await options.catalogue.tools(options.silo, serverId));
         if (request.headers.origin !== new URL(config.redirectUri).origin) return reply.code(403).send({ status: 'refused' });
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
@@ -280,7 +281,7 @@ async function review(request: FastifyRequest, reply: FastifyReply, config: Auth
     return reply.code(403).send({ status: 'refused' });
   }
   if (!options.store) return reply.code(503).send({ status: 'unavailable' });
-  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const params = z.object({ serverId: recordIdSchema });
   const { serverId } = params.parse(request.params);
   const command = request.routeOptions.url?.endsWith('/publication') ? publishToolPolicy : reviewToolPolicy;
   const result = await command(options.store, options.binding, memberId, serverId, request.body);
@@ -331,7 +332,7 @@ async function requestImageCheck(request: FastifyRequest, reply: FastifyReply,
     return reply.code(403).send({ status: 'refused' });
   }
   if (!options.store) return reply.code(503).send({ status: 'unavailable' });
-  const params = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) });
+  const params = z.object({ serverId: recordIdSchema });
   const { serverId } = params.parse(request.params);
   const result = await requestHostedCheck(options.store, options.binding, memberId,
     serverId, request.body);

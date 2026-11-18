@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { gatewayConfigurationSchema, gatewayObservationSchema, getEventDefinition,
   type EventEnvelope } from '@opencrane/events';
@@ -8,7 +9,7 @@ import { isToolPolicyAvailable, isToolReviewCurrent } from './tool-policy.ts';
 
 const types = new Set(['gateway.configuration_requested', 'gateway.configuration_observed',
   'mcp.server_published', 'mcp.server_unpublished', 'mcp.server_registered']);
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 const unknown = { status: 'unknown', stage: 'read', reason: 'unavailable' };
 type Configuration = z.infer<typeof gatewayConfigurationSchema>;
 type Observation = z.infer<typeof gatewayObservationSchema>;

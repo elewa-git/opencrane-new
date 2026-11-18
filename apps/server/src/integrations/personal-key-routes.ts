@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { savedAssistantConsent } from '@opencrane/models';
 import { invalidBody } from './instance-routes.ts';
 import { personalConnectionRefusal, logPersonalConnectionFailure }
@@ -12,7 +13,7 @@ import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { sameOrigin } from '../members/guard.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const parameters = z.object({ serverId: identifier, profileId: identifier.optional() }).strict();
 const emptyQuery = z.object({}).strict();
 

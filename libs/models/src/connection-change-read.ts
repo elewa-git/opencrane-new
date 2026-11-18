@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { verifiedBearerAccount } from './connection-account.ts';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
@@ -7,7 +8,7 @@ import { connectionOperationId, foldConnection } from './bearer-connections.ts';
 import { history } from './event-history.ts';
 import { readActiveMember } from './member-authority.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const referenceSchema = z.strictObject({ serverId: id, profileId: id, changeRef: id });
 const identitySchema = z.object({ userId: id, serverId: id, profile: id });
 const operationSchema = z.object({ operationId: z.unknown().optional() });

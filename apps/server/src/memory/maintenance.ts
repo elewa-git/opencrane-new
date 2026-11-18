@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, createHmac } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
@@ -10,7 +11,7 @@ import { memoryAccessChecks, scopeAccess, readAssistant, MemoryRefused,
   type MemoryOptions, type Scope } from './access.ts';
 import { MemoryConflict, memorySnapshot, pageCursor, readCursor } from './reads.ts';
 
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const bindingFields = memoryMaintenanceBoundDataSchema.pick({ assistantId: true,
   payingGroupId: true, enabled: true, acceptedCapCents: true });
 const bindingInput = bindingFields.extend({

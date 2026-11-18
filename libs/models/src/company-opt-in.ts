@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
@@ -10,7 +11,7 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 
 export class CompanyOptInConflict extends Error {}
 export class CompanyOptInInputInvalid extends Error {}
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const inputFields = companyOptInSetDataSchema.omit({ changedBy: true });
 const inputSchema = inputFields.extend({ changeRef: id });
 type Choice = z.infer<typeof companyOptInSetDataSchema>;

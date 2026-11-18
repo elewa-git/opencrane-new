@@ -94,9 +94,10 @@ COPY --from=project libs/models/package.json /app/libs/models/package.json
 COPY --from=project LICENSE /app/libs/models/LICENSE
 COPY --from=project libs/models/src/routing.ts /app/libs/models/src/routing.ts
 COPY --from=project libs/models/src/private-callers.ts /app/libs/models/src/private-callers.ts
-# Share report checks without adding schema libraries to the computer.
+# Share the event checks used by the computer through their separate entry points.
 COPY --from=project libs/events/package.json /app/libs/events/package.json
 COPY --from=project LICENSE /app/libs/events/LICENSE
+COPY --from=project libs/events/src/ids.ts /app/libs/events/src/ids.ts
 COPY --from=project libs/events/src/session-configuration.ts /app/libs/events/src/session-configuration.ts
 COPY --from=project libs/events/src/tool-call.ts /app/libs/events/src/tool-call.ts
 COPY --from=project libs/events/src/command-activity-label.ts /app/libs/events/src/command-activity-label.ts

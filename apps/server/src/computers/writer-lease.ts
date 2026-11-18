@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { isDeepStrictEqual } from 'node:util';
@@ -9,7 +10,7 @@ import { takeoverStartedLeaseDataSchema, takeoverRenewedDataSchema,
   takeoverClosureUnknownDataSchema, takeoverEndReasonSchema } from '@opencrane/events';
 import { envelope } from '@opencrane/models';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const readyIdentity = z.object({ assistantId: id, computerId: id,
   generation: z.int().positive(), podUid: id });
 const common = z.object({ commandId: id, assistantId: id, computerId: id,

@@ -1,0 +1,100 @@
+server stopped
+
+PostgreSQL init process complete; ready for start up.
+
+2026-11-18 21:30:28.249 UTC [1] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-11-18 21:30:28.249 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-11-18 21:30:28.249 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-11-18 21:30:28.253 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-11-18 21:30:28.263 UTC [69] LOG:  database system was shut down at 2026-11-18 21:30:28 UTC
+2026-11-18 21:30:28.283 UTC [1] LOG:  database system is ready to accept connections
+2026-11-18 21:30:31.116 UTC [83] ERROR:  relation "goose_db_version" does not exist at character 36
+2026-11-18 21:30:31.116 UTC [83] STATEMENT:  SELECT version_id, is_applied from goose_db_version ORDER BY id DESC
+2026-11-18 21:35:28.360 UTC [67] LOG:  checkpoint starting: time
+2026-11-18 21:39:59.090 UTC [67] LOG:  checkpoint complete: wrote 3377 buffers (20.6%); 0 WAL file(s) added, 0 removed, 1 recycled; write=269.612 s, sync=0.893 s, total=270.730 s; sync files=1309, longest=0.092 s, average=0.001 s; distance=17451 kB, estimate=17451 kB; lsn=0/29E9328, redo lsn=0/25FA548
+2026-11-18 21:40:28.181 UTC [67] LOG:  checkpoint starting: time
+2026-11-18 21:40:37.528 UTC [324] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:37.528 UTC [324] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:39.593 UTC [317] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:39.593 UTC [317] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:42.884 UTC [317] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:42.884 UTC [317] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:49.184 UTC [319] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:49.184 UTC [319] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:59.792 UTC [320] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:59.792 UTC [320] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:41:20.201 UTC [67] LOG:  checkpoint complete: wrote 488 buffers (3.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=51.689 s, sync=0.218 s, total=52.020 s; sync files=100, longest=0.095 s, average=0.003 s; distance=4168 kB, estimate=16123 kB; lsn=0/2B894B0, redo lsn=0/2A0C818
+2026-11-18 21:41:31.144 UTC [324] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:41:31.144 UTC [324] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "en_US.utf8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+fixing permissions on existing directory /var/lib/postgresql/data ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default "max_connections" ... 100
+selecting default "shared_buffers" ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+initdb: warning: enabling "trust" authentication for local connections
+initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+syncing data to disk ... ok
+
+
+Success. You can now start the database server using:
+
+    pg_ctl -D /var/lib/postgresql/data -l logfile start
+
+waiting for server to start....2026-11-18 21:30:27.883 UTC [55] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-11-18 21:30:27.887 UTC [55] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-11-18 21:30:27.898 UTC [58] LOG:  database system was shut down at 2026-11-18 21:30:27 UTC
+2026-11-18 21:30:27.907 UTC [55] LOG:  database system is ready to accept connections
+ done
+server started
+
+/usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+
+waiting for server to shut down...2026-11-18 21:30:28.106 UTC [55] LOG:  received fast shutdown request
+.2026-11-18 21:30:28.109 UTC [55] LOG:  aborting any active transactions
+2026-11-18 21:30:28.112 UTC [55] LOG:  background worker "logical replication launcher" (PID 61) exited with exit code 1
+2026-11-18 21:30:28.112 UTC [56] LOG:  shutting down
+2026-11-18 21:30:28.115 UTC [56] LOG:  checkpoint starting: shutdown immediate
+2026-11-18 21:30:28.128 UTC [56] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.005 s, sync=0.002 s, total=0.016 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/14EF800, redo lsn=0/14EF800
+2026-11-18 21:30:28.135 UTC [55] LOG:  database system is shut down
+ done
+server stopped
+
+PostgreSQL init process complete; ready for start up.
+
+2026-11-18 21:30:28.249 UTC [1] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-11-18 21:30:28.249 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-11-18 21:30:28.249 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-11-18 21:30:28.253 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-11-18 21:30:28.263 UTC [69] LOG:  database system was shut down at 2026-11-18 21:30:28 UTC
+2026-11-18 21:30:28.283 UTC [1] LOG:  database system is ready to accept connections
+2026-11-18 21:30:31.116 UTC [83] ERROR:  relation "goose_db_version" does not exist at character 36
+2026-11-18 21:30:31.116 UTC [83] STATEMENT:  SELECT version_id, is_applied from goose_db_version ORDER BY id DESC
+2026-11-18 21:35:28.360 UTC [67] LOG:  checkpoint starting: time
+2026-11-18 21:39:59.090 UTC [67] LOG:  checkpoint complete: wrote 3377 buffers (20.6%); 0 WAL file(s) added, 0 removed, 1 recycled; write=269.612 s, sync=0.893 s, total=270.730 s; sync files=1309, longest=0.092 s, average=0.001 s; distance=17451 kB, estimate=17451 kB; lsn=0/29E9328, redo lsn=0/25FA548
+2026-11-18 21:40:28.181 UTC [67] LOG:  checkpoint starting: time
+2026-11-18 21:40:37.528 UTC [324] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:37.528 UTC [324] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:39.593 UTC [317] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:39.593 UTC [317] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:42.884 UTC [317] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:42.884 UTC [317] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:49.184 UTC [319] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:49.184 UTC [319] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:40:59.792 UTC [320] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:40:59.792 UTC [320] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'
+2026-11-18 21:41:20.201 UTC [67] LOG:  checkpoint complete: wrote 488 buffers (3.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=51.689 s, sync=0.218 s, total=52.020 s; sync files=100, longest=0.095 s, average=0.003 s; distance=4168 kB, estimate=16123 kB; lsn=0/2B894B0, redo lsn=0/2A0C818
+2026-11-18 21:41:31.144 UTC [324] ERROR:  relation "projection_checkpoints" does not exist at character 22
+2026-11-18 21:41:31.144 UTC [324] STATEMENT:  SELECT sequence FROM projection_checkpoints WHERE name = 'conversations'

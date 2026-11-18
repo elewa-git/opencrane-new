@@ -1,15 +1,16 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { remoteEndpoint } from './address-policy.ts';
 import { exchangeRemote, prepareRemote, type RemoteNetwork } from './remote-https.ts';
 
 const tokenConfigurationSchema = z.strictObject({
   tokenEndpoint: z.string().max(2048),
-  clientId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+  clientId: recordIdSchema,
   redirectUri: z.string().max(2048),
 });
 const revocationConfigurationSchema = z.strictObject({
   revocationEndpoint: z.string().max(2048),
-  clientId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+  clientId: recordIdSchema,
 });
 const configurationSchema = z.union([tokenConfigurationSchema, revocationConfigurationSchema]);
 const consentMaterialSchema = z.strictObject({

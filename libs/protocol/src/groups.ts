@@ -1,6 +1,7 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 function hasNoNul(value: string): boolean {
   return !value.includes('\0');
 }

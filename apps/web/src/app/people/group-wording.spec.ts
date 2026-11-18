@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { grantResourceLabel, isDuplicateName, newGroupId, useGrants }
   from './group-wording';
-import type { GroupRow } from '@opencrane/protocol';
+import { recordIdPattern, type GroupRow } from '@opencrane/protocol';
 
 const row = {
   groupId: 'team', name: 'Sales team', membershipSource: 'local', position: 0,
@@ -12,11 +12,12 @@ const row = {
     ] },
 } as GroupRow;
 
-it('makes a readable, valid id for any group name', () => {
+function makesValidGroupId() {
   for (const name of ['', '👋', 'X'.repeat(200)]) {
-    expect(newGroupId(name)).toMatch(/^[\w-]{1,200}$/u);
+    expect(newGroupId(name)).toMatch(recordIdPattern);
   }
-});
+}
+it('makes a readable, valid id for any group name', makesValidGroupId);
 
 it('checks duplicate names without case or surrounding spaces', () => {
   expect(isDuplicateName(' sales TEAM ', [row])).toBe(true);

@@ -1,0 +1,22 @@
+INFO: Formatting 1st pool, 1 set(s), 1 drives per set.
+INFO: WARNING: Host local has more than 0 drives of set. A host failure will result in data becoming unavailable.
+MinIO Object Storage Server
+Copyright: 2015-2026 MinIO, Inc.
+License: GNU AGPLv3 - https://www.gnu.org/licenses/agpl-3.0.html
+Version: DEVELOPMENT.GOGET (go1.24.9 linux/amd64)
+
+API: http://172.21.0.5:9000  http://127.0.0.1:9000 
+WebUI: http://172.21.0.5:9001 http://127.0.0.1:9001  
+
+Docs: https://docs.min.io
+INFO: Formatting 1st pool, 1 set(s), 1 drives per set.
+INFO: WARNING: Host local has more than 0 drives of set. A host failure will result in data becoming unavailable.
+MinIO Object Storage Server
+Copyright: 2015-2026 MinIO, Inc.
+License: GNU AGPLv3 - https://www.gnu.org/licenses/agpl-3.0.html
+Version: DEVELOPMENT.GOGET (go1.24.9 linux/amd64)
+
+API: http://172.21.0.5:9000  http://127.0.0.1:9000 
+WebUI: http://172.21.0.5:9001 http://127.0.0.1:9001  
+
+Docs: https://docs.min.io

@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -7,7 +8,7 @@ import { isPersonalProfile } from './connection-profile-admin-read.ts';
 import { history } from './event-history.ts';
 import { readActiveMember } from './member-authority.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const referenceSchema = z.strictObject({ userId: id, serverId: id, profileId: id,
   changeRef: id });
 const receiptSchema = z.strictObject({

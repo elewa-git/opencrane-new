@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { PersonalConnectionReason } from './personal-connection-failure.ts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
@@ -9,7 +10,7 @@ import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import type { ChatOptions } from '../chat/access.ts';
 
 export type McpInstanceOptions = Omit<ChatOptions, 'keys'>;
-const id = idSchema.regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const instanceId = idSchema.regex(/^[a-f0-9]{64}$/u);
 const instanceParams = z.strictObject({ serverId: id, profileId: id });
 const instanceQuery = z.strictObject({ instanceId });

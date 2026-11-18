@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
@@ -6,7 +7,7 @@ import { foldConnection } from './bearer-connections.ts';
 import { connectionServer } from './connection-server.ts';
 import { readActiveMember } from './member-authority.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const referenceSchema = z.strictObject({ serverId: id, profileId: id });
 const identitySchema = z.object({ userId: id, serverId: id, profile: id });
 export { personalProfileMetadataSchema as metadataSchema } from '@opencrane/protocol';

@@ -1,0 +1,3 @@
+1:22 no-restricted-syntax: Import recordIdSchema or recordIdPattern instead of copying the ID pattern.
+2:23 no-restricted-syntax: Import recordIdSchema or recordIdPattern instead of copying the ID pattern.
+PASS: final rule rejects both copies, allows ids.ts, excludes tests and keeps composites

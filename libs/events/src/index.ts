@@ -155,3 +155,5 @@ export { artifactListSchema } from './file-events.ts';
 export { sessionConfiguration, type SessionConfiguration,
   type SessionConfigurationInput } from './session-configuration.ts';
 export { sessionAssistantSchema, type SessionAssistant } from './session-assistant.ts';
+
+export { recordIdPattern, recordIdSchema } from './ids.ts';

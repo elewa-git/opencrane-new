@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -9,7 +10,7 @@ import { history, ownershipWriteAccess, readActiveMember } from '@opencrane/mode
 import { sharedAssistantAuthority } from './chat/private-session.ts';
 
 const reassignmentSchema = getEventDefinition('routine.reassigned')!.dataSchema;
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const revision = z.int().positive();
 const inputSchema = z.strictObject({
   changeId: z.string().regex(/^[\w-]{1,200}:[\w-]{1,200}$/u), routineId: id,

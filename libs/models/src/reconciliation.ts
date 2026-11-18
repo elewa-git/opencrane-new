@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { currentEffectState } from './current-effects.ts';
 import { currentMembership } from './ownership.ts';
 import { z } from 'zod';
@@ -8,7 +9,7 @@ import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { authorityFence } from './authority.ts';
 import { applyBudget, emptyBudget, type BudgetState } from './state.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 export const resolutionCommandSchema = z.object({ commandId: id, expectedSequence: z.int().nonnegative(),
   outcome: z.enum(['settled', 'released']), settledCents: z.int().nonnegative(),
   evidence: effectResolvedDataSchema.shape.evidence }).strict();

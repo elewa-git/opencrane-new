@@ -168,6 +168,10 @@ Native computer envelopes also require the matching server principal/source and 
 These checks validate records, not ancestry or access. Native execution stays disabled.
 
 Import `@opencrane/events` through [src/index.ts](src/index.ts).
+`recordIdPattern` is `/^[\w-]{1,200}$/u`; `recordIdSchema` checks strings with it.
+`providerIdSchema` is the same schema. `@opencrane/events/ids` exposes only these
+ID checks for the computer image, which includes selected event modules. Model IDs and chat route IDs keep their
+separate patterns. `assistant-grant.ts` chooses the model or record ID rule by resource type.
 From the repository root, validate unknown input without trusting its declared type:
 
 ```sh

@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { isToolPolicyAvailable } from '@opencrane/projections';
 import { gatewayAdmission } from './gateway-admission.ts';
 import type { GatewayAcknowledgement } from './gateway-delivery.ts';
@@ -164,11 +165,11 @@ const recallInput = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u
 
 const rememberInput = memoryWrittenDataSchema.pick({ kind: true, pinned: true,
   expiresAt: true, sources: true, dependsOn: true }).extend({
-  scopeId: z.string().regex(/^[a-f0-9]{64}$/u), commandId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+  scopeId: z.string().regex(/^[a-f0-9]{64}$/u), commandId: recordIdSchema,
   text: memoryTextSchema, recallProof: z.string().min(1).max(10000) }).strict();
 
 const targetFields = rememberInput.pick({ scopeId: true, commandId: true, recallProof: true });
-const forgetInput = targetFields.extend({ memoryId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u),
+const forgetInput = targetFields.extend({ memoryId: recordIdSchema,
     expectedRevision: z.int().positive() });
 const correctFields = rememberInput.pick({ text: true, kind: true, pinned: true,
   expiresAt: true, dependsOn: true });

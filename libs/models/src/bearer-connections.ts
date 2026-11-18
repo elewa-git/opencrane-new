@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { appendConnection, requireSameConnectionEvent as requireSameEvent,
   requireConnectionEnabled, type ConnectionAccessCheck } from './connection-append.ts';
 import { stageMaterial } from './connection-stage-material.ts';
@@ -22,7 +23,7 @@ import { connectionServer } from './connection-server.ts';
 
 export { connectionOperationId } from './oauth-refresh-fold.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const commandSchema = z.strictObject({ action: z.enum(['create', 'rotate']),
   serverId: id, connectionId: id, profileId: id, changeRef: id,
   expectedSequence: z.int().nonnegative(), expectedGeneration: z.int().nonnegative(),

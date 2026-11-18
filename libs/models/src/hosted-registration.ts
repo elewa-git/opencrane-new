@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -8,7 +9,7 @@ import { losslessJson } from '@opencrane/events/lossless-json';
 import { history } from './actor.ts';
 import { saveToolCommand } from './tool-policy.ts';
 
-const commandIdSchema = z.string().regex(/^[\w-]{1,200}$/u);
+const commandIdSchema = recordIdSchema;
 const input = hostedImageInstallationSchema.omit({ attemptId: true }).extend({
   kind: z.literal('hosted'), locator: z.string().max(2048),
   upstream: egressDestinationSchema, commandId: commandIdSchema,

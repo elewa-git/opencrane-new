@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { rmSync } from 'node:fs';
 import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
@@ -21,7 +22,7 @@ import { acquireMemoryWrite } from './admission.ts';
 
 const fields = memoryWrittenDataSchema.pick({ kind: true, pinned: true, expiresAt: true,
   sources: true, dependsOn: true });
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const commandInput = fields.extend({ commandId: identifier, text: memoryTextSchema });
 export const changeParams = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u),
   commandId: identifier });

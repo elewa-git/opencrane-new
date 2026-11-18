@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
@@ -13,7 +14,7 @@ import { refreshInput } from './oauth-refresh.ts';
 import { currentMembership } from './ownership.ts';
 
 type Input = z.infer<typeof refreshInput>;
-const actorSchema = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const actorSchema = recordIdSchema;
 
 /** Save local revocation only. Provider revocation and private retirement need a separate worker. */
 export async function revokePersonalOAuth(store: EventStore, binding: Binding,

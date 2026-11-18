@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { Query } from '@opencrane/projections';
 import { readActiveMember } from '@opencrane/models';
 import { z } from 'zod';
@@ -7,7 +8,7 @@ import { turnToolReaders, type TurnToolReaderOptions } from './turn-tool-readers
 export interface PersonalConnectionNeedsOptions extends TurnToolReaderOptions {
   db: Query;
 }
-const serverRow = z.object({ server_id: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u) });
+const serverRow = z.object({ server_id: recordIdSchema });
 
 /** Show only the missing accounts that the same turn builder would otherwise offer. */
 export async function personalConnectionNeeds(options: PersonalConnectionNeedsOptions,

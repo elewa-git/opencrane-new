@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { savePausing, savePaused, saveFailed, type StopExecution } from './bridge-pausing.ts';
 import { pauseTimeRemaining } from './bridge-pause-time.ts';
 import { z } from 'zod';
@@ -9,7 +10,7 @@ import { readBeforeDeadline, readStreamSummary, type EventStore } from '@opencra
 import { createLogger } from '@opencrane/observability';
 import { requireTurnMember } from './turns.ts';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 const bindingData = z.object({ takeoverId: identifier, generation: z.int().positive(),
   affectedTurnIds: z.array(identifier).max(64) });
 const receiptFields = bindingData.extend({ epoch: identifier });

@@ -1,9 +1,10 @@
+import { recordIdSchema } from './ids.ts';
 /// <reference lib="dom" />
 import { z } from 'zod';
 import type { EventEnvelope } from './envelope.ts';
 import { event } from './definition.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const internalSuffixes = ['localhost', 'local', 'internal', 'lan', 'home', 'svc',
   'test', 'invalid', 'example', 'onion', 'home.arpa'];
 function normaliseHost(host: string) {

@@ -1,0 +1,72 @@
+ ↓ libs/models/test/gateway.test.ts > makes exactly three approved real OpenAI calls and records only tokens and cents
+ ↓ apps/server/test/approvals.test.ts > sizes every control including step-up at 390px, decides the real gateway card and restores terminal states
+ ↓ apps/ops/test/hosted-image-local-tools.test.ts > keeps a clean scan waiting after real Cosign and Syft checks
+ ↓ apps/ops/test/hosted-image-local-tools.test.ts > saves one real Cosign refusal and does not rescan after restart
+ ↓ apps/ops/test/hosted-image-local-tools.test.ts > leaves a clean image waiting when scanner dates are stale
+ ↓ apps/ops/test/hosted-image-local-tools.test.ts > does not save a failure from a forged success program
+ ↓ libs/models/test/codex-native-capture.test.ts > captures native consent through the proxy and gateway Ask
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > stops the exact run and recovers a lost owner_stop reply
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > stops the exact run and recovers a lost admin_stop reply
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > stops the exact run and recovers a lost patch reply
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > stops the exact run and recovers a lost delete reply
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > leaves a foreign StatefulSet untouched
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > leaves a relabelled StatefulSet untouched
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > leaves a recreated StatefulSet untouched
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > leaves a recreated-after-patch StatefulSet untouched
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > leaves a extra StatefulSet untouched
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > records already absent objects without deleting
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > saves one absent under concurrent delivery and ignores the old run
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > ignores missing Pods and unsaved triggers; replay and wake do no work
+ ↓ apps/ops/test/mcp-personal-k3d.test.ts > rereads a real append conflict before recording exact absence
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies gVisor
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies root user
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies writable root
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies privilege escalation
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies capability
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies seccomp
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies host network
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies host PID
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies host IPC
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies host path
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies token
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies init container
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies PVC
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies Secret-sourced env
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies hostPort
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies envFrom
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies command
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies args
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies disk scratch
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies large scratch
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies raised limits
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies devices
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies privileged
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies missing limits
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies another container
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies an approved image tag
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies hosted Pod resize
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies computer Pod resize
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > binds image and spec digest to protected parameters
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > denies the admin creating an approved workload
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > fails closed without parameters
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > limits lifecycle permissions to this namespace
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > creates a Pod, allows only scaling and completes deletion
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > admits four Pods and refuses a fifth through quota
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > bounds each resource total without changing admission
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > allows only the gateway and reviewed upstream, with removal controls
+ ↓ apps/ops/test/mcp-hosted-k3d.test.ts > hosted MCP namespace > blocks metadata when a reachable control exists
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > admits the checked computer template and rejects a forged Pod identity source
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.ready (delete: both, retain disk: false)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: both, retain disk: false)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.ready (delete: both, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: both, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.ready (delete: sandboxclaim, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: sandbox, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: sandboxclaim, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > qualifies the event-driven lifecycle on k3d gVisor
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > resumes a retained computer on the checked image with its home intact (already suspended: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > resumes a retained computer on the checked image with its home intact (already suspended: false)
+ ↓ apps/server/test/bridge-k3d.test.ts > streams a joined member reply and wakes the suspended k3d computer on another message
+ ↓ apps/server/test/live-view-k3d.test.ts > opens desktop pixels with the deployed service account and refuses permissions outside its namespace
+ ↓ apps/server/test/live-view-k3d.test.ts > renders real gVisor pixels at desktop and phone widths through the authenticated proxy
+ ↓ apps/server/test/screenshot-browser.test.ts > captures real desktop pixels and reopens them from the conversation and panel at 1280 and 390px

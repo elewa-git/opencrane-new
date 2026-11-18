@@ -1,10 +1,11 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { activeChatMember, isChatRefused } from './access.ts';
 import type { ChatOptions } from './access.ts';
 
 const colleagueQuery = z.object({
-  after: z.string().regex(/^[\w-]{1,200}$/u).default(''),
+  after: recordIdSchema.default(''),
   q: z.string().trim().max(100).default(''),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });

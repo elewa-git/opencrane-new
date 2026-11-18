@@ -1,8 +1,9 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
 
 const id = z.string().min(1).max(200);
-const refusalId = z.string().regex(/^[\w-]{1,200}$/u);
+const refusalId = recordIdSchema;
 export const takeoverRefusedDataSchema = z.object({
   attemptId: refusalId, actorId: refusalId, conversationId: refusalId,
   inputDigest: z.string().regex(/^[a-f0-9]{64}$/u),

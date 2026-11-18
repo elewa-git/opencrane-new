@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -5,7 +6,7 @@ import type { Binding } from '@opencrane/authz';
 import { authorityFence, history, activeMember, readActiveMember,
   MemberAccessRefused as GroupRefused } from '@opencrane/models';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 function hasNoNul(value: string) {
   return !value.includes('\0');
 }

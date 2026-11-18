@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ownershipConfirmedSchema, ownershipTransferredSchema } from '@opencrane/events';
@@ -40,7 +41,7 @@ export function registerOwnershipRoutes(app: FastifyInstance, config: AuthConfig
           options.store, options.binding, memberId, request.body);
         return reply.send(result);
       }
-      const parameters = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u).optional() });
+      const parameters = z.object({ commandId: recordIdSchema.optional() });
       const { commandId } = parameters.parse(request.params);
       const result = await read(options, memberId, commandId);
       const code = result.status === 'not_found' ? 404 : 200;

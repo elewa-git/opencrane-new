@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/protocol';
 import { KeyAssistants } from './key-assistants';
 import { PersonalKey } from './personal-key';
 import { personalProfileMetadataSchema,
@@ -9,7 +10,7 @@ import {
 import { z } from 'zod';
 
 const profileSchema = personalProfileMetadataSchema.strip();
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 const rowSchema = profileSchema.extend({
   ownerKind: z.literal('personal'),
   selected: z.boolean(),

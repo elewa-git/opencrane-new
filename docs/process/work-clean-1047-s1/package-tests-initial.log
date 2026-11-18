@@ -1,0 +1,52 @@
+Counter({('apps/server', '✓'): 6856, ('libs/models', '✓'): 2819, ('libs/events', '✓'): 1249, ('apps/computer', '✓'): 1028, ('apps/ops', '✓'): 446, ('libs/projections', '✓'): 217, ('libs/auth', '✓'): 196, ('libs/protocol', '✓'): 66, ('apps/ops', '↓'): 65, ('apps/server', '↓'): 5, ('libs/models', '↓'): 2, ('apps/server', '×'): 2})
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/memory-mcp.test.ts > refuses a reused Forget preparation with a fresh signed pass
+AssertionError: {"status":"refused"}: expected 403 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 403
+
+ ❯ reusedForgetPreparation apps/server/test/memory-mcp.test.ts:3116:40
+    3114|   const original = await changeToken(request);
+    3115|   const first = await sendChange(request, original);
+    3116|   expect(first.statusCode, first.body).toBe(200);
+       |                                        ^
+    3117|   const claims = decodeJwt(original);
+    3118|   claims['dispatch'] = await memoryBinding(setup);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > polls saved Expired and interrupts only the accepted native routine turn once
+AssertionError: expected { status: 'unknown' } to deeply equal { status: 'sent' }
+
+- Expected
++ Received
+
+  {
+-   "status": "sent",
++   "status": "unknown",
+  }
+
+ ❯ runningProhibition apps/server/test/routine-sender.test.ts:1121:54
+    1119|   kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' …
+    1120| ) {
+    1121|   expect(await sender().send(preparedComputer.wake)).toEqual({ status:…
+       |                                                      ^
+    1122|   await until(preparedComputer.executed);
+    1123|   await saveProhibition(kind);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 534 passed | 6 skipped (542)
+      Tests  2 failed | 12877 passed | 72 skipped (12951)
+   Start at  17:25:59
+   Duration  11534.50s (tests 96%, import 4%)
+
+    Isolate  542 workers spawned · ~240ms startup each (spawn + environment, per file)
+             at least ~64.77s faster with isolate: false — reuses workers across files instead of one per file
+

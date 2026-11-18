@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, grantStream } from '@opencrane/authz';
 import { history, groupMembership, PayingGroupRefused, type authorityFence } from '@opencrane/models';
@@ -20,7 +21,7 @@ export function scopeFor(silo: string, scopeKind: Scope['scopeKind'], ownerId: s
   return { scopeId: memoryScopeId(silo, scopeKind, ownerId), scopeKind, ownerId };
 }
 
-const ownerIdentifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const ownerIdentifier = recordIdSchema;
 
 async function requireScopeTables(options: MemoryOptions, deadline: number) {
   const result = await options.db.query<{ name: string; sequence: string }>(`

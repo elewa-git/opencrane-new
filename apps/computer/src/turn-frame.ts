@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events/ids';
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 
@@ -116,7 +117,7 @@ function parseToolServer(value: unknown): ToolServer {
   const serverId = requiredString(server, 'serverId');
   const connectionId = requiredString(server, 'connectionId');
   if (!/^oc_[a-f0-9]{10}$/u.test(key)
-    || !/^[\w-]{1,200}$/u.test(serverId) || !/^[\w-]{1,200}$/u.test(connectionId)) {
+    || !recordIdPattern.test(serverId) || !recordIdPattern.test(connectionId)) {
     throw new Error('Invalid tool server id');
   }
   const definitions: unknown = server['definitions'];

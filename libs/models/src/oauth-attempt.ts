@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -8,7 +9,7 @@ import { connectionServer } from './connection-server.ts';
 import { remoteEndpoint } from './address-policy.ts';
 import { toolPolicyFromRows } from './tool-policy.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/u);
 const scope = z.string().regex(/^[\x21\x23-\x5b\x5d-\x7e]{1,200}$/u);
 const scopes = z.array(scope).max(64);

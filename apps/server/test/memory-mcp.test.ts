@@ -2505,7 +2505,6 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   recordLoaded = true) {
   // Match the saved initial load with the deployment evidence required for native writes.
   await initialQualificationFixture();
-  const catalogue = memoryCatalogue;
   for (const tool of [recallTool, forgetTool, correctTool]) {
     await setup.append('mcp-memory', 'mcp.tool_mode_set', { serverId: 'memory',
       connectionId: 'server', toolName: tool.name, toolRevision: tool.revision,
@@ -2528,7 +2527,7 @@ async function changeRequest(operation: 'correct' | 'forget', checkControl = tru
   }
   const body = { ...call, params: { ...call.params, name: operation, arguments: input } };
   const requestHeaders = { ...headers, 'mcp-name': operation };
-  const request = { body, requestHeaders, catalogue };
+  const request = { body, requestHeaders, catalogue: memoryCatalogue };
   if (checkControl) {
     await changeToken(request);
   }
@@ -3110,6 +3109,7 @@ it('uses prepared IAM receipts without loading them inside the signed recall',
   usesOnlyPreparedReceipts);
 
 async function reusedForgetPreparation() {
+  memoryClock();
   const request = await changeRequest('forget', false);
   const original = await changeToken(request);
   const first = await sendChange(request, original);

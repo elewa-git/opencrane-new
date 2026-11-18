@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, randomUUID } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
@@ -277,7 +278,7 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
 }
 
 const requestInput = hostedImageCheckRequestedSchema.omit({ serverId: true }).extend({
-  commandId: z.string().regex(/^[\w-]{1,200}$/u),
+  commandId: recordIdSchema,
 });
 
 export async function requestHostedCheck(store: EventStore, binding: Binding, memberId: string,

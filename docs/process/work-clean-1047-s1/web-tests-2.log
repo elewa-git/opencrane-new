@@ -1,0 +1,203 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false
+❯ Building...
+✔ Building...
+Initial chunk files                            | Names                                       |  Raw size
+chunk-2QWOI4RP.js                              | -                                           | 260.44 kB | 
+spec-app-app.js                                | spec-app-app                                | 228.57 kB | 
+chunk-CTNVZGG4.js                              | -                                           | 223.16 kB | 
+chunk-ASSRCMJW.js                              | -                                           | 212.94 kB | 
+chunk-EK7CBOMO.js                              | -                                           | 154.99 kB | 
+spec-app-chat-workspace.js                     | spec-app-chat-workspace                     | 154.84 kB | 
+chunk-N6YXNYBX.js                              | -                                           | 146.58 kB | 
+chunk-KUQFUWSK.js                              | -                                           | 142.36 kB | 
+spec-app-chat-direct-chat.js                   | spec-app-chat-direct-chat                   | 127.67 kB | 
+chunk-3JV54ZKA.js                              | -                                           | 127.10 kB | 
+chunk-JE5QN7KT.js                              | -                                           | 124.68 kB | 
+chunk-G7HLHVVY.js                              | -                                           | 118.53 kB | 
+chunk-CBFIOV7A.js                              | -                                           | 117.83 kB | 
+chunk-H4B5JAXW.js                              | -                                           | 105.70 kB | 
+chunk-Q4VS3QV5.js                              | -                                           |  72.77 kB | 
+chunk-CJ3LQVLF.js                              | -                                           |  69.64 kB | 
+chunk-C7LZC3BM.js                              | -                                           |  68.09 kB | 
+chunk-RPTY2YHD.js                              | -                                           |  65.04 kB | 
+chunk-ZFLA3KYH.js                              | -                                           |  64.23 kB | 
+chunk-ZNGGEXSX.js                              | -                                           |  63.07 kB | 
+chunk-3OXZ66WH.js                              | -                                           |  59.83 kB | 
+spec-app-chat-approvals.js                     | spec-app-chat-approvals                     |  55.24 kB | 
+chunk-URHT5ITE.js                              | -                                           |  53.32 kB | 
+spec-app-models-model-registry.js              | spec-app-models-model-registry              |  51.66 kB | 
+chunk-E2UJSMZH.js                              | -                                           |  50.19 kB | 
+chunk-FF6W65UV.js                              | -                                           |  48.53 kB | 
+chunk-OZ4G5PSS.js                              | -                                           |  48.40 kB | 
+chunk-3KL2WELB.js                              | -                                           |  46.18 kB | 
+chunk-3BO5CMYS.js                              | -                                           |  45.77 kB | 
+chunk-P4E7AELF.js                              | -                                           |  44.31 kB | 
+chunk-OELKS4G6.js                              | -                                           |  41.40 kB | 
+chunk-K6AYCWBX.js                              | -                                           |  41.35 kB | 
+chunk-P4ISDCP7.js                              | -                                           |  40.91 kB | 
+chunk-2VWFOWVA.js                              | -                                           |  40.35 kB | 
+spec-app-spending-spending.js                  | spec-app-spending-spending                  |  37.75 kB | 
+spec-app-tool-policy-tool-policy.js            | spec-app-tool-policy-tool-policy            |  36.22 kB | 
+chunk-VHLDWQKE.js                              | -                                           |  33.30 kB | 
+spec-app-people-ownership-screen.js            | spec-app-people-ownership-screen            |  32.98 kB | 
+spec-app-memory-memory-panel-edit.js           | spec-app-memory-memory-panel-edit           |  32.66 kB | 
+spec-app-chat-budget-stop-notice.js            | spec-app-chat-budget-stop-notice            |  31.59 kB | 
+spec-app-people-group-detail-screen.js         | spec-app-people-group-detail-screen         |  30.20 kB | 
+spec-app-memory-memory-panel.js                | spec-app-memory-memory-panel                |  28.15 kB | 
+chunk-KS4LXMOG.js                              | -                                           |  26.71 kB | 
+spec-app-chat-chat-state.js                    | spec-app-chat-chat-state                    |  26.71 kB | 
+spec-app-integrations-integration-detail.js    | spec-app-integrations-integration-detail    |  26.57 kB | 
+spec-app-welcome-persona-review.js             | spec-app-welcome-persona-review             |  26.27 kB | 
+chunk-6ULO4DYT.js                              | -                                           |  25.44 kB | 
+chunk-5TNTBVIL.js                              | -                                           |  24.55 kB | 
+spec-app-integrations-review-changes.js        | spec-app-integrations-review-changes        |  23.66 kB | 
+spec-app-people-member-role.js                 | spec-app-people-member-role                 |  23.40 kB | 
+spec-app-mcp-install-hosted-install.js         | spec-app-mcp-install-hosted-install         |  23.28 kB | 
+spec-app-people-people-screen.js               | spec-app-people-people-screen               |  23.05 kB | 
+spec-app-chat-assistant-markdown.js            | spec-app-chat-assistant-markdown            |  21.87 kB | 
+spec-app-welcome-survey.js                     | spec-app-welcome-survey                     |  21.74 kB | 
+chunk-AHV3RSCB.js                              | -                                           |  21.25 kB | 
+spec-app-settings-my-tools.js                  | spec-app-settings-my-tools                  |  20.77 kB | 
+spec-app-models-provider-setup-access.js       | spec-app-models-provider-setup-access       |  20.37 kB | 
+spec-app-audit-audit.js                        | spec-app-audit-audit                        |  20.13 kB | 
+chunk-HZN2EA4D.js                              | -                                           |  20.07 kB | 
+chunk-QTUAXYS7.js                              | -                                           |  19.81 kB | 
+chunk-2PMEYUVT.js                              | -                                           |  19.10 kB | 
+spec-app-welcome-survey-work.js                | spec-app-welcome-survey-work                |  19.07 kB | 
+spec-app-models-model-table.js                 | spec-app-models-model-table                 |  18.32 kB | 
+chunk-7F425HTM.js                              | -                                           |  18.28 kB | 
+chunk-WOHQGJLV.js                              | -                                           |  17.82 kB | 
+spec-app-memory-memory-panel-forget.js         | spec-app-memory-memory-panel-forget         |  16.59 kB | 
+styles.css                                     | styles                                      |  16.42 kB | 
+chunk-WLHS33XI.js                              | -                                           |  16.02 kB | 
+chunk-LCIFFR7K.js                              | -                                           |  15.67 kB | 
+spec-app-people-member-departure.js            | spec-app-people-member-departure            |  15.62 kB | 
+spec-app-chat-private-reply.js                 | spec-app-chat-private-reply                 |  15.20 kB | 
+spec-app-live-view-live-view.js                | spec-app-live-view-live-view                |  15.17 kB | 
+spec-app-people-shared-assistant-admin.js      | spec-app-people-shared-assistant-admin      |  15.17 kB | 
+chunk-VVXSANSH.js                              | -                                           |  14.53 kB | 
+spec-app-people-invite-panel.js                | spec-app-people-invite-panel                |  14.36 kB | 
+spec-app-organisation-overview.js              | spec-app-organisation-overview              |  14.24 kB | 
+chunk-FLE6UHAK.js                              | -                                           |  14.24 kB | 
+chunk-HXM7PDP2.js                              | -                                           |  14.15 kB | 
+chunk-5IDN2PBF.js                              | -                                           |  13.81 kB | 
+spec-app-chat-file-drop.js                     | spec-app-chat-file-drop                     |  12.85 kB | 
+spec-app-models-model-access-editor.js         | spec-app-models-model-access-editor         |  12.77 kB | 
+spec-app-welcome-welcome-chat.js               | spec-app-welcome-welcome-chat               |  12.59 kB | 
+spec-app-mcp-install-mcp-install.js            | spec-app-mcp-install-mcp-install            |  12.41 kB | 
+chunk-2TASZ2CB.js                              | -                                           |  11.75 kB | 
+spec-app-chat-shared-assistant-picker.js       | spec-app-chat-shared-assistant-picker       |  10.93 kB | 
+chunk-N7QEVYP2.js                              | -                                           |  10.81 kB | 
+spec-app-people-members-screen.js              | spec-app-people-members-screen              |  10.33 kB | 
+chunk-WEZXZNOH.js                              | -                                           |  10.30 kB | 
+spec-app-settings-key-assistants.js            | spec-app-settings-key-assistants            |  10.29 kB | 
+spec-app-chat-screenshot-capture.js            | spec-app-chat-screenshot-capture            |   9.79 kB | 
+spec-app-core-websocket.service.js             | spec-app-core-websocket.service             |   9.55 kB | 
+spec-app-chat-navigation.js                    | spec-app-chat-navigation                    |   9.38 kB | 
+chunk-YHN66KLR.js                              | -                                           |   9.37 kB | 
+spec-app-chat-conversations.js                 | spec-app-chat-conversations                 |   9.37 kB | 
+spec-app-people-member-detail-screen.js        | spec-app-people-member-detail-screen        |   9.36 kB | 
+spec-app-integrations-publication-ready.js     | spec-app-integrations-publication-ready     |   9.25 kB | 
+spec-app-sign-in-sign-in.js                    | spec-app-sign-in-sign-in                    |   8.79 kB | 
+spec-app-chat-read-marker.js                   | spec-app-chat-read-marker                   |   8.74 kB | 
+spec-app-organisation-navigation.js            | spec-app-organisation-navigation            |   8.28 kB | 
+spec-app-welcome-survey-style-tasks.js         | spec-app-welcome-survey-style-tasks         |   8.25 kB | 
+spec-app-chat-tool-activity-line.js            | spec-app-chat-tool-activity-line            |   8.22 kB | 
+spec-app-tool-policy-tool-audience-guards.js   | spec-app-tool-policy-tool-audience-guards   |   8.08 kB | 
+chunk-FV7JFPU7.js                              | -                                           |   8.04 kB | 
+chunk-UQL6TP77.js                              | -                                           |   8.03 kB | 
+chunk-GXARD4F3.js                              | -                                           |   7.95 kB | 
+spec-app-chat-direct-chat-archive.js           | spec-app-chat-direct-chat-archive           |   7.58 kB | 
+spec-app-chat-conversation-file-card.js        | spec-app-chat-conversation-file-card        |   7.25 kB | 
+chunk-TV4DHWDY.js                              | -                                           |   7.20 kB | 
+spec-app-settings-personal-key.js              | spec-app-settings-personal-key              |   7.19 kB | 
+chunk-LPSO2YND.js                              | -                                           |   7.15 kB | 
+spec-app-chat-recipient-picker.js              | spec-app-chat-recipient-picker              |   7.14 kB | 
+spec-app-ui-overlay.js                         | spec-app-ui-overlay                         |   6.77 kB | 
+chunk-LNKSRFFT.js                              | -                                           |   6.77 kB | 
+spec-app-chat-composer.js                      | spec-app-chat-composer                      |   6.71 kB | 
+spec-app-integrations-tool-changes.js          | spec-app-integrations-tool-changes          |   6.57 kB | 
+chunk-OTRPPS4C.js                              | -                                           |   6.54 kB | 
+spec-app-tool-policy-initial-review.js         | spec-app-tool-policy-initial-review         |   6.52 kB | 
+chunk-KCJJCMBH.js                              | -                                           |   6.48 kB | 
+chunk-MDOU6YTQ.js                              | -                                           |   6.36 kB | 
+spec-app-chat-file-preview.js                  | spec-app-chat-file-preview                  |   6.36 kB | 
+spec-app-shared-state-call-site.js             | spec-app-shared-state-call-site             |   6.32 kB | 
+chunk-QYUPTNRQ.js                              | -                                           |   6.12 kB | 
+chunk-XDQRZESP.js                              | -                                           |   5.68 kB | 
+spec-app-people-groups-api.js                  | spec-app-people-groups-api                  |   5.47 kB | 
+spec-app-shared-state-shared-state.js          | spec-app-shared-state-shared-state          |   5.44 kB | 
+spec-app-chat-close-review.js                  | spec-app-chat-close-review                  |   5.43 kB | 
+spec-app-people-ownership-api.js               | spec-app-people-ownership-api               |   5.36 kB | 
+spec-app-chat-direct-chat-api.js               | spec-app-chat-direct-chat-api               |   5.28 kB | 
+spec-app-chat-upload-refusal.js                | spec-app-chat-upload-refusal                |   5.25 kB | 
+spec-app-people-group-add-panel.js             | spec-app-people-group-add-panel             |   5.25 kB | 
+spec-app-spending-effect-rules.js              | spec-app-spending-effect-rules              |   5.21 kB | 
+chunk-JBWBLPNK.js                              | -                                           |   5.19 kB | 
+chunk-6K5QOIK5.js                              | -                                           |   5.16 kB | 
+chunk-AUZXHPEB.js                              | -                                           |   5.06 kB | 
+spec-app-live-view-novnc-pause.js              | spec-app-live-view-novnc-pause              |   5.06 kB | 
+spec-app-chat-upload.js                        | spec-app-chat-upload                        |   4.97 kB | 
+chunk-GPDNSLFV.js                              | -                                           |   4.96 kB | 
+chunk-BHZGY37K.js                              | -                                           |   4.85 kB | 
+chunk-HBVANCZL.js                              | -                                           |   4.75 kB | 
+spec-app-live-view-lease-channel.js            | spec-app-live-view-lease-channel            |   4.62 kB | 
+spec-app-chat-upload-batch.js                  | spec-app-chat-upload-batch                  |   4.44 kB | 
+chunk-ET7MSV5N.js                              | -                                           |   4.43 kB | 
+spec-app-welcome-welcome-archive.js            | spec-app-welcome-welcome-archive            |   4.40 kB | 
+chunk-ORXYDV3O.js                              | -                                           |   4.06 kB | 
+chunk-5Y4AZZEN.js                              | -                                           |   4.06 kB | 
+spec-app-integrations-integration-facts-map.js | spec-app-integrations-integration-facts-map |   3.77 kB | 
+chunk-5KEI4Z4I.js                              | -                                           |   3.75 kB | 
+chunk-24A6IGK3.js                              | -                                           |   3.39 kB | 
+chunk-F7I4RN32.js                              | -                                           |   3.12 kB | 
+chunk-EMLPCHII.js                              | -                                           |   2.92 kB | 
+chunk-FM3LJ3KW.js                              | -                                           |   2.83 kB | 
+chunk-7DO7DAU5.js                              | -                                           |   2.81 kB | 
+spec-app-organisation-pages.js                 | spec-app-organisation-pages                 |   2.77 kB | 
+chunk-REZV6AJO.js                              | -                                           |   2.49 kB | 
+chunk-755EWIMB.js                              | -                                           |   2.46 kB | 
+spec-app-chat-session-configuration.js         | spec-app-chat-session-configuration         |   2.36 kB | 
+spec-app-ui-paper.js                           | spec-app-ui-paper                           |   2.12 kB | 
+spec-app-tool-policy-tool-audience.js          | spec-app-tool-policy-tool-audience          |   1.91 kB | 
+spec-app-settings-account-screen.js            | spec-app-settings-account-screen            |   1.81 kB | 
+spec-app-integrations-add-flow-steps.js        | spec-app-integrations-add-flow-steps        |   1.58 kB | 
+spec-app-people-group-wording.js               | spec-app-people-group-wording               |   1.57 kB | 
+spec-app-chat-personal-connection-notice.js    | spec-app-chat-personal-connection-notice    |   1.52 kB | 
+chunk-KKOGD2SJ.js                              | -                                           |   1.31 kB | 
+init-testbed.js                                | init-testbed                                |   1.21 kB | 
+spec-app-people-member-search-api.js           | spec-app-people-member-search-api           |   1.21 kB | 
+vitest-mock-patch.js                           | vitest-mock-patch                           | 974 bytes | 
+chunk-NM4LBSDS.js                              | -                                           | 902 bytes | 
+chunk-5THIQROH.js                              | -                                           | 704 bytes | 
+chunk-E6C4RB2G.js                              | -                                           | 267 bytes | 
+
+                                               | Initial total                               |   4.83 MB
+
+Lazy chunk files                               | Names                                       |  Raw size
+mermaid-library.js                             | mermaid-library                             |   7.89 MB | 
+chunk-H7TOJMXM.js                              | mermaid-renderer                            |   4.10 kB | 
+chunk-TB77NUKO.js                              | spending                                    | 368 bytes | 
+chunk-V3BQLDE6.js                              | viewer                                      | 202 bytes | 
+
+Application bundle generation complete. [44.262 seconds] - 2026-11-18T20:56:57.374Z
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+
+ RUN  v4.1.11 <private-path>
+
+
+ Test Files  85 passed (85)
+      Tests  1592 passed (1592)
+   Start at  20:56:58
+   Duration  41.14s (transform 25.10s, setup 9.56s, import 37.21s, tests 221.83s, environment 164.20s)
+

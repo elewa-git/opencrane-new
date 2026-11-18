@@ -1,3 +1,4 @@
+import { recordIdSchema } from './ids.ts';
 import { z } from 'zod';
 import { egressDestinationDataSchema } from './egress.ts';
 
@@ -24,7 +25,7 @@ function verdicts<Fields extends z.ZodRawShape>(fields: Fields) {
   ]);
 }
 export const hostedImageCheckedSchema = z.strictObject({
-  serverId: z.string().regex(/^[\w-]{1,200}$/u), attemptId: z.int().positive(), imageDigest: digest,
+  serverId: recordIdSchema, attemptId: z.int().positive(), imageDigest: digest,
   platform: hostedImageInstallationSchema.shape.platform,
   checks: z.strictObject({ signature: verdicts({}), licence: verdicts({}),
     vulnerability: verdicts(database), malware: verdicts(database) }),

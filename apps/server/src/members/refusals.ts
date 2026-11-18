@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { memberCommandRefusedSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -40,7 +41,7 @@ async function refusalAuditHistory(store: RefusalStore, silo: string,
 export async function recordMemberRefusal(store: RefusalStore, silo: string, actor: string,
   operation: 'invite' | 'join', input: { memberId: string; commandId: string;
     invitationId?: string }, reason: string, time: Date): Promise<boolean> {
-  if (!/^[\w-]{1,200}$/u.test(input.commandId)) {
+  if (!recordIdPattern.test(input.commandId)) {
     return false;
   }
   const attempted = {

@@ -1,0 +1,2 @@
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json

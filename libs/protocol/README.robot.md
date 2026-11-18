@@ -50,6 +50,9 @@ is described in the [approval API](../../docs/api/approvals.md).
 ## Public contract and usage
 
 Import `@opencrane/protocol` through [src/index.ts](src/index.ts).
+It re-exports `recordIdSchema` and `recordIdPattern` from `@opencrane/events`
+for browser callers. Record IDs contain 1–200 ASCII letters, digits, underscores
+or hyphens; other ID formats retain their own schemas.
 From the repository root:
 
 ```sh

@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import type { TurnSummary } from '@opencrane/auth';
 import { computerTurnStartedDataSchema, sessionConfiguration } from '@opencrane/events';
@@ -372,9 +373,8 @@ function isAvailableServer(state: TurnToolServerState) {
 }
 
 function hasComputerCompatibleFields(state: TurnToolServerState) {
-  const validId = /^[\w-]{1,200}$/u;
-  if (!validId.test(state.serverId) || !state.connectionId ||
-      !validId.test(state.connectionId)) return false;
+  if (!recordIdPattern.test(state.serverId) || !state.connectionId ||
+      !recordIdPattern.test(state.connectionId)) return false;
   if (state.serverInfo && (state.serverInfo.name.length > 200 ||
       state.serverInfo.version.length > 200)) return false;
   return state.discoveryTools.every(hasValidDefinitionLength);

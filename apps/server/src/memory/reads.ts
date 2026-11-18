@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { MemoryRefused } from './access.ts';
@@ -5,7 +6,7 @@ import { sourceStatuses } from './detail-sources.ts';
 import type { MemoryOptions, Scope } from './access.ts';
 
 export class MemoryConflict extends Error {}
-const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const identifier = recordIdSchema;
 export const readInput = z.strictObject({ q: z.string().default(''),
   cursor: z.string().max(2000).optional() });
 export const readParams = z.strictObject({ scopeId: z.string().regex(/^[a-f0-9]{64}$/u) });

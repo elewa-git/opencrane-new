@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events/ids';
 import { createPublicKey, verify } from 'node:crypto';
 import { record } from './http.ts';
 
@@ -18,7 +19,7 @@ export interface GateBinding {
 }
 
 function identifier(value: unknown): string {
-  if (typeof value !== 'string' || !/^[\w-]{1,200}$/u.test(value)) {
+  if (typeof value !== 'string' || !recordIdPattern.test(value)) {
     throw new Error('Invalid bridge gate');
   }
   return value;

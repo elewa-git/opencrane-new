@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/protocol';
 import { ChangeDetectionStrategy, Component, input, signal, type OnDestroy, type OnInit }
   from '@angular/core';
 import { toolAccessExplanationSchema } from '@opencrane/protocol';
@@ -8,7 +9,6 @@ type PageState = 'loading' | 'ready' | 'failed' | 'incomplete' | 'refused' | 'si
 type Grant = Explanation['person'];
 type Source = Extract<Explanation, { sources: unknown }>['sources'][number];
 
-const idPattern = /^[\w-]{1,200}$/u;
 const toolPattern = /^[A-Za-z0-9_.-]{1,100}$/u;
 const reasonText: Record<string, string> = {
   missing_requester_grant: 'This person needs access to this integration.',
@@ -54,8 +54,8 @@ export class ToolAccessExplanation implements OnInit, OnDestroy {
     const assistantId = query.get('assistant');
     const toolName = query.get('tool');
     if (!requesterId || !assistantId || !toolName ||
-        !idPattern.test(this.serverId()) || !idPattern.test(requesterId) ||
-        !idPattern.test(assistantId) || !toolPattern.test(toolName) ||
+        !recordIdPattern.test(this.serverId()) || !recordIdPattern.test(requesterId) ||
+        !recordIdPattern.test(assistantId) || !toolPattern.test(toolName) ||
         query.getAll('requester').length !== 1 ||
         query.getAll('assistant').length !== 1 || query.getAll('tool').length !== 1) {
       this.state.set('incomplete');

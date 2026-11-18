@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
@@ -12,7 +13,7 @@ import { toolPolicyFromRows } from './tool-policy.ts';
 import { oauthConfigurationDigest, oauthConfigurationSchema, prepareOAuthAttempt }
   from './oauth-attempt.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const sessionSchema = z.strictObject({ sessionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   memberRevision: z.int().positive() });
 const inputSchema = z.strictObject({ serverId: id, connectionId: id, profileId: id, changeRef: id,

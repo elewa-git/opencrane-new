@@ -1,0 +1,19 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test --maxWorkers=1
+
+ RUN  v5.0.3 <private-path>
+
+ ❯ apps/computer/test/supervisor-stop.test.ts (11 tests | 11 failed) 345625ms
+   × stops a live worker under a zombie leader or refuses proof if it never exits: false 31756ms
+   × stops a live worker under a zombie leader or refuses proof if it never exits: true 31772ms
+   × refuses a detached process handing work to a late child at the directory barrier 31567ms
+   × refuses a detached process handing work to a late child at the observed-worker barrier 31409ms
+   × refuses to run the termination helper as root 31579ms
+   × stops real executor and private children, including recovery after helper failure: false 31210ms
+   × stops real executor and private children, including recovery after helper failure: true 31218ms
+   × refuses forged stop requests and keeps all launch gates closed after a supervisor crash 31265ms
+   × keeps executor admission closed when a crash leaves an unreadable gate 31314ms
+   × keeps launcher, Xvnc and open viewer identities, viewer has child: false 31335ms
+   × keeps launcher, Xvnc and open viewer identities, viewer has child: true 31195ms
+ ❯ apps/computer/test/codex-config.test.ts (8 tests | 1 failed) 21152ms
+   × uses native private configuration to discover through the real proxy 1043ms

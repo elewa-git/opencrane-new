@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -90,7 +91,7 @@ async function scannerReady(config: Configuration) {
 
 function bundlePath(config: Configuration, attempt: Attempt) {
   requireInput(attempt.silo === config.silo && digest.test(attempt.imageDigest) &&
-    /^[\w-]{1,200}$/u.test(attempt.serverId));
+    recordIdPattern.test(attempt.serverId));
   return join(config.bundleDirectory, config.silo, attempt.imageDigest);
 }
 

@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
@@ -40,7 +41,7 @@ export function registerAssistantRoutes(
         return reply.send(await createSharedAssistant(
           options.store, options.binding, memberId, request.body, fresh));
       }
-      const id = z.string().regex(/^[\w-]{1,200}$/u);
+      const id = recordIdSchema;
       const parameters = z.object({ assistantId: id.optional(), commandId: id.optional() });
       const { assistantId, commandId } = parameters.parse(request.params);
       return await readAssistants(reply, options, memberId, assistantId, commandId);

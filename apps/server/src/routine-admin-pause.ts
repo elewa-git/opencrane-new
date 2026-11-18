@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -6,7 +7,7 @@ import { routineControlSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { ownershipWriteAccess, readActiveMember } from '@opencrane/models';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
+const id = recordIdSchema;
 const revision = z.int().positive();
 const inputSchema = z.strictObject({
   changeId: z.string().regex(/^[\w-]{1,200}:[\w-]{1,200}$/u), routineId: id,

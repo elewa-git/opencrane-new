@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -51,7 +52,7 @@ async function authoriseCapture(config: AuthConfig, files: FileOptions, view: Li
   const session = sessionFor(request, config, new Date());
   // Bind capture to the signed-in identity, CSRF marker, origin and matching silo resources.
   if (!isCaptureIdentityCurrent(config, files, view, request, session)) throw new Error('Access changed');
-  const id = z.string().regex(/^[\w-]{1,200}$/u);
+  const id = recordIdSchema;
   const { conversationId } = z.object({ conversationId: id }).parse(request.params);
   const key = id.parse(request.headers['idempotency-key']);
   // Capture accepts no URL, filesystem path, bytes, dimensions or claimed identity.

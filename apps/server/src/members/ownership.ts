@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { randomUUID } from 'node:crypto';
 import { legacyMemberRole } from '@opencrane/events';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { ownershipWriteAccess, currentMembership, currentOwnershipMembership,
   history, ownershipSubject } from '@opencrane/models';
 
-const identifier = z.string().regex(/^[\w-]{1,200}$/u);
+const identifier = recordIdSchema;
 const common = { commandId: identifier, expectedSequence: z.int().nonnegative().safe() };
 const commandSchema = z.discriminatedUnion('action', [
   z.object({ ...common, action: z.literal('transfer'), successorId: identifier }).strict(),

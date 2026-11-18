@@ -1,3 +1,4 @@
+import { recordIdPattern } from '@opencrane/events/ids';
 import type { approvalHolds } from './approval-holds.ts';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server } from 'node:http';
@@ -124,7 +125,7 @@ async function prepareRoutine(input: Record<string, unknown>, runner: TurnRunner
 async function loadRecall(input: Record<string, unknown>, runner: TurnRunnerPort,
   next: WebSocket, resumed: boolean) {
   const turnId = input['turnId'];
-  if (typeof turnId !== 'string' || !/^[\w-]{1,200}$/u.test(turnId)) {
+  if (typeof turnId !== 'string' || !recordIdPattern.test(turnId)) {
     next.close(1008, 'Invalid recall request');
     return;
   }

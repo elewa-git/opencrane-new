@@ -1,3 +1,4 @@
+import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
@@ -16,7 +17,7 @@ import { withConnectionStage } from './connection-stage-lock.ts';
 import { activeMember, MemberAccessRefused } from './member-authority.ts';
 import { currentMembership } from './ownership.ts';
 
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,200}$/u);
+const id = recordIdSchema;
 const createSchema = z.strictObject({
   serverId: id, connectionId: id, profileId: id, changeRef: id,
   registrationRevision: z.int().positive(), optInRevision: z.int().positive(),

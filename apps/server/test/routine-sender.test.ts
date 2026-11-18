@@ -1118,8 +1118,7 @@ async function pollRoutine() {
 async function runningProhibition(
   kind: 'Stop' | 'Pause' | 'Retire' | 'Access' | 'Denied' | 'Expired' | 'Admin',
 ) {
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  await until(preparedComputer.executed);
+  await startRunning();
   await saveProhibition(kind);
   const observed = performance.now();
   await pollRoutine();
