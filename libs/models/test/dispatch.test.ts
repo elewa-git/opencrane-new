@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { parseEventByType } from '@opencrane/events';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, history, priceTableId, totals } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
@@ -275,22 +275,16 @@ async function startsAccessAfterQueue(expireAccess: boolean) {
   const secondHold = await actor.reserve(secondCall, 1);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const realNow = performance.now.bind(performance);
-  let elapsed = 0;
-  function now() {
-    return realNow() + elapsed;
-  }
-  const clock = vi.spyOn(performance, 'now');
-  clock.mockImplementation(now);
+  const clock = manualStoreTime(nats.store);
   async function holdAccess() {
     entered.resolve();
     await release.promise;
   }
   function advanceAccess() {
-    if (expireAccess) elapsed += 2001;
+    if (expireAccess) clock.advance(2001);
     return Promise.resolve();
   }
-  const queueDeadline = performance.now() + 30_000;
+  const queueDeadline = clock.now() + 30_000;
   const first = { ...admission(firstHold), callId: 'first', modelCall: firstCall };
   const second = { ...admission(secondHold), callId: 'second', modelCall: secondCall };
   const blocked = actor.admitDispatch(first, holdAccess, undefined, undefined, { queueDeadline });
@@ -302,14 +296,14 @@ async function startsAccessAfterQueue(expireAccess: boolean) {
     const result = expireAccess
       ? expect(queued).rejects.toThrow('Budget append unavailable')
       : expect(queued).resolves.toBeUndefined();
-    elapsed += 2100;
+    clock.advance(2100);
     release.resolve();
     await blockedResult;
     await result;
     expect(actor.state.dispatches).toHaveLength(expireAccess ? 0 : 1);
   } finally {
     release.resolve();
-    clock.mockRestore();
+    clock.restore();
   }
 }
 it.each([false, true])('starts the two-second dispatch check after the queue, expires: %s',
@@ -326,21 +320,15 @@ async function holdsQueueUntilExpiredWorkFinishes() {
   const secondHold = await actor.reserve(secondCall, 1);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const realNow = performance.now.bind(performance);
-  let elapsed = 0;
-  function now() {
-    return realNow() + elapsed;
-  }
+  const clock = manualStoreTime(nats.store);
   async function holdAccess() {
     entered.resolve();
     await release.promise;
   }
   async function checked() {}
   const nextAccess = vi.fn(checked);
-  const clock = vi.spyOn(performance, 'now');
-  clock.mockImplementation(now);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  const queueDeadline = performance.now() + 30_000;
+  const queueDeadline = clock.now() + 30_000;
   const first = { ...admission(firstHold), callId: 'held', modelCall: firstCall };
   const second = { ...admission(secondHold), callId: 'waiting', modelCall: secondCall };
   const held = actor.admitDispatch(first, holdAccess, undefined, undefined, { queueDeadline });
@@ -349,7 +337,7 @@ async function holdsQueueUntilExpiredWorkFinishes() {
   try {
     await entered.promise;
     waiting = actor.admitDispatch(second, nextAccess, undefined, undefined, { queueDeadline });
-    elapsed += 2100;
+    clock.advance(2100);
     await vi.advanceTimersByTimeAsync(2100);
     await refused;
     // A timed-out caller cannot let another command overtake its still-running work.
@@ -363,7 +351,7 @@ async function holdsQueueUntilExpiredWorkFinishes() {
     release.resolve();
     vi.useRealTimers();
     await waiting;
-    clock.mockRestore();
+    clock.restore();
   }
 }
 it('keeps serial budget ownership until expired access work finishes',

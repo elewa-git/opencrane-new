@@ -1,3 +1,4 @@
+import { manualStoreTime } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import { request, IncomingMessage } from 'node:http';
 import { once } from 'node:events';
@@ -781,7 +782,8 @@ async function refusesNativeDispatchAfterDecision(change: string) {
         await context.actor.stopRoot(context.root.rootId, 'requester_stop',
           'conversation-conversation', position);
       } else if (change === 'deadline') {
-        vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 2001);
+        const clock = manualStoreTime(context.store);
+        clock.advance(2001);
       }
       return decisionId;
     }
@@ -841,21 +843,16 @@ async function preservesNativeDeadline(restart: boolean, expireDuringDecision: b
     const binding = child(context, 'original-deadline');
     await admit(context, binding);
     const originalClock = Date.now();
-    const originalPerformance = performance.now();
-    let elapsed = 0;
+    const clock = manualStoreTime(context.store);
+    const started = clock.now();
     function wallClock() {
-      return originalClock + elapsed;
-    }
-    function monotonicClock() {
-      return originalPerformance + elapsed;
+      return originalClock + clock.now() - started;
     }
     const dateClock = vi.spyOn(Date, 'now');
     dateClock.mockImplementation(wallClock);
-    const performanceClock = vi.spyOn(performance, 'now');
-    performanceClock.mockImplementation(monotonicClock);
     const id = await reserve(context, binding, 110);
     const saved = context.actor.state.reservations[0]!;
-    elapsed = expireDuringDecision ? 1700 : 2100;
+    clock.advance(expireDuringDecision ? 1700 : 2100);
     if (restart) {
       await context.restartActor();
     }
@@ -863,7 +860,7 @@ async function preservesNativeDeadline(restart: boolean, expireDuringDecision: b
     const allow = allowNative(context, binding);
     async function delayedDecision(reservationId: string, requestId: string) {
       const decisionId = await allow(reservationId, requestId);
-      elapsed += 400;
+      clock.advance(400);
       return decisionId;
     }
     await expect(nativeGrant(context, binding, 110, `call-${binding.turnId}-110`,

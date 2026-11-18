@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, history, priceTableId, totals } from '../src/index.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -217,12 +217,7 @@ async function keepsFinalResolutionChecks(change: string) {
     evidence: [{ kind: 'dispatch_record', reference: 'dispatch-check',
       digest: 'a'.repeat(64), notDispatched: true }],
   };
-  const realNow = performance.now.bind(performance);
-  let offset = 0;
-  function now() {
-    return realNow() + offset;
-  }
-  const clock = vi.spyOn(performance, 'now').mockImplementation(now);
+  const clock = manualStoreTime(nats.store);
   let checks = 0;
   async function fresh() {
     checks++;
@@ -232,7 +227,7 @@ async function keepsFinalResolutionChecks(change: string) {
         memberId: 'owner', removedBy: 'admin',
       })]);
     } else if (change === 'expiry') {
-      offset += 2001;
+      clock.advance(2001);
     } else {
       await nats.seed([envelope('test', `effect-${permitId}`, 'effect.uncertain', {
         permitId, computerId: 'computer', reason: 'missing_usage',
@@ -256,7 +251,7 @@ async function keepsFinalResolutionChecks(change: string) {
     expect(totals(actor.state, new Date('2026-09-30T23:59:59.999Z')))
       .toMatchObject({ reservedCents: 1000 });
   } finally {
-    clock.mockRestore();
+    clock.restore();
   }
 }
 it.each(['removal', 'expiry', 'race'])(

@@ -1,3 +1,4 @@
+import { manualStoreTime } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import type { AppendCommand, AppendResult } from '@opencrane/event-store';
 import { decisionRecordedDataSchema, parseEventByType } from '@opencrane/events';
@@ -243,12 +244,7 @@ async function recoversAfterLastAccessCheckFails(failure: (typeof lastAccessFail
   const head = current.nats.store.head.bind(current.nats.store);
   let allowed = false;
   let checksAfterAllow = 0;
-  const realNow = performance.now.bind(performance);
-  let timeShift = 0;
-
-  function shiftedTime() {
-    return realNow() + timeShift;
-  }
+  const clock = manualStoreTime(current.nats.store);
 
   async function saveAllow(command: AppendCommand): Promise<AppendResult> {
     const result = await append(command);
@@ -266,7 +262,7 @@ async function recoversAfterLastAccessCheckFails(failure: (typeof lastAccessFail
         if (failure === 'read_outage') {
           return Promise.reject(new Error('Scripted final access read outage'));
         }
-        timeShift = 5000;
+        clock.advance(5000);
       }
     }
     return head(...args);
@@ -276,8 +272,6 @@ async function recoversAfterLastAccessCheckFails(failure: (typeof lastAccessFail
   writer.mockImplementation(saveAllow);
   const reader = vi.spyOn(current.nats.store, 'head');
   reader.mockImplementation(failLastAccessCheck);
-  const clock = vi.spyOn(performance, 'now');
-  clock.mockImplementation(shiftedTime);
   try {
     const response = await current.call();
     expect(checksAfterAllow).toBe(1);
@@ -295,7 +289,7 @@ async function recoversAfterLastAccessCheckFails(failure: (typeof lastAccessFail
     });
     writer.mockRestore();
     reader.mockRestore();
-    clock.mockRestore();
+    clock.restore();
     const recovered = await recoverActor(current);
     expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0 });
     const reservation = recovered.state.reservations[0]!;
@@ -304,7 +298,7 @@ async function recoversAfterLastAccessCheckFails(failure: (typeof lastAccessFail
   } finally {
     writer.mockRestore();
     reader.mockRestore();
-    clock.mockRestore();
+    clock.restore();
     await current.close();
   }
 }

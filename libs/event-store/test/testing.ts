@@ -13,7 +13,7 @@ import { jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
 import { createEventStore, connectNats, EventStore, systemClock, type Clock } from "../src/index.ts";
-import { afterAll, expect, onTestFinished } from "vitest";
+import { afterAll, expect, onTestFinished, vi } from "vitest";
 
 function registerChildCleanup(child: ChildProcess) {
   const killChild = () => {
@@ -404,4 +404,22 @@ export function manualClock(started = 0): ManualClock {
     }
   }
   return { now, advance, sleep };
+}
+
+export interface ManualStoreTime extends Pick<ManualClock, 'now' | 'advance'> {
+  restore(): void;
+}
+
+/** Keep real request timing separate while a test advances the store's time. */
+export function manualStoreTime(
+  store: Pick<EventStore, 'clock'>,
+  started = store.clock.now(),
+): ManualStoreTime {
+  const clock = manualClock(started);
+  const now = clock.now.bind(clock);
+  const reader = vi.spyOn(store.clock, 'now').mockImplementation(now);
+  const restore = reader.mockRestore.bind(reader);
+  onTestFinished(restore);
+  const advance = clock.advance.bind(clock);
+  return { now, advance, restore };
 }

@@ -4,7 +4,7 @@ import type { AppendCommand } from '@opencrane/event-store';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { companyOptInSetDataSchema } from '@opencrane/events';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { pgDb } from '@opencrane/projections';
@@ -236,20 +236,14 @@ it.each(['admin removal', 'installation replacement'])(
 
 async function historyTiming(stage: string) {
   const test = await fixture();
-  const now = performance.now.bind(performance);
-  let elapsed = 0;
-  function clock() {
-    return now() + elapsed;
-  }
-  const timer = vi.spyOn(performance, 'now');
-  timer.mockImplementation(clock);
+  const clock = manualStoreTime(nats.store);
   const read = nats.store.readStream.bind(nats.store);
   async function* slowHistory(subject: string, from?: number, deadline?: number) {
     yield* read(subject, from, deadline);
     const preparing = stage === 'preparation' && subject === `mcp-${test.input.serverId}`;
     const checkingAccess = stage === 'access' && subject === `member-${test.userId}`;
     if (preparing || checkingAccess) {
-      elapsed += 2100;
+      clock.advance(2100);
     }
   }
   const fault = vi.spyOn(nats.store, 'readStream');
@@ -263,7 +257,7 @@ async function historyTiming(stage: string) {
     }
   } finally {
     fault.mockRestore();
-    timer.mockRestore();
+    clock.restore();
   }
 }
 it.each(['preparation', 'access'])('keeps the short write deadline separate from %s', historyTiming);

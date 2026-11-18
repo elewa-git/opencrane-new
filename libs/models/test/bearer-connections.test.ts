@@ -4,7 +4,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest } from '@opencrane/events/mcp-catalogue';
 import { type Db, pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
@@ -309,7 +309,7 @@ async function finalRevokeCheck(outcome: string) {
     }
     // Finish concurrent position reads before advancing the access check's clock.
     if (expired && pendingReads === 0) {
-      vi.spyOn(performance, 'now').mockReturnValue(deadline! + 1);
+      manualStoreTime(nats.store, deadline! + 1);
     }
     return sequence;
   }

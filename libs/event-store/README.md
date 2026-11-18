@@ -71,6 +71,7 @@ flowchart LR
 ## How to run or test it
 
 Timing tests can supply a manual clock to advance deadlines without waiting.
+For an existing store, `manualStoreTime` controls its current-time readings during a test.
 Tests can save an event with named fields through `appendEvent` from
 `@opencrane/event-store/testing`. The calling test applies any read tables afterwards.
 

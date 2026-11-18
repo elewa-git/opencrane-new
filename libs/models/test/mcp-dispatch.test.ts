@@ -1,3 +1,4 @@
+import { manualStoreTime } from '@opencrane/event-store/testing';
 import { body, catalogue, tool, prepare, permit, send, reviewRestoration,
   publishRestoration, restorationDelivery, generationHeaders, publishedFixture,
   selectedPersonalFixture, requestFromPermit } from './support/mcp-dispatch-fixture.ts';
@@ -16,7 +17,7 @@ import { startDecision } from '../src/decision.ts';
 import { envelope } from '../src/actor.ts';
 import { recordAdapterObservation, recordToolObservation, toolObservation } from '../src/tool-dispatch.ts';
 import { gatewayDelivery } from '../src/gateway-delivery.ts';
-import type { AppendCommand, StoredEvent } from '@opencrane/event-store';
+import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { setTimeout as pause } from 'node:timers/promises';
 import { z } from 'zod';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -2393,12 +2394,10 @@ function restoreTlsIdentityClock() {
   vi.restoreAllMocks();
 }
 
-function holdTlsIdentityClock() {
+function holdTlsIdentityClock(store: Pick<EventStore, 'clock'>) {
   // Reach certificate verification without making this case a test of dispatch expiry.
-  const elapsed = performance.now();
+  manualStoreTime(store);
   const wall = Date.now();
-  const elapsedClock = vi.spyOn(performance, 'now');
-  elapsedClock.mockReturnValue(elapsed);
   const wallClock = vi.spyOn(Date, 'now');
   wallClock.mockReturnValue(wall);
   onTestFinished(restoreTlsIdentityClock);
@@ -2485,7 +2484,7 @@ async function guardsRemoteCall(mode: typeof remoteGuards[number]) {
       'x-opencrane-mcp-permit': value };
     const request = { method: 'POST', headers: canaries, body: raw };
     const beforeSend = performance.now();
-    if (mode === 'wrong_name') holdTlsIdentityClock();
+    if (mode === 'wrong_name') holdTlsIdentityClock(setup.nats.store);
     const sending = fetch(`${setup.options.decisionUrl}/dispatch/mcp/fixture/installed`, request);
     try {
       if (mode === 'held_start') {

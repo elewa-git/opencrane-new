@@ -11,7 +11,7 @@ import { connectionCreatedDataSchema, connectionSelectedDataSchema,
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture } from '@opencrane/event-store/testing';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { pgDb } from '@opencrane/projections';
 import { envelope, history } from '../src/actor.ts';
@@ -724,9 +724,8 @@ async function appendDeadline(remaining: number, expectedDeadline: number) {
   const rows = await history(nats.store, 'mcp-server', 'test');
   const expiresAt = Date.parse(toolPolicyFromRows(rows).expiresAt!);
   const wallClock = vi.spyOn(Date, 'now');
-  const monotonicClock = vi.spyOn(performance, 'now');
+  const monotonicClock = manualStoreTime(nats.store, 1000);
   wallClock.mockReturnValue(expiresAt - remaining);
-  monotonicClock.mockReturnValue(1000);
   const append = nats.store.append.bind(nats.store);
   async function checkDeadline(command: AppendCommand) {
     expect(command.deadline).toBe(expectedDeadline);
@@ -740,7 +739,7 @@ async function appendDeadline(remaining: number, expectedDeadline: number) {
   } finally {
     fault.mockRestore();
     wallClock.mockRestore();
-    monotonicClock.mockRestore();
+    monotonicClock.restore();
   }
 }
 it.each([[500, 1500], [5000, 3000]])(
@@ -974,17 +973,12 @@ async function readWithoutWriteDeadline() {
   const selected = await test.select();
   const readStream = nats.store.readStream.bind(nats.store);
   const head = vi.spyOn(nats.store, 'head');
-  const clock = vi.spyOn(performance, 'now');
-  let now = 1000;
-  clock.mockImplementation(currentTime);
-  function currentTime() {
-    return now;
-  }
+  const clock = manualStoreTime(nats.store, 1000);
   async function* slowHistory(subject: string, from?: number, deadline?: number) {
     expect(subject.startsWith('conversation-')).toBe(false);
     yield* readStream(subject, from, deadline);
     if (subject === test.profileSubject || subject === `member-${test.userId}`) {
-      now += 2500;
+      clock.advance(2500);
     }
   }
   const read = vi.spyOn(nats.store, 'readStream');
@@ -1002,7 +996,7 @@ async function readWithoutWriteDeadline() {
   } finally {
     read.mockRestore();
     head.mockRestore();
-    clock.mockRestore();
+    clock.restore();
   }
 }
 function readSubject(call: [string, ...unknown[]]) {
@@ -1037,17 +1031,12 @@ it('keeps choices, profiles and control streams separate for two people using th
 async function historyBeforeWriteAccess() {
   const test = await fixture();
   const readStream = nats.store.readStream.bind(nats.store);
-  const clock = vi.spyOn(performance, 'now');
-  let now = 1000;
-  function currentTime() {
-    return now;
-  }
-  clock.mockImplementation(currentTime);
+  const clock = manualStoreTime(nats.store, 1000);
   async function* slowFacts(subject: string, from?: number, deadline?: number) {
     expect(subject.startsWith('conversation-')).toBe(false);
     yield* readStream(subject, from, deadline);
     if (subject === test.profileSubject) {
-      now += 2500;
+      clock.advance(2500);
     }
   }
   const read = vi.spyOn(nats.store, 'readStream');
@@ -1056,7 +1045,7 @@ async function historyBeforeWriteAccess() {
     expect((await test.select()).status).toBe('selected');
   } finally {
     read.mockRestore();
-    clock.mockRestore();
+    clock.restore();
   }
 }
 it('finishes profile history before starting the two-second write access check',

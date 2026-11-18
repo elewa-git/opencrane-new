@@ -2,7 +2,7 @@ import { EgressRelayRegistry, type EgressCloseRecord } from '../src/egress-relay
 import { jetstreamManager } from '@nats-io/jetstream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from 'vitest';
-import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
+import { manualStoreTime, countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { databases } from '@opencrane/authz/testing';
 import { createLogger } from '@opencrane/observability';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -651,8 +651,7 @@ async function currentProofDeadline() {
   const position = await nats.store.head('budget-test');
   const deadline = performance.now() + 2000;
   function lateHead() {
-    const clock = vi.spyOn(performance, 'now').mockReturnValue(deadline);
-    onTestFinished(clock.mockRestore.bind(clock));
+    manualStoreTime(nats.store, deadline);
     return Promise.resolve(position);
   }
   const spy = vi.spyOn(nats.store, 'head').mockImplementation(lateHead);
@@ -754,8 +753,7 @@ async function admitsAfterRepeatedConflicts(change: string) {
     bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
   const budgetPosition = await nats.store.head('budget-test');
   const deadline = performance.now() + 2000;
-  const decisionClock = vi.spyOn(performance, 'now');
-  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  const decisionClock = manualStoreTime(nats.store);
   let checks = 0;
   async function checkAccess() {
     checks += 1;
@@ -772,8 +770,10 @@ async function admitsAfterRepeatedConflicts(change: string) {
       }
     }
     if (checks === 5 && change === 'revoked') throw new Error('Authority changed');
-    if (checks === 5 && change === 'expired') decisionClock.mockReturnValue(deadline);
-    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+    if (checks === 5 && change === 'expired') {
+      decisionClock.advance(deadline - decisionClock.now());
+    }
+    if (nats.store.clock.now() >= deadline) throw new Error('Authority snapshot expired');
   }
   checkAccess.deadline = deadline;
   const reads = vi.spyOn(nats.store, 'readStream');
@@ -802,7 +802,7 @@ async function admitsAfterRepeatedConflicts(change: string) {
   for (const [command] of writes.mock.calls) {
     if (command.checkAccess) expect(command.deadline).toBe(deadline);
   }
-  decisionClock.mockRestore();
+  decisionClock.restore();
   if (change === 'writer') {
     await expect(reserve()).rejects.toThrow('Budget writer unavailable');
   } else {
@@ -821,9 +821,12 @@ async function remainsUsableAfterPublishDeadline() {
     bodyDigest: '0'.repeat(64), reservationId, modelCall: reservation.call };
   const started = performance.now();
   const deadline = started + 2000;
-  const decisionClock = vi.spyOn(performance, 'now');
-  decisionClock.mockReturnValue(started);
-  onTestFinished(decisionClock.mockRestore.bind(decisionClock));
+  const decisionClock = manualStoreTime(nats.store, started);
+  function reachesPublishDeadline() {
+    const observed = decisionClock.now();
+    decisionClock.advance(deadline - observed);
+    return observed;
+  }
   let checks = 0;
   async function checkAccess() {
     checks += 1;
@@ -838,16 +841,17 @@ async function remainsUsableAfterPublishDeadline() {
     }
     if (checks === 6) {
       // Let the last access check pass just before the store sees the deadline.
-      decisionClock.mockReturnValue(deadline);
-      decisionClock.mockReturnValueOnce(deadline - 0.001);
+      decisionClock.advance(deadline - 0.001 - decisionClock.now());
+      const reader = vi.spyOn(nats.store.clock, 'now');
+      reader.mockImplementationOnce(reachesPublishDeadline);
     }
-    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+    if (nats.store.clock.now() >= deadline) throw new Error('Authority snapshot expired');
   }
   checkAccess.deadline = deadline;
   await expect(actor.admitDispatch(admission, checkAccess))
     .rejects.toThrow('Budget append unavailable');
-  expect(performance.now()).toBe(deadline);
-  decisionClock.mockRestore();
+  expect(decisionClock.now()).toBe(deadline);
+  decisionClock.restore();
   expect(checks).toBe(6);
   expect(actor.state.dispatches).toHaveLength(0);
   const rows = await history(nats.store, 'budget-test', 'test');

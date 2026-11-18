@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { jetstream, jetstreamManager } from '@nats-io/jetstream';
 import { EventStore } from '@opencrane/event-store';
-import { natsFixture, TimeoutError } from '@opencrane/event-store/testing';
+import { manualStoreTime, natsFixture, TimeoutError } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, history, priceTableId, totals } from '../src/index.ts';
 import { applyBudget } from '../src/state.ts';
 import { takeRefusedAdmission } from '../src/budget-writer.ts';
@@ -38,11 +38,11 @@ async function lostAdmission(delayed: boolean) {
   const publish = client.publish.bind(client);
   let pending: Parameters<typeof publish> | undefined;
   const deadline = performance.now() + 2000;
-  const clock = vi.spyOn(performance, 'now');
+  const clock = manualStoreTime(nats.store);
   async function loseReply(...args: Parameters<typeof publish>): Promise<never> {
     pending = args;
     if (!delayed) await publish(...args);
-    clock.mockReturnValue(deadline);
+    clock.advance(deadline - clock.now());
     throw new TimeoutError();
   }
   client.publish = loseReply;
@@ -50,7 +50,7 @@ async function lostAdmission(delayed: boolean) {
   checked.deadline = deadline;
   await expect(actor.admitDispatch(admission, checked)).rejects.toThrow('unavailable');
   expect(pending).toBeDefined();
-  clock.mockRestore();
+  clock.restore();
   client.publish = publish;
   await expect(actor.requireCurrent(performance.now() + 2000)).rejects.toThrow('unavailable');
   async function* failedRead(): AsyncGenerator<never> { yield await Promise.reject(new TimeoutError()); }
@@ -272,12 +272,12 @@ it('refuses expired queue waits before the earlier command finishes', queuedExpi
 async function lateAcknowledgement() {
   const publish = client.publish.bind(client);
   const deadline = performance.now() + 2000;
-  const clock = vi.spyOn(performance, 'now');
+  const clock = manualStoreTime(nats.store);
   let injected = false;
   async function lateReply(...args: Parameters<typeof publish>) {
     const result = await publish(...args);
     injected = true;
-    clock.mockReturnValue(deadline);
+    clock.advance(deadline - clock.now());
     return result;
   }
   function checked() { return Promise.resolve(); }
@@ -285,7 +285,7 @@ async function lateAcknowledgement() {
   client.publish = lateReply;
   await expect(actor.reserve(call, 10, checked)).rejects.toThrow('unavailable');
   expect(injected).toBe(true);
-  clock.mockRestore();
+  clock.restore();
   client.publish = publish;
   expect(totals(actor.state).reservedCents).toBe(10);
   await actor.reserve(call, 1);
