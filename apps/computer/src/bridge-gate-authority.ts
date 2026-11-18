@@ -1,4 +1,4 @@
-import { recordIdPattern } from '@opencrane/events';
+import { recordIdPattern } from '@opencrane/events/ids';
 import { createPublicKey, verify } from 'node:crypto';
 import { record } from './http.ts';
 

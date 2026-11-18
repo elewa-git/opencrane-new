@@ -1066,7 +1066,10 @@ can set another host address. The Pod image always uses `k3d-ocn-registry:5000`.
 
 `Turn.tools` is optional. Each entry has `key`, `serverId`, `connectionId`,
 optional `serverInfo` (`name`, `version`) and string `definitions`. Entries reject
-unknown fields. IDs match `^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`.
+unknown fields. IDs use `recordIdPattern` from `@opencrane/events/ids`, matching
+`^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`. The image includes that module
+alongside its other selected event modules. The isolated runtime test reads the
+Dockerfile copy list and checks upload IDs without the rest of the event library.
 The list allows 20 servers and 48 KiB of JSON encoded as UTF-8. Each server
 allows 1,000 definitions of at most 32,768 characters each. Server name and
 version allow 200 characters each. No entry carries `discoverResult`. The server fills

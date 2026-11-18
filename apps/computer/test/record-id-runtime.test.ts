@@ -33,7 +33,7 @@ async function prepareRuntime(directory: string) {
   await writeFile(join(directory, 'package.json'), '{"type":"module"}');
 }
 
-it('checks upload IDs using only event modules included in the computer image', async () => {
+async function checksPackagedRecordIds() {
   const directory = await mkdtemp(join(tmpdir(), 'computer-record-id-'));
   const code = `
     import assert from 'node:assert/strict';
@@ -51,4 +51,7 @@ it('checks upload IDs using only event modules included in the computer image', 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}
+
+it('checks upload IDs using only event modules included in the computer image',
+  checksPackagedRecordIds);

@@ -1,4 +1,4 @@
-import { recordIdPattern } from '@opencrane/events';
+import { recordIdPattern } from '@opencrane/events/ids';
 import type { approvalHolds } from './approval-holds.ts';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server } from 'node:http';

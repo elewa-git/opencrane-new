@@ -1,4 +1,4 @@
-import { recordIdPattern } from '@opencrane/events';
+import { recordIdPattern } from '@opencrane/events/ids';
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 

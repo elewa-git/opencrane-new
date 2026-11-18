@@ -22,7 +22,7 @@ flowchart LR
   computer -->|reports results| server
   computer -->|runs assistant work| desktop["Codex, browser and desktop<br/>working tools"]
   computer -->|sends checked calls| gateway["agentgateway<br/>AI gateway"]
-  computer -.-> events["libs/events<br/>session settings"]
+  computer -.-> events["libs/events<br/>session settings and ID checks"]
   computer -.-> models["libs/models<br/>private caller checks"]
 ```
 
@@ -35,6 +35,7 @@ flowchart LR
 - Label recognised commands in plain words and mask private command details.
 - Run the assistant, file tools and desktop as separate users with limited access.
 - Check short-lived passes and private callers before AI or reviewed tool calls.
+- Reuse record ID checks when accepting turns, tool references and uploaded files.
 - Keep waiting tool calls for checked retries without inventing a new request.
 - Isolate private turns in temporary processes and clear private replies when work ends.
 - Check live process identities and protect private processes from dumps.

@@ -1,4 +1,4 @@
-import { recordIdPattern } from '@opencrane/events';
+import { recordIdPattern } from '@opencrane/events/ids';
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 /** These checks keep untrusted identifiers and names inside their intended upload paths. */
