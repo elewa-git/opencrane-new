@@ -122,11 +122,10 @@ function resolutionData(event: EventEnvelope): Record<string, unknown> {
     throw new Error('Invalid resolution audit event');
   }
   const data = parsed.data;
-  const receiptId = recordIdSchema;
   if (event.source !== 'opencrane-server' || event.subject !== `effect-${data.permitId}` ||
       data.reservationId !== data.permitId || event.principal?.kind !== 'human' ||
-      event.principal.id !== data.resolvedBy || !receiptId.safeParse(data.resolvedBy).success ||
-      !receiptId.safeParse(data.permitId).success) {
+      event.principal.id !== data.resolvedBy || !recordIdSchema.safeParse(data.resolvedBy).success ||
+      !recordIdSchema.safeParse(data.permitId).success) {
     throw new Error('Invalid resolution audit event');
   }
   return data;
