@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { randomBytes } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { record } from './http.ts';
 import { parseTools, type Turn } from './turn-frame.ts';
@@ -176,9 +177,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
   async function prepare(input: Turn, previousThread: string | undefined,
     startParams: Record<string, unknown>) {
     const tools = JSON.stringify(input.tools ?? []);
-    const hash = createHash('sha256');
-    hash.update(tools);
-    const fingerprint = hash.digest('hex');
+    const fingerprint = sha256Hex(tools);
     const previousLoad = previousThread && loaded.get(previousThread);
     if (previousLoad && previousLoad.fingerprint === fingerprint) {
       try {

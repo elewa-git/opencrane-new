@@ -1,15 +1,13 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { nativeRefusal } from './native-requests.ts';
 import { isToolCallText } from '@opencrane/events/tool-call';
-import { createHash } from 'node:crypto';
 import { record } from './http.ts';
 import { commandActivityLabel } from './command-label.ts';
 import type { BridgeReport } from './report-journal.ts';
 import type { Turn } from './turn-frame.ts';
 
 function commandReport(command: string, exitCode: number, preview?: string) {
-  const commandHash = createHash('sha256');
-  commandHash.update(command);
-  const commandDigest = commandHash.digest('hex');
+  const commandDigest = sha256Hex(command);
   const activityLabel = commandActivityLabel(command);
   return { type: 'agent.command_ran', data: { commandDigest, exitCode, activityLabel,
     ...(preview ? { preview } : {}) } };

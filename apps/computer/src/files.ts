@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { connect } from 'node:net';
 import { createInterface } from 'node:readline';
 import { isSafeFileName, isSafeId, MAX_UPLOAD_BYTES } from './file-rules.ts';
@@ -66,9 +66,7 @@ export function filePackets(
     parts = [];
     busy = true;
     try {
-      const hash = createHash('sha256');
-      hash.update(bytes);
-      const digest = hash.digest('hex');
+      const digest = sha256Hex(bytes);
       if (digest !== currentFile.sha256) {
         throw new Error('File digest mismatch');
       }

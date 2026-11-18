@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { record } from './http.ts';
 
 export type Binding = Readonly<{
@@ -191,9 +191,7 @@ export function workerRequest(frame: Buffer, lookup: Lookup,
     checkRegistration(saved, binding, request, now);
     const prepared = operation(request.argv, input);
     if (prepared.host !== saved.host || prepared.port !== saved.port) throw new Error();
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify([request.argv, request.cwd, input]));
-    if (hash.digest('hex') !== saved.operationDigest) throw new Error();
+    if (sha256HexOfJson([request.argv, request.cwd, input]) !== saved.operationDigest) throw new Error();
     // Copy only reviewed identity fields; never copy credentials from trusted state either.
     const identity = {
       ...binding,
