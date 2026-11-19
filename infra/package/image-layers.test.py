@@ -33,6 +33,16 @@ def read_checked_blob(archive, digest):
     return json.loads(contents)
 
 
+class SourceReviewTests(unittest.TestCase):
+    def test_reviewed_helper_hashes_match_repository_source(self):
+        review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
+        for path, expected in review["files"].items():
+            if path.startswith("app/"):
+                with self.subTest(source=path):
+                    actual = hashlib.sha256(Path(path[4:]).read_bytes()).hexdigest()
+                    self.assertEqual(actual, expected)
+
+
 class ImageLayerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
