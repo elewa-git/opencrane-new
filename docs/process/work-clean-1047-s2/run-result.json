@@ -1,0 +1,36 @@
+{
+  "slot": "1",
+  "testedHead": "4b88608ec5971ea5d702dd70b57da156fb15dff7",
+  "startedAt": "2026-11-19T05:52:52.340766+00:00",
+  "upExitCode": 0,
+  "statusExitCode": 0,
+  "downStartedAt": "2026-11-19T06:06:50.952618+00:00",
+  "screenshotsCopiedAt": "2026-11-19T06:06:29.391Z",
+  "screenshotsCopied": 37,
+  "copiedBeforeTeardown": true,
+  "downExitCode": 0,
+  "slotsAfterTeardown": {
+    "1": {
+      "exitCode": 0,
+      "free": true
+    },
+    "2": {
+      "exitCode": 0,
+      "free": true
+    }
+  },
+  "finishedAt": "2026-11-19T06:07:41.009905+00:00",
+  "journey": "PASS",
+  "origin": "http://127.0.0.1:25106",
+  "viewports": [
+    {
+      "width": 1280,
+      "height": 900
+    },
+    {
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "visualInspection": "PASS: representative chat, upload, preview, viewer, budget and history captures"
+}

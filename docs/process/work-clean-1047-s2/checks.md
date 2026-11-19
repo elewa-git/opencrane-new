@@ -65,6 +65,7 @@ event type, stored field or business rule.
 | Markdown | PASS |
 | README structure | PASS |
 | Whole-stream reads and lint debt | PASS |
+| Fresh CORE journey | [PASS](journey.md) |
 
 Every lint, typecheck and test command runs under `nice -n 10`. The full root
 ESLint command and root test suite are NOT RUN under the supplied local scope.
@@ -82,6 +83,12 @@ Dockerfile adds one copy instruction. Tests, documents and receipts are excluded
 5. Added the narrow import rule and proved both copy-prevention rules refuse a probe.
 6. Ran source checks and each touched package's tests with niceness 10. Initial
    batches used two workers; complete resumed batches use three workers.
+7. Reproduced two clock-fixture defects, then reused scoped clocks and whole
+   milliseconds without changing production deadlines or timer assertions.
+8. Retained loaded-run failures and qualified both affected complete files with
+   one worker after the quiet-window check. Removed the temporary migration scripts.
+9. Passed one fresh CORE journey at both widths, copied the evidence before
+   teardown, released the secondary slot and restored generated shared captures.
 
 The first broad test attempt was interrupted after a focused failure established
 that the pinned gateway binary was missing; the [focused failure](missing-test-tool.log)

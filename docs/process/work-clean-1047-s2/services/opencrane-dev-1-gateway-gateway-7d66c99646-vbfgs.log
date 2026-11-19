@@ -1,0 +1,100 @@
+storage:
+  mode: file
+sensitiveHeaders: []
+dns:
+  resolverCfg:
+    domain: null
+    search:
+    - opencrane-dev-1-gateway.svc.cluster.local
+    - svc.cluster.local
+    - cluster.local
+    - tail00285e.ts.net
+    name_servers:
+    - ip: 10.43.0.10
+      trust_negative_responses: true
+      connections:
+      - port: 53
+        protocol:
+          type: udp
+        bind_addr: null
+      - port: 53
+        protocol:
+          type: tcp
+        bind_addr: null
+  resolverOpts:
+    ndots: 5
+    timeout: 5
+    attempts: 2
+    edns0: false
+    ip_strategy: Ipv4thenIpv6
+    cache_size: 8192
+    use_hosts_file: Auto
+    positive_min_ttl: null
+    negative_min_ttl: null
+    positive_max_ttl: null
+    negative_max_ttl: null
+    num_concurrent_reqs: 2
+    max_active_requests: 32
+    preserve_intermediates: true
+    try_tcp_on_error: false
+    server_ordering_strategy: QueryStatistics
+    recursion_desired: true
+    avoid_local_udp_ports: []
+    os_port_selection: false
+    case_randomization: false
+    trust_anchor: null
+    allow_answers: []
+    deny_answers: []
+    edns_payload_len: 1232
+proxyMetadata:
+  instanceIp: null
+  podName: ''
+  podNamespace: ''
+  nodeName: ''
+  role: '~'
+  nodeId: agentgateway~1.1.1.1~.~.svc.cluster.local
+threadingMode: multithreaded
+sessionEncoder: base64
+oidcCookieEncoder: null
+backend:
+  keepalives:
+    enabled: true
+    time: 3m0s
+    interval: 3m0s
+    retries: 9
+  connectTimeout: 11s
+  poolIdleTimeout: 1m30s
+  poolMaxSize: null
+mcp:
+  sessionTtl: 30m0s
+dynamicCaCertCache:
+  ttl: 5m0s
+  capacity: 256
+modelCatalog:
+  sources: []
+
+2026-11-19T05:53:42.164442Z	info	management::hyper_helpers	listener established	address=[::]:15021 component="readiness"
+2026-11-19T05:53:42.166193Z	info	state_manager	loaded config from File("/config/config.yaml")
+2026-11-19T05:53:42.167265Z	info	state_manager	Watching config file: /config/config.yaml
+2026-11-19T05:53:42.169658Z	info	agent_core::readiness	Task 'state manager' complete (14.158019ms), still awaiting 1 tasks
+2026-11-19T05:53:42.169836Z	info	app	serving UI at http://off/ui
+2026-11-19T05:53:42.169862Z	info	agent_core::readiness	Task 'agentgateway' complete (14.378818ms), marking server ready
+2026-11-19T05:53:42.169868Z	info	management::hyper_helpers	listener disabled	component="admin"
+2026-11-19T05:53:42.169876Z	info	management::hyper_helpers	listener disabled	component="stats"
+2026-11-19T05:53:42.170895Z	info	proxy::gateway	started bind	bind="bind/3000"
+2026-11-19T05:57:04.984011Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:57834 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:57:14.228660Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:54440 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:57:41.43244Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:35590 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:58:13.638784Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:25878 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:58:33.905997Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:55162 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:58:44.926253Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:33522 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:58:57.580336Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:39225 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:59:06.343548Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:39028 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:59:30.118354Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:56931 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T05:59:57.378676Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:23014 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T06:00:30.929837Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:43899 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T06:00:47.585339Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:24772 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T06:00:57.175381Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:50752 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T06:01:24.575599Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:46462 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T06:01:28.96891Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.207:46462 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]
+2026-11-19T06:01:51.611083Z	info	request gateway=default/default listener=default route=default/route0 endpoint=172.18.0.5:25107 src.addr=10.42.0.208:63628 http.method=POST http.host=10.43.102.175 http.path=[REDACTED]

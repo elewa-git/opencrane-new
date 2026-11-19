@@ -1,0 +1,695 @@
+❯ Building...
+✔ Building...
+Initial chunk files | Names            |  Raw size
+styles.css          | styles           |  16.46 kB |
+main.js             | main             | 190 bytes |
+
+                    | Initial total    |  16.65 kB
+
+Lazy chunk files    | Names            |  Raw size
+mermaid-library.js  | mermaid-library  |   7.89 MB |
+chunk-SHHYVVYJ.js   | startup          |   3.69 MB |
+chunk-HAV2PQAU.js   | mermaid-renderer |   4.10 kB |
+chunk-GOMI4DH3.js   | -                |   1.37 kB |
+chunk-C5YQYH2K.js   | viewer           | 202 bytes |
+
+Application bundle generation complete. [43.320 seconds] - 2026-11-19T05:55:29.371Z
+
+▲ [WARNING] File '../../libs/protocol/src/index.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    src<container-app>/integrations/integration-detail.ts:9:62:
+      9 │ ...ionsResponseSchema, toolPolicySchema, } from '@opencrane/protocol';
+        ╵                                                 ~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/assistant-grant.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/data.ts:1:37:
+      1 │ import { assistantGrantSchema } from './assistant-grant.ts';
+        ╵                                      ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/tool-dispatch.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/data.ts:12:31:
+      12 │ import { toolCallFields } from './tool-dispatch.ts';
+         ╵                                ~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/routine-approval.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/data.ts:16:45:
+      16 │ import { routineApprovalBindingSchema } from './routine-approval.ts';
+         ╵                                              ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/turn-stop.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/data.ts:325:49:
+      325 │ export { agentTurnStopRequestedDataSchema } from './turn-stop.ts';
+          ╵                                                  ~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/definition.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/egress.ts:5:22:
+      5 │ import { event } from './definition.ts';
+        ╵                       ~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/envelope.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:11:7:
+      11 │ } from './envelope.ts';
+         ╵        ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/examples.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:22:7:
+      22 │ } from './examples.ts';
+         ╵        ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/registry.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:29:7:
+      29 │ } from './registry.ts';
+         ╵        ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/parse.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:31:62:
+      31 │ ...parseEventByType, type ParseEventByTypeResult } from './parse.ts';
+         ╵                                                         ~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/memory.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:32:82:
+      32 │ ...DataSchema, memoryCleanupRecordedEventSchema } from './memory.ts';
+         ╵                                                        ~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/handlers.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:34:55:
+      34 │ ...t { handlerSubscriptions, type HandlerName } from './handlers.ts';
+         ╵                                                      ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/data.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:36:32:
+      36 │   grantRevokedDataSchema } from './data.ts';
+         ╵                                 ~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/mcp-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:43:48:
+      43 │ export { mcpOAuthConfigurationDataSchema } from './mcp-events.ts';
+         ╵                                                 ~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/file-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:44:88:
+      44 │ ...ctedDataSchema, fileDeliveredDataSchema } from './file-events.ts';
+         ╵                                                   ~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/identity-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:47:94:
+      47 │ ...aSchema, memberCommandRefusedSchema } from './identity-events.ts';
+         ╵                                               ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/ownership-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:50:62:
+      50 │ ...Schema, ownershipSteppedDownSchema } from './ownership-events.ts';
+         ╵                                              ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/provider-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:54:56:
+      54 │ ...patchedSchema, providerResultSchema } from './provider-events.ts';
+         ╵                                               ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/command-activity.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:61:70:
+      61 │ ...Schema, commandActivityLabelSchema } from './command-activity.ts';
+         ╵                                              ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/command-activity-label.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:62:42:
+      62 │ ... { type CommandActivityLabel } from './command-activity-label.ts';
+         ╵                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/conversation.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:70:82:
+      70 │ ...Schema, groupConversationCommandSchema } from './conversation.ts';
+         ╵                                                  ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/turn-binding.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:72:77:
+      72 │ ...ema, optionalProviderTurnBindingSchema } from './turn-binding.ts';
+         ╵                                                  ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/delegation.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:78:75:
+      78 │ ...ataSchema, delegationCompletedDataSchema } from './delegation.ts';
+         ╵                                                    ~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/egress.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:81:54:
+      81 │   egressDestinationDataSchema, type EgressRule } from './egress.ts';
+         ╵                                                       ~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/startup-credentials.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:83:40:
+      83 │   type StartupCredentialContract } from './startup-credentials.ts';
+         ╵                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/mcp-instance.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:87:35:
+      87 │   mcpInstanceObservedSchema } from './mcp-instance.ts';
+         ╵                                    ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/takeover.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:95:33:
+      95 │   takeoverEndReasonSchema } from './takeover.ts';
+         ╵                                  ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/survey.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:101:7:
+      101 │   from './survey.ts';
+          ╵        ~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/routines.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:104:7:
+      104 │   from './routines.ts';
+          ╵        ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/routine-fold.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:105:47:
+      105 │ export { foldRoutine, type RoutineState } from './routine-fold.ts';
+          ╵                                                ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/connections.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:117:50:
+      117 │ ...nnectionOAuthExchangeClaimedDataSchema } from './connections.ts';
+          ╵                                                  ~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/memory-context.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:119:34:
+      119 │   type MemoryContextRecord } from './memory-context.ts';
+          ╵                                   ~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/gateway-configuration.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:123:43:
+      123 │ ...nfigurationObservationSchema } from './gateway-configuration.ts';
+          ╵                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/budget-root.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:124:78:
+      124 │ ...ataSchema, budgetRootStoppedDataSchema } from './budget-root.ts';
+          ╵                                                  ~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/hosted-image.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:126:71:
+      126 │ ...dSchema, hostedImageScanClaimedSchema } from './hosted-image.ts';
+          ╵                                                 ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/child-request.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:129:7:
+      129 │   from './child-request.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/child-publication.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:132:47:
+      132 │ ...{ childResultPublishedDataSchema } from './child-publication.ts';
+          ╵                                            ~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/egress-observation.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:135:7:
+      135 │   from './egress-observation.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/approval-cancellation.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:140:7:
+      140 │   from './approval-cancellation.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/native-request.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:143:52:
+      143 │ ...agentNativeRequestRefusedDataSchema } from './native-request.ts';
+          ╵                                               ~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/child-activation.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:148:68:
+      148 │ ...Schema, childActivatedEventSchema } from './child-activation.ts';
+          ╵                                             ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/credential-release.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:150:44:
+      150 │ ...t { toolCredentialReleaseSchema } from './credential-release.ts';
+          ╵                                           ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/session-configuration.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:156:40:
+      156 │ ...pe SessionConfigurationInput } from './session-configuration.ts';
+          ╵                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/session-assistant.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:157:62:
+      157 │ ...antSchema, type SessionAssistant } from './session-assistant.ts';
+          ╵                                            ~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/ids.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/index.ts:159:48:
+      159 │ export { recordIdPattern, recordIdSchema } from './ids.ts';
+          ╵                                                 ~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/tool-call.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/native-request.ts:3:31:
+      3 │ import { isToolCallText } from './tool-call.ts';
+        ╵                                ~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/private-reports.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/registry.ts:12:36:
+      12 │ import { privateReportEvents } from './private-reports.ts';
+         ╵                                     ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/routine-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/registry.ts:14:53:
+      14 │ ...routineEvents, modernRoutineExamples } from './routine-events.ts';
+         ╵                                                ~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/audit-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/registry.ts:31:28:
+      31 │ import { auditEvents } from './audit-events.ts';
+         ╵                             ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/decision-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/registry.ts:34:31:
+      34 │ import { decisionEvents } from './decision-events.ts';
+         ╵                                ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/budget-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/registry.ts:36:29:
+      36 │ import { budgetEvents } from './budget-events.ts';
+         ╵                              ~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/bridge-events.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/events/src/registry.ts:49:29:
+      49 │ import { bridgeEvents } from './bridge-events.ts';
+         ╵                              ~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/messages.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:16:7:
+      16 │ } from './messages.ts';
+         ╵        ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/realtime.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:17:96:
+      17 │ ...ealtimeMessageSchema, type RealtimeMessage } from './realtime.ts';
+         ╵                                                      ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/integrations.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:27:7:
+      27 │ } from './integrations.ts';
+         ╵        ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/computers.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:28:101:
+      28 │ ... type ComputerRow, type ComputersResponse } from './computers.ts';
+         ╵                                                     ~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/chat.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:56:7:
+      56 │ } from './chat.ts';
+         ╵        ~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/ownership.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:69:7:
+      69 │ } from './ownership.ts';
+         ╵        ~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/budgets.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:71:62:
+      71 │ ...dgetStopStatusSchema, type BudgetStopStatus } from './budgets.ts';
+         ╵                                                       ~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/groups.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:76:23:
+      76 │   type GroupRow } from './groups.ts';
+         ╵                        ~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/effects.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:83:7:
+      83 │ } from './effects.ts';
+         ╵        ~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/audit.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:86:83:
+      86 │ ...ord, type AuditFilter, type AuditDetailFilter } from './audit.ts';
+         ╵                                                         ~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/approvals.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:89:77:
+      89 │ ...a, approvalCardsSchema, type ApprovalCard } from './approvals.ts';
+         ╵                                                     ~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/original-call.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:90:66:
+      90 │ ...StatusSchema, type OriginalCallStatus } from './original-call.ts';
+         ╵                                                 ~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/members.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:92:51:
+      92 │   memberDetailSchema, memberDirectorySchema } from './members.ts';
+         ╵                                                    ~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/model-access.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:108:7:
+      108 │ } from './model-access.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/member-inventory.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:109:80:
+      109 │ ...rtureSchema, type MemberAccessRow } from './member-inventory.ts';
+          ╵                                             ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/child-requests.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:116:7:
+      116 │   from './child-requests.ts';
+          ╵        ~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/spending.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:118:61:
+      118 │ ...ingCallsQuery, type SpendingCallsResponse } from './spending.ts';
+          ╵                                                     ~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/spending-effects.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:120:65:
+      120 │ ...ery, type SpendingEffectsResponse } from './spending-effects.ts';
+          ╵                                             ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/current-effects.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:122:63:
+      122 │ ...Query, type CurrentEffectsResponse } from './current-effects.ts';
+          ╵                                              ~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/personal-connections.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:126:103:
+      126 │ ... type PersonalProfileMetadata } from './personal-connections.ts';
+          ╵                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/protocol/src/session-defaults.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:128:32:
+      128 │ export { sessionDefaults } from './session-defaults.ts';
+          ╵                                 ~~~~~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] File '../../libs/events/src/index.ts' not found in TypeScript compilation. [plugin angular-compiler]
+
+    ../../libs/protocol/src/index.ts:130:48:
+      130 │ export { recordIdPattern, recordIdSchema } from '@opencrane/events';
+          ╵                                                 ~~~~~~~~~~~~~~~~~~~
+
+  The file will be bundled and included in the output but will not be type-checked at build time. To remove this message you can add the file to the TypeScript program via the 'files' or 'include' property.
+
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+Watch mode enabled. Watching for file changes...
+NOTE: Raw file sizes do not reflect development server per-request transformations.
+  ➜  Local:   [REDACTED]

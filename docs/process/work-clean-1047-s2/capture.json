@@ -1,0 +1,224 @@
+{
+  "testedHead": "4b88608ec5971ea5d702dd70b57da156fb15dff7",
+  "copiedAt": "2026-11-19T06:06:29.391Z",
+  "screenshots": [
+    {
+      "file": "screenshots/slot/preview-1280.png",
+      "sha256": "895447243efd677df778f804b81b34fdd4a4c0d43a92031ec3b299d327260ad1",
+      "bytes": 112922
+    },
+    {
+      "file": "screenshots/slot/preview-390.png",
+      "sha256": "230bc9bcfd13f06a57158867d6fe589da0298465240627ad4a4f1e6540173fad",
+      "bytes": 18635
+    },
+    {
+      "file": "screenshots/slot/upload-1280.png",
+      "sha256": "e21283bfc7e2107aadaf6050ab569de42c8c0e227fa4ebc3ac774c43f90b2020",
+      "bytes": 156676
+    },
+    {
+      "file": "screenshots/slot/upload-390.png",
+      "sha256": "02d9968d5c8ed26e9665be4a37a48a424b29fbb82a1ee85a5df14d8335c1cd1d",
+      "bytes": 55855
+    },
+    {
+      "file": "screenshots/slot/upload-preparing-1280.png",
+      "sha256": "b9853704eb7840e066b2443faa7fe557dce4547ac4401ff65d3401624711c217",
+      "bytes": 143274
+    },
+    {
+      "file": "screenshots/slot/upload-preparing-390.png",
+      "sha256": "a8157a633e5d812bbfed13ae5575dbe35c7d37dc3f94c04ca6e37b537fa1336e",
+      "bytes": 56002
+    },
+    {
+      "file": "screenshots/slot/upload-ready-1280.png",
+      "sha256": "33a8d0fee59f405fdadd2c9728232d63fde8ea5e634d5c804ad2138469b5de54",
+      "bytes": 141627
+    },
+    {
+      "file": "screenshots/slot/upload-ready-390.png",
+      "sha256": "b3469e7e2b73f10e5229312dbbdb70ca9b872b41d2b62443e176df1c12f75eb9",
+      "bytes": 54430
+    },
+    {
+      "file": "screenshots/slot/workspace-1280.png",
+      "sha256": "64c89eb27da25a993778fdedaf598f14b98fe5945aa8e0e9d9bd870ebe1edbf3",
+      "bytes": 152901
+    },
+    {
+      "file": "screenshots/slot/workspace-390.png",
+      "sha256": "b58d2a84d4fe1dbf4786a51a9f7341bab9f7b0583eff1bac73136cf92d0eb42e",
+      "bytes": 66148
+    },
+    {
+      "file": "screenshots/live-view/conversation-entry-1280.png",
+      "sha256": "427c52ea713770d5b58e43ab52202b24b13a2427032e6ee627e92042dc4ed763",
+      "bytes": 178043
+    },
+    {
+      "file": "screenshots/live-view/conversation-entry-390.png",
+      "sha256": "4d5ae849bc80094731ff000bb8cf8ba366e2c428a46cd538e3f4d81cc3b4ac8c",
+      "bytes": 29856
+    },
+    {
+      "file": "screenshots/live-view/conversation-revoked-1280.png",
+      "sha256": "ff7fa8fce02dcf79e815b68a61b2c3449908a0247118861f9092aa32534ceb3a",
+      "bytes": 29641
+    },
+    {
+      "file": "screenshots/live-view/conversation-revoked-390.png",
+      "sha256": "390d6b858c586d35275bea9c1f183420ca24a23fe7dbcd2db1f004e065986d3e",
+      "bytes": 14583
+    },
+    {
+      "file": "screenshots/live-view/conversation-viewer-1280.png",
+      "sha256": "6f32a465707738d9ebc82c15258e3a41ab2641ef39b6f0a79113f40c612ea7b7",
+      "bytes": 45860
+    },
+    {
+      "file": "screenshots/live-view/conversation-viewer-390.png",
+      "sha256": "9227447f448138ba4c74b5fff74d9d1e1ad33f0aaca00dc7f0c654c8133ab531",
+      "bytes": 18446
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-assistant-1280.png",
+      "sha256": "d79a5030521c9e0e829d87870ea57f2303b95afe565cf1f4d211e9fcb93ff24e",
+      "bytes": 281886
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-assistant-390.png",
+      "sha256": "54342060d9bafe269dc28607de4cd4ab5b7a718c241528704cd61793f1a9dbad",
+      "bytes": 254469
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-assistant-refusal-1280.png",
+      "sha256": "bb98dc9c8753009c1437b594447c797dbe74f020287c61f6e2e776db1939a3c0",
+      "bytes": 185947
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-assistant-refusal-390.png",
+      "sha256": "2de67a400f4341ecca6fcc2a236d53206ef9b95cc8984d7935a073da552be171",
+      "bytes": 80164
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-paying_group-1280.png",
+      "sha256": "2155f183c5ea6744b7810b6923e7a308063ba541c1af7233658d44b524c24b20",
+      "bytes": 282770
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-paying_group-390.png",
+      "sha256": "b5246822458c2044f4f685db76ffbca6558e037866dec20ffec67895c65511a6",
+      "bytes": 255160
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-paying_group-refusal-1280.png",
+      "sha256": "4ecde4b3aed83b151cf3ff3499e0063ab5bfcf0869935c7b7554098d09a16931",
+      "bytes": 177734
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-paying_group-refusal-390.png",
+      "sha256": "06b8fe5afda90103cdaf9d4e5b5fe6376f78d8ec78f0dad92932c95cc4835ae1",
+      "bytes": 79805
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-repeat-headroom-390.png",
+      "sha256": "5de096b56d1715f67e26711cfd48f1278c1064b51da15e05a04cb3ead1cf4756",
+      "bytes": 266023
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-stub-chat-1280.png",
+      "sha256": "64c89eb27da25a993778fdedaf598f14b98fe5945aa8e0e9d9bd870ebe1edbf3",
+      "bytes": 152901
+    },
+    {
+      "file": "screenshots/p3-13-live/fresh-stub-chat-390.png",
+      "sha256": "b58d2a84d4fe1dbf4786a51a9f7341bab9f7b0583eff1bac73136cf92d0eb42e",
+      "bytes": 66148
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-action-1280.png",
+      "sha256": "5fe0e835017f6e0f4f4bf3b3673f0b4320429e03d8b0eb63f2cae28f3e7da1cd",
+      "bytes": 68716
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-action-390.png",
+      "sha256": "62c2cb5530d0d0e3210265d5e409d3c28d3521b20dddae8934dde8d512818622",
+      "bytes": 65278
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-category-1280.png",
+      "sha256": "b7263299cfe4a12b3a3af15ad0d4112a154d9209fea96ab6eb7ed83d00af5219",
+      "bytes": 250903
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-category-390.png",
+      "sha256": "9a80be2f9849a9459cfdf416b73ce7536eee1df214847bfecca90a6cb2844702",
+      "bytes": 208676
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-change-1280.png",
+      "sha256": "bac7463c4a8d5b0760b8c22a73f90e9b06dab3e9b561da909c70bc65a21d148d",
+      "bytes": 250889
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-change-390.png",
+      "sha256": "9445c1fe1c0fa98186f78659c70ee530010e57127feafabe589f6073ca58750c",
+      "bytes": 208696
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-refused-1280.png",
+      "sha256": "16411de1cb258a9e3f8e46dacb04dbdd7fdc23dc95ae99fedb7f404877fb8b0d",
+      "bytes": 116207
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-refused-390.png",
+      "sha256": "2aeebfd644b04e56bb6bbafc0a8e718b55690d868960ddcaa6efc0a3bb9c3294",
+      "bytes": 70811
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-stub-chat-1280.png",
+      "sha256": "64c89eb27da25a993778fdedaf598f14b98fe5945aa8e0e9d9bd870ebe1edbf3",
+      "bytes": 152901
+    },
+    {
+      "file": "screenshots/p3-19-live/fresh-stub-chat-390.png",
+      "sha256": "b58d2a84d4fe1dbf4786a51a9f7341bab9f7b0583eff1bac73136cf92d0eb42e",
+      "bytes": 66148
+    }
+  ],
+  "serviceLogs": [
+    "up.log",
+    "status.log",
+    "services/audit.log",
+    "services/budgets.log",
+    "services/computers.log",
+    "services/connection-custody.log",
+    "services/conversations.log",
+    "services/dispatcher.log",
+    "services/files.log",
+    "services/mcp-catalogue.log",
+    "services/members.log",
+    "services/memory.log",
+    "services/minio-tokens.log",
+    "services/replay-mcp-catalogue.log",
+    "services/replay-members.log",
+    "services/routines.log",
+    "services/server.log",
+    "services/web.log",
+    "services/docker-opencrane-dev-1-models-1.log",
+    "services/docker-opencrane-dev-1-scanner-1.log",
+    "services/docker-opencrane-dev-1-minio-1.log",
+    "services/docker-opencrane-dev-1-clamav-1.log",
+    "services/docker-opencrane-dev-1-openfga-1.log",
+    "services/docker-opencrane-dev-1-openfga-migrate-1.log",
+    "services/docker-opencrane-dev-1-postgres-1.log",
+    "services/docker-opencrane-dev-1-nats-1.log",
+    "services/opencrane-dev-1-computer-293ad9e1dca7393714fd36f884ee8ee5.log",
+    "services/opencrane-dev-1-computer-530750581c929c9e05a1a2bcff59adce.log",
+    "services/opencrane-dev-1-computer-8758be48bf6edde9f441c77886319c13.log",
+    "services/opencrane-dev-1-computer-ccf18945713e0068514ea91eb6009712.log",
+    "services/opencrane-dev-1-gateway-gateway-7d66c99646-vbfgs.log"
+  ]
+}
