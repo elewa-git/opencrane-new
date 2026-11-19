@@ -22,7 +22,7 @@ export async function rebuildAuditProjection(db: Db, source: EventSource, logger
       };
       await apply(1, checkpoint);
       const rebuilt = (await tx.query('SELECT * FROM audit_entries ORDER BY silo, event_id')).rows;
-      // eslint-disable-next-line no-restricted-syntax -- Preserve exact audit replay verification.
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact audit replay verification.
       const changed = JSON.stringify(before) !== JSON.stringify(rebuilt);
       if (verify && changed) throw new Error('Rebuilt audit differs from the live projection');
       await apply(checkpoint + 1, head);

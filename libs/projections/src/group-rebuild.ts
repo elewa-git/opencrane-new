@@ -68,7 +68,7 @@ export async function rebuildGroupProjection(
       await runner.run(replayGroups, { toSequence: checkpoint });
       const liveState = await state(locked, '');
       const replayState = await state(locked, '_replay');
-      // eslint-disable-next-line no-restricted-syntax -- Preserve exact group replay verification.
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact group replay verification.
       const unchanged = JSON.stringify(liveState) === JSON.stringify(replayState);
       if (verify && !unchanged) throw new Error('Rebuilt groups differ from the live projection');
       const head = await source.head();

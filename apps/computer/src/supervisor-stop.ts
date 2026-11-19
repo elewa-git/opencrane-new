@@ -126,7 +126,7 @@ export function supervisorStop() {
   function sameRequest(input: StopRequest, saved: Gate) {
     const previous = { generation: saved.generation, podUid: saved.podUid,
       takeoverId: saved.takeoverId, affectedTurnIds: saved.affectedTurnIds };
-    // eslint-disable-next-line no-restricted-syntax -- Preserve exact stop retry conflict detection.
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact stop retries.
     return JSON.stringify(input) === JSON.stringify(previous);
   }
 

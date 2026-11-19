@@ -202,7 +202,7 @@ async function recordInvalidation(options: Options, request: Request, access = f
     request.conversationId, request.turnId);
   if (current.turnEnded !== chat.turnEnded ||
       current.conversationClosed !== chat.conversationClosed ||
-      // eslint-disable-next-line no-restricted-syntax -- Preserve exact memory input conflict detection.
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact memory input conflicts.
       JSON.stringify(current.memoryContext) !== JSON.stringify(state) ||
       !sameJson(Array.from(current.memoryContext?.events ?? []), Array.from(state.events))) {
     return { status: 'reload_required' };

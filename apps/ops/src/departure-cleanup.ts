@@ -36,7 +36,7 @@ async function savedDeparture(store: EventStore, trigger: EventEnvelope, deadlin
   let found = false;
   for (const row of rows) {
     if (row.event.id === trigger.id) {
-      // eslint-disable-next-line no-restricted-syntax -- Preserve exact saved departure proof before cleanup.
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact saved departure proof before cleanup.
       found = JSON.stringify(row.event.data) === JSON.stringify(data);
     } else if (found && ['member.joined', 'member.removed', 'silo.owner_bootstrapped']
       .includes(row.event.type)) {

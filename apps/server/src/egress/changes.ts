@@ -52,7 +52,7 @@ function receipt(row: StoredEvent) {
 }
 function checkOriginal(row: StoredEvent, type: string, memberId: string, data: unknown) {
   if (row.event.type !== type || row.event.principal?.kind !== 'human' ||
-      // eslint-disable-next-line no-restricted-syntax -- Preserve exact egress command conflict detection.
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact egress command conflicts.
       row.event.principal.id !== memberId || JSON.stringify(row.event.data) !== JSON.stringify(data)) {
     throw new ProviderConflict('Conflict');
   }

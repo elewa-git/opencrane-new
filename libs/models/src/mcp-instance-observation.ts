@@ -53,7 +53,7 @@ function checkSavedObservation(saved: StoredEvent, attempted: EventEnvelope) {
   }
   const savedData = mcpInstanceObservedSchema.parse(event.data);
   const attemptedData = mcpInstanceObservedSchema.parse(attempted.data);
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact instance observation retry conflict detection.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact instance observation retries.
   if (JSON.stringify(savedData) !== JSON.stringify(attemptedData)) {
     throw new McpInstanceRefused('conflict', 'Observation payload mismatch');
   }

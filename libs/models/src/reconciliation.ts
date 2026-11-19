@@ -174,7 +174,7 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
   const { commandId, expectedSequence, ...fields } = command;
   const payload = effectResolvedDataSchema.parse({ ...fields, permitId, reservationId: current.reservationId, resolvedBy: memberId });
   const prior = rows.find(r => r.event.commandId === commandId);
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact money effect resolution conflict detection.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact money effect resolution conflicts.
   if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' } as const;
   if (current.sequence !== expectedSequence || current.resolution || current.state !== 'outcome_unknown') return { status: 'conflict' } as const;
   if (!sufficient(payload) || current.observations.some(o => o.costCents !== payload.settledCents)) return { status: 'held' } as const;

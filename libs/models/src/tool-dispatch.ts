@@ -103,7 +103,7 @@ async function recordObservation(actor: BudgetActor, observation: Observation,
   }
   const savedRows = await history(actor.store, subject, actor.silo, deadline);
   const saved = savedRows.find(alreadyRecorded);
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact tool dispatch receipt retry binding.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact tool dispatch receipt retry binding.
   if (!saved || JSON.stringify(saved.event.data) !== JSON.stringify(data)) {
     throw new Error('Tool dispatch evidence unavailable');
   }
@@ -160,7 +160,7 @@ function requireAdapterStart(decision: EventEnvelope, start: EventEnvelope | und
 function requireSameAdapter(event: EventEnvelope, observation: Observation,
   adapter: AdapterBinding) {
   const saved = toolDispatchRecordedDataSchema.parse(event.data);
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact tool dispatch adapter binding.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact tool dispatch adapter binding.
   if (JSON.stringify(saved.adapter) !== JSON.stringify(adapter) ||
       saved.evidence !== observation.evidence || saved.outcome !== observation.toolOutcome) {
     throw new Error('Tool dispatch evidence unavailable');

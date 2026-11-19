@@ -80,7 +80,7 @@ export async function recordRecall(options: MemoryOptions, context: MemoryContex
   const { inputGeneration } = evidence;
   // Include ordinary activity that arrived during access checks without changing the proof.
   const chat = await evidence.refresh();
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact recall input conflict detection.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact recall input conflicts.
   if (JSON.stringify(chat.memoryContext) !==
       JSON.stringify(evidence.chat.memoryContext)) {
     throw new Error('Memory input changed');

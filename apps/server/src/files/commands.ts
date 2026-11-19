@@ -150,7 +150,7 @@ export async function fileCommand(
     const savedRows = await chatHistory(store, silo, context.conversationId);
     const saved = findEventById(savedRows, eventId);
     // A concurrent retry may have won the append; its data must still match.
-    // eslint-disable-next-line no-restricted-syntax -- Preserve exact file command retry conflict detection.
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact file command retries.
     const changedData = JSON.stringify(saved?.event.data) !== JSON.stringify(data);
     if (!saved || saved.event.type !== type || changedData) {
       throw new FileRefusal('id_reused');
@@ -171,7 +171,7 @@ function findEventById(rows: StoredEvent[], eventId: string) {
 function verifyRetry(previous: StoredEvent, type: string, data: unknown, memberId: string) {
   const wrongType = previous.event.type !== type;
   const wrongMember = previous.event.principal?.id !== memberId;
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact file command retry conflict detection.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact file command retries.
   const changedData = JSON.stringify(previous.event.data) !== JSON.stringify(data);
   if (wrongType || wrongMember || changedData) {
     throw new FileRefusal('id_reused');

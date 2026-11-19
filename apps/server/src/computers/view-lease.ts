@@ -155,7 +155,7 @@ export class ViewLease<Computer> {
 
   private acceptSuccess(startedAt: number, computer: Computer) {
     if (this.state === 'stopped') return;
-    // eslint-disable-next-line no-restricted-syntax -- Preserve exact computer access binding.
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact computer access binding.
     if (JSON.stringify(computer) !== JSON.stringify(this.expected)) {
       this.deny();
       return;

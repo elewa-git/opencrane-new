@@ -93,7 +93,7 @@ export function canCombineReports(first: unknown, next: unknown, textLength: num
   void rightSequence;
   void rightPrevious;
   void rightText;
-  // eslint-disable-next-line no-restricted-syntax -- Preserve exact report identity binding.
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact report identity binding.
   return JSON.stringify(leftIdentity) === JSON.stringify(rightIdentity);
 }
 
