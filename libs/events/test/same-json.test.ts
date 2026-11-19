@@ -13,6 +13,7 @@ function registerJsonComparisonTests() {
   it('preserves toJSON behaviour', preservesToJson);
   it('does not lose object keys named __proto__', preservesPrototypeNamedKeys);
   it('keeps stringify errors for cyclic values and big integers', preservesStringifyErrors);
+  it('keeps saved JSON text exact inside ordered pairs', preservesSavedJsonText);
 }
 
 function ignoresNestedObjectOrder() {
@@ -77,4 +78,13 @@ function preservesStringifyErrors() {
   }
   expect(compareCyclic).toThrow(TypeError);
   expect(compareBigInteger).toThrow(TypeError);
+}
+
+function preservesSavedJsonText() {
+  const leftText = '{"a":1,"b":2}';
+  const rightText = '{"b":2,"a":1}';
+  const leftPairs = [['event', leftText]];
+  const rightPairs = [['event', rightText]];
+  expect(sameJson(leftPairs, rightPairs)).toBe(false);
+  expect(sameJson(leftPairs, leftPairs)).toBe(true);
 }
