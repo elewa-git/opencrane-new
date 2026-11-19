@@ -1,15 +1,25 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import type { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy } from '@opencrane/models';
+import { toolPolicySchema } from '@opencrane/protocol';
 
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;
 type Tool = NonNullable<Catalogue['tools']>[number];
 type Append = (type: string, subject: string, data: Record<string, unknown>) => Promise<void>;
+const policyToolSchema = toolPolicySchema.shape.tools.element;
+const reviewedModeSchema = policyToolSchema.pick({ name: true, mode: true });
+const reviewReplySchema = z.object({ status: z.string(), sequence: z.number().optional(),
+  policy: z.object({ tools: z.array(reviewedModeSchema).optional() }).optional() });
+
+function selectedToolMode(tool: { name?: unknown; mode?: unknown }) {
+  return { name: tool.name, mode: tool.mode };
+}
 
 export function journeyTool(name: string, readOnly: boolean, review?: Tool['review']): Tool {
   const annotations = { readOnlyHint: readOnly, destructiveHint: !readOnly };
@@ -91,17 +101,14 @@ export async function reviewSavedJourneyTools(input: JourneyToolReview,
   const request = { headers: { origin }, data: command };
   const saved = await ownerPage.request.post(`${url}/review`, request);
   assert.equal(saved.status(), 200, 'Owner saves the exact tool review');
-  const savedReply = await saved.json() as {
-    status?: unknown;
-    sequence?: unknown;
-    policy?: { tools?: Array<{ name?: unknown; mode?: unknown }> };
-  };
+  const savedReply = reviewReplySchema.parse(await saved.json());
   assert.equal(savedReply.status, 'appended');
   assert(Number.isInteger(savedReply.sequence) && Number(savedReply.sequence) > 0,
     'The saved review has a positive sequence');
   if (savedReply.policy) {
-    assert.deepEqual(savedReply.policy.tools?.map((tool) => ({ name: tool.name, mode: tool.mode })),
-      choices.map((choice) => ({ name: choice.name, mode: choice.mode })));
+    const savedModes = savedReply.policy.tools?.map(selectedToolMode);
+    const expectedModes = choices.map(selectedToolMode);
+    assert.deepEqual(savedModes, expectedModes);
   }
   const reviewed = await readToolPolicy(store, silo, serverId);
   const publication = { commandId: randomUUID(), expectedSequence: reviewed.sequence,
@@ -109,5 +116,6 @@ export async function reviewSavedJourneyTools(input: JourneyToolReview,
   const publishRequest = { headers: { origin }, data: publication };
   const published = await ownerPage.request.post(`${url}/publication`, publishRequest);
   assert.equal(published.status(), 200, 'Owner publishes the exact saved review');
-  assert.equal((await published.json()).status, 'appended');
+  const publicationReply = reviewReplySchema.parse(await published.json());
+  assert.equal(publicationReply.status, 'appended');
 }
