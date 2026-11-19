@@ -14,6 +14,8 @@ import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
 import { routineAsk } from './support/routine-ask.ts';
+import { advanceRoutineFixtureClock, sendWithFixtureTime }
+  from './support/routine-sender-clock.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
@@ -697,12 +699,8 @@ async function handsOffOnce() {
 it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
 
 function advanceWake() {
-  const monotonic = performance.now.bind(performance);
-  function afterWake() {
-    return monotonic() + 14_000;
-  }
   now += 14_000;
-  vi.spyOn(performance, 'now').mockImplementation(afterWake);
+  advanceRoutineFixtureClock(14_000);
 }
 async function refusesAfterWake(kind: string) {
   const authority = sender();
@@ -879,7 +877,7 @@ async function wrongComputerLink() {
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
-async function refusesLateChange(kind: string, delayPublication = false) {
+async function refusesLateChangeWithDelay(kind: string, delayPublication: boolean) {
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
@@ -913,7 +911,7 @@ async function refusesLateChange(kind: string, delayPublication = false) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changed);
   try {
-    await sender().send(computer.wake);
+    await sendWithFixtureTime(sender, computer.wake);
     const link = await computer.wake();
     function completed() {
       return computer.starts > 0 || computer.closedSessions > 0;
@@ -927,12 +925,17 @@ async function refusesLateChange(kind: string, delayPublication = false) {
     await computer.close();
   }
 }
+async function refusesLateChange(kind: string) {
+  await refusesLateChangeWithDelay(kind, false);
+}
 it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
   'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function refusesLatePayerAfterSlowPublication() {
-  await refusesLateChange('payer', true);
+  const startedAt = performance.now();
+  await refusesLateChangeWithDelay('payer', true);
+  expect(performance.now()).toBeGreaterThanOrEqual(startedAt + 2000);
 }
 it('reaches the late payer refusal after a slow start publication',
   refusesLatePayerAfterSlowPublication);
@@ -1153,17 +1156,7 @@ it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as c
 
 
 async function startRunning() {
-  const fixtureTime = performance.now();
-  function fixedFixtureTime() {
-    return fixtureTime;
-  }
-  const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(fixedFixtureTime);
-  try {
-    expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  } finally {
-    monotonicClock.mockRestore();
-  }
+  expect(await sendWithFixtureTime(sender, preparedComputer.wake)).toEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   return preparedComputer.wake();
 }
