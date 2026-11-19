@@ -116,6 +116,9 @@ spec:
             - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
             {{- end }}
             - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
+{{- end }}
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
             {{- if .Values.exposure.public.enabled }}
@@ -133,6 +136,9 @@ spec:
             {{- if .Values.exposure.public.enabled }}
             - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap, readOnly: true }
             {{- end }}
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: provider-secrets, mountPath: /var/lib/opencrane/provider-secrets }
+{{- end }}
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
             - { name: storage-lease, mountPath: /run/storage, readOnly: true }
           ports: [{ containerPort: 8080 }]
@@ -173,10 +179,17 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.runtime | quote }}
                   key: PROJECTION_DATABASE_URL
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: DEV_REAL_PROVIDER, value: "1" }
+            - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
+{{- end }}
             - { name: NODE_OPTIONS, value: "--max-old-space-size=256" }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: provider-secrets, mountPath: /var/lib/opencrane/provider-secrets, readOnly: true }
+{{- end }}
             - { name: model-state, mountPath: /var/lib/opencrane/models }
           ports:
             - { containerPort: 43000, name: model-gateway }
@@ -205,6 +218,10 @@ spec:
           secret:
             secretName: {{ .Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
+{{- if eq (toString .Values.models.mode) "provider" }}
+        - name: provider-secrets
+          persistentVolumeClaim: { claimName: provider-secrets }
+{{- end }}
         - name: model-state
           emptyDir: {}
         - name: kubeconfig

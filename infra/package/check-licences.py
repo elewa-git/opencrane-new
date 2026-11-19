@@ -36,6 +36,7 @@ base-files 12.4+deb12u15
 base-passwd 3.6.1
 bash 5.2.15-2+b13
 bsdutils 1:2.38.1-5+deb12u3
+ca-certificates 20230311+deb12u1
 coreutils 9.1-1
 dash 0.5.12-2
 debconf 1.5.82
@@ -93,6 +94,7 @@ libsemanage2 3.4-1+b5
 libsepol2 3.4-2.1
 libsmartcols1 2.38.1-5+deb12u3
 libss2 1.47.0-2+b2
+libssl3 3.0.20-1~deb12u2
 libstdc++6 12.2.0-14+deb12u1
 libsystemd0 252.39-1~deb12u2
 libtasn1-6 4.19.0-2+deb12u1
@@ -108,6 +110,7 @@ mawk 1.3.4.20200120-3.1
 mount 2.38.1-5+deb12u3
 ncurses-base 6.4-4
 ncurses-bin 6.4-4
+openssl 3.0.20-1~deb12u2
 passwd 1:4.13+dfsg1-1+deb12u2
 perl-base 5.36.0-7+deb12u3
 sed 4.9-1+deb12u1

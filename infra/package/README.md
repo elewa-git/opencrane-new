@@ -23,6 +23,7 @@ flowchart LR
   browser["Browser<br/>chat and desktop"] -->|connects through website proxy| apps
   package -->|checks settings and installs apps| apps["Server, website, workers and computer<br/>first owner token claim"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
+  apps -->|uses the stand-in or a connected provider| models["Model gateway"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
   package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
 ```
@@ -33,11 +34,11 @@ flowchart LR
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
 - Keep private settings in named Secrets and check production sign-in before installation.
-  Chats need no key volume.
 - Keep network access private while the public-address installer is being built.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log and development sign-in.
 - Let the first person claim ownership with a one-time token in public-address mode.
+- Choose the stand-in model or private storage for a provider connected in Settings.
 - Set the installation's public organisation name.
 - Give assistant computers the private gateway address and short-lived passes.
 - Save scheduled backups of events, databases and uploaded files together.
@@ -61,18 +62,21 @@ Not built yet:
    create the test owner; public-address mode waits for a signed-in person to claim
    ownership with a one-time token. Workers start an assistant's computer when needed.
    The worker that sends saved events to reactions can use a full CPU when work arrives together.
-3. **A developer opens the website.** A local port forward connects their browser
+3. **An owner connects a model provider.** With `models.mode: provider`, they save
+   its key in Settings, run the quoted test, select the chat model and switch on.
+   Members can then get real replies. The default install keeps the stand-in.
+4. **A developer opens the website.** A local port forward connects their browser
    to the private website. A closed desktop connection leaves other requests available.
    A missing or changed cluster target stops forwarding.
-4. **A person uploads a file.** The server scans it before saving and sending it
+5. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
-5. **A backup runs.** The job stops writes, drains read tables and saves matching
+6. **A backup runs.** The job stops writes, drains read tables and saves matching
    events, databases and files. It publishes a complete backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-6. **A developer restores a pilot.** A separate empty installation checks the matching
+7. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-7. **A developer checks or removes an install.** Fresh-install checks use new storage
+8. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
 

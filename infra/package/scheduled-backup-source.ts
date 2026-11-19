@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { Pool } from 'pg';
 import { connectNats } from '@opencrane/event-store';
 import { pilotProjectionNames } from './pilot-projections.ts';
+import { routines } from '@opencrane/projections';
 import { hashBackupBytes } from './backup-bytes.ts';
 import { z } from 'zod';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
@@ -107,15 +108,21 @@ class PilotBackupSource implements BackupSource {
     this.info = await this.eventInfo();
     let positions = await this.checkpoints();
     const sequence = this.info.state.last_seq;
+    const projectionNames = [...pilotProjectionNames];
+    const readerNames = [...readers];
+    if (this.options.providerMode) {
+      projectionNames.push(routines.name);
+      readerNames.push('worker-routines');
+    }
     function caughtUp(name: string) {
       return positions[name] === sequence;
     }
-    while (!pilotProjectionNames.every(caughtUp)) {
+    while (!projectionNames.every(caughtUp)) {
       await delay(500);
       this.remaining();
       positions = await this.checkpoints();
     }
-    await this.stop(readers);
+    await this.stop(readerNames);
     const lsn = await this.db.query<{ lsn: string }>('SELECT pg_current_wal_lsn()::text AS lsn');
     this.point = { sequence: this.info.state.last_seq, lsn: lsn.rows[0]!.lsn,
       checkpoints: await this.checkpoints() };

@@ -937,7 +937,7 @@ function rendersPrivateProviderStorage() {
     const environment = {};
     for (const setting of container.env ?? []) environment[setting.name] = setting.value;
     if (container.name === 'server' || container.name === 'models') {
-      assert.equal(environment.PROVIDER_SECRETS_DIR, '/var/lib/opencrane/provider-secrets');
+      assert.equal(environment.PROVIDER_SECRETS_DIR, '/var/lib/opencrane/provider-secrets/keys');
     } else {
       assert.equal(environment.PROVIDER_SECRETS_DIR, undefined);
     }

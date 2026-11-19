@@ -16,6 +16,8 @@ import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from '
 import { checkPublicSettings, type PublicPackageValues } from '../package/public-settings.mjs';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 
+import { checkModelSecrets, type PackageModels } from '../package/model-settings.ts';
+
 const execute = promisify(execFile);
 const namespace = `opencrane-package-${stackId}`;
 const release = `opencrane-package-${stackId}`;
@@ -28,7 +30,6 @@ const secretKeys: Record<string, string[]> = {
     'OIDC_CLIENT_SECRET_ENV_VAR',
     'OIDC_EXPECTED_ORG_ID', 'OPENFGA_API_URL', 'OPENFGA_STORE_ID', 'OPENFGA_MODEL_ID',
     'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
-    'MODEL_UPSTREAM', 'MODEL_KEY_FILE',
     'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT', 'DEV_OWNER_EMAIL',
     'MINIO_URL', 'MINIO_CREDENTIALS_FILE', 'SCANNER_URL', 'SCANNER_CA_FILE',
     'SCANNER_MANIFEST_DIGEST',
@@ -38,7 +39,7 @@ const secretKeys: Record<string, string[]> = {
     'projection.crt', 'projection.key', 'projection.seed',
     'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed',
     'token-signing-key.pem', 'zitadel-client-secret',
-    'model-jwks.json', 'model-stub-key', 'scanner-ca.crt'],
+    'model-jwks.json', 'scanner-ca.crt'],
   postgres: ['POSTGRES_PASSWORD'],
   nats: ['nats.conf', 'ca.crt', 'server.crt', 'server.key', 'NATS_LISTEN',
     'NATS_STORE_DIR', 'NATS_CA_FILE', 'NATS_CERT_FILE', 'NATS_KEY_FILE',
@@ -82,6 +83,12 @@ type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & PublicPackage
   images: Record<string, string>;
   natsCluster?: { enabled: boolean };
   pilotRestore?: { enabled: boolean; backupId: string };
+  models?: PackageModels;
+};
+type PackageReview = {
+  requiredSecrets: string[];
+  chartVersion: string;
+  images: Record<string, string>;
 };
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
@@ -286,10 +293,6 @@ function checkSecretFields(name: string, stored: SecretData, tokenBootstrap = fa
     if (!/^[A-Z][A-Z0-9_]*$/u.test(secretName) || !stored.data?.[secretName]) {
       throw new Error('OIDC client secret reference is absent');
     }
-    const upstream = Buffer.from(stored.data!['MODEL_UPSTREAM']!, 'base64').toString('utf8');
-    if (upstream !== '127.0.0.1:43003') {
-      throw new Error('The package model must use its local stub');
-    }
   }
   // Read secret bytes only in memory; report field names, never endpoint credentials.
   for (const [key, expectedHost] of Object.entries(privateHosts)) {
@@ -379,6 +382,7 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
     const stored = JSON.parse(found) as SecretData;
     checkReplicaSettings(name, stored, values);
     checkSecretFields(name, stored, values.exposure?.public?.enabled === true);
+    checkModelSecrets(name, stored, values.models);
     secrets[name] = stored;
   }
   if (values.exposure?.public?.enabled === true) {
@@ -556,7 +560,7 @@ export async function installPackage(valuesFile: string) {
   const deployments = [
     'scanner', 'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
     'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
-    'worker-dispatcher',
+    'worker-dispatcher', ...(values.models?.mode === 'provider' ? ['worker-routines'] : []),
   ];
   for (const deployment of deployments) {
     await checkedKubectl(['-n', namespace, 'rollout', 'status', `deployment/${deployment}`,

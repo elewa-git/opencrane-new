@@ -1,0 +1,53 @@
+export type PackageModels = { mode: 'stub' | 'provider' };
+
+type SecretData = { data?: Record<string, string> };
+
+export function modelRuntimeSettings(models: PackageModels | undefined) {
+  const settings: Record<string, string> = {
+    MODEL_DECISION_URL: 'http://server:43001',
+    MODEL_STATE_DIR: '/var/lib/opencrane/models',
+    MODEL_JWKS_FILE: '/run/opencrane/files/model-jwks.json',
+    AGENTGATEWAY_BINARY: '/usr/local/bin/agentgateway',
+    MODEL_GATEWAY_PORT: '43000',
+    MODEL_DECISION_PORT: '43001',
+    MODEL_READINESS_PORT: '43002',
+    MODEL_GATEWAY_CONTROL_PORT: '43004',
+  };
+  if (models?.mode !== 'provider') {
+    settings['MODEL_KEY_FILE'] = '/run/opencrane/files/model-stub-key';
+    settings['MODEL_UPSTREAM'] = '127.0.0.1:43003';
+    settings['MODEL_STUB_PORT'] = '43003';
+    settings['MODEL_STUB_MCP_GENERATION'] = 'local-package';
+    settings['MODEL_STUB_MCP_REVISION'] = 'local-package';
+  }
+  return settings;
+}
+
+export function checkModelSecrets(name: string, stored: SecretData,
+  models: PackageModels | undefined) {
+  if (name !== 'runtime' && name !== 'runtimeFiles') {
+    return;
+  }
+  const data = stored.data ?? {};
+  if (models?.mode === 'provider') {
+    for (const key of Object.keys(data)) {
+      if (key === 'MODEL_UPSTREAM' || key === 'MODEL_KEY_FILE' ||
+          key.startsWith('MODEL_STUB_') || key === 'model-stub-key') {
+        throw new Error('Provider mode refuses stand-in settings');
+      }
+    }
+    return;
+  }
+  const requiredKeys = name === 'runtime' ? ['MODEL_UPSTREAM', 'MODEL_KEY_FILE'] : ['model-stub-key'];
+  for (const key of requiredKeys) {
+    if (!data[key]) {
+      throw new Error(`Required secret field is absent: ${name}.${key}`);
+    }
+  }
+  if (name === 'runtime') {
+    const upstream = Buffer.from(data['MODEL_UPSTREAM']!, 'base64').toString('utf8');
+    if (upstream !== '127.0.0.1:43003') {
+      throw new Error('The package model must use its local stub');
+    }
+  }
+}

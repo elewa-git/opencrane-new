@@ -6,7 +6,12 @@ import { createConnection, createServer, type Socket, type Server } from 'node:n
 
 const sockets = new Set<Socket>();
 const servers: Server[] = [];
-for (const name of ['MODEL_DECISION_PORT', 'MODEL_READINESS_PORT', 'MODEL_STUB_PORT']) {
+const realProvider = process.env['DEV_REAL_PROVIDER'] === '1';
+const forwardedPorts = ['MODEL_DECISION_PORT', 'MODEL_READINESS_PORT'];
+if (!realProvider) {
+  forwardedPorts.push('MODEL_STUB_PORT');
+}
+for (const name of forwardedPorts) {
   const port = Number(process.env[name]);
   // These existing listeners bind loopback. Forward the container interfaces
   // without widening their production listeners or changing the owner stack.
@@ -32,5 +37,5 @@ const custodySocket = process.env['CONNECTION_CUSTODY_SOCKET'];
 if (custodySocket) {
   await startConnectionCustodyBridge(custodySocket, Number(process.env['CUSTODY_PROXY_PORT']));
 }
-if (process.env['DEV_REAL_PROVIDER'] !== '1') await import('./model-stub.ts');
+if (!realProvider) await import('./model-stub.ts');
 await import('../../apps/server/src/models-main.ts');

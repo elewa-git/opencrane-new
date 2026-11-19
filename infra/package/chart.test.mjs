@@ -333,7 +333,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
     await prepareSettings({ ...packageValues, scanner: values.scanner });
-    await provisionSecrets(values.secrets, owner, tokenBootstrap);
+    await provisionSecrets(values.secrets, owner, tokenBootstrap, packageValues.models);
     return { key, settings, secrets, tokenRecord, files: readdirSync(directory) };
   } finally {
     const remainingFiles = readdirSync(directory);
