@@ -1895,7 +1895,8 @@ records the boundary. `scripts/p5-4-images16.test.mjs` runs the refusal fixtures
 
 Conversation encryption is deferred. New messages, replies, reasoning summaries,
 child results, redacted command previews, approval reviews and routine instructions
-are plaintext event fields. Current membership and conversation permissions still
+are plaintext event fields. Their shared text rule refuses NUL and unpaired UTF-16
+surrogates before append. Current membership and conversation permissions still
 protect browser and file reads. Event logs, database dumps and backups contain
 readable conversation data and belong in private operator storage.
 Memory facts and personal survey answers keep their separate encryption.

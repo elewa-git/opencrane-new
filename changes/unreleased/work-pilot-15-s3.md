@@ -8,4 +8,6 @@ version. Verify replayed chats, permissions, budgets and uploaded files before
 opening authenticated reading; keep effects held and refuse non-empty targets.
 
 Refuse text that PostgreSQL cannot store before recording conversation events.
-Keep private database error context out of projection logs.
+Keep private database error context out of projection logs. Limit restore scaling
+to the server and permissions service. Refuse malformed saved approval reviews
+and retain the final access checks when saving routine input.

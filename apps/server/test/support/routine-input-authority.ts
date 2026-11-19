@@ -4,9 +4,10 @@ export async function expectRoutineInputAuthorityCycles(
   prepare: () => Promise<unknown>, arm: (action: () => Promise<void>) => void,
 ) {
   let checks = 0;
-  async function checked() {
+  function checked() {
     checks += 1;
     arm(checked);
+    return Promise.resolve();
   }
   arm(checked);
   const receipt = await prepare();

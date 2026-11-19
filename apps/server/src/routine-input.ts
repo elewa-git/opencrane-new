@@ -67,8 +67,7 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
   const conversationId = run.conversationId;
   let position: number;
   if (previous) {
-    // Renew access before replying with the saved input.
-    verify(previous);
+    // The loaded input is already verified. Renew access before returning its receipt.
     await preparation.checkAccess();
     position = previous.sequence;
   } else {

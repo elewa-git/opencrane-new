@@ -1,3 +1,5 @@
+import { event } from '@opencrane/event-store/testing';
+import { routineEvent as record } from './support/routine-event.ts';
 import { expectRoutineInputAuthorityCycles } from './support/routine-input-authority.ts';
 import { readConversationProse } from '@opencrane/events';
 import { holdFixtureClock, withRoutineFixtureClock }
@@ -29,7 +31,6 @@ import { promisify } from 'node:util';
 import { z } from 'zod';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { createEventStore, type AppendCommand, type StoredEvent } from '@opencrane/event-store';
-import { event } from '@opencrane/event-store/testing';
 import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -89,9 +90,6 @@ function forbiddenEffect(): never {
   throw new Error('private-service-canary');
 }
 const db = { query: forbiddenEffect };
-function record(id: string, subject: string, type: string, data: unknown): EventEnvelope {
-  return { ...event(id, subject, type), source: 'opencrane-server', commandId: id, data };
-}
 async function apply(events: EventEnvelope[]) {
   await nats.seed(events);
   const auth = memberAuthorisation(binding, nats.store);

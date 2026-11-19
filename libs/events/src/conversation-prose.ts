@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 function isStorageSafeText(value: string): boolean {
   // JSONB cannot store NUL or unpaired UTF-16 surrogates. Valid pairs remain allowed.
-  return !/[\u0000\ud800-\udfff]/u.test(value);
+  return !value.includes('\u0000') && !/[\ud800-\udfff]/u.test(value);
 }
 
 export const storageSafeTextSchema = z.string().refine(isStorageSafeText,

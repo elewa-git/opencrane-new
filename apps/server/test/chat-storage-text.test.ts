@@ -3,6 +3,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { database } from '@opencrane/projections/testing';
 import { conversations, ProjectionRunner, readConversation } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
+import { memorySink } from '@opencrane/observability/testing';
 import { chatCommand } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
 
@@ -12,9 +13,8 @@ const unsupported = ['\u0000', '\ud800', '\udfff'];
 async function refusesUnsupportedText(character: string) {
   const nats = await natsFixture();
   const storage = await database('pg');
-  const logs: string[] = [];
-  function write(line: string) { logs.push(line); }
-  const logger = createLogger('storage-text-test', { destination: { write }, level: 'info' });
+  const logs = memorySink();
+  const logger = createLogger('storage-text-test', { destination: logs.stream, level: 'info' });
   try {
     const owner = { silo: 'test', memberId: 'alice' };
     const creation = { id: 'created', conversationId: 'chat', assistantId: 'assistant' };
@@ -23,7 +23,7 @@ async function refusesUnsupportedText(character: string) {
     const message = { id: 'unsafe', conversationId: 'chat', text: privateText };
     await expect(chatCommand(nats.store, owner, message)).rejects.toThrow();
     expect(await nats.store.head()).toBe(1);
-    await chatCommand(nats.store, owner, { ...message, id: 'safe', text: 'Hello' });
+    await chatCommand(nats.store, owner, { ...message, id: 'safe', text: 'Hello \u0001 \u{1F680}' });
     const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
     const report = { sequence: 1, conversationId: 'chat', turnId: 'safe',
       assistantId: 'assistant', messageId: 'reply', type: 'agent.message_completed',
@@ -36,11 +36,12 @@ async function refusesUnsupportedText(character: string) {
     await runner.run(conversations);
     expect(await runner.checkpoint(conversations)).toBe(3);
     const before = await readConversation(storage.db, 'test', 'chat');
+    expect(before.rows[1]?.data).toMatchObject({ utterance: 'Hello \u0001 \u{1F680}' });
     expect(before.rows.at(-1)?.data).toMatchObject({ utterance: 'A safe reply' });
     await runner.rebuild(conversations);
     expect(await runner.checkpoint(conversations)).toBe(3);
     expect((await readConversation(storage.db, 'test', 'chat')).rows).toEqual(before.rows);
-    expect(logs.join('')).not.toContain(canary);
+    expect(logs.text()).not.toContain(canary);
   } finally {
     await storage.close();
     await nats.close();
@@ -52,9 +53,8 @@ it.each(unsupported)('refuses unsupported text before append and keeps replay ad
 async function hidesPostgresErrorContext() {
   const nats = await natsFixture();
   const storage = await database('pg');
-  const logs: string[] = [];
-  function write(line: string) { logs.push(line); }
-  const logger = createLogger('storage-error-test', { destination: { write }, level: 'info' });
+  const logs = memorySink();
+  const logger = createLogger('storage-error-test', { destination: logs.stream, level: 'info' });
   try {
     await chatCommand(nats.store, { silo: 'test', memberId: 'alice' },
       { id: 'created', conversationId: 'chat', assistantId: 'assistant' });
@@ -66,7 +66,7 @@ async function hidesPostgresErrorContext() {
     const runner = new ProjectionRunner(storage.db, nats.store, logger);
     await runner.initialise(failing);
     await expect(runner.run(failing)).rejects.toMatchObject({ code: '22P05' });
-    const output = logs.join('');
+    const output = logs.text();
     expect(output).toContain('handler.failed');
     expect(output).toContain('22P05');
     expect(output).not.toContain(canary);
