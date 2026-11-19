@@ -75,6 +75,15 @@ async function keepsIntentAndReplay() {
   await fixture.runner.rebuild(auditTrail);
   expect(await readAudit(fixture.db, 'test')).toEqual(audit);
 }
+async function rechecksSavedCreationPosition() {
+  const { options, input } = await setup();
+  const control = await requestControl(options, 'alice', input);
+  expect(control.phase).toBe('requested');
+  expect(control.requesterId).toBe('alice');
+  expect(control.conversationId).toBe('chat');
+}
+it('rechecks the saved creation position before granting a requester control lease',
+  rechecksSavedCreationPosition);
 it('keeps one intent, replayable status and audit, and independently authorised viewing',
   keepsIntentAndReplay, 30_000);
 async function refusesAnotherRequester() {
