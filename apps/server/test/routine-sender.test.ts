@@ -633,7 +633,6 @@ async function savedStarts() {
   return rows.filter(started);
 }
 async function handsOffOnce() {
-  const authority = sender();
   const computer = await recordingComputer();
   const root = actor.state.roots[0]!;
   const budgetPosition = await nats.store.head('budget-test');
@@ -700,7 +699,6 @@ function advanceWake() {
   advanceRoutineFixtureClock(14_000);
 }
 async function refusesAfterWake(kind: string) {
-  const authority = sender();
   const computer = await recordingComputer();
   let wakes = 0;
   async function wake() {
@@ -755,7 +753,6 @@ async function inert(enabled: boolean, replay: boolean) {
 it.each([[false, false], [true, true]])('does not wake or send enabled=%s replay=%s', inert);
 
 async function losesReply(stage: string) {
-  const authority = sender();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let lost = false;
@@ -787,7 +784,7 @@ async function losesReply(stage: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(loseStart);
   try {
-    await sendWithFixtureTime(authority, wake);
+    await sendWithFixtureTime(sender, wake);
     function replyLost() {
       return lost;
     }
@@ -813,7 +810,6 @@ it.each(['routine.run_activation_admitted', 'send', 'computer.turn_started'])(
 
 
 async function refusesChangedStart(field: string) {
-  const authority = sender();
   const computer = await recordingComputer();
   const link = await computer.wake();
   const send = link.socket.send.bind(link.socket);
@@ -844,7 +840,6 @@ it.each(['messageId', 'id', 'rootId', 'senderAttemptId', 'threadId',
   'refuses changed %s through real report admission', refusesChangedStart);
 
 async function changesAtStartAppend() {
-  const authority = sender();
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let attempted = false;
@@ -1506,7 +1501,7 @@ async function stoppedBeforeGrant() {
     send(bytes, {});
   }
   sending.mockImplementation(holdGrant);
-  expect(await sendWithFixtureTime(sender(), preparedComputer.wake)).toEqual({ status: 'sent' });
+  expect(await sendWithFixtureTime(sender, preparedComputer.wake)).toEqual({ status: 'sent' });
   function acknowledged() {
     expect(held).toBeDefined();
   }
