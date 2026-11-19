@@ -3,8 +3,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import type { tokenIssuer } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
-import { recordIdSchema, type EventEnvelope } from '@opencrane/events';
-import { history, readToolPolicy } from '@opencrane/models';
+import { messagePostedDataSchema, recordIdSchema, type EventEnvelope } from '@opencrane/events';
+import { envelope, history, readToolPolicy } from '@opencrane/models';
 import { integrationFactsSchema } from '@opencrane/protocol';
 import { demoLocator } from './test/demo-remote.ts';
 import { reviewSavedJourneyTools, type JourneyToolReview } from './journey-tool-policy.ts';
@@ -25,7 +25,11 @@ export type ApprovalToolRequest = {
 };
 
 export function completedApprovalMessage(message: EventEnvelope): EventEnvelope[] {
-  return [message];
+  const data = messagePostedDataSchema.parse(message.data);
+  const completed = { conversationId: data.conversationId, turnId: message.id };
+  // Keep old fixture messages out of the bridge's waiting work.
+  const completion = envelope(message.silo, message.subject, 'agent.turn_completed', completed);
+  return [message, completion];
 }
 
 export function approvalToolBody(input: ApprovalToolRequest) {

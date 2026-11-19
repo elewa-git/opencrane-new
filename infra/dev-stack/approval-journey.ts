@@ -6,11 +6,11 @@ import type { Page, Response } from 'playwright';
 import { z } from 'zod';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { grantStream, type memberAuthorisation } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import type { AppendCommand, EventStore } from '@opencrane/event-store';
 import { envelope, history, providerTurnAdmission } from '@opencrane/models';
 import { conversationKeys, connectProjectionDb, type Query } from '@opencrane/projections';
 import { directory, readEnv } from './config.ts';
-import { approvalToolBody, issueApprovalComputer, prepareApprovalTool,
+import { approvalToolBody, completedApprovalMessage, issueApprovalComputer, prepareApprovalTool,
   type ApprovalJourneyIdentity } from './approval-tool.ts';
 import { createStageBCollector } from './stage-b-collector.ts';
 import { readStageBQuote } from './stage-b-readback.ts';
@@ -197,16 +197,26 @@ async function seedApprovalChat(store: EventStore, silo: string,
         const data = { conversationId, authorId: assistantId, authorKind: 'agent',
           contentType: 'text', ...encrypted };
         const event = envelope(silo, subject, 'message.posted', data);
-        const result = await store.append({ event, expectedSequence: position, historyChecked: true });
-        assert.equal(result.status, 'appended', 'Seed each earlier chat message once');
-        if (result.status !== 'appended') throw new Error('Chat seeding refused');
-        position = result.sequence;
+        position = await appendApprovalMessage(store, event, position);
       }
       await waitForApprovalHistory(db.db, position);
     }
   } finally {
     await db.close();
   }
+}
+
+async function appendApprovalMessage(store: EventStore, message: ReturnType<typeof envelope>,
+  position: number) {
+  const records = completedApprovalMessage(message);
+  for (const event of records) {
+    const command: AppendCommand = { event, expectedSequence: position, historyChecked: true };
+    const result = await store.append(command);
+    assert.equal(result.status, 'appended', 'Seed each earlier chat record once');
+    if (result.status !== 'appended') throw new Error('Chat seeding refused');
+    position = result.sequence;
+  }
+  return position;
 }
 
 function failDatabase(error: Error) {
