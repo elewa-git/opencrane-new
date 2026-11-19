@@ -326,7 +326,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       assert.deepEqual(commands.map(commandProgram), ['node', 'node',
         'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
       assert.equal(secrets.size, 8);
-      return { key, settings, secrets };
+      return { key, settings, secrets, files: readdirSync(directory) };
     }
     const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',
       'prepareSettings', replacements);
@@ -334,7 +334,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       'provisionSecrets', replacements);
     await prepareSettings({ ...packageValues, scanner: values.scanner });
     await provisionSecrets(values.secrets, owner, tokenBootstrap);
-    return { key, settings, secrets, tokenRecord };
+    return { key, settings, secrets, tokenRecord, files: readdirSync(directory) };
   } finally {
     const remainingFiles = readdirSync(directory);
     const cleanup = { recursive: true, force: true };
@@ -1002,3 +1002,28 @@ async function preparesPublicTokenWithoutDevOwner() {
 }
 test('public preparation stores the existing token hash and requires no development owner',
   preparesPublicTokenWithoutDevOwner);
+
+async function preparesOnlyProviderSettings() {
+  const packageValues = { models: { mode: 'provider' } };
+  const { settings, secrets, files } =
+    await preparedSecretsFixture(true, false, false, packageValues);
+  const runtime = settings.get('package-runtime');
+  for (const name of Object.keys(runtime)) {
+    assert.doesNotMatch(name, /^MODEL_(UPSTREAM|KEY_FILE|STUB_)/u);
+  }
+  assert.equal(files.includes('model-stub-key'), false);
+  assert.equal(secrets.get('runtime-files')['model-stub-key'], undefined);
+  assert.equal(runtime.MODEL_DECISION_URL, 'http://server:43001');
+}
+test('provider preparation writes no stand-in key or stand-in settings', preparesOnlyProviderSettings);
+
+async function preparesDefaultStandIn() {
+  const { settings, secrets, files } = await preparedSecretsFixture();
+  const runtime = settings.get('package-runtime');
+  assert.equal(runtime.MODEL_UPSTREAM, '127.0.0.1:43003');
+  assert.equal(runtime.MODEL_KEY_FILE, '/run/opencrane/files/model-stub-key');
+  assert.equal(runtime.MODEL_STUB_PORT, '43003');
+  assert.equal(files.includes('model-stub-key'), true);
+  assert.equal(secrets.get('runtime-files')['model-stub-key'].toString(), 'dev-stack-stub-only');
+}
+test('default preparation retains the stand-in key and settings', preparesDefaultStandIn);

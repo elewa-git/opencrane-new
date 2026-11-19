@@ -490,3 +490,33 @@ function refusesExtraValuesArguments() {
 }
 
 test('preparation names extra values arguments before preflight', refusesExtraValuesArguments);
+
+for (const mode of ['stub', 'provider']) {
+  function acceptsModelsMode() {
+    const { directory, values, review } = fixture();
+    values.models = { mode };
+    try {
+      const result = check(values, review, directory);
+      assert.equal(result.status, 0, result.stderr);
+    } finally {
+      rmSync(directory, { recursive: true });
+    }
+  }
+  test(`preflight accepts models mode ${mode}`, acceptsModelsMode);
+}
+
+for (const models of [null, [], {}, { mode: 'unknown' }, { mode: 'provider', key: 'private-canary' }]) {
+  function refusesModelsSettings() {
+    const { directory, values, review } = fixture();
+    values.models = models;
+    try {
+      const result = check(values, review, directory);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Unsupported models setting/u);
+      assert.doesNotMatch(result.stderr, /private-canary/u);
+    } finally {
+      rmSync(directory, { recursive: true });
+    }
+  }
+  test(`preflight refuses models settings ${JSON.stringify(models)}`, refusesModelsSettings);
+}

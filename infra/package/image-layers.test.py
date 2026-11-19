@@ -132,6 +132,16 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
+    def test_provider_gateway_has_system_https_trust(self):
+        self.assertIn("etc/ssl/certs/ca-certificates.crt", self.paths)
+        result = subprocess.run([
+            "docker", "run", "--rm", "--network", "none", "--entrypoint", "openssl",
+            os.environ["PACKAGE_IMAGE_NAME"], "crl2pkcs7", "-nocrl", "-certfile",
+            "/etc/ssl/certs/ca-certificates.crt", "-outform", "DER",
+        ], capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0)
+        self.assertGreater(len(result.stdout), 1000)
+
     def test_missing_model_import_refuses_even_with_entry_point_present(self):
         required = ("infra/dev-stack/connection-custody-bridge.ts",
                     "infra/dev-stack/model-stub.ts", "infra/dev-stack/stage-b-model.ts",
