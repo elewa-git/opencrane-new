@@ -67,6 +67,7 @@ function originalReceipt(row: StoredEvent, rows: StoredEvent[], input: Input, me
     const identity = memoryIdentity(saved)!;
     if (keys.decrypt(identity, data) !== input.text || data.kind !== input.kind ||
       data.pinned !== input.pinned || data.expiresAt !== input.expiresAt ||
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact memory correction retry binding.
       (dependsOn && JSON.stringify(data.dependsOn) !== JSON.stringify(dependsOn))) {
       throw new MemoryConflict();
     }

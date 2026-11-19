@@ -125,6 +125,7 @@ async function prepareTarget(options: ModelAccessOptions, input: AccessCommand,
 function checkOriginal(event: EventEnvelope, type: string, memberId: string, data: unknown) {
   if (event.type !== type || event.principal?.id !== memberId ||
       event.principal?.kind !== 'human' ||
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact model grant retry conflict detection.
       JSON.stringify(event.data) !== JSON.stringify(data)) {
     throw new ProviderConflict();
   }

@@ -390,6 +390,7 @@ function decideTurn(facts: ComputerFacts, conversation: ChatFacts, input: TurnIn
 function verifyBinding(saved: StoredEvent | undefined, expected: TurnBinding) {
   const stored = saved && binding.parse(saved.event.data);
   const expectedBinding = binding.parse(expected);
+  // eslint-disable-next-line no-restricted-syntax -- Preserve exact turn input and budget binding.
   if (!saved || JSON.stringify(stored) !== JSON.stringify(expectedBinding)) {
     throw new ReportRejected('Turn binding conflict');
   }

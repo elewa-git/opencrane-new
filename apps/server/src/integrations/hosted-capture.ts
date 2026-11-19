@@ -23,6 +23,7 @@ const registrationSchema = z.object({ serverId: z.string(), kind: z.literal('hos
   credentialContract: z.unknown().optional() });
 
 function sameRun(first: HostedRun, second: HostedRun) {
+  // eslint-disable-next-line no-restricted-syntax -- Preserve exact hosted workload binding.
   return JSON.stringify(first) === JSON.stringify(second);
 }
 
