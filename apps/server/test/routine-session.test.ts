@@ -1144,6 +1144,8 @@ function routineRootTests() {
     'keeps allocated input idle with %s', noDelivery);
 
   async function once() {
+    // Hold fixture time while matching requests wait for the actor's serial queue.
+    holdFixtureClock();
     const before = await nats.store.head();
     const results = await Promise.all([prepare(), prepare()]);
     expect(results[0]).toEqual(results[1]);
