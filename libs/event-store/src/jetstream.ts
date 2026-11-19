@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { systemClock, type Clock } from './clock.ts';
 import { appendResult, savedAppend, unavailableAppend, rejectedAppend,
   recoverAppend, previousAppend } from './append-result.ts';
@@ -111,7 +112,7 @@ function verifyEventsConfig(config: StreamConfig, replicas: number): void {
   for (const [key, expected] of Object.entries(eventsConfig(replicas))) {
     const actual: unknown = Reflect.get(config, key);
     const fallback: unknown = Reflect.get(defaults, key);
-    if (JSON.stringify(actual ?? fallback) !== JSON.stringify(expected)) {
+    if (!sameJson(actual ?? fallback, expected)) {
       throw new Error(`Incompatible EVENTS configuration: ${key}`);
     }
   }
