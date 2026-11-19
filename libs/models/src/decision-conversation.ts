@@ -38,7 +38,7 @@ export function decisionConversationReader(store: EventStore, db: Query,
     // Global positions may include other streams. This conservative bound also caps
     // the number of conversation events read inside the original access deadline.
     if (through - indexed.position > 64) {
-      return caughtUpConversation(store, silo, request, through);
+      return caughtUpConversation(store, silo, request.conversationId, request.head, through);
     }
     for (const entry of indexed.rows) {
       const position = Number(entry.position);

@@ -28,17 +28,20 @@ async function catchesUpOnceAndKeepsCapturedPosition() {
     });
     await fixture.seed([creation, stop]);
     vi.spyOn(fixture.store, 'readStream').mockImplementation(paused);
-    const request = { conversationId: 'chat', turnId: 'turn', head: 2, deadline: 0 };
-    expect(() => caughtUpConversation(fixture.store, 'test', request, 2))
+    const request = { conversationId: 'chat', head: 2 };
+    expect(() => caughtUpConversation(fixture.store, 'test',
+      request.conversationId, request.head, 2))
       .toThrow('Conversation history is catching up');
-    expect(() => caughtUpConversation(fixture.store, 'test', request, 2))
+    expect(() => caughtUpConversation(fixture.store, 'test',
+      request.conversationId, request.head, 2))
       .toThrow('Conversation history is catching up');
     resume.resolve();
     await readStreamSummary(fixture.store, 'test', 'conversation-chat',
       decisionChatSummary, Infinity, copy);
     expect(reads).toBe(2);
     const captured = { ...request, head: 1 };
-    expect(caughtUpConversation(fixture.store, 'test', captured, 2)).toEqual({
+    expect(caughtUpConversation(fixture.store, 'test',
+      captured.conversationId, captured.head, 2)).toEqual({
       sequence: 1, conversation: [{ sequence: 1, event: creation }],
     });
     expect(reads).toBe(2);
@@ -56,8 +59,9 @@ async function usesSelectedCatchupClock() {
   const fixture = await natsFixture({ clock });
   const sleep = vi.spyOn(clock, 'sleep');
   try {
-    const request = { conversationId: 'chat', turnId: 'turn', head: 1, deadline: 0 };
-    expect(() => caughtUpConversation(fixture.store, 'test', request, 1))
+    const request = { conversationId: 'chat', head: 1 };
+    expect(() => caughtUpConversation(fixture.store, 'test',
+      request.conversationId, request.head, 1))
       .toThrow('Conversation history is catching up');
     expect(sleep).toHaveBeenCalledWith(10_000, expect.any(AbortSignal));
     await readStreamSummary(fixture.store, 'test', 'conversation-chat',
