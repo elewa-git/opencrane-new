@@ -33,8 +33,8 @@ export async function checkSlowPayerPublication(
   send: (kind: string, clock: ManualClock) => Promise<void>) {
   const originalNow: unknown = Reflect.get(performance, 'now');
   const startedAt = performance.now();
-  // Keep manual time distinct so a leaked clock is observable after send setup.
-  const publicationClock = manualClock(startedAt + 60_000);
+  // Keep the test clock near real time so other fixture timers do not inherit a future deadline.
+  const publicationClock = manualClock(startedAt);
   function publicationTime() {
     return publicationClock.now();
   }
@@ -42,7 +42,7 @@ export async function checkSlowPayerPublication(
   monotonicClock.mockImplementation(publicationTime);
   try {
     await send('payer', publicationClock);
-    expect(publicationClock.now()).toBe(startedAt + 62_100);
+    expect(publicationClock.now()).toBe(startedAt + 2100);
     expect(Reflect.get(performance, 'now')).toBe(originalNow);
     expect(performance.now()).not.toBe(publicationClock.now());
   } finally {

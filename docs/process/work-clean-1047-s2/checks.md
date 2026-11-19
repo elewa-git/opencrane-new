@@ -193,6 +193,19 @@ not reach the intercepted start append. The clock case passed again. A focused
 selection of the clock case and all three following cases passed 4 of 4. Neither
 complete-file failure is attributed to the clock correction without proof.
 
+A comparison run excluding only the corrected case passed the other 113 cases.
+The helper's extra 60-second clock offset served only to make restoration
+observable; it could also give later timers an artificial future deadline.
+Remove that offset and start the manual clock at the real monotonic snapshot.
+Keep the exact advancement, late payer, socket, saved-start and clock-restoration
+assertions. With this refinement, the focused four-case selection passed, then
+the complete changed file passed twice: 114 of 114 cases in 600.23 seconds and
+114 of 114 in 613.54 seconds. Removing the snapshot hold against the final
+helper still [fails](clock-without-hold.log) at the late payer injection. The
+source was restored immediately after that probe. The earlier complete-file
+failures remain recorded; the comparison supports a fixture interaction but
+does not prove their cause.
+
 The corrected files pass scoped ESLint without warnings. Typecheck, the event
 catalogue (174 types), Knip, changelog lint and Markdown lint pass. Knip reports
 two existing configuration hints. All test, lint and typecheck commands use
