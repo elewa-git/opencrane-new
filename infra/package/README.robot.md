@@ -447,7 +447,7 @@ substitute. Package preparation downloads both exact-source approvals and images
 the shared scanner fetch path, pinned to github.com, and publishes their exact digests
 only to the existing development registry. No public image is published.
 
-The current image has a source-bound all-layer scan. Its 88 Debian package versions
+The runtime requires a source-bound all-layer scan. Its 91 Debian package versions
 were checked again against authenticated main indexes; `package-debian-main.json`
 records their signed index hashes. Publication uses the existing local registry;
 fresh-install qualification remains separate. R3 approval is separate. Unknown licences or open

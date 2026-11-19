@@ -165,6 +165,12 @@ assertion. The fixture now uses unrelated streamed chat events so the existing
 projection runner batches replay; the test timeout was not increased.
 Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1/journey.md).
 
+## Packaged connected provider
+
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| Packaged connected-provider chat | [#1110](https://github.com/elewa-git/opencrane-new/issues/1110) | No | NOT RUN | [Receipt](work-pilot-1110-s1/journey.md) |
+
 ## Still NOT RUN
 
 The evidence does not qualify these conditions yet:
