@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdPattern } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -161,9 +162,9 @@ function requireSlot(silo: string, run: Run, now: number) {
 }
 function envelope(silo: string, data: Run): EventEnvelope {
   const id = `routine-due-${data.occurrenceId}`;
-  return { id, commandId: id, silo, source: 'opencrane-server', type: 'routine.due',
+  return serverEvent({ id, commandId: id, silo, type: 'routine.due',
     subject: `routine-${data.routineId}`, time: data.firedAt,
-    principal: { kind: 'system', id: 'opencrane-server' }, correlation: {}, data };
+    principal: { kind: 'system', id: 'opencrane-server' }, data });
 }
 function receipt(row: StoredEvent, run: Run) {
   return { status: 'confirmed' as const, eventId: row.event.id, position: row.sequence,
