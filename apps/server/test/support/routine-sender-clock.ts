@@ -5,7 +5,7 @@ type Sender = ReturnType<typeof createRoutineSender>;
 
 export async function sendWithFixtureTime(makeSender: () => Sender,
   wake: Parameters<Sender['send']>[0]) {
-  // Hold send setup time so scheduling cannot prevent the intended saved-event checks.
+  // Hold send setup time so scheduling cannot prevent the intended refusal.
   const fixtureTime = performance.now();
   function fixedFixtureTime() {
     return fixtureTime;
