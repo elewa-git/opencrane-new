@@ -236,7 +236,10 @@ was not checked, and hides that message while another refresh is running. A 401 
 clears the register and detail page before showing the shared access-lost message.
 `/org/integrations/<id>/changes` uses the detail page's two reads and refresh handling.
 It accepts ids matching `[\w-]{1,200}`. The policy's saved catalogue snapshots supply
-added, removed, schema-changed and details-changed rows. Missing or equal snapshots show
+added, removed, schema-changed and details-changed rows. Schema and metadata comparisons
+ignore object key order at every depth and preserve array order through protocol.sameJson.
+Stored revision and catalogue digests remain exact; a changed revision still gives a
+details-changed row when only key order differs. Missing or equal snapshots show
 no counts and block review because the page cannot show a complete comparison. A hold
 alone does not mean tools changed: the banner and facts say so only when the saved
 snapshots have different catalogue digests. An unavailable check stays labelled as paused. A missing

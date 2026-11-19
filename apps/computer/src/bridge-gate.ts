@@ -19,6 +19,7 @@ export class BridgeGate {
     }
     // Check the saved computer identity before any stop or cleanup can begin.
     const next = requireBridgeGateAuthority(value['gate'], identity);
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact stop authority binding.
     if (this.binding && JSON.stringify(this.binding) !== JSON.stringify(next)) {
       throw new Error('Different bridge gate');
     }

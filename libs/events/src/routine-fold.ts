@@ -43,11 +43,13 @@ function saveRun(state: RoutineState, event: EventEnvelope): RoutineState {
   if (!saved || state.status !== 'active' || run.definitionRevision !== saved.definitionRevision ||
       run.scheduleRevision !== saved.scheduleRevision ||
       run.controlRevision !== saved.controlRevision ||
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact routine input and budget binding.
       JSON.stringify(run.definition) !== JSON.stringify(savedDefinition)) {
     throw new Error('A run must use the active saved definition');
   }
   if (state.activeRun) {
     const activeRun = schemas.routineDueSchema.parse(state.activeRun);
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact active run idempotency.
     if (JSON.stringify(activeRun) === JSON.stringify(run)) {
       return state;
     }

@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
@@ -201,9 +202,9 @@ async function recordInvalidation(options: Options, request: Request, access = f
     request.conversationId, request.turnId);
   if (current.turnEnded !== chat.turnEnded ||
       current.conversationClosed !== chat.conversationClosed ||
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact memory input conflicts.
       JSON.stringify(current.memoryContext) !== JSON.stringify(state) ||
-      JSON.stringify(Array.from(current.memoryContext?.events ?? [])) !==
-      JSON.stringify(Array.from(state.events))) {
+      !sameJson(Array.from(current.memoryContext?.events ?? []), Array.from(state.events))) {
     return { status: 'reload_required' };
   }
   const event = invalidationEvent(options.silo, saved, state, scopeId, cause.position, id, reason);

@@ -128,3 +128,4 @@ export { personalProfileMetadataSchema, personalConnectionSettingsSchema,
 export { sessionDefaults } from './session-defaults.ts';
 
 export { recordIdPattern, recordIdSchema } from '@opencrane/events';
+export { sameJson } from '@opencrane/events';

@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { z } from 'zod';
 import { readEventAt,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -100,7 +101,7 @@ function sameGroupCreation(data: unknown,
   const savedIds = [...created.participantIds].sort();
   return created.createdBy === memberId && created.groupId === input.groupId &&
     created.groupSnapshotPosition === input.groupSnapshotPosition &&
-    JSON.stringify(savedIds) === JSON.stringify(ids);
+    sameJson(savedIds, ids);
 }
 
 export async function chatHistory(

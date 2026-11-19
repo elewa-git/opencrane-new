@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { recordIdSchema } from '@opencrane/events';
 import { savePausing, savePaused, saveFailed, type StopExecution } from './bridge-pausing.ts';
 import { pauseTimeRemaining } from './bridge-pause-time.ts';
@@ -122,7 +123,7 @@ function requireReadyControl(control: Exclude<ComputerControl, { phase: 'unverif
 function matchesReceipt(next: z.infer<typeof receiptData>, sent: z.infer<typeof bindingData>,
   previous: z.infer<typeof receiptData> | undefined) {
   if (next.takeoverId !== sent.takeoverId || next.generation !== sent.generation
-    || JSON.stringify(next.affectedTurnIds) !== JSON.stringify(sent.affectedTurnIds)
+    || !sameJson(next.affectedTurnIds, sent.affectedTurnIds)
     || (previous && next.epoch !== previous.epoch)) return false;
   if (next.type === 'bridge_quiet') {
     for (const turnId of next.interruptedTurnIds) {

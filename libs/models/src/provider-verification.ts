@@ -115,6 +115,7 @@ export async function requestProviderVerification(store: EventStore, binding: Bi
   const previous = current.rows.find(matches);
   if (previous) {
     if (previous.event.type !== type ||
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact provider verification retries.
       JSON.stringify(previous.event.data) !== JSON.stringify(payload)) {
       throw new ProviderConflict();
     }
@@ -151,6 +152,7 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
   }
   const requested = current.rows.find(matches);
   if (requested?.event.type !== 'provider.verification_requested' ||
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact verification request binding.
     JSON.stringify(requested.event.data) !== JSON.stringify(data)) {
     throw new ProviderRefused();
   }

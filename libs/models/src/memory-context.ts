@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { recordIdSchema } from '@opencrane/events';
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose';
 import { z } from 'zod';
@@ -59,7 +60,7 @@ export async function verifyMemoryContext(token: string,
   const scopes = parsed.input ? [parsed.input.scopeId] : [];
   if (claims.exp * 1000 <= Date.now() || claims.exp <= claims.iat || claims.exp - claims.iat > 2 ||
       claims.iat * 1000 > Date.now() || claims.bodyDigest !== parsed.bodyDigest ||
-      claims.operation !== operation || JSON.stringify(claims.scopes) !== JSON.stringify(scopes) ||
+      claims.operation !== operation || !sameJson(claims.scopes, scopes) ||
       claims.thread !== parsed.request.params._meta.threadId ||
       claims.callId !== parsed.request.params._meta.callId) {
     throw new Error('Memory context refused');

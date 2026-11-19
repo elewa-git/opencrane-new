@@ -385,6 +385,7 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
   function finishRecovery() {
     const current = journal.read();
     // Ignore a read taken while another server was changing this command's record.
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact concurrent command recovery check.
     if (current === null || JSON.stringify(current) !== JSON.stringify(entry)) {
       return Promise.resolve();
     }

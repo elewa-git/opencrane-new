@@ -24,6 +24,7 @@ function checkEvidence(context: MemoryContext, evidence: Evidence, dependencies:
     saved.conversationId, saved.turnId, saved.threadId];
   const current = [context.requester, context.assistant, context.computer, context.generation,
     context.conversation, context.turn, context.thread];
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact memory lineage evidence binding.
   if (JSON.stringify(recorded) !== JSON.stringify(current)) {
     throw new MemoryRefused();
   }

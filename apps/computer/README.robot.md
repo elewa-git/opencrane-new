@@ -1276,6 +1276,13 @@ model delivery and a fresh-install chat journey remain NOT RUN.
 
 The [approval API](../../docs/api/approvals.md) explains tool failure records and approval actions.
 
+## Packaged JSON comparison
+
+The image includes the browser-safe `@opencrane/events/same-json` module.
+The worker's fixed npm argument check uses it on ordered string arrays, preserving
+its accepted commands. Stop, private-tool and catalogue binding checks retain exact
+JSON text comparison to avoid broadening accepted retries or grants.
+
 ## Signed bridge work gate
 
 The bridge reads the public signing key and identity saved by root credential

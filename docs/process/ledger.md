@@ -103,6 +103,12 @@ fresh-install proof. Phase 5 remains in the index linked above.
 | P4-27 Admin overview and change history | [#109](https://github.com/elewa-git/opencrane-new/issues/109) | Part 2026-11-17 `df068a68c` | NOT RUN | — |
 | P4-28 Complete company qualification | [#110](https://github.com/elewa-git/opencrane-new/issues/110) | No | NOT RUN | — |
 
+## Engineering standards
+
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| Shared JSON comparison | [#1048](https://github.com/elewa-git/opencrane-new/issues/1048) | No | NOT RUN | [Receipt](work-clean-1048-s1/journey.md) |
+
 ## Measurements
 
 ### Lint size debt

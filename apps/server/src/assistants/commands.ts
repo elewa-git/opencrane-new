@@ -28,6 +28,7 @@ function previous(rows: StoredEvent[], input: z.infer<typeof inputSchema>, membe
   const expected = { assistantId: input.assistantId, ownerId: input.groupId,
     kind: 'team', payingGroupId: input.payingGroupId, name: input.name, grants: input.grants };
   if (saved.event.principal?.id !== memberId || saved.event.type !== 'assistant.created' ||
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact assistant creation retry binding.
       JSON.stringify(saved.event.data) !== JSON.stringify(expected)) {
     throw new GroupConflict('Command id already used');
   }

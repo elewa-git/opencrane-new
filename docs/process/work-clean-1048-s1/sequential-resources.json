@@ -1,0 +1,12 @@
+{
+  "startedAt": "2026-11-19T14:46:09.783090+00:00",
+  "head": "4d032808c8bebcb6ff3e3e4e268c9ad46bc95197",
+  "loadAverage": [
+    4.71337890625,
+    5.3173828125,
+    6.26220703125
+  ],
+  "selectionMaxWorkers": 1,
+  "otherSelectionMaxWorkers": 1,
+  "combinedFixtureWorkerLimit": 2
+}

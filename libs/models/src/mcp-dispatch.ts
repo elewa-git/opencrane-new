@@ -362,6 +362,7 @@ export function mcpDispatch(actor: BudgetActor, options?: McpDispatchOptions) {
       return permit.route;
     }
     const currentRoute = routeFor(permit.route.serverId, permit.route.connectionId);
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact credential dispatch route binding.
     if (JSON.stringify(currentRoute) !== JSON.stringify(permit.route)) {
       throw new Error('MCP backend changed');
     }

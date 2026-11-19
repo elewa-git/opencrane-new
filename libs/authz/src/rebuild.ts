@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { randomUUID } from "node:crypto";
 import type { EventSource } from "@opencrane/projections";
 import { readEvents } from "@opencrane/projections";
@@ -64,8 +65,7 @@ export async function rebuildMembers(
     }
     if (
       verifyAgainst &&
-      JSON.stringify(await snapshot(binding)) !==
-        JSON.stringify(await snapshot(verifyAgainst))
+      !sameJson(await snapshot(binding), await snapshot(verifyAgainst))
     ) {
       throw new Error("Rebuilt OpenFGA state differs from the live projection");
     }

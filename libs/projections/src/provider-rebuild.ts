@@ -56,6 +56,7 @@ export async function rebuildProviderProjection(
       await runner.run(replayProviders, { toSequence: checkpoint });
       const liveState = await state(locked, 'providers');
       const replayState = await state(locked, 'providers_replay');
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact provider replay verification.
       const unchanged = JSON.stringify(liveState) === JSON.stringify(replayState);
       if (verify && !unchanged) {
         throw new Error('Rebuilt providers differ from the live projection');

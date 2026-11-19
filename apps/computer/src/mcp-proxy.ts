@@ -493,6 +493,7 @@ function bindCatalogue(previous: Catalogue, turnId: string, conversation: string
   if (previous.turnId !== turnId || previous.conversation !== conversation
     || previous.restricted !== restricted
     || (restricted && previous.thread !== undefined && previous.thread !== thread)
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact tool catalogue binding.
     || JSON.stringify([...previous.servers]) !== JSON.stringify([...servers])) {
     throw new Error('Tool list address was reused');
   }

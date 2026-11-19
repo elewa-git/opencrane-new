@@ -155,6 +155,7 @@ function matchesSavedCommand(options: ChatOptions, memberId: string,
   input: z.infer<typeof commandSchema>, row: NonNullable<Awaited<ReturnType<typeof savedCommand>>>['row']) {
   if (input.operation === 'save_step') {
     return row.event.type === 'onboarding.survey_step_saved' &&
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact survey retries.
       JSON.stringify(decryptAnswers(options, memberId, row.event)) ===
       JSON.stringify(input.answers);
   }

@@ -34,6 +34,7 @@ function checkOriginal(saved: StoredEvent, event: EventEnvelope) {
   if (saved.event.silo !== event.silo || saved.event.subject !== event.subject ||
       saved.event.commandId !== event.commandId || saved.event.type !== event.type ||
       saved.event.principal?.kind !== 'human' || saved.event.principal.id !== event.principal?.id ||
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact grant command retries.
       JSON.stringify(saved.event.data) !== JSON.stringify(event.data)) {
     throw new ProviderConflict();
   }

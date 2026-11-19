@@ -100,6 +100,7 @@ function reconcileStop(saved: StoredEvent, attempted: EventEnvelope) {
   }
   const savedPayload = mcpInstanceStopSchema.parse(event.data);
   const attemptedPayload = mcpInstanceStopSchema.parse(attempted.data);
+  // eslint-disable-next-line no-restricted-syntax -- Keep exact instance stop retries.
   if (JSON.stringify(savedPayload) !== JSON.stringify(attemptedPayload)) {
     throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
   }
@@ -148,6 +149,7 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
     if (input.runGeneration === undefined) {
       data.runGeneration = saved.runGeneration;
     }
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact instance stop retries.
     if (JSON.stringify(saved) !== JSON.stringify(mcpInstanceStopSchema.parse(data))) {
       throw new McpInstanceRefused('conflict', 'Instance change payload mismatch');
     }

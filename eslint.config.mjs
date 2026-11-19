@@ -7,6 +7,21 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const recordIdRestriction = {
+  selector: 'Literal[regex.pattern="^[\\\\w-]{1,200}$"][regex.flags="u"], ' +
+    'Literal[regex.pattern="^[A-Za-z0-9_-]{1,200}$"][regex.flags="u"]',
+  message: 'Import recordIdSchema or recordIdPattern instead of copying the ID pattern.',
+};
+
+const jsonTextComparisonRestriction = {
+  selector: 'BinaryExpression[operator=/^(===|!==|==|!=)$/]' +
+    '[left.type="CallExpression"][left.callee.type="MemberExpression"]' +
+    '[left.callee.object.name="JSON"][left.callee.property.name="stringify"]' +
+    '[right.type="CallExpression"][right.callee.type="MemberExpression"]' +
+    '[right.callee.object.name="JSON"][right.callee.property.name="stringify"]',
+  message: 'Import sameJson instead of comparing JSON.stringify results.',
+};
+
 export default tseslint.config(
   {
     // spikes and infra have separate qualification; they are not production workspaces.
@@ -73,12 +88,20 @@ export default tseslint.config(
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
     ignores: ['libs/events/src/ids.ts'],
     rules: {
-      'no-restricted-syntax': ['error', {
-        selector: 'Literal[regex.pattern="^[\\\\w-]{1,200}$"][regex.flags="u"], ' +
-          'Literal[regex.pattern="^[A-Za-z0-9_-]{1,200}$"][regex.flags="u"]',
-        message: 'Import recordIdSchema or recordIdPattern instead of copying the ID pattern.',
-      }],
+      'no-restricted-syntax': ['error', recordIdRestriction],
     },
+  },
+  {
+    files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
+    ignores: ['**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', recordIdRestriction, jsonTextComparisonRestriction],
+    },
+  },
+  {
+    // Exempt the shared ID definition only from its own copy rule.
+    files: ['libs/events/src/ids.ts'],
+    rules: { 'no-restricted-syntax': ['error', jsonTextComparisonRestriction] },
   },
   {
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],

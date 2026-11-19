@@ -62,6 +62,7 @@ function requireSameRetirement(event: EventEnvelope, input: Input, memberId: str
       event.subject !== `routine-${input.routineId}` ||
       event.principal?.kind !== 'human' || event.principal.id !== memberId ||
       data.actorId !== memberId ||
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact routine retirement retries.
       !saved.success || JSON.stringify(saved.data) !== JSON.stringify(data)) {
     throw new RetirementConflict();
   }

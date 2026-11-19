@@ -61,6 +61,7 @@ async function authoriseCapture(config: AuthConfig, files: FileOptions, view: Li
   if (!memberId) throw new Error('Access changed');
   const computer = await viewAccess(view, memberId, conversationId);
   const fresh = async () => {
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact computer access binding.
     if (!sessionFor(request, config, new Date()) || JSON.stringify(await viewAccess(view, memberId, conversationId)) !== JSON.stringify(computer)) throw new Error('Access changed');
   };
   const fileId = sha256HexOfJson([files.silo, conversationId, memberId, `screenshot-${key}`]);

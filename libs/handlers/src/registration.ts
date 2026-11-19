@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import {
   handlerSubscriptions,
   type HandlerName,
@@ -34,8 +35,7 @@ export function checkHandlers(handlers: readonly Handler[]): string {
   for (const handler of handlers) {
     if (
       names.has(handler.name) ||
-      JSON.stringify(handler.eventTypes) !==
-        JSON.stringify(handlerSubscriptions[handler.name])
+      !sameJson(handler.eventTypes, handlerSubscriptions[handler.name])
     ) {
       throw new Error(
         "Duplicate handler or subscriptions differ from catalogue",

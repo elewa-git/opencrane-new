@@ -165,6 +165,7 @@ function reconcileBinding(saved: StoredEvent, silo: string, providerId: string,
   if (event.silo !== silo || event.subject !== `provider-${providerId}` ||
     event.commandId !== commandId || event.principal?.kind !== 'human' ||
     event.principal.id !== memberId || event.type !== 'provider.model_binding_set' ||
+    // eslint-disable-next-line no-restricted-syntax -- Keep exact provider binding retries.
     JSON.stringify(event.data) !== JSON.stringify(payload)) {
     throw new ProviderConflict();
   }

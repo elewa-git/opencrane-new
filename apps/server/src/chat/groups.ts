@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { getEventDefinition, chatIdSchema } from '@opencrane/events';
@@ -120,7 +121,7 @@ export async function reviewedGroup(options: ChatOptions, memberId: string,
   const ids = snapshot.members.map(memberIdFor);
   const reviewedIds = [...input.participantIds].sort();
   if (snapshot.position !== input.groupSnapshotPosition ||
-      JSON.stringify(ids) !== JSON.stringify(reviewedIds)) {
+      !sameJson(ids, reviewedIds)) {
     throw new ChatConflict('Group changed; review its members again');
   }
   return snapshot;

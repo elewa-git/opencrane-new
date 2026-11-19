@@ -234,6 +234,7 @@ function applyCapture(next: ToolPolicy, previous: Catalogue | null, catalogue: C
     throw new Error('Hosted catalogue has no saved start');
   }
   if (next.hostedRun &&
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact approval catalogue workload binding.
       JSON.stringify(catalogue.hostedRun) !== JSON.stringify(next.hostedRun)) {
     throw new Error('Captured catalogue does not match the hosted run');
   }
@@ -307,6 +308,7 @@ function applyCheck(state: ToolPolicy, data: Record<string, unknown>, sequence: 
     throw new Error('Catalogue check does not match the saved snapshot');
   }
   if (state.hostedRun &&
+      // eslint-disable-next-line no-restricted-syntax -- Keep exact approval catalogue workload binding.
       JSON.stringify(state.catalogue.hostedRun) !== JSON.stringify(state.hostedRun)) {
     throw new Error('Catalogue check belongs to an earlier hosted run');
   }
