@@ -2042,7 +2042,7 @@ keeps the remaining live checks explicit.
 The models process gets a separate control port for checking loaded configuration.
 The stack never forwards it. After a fresh CORE run, `stage-b-live.ts` starts the
 guarded demo transport. Run `journey.sh` with `APPROVAL_JOURNEY_ONLY=1` to seed
-3,000 messages and check requester approval, exact forwarded bytes, single use, denial
+3,000 completed messages and check requester approval, exact forwarded bytes, single use, denial
 and a browser Stop followed by a refused call, at 1280 and 390 pixels.
 The launcher records synthetic write bytes in `demo-calls.jsonl`; direct readback
 confirms the effect count independently. Keep the launcher running until checks finish.
