@@ -130,6 +130,10 @@ function checkBootstrapOrder(calls, restoring) {
 
 function checkFixtureArguments(calls, fixture, privateDirectory, renders) {
   for (const call of calls) {
+    if (call.program === 'kubectl' && call.args.includes('run')) {
+      assert.equal(call.args[call.args.indexOf('--image') + 1], fixture.values.images.server,
+        'Host probes must use the current CI-approved application image');
+    }
     if (fixture.cluster) {
       assert.ok(!call.args.includes('--context=k3d-ocn') && !call.args.includes('k3d-ocn'),
         'Never fall back to the shared cluster');
