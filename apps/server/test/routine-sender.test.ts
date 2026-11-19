@@ -1031,7 +1031,8 @@ async function keepsNativeSession() {
   const second = await link.prepareRoutineThread(preparationIdentity('other-turn'));
   expect(second).toBe('native-thread-2');
   expect(selection.threadId).toBe('native-thread-1');
-  await sender().send(computer.wake);
+  const result = await sender().send(computer.wake);
+  expect(result).toEqual({ status: 'sent' });
   await until(computer.executed);
   expect(computer.nativeStarts).toBe(2);
   expect(computer.executedThreads).toEqual(['native-thread-1']);
