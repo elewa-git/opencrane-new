@@ -5,9 +5,11 @@ import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
 import { computerTurnStartedDataSchema } from '@opencrane/events';
 import { history } from '@opencrane/models';
-import { directory, readEnv } from './config.ts';
+import { readEnv } from './config.ts';
 import { approvalToolBody, issueApprovalComputer, waitForApprovalSetup,
-  type ApprovalJourneyIdentity } from './approval-tool.ts';
+  type ApprovalJourneyIdentity, type ApprovalToolRequest } from './approval-tool.ts';
+import { captureApprovalState, decideJourneyApproval, postedRequestField }
+  from './approval-cards.ts';
 
 export type ApprovalStopInput = ApprovalJourneyIdentity & {
   conversationId: string;
@@ -41,30 +43,40 @@ export async function stopApprovalTurn(page: Page, store: EventStore,
   const computer = await issueApprovalComputer(store, tokens, input);
   const claims = { ...input, ...active, model: active.model ?? 'gpt-6-luna' };
   const turn = await computerCredentials(store, tokens, input.silo).turn(claims);
-  function isStopResponse(response: Response) {
-    const request = response.request();
-    if (request.method() !== 'POST' || !response.url().includes('/api/conversations/')) {
-      return false;
-    }
-    return request.postDataJSON()?.stopTurnId === active?.turnId;
-  }
-  const stopping = page.waitForResponse(isStopResponse);
-  await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
-  assert.equal((await stopping).status(), 200, 'Requester saves Stop through the browser');
-  const body = approvalToolBody({ threadId: active.threadId,
-    callId: 'after-browser-stop', slot: 'morning' });
+  const toolRequest: ApprovalToolRequest = { threadId: active.threadId,
+    callId: `after-browser-stop-${active.turnId}`, slot: 'morning' };
+  const body = approvalToolBody(toolRequest);
   const url = `http://127.0.0.1:${settings['MODEL_GATEWAY_PORT']}/mcp/${input.serverId}/installed`;
   const headers = { authorization: `Bearer ${computer.value}`, 'x-turn-token': turn.value,
     'session-id': active.threadId, 'content-type': 'application/json',
     'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
     'mcp-name': 'change_delivery_slot' };
-  const refusal = await fetch(url, { method: 'POST', headers, body });
+  const request = { method: 'POST', headers, body };
+  // Approve these exact bytes so Ask alone cannot explain the later refusal.
+  const asking = await fetch(url, request);
+  await asking.arrayBuffer();
+  assert.equal(asking.status, 403, 'The active native turn requests approval');
+  const requested = page.getByRole('region', { name: 'Approval needed', exact: true });
+  await requested.waitFor();
+  await decideJourneyApproval(page, requested, 'Approve', /Approved by you.*Not used yet/);
+  await captureApprovalState(page, 'stop-approved');
+  function isStopResponse(response: Response) {
+    const request = response.request();
+    if (request.method() !== 'POST' || !response.url().includes('/api/conversations/')) {
+      return false;
+    }
+    return postedRequestField(response, 'stopTurnId') === active?.turnId;
+  }
+  const stopping = page.waitForResponse(isStopResponse);
+  await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
+  assert.equal((await stopping).status(), 200, 'Requester saves Stop through the browser');
+  const refusal = await fetch(url, request);
   await refusal.arrayBuffer();
   assert.equal(refusal.status, 403, 'The next tool call on the stopped turn is refused');
   await page.getByText('Stopped · partial reply kept', { exact: true }).waitFor();
   const width = page.viewportSize()!.width;
-  const addresses = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
-  await page.screenshot({ path: `docs/process/work-bug-1148-s1/stopped-${width}.png`,
-    fullPage: true, mask: [addresses] });
-  console.log(`PASS browser Stop ${width}px in the 3,000-message chat; next tool call HTTP 403`);
+  await captureApprovalState(page, 'stopped');
+  const message = `PASS browser Stop ${width}px in the 3,000-message chat; ` +
+    'the same approved request is refused with HTTP 403';
+  console.log(message);
 }

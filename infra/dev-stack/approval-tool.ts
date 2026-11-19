@@ -38,7 +38,8 @@ export function approvalToolBody(input: ApprovalToolRequest) {
     callId: input.callId };
   const argumentsData = { quoteId: 'DEMO-001', slot: input.slot };
   const params = { name: 'change_delivery_slot', arguments: argumentsData, _meta: metadata };
-  return JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
+  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params };
+  return JSON.stringify(request);
 }
 
 export async function issueApprovalComputer(store: EventStore,
@@ -49,7 +50,8 @@ export async function issueApprovalComputer(store: EventStore,
   }
   const identity = z.object({ tokenId: z.string() }).parse(
     rows.findLast(computerIdentity)?.event.data);
-  return tokens.computer({ ...input, ...identity });
+  const claims = { ...input, ...identity };
+  return tokens.computer(claims);
 }
 
 export async function waitForApprovalSetup(check: () => Promise<boolean>) {
@@ -79,7 +81,8 @@ export async function prepareApprovalTool(input: ApprovalToolSetup) {
     return 'block';
   }
   const modes = policy.catalogue.tools.map(chooseMode);
-  await reviewSavedJourneyTools({ ...input, serverId }, modes);
+  const review = { ...input, serverId };
+  await reviewSavedJourneyTools(review, modes);
   async function publicationReady() {
     const response = await ownerPage.request.get(
       `${origin}/api/org/integrations/${serverId}/facts`);

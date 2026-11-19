@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Page, Response } from 'playwright';
+import type { Page } from 'playwright';
 import { z } from 'zod';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { grantStream, type memberAuthorisation } from '@opencrane/authz';
-import type { AppendCommand, EventStore } from '@opencrane/event-store';
+import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
+import { approvalUsedDataSchema, decisionRecordedDataSchema } from '@opencrane/events';
 import { envelope, history, providerTurnAdmission } from '@opencrane/models';
 import { conversationKeys, connectProjectionDb, type Query } from '@opencrane/projections';
 import { directory, readEnv } from './config.ts';
@@ -15,8 +16,26 @@ import { approvalToolBody, completedApprovalMessage, issueApprovalComputer, prep
 import { createStageBCollector } from './stage-b-collector.ts';
 import { readStageBQuote } from './stage-b-readback.ts';
 import { stopApprovalTurn } from './approval-stop.ts';
+import { approvalTerminal, captureApprovalState, decideJourneyApproval }
+  from './approval-cards.ts';
 
 type Append = (type: string, subject: string, data: Record<string, unknown>, source?: string) => Promise<void>;
+
+function isAllowedDecision(row: StoredEvent) {
+  if (row.event.type !== 'decision.recorded') return false;
+  const decision = decisionRecordedDataSchema.parse(row.event.data);
+  return decision.outcome === 'allow';
+}
+
+function countApprovalUses(rows: StoredEvent[], permitId: string) {
+  let uses = 0;
+  for (const row of rows) {
+    if (row.event.type !== 'approval.used') continue;
+    const used = approvalUsedDataSchema.parse(row.event.data);
+    if (used.permitId === permitId) uses++;
+  }
+  return uses;
+}
 
 async function recordedApprovalCalls() {
   const text = await readFile(`${directory}/demo-calls.jsonl`, 'utf8');
@@ -80,7 +99,6 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
   await mkdir('docs/process/work-bug-1148-s1', { recursive: true });
   for (const page of pages) {
     const width = page.viewportSize()!.width;
-    const addresses = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
     const turnId = randomUUID();
     await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, turnId, assistantId: input.assistantId });
     await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', payingGroupId: defaultPayingGroupId, ...provider }, 'opencrane-server');
@@ -111,26 +129,12 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       await page.reload(); await requested.waitFor();
       await page.evaluate('document.fonts.ready');
       assert(await requested.evaluate(element => element.scrollWidth <= element.clientWidth), 'Card fits viewport');
-      await page.screenshot({ path: `docs/process/work-bug-1148-s1/requested-${width}.png`, fullPage: true, mask: [addresses] });
-      async function decide(button: 'Approve' | 'Deny', label: RegExp | string) {
-        const decidingId = await requested.getAttribute('data-approval');
-        assert(decidingId);
-        function isDecisionResponse(response: Response) {
-          const request = response.request();
-          return request.method() === 'POST' && response.url().endsWith('/approvals') &&
-            request.postDataJSON()?.approvalId === decidingId;
-        }
-        const response = page.waitForResponse(isDecisionResponse);
-        const decisionPattern = button === 'Approve' ? /^Approve:/ : /^Deny:/;
-        await requested.getByRole('button', { name: decisionPattern }).click();
-        assert.equal((await response).status(), 200, 'One decision submission succeeds');
-        await approvalTerminal(page, decidingId, label).waitFor();
-        return 1;
-      }
-      const approveAttempts = await decide('Approve', /Approved by you.*Not used yet/);
+      await captureApprovalState(page, 'requested');
+      const approveAttempts = await decideJourneyApproval(page, requested, 'Approve',
+        /Approved by you.*Not used yet/);
       const approved = page.getByRole('button', { name: /Approved by you.*Not used yet/ });
       await page.reload(); await approved.waitFor();
-      await page.screenshot({ path: `docs/process/work-bug-1148-s1/approved-${width}.png`, fullPage: true, mask: [addresses] });
+      await captureApprovalState(page, 'approved');
       assert.equal(await call('afternoon'), 200);
       assert.equal(await call('afternoon'), 403, 'Second retry refused');
       const recorded = await recordedApprovalCalls();
@@ -141,25 +145,25 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       assert.equal(recorded.length, before + 1, 'Exactly one upstream call');
       assert.equal(recorded.at(-1)!.body, body('afternoon'), 'Approved bytes forwarded unchanged');
       const audit = await history(store, `decision-${recorded.at(-1)!.requestId}`, input.silo);
-      assert(audit.some(row => row.event.type === 'decision.recorded' && (row.event.data as { outcome: string }).outcome === 'allow'));
+      assert(audit.some(isAllowedDecision));
       await page.reload();
       await approvalTerminal(page, approvalId, /Approved by you.*used once/).waitFor();
-      await page.screenshot({ path: `docs/process/work-bug-1148-s1/used-${width}.png`, fullPage: true, mask: [addresses] });
+      await captureApprovalState(page, 'used');
       assert.equal(await call('morning'), 403);
       await requested.waitFor();
       const deniedId = await requested.getAttribute('data-approval');
       assert(deniedId);
-      const denyAttempts = await decide('Deny', /Denied by you/);
+      const denyAttempts = await decideJourneyApproval(page, requested, 'Deny', /Denied by you/);
       assert.equal(await call('morning'), 403, 'Denied call refused');
       assert.equal((await recordedApprovalCalls()).length, before + 1, 'Denial has zero upstream effects');
       await page.reload();
       await approvalTerminal(page, deniedId, /Denied by you/).waitFor();
       await approvalTerminal(page, approvalId, /Approved by you.*used once/).waitFor();
       assert.equal(await page.getByRole('button', { name: /^Approve:/ }).count(), 0);
-      await page.screenshot({ path: `docs/process/work-bug-1148-s1/denied-${width}.png`, fullPage: true, mask: [addresses] });
+      await captureApprovalState(page, 'denied');
       const approvals = await history(store, `approval-${approvalId}`, input.silo);
-      assert.equal(approvals.filter(row => row.event.type === 'approval.used' &&
-        (row.event.data as { permitId: string }).permitId === recorded.at(-1)!.requestId).length, 1);
+      const uses = countApprovalUses(approvals, recorded.at(-1)!.requestId);
+      assert.equal(uses, 1);
       console.log(`PASS approvals ${width}px after 3,000 saved messages: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
     } catch (error) {
       // Capture the card before cleanup closes the turn and leaves the conversation.
@@ -235,9 +239,4 @@ async function waitForApprovalHistory(db: Query, position: number) {
       `The long chat reaches the conversation projection: expected ${position}, saved ${checkpoint}`);
     await delay(100);
   }
-}
-
-function approvalTerminal(page: Page, approvalId: string, name: string | RegExp) {
-  const identity = page.locator(`button[data-approval="${approvalId}"]`);
-  return page.getByRole('button', { name }).and(identity);
 }
