@@ -4,6 +4,7 @@ import { remoteFixture } from "@opencrane/models/testing/remote-mcp";
 import { afterEach, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { history } from '@opencrane/models';
 import { registerRemote, discoveryStatus } from '../src/integrations/registration.ts';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { discoverInventory } from '../src/integrations/inventory.ts';
@@ -19,7 +20,7 @@ async function keepsRegistrationIdSeparateFromCommand() {
   const change = await registerRemote(nats.store, 'test', 'admin', {
     locator: 'https://mcp.example.test/mcp',
   });
-  const rows = await Array.fromAsync(nats.store.readStream(`mcp-${change.serverId}`));
+  const rows = await history(nats.store, `mcp-${change.serverId}`, 'test');
   expect(rows).toHaveLength(1);
   const event = rows[0]!.event;
   expect(event.id).not.toBe(change.changeRef);
