@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -186,9 +187,9 @@ async function prepareSave(custody: Custody, input: Input, material: string,
     throw new Error('Company connection conflict');
   }
   const type = generation === 1 ? 'connection.created' : 'connection.refreshed';
-  const event = { ...envelope(silo, subject, type, data, operationId),
-    commandId: input.changeRef, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: custodianId } };
+  const event = serverEvent({ ...envelope(silo, subject, type, data, operationId),
+    commandId: input.changeRef,
+    principal: { kind: 'human' as const, id: custodianId } });
   return { event, original, data };
 }
 function requirePrevious(previous: ReturnType<typeof foldCompanyConnection>,

@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
@@ -110,9 +111,9 @@ async function stageGeneration(custody: Custody, evidence: Evidence) {
       configurationDigest: oauthConfigurationDigest(saved.configuration),
     } };
   const data = connectionCreatedDataSchema.parse(payload);
-  const event = { ...envelope(stage.siloId, claimed.event.subject, 'connection.created',
-    data, operationId), commandId: saved.event.commandId, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: stage.userId } };
+  const event = serverEvent({ ...envelope(stage.siloId, claimed.event.subject, 'connection.created',
+    data, operationId), commandId: saved.event.commandId,
+    principal: { kind: 'human' as const, id: stage.userId } });
   return { event, identityUntil };
 }
 

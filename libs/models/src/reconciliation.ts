@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { currentEffectState } from './current-effects.ts';
 import { currentMembership } from './ownership.ts';
@@ -178,8 +179,8 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
   if (current.sequence !== expectedSequence || current.resolution || current.state !== 'outcome_unknown') return { status: 'conflict' } as const;
   if (!sufficient(payload) || current.observations.some(o => o.costCents !== payload.settledCents)) return { status: 'held' } as const;
   await fresh?.(); await memberFresh();
-  return store.append({ event: { ...envelope(silo, `effect-${permitId}`, 'effect.resolved', payload, commandId),
-    source: 'opencrane-server', principal: { kind: 'human', id: memberId } }, expectedSequence });
+  return store.append({ event: serverEvent({ ...envelope(silo, `effect-${permitId}`, 'effect.resolved', payload, commandId),
+    principal: { kind: 'human', id: memberId } }), expectedSequence });
 }
 
 function sufficient(payload: z.infer<typeof effectResolvedDataSchema>) {

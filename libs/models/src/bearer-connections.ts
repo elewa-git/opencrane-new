@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { appendConnection, requireSameConnectionEvent as requireSameEvent,
   requireConnectionEnabled, type ConnectionAccessCheck } from './connection-append.ts';
@@ -348,9 +349,9 @@ async function saveLocked(store: EventStore, binding: Binding, memberId: string,
     throw new Error('Connection conflict');
   }
   const type = input.action === 'create' ? 'connection.created' : 'connection.refreshed';
-  const event = { ...envelope(binding.silo, subject, type, data, operationId),
-    commandId: input.changeRef, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: memberId } };
+  const event = serverEvent({ ...envelope(binding.silo, subject, type, data, operationId),
+    commandId: input.changeRef,
+    principal: { kind: 'human' as const, id: memberId } });
   const append = { input, event, server, original, confirmAccess: custody.confirmAccess };
   return appendConnection(store, binding, memberId, append);
 }
@@ -378,9 +379,9 @@ export async function changePersonalConnection(store: EventStore, binding: Bindi
     ? { ...fields, revokedBy: actorId, reason: 'owner_requested' }
     : { ...fields, disabledBy: actorId, reason: 'admin_disabled' };
   const type = isRevoke ? 'connection.revoked' : 'connection.disabled';
-  const event = { ...envelope(binding.silo, subject, type, payload, operationId),
-    commandId: input.changeRef, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: actorId } };
+  const event = serverEvent({ ...envelope(binding.silo, subject, type, payload, operationId),
+    commandId: input.changeRef,
+    principal: { kind: 'human' as const, id: actorId } });
   // Check current permission once after preparation, including when history failed.
   const fresh = await authorityFence(store, performance.now(), [`member-${actorId}`]);
   const options = { requiredRole, fresh };

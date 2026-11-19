@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -108,9 +109,9 @@ export async function checkPersonalOAuthStart(store: EventStore, binding: Bindin
     stateDigest: prepared.stateDigest, secretRef: `secret:${prepared.identity.reference}`,
     uid: prepared.identity.uid, resourceVersion: prepared.identity.resourceVersion,
     expectedSequence: 0, appendUntil: prepared.stage.appendUntil });
-  const event = { ...envelope(binding.silo, subject, 'connection.oauth_started',
-    data, data.attemptId), commandId: input.changeRef, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: session.userId } };
+  const event = serverEvent({ ...envelope(binding.silo, subject, 'connection.oauth_started',
+    data, data.attemptId), commandId: input.changeRef,
+    principal: { kind: 'human' as const, id: session.userId } });
   const appendUntil = Math.min(prepared.stage.appendUntil, server.expiresAt);
   async function checkDependencies(sequence: number, deadline: number) {
     const current = oauthConfigurationSchema.parse(await loadConfiguration(input.serverId));

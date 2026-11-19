@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -372,9 +373,9 @@ async function prepareSelection(store: EventStore, silo: string, userId: string,
     }
     const consent = preservedConsent(command, rows, original);
     const selected = connectionSelectedDataSchema.parse({ ...payload, ...companyBinding, ...consent });
-    const event = { ...envelope(silo, subject, 'connection.selected', selected, operationId),
-      commandId: changeRef, source: 'opencrane-server',
-      principal: { kind: 'human' as const, id: userId } };
+    const event = serverEvent({ ...envelope(silo, subject, 'connection.selected', selected, operationId),
+      commandId: changeRef,
+      principal: { kind: 'human' as const, id: userId } });
     let checked;
     if (original) {
       sameReceipt(original, event);

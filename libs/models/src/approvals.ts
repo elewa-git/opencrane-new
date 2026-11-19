@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, toolDispatchRecordedDataSchema,
@@ -340,10 +341,10 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
     type = 'approval.retry_requested';
     data = { approvalId };
   }
-  const event = {
+  const event = serverEvent({
     ...envelope(silo, `approval-${approvalId}`, type, data),
-    principal: { kind: 'human', id: memberId }, source: 'opencrane-server',
-  };
+    principal: { kind: 'human', id: memberId },
+  });
   const command: AppendCommand = { event, expectedSequence: current.sequence };
   if (Number.isFinite(deadline)) command.deadline = deadline;
   return store.append(command);

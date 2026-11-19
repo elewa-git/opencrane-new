@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { publicationEntry, publicationDigest } from './publication.ts';
 import { authorityFence } from './authority.ts';
@@ -292,8 +293,8 @@ export async function saveToolCommand(store: EventStore, binding: Binding, membe
   if (!valid) {
     return { status: 'conflict' };
   }
-  const event = { ...envelope(binding.silo, `mcp-${serverId}`, type, payload, command.commandId),
-    principal: { kind: 'human' as const, id: memberId }, source: 'opencrane-server' };
+  const event = serverEvent({ ...envelope(binding.silo, `mcp-${serverId}`, type, payload, command.commandId),
+    principal: { kind: 'human' as const, id: memberId } });
   await fresh();
   if (Date.now() >= expiresAt) {
     return { status: 'conflict' };

@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -96,9 +97,9 @@ function refreshClaimEvent(siloId: string, prepared: Prepared, workerId: string,
     attemptId: attempt.attemptId, workerId, purpose: 'refresh', secretRef: saved.secretRef,
     uid: activation.uid, resourceVersion: activation.resourceVersion,
     expectedSequence: original!.sequence, appendUntil });
-  return { ...envelope(siloId, subject, 'connection.oauth_exchange_claimed', data, claimId,
-    new Date(now)), source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: input.userId } };
+  return serverEvent({ ...envelope(siloId, subject, 'connection.oauth_exchange_claimed', data, claimId,
+    new Date(now)),
+    principal: { kind: 'human' as const, id: input.userId } });
 }
 
 /** Append once, then confirm this invocation's exact worker identity from saved history. */
@@ -255,9 +256,9 @@ async function appendRefresh(store: EventStore, siloId: string, prepared: Prepar
     serverId: input.serverId, connectionId: input.connectionId, profile: input.profileId,
     attemptId, configurationDigest: activation.configurationDigest,
     generation: activation.generation, expectedSequence, scopes: activation.account.scopes });
-  const event = { ...envelope(siloId, subject, 'connection.refresh_started', data, attemptId),
-    commandId: input.changeRef, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: input.userId } };
+  const event = serverEvent({ ...envelope(siloId, subject, 'connection.refresh_started', data, attemptId),
+    commandId: input.changeRef,
+    principal: { kind: 'human' as const, id: input.userId } });
   const command = { event, expectedSequence: checked.categorySequence, expectedSubject: 'connection-*',
     historyChecked: true as const, deadline: checked.deadline, checkAccess: checked.checkAccess };
   const result = await store.append(command);

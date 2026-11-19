@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -78,9 +79,9 @@ export async function claimPersonalOAuthCallback(store: EventStore, binding: Bin
         secretRef: `secret:${staged.identity.reference}`, uid: staged.identity.uid,
         resourceVersion: staged.identity.resourceVersion, expectedSequence: saved.original!.sequence,
         appendUntil: saved.prepared.stage.appendUntil });
-      const event = { ...envelope(binding.silo, subject, 'connection.oauth_exchange_claimed',
+      const event = serverEvent({ ...envelope(binding.silo, subject, 'connection.oauth_exchange_claimed',
         data, staged.stage.operationId), commandId: staged.stage.operationId,
-        source: 'opencrane-server', principal: { kind: 'human' as const, id: session.userId } };
+        principal: { kind: 'human' as const, id: session.userId } });
       const sequence = await appendClaim(store, event, checked);
       return { saved, sequence, claimId: event.id, staged };
     }

@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -109,9 +110,9 @@ async function appendGeneration(store: EventStore, binding: Binding, custody: Cu
   const payload = { ...prepared.saved, activation,
     secretRef: `secret:${staged.identity.reference}` };
   const data = connectionRefreshedDataSchema.parse(payload);
-  const event = { ...envelope(binding.silo, prepared.subject, 'connection.refreshed', data,
-    operationId), commandId: prepared.original!.event.commandId, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: stage.userId } };
+  const event = serverEvent({ ...envelope(binding.silo, prepared.subject, 'connection.refreshed', data,
+    operationId), commandId: prepared.original!.event.commandId,
+    principal: { kind: 'human' as const, id: stage.userId } });
   // Start the short access deadline after all private staging has finished.
   const checked = await refreshAccess(store, binding, prepared, loadConfiguration);
   async function checkAccess() {

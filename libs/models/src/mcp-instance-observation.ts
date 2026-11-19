@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { mcpInstanceStartSchema, mcpInstanceObservedSchema,
   type EventEnvelope } from '@opencrane/events';
@@ -72,10 +72,9 @@ export async function mcpInstanceObservation(store: EventStore, silo: string,
     serverId: worker.serverId };
   const current = await readMcpInstance(store, silo, reference);
   checkWorker(silo, worker, current.state);
-  const event: EventEnvelope = { id: randomUUID(), commandId: input.changeRef, silo,
+  const event: EventEnvelope = serverEvent({ commandId: input.changeRef, silo,
     subject: `mcp-instance-${worker.instanceId}`, type: 'mcp.instance_observed', data,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'system', id: worker.workerId } };
+    principal: { kind: 'system', id: worker.workerId } });
   function sameChange(row: StoredEvent) {
     return row.event.commandId === input.changeRef;
   }

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { serverEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { registerHandler } from '@opencrane/handlers';
 import {
@@ -132,12 +132,11 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
     await fresh();
     return providerReceipt(original);
   }
-  const event: EventEnvelope = {
-    id: randomUUID(), commandId: input.commandId, subject: `provider-${providerId}`,
+  const event: EventEnvelope = serverEvent({
+    commandId: input.commandId, subject: `provider-${providerId}`,
     silo: binding.silo, type: 'provider.model_binding_set', data: payload,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human', id: memberId },
-  };
+  });
   const command = {
     event, expectedSequence: current.position, expectedSubject: 'provider-*',
     historyChecked: true as const, deadline: fresh.deadline,

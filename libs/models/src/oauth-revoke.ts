@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -84,9 +85,9 @@ export async function prepareRevoke(store: EventStore, siloId: string, subject: 
       expectedSequence: state.sequence, reason: 'owner_requested' };
     const data = connectionRevokedDataSchema.parse(payload);
     const time = original ? new Date(original.event.time) : new Date();
-    const event = { ...envelope(siloId, subject, 'connection.revoked', data, operationId, time),
-      commandId: original?.event.commandId ?? input.changeRef, source: 'opencrane-server',
-      principal: { kind: 'human' as const, id: input.userId } };
+    const event = serverEvent({ ...envelope(siloId, subject, 'connection.revoked', data, operationId, time),
+      commandId: original?.event.commandId ?? input.changeRef,
+      principal: { kind: 'human' as const, id: input.userId } });
     if (original && (original.sequence <= state.sequence ||
         !isDeepStrictEqual(original.event, event))) {
       return undefined;
