@@ -52,20 +52,7 @@ describe('changed tool comparison', () => {
     expect(result?.rows[2]?.after).toContain('After');
   });
 
-  it('ignores reordered schema keys when describing a tool change', () => {
-    const beforeInput = { type: 'object', properties: { field: { type: 'string', maxLength: 20 } } };
-    const afterInput = { properties: { field: { maxLength: 20, type: 'string' } }, type: 'object' };
-    const beforeOutput = { type: 'object', properties: { result: { type: 'string' } } };
-    const afterOutput = { properties: { result: { type: 'string' } }, type: 'object' };
-    const before = [tool('ordered', 'Same', beforeInput, beforeOutput)];
-    const after = [tool('ordered', 'Same', afterInput, afterOutput)];
-    const result = compareToolCatalogues(policy(before, after));
-    // The stored revision still differs; key order alone adds no schema change details.
-    expect(result?.rows[0]?.kind).toBe('Details changed');
-    expect(result?.rows[0]?.fields).toEqual([]);
-    expect(result?.rows[0]?.before).not.toContain('Input field');
-    expect(result?.rows[0]?.before).not.toContain('Output schema');
-  });
+  it('ignores reordered schema keys when describing a tool change', reorderedSchemaKeys);
 
   it('reports output changes and limits a long field list', () => {
     const oldTool = tool('many', 'Same', input, { type: 'object' });
@@ -141,3 +128,18 @@ describe('changed tool comparison', () => {
     expect(result?.rows[0]?.after).toHaveLength(300);
   });
 });
+
+function reorderedSchemaKeys() {
+  const beforeInput = { type: 'object', properties: { field: { type: 'string', maxLength: 20 } } };
+  const afterInput = { properties: { field: { maxLength: 20, type: 'string' } }, type: 'object' };
+  const beforeOutput = { type: 'object', properties: { result: { type: 'string' } } };
+  const afterOutput = { properties: { result: { type: 'string' } }, type: 'object' };
+  const before = [tool('ordered', 'Same', beforeInput, beforeOutput)];
+  const after = [tool('ordered', 'Same', afterInput, afterOutput)];
+  const result = compareToolCatalogues(policy(before, after));
+  // The stored revision still differs; key order alone adds no schema change details.
+  expect(result?.rows[0]?.kind).toBe('Details changed');
+  expect(result?.rows[0]?.fields).toEqual([]);
+  expect(result?.rows[0]?.before).not.toContain('Input field');
+  expect(result?.rows[0]?.before).not.toContain('Output schema');
+}
