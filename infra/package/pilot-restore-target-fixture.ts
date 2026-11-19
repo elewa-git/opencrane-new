@@ -115,6 +115,8 @@ async function objectFixture(directory: string) {
 async function targetDatabaseFixture() {
   const content = await database('pg');
   const admin = new Pool({ connectionString: process.env['PG_TEST_URL'] });
+  const coordination = await admin.connect();
+  await coordination.query("SELECT pg_advisory_lock(hashtext('pilot_restore_tests'))");
   const inventory = await content.db.query<{ name: string }>('SELECT current_database() AS name');
   const contentUrl = new URL(process.env['PG_TEST_URL']!);
   contentUrl.pathname = `/${inventory.rows[0]!.name}`;
@@ -157,8 +159,10 @@ async function targetDatabaseFixture() {
   async function close() {
     await admin.query(`DROP DATABASE IF EXISTS ${application} WITH (FORCE)`);
     await admin.query(`DROP ROLE IF EXISTS ${role}`);
-    await admin.end();
     await content.close();
+    await coordination.query("SELECT pg_advisory_unlock(hashtext('pilot_restore_tests'))");
+    coordination.release();
+    await admin.end();
   }
   return { content, adminUrl, contentUrl, snapshot, nonEmpty, close };
 }

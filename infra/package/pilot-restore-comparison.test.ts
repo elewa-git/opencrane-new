@@ -10,7 +10,7 @@ async function comparisonFixture() {
   const current = await database('pg');
   const admin = new Pool({ connectionString: process.env['PG_TEST_URL'] });
   const lock = await admin.connect();
-  await lock.query("SELECT pg_advisory_lock(hashtext('pilot_restore'))");
+  await lock.query("SELECT pg_advisory_lock(hashtext('pilot_restore_tests'))");
   const createdRoles: string[] = [];
   for (const role of ['projection', 'server']) {
     const found = await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role]);
@@ -44,7 +44,7 @@ async function comparisonFixture() {
     await admin.query('DROP DATABASE IF EXISTS pilot_replay WITH (FORCE)');
     await current.close();
     for (const role of createdRoles) await admin.query(`DROP ROLE ${role}`);
-    await lock.query("SELECT pg_advisory_unlock(hashtext('pilot_restore'))");
+    await lock.query("SELECT pg_advisory_unlock(hashtext('pilot_restore_tests'))");
     lock.release();
     await admin.end();
     await events.close();
