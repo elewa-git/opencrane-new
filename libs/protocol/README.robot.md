@@ -32,6 +32,10 @@ append and projection status.
 Visible close events keep `conversationId` and `closedBy` so the browser can show
 the first closer from saved history. Their event time supplies the date.
 
+`sameJson` re-exports the browser-safe event helper. It ignores object key order at
+every depth, preserves array order and treats undefined properties as missing.
+Tool change descriptions use it without changing stored digests or review bindings.
+
 Protocol defines shared browser/server message schemas so the two sides cannot drift
 through separate declarations. It owns wire shapes, not authentication, persistence
 or event business rules. Both [web](../../apps/web/README.md) and
