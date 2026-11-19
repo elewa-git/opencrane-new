@@ -4,6 +4,8 @@ import { fixture } from './fixture.ts';
 async function separateDecisionReads() {
   const setup = await fixture();
   try {
+    await setup.stopDispatch();
+    await setup.runtime.stop();
     const backendReads = vi.spyOn(setup.db, 'query');
     const head = await setup.nats.store.head();
     const request = { conversationId: 'conversation', turnId: 'turn', head,
@@ -21,3 +23,20 @@ function isCreation(row: { event: { type: string } }) {
 }
 it('keeps gateway index reads separate from the memory backend database handle',
   separateDecisionReads);
+
+async function separateProjectionReads() {
+  const setup = await fixture();
+  try {
+    await setup.stopDispatch();
+    await setup.runtime.stop();
+    const backendPositions = vi.spyOn(setup.nats.store, 'head');
+    await setup.append('conversation-other', 'agent.turn_started', {
+      assistantId: 'other', conversationId: 'other', turnId: 'other-turn' });
+    expect(backendPositions).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it('keeps projection worker positions separate from memory backend read probes',
+  separateProjectionReads);
