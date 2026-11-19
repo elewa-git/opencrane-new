@@ -67,7 +67,10 @@ function payingDeadline(expired: boolean) {
 it.each([false, true])('uses manual time for group authority (expired: %s)', payingDeadline);
 
 async function actorDeadline(expired: boolean) {
-  const clock = manualClock(performance.now() + 5000);
+  const processTime = performance.now();
+  // Use whole milliseconds because this fixture checks exact timer arguments.
+  const fixtureStartedAt = Math.ceil(processTime) + 5000;
+  const clock = manualClock(fixtureStartedAt);
   nats = await natsFixture({ clock });
   const actor = new BudgetActor(nats.store, 'test');
   await actor.start(100, 100, 'group');
