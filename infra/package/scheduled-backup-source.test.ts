@@ -6,7 +6,7 @@ import { event, natsFixture } from '@opencrane/event-store/testing';
 import { budgets } from '@opencrane/models';
 import { members, mcpCatalogue, computers, conversations, files, auditTrail,
   personalSettings, groups, providers, modelAccess, egressPolicy, connectionProfiles,
-  childRequests } from '@opencrane/projections';
+  childRequests, routines } from '@opencrane/projections';
 import { packageBackupSource } from './scheduled-backup-source.ts';
 import { captureScheduledBackup, listBackups } from './scheduled-backup.ts';
 
@@ -55,7 +55,7 @@ afterEach(function reset() {
   database.clients = '0';
 });
 
-async function fixture(ready = true) {
+async function fixture(ready = true, providerMode = false) {
   database.names = projectionNames;
   const directory = await mkdtemp(join(tmpdir(), 'backup-adapter-'));
   const nats = await natsFixture();
@@ -77,7 +77,7 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   const backupDirectory = join(directory, 'sets');
   await mkdir(backupDirectory, { mode: 0o700 });
   const options = { directory: backupDirectory, id: 'adapter-backup',
-    silo: 'test', images: { server: 'test' } };
+    silo: 'test', images: { server: 'test' }, providerMode };
   const runtime = await packageBackupSource(options);
   const replicas = new Map<string, number>();
   function kube(args: string[]) {
@@ -195,3 +195,31 @@ for (const violation of violations) {
       expect(calls).toContain('rollout status deployment/server --timeout=60s');
     });
 }
+
+async function pausesProviderSelectionProjection() {
+  const test = await fixture(true, true);
+  database.names = [...projectionNames, routines.name];
+  const command = vi.mocked(test.source.kube);
+  await test.source.pause();
+  expect(command).toHaveBeenCalledWith([
+    'scale', 'deployment/worker-routines', '--replicas=0', '--current-replicas=1',
+  ]);
+  await test.source.resume();
+  const calls = await readFile(test.calls, 'utf8');
+  expect(calls).toContain('scale deployment/worker-routines --replicas=1');
+}
+it('provider backups pause and resume the model-selection projection',
+  pausesProviderSelectionProjection);
+
+async function refusesLaggingProviderProjection() {
+  const test = await fixture(true, true);
+  database.names = [...projectionNames, routines.name];
+  database.behind = routines.name;
+  await expect(test.source.pause()).rejects.toThrow('Backup deadline');
+  const command = vi.mocked(test.source.kube);
+  expect(command).not.toHaveBeenCalledWith([
+    'scale', 'deployment/worker-routines', '--replicas=0', '--current-replicas=1',
+  ]);
+}
+it('provider backups wait for the routines checkpoint before stopping its reader',
+  refusesLaggingProviderProjection);

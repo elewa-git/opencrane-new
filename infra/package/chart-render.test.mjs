@@ -961,3 +961,29 @@ for (const mode of ['unknown', '', 42, true]) {
   }
   test(`Helm refuses models mode ${mode}`, refusesModelMode);
 }
+
+function providerIncludesSelectionProjection() {
+  const values = chartValues();
+  const ordinary = renderedResources(values);
+  assert.equal(ordinary.has('Deployment/worker-routines'), false);
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const routines = resources.get('Deployment/worker-routines');
+  assert.ok(routines, 'Provider selection needs the routines checkpoint');
+  assert.deepEqual(routines.spec.template.spec.containers[0].command,
+    ['node', 'infra/package/worker.mjs', 'routines']);
+  const backupRole = resources.get('Role/package-backup');
+  for (const rule of backupRole.rules) {
+    if (rule.resources.includes('deployments') || rule.resources.includes('deployments/scale')) {
+      assert.ok(rule.resourceNames.includes('worker-routines'));
+    }
+  }
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  assert.ok(backup.containers[0].env.some(providerBackupMode));
+}
+test('provider mode runs the projection required by default-model selection',
+  providerIncludesSelectionProjection);
+
+function providerBackupMode(setting) {
+  return setting.name === 'BACKUP_PROVIDER_MODE' && setting.value === 'true';
+}
