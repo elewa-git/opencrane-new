@@ -25,8 +25,10 @@ function probePod(node: string, options: HostCheckOptions, source: string) {
   const volumes = [];
   const volumeMounts = [];
   for (const directory of ['proc', 'etc', 'sys', 'dev']) {
-    volumes.push({ name: directory, hostPath: { path: `/${directory}`, type: 'Directory' } });
-    volumeMounts.push({ name: directory, mountPath: `/host/${directory}`, readOnly: true });
+    const volume = { name: directory, hostPath: { path: `/${directory}`, type: 'Directory' } };
+    const mount = { name: directory, mountPath: `/host/${directory}`, readOnly: true };
+    volumes.push(volume);
+    volumeMounts.push(mount);
   }
   const script = source + '\nconsole.log(JSON.stringify(collectHost("/host")));';
   return {
@@ -159,10 +161,12 @@ export async function checkPackageHosts(options: HostCheckOptions): Promise<Host
   for (const node of nodes.items) {
     const state = await probeNode(node.metadata.name, options, source);
     const failures = hostFailures(state);
-    record.nodes.push({ name: node.metadata.name, uid: node.metadata.uid, failures });
+    const result = { name: node.metadata.name, uid: node.metadata.uid, failures };
+    record.nodes.push(result);
   }
   if (underlying) {
-    record.nodes.push({ name: 'underlying-k3d-host', uid: 'local', failures: hostFailures(underlying) });
+    const result = { name: 'underlying-k3d-host', uid: 'local', failures: hostFailures(underlying) };
+    record.nodes.push(result);
   }
   const current = await options.command(['get', 'nodes', '-o', 'json']);
   requireSameNodes(nodes, JSON.parse(current) as NodeList);

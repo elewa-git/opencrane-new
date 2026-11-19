@@ -96,7 +96,9 @@ test('read fixture host files without changing them, and refuse missing observat
     assert.deepEqual(hostFailures(state), []);
     assert.deepEqual(collectHost(directory), state);
     rmSync(`${directory}/proc/sys/kernel/core_pattern`);
-    function missingSetting() { return collectHost(directory); }
+    function missingSetting() {
+      return collectHost(directory);
+    }
     assert.throws(missingSetting, /ENOENT/u);
   } finally {
     rmSync(directory, { recursive: true, force: true });

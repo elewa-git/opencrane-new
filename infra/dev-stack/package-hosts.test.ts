@@ -30,8 +30,12 @@ test('check every target node, clean up probes and record each result', async fu
   const deletions = calls.filter(isDelete);
   assert.equal(deletions.length, 2);
 });
-function nodeName(node: { name: string }) { return node.name; }
-function isDelete(args: string[]) { return args.includes('delete'); }
+function nodeName(node: { name: string }) {
+  return node.name;
+}
+function isDelete(args: string[]) {
+  return args.includes('delete');
+}
 
 test('refuse a failing second node before installation and clean its probe', async function refusal() {
   const { command, calls } = fixture([safe, unsafe]);
@@ -80,7 +84,9 @@ function localFixture(uid = 'local-node') {
 
 test('local accepted exception is explicit and retained with both failures', async function localOverride(context) {
   const messages: string[] = [];
-  function capture(message: string) { messages.push(message); }
+  function capture(message: string) {
+    messages.push(message);
+  }
   context.mock.method(console, 'warn', capture);
   const { command, localCommand, calls } = localFixture();
   const record = await checkPackageHosts({ command, localCommand, namespace: 'test',

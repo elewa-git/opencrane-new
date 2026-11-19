@@ -84,7 +84,8 @@ export function collectHost(prefix = '') {
     const base = `${prefix}/sys/dev/block/${major}:${minor}/dm`;
     const name = readOptional(`${base}/name`).trim();
     const uuid = readOptional(`${base}/uuid`).trim();
-    state.mappings.push({ path, name, uuid });
+    const mapping = { path, name, uuid };
+    state.mappings.push(mapping);
   }
   return state;
 }
