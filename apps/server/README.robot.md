@@ -1335,14 +1335,14 @@ one of its required settings is missing.
 | `TOKEN_SIGNING_KEY_FILE` | Server | Required with chat or budget checks | None | Path to the private token-signing key. |
 | `TOKEN_ISSUER` | Both | Models yes; server with chat or budget checks | None | Name that appears as the token issuer. |
 | `MODEL_DECISION_URL` | Server | No | Development URL in development; otherwise unset | Address of the models decision service. |
-| `PROVIDER_SECRETS_DIR` | Both | Models after switch-on | Unset | Shared provider custody directory. Required by models after switch-on; startup does not read keys. |
+| `PROVIDER_SECRETS_DIR` | Both | Models after switch-on | Unset | Shared provider custody directory. Without a static key, selects the managed gateway before setup. Required after switch-on; startup reads no keys. |
 | `MODEL_STATE_DIR` | Models | Yes | None | Directory for model gateway state and usage records. |
 | `MODEL_JWKS_FILE` | Models | Yes | None | Path to the public keys used to check signed tokens. |
 | `DEFAULT_PAYING_GROUP_ID` | Models | No | `installation-default` | Group charged for personal assistant use by default. |
 | `MODEL_DECISION_PORT` | Models | Yes | None | Port for model budget decisions. |
 | `MODEL_GATEWAY_PORT` | Models | Yes | None | Local port for the AI gateway. |
 | `AGENTGATEWAY_BINARY` | Models | Yes | None | Path to the agentgateway program. |
-| `MODEL_KEY_FILE` | Models | No; refused after switch-on | `.keys/.openai-key` in the repository root | Legacy gateway key file. Any configured value after switch-on stops startup. Managed mode never resolves the default path. |
+| `MODEL_KEY_FILE` | Models | No; refused after switch-on | `.keys/.openai-key` in the repository root | Legacy gateway key file. Any configured value after switch-on stops startup. A custody directory without a static key selects the managed route before switch-on; it never resolves the default path. |
 | `MODEL_READINESS_PORT` | Models | Yes | None | Port used to check whether the AI gateway is ready. |
 | `MODEL_UPSTREAM` | Models | No | Unset | Optional upstream address for the AI gateway. |
 | `MODEL_GATEWAY_CONTROL_PORT` | Models | Yes | None | Private port for exact configuration replies; never forward it. |
@@ -4282,14 +4282,19 @@ Unknown. Rebuild the MCP catalogue before serving these reads on an existing ins
 After budget replay, `models-main.ts` reads `managedProviderCallsEnabled` within ten
 seconds. An unreadable mode stops startup. Managed startup requires
 `PROVIDER_SECRETS_DIR` and refuses any configured `MODEL_KEY_FILE`. It reads no
-provider key until a checked call. Gateway configuration reloads keep managed mode.
+provider key until a checked call. Setting custody without a static key starts the
+managed route before setup. Calls remain refused until recorded switch-on; that
+process can continue after switch-on without a restart. Gateway configuration reloads
+keep managed mode.
 A legacy process checks switch-on each loop and exits non-zero when it appears;
 its decision service already refuses legacy admission after that event.
 `test/models-managed.test.ts` covers the spawned process with real dependencies.
 Its unreadable-mode test uses the operating system’s `mkfifo` utility to pause
 startup at signing-file loading, after budget replay. It uses no timed sleep.
-Dev stacks still set `MODEL_KEY_FILE`, so switch-on stops their models process
-until custody wiring is supplied. Fresh-install qualification: NOT RUN.
+A legacy dev stack that still sets `MODEL_KEY_FILE` restarts models after switch-on.
+A provider-only package starts with shared custody and needs no static key or mode
+restart. Missing custody at call time refuses before reservation and provider contact.
+Fresh-install qualification: NOT RUN.
 
 ## Original budget change receipts (P4-26 PR 1; Part of #108)
 

@@ -14,7 +14,9 @@ export async function runBackupCommand(args: string[], directory: string) {
     process.stdout.write(`${JSON.stringify(await showBackup(directory, id), null, 2)}\n`);
   } else if (command === 'run' && !id) {
     const images = z.record(z.string(), z.string()).parse(JSON.parse(process.env['BACKUP_IMAGES'] ?? '{}'));
-    const options = { directory, id: randomUUID(), silo: process.env['SILO_ID'] ?? '', images };
+    const providerMode = process.env['BACKUP_PROVIDER_MODE'] === 'true';
+    const options = { directory, id: randomUUID(), silo: process.env['SILO_ID'] ?? '',
+      images, providerMode };
     const { packageBackupSource } = await import('./scheduled-backup-source.ts');
     const runtime = await packageBackupSource(options);
     try {

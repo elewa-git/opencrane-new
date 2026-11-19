@@ -56,7 +56,8 @@ Not built yet:
    People can also chat with each other without starting assistant work.
 3. **An assistant makes a call.** The AI gateway asks the models process whether
    access and spending rules allow it. The process sets money aside, records the
-   cost and releases unused money.
+   cost and releases unused money. With a connected provider, its private key is read
+   only for an admitted call; setup can finish before model calls are switched on.
 4. **A person uses a tool.** A reviewed tool may need their approval before it runs.
    The server saves the decision and checks access again before allowing work.
 5. **An admin changes settings.** The server checks their rights and saves the change.

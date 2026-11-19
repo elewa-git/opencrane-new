@@ -15,6 +15,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Groups the templates that start apps, services, workers and assistant computers.
 - Schedules one nightly pilot backup on a separate volume with a read-only catalogue.
 - Includes persistent file storage and a private virus scanner for chat attachments.
+- Keeps the stand-in model by default or uses a provider connected through Settings.
 
 ## Main files
 
@@ -37,13 +38,15 @@ combines those settings with the templates.
 flowchart LR
   package["Local installation tools"] --> chart["chart<br/>installation, files, scanner, scheduled backups and database previews"]
   package --> prepare["Preparation and checks"]
-  chart --> templates["templates<br/>programs and settings"]
+  chart --> templates["templates<br/>programs, settings and private provider storage"]
 ```
 
 ## Not done here
 
-Private credentials are prepared outside this folder. The chart refers to them by
-name. The optional database standby needs separately prepared credentials and a
+Private installation credentials are prepared outside this folder. The chart refers
+to them by name. With `models.mode: provider`, the owner saves the model key in
+Settings. Only the server and models containers mount its private persistent volume;
+the models mount is read-only. No provider key belongs in Helm values. The optional database standby needs separately prepared credentials and a
 CloudNativePG controller. It has been checked by rendering the chart, which does
 not prove a running standby. An optional render also describes three private NATS
 peers. It needs separate route trust and one certificate reference per peer.

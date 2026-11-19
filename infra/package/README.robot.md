@@ -81,7 +81,8 @@ references; this does not qualify live gateway delivery in a packaged install. T
 An init container copies those files into memory, gives them to the `node` user
 and sets mode 0400. The server, model process, workers and bootstrap Job mount
 the copy read-only. Conversations need no key volume or wrapping Secret.
-The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
+The default `models.mode: stub` keeps the local stand-in. Set `models.mode: provider`
+before preparation to use a connected provider. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
 database setup credentials. The installer checks all eight names and required
@@ -166,6 +167,47 @@ port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and
 the scanner run inside this chart. The file worker still projects events; object
 storage is content, and the upload command remains the only business write.
+
+## Connected model provider
+
+`models.mode` accepts `stub` (default) or `provider`. Preflight and Helm refuse other
+values. The default chart output stays byte-for-byte unchanged. Provider preparation
+writes neither a `model-stub-key` file nor `MODEL_UPSTREAM`, `MODEL_KEY_FILE` or any
+`MODEL_STUB_*` setting. Installation refuses inherited stand-in settings in this mode.
+
+Provider mode creates a 1 GiB `provider-secrets` PVC. Only the server and models
+containers mount it, respectively read-write and read-only. Both receive
+`PROVIDER_SECRETS_DIR=/var/lib/opencrane/provider-secrets/keys`. The existing secret
+store creates that subfolder with mode 0700 and key files with mode 0600. Workers,
+bootstrap, website, scanner and backup Jobs never mount the key volume. Key volume
+backup and restart qualification remain separate work.
+
+The models container receives `DEV_REAL_PROVIDER=1`, skips the stand-in and starts
+the managed gateway without a static key, before any provider exists. Calls remain
+refused until the owner records switch-on. Provider mode also runs the existing
+routines projection, which default-model selection needs. Scheduled backups wait
+for its checkpoint and pause and resume it with the other read tables.
+
+Sign in as the owner and open Settings, then Models. Create an OpenAI connection,
+save the private key, check reachability and accept the quoted test. Enable the chat
+model, select the default, drain existing calls and switch on. A member can then
+open chat and ask a short question. A missing key cannot send a model call or reserve
+money. An invalid key fails the product's verification. Keys are never read back.
+Never put the key in values, environment settings, command arguments or receipts.
+For automated qualification, reuse
+[provider setup](../dev-stack/provider-setup.ts) and the
+[real reply journey](../dev-stack/real-model-journey.ts), following the
+[real-provider setup contract](../dev-stack/README.robot.md#opt-in-real-replies).
+The existing fleet guard refuses real-provider journeys; do not bypass it.
+
+The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
+packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2
+(Apache-2.0 with the package's Debian main notices). Their package notices and versions
+were read in the pinned Node base against the signed bookworm snapshot of 13 July
+2026. The inventory and authenticated main-index list include all three. The gateway
+uses `/etc/ssl/certs/ca-certificates.crt` from the image; no host trust mount is needed.
+The saved-image test requires a non-empty, parseable certificate bundle. These source
+changes grant no image approval; use only exact-source CI-approved images to install.
 
 ## Packaged upload services
 
@@ -312,8 +354,8 @@ checkout. It follows runtime imports after removing TypeScript types, starting a
 both bootstrap programs, `scheduled-backup-run.ts` and `infra/dev-stack/secondary-models.ts`,
 the chart’s model entry point. The backup runner, collector, source adapter and event
 collector have explicit Docker context exceptions and image-file allowlist entries.
-The package deliberately uses the secondary stack’s fake model
-for local install checks. Its bridge and tool-rehearsal helper ship through the same
+The package uses the secondary stack’s stand-in by default. Provider mode skips
+that process and its relay port. Its bridge and tool-rehearsal helper ship through the same
 explicit `.dockerignore` exceptions as the launcher and stub. Removing a required
 imported file refuses even when the entry point remains. It also checks every
 shipped TypeScript module for runtime imports from test folders. The existing bootstrap source suite checks that every
