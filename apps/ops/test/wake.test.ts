@@ -172,7 +172,7 @@ it('keeps reconciling computers beside human conversations and view audits after
     });
     const message = {
       conversationId: 'direct', authorId: 'alice', authorKind: 'human', contentType: 'text',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:direct',
+      utterance: 'A saved direct message',
     };
     await append('conversation-direct', 'message.posted', message);
     outcome = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal).catch((error: unknown) => error);

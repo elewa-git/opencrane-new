@@ -1,3 +1,5 @@
+import { bridgeProcessSettings } from './support/bridge-process.ts';
+import { dirname } from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -115,7 +117,8 @@ async function createReplicas(options: ReplicaOptions) {
   const joined = await append('alice', 'member.joined',
     { invitationId: 'invite-alice', role: 'admin' });
   const binding = authz.binding;
-  const settings = { ...env, ...nats.env(), DATABASE_URL: dbs.queue.options.connectionString,
+  const bridge = await bridgeProcessSettings(dirname(nats.env().NATS_CA_FILE));
+  const settings = { ...bridge, ...env, ...nats.env(), DATABASE_URL: dbs.queue.options.connectionString,
     OPENFGA_API_URL: binding.apiUrl, OPENFGA_STORE_ID: binding.storeId,
     OPENFGA_MODEL_ID: binding.authorizationModelId };
   async function start() {

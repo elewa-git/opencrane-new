@@ -1,3 +1,5 @@
+import { bridgeProcessSettings } from './support/bridge-process.ts';
+import { dirname } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
@@ -24,12 +26,14 @@ let runner: ProjectionRunner;
 let authz: ReturnType<typeof memberAuthorisation>;
 let server: RunningServer;
 let sequence = 0;
+let bridge: NodeJS.ProcessEnv;
 const sockets: WebSocket[] = [];
 beforeAll(async () => { fga = await openfga(); }, 120_000);
 afterAll(async () => { await fga.close(); });
 beforeEach(async () => {
   dbs = await databases();
   nats = await natsFixture();
+  bridge = await bridgeProcessSettings(dirname(nats.env().NATS_CA_FILE));
   sequence = 0;
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('realtime-test'));
   await runner.initialise(members);
@@ -63,7 +67,7 @@ afterEach(async () => {
 });
 async function startRealtimeServer(heartbeatIntervalMs?: number) {
   const binding = authz.binding;
-  const settings: NodeJS.ProcessEnv = { ...env, ...nats.env(),
+  const settings: NodeJS.ProcessEnv = { ...bridge, ...env, ...nats.env(),
     DATABASE_URL: dbs.queue.options.connectionString,
     OPENFGA_API_URL: binding.apiUrl,
     OPENFGA_STORE_ID: binding.storeId,

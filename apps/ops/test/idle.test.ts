@@ -128,7 +128,7 @@ async function keepsNewMessagesActiveDuringPodReads() {
     if (!posted) {
       const data = {
         conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-        ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text',
+        utterance: 'A message received during the state read', contentType: 'text',
       };
       const event = envelope('test', conversation, 'message.posted', data, 'pending-message');
       await nats.store.append({ event, expectedSequence: conversationPosition });
