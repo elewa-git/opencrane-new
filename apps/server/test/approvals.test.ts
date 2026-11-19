@@ -1397,8 +1397,7 @@ async function refusesForeignTakeoverCancellation() {
     const current = await readApproval(setup.nats.store, 'test', cards[0]!.approvalId);
     const approvalId = 'c'.repeat(64);
     const subject = `approval-${approvalId}`;
-    const request = { ...current.request, approvalId, conversationId: 'other-conversation',
-      requesterId: 'bob' };
+    const request = { ...current.request, approvalId, conversationId: 'other-conversation' };
     await setup.append(subject, 'tool.approval_requested', request);
     await saveTakeover(setup);
     const before = await history(setup.nats.store, subject, 'test');
