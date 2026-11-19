@@ -56,3 +56,82 @@ test('unknown override values fail closed', async function invalidOverride() {
   }
   await assert.rejects(check, /Unknown host-risk override/u);
 });
+
+test('local accepted exception is explicit and retained with both failures', async function localOverride(context) {
+  const messages: string[] = [];
+  function capture(message: string) { messages.push(message); }
+  context.mock.method(console, 'warn', capture);
+  const { command: probe, calls } = fixture([unsafe]);
+  async function command(args: string[]) {
+    if (args.includes('nodes')) return JSON.stringify({ items: [
+      { metadata: { name: 'k3d-ocn-server-0', uid: 'local-node' } },
+    ] });
+    return probe(args);
+  }
+  async function localCommand(program: string, args: string[]) {
+    if (program === 'node') return JSON.stringify(unsafe);
+    if (args.includes('context')) return JSON.stringify('unix:///var/run/docker.sock');
+    return JSON.stringify([{ Name: '/k3d-ocn-server-0', State: { Running: true },
+      Config: { Labels: { 'k3d.cluster': 'ocn' } } }]);
+  }
+  const record = await checkPackageHosts({ command, localCommand, namespace: 'test',
+    image: 'image@sha256:abc', override: 'accepted-dev-box-366' });
+  assert.equal(record.override, 'accepted-dev-box-366');
+  assert.match(messages.join('\n'), /HOST RISK OVERRIDE: accepted-dev-box-366/u);
+  assert.match(messages.join('\n'), /F1:/u);
+  assert.match(messages.join('\n'), /F2:/u);
+  assert.equal(record.nodes.length, 2);
+  assert.equal(record.nodes[0]?.failures.length, 2);
+  assert.equal(record.nodes[1]?.failures.length, 2);
+  assert.equal(calls.filter(isDelete).length, 1);
+});
+
+test('an unreadable node refuses and removes its probe', async function unreadable() {
+  const { command: probe, calls } = fixture();
+  async function command(args: string[]) {
+    if (args.includes('logs')) throw new Error('Host settings are unreadable');
+    return probe(args);
+  }
+  async function check() {
+    await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
+  }
+  await assert.rejects(check, /unreadable/u);
+  assert.equal(calls.filter(isDelete).length, 1);
+});
+
+test('target changes during probes refuse installation', async function nodeDrift() {
+  const { command: probe } = fixture();
+  let listed = false;
+  async function command(args: string[]) {
+    if (args.includes('nodes')) {
+      if (listed) return JSON.stringify({ items: [] });
+      listed = true;
+    }
+    return probe(args);
+  }
+  async function check() {
+    await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
+  }
+  await assert.rejects(check, /Installation nodes changed/u);
+});
+
+test('probe Pods have only read-only host mounts and no service token', async function readOnly() {
+  const { command, calls } = fixture();
+  await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
+  let probes = 0;
+  for (const args of calls) {
+    if (!args.includes('run')) continue;
+    const pod = JSON.parse(args[args.indexOf('--overrides') + 1]!);
+    assert.equal(pod.spec.automountServiceAccountToken, false);
+    assert.equal(pod.spec.restartPolicy, 'Never');
+    assert.equal(pod.spec.volumes.length, 4);
+    for (const container of pod.spec.containers) {
+      assert.equal(container.securityContext.allowPrivilegeEscalation, false);
+      assert.equal(container.securityContext.readOnlyRootFilesystem, true);
+      assert.deepEqual(container.securityContext.capabilities.drop, ['ALL']);
+      for (const mount of container.volumeMounts) assert.equal(mount.readOnly, true);
+    }
+    probes++;
+  }
+  assert.equal(probes, 2);
+});

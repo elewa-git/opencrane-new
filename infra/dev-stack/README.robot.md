@@ -7,6 +7,12 @@ fixture. A synthetic `PROXY_PROOF` prompt makes the native agent call the offere
 recall tool. The stub leaves that tool response open until the fixture stops.
 It supplies no memory fact or paid model result. Normal stub runs omit this setting.
 
+Package installation checks every target host before Helm and saves `hostPreflight`
+in its installation record. Unsafe swap or host crash dumps refuse with the fix.
+The [package host contract](../package/README.robot.md#host-disk-protection) gives
+the settings, production probes and explicit local-only `OPENCRANE_ACCEPT_DEV_HOST_RISK`
+exception. It is never enabled by the launcher.
+
 For a fresh packaged upload journey, claim a secondary slot and use
 `run.sh package-prepare`, the package's private `prepare.ts`, `run.sh package-up`
 with its values file, then `run.sh package-check` and the package forwarder.

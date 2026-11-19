@@ -1908,6 +1908,93 @@ same slot. The ordinary development install uses `infra/dev-stack/up.sh --fresh`
 instead. Both replace development data; keep any needed old fixture with its old
 software and keys separately. Do not replay old encrypted conversation events into
 this version or reuse those backups. Create a new backup baseline after the reset.
+## Host disk protection
+
+Before any Helm command, `installPackage` runs a short-lived probe on **every**
+node returned by the recorded cluster, including control-plane and tainted nodes.
+Each probe uses the reviewed application image, no service-account token, no added
+capabilities and read-only mounts of host `/proc`, `/etc`, `/sys` and `/dev`.
+It removes the probe Pod even on failure. Unreadable settings refuse installation.
+The probe never changes swap, sysctls, crash reporters or host files.
+The installer saves the check time, node names, UIDs and refusals under
+`hostPreflight` in the private `package-owner.json` installation record.
+
+Local k3d nodes share their Docker host's kernel and swap. The installer also
+checks that underlying host after verifying local running node containers through
+a Unix Docker endpoint. A remote Docker endpoint is refused for this local check.
+
+F1 requires one of these configurations on **each production host**:
+
+- Disable swap now and remove swap entries from `/etc/fstab` and swap units so it
+  stays off after reboot. Verify `/proc/swaps` contains its header only.
+- Use a dedicated swap block device opened with a fresh random key every boot.
+  The accepted `/etc/crypttab` row is
+  `cryptswap DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256`.
+  Replace `DEVICE` with that dedicated device. Use only `/dev/mapper/cryptswap`
+  as swap in `/etc/fstab`; do not activate its unencrypted backing device.
+  The probe matches each active swap device to its sysfs `CRYPT-PLAIN` mapping
+  and its unique crypttab row. Persistent key files, LUKS, missing mappings and
+  extra crypttab options refuse. Reboot before production qualification.
+  Configuring this destroys previous swap contents; do not use a data partition.
+
+See the [systemd crypttab contract](https://www.freedesktop.org/software/systemd/man/crypttab.html)
+for random-key swap. A disk encrypted with a persistent key does not meet F1.
+
+F2 requires crash dumps to be off. Disable apport and any other host crash
+reporter, including systemd-coredump socket activation where installed. Remove
+any competing sysctl files that restore a reporter pipe. Save these exact lines
+in `/etc/sysctl.d/99-no-core.conf`, apply them with `sysctl --system`, and reboot
+to check persistence:
+
+```ini
+kernel.core_pattern=
+kernel.core_uses_pid=0
+```
+
+An empty pattern alone is insufficient: a PID suffix can still create hidden
+`.PID` core files. Container core limits alone cannot stop a host pipe reporter.
+All reporter pipes and file patterns are refused, including `/dev/null` and
+reporters configured to discard output: this check cannot prove their downstream
+storage behaviour. The empty-pattern configuration is the supported way to keep
+host dumps from persisting. See the [Linux core contract](https://man7.org/linux/man-pages/man5/core.5.html).
+
+### Rerun the production disk probes
+
+On each production node, from this checkout, run after applying settings and again
+after reboot, with no override:
+
+```sh
+nice -n 10 node infra/package/preflight.mjs --host
+```
+
+This reruns the F1 swap and F2 crash-dump checks from the
+[P4-14 record](../../docs/process/p4-14-private-turns-evidence.md).
+Exit zero prints `PASS F1 and F2`; any other result names the exact fix.
+Save the node identity, boot identity (`cat /proc/sys/kernel/random/boot_id`), UTC
+time, command, output and exit status as production evidence. Inspect
+`/var/crash` and `/var/lib/systemd/coredump` before and after the P4-14 fault/disk
+qualification and retain its canary inventories: a settings PASS alone does not
+qualify private turns or prove old dumps have been removed. The existing private
+memory qualification has stricter requirements and never accepts this override.
+
+### Accepted local exception
+
+The owner accepted swap and apport on the dev box on 12 October 2026 in
+[#366](https://github.com/elewa-git/opencrane-new/issues/366). Do not change this
+box's host settings. To install on a claimed local spare slot, opt in for that
+one command:
+
+```sh
+OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366 \
+  infra/dev-stack/run.sh package-up --id "$DEV_STACK_ID" --values "$PACKAGE_VALUES_FILE"
+```
+
+No launcher, chart or saved setting enables this by default. It requires verified
+local k3d nodes, prints `HOST RISK OVERRIDE` and every accepted refusal, and saves
+`hostPreflight.override: "accepted-dev-box-366"` with the failed checks in the
+installation record before Helm runs. Unknown override values refuse. Keep that
+record's host-check fields and the command log with the install receipt. This is
+an accepted local gap, never a production F1/F2 PASS.
 
 ## Scheduled pilot backup
 

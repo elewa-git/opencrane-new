@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { hostFailures } from './host-preflight.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { collectHost, hostFailures } from './host-preflight.mjs';
 
 const emptySwaps = 'Filename\tType\tSize\tUsed\tPriority\n';
 const randomSwap = 'cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\n';
@@ -77,4 +80,25 @@ test('report both host failures together', function bothFailures() {
   state.swaps += '/swapfile file 8192 0 -2\n';
   state.corePattern = '|apport\n';
   assert.equal(hostFailures(state).length, 2);
+});
+
+test('read fixture host files without changing them, and refuse missing observations', function hostFiles() {
+  const directory = mkdtempSync(join(tmpdir(), 'host-preflight-'));
+  try {
+    mkdirSync(`${directory}/proc/sys/kernel`, { recursive: true });
+    mkdirSync(`${directory}/etc`);
+    writeFileSync(`${directory}/proc/swaps`, emptySwaps);
+    writeFileSync(`${directory}/proc/sys/kernel/core_pattern`, '\n');
+    writeFileSync(`${directory}/proc/sys/kernel/core_uses_pid`, '0\n');
+    writeFileSync(`${directory}/etc/crypttab`, randomSwap);
+    const state = collectHost(directory);
+    assert.deepEqual(state, { ...fixture(), crypttab: randomSwap });
+    assert.deepEqual(hostFailures(state), []);
+    assert.deepEqual(collectHost(directory), state);
+    rmSync(`${directory}/proc/sys/kernel/core_pattern`);
+    function missingSetting() { return collectHost(directory); }
+    assert.throws(missingSetting, /ENOENT/u);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

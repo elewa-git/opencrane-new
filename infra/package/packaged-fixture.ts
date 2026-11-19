@@ -20,6 +20,8 @@ const files = [
   'infra/dev-stack/identity.ts',
   'infra/dev-stack/packaged.ts',
   'infra/dev-stack/package-review.ts',
+  'infra/dev-stack/package-hosts.ts',
+  'infra/package/host-preflight.mjs',
   'infra/dev-stack/private-directories.ts',
   'infra/dev-stack/target.ts',
   'infra/package/journey-check.ts',

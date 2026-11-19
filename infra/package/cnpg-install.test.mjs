@@ -14,7 +14,7 @@ import { expireCertificate } from './expired-certificate-fixture.mjs';
 const source = resolve('.');
 const applicationImage = 'k3d-ocn-registry:5000/opencrane/package@sha256:' + 'a'.repeat(64);
 const canary = 'private-canary:%/?@';
-const generatedPassword = 'a'.repeat(64);
+const generatedPassword = '0123456789abcdef'.repeat(4);
 const refusal = 'CNPG installation inputs are incomplete or incompatible';
 const nextStep = 'A Helm release already uses this namespace';
 function encoded(value) {
@@ -193,6 +193,11 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       }
     }
     if (fixture.install && !expected) {
+      const savedOwner = JSON.parse(await readFile(`${directory}/package-owner.json`, 'utf8'));
+      assert.ok(savedOwner.hostPreflight.checkedAt);
+      assert.equal(savedOwner.hostPreflight.nodes.length, 1);
+      assert.deepEqual(savedOwner.hostPreflight.nodes[0].failures, []);
+      assert.equal(savedOwner.hostPreflight.override, undefined);
       const helmCommands = [];
       for (const call of calls) {
         if (call.program === 'helm') {
