@@ -88,6 +88,19 @@ async function actorDeadline(expired: boolean) {
 }
 it.each([false, true])('uses manual time for the actor queue (expired: %s)', actorDeadline);
 
+async function actorDeadlineAfterFractionalProcessTime() {
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockReturnValueOnce(1999.999999999999);
+  try {
+    await actorDeadline(false);
+  } finally {
+    monotonicClock.mockRestore();
+  }
+}
+it('keeps actor queue timing exact after a fractional process timestamp',
+  actorDeadlineAfterFractionalProcessTime);
+
+
 async function fallbackDeadline(expired: boolean) {
   const clock = manualClock();
   const deadline = accessDeadline({ clock });
