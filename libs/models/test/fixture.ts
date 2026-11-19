@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, onTestFinished } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
-import type { Clock, EventStore, StoredEvent } from '@opencrane/event-store';
+import { createEventStore, type Clock, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -78,9 +78,12 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
-  const decisionRunner = new ProjectionRunner(db, nats.store, logger);
+  const projectionStore = await createEventStore(nats.connection, nats.store.clock);
+  const decisionRunner = new ProjectionRunner(db, projectionStore, logger);
   await decisionRunner.initialise(conversations);
-  const conversationHistory = decisionConversationReader(nats.store, db, 'test');
+  // Keep gateway reads separate from backend query probes, as in the real processes.
+  const decisionDb = pgDb(dbs.queue);
+  const conversationHistory = decisionConversationReader(nats.store, decisionDb, 'test');
   const append = async (subject: string, type: string, payload: unknown) => {
     let data = payload;
     if (type === 'mcp.server_discovered') {

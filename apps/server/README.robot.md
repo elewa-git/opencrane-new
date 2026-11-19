@@ -3375,7 +3375,9 @@ serverTime, reason, scope, eligibleActions and a session/chat-bound csrf value.
 Statuses include none, requested, pausing, paused, failed and unverified.
 Only the requester receives commandId and their own affectedTurnIds in this chat.
 Direct and group chats return not_applicable. Reads save nothing and touch no computer.
-Access helpers reuse the loaded creation event; later write checks read only new activity.
+Access helpers reuse the loaded creation event, including repeat reads at its exact saved
+position. Other conversation positions and close-inclusive reads are refused by this
+creation-only reader. Later write checks read only new activity.
 
 POST takes exactly commandId, requesterEventId and generation. Session, silo, Origin
 and CSRF checks precede body validation and the request switch. Registration defaults
