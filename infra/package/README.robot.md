@@ -1915,7 +1915,8 @@ this version or reuse those backups. Create a new backup baseline after the rese
 
 Before any Helm command, `installPackage` runs a short-lived probe on **every**
 node returned by the recorded cluster, including control-plane and tainted nodes.
-Each probe uses the reviewed application image, no service-account token, no added
+Image preflight first verifies the exact-source CI approval. Each probe uses that
+installation image, no service-account token, no added
 capabilities and read-only mounts of host `/proc`, `/etc`, `/sys` and `/dev`.
 It removes the probe Pod even on failure. Unreadable settings refuse installation.
 The probe never changes swap, sysctls, crash reporters or host files.

@@ -473,14 +473,13 @@ export async function installPackage(valuesFile: string) {
     deadline?: number) {
     return ownedKubectl(owner, args, timeoutMs, signal, deadline);
   }
-  const fixedReview = await readBoundedJson('infra/package/reviewed-images.json') as PackageReview;
-  const hostOptions = { command: checkedKubectl, namespace, image: fixedReview.images['server']!,
+  const { values, review } = await readReviewedValues(valuesFile);
+  const hostOptions = { command: checkedKubectl, namespace, image: values.images['server']!,
     localCommand: command };
   const override = process.env['OPENCRANE_ACCEPT_DEV_HOST_RISK'];
   owner.hostPreflight = await checkPackageHosts({ ...hostOptions,
     ...(override === undefined ? {} : { override }) });
   await saveOwner(owner);
-  const { values, review } = await readReviewedValues(valuesFile);
   await checkCnpgInstallation(values, namespace, checkedKubectl);
   const secrets = await checkNamedSecrets(values, review, owner);
   if (values.natsCluster?.enabled) {
