@@ -28,7 +28,8 @@ import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, foldRoutineHistory, grantStream, memberAuthorisation } from '@opencrane/authz';
-import { natsFixture, event } from '@opencrane/event-store/testing';
+import { natsFixture, event, manualClock, type ManualClock }
+  from '@opencrane/event-store/testing';
 import { foldRoutine, routineActivationSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
@@ -877,13 +878,13 @@ async function wrongComputerLink() {
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
-async function refusesLateChangeWithDelay(kind: string, delayPublication: boolean) {
+async function refusesLateChangeWithDelay(kind: string, publicationClock?: ManualClock) {
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function changed(...args: Parameters<typeof append>) {
     const proposed = proposedEvent.parse(args[0].event);
-    if (delayPublication && proposed.type === 'computer.turn_started') {
+    if (publicationClock && proposed.type === 'computer.turn_started') {
       await delay(2100);
     }
     const result = await append(...args);
@@ -926,16 +927,26 @@ async function refusesLateChangeWithDelay(kind: string, delayPublication: boolea
   }
 }
 async function refusesLateChange(kind: string) {
-  await refusesLateChangeWithDelay(kind, false);
+  await refusesLateChangeWithDelay(kind);
 }
 it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
   'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
 
 async function refusesLatePayerAfterSlowPublication() {
-  await refusesLateChangeWithDelay('payer', true);
-  const clockIsMocked = vi.isMockFunction(Reflect.get(performance, 'now'));
-  expect(clockIsMocked).toBe(false);
+  const originalNow = performance.now;
+  const startedAt = performance.now();
+  const publicationClock = manualClock(startedAt + 60_000);
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockImplementation(publicationClock.now);
+  try {
+    await refusesLateChangeWithDelay('payer', publicationClock);
+    expect(publicationClock.now()).toBe(startedAt + 62_100);
+    expect(performance.now).toBe(originalNow);
+    expect(performance.now()).not.toBe(publicationClock.now());
+  } finally {
+    monotonicClock.mockRestore();
+  }
 }
 it('reaches the late payer refusal after a slow start publication',
   refusesLatePayerAfterSlowPublication);
