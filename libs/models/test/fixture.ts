@@ -79,7 +79,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
   const projectionStore = await createEventStore(nats.connection, nats.store.clock);
-  const decisionRunner = new ProjectionRunner(db, projectionStore, logger);
+  const projectionDb = pgDb(dbs.queue);
+  const decisionRunner = new ProjectionRunner(projectionDb, projectionStore, logger);
   await decisionRunner.initialise(conversations);
   // Keep gateway reads separate from backend query probes, as in the real processes.
   const decisionDb = pgDb(dbs.queue);
