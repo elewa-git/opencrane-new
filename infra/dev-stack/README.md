@@ -6,8 +6,9 @@ This package starts a full local copy of OpenCrane for development and testing.
 It brings the apps and services together and checks product journeys.
 The checks use a browser to sign in, chat and reload saved replies.
 Developers can also check files, spending and organisation settings.
-The focused tool approval driver checks long chats through a reviewed demo tool
-and the guarded local TLS transport. It checks approval, one use and Stop refusal.
+The focused tool approval driver asks the free model to use a reviewed demo tool
+in a long chat, through the guarded local TLS transport. It checks browser approval,
+one use and Stop refusing an already approved request.
 
 ## Where it fits
 
