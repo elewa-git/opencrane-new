@@ -1,9 +1,13 @@
 import { expect, it, vi } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { readStreamSummary, type StoredEvent } from '@opencrane/event-store';
 import { caughtUpConversation } from '../src/decision-conversation-catchup.ts';
 import { decisionChatSummary } from '../src/decision-summary.ts';
 import { envelope } from '../src/actor.ts';
+
+function copy(rows: StoredEvent[]) {
+  return [...rows];
+}
 
 async function catchesUpOnceAndKeepsCapturedPosition() {
   const fixture = await natsFixture();
@@ -14,9 +18,6 @@ async function catchesUpOnceAndKeepsCapturedPosition() {
     reads++;
     await resume.promise;
     yield* read(...args);
-  }
-  function copy(rows: StoredEvent[]) {
-    return [...rows];
   }
   try {
     const creation = envelope('test', 'conversation-chat', 'conversation.created', {
@@ -49,3 +50,22 @@ async function catchesUpOnceAndKeepsCapturedPosition() {
 }
 it('shares one background catch-up and returns only the captured complete prefix',
   catchesUpOnceAndKeepsCapturedPosition);
+
+async function usesSelectedCatchupClock() {
+  const clock = manualClock(Math.ceil(performance.now()) + 20_000);
+  const fixture = await natsFixture({ clock });
+  const sleep = vi.spyOn(clock, 'sleep');
+  try {
+    const request = { conversationId: 'chat', turnId: 'turn', head: 1, deadline: 0 };
+    expect(() => caughtUpConversation(fixture.store, 'test', request, 1))
+      .toThrow('Conversation history is catching up');
+    expect(sleep).toHaveBeenCalledWith(10_000, expect.any(AbortSignal));
+    await readStreamSummary(fixture.store, 'test', 'conversation-chat',
+      decisionChatSummary, Infinity, copy);
+  } finally {
+    vi.restoreAllMocks();
+    await fixture.close();
+  }
+}
+it('bounds background conversation catch-up with the selected event-store clock',
+  usesSelectedCatchupClock);
