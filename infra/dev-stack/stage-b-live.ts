@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { requireStageBStack } from './stage-b-guard.ts';
 import { stageBComposeOverride, stageBLaunchSources } from './stage-b-launch.ts';
+import { recordDemoCalls } from './record-demo-calls.ts';
 
 const root = new URL('../../', import.meta.url).pathname.slice(0, -1);
 const id = process.env['DEV_STACK_ID'];
@@ -26,6 +27,7 @@ if (accountsFile) {
   credentials = { accounts: demoAccountsSchema.parse(raw) };
 }
 const demo = createDemoServer(undefined, credentials);
+recordDemoCalls(demo, `${directory}/demo-calls.jsonl`);
 await demo.listen({ path: `${directory}/stage-b-demo.sock` });
 const execute = promisify(execFile);
 const composeFile = `${directory}/stage-b-compose.json`;

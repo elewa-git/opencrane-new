@@ -49,11 +49,31 @@ export async function reviewJourneyTools(ownerPage: Page, store: EventStore, sil
     catalogue.serverInfo = serverInfo;
   }
   await append('mcp.server_discovered', `mcp-${serverId}`, catalogue);
+  const saved = await readToolPolicy(store, silo, serverId);
+  assert.equal(saved.catalogue?.schemaDigest, catalogue.schemaDigest);
+  assert.equal(saved.tools.length, tools.length);
 
-  // Read the saved events so a slow projection cannot supply an older review revision.
+  const input = { ownerPage, store, silo, origin, serverId };
+  await reviewSavedJourneyTools(input, modes);
+}
+
+export type JourneyToolReview = {
+  ownerPage: Page;
+  store: EventStore;
+  silo: string;
+  origin: string;
+  serverId: string;
+};
+
+export async function reviewSavedJourneyTools(input: JourneyToolReview,
+  modes: ('allow' | 'ask' | 'block')[]) {
+  const { ownerPage, store, silo, origin, serverId } = input;
+  // Read saved definitions so a slow projection cannot supply an older review revision.
   const url = `${origin}/api/org/integrations/${serverId}`;
   const policy = await readToolPolicy(store, silo, serverId);
-  assert.equal(policy.catalogue?.schemaDigest, catalogue.schemaDigest);
+  const catalogue = policy.catalogue;
+  assert(catalogue?.tools, 'Discovery supplies the exact definitions for review');
+  const tools = catalogue.tools;
   assert.equal(policy.tools.length, tools.length);
   for (const tool of policy.tools) {
     assert.equal(tool.reviewed, false, 'Discovery cannot authorise a tool');
@@ -83,6 +103,11 @@ export async function reviewJourneyTools(ownerPage: Page, store: EventStore, sil
     assert.deepEqual(savedReply.policy.tools?.map((tool) => ({ name: tool.name, mode: tool.mode })),
       choices.map((choice) => ({ name: choice.name, mode: choice.mode })));
   }
-  const publication = { serverId, publishedBy: 'zitadel-owner' };
-  await append('mcp.server_published', `mcp-${serverId}`, publication);
+  const reviewed = await readToolPolicy(store, silo, serverId);
+  const publication = { commandId: randomUUID(), expectedSequence: reviewed.sequence,
+    reviewRevision: reviewed.reviewRevision };
+  const publishRequest = { headers: { origin }, data: publication };
+  const published = await ownerPage.request.post(`${url}/publication`, publishRequest);
+  assert.equal(published.status(), 200, 'Owner publishes the exact saved review');
+  assert.equal((await published.json()).status, 'appended');
 }

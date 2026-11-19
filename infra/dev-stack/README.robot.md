@@ -2006,7 +2006,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Allow an explicit owner real-provider start from an interactive terminal, while refusing fleet tasks.
   Check readiness without sending chat prompts. Restore the saved mode and stop newly
   launched services if the start fails or is interrupted.
-- Run browser checks against real local services. The approval journey is currently skipped.
+- Run browser checks against real local services. The focused approval journey uses
+  the guarded local TLS launcher, current publication commands and gateway acknowledgement.
 - Declare review details for read-only test tools before the Owner selects Allow.
   Discovery leaves every tool blocked until the exact review is saved.
 - Check integration list rows with a hosted display fixture. The fixture makes no
@@ -2057,8 +2058,12 @@ report readiness. The [demo guide](../../docs/process/demo/README.md)
 keeps the remaining live checks explicit.
 
 The models process gets a separate control port for checking loaded configuration.
-The stack never forwards it. The approval journey is skipped while publication
-and call checks are being connected.
+The stack never forwards it. After a fresh CORE run, `stage-b-live.ts` starts the
+guarded demo transport. Run `journey.sh` with `APPROVAL_JOURNEY_ONLY=1` to seed
+3,000 messages and check requester approval, exact forwarded bytes, single use, denial
+and a browser Stop followed by a refused call, at 1280 and 390 pixels.
+The launcher records synthetic write bytes in `demo-calls.jsonl`; direct readback
+confirms the effect count independently. Keep the launcher running until checks finish.
 
 1. **A developer starts OpenCrane.** The scripts start the databases and services, then
    start the server, workers and website. Startup waits up to five minutes for the website
