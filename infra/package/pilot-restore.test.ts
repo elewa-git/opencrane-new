@@ -135,7 +135,7 @@ async function refusesInvalidSet(kind: string) {
   const path = join(options.directory, options.id, 'manifest.json');
   const manifest = manifestSchema.parse(JSON.parse(await readFile(path, 'utf8')));
   if (kind === 'mixed') manifest.parts.events.backupId = 'another-backup';
-  if (kind === 'version') manifest.images['server'] = 'other-version';
+  if (kind === 'version') manifest.images['server'] = `registry.example.test/server@sha256:${'c'.repeat(64)}`;
   if (kind === 'point') manifest.parts.events.details['lastSequence'] = 2;
   if (kind === 'ahead') manifest.point.checkpoints['members'] = 2;
   if (kind === 'missing checkpoint') delete manifest.point.checkpoints['members'];
@@ -233,7 +233,7 @@ async function refusesInvalidFiles(kind: string) {
   const objects = [entry];
   let data = bytes.toString('base64');
   if (kind === 'duplicate') objects.push(entry);
-  if (kind === 'corrupt') data = Buffer.from('Different bytes').toString('base64');
+  if (kind === 'corrupt') data = Buffer.from('A wrong file').toString('base64');
   const archived = Buffer.from(JSON.stringify({ ...entry, data }));
   manifest.parts.files.details = { bucket: 'files', objects };
   manifest.parts.files.byteCount = archived.length;

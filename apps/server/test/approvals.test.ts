@@ -1,3 +1,4 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { approvalFixture } from './support/approval-fixture.ts';
 import { substituteStoredContent } from '@opencrane/event-store/testing';
 /* eslint max-lines: ["error", { max: 1686, skipBlankLines: true, skipComments: true }] */
@@ -413,12 +414,12 @@ it('fences changed authority before consumption, leaving no upstream effect or c
   } finally { await f.close(); }
 }, 40_000);
 
-it('refuses decisions and consumption when the saved review is malformed', async () => {
+it.each(['{', '{}'])('refuses decisions and consumption for malformed review %s', async review => {
   const f = await approvalFixture();
   try {
     await f.call();
     const headers = f.headers(), { cards, csrf } = await f.read(headers);
-    const unavailable = substituteStoredContent(f.nats.store, 'tool.approval_requested', { review: '{' });
+    const unavailable = substituteStoredContent(f.nats.store, 'tool.approval_requested', { review, reviewDigest: sha256Hex(review) });
     try {
       expect((await f.app.inject({ method: 'POST', url: '/api/conversations/conversation/approvals', headers: { ...headers, 'x-csrf-token': csrf }, payload: { approvalId: cards[0]!.approvalId, decision: 'approved' } })).statusCode).toBe(503);
       expect((await f.call()).status).toBe(403); expect(f.received()).toBe(0);
