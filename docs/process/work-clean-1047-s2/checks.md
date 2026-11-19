@@ -1,8 +1,8 @@
 # Shared SHA-256 hex checks
 
-Slice 2 of 2. Builder checks only; independent review belongs to the orchestrator.
-The slice has an eight-agent-hour budget and two rework rounds. No independent
-review or rework round was run by this builder.
+Slice 2 of 2. These are builder checks; the first independent review found the
+slow-publication test's real-time sleep. The ticket has a sixteen-agent-hour
+budget and two rework rounds per slice.
 
 ## Compatibility
 
@@ -153,3 +153,47 @@ The second pass covers 13,056 passing cases and 69 NOT RUN conditions. The origi
 failed selections remain FAIL; isolated qualification does not erase their results.
 Both files ran once in this controlled qualification. No assertion, deadline or
 test code changed, and the loaded failures are retained above.
+
+## Controlled slow publication
+
+The review correction changes test code only. Replace the slow-publication
+regression's real 2,100 ms wait with the shared `manualClock` from
+`@opencrane/event-store/testing`. Advance that underlying clock during the start
+append while `sendWithFixtureTime` holds its earlier snapshot. Keep all existing
+payer-refusal, socket and saved-start assertions.
+
+Test-first commit `2ef5ae0ec` [fails](clock-red.log) because the real sleep leaves
+the manual clock unchanged instead of advancing it by 2,100 ms. Replacing the sleep
+with `advance(2100)` makes the focused case PASS. Removing only the snapshot hold
+then [fails](clock-without-hold.log) at `expect(injected).toBe(true)`: expiry prevents
+the payer change from being reached. Restore the hold before final qualification.
+The clock check also verifies that the original `performance.now` function is
+restored and that its returned time differs from the advanced manual time before
+its own cleanup runs.
+
+Keep the clock assertions in the existing clock-support module so the test file
+stays within its existing size limit. Use a named clock reader and retain cleanup
+in `finally`. Add no dependency, production change, deadline change or size-limit
+exception. Leave the existing final-expiry-guard coverage gap in `budget-writer.ts`
+for its recorded follow-up.
+
+The fresh CORE journey remains PASS at `4b88608ec5971ea5d702dd70b57da156fb15dff7`.
+It covers the unchanged product code. A new journey is NOT RUN for this test-only
+correction; no secondary stack is claimed.
+
+The first complete changed-file run was FAIL: 113 of 114 cases passed. The
+following `retries an unsaved start after another computer thread advances its
+stream` case timed out in the shared `until` helper. The corrected slow-publication
+case passed. Running those two adjacent cases together then passed 2 of 2 cases,
+so the timeout did not reproduce in that selection. Its cause remains unproved;
+the failed complete run stays in the evidence. The second complete run was also
+FAIL: 113 of 114 cases passed. Its failure was a different adjacent case,
+`refuses selected thread activity while saving the computer start`, which did
+not reach the intercepted start append. The clock case passed again. A focused
+selection of the clock case and all three following cases passed 4 of 4. Neither
+complete-file failure is attributed to the clock correction without proof.
+
+The corrected files pass scoped ESLint without warnings. Typecheck, the event
+catalogue (174 types), Knip, changelog lint and Markdown lint pass. Knip reports
+two existing configuration hints. All test, lint and typecheck commands use
+`nice -n 10`.

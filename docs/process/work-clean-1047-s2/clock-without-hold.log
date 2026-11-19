@@ -1,0 +1,39 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/routine-sender.test.ts --maxWorkers=2 -t reaches the late payer refusal after a slow start publication
+
+ RUN  v5.0.3 .
+
+ ❯ apps/server/test/routine-sender.test.ts (114 tests | 1 failed | 113 skipped) 8416ms
+   × reaches the late payer refusal after a slow start publication 8412ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > reaches the late payer refusal after a slow start publication
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ refusesLateChangeWithDelay apps/server/test/routine-sender.test.ts:921:22
+    919|     }
+    920|     await until(completed);
+    921|     expect(injected).toBe(true);
+       |                      ^
+    922|     expect(computer.starts).toBe(0);
+    923|     expect(link.socket.readyState).toBe(link.socket.OPEN);
+ ❯ refusesLatePayerAfterSlowPublication apps/server/test/routine-sender.test.ts:944:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 113 skipped (114)
+   Start at  06:47:11
+   Duration  21.48s (transform 46%, tests 40%, import 14%)
+
+  Transform  transforming modules took 9.77s · 46% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
