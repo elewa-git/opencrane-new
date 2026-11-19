@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { envelope as modelsEnvelope } from '@opencrane/models';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const base = 'f316313f0265e5678c49fc1dcf2c03cbcc3d17d2';
@@ -70,14 +71,21 @@ function fixtureRequire(name) {
   return { randomUUID };
 }
 
-// Keep the unchanged models builder's output here; its validation is outside this comparison.
+// Supply the existing builder's optional clock value without changing its validation.
 function envelope(silo, subject, type, data, id) {
-  return { silo, subject, type, data, id, commandId: id, source: 'models',
-    correlation: {}, time: fixedTime };
+  return modelsEnvelope(silo, subject, type, data, id, new Date(fixedTime));
 }
 
-function fixtureContext() {
-  const data = { routineId: 'example', occurrenceId: 'occurrence', firedAt: fixedTime };
+function sampleData(file) {
+  if (file === 'apps/server/src/integrations/registration.ts') {
+    return { serverId: 'example', kind: 'remote', locator: 'https://mcp.example.test/mcp',
+      registeredBy: 'alice' };
+  }
+  return { routineId: 'example', occurrenceId: 'occurrence', firedAt: fixedTime };
+}
+
+function fixtureContext(file) {
+  const data = sampleData(file);
   const saved = { id: 'prior', commandId: 'prior', silo: 'silo', subject: 'prior', type: 'prior',
     source: 'prior', data: {}, correlation: { request: 'request' }, time: fixedTime,
     report: { sequence: 1, digest: 'a'.repeat(64) } };
@@ -94,7 +102,7 @@ function fixtureContext() {
 
 function evaluateEnvelope(file, old) {
   const expression = envelopeExpression(file, old);
-  const context = fixtureContext();
+  const context = fixtureContext(file);
   const event = vm.runInContext(expression, context);
   return structuredClone(event);
 }

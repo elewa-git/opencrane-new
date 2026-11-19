@@ -25,11 +25,11 @@ No serialised-text comparisons are used.
 Run the [comparison script](compare-envelopes.mjs) from the repository root:
 
 ```sh
-node docs/process/work-clean-1049-s1/compare-envelopes.mjs
+node --experimental-strip-types docs/process/work-clean-1049-s1/compare-envelopes.mjs
 ```
 
-For registration, the fixture supplies the unchanged models builder's output;
-this comparison covers the later overrides, rather than that builder's validation.
+For registration, use the real, unchanged models builder with its optional date
+argument fixed. It still validates the fixture before the later overrides.
 The routine samples compare the returned expressions with the same supplied id.
 Their existing tests cover the occurrence-based id derivations.
 
