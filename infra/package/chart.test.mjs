@@ -924,3 +924,34 @@ function isReadOnlyBackup(mount) {
 function isNatsCertificate(setting) { return setting.name === 'NATS_CERT_FILE'; }
 
 function isPodRule(rule) { return rule.resources.includes('pods'); }
+
+function restoreScalingIsRestricted() {
+  const permissions = namedResource('Role', 'package-restore');
+  const scalable = new Set();
+  const readable = new Set();
+  for (const rule of permissions.rules) {
+    if (rule.resources.includes('deployments/scale') &&
+        rule.verbs.some(changesScale)) {
+      for (const name of rule.resourceNames ?? ['*']) scalable.add(name);
+    }
+    if (rule.resources.includes('deployments') &&
+        ['get', 'list', 'watch'].every(hasVerb.bind(null, rule))) {
+      for (const name of rule.resourceNames ?? ['*']) readable.add(name);
+    }
+  }
+  assert.deepEqual([...scalable].sort(), ['openfga', 'server']);
+  assert.deepEqual([...readable].sort(), ['backup-catalogue', 'openfga', 'server',
+    'worker-audit', 'worker-budgets', 'worker-computers', 'worker-conversations',
+    'worker-dispatcher', 'worker-files', 'worker-mcp-catalogue', 'worker-members']);
+  assert.ok(permissions.rules.find(isPodRule).verbs.includes('watch'));
+  for (const resource of ['persistentvolumeclaims', 'serviceaccounts', 'secrets']) {
+    function readsResource(rule) {
+      return rule.resources.includes(resource) && rule.verbs.includes('get');
+    }
+    assert.ok(permissions.rules.some(readsResource), resource);
+  }
+}
+function changesScale(verb) { return ['patch', 'update', '*'].includes(verb); }
+function hasVerb(rule, verb) { return rule.verbs.includes(verb); }
+test('restore account scales only server and OpenFGA and retains required reads',
+  restoreScalingIsRestricted);
