@@ -1,107 +1,92 @@
-# Long-conversation decisions: review-fix qualification
+# Long-chat approval and Stop journey
+
+Date: 19 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
-Date: 17 November 2026 UTC. Branch: `work/bug-1148-s1`.
-The PR remains a draft. Finding 4 and the failing decision-cost gate block completion.
-The earlier CORE receipt and chat pictures do not qualify these review fixes.
+CORE: PASS at 390 and 1280 pixels. Long-chat approval, execution and Stop refusal:
+NOT RUN, because history setup failed before tool discovery. No independent review
+result is claimed. The PR remains a draft.
 
-## Fresh stack and browser steps
+## Fresh secondary attempt
 
-Claimed secondary slot 1 through `infra/dev-stack/claim.sh`. Used the launchers:
+Source: `0e089c95aa1db43ca2f46a7c69c1b2c3a2d5f038`.
+Receipt identifier: `live-20261119T200258Z`.
+Secondary slot: 1. Started at 20:02 UTC; torn down at 20:23 UTC.
 
-```sh
-stack_id=$(infra/dev-stack/claim.sh) || exit 1
+Before claiming, both secondary slots reported free, no package stack was up, and
+one-minute load remained below six for 328 seconds. Checks ran every 30 seconds.
+Used `claim.sh`, then `up.sh --fresh`, with the default CORE qualification.
+
+| Check | 390 px | 1280 px |
+| --- | --- | --- |
+| CORE chat, reload and native Stop | PASS | PASS |
+| CORE uploads and live-view revocation | PASS | PASS |
+| Existing guarded TLS launcher ready | PASS, shared fixture | PASS, shared fixture |
+| Seed 3,000 completed earlier messages | FAIL during setup | NOT RUN |
+| Discover, review and publish the tool | NOT RUN | NOT RUN |
+| Browser approval and exactly one real demo effect | NOT RUN | NOT RUN |
+| Long-chat native Stop and next tool call refused | NOT RUN | NOT RUN |
+
+[CORE mobile screenshot](first-core-390.png) and [CORE desktop screenshot](first-core-1280.png)
+show the earlier CORE chat and Stop, not a long-chat approval outcome.
+
+The seed failed at `waitForApprovalHistory` with the existing assertion that history
+must reach the conversation projection. The retained worker log shows successful
+seed records and no handler error. It does not contain the expected and observed
+checkpoint values, so the delay's cause is not established. Added those diagnostics
+and batch progress for the next fresh run. No longer deadline or retry was added.
+
+Startup, service and container logs and all screenshots were copied into the private
+fleet receipt before `down.sh`. The final slot status was free. No owner stack was
+used. Another secondary claim later prevented an immediate new fresh run.
+
+The earlier first-round attempt failed before approval with gateway 404. Its result
+remains recorded in [the first fix receipt](rework1.md). It is not evidence of this
+round's source passing the slice journey.
+
+## Reproduction
+
+Wait until both `status.sh --id 1` and `status.sh --id 2` report free, no package stack
+is up, and one-minute load stays below six for five minutes. Check every 30 seconds;
+stop after two hours if that interval does not occur. Supply the approved Zitadel
+credential file through `ZITADEL_KEY_FILE`; its contents must never enter commands,
+logs, screenshots or saved events.
+
+Run from this worktree in Bash after the eligibility interval:
+
+```bash
+export DEV_STACK_CLAIM_PID=$$
+stack_id=$(infra/dev-stack/claim.sh)
 export DEV_STACK_ID="$stack_id"
-export APPROVAL_JOURNEY_ONLY=1
-# Point ZITADEL_KEY_FILE at the approved local PAT file, by path only.
+# Install cleanup that saves startup/service logs and screenshots before down.sh.
 infra/dev-stack/up.sh --fresh
-infra/dev-stack/status.sh
-# The fresh startup invokes the focused browser driver.
-infra/dev-stack/down.sh
+STAGE_B_CLAIMED_ID="$stack_id" nice -n 10 node --experimental-strip-types \
+  infra/dev-stack/stage-b-live.ts &
+tls_pid=$!
+# Wait for the launcher's guarded server/models readiness message.
+APPROVAL_JOURNEY_ONLY=1 infra/dev-stack/journey.sh --id "$stack_id"
+# Copy startup/service logs, demo-calls.jsonl, approval-readback and screenshots now.
+kill -TERM "$tls_pid"
+wait "$tls_pid"
+infra/dev-stack/down.sh --id "$stack_id"
+infra/dev-stack/status.sh --id "$stack_id"
 ```
 
-The final attempt used source head `8a0176de073e786a0b0f36fa05294dc7394fb296`.
-Later source changes preserve conversation validation errors before index insertion;
-that later source has not passed a fresh browser journey.
-The startup reached the website and completed common sign-in and membership checks.
-The driver seeded one valid encrypted chat with 3,000 earlier messages, in batches
-of 50, waiting for the conversation projection between batches. It configured the
-timed tool review after seeding, without extending its expiry.
+Always retain logs before cleanup, including after a failed step. Always run `down.sh`.
+The launcher requires the current secondary claim and uses the existing TLS fixture
+for `https://mcp.example.test/`. Product network guards remain enabled.
 
-At 390 × 844, the first tool request returned HTTP 404 instead of the expected
-HTTP 403 Ask response. No approval existed, no decision-service request was seen,
-and the recording tool received zero calls. The driver stopped at that assertion.
-Approving a call, seeing it run, single use and refusing a denied call are NOT RUN.
-The 1280 × 900 steps are NOT RUN. CORE on the final source is NOT RUN.
+The focused driver seeds 3,000 messages and matching completion events. It registers
+the real demo definition through discovery, reviews `change_delivery_slot` as Ask,
+blocks other tools, publishes with the current reviewed revision and waits for the
+matching gateway acknowledgement. It scripts the approval-request turn as the existing
+approval fixture does; browser decisions and gateway execution use the real services.
+Independent demo readback and recorded exact request bytes prove the effect and single
+use. A normal browser chat turn first requests and approves its own exact tool call.
+Capture its approved, unused state, press Stop, then resend those same bytes with the
+already issued pass. The call must be refused without another upstream effect; Ask
+alone cannot explain this refusal.
 
-Used the existing stand-in model setup, scripted active turns and recording MCP
-tool through the real gateway. Paid model calls: zero. A real model provider would
-not supply the missing tool route.
-
-The helper still emits the old `mcp.server_published` payload. The running product
-requires the current publication command, a matching reviewed revision and an
-acknowledged dynamic route. Its remote watcher also requires the guarded TLS fixture
-transport; the helper currently advertises a loopback HTTP endpoint. The policy read
-reported `published: false`. The smallest remaining fix is to reuse the existing
-Stage B TLS fixture with the current publication flow, then repeat the complete
-fresh journey at both widths. No publication or network guard was weakened.
-
-Saved sanitised startup, host-service and owned-container logs, plus the failure
-capture and text, into the private rework receipt folder before teardown. Ran
-`infra/dev-stack/down.sh`; it exited zero. A later status check reported slot 1
-`free`. The owner stack was not used. No live PASS is claimed.
-
-## Own source checks
-
-Every test, lint, typecheck and build command ran under `nice -n 10`. Tests used the supplied disposable
-PostgreSQL database and normal NATS, OpenFGA and gateway fixtures.
-
-| Check | Result | Evidence |
-| --- | --- | --- |
-| New index, creation and catch-up cases | PASS twice | Six files, 27 tests in each run; 205.12 s and 261.02 s. |
-| Added prepared-history and validation-order cases | PASS twice | Two focused files, 12 tests per run. |
-| Final completeness proof cases | PASS twice | All nine replay tests passed twice after adding unique-position and first-position guard probes. Both removals failed their isolated tests first. |
-| Unchanged activity and participation assertions | PASS | Five activity and four participation cases, plus seven replay cases: 16 passed. |
-| Guard removal | PASS | Each touched guard failed its focused test when removed; normal source restored. See [fix details](rework1.md#guard-removal-evidence). |
-| Final affected groups | PASS twice | Four files, 16 tests in each run: approval history, decision measurements, activity and participation. |
-| Unchanged decision-cost suite | FAIL | Final run: 27 passed, one failed. The 3,000-message and cold catch-up cases passed unchanged. The many-models cache case returned HTTP 503 where it requires 200. An earlier 28-test PASS does not replace this result. |
-| Typecheck | PASS | Full workspace, package and dev-stack checks on the final product source. |
-| Scoped ESLint, events, Knip, changelog and reads | PASS | Zero ESLint warnings in its configured changed-file scope; 174 event types; two existing Knip hints; 308 known whole-stream reads and five rebuild reads. Dev-stack files use their dedicated typecheck and are outside repository ESLint scope. |
-| Markdown | PASS | Repository run with no file arguments; zero issues. Rechecked after receipt changes. |
-| Public privacy and secret scan | PASS | Both required scans passed; repeated before the push. |
-
-Made right: reused the existing summary and read baseline, split catch-up and
-conversation application into named functions, and removed the moved fallback from
-the invalidation helper. The shipped-code and baseline diff is 834 changed lines
-(681 added, 153 deleted); moving the existing conversation application body counts
-in that total. No file or function limit was raised.
-
-No pre-existing assertion, access check, money check or memory check was loosened.
-No dependency, event type, API field, product retry, timeout or size limit was
-added or increased.
-
-A diagnostic repeat of the isolated many-models case, with structured warning logging and unchanged assertions and deadlines, passed. It did not reproduce or
-explain the full-suite HTTP 503. The full-suite gate remains FAIL. Five selected
-approval requester, payer and single-use cases also passed; the other 75 were
-not selected in that run.
-
-The full root suite, real-provider qualification and second independent
-review are NOT RUN. Hosted CI is not claimed here.
-
-## Earlier fresh attempts
-
-| Attempt | Result | Cause and retained evidence |
-| --- | --- | --- |
-| 1 | FAIL | Worktree had no local key directory. Selected the approved PAT by path. |
-| 2 | FAIL | CORE caret assertion stopped before approval. Host logs retained; container stdout was not copied before teardown. Evidence is PARTIAL. |
-| 3 | FAIL | Driver used the wrong conversation-key directory. Corrected the fixture setting. |
-| 4 | FAIL | Bulk seed left the projection behind. Added bounded seed batches and readiness checks, keeping the existing timeout. |
-| 5 | PARTIAL | Interrupted to share one seeded chat across widths. |
-| 6 | PARTIAL | Interrupted to move timed review after history preparation. |
-| 7 | PARTIAL | Interrupted to select the focused approval driver with shared cleanup. |
-| 8 | FAIL | Seed completed; gateway returned 404 before approval at 390 px. Host and container logs retained before teardown. |
-
-Each claimed stack was stopped through its launcher. Remaining work stays in this
-PR. The worktree remains available for review. Work stopped before the owner's
-7.5-hour reporting threshold; live qualification is incomplete.
+Provider: existing free stand-in. Paid calls: zero. No real-provider attempt was needed
+before the setup failure. Whether this driver completes the whole slice remains unproved.
