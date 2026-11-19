@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { sameJson } from '../src/same-json.ts';
 
-describe('sameJson', sameJsonCases);
+describe('sameJson', registerJsonComparisonTests);
 
-function sameJsonCases() {
+function registerJsonComparisonTests() {
   it('ignores object key order at every depth', ignoresNestedObjectOrder);
   it('ignores key order in objects inside nested arrays', ignoresObjectOrderInArrays);
   it('preserves array order at every depth', preservesArrayOrder);
