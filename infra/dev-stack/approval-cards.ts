@@ -12,7 +12,7 @@ export function postedRequestField(response: Response, field: string) {
 }
 
 type ApprovalScreenshot = 'requested' | 'approved' | 'used' | 'denied' |
-  'stop-approved' | 'stopped';
+  'native-requested' | 'native-used' | 'stop-approved' | 'stopped';
 
 export async function captureApprovalState(page: Page, state: ApprovalScreenshot) {
   const width = page.viewportSize()!.width;

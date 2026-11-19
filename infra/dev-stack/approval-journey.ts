@@ -16,6 +16,7 @@ import { approvalToolBody, completedApprovalMessage, issueApprovalComputer, prep
 import { createStageBCollector } from './stage-b-collector.ts';
 import { readStageBQuote } from './stage-b-readback.ts';
 import { stopApprovalTurn } from './approval-stop.ts';
+import { nativeApprovalTurn } from './approval-native.ts';
 import { approvalTerminal, captureApprovalState, decideJourneyApproval }
   from './approval-cards.ts';
 
@@ -99,6 +100,16 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
   await mkdir('docs/process/work-bug-1148-s1', { recursive: true });
   for (const page of pages) {
     const width = page.viewportSize()!.width;
+    const nativeBefore = (await recordedApprovalCalls()).length;
+    const nativeInput = { origin: input.origin, conversationId,
+      expectedEffectCount: nativeBefore + 1 };
+    await nativeApprovalTurn(page, nativeInput);
+    assert.equal((await recordedApprovalCalls()).length, nativeBefore + 1,
+      'The native approved tool call has exactly one upstream effect');
+    const nativeQuote = await readStageBQuote(collector, `${directory}/stage-b-demo.sock`,
+      revision, `native-${width}`);
+    assert.equal(nativeQuote.value.effectCount, nativeBefore + 1);
+    assert.equal(nativeQuote.value.slot, 'afternoon');
     const turnId = randomUUID();
     await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, turnId, assistantId: input.assistantId });
     await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', payingGroupId: defaultPayingGroupId, ...provider }, 'opencrane-server');
