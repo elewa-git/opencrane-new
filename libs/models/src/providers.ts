@@ -171,6 +171,7 @@ export function reconcileProvider(saved: StoredEvent, attempted: EventEnvelope) 
     event.commandId !== expected.commandId || event.type !== expected.type ||
     event.principal?.kind !== expected.principal?.kind ||
     event.principal?.id !== expected.principal?.id ||
+    // eslint-disable-next-line no-restricted-syntax -- Preserve exact provider command retry conflict detection.
     JSON.stringify(event.data) !== JSON.stringify(expected.data)) {
     throw new ProviderConflict();
   }
@@ -196,6 +197,7 @@ export async function providerCommand(store: EventStore, binding: Binding,
   const type = types[input.action];
   if (previous) {
     if (previous.event.type !== type ||
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact provider command retry conflict detection.
       JSON.stringify(previous.event.data) !== JSON.stringify(payload)) {
       throw new ProviderConflict();
     }

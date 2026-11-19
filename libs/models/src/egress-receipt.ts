@@ -55,6 +55,7 @@ async function saveEvidence(file: string, directory: string, event: EventEnvelop
         throw error;
       }
       const original = await readEvidence(file);
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact durable egress evidence conflict detection.
       if (JSON.stringify(original) !== JSON.stringify(event)) {
         throw new Error('egress_receipt_refused', { cause: error });
       }
@@ -125,6 +126,7 @@ export async function createEgressReceipt(store: Pick<EventStore, 'append' | 're
       const event = envelope(silo, subject, 'egress.observed', data, observationId,
         new Date(relay.closedAt));
       const valid = checkedEvidence(event, silo, binding, destinationDigest);
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact pending egress evidence binding.
       if (pending && JSON.stringify(pending) !== JSON.stringify(valid)) {
         return false;
       }
@@ -138,6 +140,7 @@ export async function createEgressReceipt(store: Pick<EventStore, 'append' | 're
   async function saved() {
     for await (const row of store.readStream(subject, 1, performance.now() + 1000)) {
       const event = checkedEvidence(row.event, silo, binding, destinationDigest);
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact saved egress evidence binding.
       if (JSON.stringify(event) !== JSON.stringify(pending)) {
         return 'refused' as const;
       }

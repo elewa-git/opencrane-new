@@ -24,6 +24,7 @@ async function sameRows(db: Query, table: string, key: 'reservation_id' | 'event
   while (true) {
     const live = await indexedRows(db, table, key, after);
     const replayed = await indexedRows(db, `${table}_replay`, key, after);
+    // eslint-disable-next-line no-restricted-syntax -- Preserve exact budget replay verification.
     if (JSON.stringify(live) !== JSON.stringify(replayed)) return false;
     if (live.length < 200) return true;
     const last = live.at(-1)!;
@@ -39,6 +40,7 @@ async function rebuildLocked(db: Db, source: EventSource, logger: Logger, verify
   await runner.initialise(replayBudgets);
   try {
     await runner.run(replayBudgets, { toSequence: previousSequence });
+    // eslint-disable-next-line no-restricted-syntax -- Preserve exact budget replay verification.
     const budgetsUnchanged = JSON.stringify(await rows(db, 'model_budgets')) === JSON.stringify(await rows(db, 'model_budgets_replay'));
     const callsUnchanged = await sameRows(db, 'model_budget_calls', 'reservation_id');
     const effectsUnchanged = await sameRows(db, 'model_budget_effects', 'event_id');
