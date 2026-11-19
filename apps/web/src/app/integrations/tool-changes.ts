@@ -1,4 +1,4 @@
-import type { ToolPolicy } from '@opencrane/protocol';
+import { sameJson, type ToolPolicy } from '@opencrane/protocol';
 
 type Catalogue = NonNullable<ToolPolicy['catalogue']>;
 type SavedTool = NonNullable<Catalogue['tools']>[number];
@@ -105,8 +105,9 @@ function compareTool(
   else if (schemasDiffer(beforeDefinition, afterDefinition)) {
     kind = 'Schema changed';
     fields.push(...inputFieldChanges(beforeDefinition?.inputSchema, afterDefinition?.inputSchema));
-    if (JSON.stringify(beforeDefinition?.outputSchema) !==
-        JSON.stringify(afterDefinition?.outputSchema)) fields.push('Output schema changed');
+    if (!sameJson(beforeDefinition?.outputSchema, afterDefinition?.outputSchema)) {
+      fields.push('Output schema changed');
+    }
   } else kind = 'Details changed';
 
   if (oldTool && currentTool && oldTool.revision !== currentTool.revision) {
@@ -131,11 +132,11 @@ function detailChanges(before: Definition | null, after: Definition | null): str
   const changes: string[] = [];
   if (before.title !== after.title) changes.push('Title changed');
   if (before.description !== after.description) changes.push('Description changed');
-  if (JSON.stringify(before.annotations) !== JSON.stringify(after.annotations)) {
+  if (!sameJson(before.annotations, after.annotations)) {
     changes.push('Annotations changed');
   }
-  if (JSON.stringify(before.metadata) !== JSON.stringify(after.metadata) ||
-      JSON.stringify(before._meta) !== JSON.stringify(after._meta)) {
+  if (!sameJson(before.metadata, after.metadata) ||
+      !sameJson(before._meta, after._meta)) {
     changes.push('Metadata changed');
   }
   return changes;
@@ -157,8 +158,8 @@ function readDefinition(value: string | undefined, name: string): Definition | n
 
 function schemasDiffer(before: Definition | null, after: Definition | null): boolean {
   if (!before || !after) return false;
-  return JSON.stringify(before.inputSchema) !== JSON.stringify(after.inputSchema) ||
-    JSON.stringify(before.outputSchema) !== JSON.stringify(after.outputSchema);
+  return !sameJson(before.inputSchema, after.inputSchema) ||
+    !sameJson(before.outputSchema, after.outputSchema);
 }
 
 function inputFieldChanges(before: unknown, after: unknown): string[] {
@@ -169,7 +170,7 @@ function inputFieldChanges(before: unknown, after: unknown): string[] {
   const changed: string[] = [];
   for (const [name, schema] of currentFields) {
     if (!oldFields.has(name)) added.push(name);
-    else if (JSON.stringify(schema) !== JSON.stringify(oldFields.get(name))) changed.push(name);
+    else if (!sameJson(schema, oldFields.get(name))) changed.push(name);
   }
   for (const name of oldFields.keys()) if (!currentFields.has(name)) removed.push(name);
   const all = [...added, ...removed, ...changed];
@@ -222,7 +223,7 @@ function appendTitle(lines: string[], definition: Definition, other: Definition 
 }
 
 function appendOutputSchema(lines: string[], schema: unknown, otherSchema: unknown): void {
-  if (JSON.stringify(schema) === JSON.stringify(otherSchema)) return;
+  if (sameJson(schema, otherSchema)) return;
   appendSavedValue(lines, 'Output schema', schema, otherSchema);
 }
 
@@ -243,7 +244,7 @@ function appendInputFields(lines: string[], schema: unknown, otherSchema: unknow
   const otherFields = topLevelFields(otherSchema);
   let shown = 0;
   for (const [name, value] of fields) {
-    if (otherFields.has(name) && JSON.stringify(value) === JSON.stringify(otherFields.get(name))) {
+    if (otherFields.has(name) && sameJson(value, otherFields.get(name))) {
       continue;
     }
     if (shown === 10) {
@@ -254,7 +255,7 @@ function appendInputFields(lines: string[], schema: unknown, otherSchema: unknow
     lines.push(`Input ${name.slice(0, 100)}: ${detail}`);
     shown += 1;
   }
-  if (shown === 0 && JSON.stringify(schema) !== JSON.stringify(otherSchema)) {
+  if (shown === 0 && !sameJson(schema, otherSchema)) {
     appendSavedValue(lines, 'Input schema', schema, otherSchema);
   }
 }
