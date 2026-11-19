@@ -228,11 +228,8 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     decision: z.enum(['approved', 'rejected', 'retry']),
   }).strict();
   const input = inputSchema.parse(req.body);
-  const checked = await readDecisionApproval(options, input.approvalId);
+  const checked = await readDecisionApproval(options, input.approvalId, memberId, conversationId);
   const { request, requestPosition } = checked;
-  if (request.conversationId !== conversationId || request.requesterId !== memberId) {
-    return reply.code(403).send({ status: 'refused' });
-  }
   if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
   const text = request.review;
   readStoredApprovalReview(text);
@@ -279,7 +276,8 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   return reply.code(statusCode).send({ status: result.status });
 }
 
-async function readDecisionApproval(options: ChatOptions, approvalId: string) {
+async function readDecisionApproval(options: ChatOptions, approvalId: string,
+  memberId: string, conversationId: string) {
   const conversationHistory = decisionConversationReader(options.store, options.db, options.silo);
   const readOptions = { deadline: performance.now() + 10_000, deferInvalidation: true,
     conversationHistory };
@@ -287,6 +285,11 @@ async function readDecisionApproval(options: ChatOptions, approvalId: string) {
     const subject = `approval-${approvalId}`;
     for await (const { event } of options.store.readStream(subject, 1, readOptions.deadline)) {
       if (event.silo !== options.silo) throw new MemberRefusal(403, 'refused');
+      const request = toolApprovalRequestedDataSchema.parse(event.data);
+      // Refuse foreign requests before loading their conversation or preparing cancellation.
+      if (request.conversationId !== conversationId || request.requesterId !== memberId) {
+        throw new MemberRefusal(403, 'refused');
+      }
       break;
     }
     return await readApproval(options.store, options.silo, approvalId, readOptions);

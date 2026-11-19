@@ -224,7 +224,9 @@ async function unavailable(conversationId: string) {
 it.each(['parent', 'child'])('keeps %s IAM outages retryable', unavailable, 60_000);
 
 async function sourceGuard(field: string) {
-  await seeded();
+  const child = await seeded();
+  const sourceSchema = z.object({ origin: z.object({ sourcePosition: z.number() }) });
+  const sourcePosition = sourceSchema.parse(child.data).origin.sourcePosition;
   const logged: unknown[][] = [];
   function recordError(...values: unknown[]) {
     logged.push(values);
@@ -235,9 +237,12 @@ async function sourceGuard(field: string) {
   }
   context.app.addHook('onRequest', capture);
   const original = context.nats.store.readStream.bind(context.nats.store);
-  async function* readStream(subject: string, from = 1, deadline = Infinity) {
-    for await (const row of original(subject, from, deadline)) {
-      if (subject === 'conversation-parent' && from > 1) {
+  let sourceRead = false;
+  async function* readStream(...args: Parameters<typeof original>) {
+    const [subject, from = 1] = args;
+    for await (const row of original(...args)) {
+      if (subject === 'conversation-parent' && from === sourcePosition) {
+        sourceRead = true;
         if (field === 'outage') throw new Error('Store unavailable: parent');
         const changed = structuredClone(row);
         if (field === 'position') changed.sequence += 1;
@@ -251,6 +256,7 @@ async function sourceGuard(field: string) {
   }
   vi.spyOn(context.nats.store, 'readStream').mockImplementation(readStream);
   const response = await read(field === 'outage' ? 503 : 200);
+  expect(sourceRead).toBe(true);
   const status = field === 'outage' ? 'unavailable' : 'restricted';
   expect(response.body).toBe(JSON.stringify({ status }));
   if (field === 'outage') expect(logged).toHaveLength(1);
