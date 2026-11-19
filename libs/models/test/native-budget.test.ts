@@ -420,7 +420,8 @@ async function checksQueuedAccess() {
       await release.promise;
     }
     const blocking = context.actor.reserve(rootCall, 1, holdQueue, undefined, context.root.rootId);
-    await entered.promise;
+    // Keep early refusals visible when a queue signal cannot arrive.
+    await Promise.race([entered.promise, blocking]);
     const queued = Promise.withResolvers<void>();
     const original = context.actor.reserve.bind(context.actor);
     function reserveCall(...args: Parameters<typeof original>) {
@@ -430,7 +431,7 @@ async function checksQueuedAccess() {
     vi.spyOn(context.actor, 'reserve').mockImplementation(reserveCall);
     const pending = reserve(context, binding, 651);
     const refused = expect(pending).rejects.toThrow();
-    await queued.promise;
+    await Promise.race([queued.promise, pending]);
     const revoke = { resourceType: 'model', resourceId: start.model,
       granteeKind: 'member', granteeId: 'alice', revokedBy: 'alice' };
     await context.append(grantStream('model', start.model), 'grant.revoked', revoke);
