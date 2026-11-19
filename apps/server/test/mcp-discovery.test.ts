@@ -13,6 +13,23 @@ vi.setConfig({ testTimeout: 20_000 });
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.reverse()) await close(); cleanups.length = 0; });
 
+async function keepsRegistrationIdSeparateFromCommand() {
+  const nats = await natsFixture();
+  cleanups.push(nats.close);
+  const change = await registerRemote(nats.store, 'test', 'admin', {
+    locator: 'https://mcp.example.test/mcp',
+  });
+  const rows = await Array.fromAsync(nats.store.readStream(`mcp-${change.serverId}`));
+  expect(rows).toHaveLength(1);
+  const event = rows[0]!.event;
+  expect(event.id).not.toBe(change.changeRef);
+  expect(event.id).toMatch(/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u);
+  expect(event.commandId).toBe(change.changeRef);
+  expect(event.source).toBe('opencrane-server');
+}
+it('keeps a fresh registration UUID separate from the shared command reference',
+  keepsRegistrationIdSeparateFromCommand);
+
 it('quarantines a private DNS target and refuses callers without the install identity', async () => {
   const nats = await natsFixture(); cleanups.push(() => nats.close());
   const app = Fastify(); cleanups.push(() => app.close());
