@@ -20,6 +20,7 @@ async function suppressesStandInOnlyInRealMode() {
       };
       if (real) {
         environment['DEV_REAL_PROVIDER'] = '1';
+        delete environment['MODEL_STUB_PORT'];
       }
       const args = ['--experimental-strip-types', 'infra/dev-stack/secondary-models.ts'];
       const options = { env: environment, timeout: 15_000, encoding: 'utf8' as const };

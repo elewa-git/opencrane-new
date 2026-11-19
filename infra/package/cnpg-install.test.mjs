@@ -802,3 +802,29 @@ async function installsEmptyRestoreTargetWithoutBootstrap() {
 }
 test('restore package installation never waits for or runs owner bootstrap',
   installsEmptyRestoreTargetWithoutBootstrap);
+function providerFixture() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.values.models = { mode: 'provider' };
+  const runtime = fixture.secrets.runtime.data;
+  delete runtime.MODEL_UPSTREAM;
+  delete runtime.MODEL_KEY_FILE;
+  delete fixture.secrets.runtimefiles.data['model-stub-key'];
+  return fixture;
+}
+
+async function providerReachesHelm() {
+  const fixture = providerFixture();
+  fixture.install = true;
+  await runFixture(fixture, undefined, true);
+}
+test('provider install reaches Helm without any stand-in key or upstream', providerReachesHelm);
+
+for (const name of ['MODEL_KEY_FILE', 'MODEL_UPSTREAM', 'MODEL_STUB_PORT']) {
+  async function refusesInheritedStandIn() {
+    const fixture = providerFixture();
+    fixture.secrets.runtime.data[name] = encoded(canary);
+    await runFixture(fixture, 'Provider mode refuses stand-in settings');
+  }
+  test(`provider install refuses inherited ${name}`, refusesInheritedStandIn);
+}

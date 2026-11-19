@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -820,3 +821,73 @@ function keepsJournalBelowGroupManagedRoot() {
 
 test('keeps the restore journal private when Kubernetes mounts its volume again',
   keepsJournalBelowGroupManagedRoot);
+function defaultModelBytesStayTheSame() {
+  const values = chartValues();
+  const original = renderChart(values);
+  assert.equal(original.status, 0, original.stderr);
+  const digest = createHash('sha256');
+  digest.update(original.stdout);
+  assert.equal(digest.digest('hex'),
+    'ef0b26c1c872f4d790e44e1bc445e7db0b55def7bd3c2dae4193cf432080f94e');
+  values.models = { mode: 'stub' };
+  assert.equal(renderChart(values).stdout, original.stdout);
+}
+test('default and explicit stub mode preserve the original chart bytes', defaultModelBytesStayTheSame);
+
+function rendersPrivateProviderStorage() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  const mounts = [];
+  for (const resource of resources.values()) {
+    const pod = resource.spec?.template?.spec;
+    for (const container of [...(pod?.initContainers ?? []), ...(pod?.containers ?? [])]) {
+      for (const mount of container.volumeMounts ?? []) {
+        if (mount.name === 'provider-secrets') {
+          mounts.push({ container: container.name, ...mount });
+        }
+      }
+    }
+  }
+  assert.deepEqual(mounts, [
+    { container: 'server', name: 'provider-secrets', mountPath: '/var/lib/opencrane/provider-secrets' },
+    { container: 'models', name: 'provider-secrets',
+      mountPath: '/var/lib/opencrane/provider-secrets', readOnly: true },
+  ]);
+  const volumes = new Map();
+  for (const volume of server.volumes) volumes.set(volume.name, volume);
+  assert.deepEqual(volumes.get('provider-secrets'), {
+    name: 'provider-secrets', persistentVolumeClaim: { claimName: 'provider-secrets' },
+  });
+  assert.deepEqual(resources.get('PersistentVolumeClaim/provider-secrets').spec, {
+    accessModes: ['ReadWriteOnce'], resources: { requests: { storage: '1Gi' } },
+  });
+  for (const container of server.containers) {
+    const environment = {};
+    for (const setting of container.env ?? []) environment[setting.name] = setting.value;
+    if (container.name === 'server' || container.name === 'models') {
+      assert.equal(environment.PROVIDER_SECRETS_DIR, '/var/lib/opencrane/provider-secrets');
+    } else {
+      assert.equal(environment.PROVIDER_SECRETS_DIR, undefined);
+    }
+    if (container.name === 'models') assert.equal(environment.DEV_REAL_PROVIDER, '1');
+    for (const name of Object.keys(environment)) {
+      assert.doesNotMatch(name, /^MODEL_(UPSTREAM|KEY_FILE|STUB_)/u);
+    }
+  }
+}
+test('provider mode shares persistent key storage only with server and read-only models',
+  rendersPrivateProviderStorage);
+
+for (const mode of ['unknown', '', 42, true]) {
+  function refusesModelMode() {
+    const values = chartValues();
+    values.models = { mode };
+    const result = renderChart(values);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Unsupported models mode/u);
+    assert.equal(result.stdout, '');
+  }
+  test(`Helm refuses models mode ${mode}`, refusesModelMode);
+}
