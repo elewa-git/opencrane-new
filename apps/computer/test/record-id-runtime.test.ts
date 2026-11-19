@@ -37,6 +37,8 @@ async function checksPackagedRecordIds() {
   const directory = await mkdtemp(join(tmpdir(), 'computer-record-id-'));
   const code = `
     import assert from 'node:assert/strict';
+    import { sameJson } from '@opencrane/events/same-json';
+    assert.equal(sameJson({ a: 1, b: 2 }, { b: 2, a: 1 }), true);
     import { sha256Hex } from '@opencrane/events/digest';
     assert.equal(sha256Hex('abc'),
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
