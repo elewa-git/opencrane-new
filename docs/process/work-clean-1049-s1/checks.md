@@ -145,6 +145,31 @@ with the same limits. It passed at 1,088 ms for socket readiness (history 203 ms
 list 104 ms). Restore the slice and the unchanged test immediately afterwards.
 Both isolated versions pass; the original full-file cause remains NOT PROVED.
 
+A new broad attempt after `npm ci` reported 221 passing and one failing case in
+`mcp-dispatch.test.ts`: the stored-credential header refusal. It was stopped
+after that file because the package gate had already failed. The exact case
+passed in isolation, then all 222 cases in the file passed together with one
+worker. The broad failure's cause remains NOT PROVED; neither a timeout nor a
+product rule was changed. The stopped attempt is not a passing package gate.
+
+The complete `libs/event-store/test` and `apps/ops/test` scope passed twice with
+two workers: 60 files and 846 tests passed per run, with three files and 65
+optional tests skipped per run. Durations were 657.70 and 643.72 seconds. The
+skipped conditions remain NOT RUN.
+
+A later two-worker `libs/models/test` attempt reported two failures before it was
+stopped: the decision-cost check received an unavailable decision audit, and
+the numeric-credential reply check received a refusal instead of the expected
+safe reply. Each exact case passed in isolation. The earlier complete
+`mcp-dispatch.test.ts` run also passed its numeric-credential case. The reason
+for either broad-run failure remains NOT PROVED. No deadline or refusal rule
+was changed, and the stopped attempt is not a passing models package gate.
+
+Nine focused server files covering chat, members, memory, integrations, files,
+egress, routines and managed models passed twice: 546 tests per run, in 842.45
+and 873.09 seconds. This is direct coverage of migrated callers. It does not
+replace the complete `apps/server/test` package gate.
+
 Run the two timing-sensitive files serially and the other 423 files with at most
 two workers, twice each. Use the shared disposable test database and run all
 commands under `nice -n 10`. Keep every existing wait and timeout unchanged.
@@ -168,6 +193,14 @@ uses the `lint:code` configuration; the complete repository ESLint run belongs
 to CI. No web source changed, so web tests and the web build are NOT RUN locally.
 The helper and registration test files passed twice together: 57 tests per run.
 The native-budget file also passed twice separately: 46 tests per run.
+
+The final source checks after `npm ci` passed: full workspace, package and
+dev-stack typecheck; event catalogue; knip; dependency boundaries; changelog;
+changed-code ESLint with the 8 GiB heap and zero warnings; whole-stream reads;
+markdownlint; and all seven fixed-id and fixed-time envelope comparisons.
+The twice-run event-store and ops scope passed as recorded above. The complete
+models package gate failed in a two-worker attempt, and the complete server
+package gate was not run twice. The overall touched-package test gate is PARTIAL.
 
 ## Make it right
 
