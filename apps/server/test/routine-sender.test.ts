@@ -962,7 +962,7 @@ async function acceptsOtherThread() {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changed);
   try {
-    await sender().send(computer.wake);
+    await sendWithFixtureTime(sender, computer.wake);
     const link = await computer.wake();
     function completed() {
       return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
@@ -1001,7 +1001,7 @@ async function refusesRelevantComputerChange(kind: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changeBeforeAppend);
   try {
-    await sender().send(computer.wake);
+    await sendWithFixtureTime(sender, computer.wake);
     const link = await computer.wake();
     function completed() {
       return computer.starts > 0 || computer.closedSessions > 0;
@@ -1880,7 +1880,7 @@ async function stopHeldAcknowledgement(kind: 'Stop' | 'Admin' | 'Denied') {
     send(bytes);
   }
   vi.spyOn(link.socket, 'send').mockImplementation(recordFrame);
-  const sending = sender().send(preparedComputer.wake);
+  const sending = sendWithFixtureTime(sender, preparedComputer.wake);
   let stopEventId: string | undefined;
   try {
     await held.promise;
