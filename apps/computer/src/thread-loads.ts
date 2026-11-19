@@ -71,6 +71,7 @@ function privateTools(input: Turn, binding: Pick<PrivateThreadBinding, 'tools'>)
   const server = tools[0];
   if (tools.length !== 1 || server?.serverId !== 'memory' || server.connectionId !== 'server'
     || server.definitions.length < 1 || server.definitions.length > 4
+    // eslint-disable-next-line no-restricted-syntax -- Preserve exact private tool grant binding.
     || JSON.stringify(tools) !== JSON.stringify(expected)) {
     throw new Error('Private tool list refused');
   }

@@ -1,3 +1,4 @@
+import { sameJson } from '@opencrane/events/same-json';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { record } from './http.ts';
 
@@ -100,7 +101,7 @@ function checkLockfile(input: string) {
   return JSON.stringify(manifest);
 }
 function operation(argv: string[], input: string) {
-  if (JSON.stringify(argv) === JSON.stringify(npmForm)) {
+  if (sameJson(argv, npmForm)) {
     const manifest = checkLockfile(input);
     const fixed = ['/usr/bin/npm', ...npmForm.slice(1), '--registry=https://registry.npmjs.org',
       '--userconfig=/dev/null', '--globalconfig=/dev/null'];
