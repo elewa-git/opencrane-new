@@ -25,6 +25,7 @@ function partitionsTests() {
     'scripts/stage-b-read.test.mjs',
   ]);
   assert.deepEqual(browserFiles, [
+    'apps/server/test/approval-history-fixture.test.ts',
     'apps/server/test/approvals.test.ts',
     'apps/server/test/audit-browser.test.ts',
     'apps/server/test/bootstrap-browser.test.ts',
@@ -232,3 +233,11 @@ function verifiesRealChatBrowserAssignment() {
 
 test('detects Chromium through the real chat browser scripts', detectsRealChatBrowserScripts);
 test('accepts the real chat browser suite in the fixture list', verifiesRealChatBrowserAssignment);
+
+function verifiesApprovalHistoryAssignment() {
+  const file = 'apps/server/test/approval-history-fixture.test.ts';
+  const source = readFileSync(file, 'utf8');
+  assert.equal(needsFixtures(source, file), true);
+  assert.ok(fixtureFiles.includes(file), 'Keep imported browser helpers in the fixture job');
+}
+test('assigns the seeded-history fixture to the browser job', verifiesApprovalHistoryAssignment);
