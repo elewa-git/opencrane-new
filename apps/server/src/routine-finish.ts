@@ -1,6 +1,6 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { computerSummary, isComputerLifecycle, type ComputerSummary } from '@opencrane/auth';
@@ -324,10 +324,10 @@ function finishEvent(silo: string, subject: string, input: Input, run: Run,
       terminalEvidence: input.terminalEvidence, ...success }
     : { ...identity, outcome: 'interrupted', reason: 'root_stopped',
       terminalEvidence: input.terminalEvidence };
-  return { id: randomUUID(), commandId, subject, silo,
-    type: 'routine.run_finished', source: 'opencrane-server',
+  return serverEvent({ commandId, subject, silo,
+    type: 'routine.run_finished',
     principal: { kind: 'system', id: 'opencrane-server' },
-    time: new Date().toISOString(), correlation: {}, data };
+    data });
 }
 type FinishContext = {
   store: EventStore; silo: string; subject: string; rows: StoredEvent[];

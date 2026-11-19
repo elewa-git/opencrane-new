@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { readConversationProse } from '@opencrane/events';
 import { childStartFailure, childStartState } from './child-failure.ts';
@@ -171,9 +172,8 @@ export async function save(options: Options, memberId: string, id: string, subje
   verify: typeof verifySaved = verifySaved,
   checkAccess?: () => Promise<unknown>) {
   if (!fresh) throw new Error('Child write check unavailable');
-  const event = { id, commandId: id, subject, type, data, silo: options.silo,
-    source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: 'human' as const, id: memberId }, correlation: {} };
+  const event = serverEvent({ id, commandId: id, subject, type, data, silo: options.silo,
+    principal: { kind: 'human' as const, id: memberId } });
   await fresh();
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
     deadline: fresh.deadline, checkAccess: checkAccess ?? fresh };
@@ -239,10 +239,10 @@ function childCreation(intent: ReturnType<typeof savedIntent>) {
 function verifyCreation(options: Options, memberId: string, loaded: Loaded,
   intent: ReturnType<typeof savedIntent>, previous: StoredEvent) {
   const id = stageId(options, loaded.input, 'child-created');
-  const expected = { ...previous.event, id, commandId: id, silo: options.silo,
+  const expected = serverEvent({ ...previous.event, id, commandId: id, silo: options.silo,
     subject: `conversation-${intent.data.childConversationId}`, type: 'conversation.created',
-    source: 'opencrane-server', data: childCreation(intent),
-    principal: { kind: 'human' as const, id: memberId } };
+    data: childCreation(intent),
+    principal: { kind: 'human' as const, id: memberId } });
   verifySaved(previous, expected);
 }
 function inputText(data: unknown) {
@@ -291,9 +291,9 @@ export async function checkedChildInput(options: Options, memberId: string, valu
   const previous = rows.find(isFirstInput);
   const subject = `conversation-${childConversationId}`;
   if (previous) {
-    const expected = { ...previous.event, id: firstInputId, commandId: firstInputId,
-      subject, silo: options.silo, type: 'message.posted', source: 'opencrane-server', data,
-      principal: { kind: 'human' as const, id: memberId } };
+    const expected = serverEvent({ ...previous.event, id: firstInputId, commandId: firstInputId,
+      subject, silo: options.silo, type: 'message.posted', data,
+      principal: { kind: 'human' as const, id: memberId } });
     verifyInput(previous, expected);
     await fresh();
   }

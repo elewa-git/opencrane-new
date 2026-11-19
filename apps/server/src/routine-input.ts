@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import { readEventAt, type StoredEvent } from '@opencrane/event-store';
 import { messagePostedDataSchema } from '@opencrane/events';
@@ -72,10 +73,9 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
     position = previous.sequence;
   } else {
     const data = inputData();
-    const event = { id: run.messageId, commandId: run.messageId, type: 'message.posted',
+    const event = serverEvent({ id: run.messageId, commandId: run.messageId, type: 'message.posted',
       subject: `conversation-${conversationId}`, silo: worker.silo,
-      source: 'opencrane-server', time: new Date().toISOString(),
-      principal: { kind: 'system' as const, id: worker.workerId }, data };
+      principal: { kind: 'system' as const, id: worker.workerId }, data });
     // Recheck access before the conditional append.
     const deadline = await preparation.checkAccess();
     async function checkAccess() {

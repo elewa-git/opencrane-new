@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -51,9 +51,9 @@ export async function writeToolAccess(request: FastifyRequest, reply: FastifyRep
   const data = { resourceType: 'mcp_server', resourceId: serverId,
     granteeId: input.granteeId, granteeKind: input.granteeKind,
     ...(input.action === 'grant' ? { grantedBy: memberId } : { revokedBy: memberId }) };
-  const event = { id: randomUUID(), commandId: input.commandId, subject, silo: options.silo,
-    type, data, time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'human' as const, id: memberId } };
+  const event = serverEvent({ commandId: input.commandId, subject, silo: options.silo,
+    type, data,
+    principal: { kind: 'human' as const, id: memberId } });
   function matchesCommand(row: StoredEvent) {
     return row.event.commandId === input.commandId;
   }

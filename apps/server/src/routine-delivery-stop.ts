@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory } from '@opencrane/authz';
 import { affectedRoutineOccurrence } from './routine-bridge.ts';
@@ -39,10 +40,10 @@ export async function stopUnconfirmedRoutine(store: EventStore, silo: string,
     next: state.definition!.next, cause };
   const data = routineStopSchema.parse(stop);
   const id = `routine-delivery-${run.occurrenceId}`;
-  const event = { id, commandId: id, subject, silo, data,
-    type: 'routine.run_stop_requested', source: 'opencrane-server',
+  const event = serverEvent({ id, commandId: id, subject, silo, data,
+    type: 'routine.run_stop_requested',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
-    time: new Date().toISOString(), correlation: {} };
+    });
   // Save only a prohibition. Lost leadership must not prevent cancelling its own attempt.
   const appendDeadline = Math.min(deadline, performance.now() + 2000);
   const change = { event, expectedSequence: rows.at(-1)!.sequence,

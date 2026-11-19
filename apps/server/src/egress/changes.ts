@@ -1,8 +1,8 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { egressGrantStream } from '@opencrane/projections';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { egressCommandSchema, egressDestinationDataSchema, egressRuleSchema,
@@ -90,9 +90,9 @@ export async function egressCommand(options: EgressOptions, memberId: string, va
   const fresh = await ownershipWriteAccess(options.store, membership.positions);
   await activeMember(options.store, options.binding, memberId,
     { requiredRole: 'admin', fresh, membership });
-  const event = { id: randomUUID(), commandId: input.commandId, subject, silo: options.silo,
-    type, data, time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'human' as const, id: memberId } };
+  const event = serverEvent({ commandId: input.commandId, subject, silo: options.silo,
+    type, data,
+    principal: { kind: 'human' as const, id: memberId } });
   await fresh();
   let result;
   try {

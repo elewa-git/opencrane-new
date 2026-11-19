@@ -1,6 +1,6 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { foldRoutineHistory } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -80,10 +80,10 @@ export async function stopRoutineAfterApproval(store: EventStore, silo: string, 
       actorId: 'opencrane-server', source: 'approval', reason, cause: input.cause,
       affectedRun: run.occurrenceId, next: checked.state.definition!.next };
     const data = routineStopSchema.parse(stop);
-    const event: EventEnvelope = { id: randomUUID(), commandId, subject, silo,
-      type: 'routine.run_stop_requested', source: 'opencrane-server',
+    const event: EventEnvelope = serverEvent({ commandId, subject, silo,
+      type: 'routine.run_stop_requested',
       principal: { kind: 'system', id: 'opencrane-server' },
-      time: new Date().toISOString(), correlation: {}, data };
+      data });
     const change = { event, expectedSequence: position,
       deadline: performance.now() + 2000, historyChecked: true as const };
     const result = await store.append(change);

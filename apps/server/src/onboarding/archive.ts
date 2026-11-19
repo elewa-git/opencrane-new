@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { serverEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { parseEventByType, welcomeArchiveSetDataSchema, welcomeStartedDataSchema,
   type EventEnvelope } from '@opencrane/events';
@@ -33,10 +33,10 @@ function archiveEvent(options: ChatOptions, memberId: string, input: Input,
   const started = welcomeStartedDataSchema.parse(history.welcome?.start.event.data);
   const data = { schemaVersion: 1 as const, memberId, generation: started.generation,
     welcomeId: input.welcomeId, archived: input.archived };
-  const event: EventEnvelope = { id: randomUUID(), commandId: input.commandId,
-    type: 'onboarding.welcome_archive_set', source: 'opencrane-server',
-    time: new Date().toISOString(), silo: options.silo, subject: `personal-${memberId}`,
-    principal: { kind: 'human', id: memberId }, correlation: {}, data };
+  const event: EventEnvelope = serverEvent({ commandId: input.commandId,
+    type: 'onboarding.welcome_archive_set',
+    silo: options.silo, subject: `personal-${memberId}`,
+    principal: { kind: 'human', id: memberId }, data });
   if (!parseEventByType(event).success) throw new z.ZodError([]);
   return event;
 }

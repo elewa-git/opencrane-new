@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
@@ -38,12 +39,12 @@ async function claimSilo(options: MembershipOptions, issuer: string, sub: string
   const id = randomUUID();
   // Check every member history because each sign-in identity is stored there.
   // The append succeeds only while all of those histories are still empty.
-  const result = await options.store.append({ expectedSequence: 0, expectedSubject: 'member-*', event: {
+  const result = await options.store.append({ expectedSequence: 0, expectedSubject: 'member-*', event: serverEvent({
     id, commandId: id, type: 'silo.owner_bootstrapped', subject: 'member-bootstrap-owner',
-    silo: options.silo, source: 'opencrane-server', time: now().toISOString(), principal: { kind: 'human', id: sub },
+    silo: options.silo, time: now().toISOString(), principal: { kind: 'human', id: sub },
     data: { memberId: 'bootstrap-owner', email: input.email, displayName: input.displayName,
       role: 'owner', identity: { issuer, sub } },
-  } });
+  }) });
   if (result.status === 'conflict') return { status: 'refused', reason: 'concurrent_claim' };
   if (result.status !== 'appended') throw new Error('Bootstrap append unavailable');
   return { status: 'claimed', memberId: 'bootstrap-owner', sequence: result.sequence };

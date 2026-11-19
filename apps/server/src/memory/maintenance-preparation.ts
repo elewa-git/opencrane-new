@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -150,11 +151,11 @@ async function saveResult(options: MemoryOptions, rows: StoredEvent[], intent: R
   const data = memoryMaintenanceRecordedDataSchema.parse({ ...intent, ...outcome,
     selectedAt: time });
   const id = digest([options.silo, intent.scopeId, intent.nightId, 'preflight']);
-  const event = { id, commandId: id, subject: `scope-${intent.scopeId}`,
-    silo: options.silo, source: 'opencrane-server', time,
+  const event = serverEvent({ id, commandId: id, subject: `scope-${intent.scopeId}`,
+    silo: options.silo, time,
     type: 'memory.maintenance_recorded',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
-    correlation: {}, data };
+    data });
   if (!parseEventByType(event).success) throw new Error('Invalid maintenance result');
   const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0,
     historyChecked: true as const };

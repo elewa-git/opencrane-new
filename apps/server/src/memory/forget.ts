@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -243,10 +244,9 @@ async function forgetLocked(options: MemoryOptions, requester: string, scope: Sc
   if (agent) {
     correlation = { conversation: agent.conversation, turn: agent.turn, request: agent.requestId };
   }
-  const proposed = { id: reference, commandId: input.commandId,
+  const proposed = serverEvent({ id: reference, commandId: input.commandId,
     silo: options.silo, subject: `scope-${scope.scopeId}`, type: 'memory.forgotten',
-    source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: principalKind, id: requester }, correlation, data };
+    principal: { kind: principalKind, id: requester }, correlation, data });
   const event = memoryForgottenEventSchema.parse(proposed);
   const identity = { silo: options.silo, ...scope, memoryId, revision: input.expectedRevision };
   const position = await options.store.head(`scope-${scope.scopeId}`, fresh.deadline);

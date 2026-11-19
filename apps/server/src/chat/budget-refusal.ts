@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { readEventAt, readStreamSummary, type EventStore } from '@opencrane/event-store';
@@ -71,11 +72,11 @@ export async function recordBudgetRefusal(store: EventStore, turn: RefusedTurn,
     contextDigest: sha256HexOfJson(context),
   };
   const data = decisionRecordedDataSchema.parse(decision);
-  const event: EventEnvelope = {
+  const event: EventEnvelope = serverEvent({
     id, commandId: id, type: 'decision.recorded', subject: `decision-${id}`, silo: turn.silo,
-    source: 'opencrane-server', principal: { kind: 'system', id: 'turn-lifecycle' },
-    time: new Date().toISOString(), correlation: {}, data,
-  };
+    principal: { kind: 'system', id: 'turn-lifecycle' },
+    data,
+  });
   // Use one stream per refused turn so reconnects remain idempotent after NATS deduplication expires.
   const command = { event, expectedSequence: 0, historyChecked: true as const,
     ...(control ? { signal: control.signal, deadline: control.deadline } : {}) };

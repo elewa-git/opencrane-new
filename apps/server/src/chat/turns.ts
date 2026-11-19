@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { readDeploymentQualification } from
   '../../../../scripts/private-memory-qualification/deployment.ts';
@@ -124,11 +125,11 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   } = { ...data, assistantId: context.assistantId, computerId: context.computerId };
   addNativeTermination(eventData, input, facts);
   if (refusal instanceof BudgetAdmissionRejected) eventData.budgetStopId = refusal.stopId;
-  const event: EventEnvelope = {
-    id, commandId: id, type, subject, silo: context.silo, correlation: {},
-    source: 'opencrane-server', principal: { kind: 'system' as const, id: 'turn-lifecycle' },
-    time: new Date().toISOString(), data: eventData,
-  };
+  const event: EventEnvelope = serverEvent({
+    id, commandId: id, type, subject, silo: context.silo,
+    principal: { kind: 'system' as const, id: 'turn-lifecycle' },
+    data: eventData,
+  });
   addLifecycleDetails(eventData, status, executionMode);
   await fresh?.();
   const saved = await saveTurn(store, facts, event, data, routineDeadline, fresh);

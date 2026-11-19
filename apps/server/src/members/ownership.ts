@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { legacyMemberRole } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -136,12 +136,11 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
       store, binding.silo, actorId, membership.owners, positions);
     if (!anotherActiveOwner) throw new OwnershipConflict('last_owner');
   }
-  const event = {
-    id: randomUUID(), commandId: input.commandId, subject, silo: binding.silo,
+  const event = serverEvent({
+    commandId: input.commandId, subject, silo: binding.silo,
     type: commandType(input), data: payload(input, actorId),
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human' as const, id: actorId },
-  };
+  });
   // Read histories first, then check only the streams that decide access.
   const fresh = await ownershipWriteAccess(store, positions);
   await fresh();

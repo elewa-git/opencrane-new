@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex as digest } from '@opencrane/events/digest';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { readConversationProse } from '@opencrane/events';
@@ -225,9 +226,9 @@ async function appendPublication(options: ChatOptions, memberId: string, loaded:
     ...prose, contentType: 'text' });
   const subject = `conversation-${binding.parentConversationId}`;
   const expectedSequence = streamPosition(loaded.parentRows, subject);
-  const event = { id: input.id, commandId: input.id, type: 'conversation.child_result_published',
-    subject, silo: options.silo, source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: 'human' as const, id: memberId }, data };
+  const event = serverEvent({ id: input.id, commandId: input.id, type: 'conversation.child_result_published',
+    subject, silo: options.silo,
+    principal: { kind: 'human' as const, id: memberId }, data });
   await fresh();
   if (binding.expiresAt <= Date.now()) throw new PublicationConflict('review_stale');
   const command = { event, expectedSequence, expectedGlobalSequence,

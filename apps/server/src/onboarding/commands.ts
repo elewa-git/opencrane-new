@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
-import { randomUUID } from 'node:crypto';
 import type { OnboardingOptions } from './options.ts';
 import { z } from 'zod';
 import type { AppendCommand } from '@opencrane/event-store';
@@ -113,10 +113,10 @@ export async function surveyCommand(options: OnboardingOptions, memberId: string
     await chatAccess(options, { memberId });
   }
   const type = eventType(input);
-  const event: EventEnvelope = { id: randomUUID(), commandId: input.commandId, type,
-    source: 'opencrane-server', time: new Date().toISOString(), silo: options.silo,
-    subject: `personal-${memberId}`, principal: { kind: 'human', id: memberId }, correlation: {},
-    data: eventData(options, memberId, input, history) };
+  const event: EventEnvelope = serverEvent({ commandId: input.commandId, type,
+    silo: options.silo,
+    subject: `personal-${memberId}`, principal: { kind: 'human', id: memberId },
+    data: eventData(options, memberId, input, history) });
   if (!parseEventByType(event).success) throw new z.ZodError([]);
   // Finish content and encryption before starting the short membership check.
   const accessRequest = { memberId };

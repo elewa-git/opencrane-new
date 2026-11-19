@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -193,10 +193,10 @@ export async function reassignRoutine(store: EventStore, binding: Binding,
     const data = reassignmentData(saved.state, memberId, input.ownerId, successor.admissionId);
     const position = saved.rows.at(-1)?.sequence ?? 0;
     requireRevisions(input, saved.state, position);
-    const event: EventEnvelope = { id: randomUUID(), commandId: input.changeId,
-      type: 'routine.reassigned', source: 'opencrane-server', silo: binding.silo,
+    const event: EventEnvelope = serverEvent({ commandId: input.changeId,
+      type: 'routine.reassigned', silo: binding.silo,
       subject: `routine-${input.routineId}`, principal: { kind: 'human', id: data.actorId },
-      time: new Date().toISOString(), correlation: {}, data };
+      data });
     const change = { event, expectedSequence: position, deadline: fresh.deadline,
       historyChecked: true as const, checkAccess: fresh };
     const result = await store.append(change);

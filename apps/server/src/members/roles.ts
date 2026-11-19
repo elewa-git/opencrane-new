@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberRoleChangedDataSchema, ownershipTransferredSchema,
   ownershipConfirmedSchema } from '@opencrane/events';
@@ -70,9 +70,9 @@ export async function roleCommand(options: GroupOptions, actor: string, memberId
     throw new RoleConflict('concurrent_change');
   }
   const data = { memberId, previousRole: target.role, newRole: input.newRole, changedBy: actor };
-  const event = { id: randomUUID(), commandId: input.commandId, subject, silo,
-    type: 'member.role_changed', source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: 'human' as const, id: actor }, data };
+  const event = serverEvent({ commandId: input.commandId, subject, silo,
+    type: 'member.role_changed',
+    principal: { kind: 'human' as const, id: actor }, data });
   await fresh();
   const command = { event, expectedSequence: input.expectedSequence,
     deadline: fresh.deadline, historyChecked: true as const };

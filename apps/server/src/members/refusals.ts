@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
 import { memberCommandRefusedSchema } from '@opencrane/events';
@@ -62,11 +63,11 @@ export async function recordMemberRefusal(store: RefusalStore, silo: string, act
     if (rows.some(matches)) {
       return true;
     }
-    const event = {
+    const event = serverEvent({
       id: key, commandId: key, silo, subject: `memberaudit-${input.memberId}`,
-      type: 'member.command_refused', source: 'opencrane-server', time: time.toISOString(),
+      type: 'member.command_refused', time: time.toISOString(),
       principal: { kind: 'human' as const, id: actor }, data: data.data,
-    };
+    });
     const command = {
       event, expectedSequence: rows.at(-1)?.sequence ?? 0, historyChecked: true as const, deadline,
     };

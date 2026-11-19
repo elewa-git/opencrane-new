@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { getEventDefinition, legacyMemberRole, memberInvitedDataSchema,
@@ -141,17 +142,16 @@ function invitationEvent(silo: string, actor: string, input: Input, time: Date) 
     invitationId,
     expiresAt,
   };
-  const event = {
+  const event = serverEvent({
     id: invitationId,
     commandId: input.commandId,
     subject,
     silo: silo,
     type: 'member.invited',
-    source: 'opencrane-server',
     principal: { kind: 'human' as const, id: actor },
     time: time.toISOString(),
     data,
-  };
+  });
   return event;
 }
 
