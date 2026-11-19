@@ -76,7 +76,8 @@ async function requireLocalDocker(command: LocalCommand) {
   }
 }
 
-async function requireLocalContainer(name: string, command: LocalCommand) {
+async function requireLocalContainer(node: NodeList['items'][number], command: LocalCommand) {
+  const name = node.metadata.name;
   if (!/^k3d-(ocn|opencrane-target-[12])-(server|agent)-\d+$/u.test(name)) {
     throw new Error('Host-risk override requires verified local k3d nodes');
   }
@@ -90,6 +91,13 @@ async function requireLocalContainer(name: string, command: LocalCommand) {
       !container.State.Running || container.Config.Labels['k3d.cluster'] !== cluster) {
     throw new Error('Cannot verify the underlying k3d host');
   }
+  // Bind the API node to this local cluster; names and Docker labels alone can be copied.
+  const server = `k3d-${cluster}-server-0`;
+  const uid = await command('docker', ['exec', server, 'kubectl', 'get', 'node', name,
+    '-o', 'jsonpath={.metadata.uid}']);
+  if (uid !== node.metadata.uid) {
+    throw new Error('Local k3d node identity differs from the installation target');
+  }
 }
 
 async function localHost(nodes: NodeList, options: HostCheckOptions, source: string) {
@@ -102,7 +110,7 @@ async function localHost(nodes: NodeList, options: HostCheckOptions, source: str
   await requireLocalDocker(options.localCommand);
   // A k3d node shares the Docker host's memory and swap, outside its filesystem.
   for (const node of nodes.items) {
-    await requireLocalContainer(node.metadata.name, options.localCommand);
+    await requireLocalContainer(node, options.localCommand);
   }
   const script = source + '\nconsole.log(JSON.stringify(collectHost()));';
   const output = await options.localCommand('node', ['--input-type=module', '-e', script]);

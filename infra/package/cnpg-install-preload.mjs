@@ -97,6 +97,8 @@ function execute(program, args, options, callback) {
     return;
   }
   if (program === 'helm') {
+    const owner = JSON.parse(readFileSync('package-owner.json', 'utf8'));
+    assert.ok(owner.hostPreflight?.checkedAt, 'Record host checks before any Helm command');
     if (fixture.install) {
       const valuesName = args[args.indexOf('--values') + 1];
       const valuesPath = new URL(valuesName, 'file://' + options.cwd + '/');

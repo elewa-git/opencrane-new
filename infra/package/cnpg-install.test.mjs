@@ -631,7 +631,7 @@ for (const reason of clusterRefusals) {
     if (reason === 'lost target') fixture.loseTarget = true;
     let expected = 'Package command failed';
     if (reason === 'runtime' || reason === 'bootstrap') expected = 'Invalid package NATS replica settings';
-    if (reason === 'lost target') expected = refusal;
+    if (reason === 'lost target') expected = 'Package ownership differs from the recorded namespace';
     await runFixture(fixture, expected);
   }
   test(`R3 inputs refuse before Helm: ${reason}`, refusesClusterInputs);

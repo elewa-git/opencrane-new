@@ -1924,7 +1924,9 @@ The installer saves the check time, node names, UIDs and refusals under
 
 Local k3d nodes share their Docker host's kernel and swap. The installer also
 checks that underlying host after verifying local running node containers through
-a Unix Docker endpoint. A remote Docker endpoint is refused for this local check.
+a Unix Docker endpoint. It compares each API node UID with the UID returned by
+that local cluster's server, so matching names cannot authorise a remote cluster.
+A remote Docker endpoint is refused for this local check.
 
 F1 requires one of these configurations on **each production host**:
 

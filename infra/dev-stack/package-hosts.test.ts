@@ -67,7 +67,10 @@ function localFixture(uid = 'local-node') {
   }
   async function localCommand(program: string, args: string[]) {
     if (program === 'node') return JSON.stringify(unsafe);
-    if (args.includes('exec')) return uid;
+    if (args.includes('exec')) {
+      assert.deepEqual(args.slice(2, 6), ['kubectl', 'get', 'node', 'k3d-ocn-server-0']);
+      return uid;
+    }
     if (args.includes('context')) return JSON.stringify('unix:///var/run/docker.sock');
     return JSON.stringify([{ Name: '/k3d-ocn-server-0', State: { Running: true },
       Config: { Labels: { 'k3d.cluster': 'ocn' } } }]);
