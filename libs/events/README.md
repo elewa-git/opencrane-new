@@ -11,7 +11,7 @@ It does not save events or decide who may act.
 
 This package belongs to the event core. [libs/event-store](../event-store/README.md)
 checks events with it before saving or returning them.
-Other libraries and apps use the same definitions to read saved changes and check record IDs.
+Other libraries and apps use the same definitions to read saved changes, check record IDs and compare JSON values.
 Node callers also share SHA-256 hex digests.
 
 ```mermaid
@@ -22,13 +22,14 @@ flowchart LR
   server["apps/server<br/>back end"] -.->|events and Node digests| events
   models["libs/models<br/>AI access rules"] -.-> events
   computer["apps/computer<br/>assistant computers"] -.-> events
-  protocol["libs/protocol<br/>browser contracts"] -.->|record ID checks| events
+  protocol["libs/protocol<br/>browser contracts"] -.->|record ID checks and JSON comparison| events
 ```
 
 ## What it is responsible for
 
 - Define each event's type, data and shared details, such as its id and time.
 - Share record ID checks with the apps and libraries that accept the same format.
+- Compare JSON values while ignoring object key order and preserving array order.
 - Share SHA-256 hex digests through a separate Node entrypoint.
 - Reject unknown event types and badly formed records.
 - Keep older records readable during [replay](../../GLOSSARY.md#replay).

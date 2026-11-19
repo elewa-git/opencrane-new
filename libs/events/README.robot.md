@@ -115,6 +115,18 @@ Unchanged checks preserve the approval rule revision while advancing the write p
 The [projection contract](../../libs/projections/README.robot.md#dated-mcp-catalogue-evidence)
 records snapshot and expiry rules for #48 PR 1.
 
+## JSON comparison
+
+`sameJson(left: unknown, right: unknown): boolean` compares the JSON representations
+with object keys sorted at every depth. Array order remains significant. Undefined
+object properties count as missing; null remains distinct from missing. JSON's
+`toJSON`, array-hole and non-finite number rules apply before sorting. Cyclic values
+and big integers retain JSON.stringify's errors. The helper has no Node imports.
+The main index exports it; `@opencrane/events/same-json` exposes only this helper
+for the computer image. Browser callers import the protocol re-export.
+Existing conflict, approval, dispatch and money checks retain exact JSON-text
+comparison where ignoring key order could broaden acceptance.
+
 ## SHA-256 hex digests
 
 `@opencrane/events/digest` exports `sha256Hex(value: string | Uint8Array): string`
