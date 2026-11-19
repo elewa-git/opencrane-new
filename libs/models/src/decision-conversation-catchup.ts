@@ -48,7 +48,7 @@ function startCatchup(store: EventStore, silo: string, subject: string) {
     // Let later decisions copy the completed summary without retaining another result.
   }
   // Catch up independently after refusing the request. Never extend its access deadline.
-  const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
   const catchingUp = readStreamSummary(store, silo, subject, decisionChatSummary, deadline, discard);
   void catchingUp.then(complete, failed);
 }
