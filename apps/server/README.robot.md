@@ -5147,7 +5147,8 @@ HTTP approval decisions load history with `deferInvalidation: true`. The read pr
 an invalidation without saving it. The route checks the request's conversation,
 requester and participation position, loads turn activity, then starts the short
 write check. `currentAuthority` and the final access confirmation precede the save.
-Foreign ids and removal during history loading leave the approval stream unchanged.
+Foreign ids are refused before their conversation history is loaded or cancellation is prepared.
+Removal during history loading leaves the approval stream unchanged.
 The save uses the original approval position and the write check's deadline.
 
 ## Exact member admission history progress
