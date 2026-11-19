@@ -2,51 +2,55 @@
 
 Journey on a fresh dev stack: PASS
 
-Run date: 17 November 2026. Qualified source:
-[547b8bac1](https://github.com/elewa-git/opencrane-new/commit/547b8bac1530b5013b5443c0444dd4b8b0648b17).
-Images came from the successful CI
-[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/44175150216)
-and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/44175157986).
-See the pull request for the final-head image approvals and repeat.
-The model uses the local stand-in; this does not qualify a real provider.
+Run date: 19 November 2026. Qualified source:
+[d29df05b1](https://github.com/elewa-git/opencrane-new/commit/d29df05b1d51bc4478019cd77e3d505b8b7729fb).
+Use successful CI [application approval](https://github.com/elewa-git/opencrane-new/actions/runs/44614979319)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/44614984931).
+The pull request records the final-head image approvals and repeat after this
+receipt is committed. The model uses the local stand-in; real-provider operation
+is NOT RUN.
 
 ## Steps observed
 
-1. Claim a fresh secondary slot. Run `package-prepare`, `package-up` and
-   `package-check` with the exact-source approved images.
-2. Sign in through the development identity provider. Start a chat, upload
-   `project.pdf` and read its project code, `Willow-47`. Download the PDF and
-   compare its complete bytes and SHA-256 with the upload, at 1280 px and 390 px.
-3. Create a Job from the installed scheduled-backup CronJob. Check the completed
-   event, database and file set with the catalogue. Its event position is 46.
-4. Attempt restore into the running source. Require `non_empty` refusal and
-   identical prior event history, checked through position 47.
-5. Send a later message, retain the completed set privately and remove the source.
-   Run `down`, claim a clean slot and install restore mode. Check a new namespace
-   UID and new volume UIDs before importing the saved set. Stop its catalogue.
-6. Inject an exit with status 137 immediately after native events are restored
-   and the database stage is durably recorded. Check that the reader remains
-   stopped. Create a second Job running the normal packaged restore CLI.
-7. Sign in as the same person at both widths. Read the saved reply and require the
-   later message to be absent. Download the original PDF and compare its bytes.
-   Check anonymous history refusal and `restore_read_only` on an owner-claim write.
-8. Require event position 46 after browser reads. Check workers and scheduled
-   backup remain held. Rerun the completed restore, repeat both browser widths
-   and downloads, and require the event position to remain 46.
-9. Run `package-down` and `down`. Both return status 0; the slot is released.
+1. Wait for both secondary slots to be free and for load to stay below 6 for five
+   minutes, checking every 30 seconds. Claim a slot, run ordinary `up --fresh`,
+   check it and run `down`. Apply the same admission rule before the packaged claim.
+2. Run `package-prepare`, `package-up` and `package-check` with the exact-source
+   CI-approved images. Sign in, create a chat and upload `project.pdf`.
+3. Read project code `Willow-47`. Download the PDF at 1280 px and 390 px and compare
+   its complete bytes and SHA-256 with the upload.
+4. Start a Job from the installed scheduled-backup CronJob. Check the completed
+   event, database and file set through the catalogue. Its exact saved event point is 46.
+5. Attempt restore into the source. Require `non_empty` refusal and identical
+   event history through position 47, recorded immediately before that attempt.
+6. Send a later message and retain the completed set privately. Remove the source
+   and release its slot. Repeat admission, claim a clean slot and install restore
+   mode. Require new namespace and volume UIDs before importing the set; stop the
+   destination catalogue.
+7. Force exit 137 immediately after native events are restored and the database
+   stage is durably recorded. Require the reader to remain stopped. Run the normal
+   packaged restore CLI in a second Job and require all three parts to verify.
+8. Sign in as the same person at both widths. Read the saved reply, require the
+   later message to be absent and download the identical original PDF. Require
+   anonymous history refusal and `restore_read_only` on an owner-claim write.
+9. Require the exact saved event point after browser reads. Check that workers and
+   scheduled backup remain held. Rerun the completed restore and repeat both
+   browser widths, downloads and the unchanged event-point assertion.
+10. Run `package-down` and `down`; check successful teardown and slot release.
 
 ## Results
 
 | Condition | Result |
 | --- | --- |
-| Fresh source sign-in, chat, upload and identical download at both widths | PASS |
-| Complete scheduled backup and catalogue verification | PASS |
+| Ordinary fresh secondary startup, status and teardown | PASS |
+| Fresh packaged source sign-in, chat, upload and identical downloads at both widths | PASS |
+| Scheduled backup and catalogue verification | PASS |
 | Non-empty refusal without changing prior event history | PASS |
 | Source removed; destination namespace and volumes are new | PASS |
 | Crash after durable native events; reader stays stopped | PASS |
 | Normal packaged CLI resumes and verifies all three parts | PASS |
-| Restored sign-in, saved chat and identical download at both widths | PASS |
-| Denied anonymous read, held write and no appended events | PASS |
+| Restored sign-in, saved chat and identical downloads at both widths | PASS |
+| Anonymous read refused; writes held; no appended events | PASS |
 | Completed rerun and repeated browser checks | PASS |
 | Package teardown and slot release | PASS |
 
@@ -59,19 +63,32 @@ The model uses the local stand-in; this does not qualify a real provider.
 
 ## Other evidence and limits
 
-Changed tests passed twice: 116 executed Vitest files, the five Node test files,
-and the native-memory recall configuration. Typecheck, `check:events`, knip,
+Changed tests: PASS twice. Thirty-one Vitest files executed 864 cases per
+repetition, and five Node test files executed 117. Typecheck, `check:events`, knip,
 changed-file ESLint with zero warnings, changelog lint, Markdown lint,
-whole-stream-read lint and README checks passed. Privacy and secret scans passed.
-The desktop-view opt-in file, real-provider case and approval-browser opt-in case
-were NOT RUN. Independent review is NOT RUN; the orchestrator runs those reviews.
+whole-stream-read lint and README checks passed. Privacy and secret scans passed
+before the source push. Required CI for the qualified
+source is [PASS](https://github.com/elewa-git/opencrane-new/actions/runs/44614873657).
 
-A supplementary ordinary secondary stack passed fresh `up`, `status` and `down`
-on the earlier source commit `100c07f00`. The packaged journey above is the complete
-restore qualification for the final production code.
+Guard-removal checks: PASS. Nineteen restore/review guards, the routine input's
+final authority callback and the actual SQL import's dump comparison each made
+its own test fail when removed. All were restored. Production restore tests use
+real NATS, disposable PostgreSQL and real `pg_dump`/`psql` clients. They keep
+admission closed after refusal, interrupted import and database replacement.
 
-Earlier attempts failed on catalogue startup, patch-file stdin and journal remount
-permissions; those causes were fixed before this pass. Harness history-loading
-and asynchronous-suspension races were corrected. One destination attempt was
-NOT RUN when `package-prepare` refused reused approval directories; normal teardown
-and a fresh claim resolved it. Every claimed installation was cleaned up.
+The approval-browser opt-in case, desktop-view opt-in file and real-provider case
+are NOT RUN. Independent review is NOT RUN by this builder; the orchestrator runs
+that review.
+
+Initial combined local runs exceeded unchanged Angular or route-process readiness
+deadlines under resource contention. Separate browser runs used CI's existing
+limit of two Angular build workers and passed twice. Serial route runs passed
+twice at their original deadlines. The complete routine sender and session files also passed twice after their positive setup
+fixtures reused the existing clock helper; execution, expiry, money, access and
+memory assertions remain.
+No timeout, money assertion, access assertion or memory check was loosened.
+
+The earlier destination-preflight refusal remains unclassified. It is separate
+from the earlier reused-approval-directory setup refusal. It did not recur in this
+run. The harness retains the original child-process diagnostic if preflight refuses; later success does not classify the earlier
+refusal. Startup and service logs are retained privately before teardown.
