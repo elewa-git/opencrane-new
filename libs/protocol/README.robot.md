@@ -34,6 +34,7 @@ the first closer from saved history. Their event time supplies the date.
 
 `sameJson` re-exports the browser-safe event helper. It ignores object key order at
 every depth, preserves array order and treats undefined properties as missing.
+Strings keep their exact contents, including strings containing JSON.
 Tool change descriptions use it without changing stored digests or review bindings.
 
 Protocol defines shared browser/server message schemas so the two sides cannot drift

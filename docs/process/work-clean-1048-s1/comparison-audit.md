@@ -2,8 +2,9 @@
 
 Baseline: `f316313f0265e5678c49fc1dcf2c03cbcc3d17d2`.
 
-The issue counted 64 sites on an older main. An AST walk of current production
-TypeScript finds 73 direct equality comparisons, including multiline expressions.
+The issue's grep counts 64 sites on this baseline. An AST walk of production
+TypeScript finds 73 direct equality comparisons because it also reads multiline
+expressions and nested calls.
 All 73 are listed below using their baseline line numbers. Nineteen migrate;
 54 retain their exact existing comparison. No stored text or digest changes.
 
@@ -12,7 +13,8 @@ preserving sensitive checks that could accept a previously refused reordered val
 FLAG marks these retained checks, including conservative preservation of replay
 verification gates. Each has a narrow lint exception with its reason. These are
 explicit exceptions to the issue's literal zero-grep acceptance criterion; no
-comparison is hidden behind a renamed text helper or indirect equality.
+comparison is hidden behind a renamed text helper or indirect equality. The issue's
+grep now reports 49; it misses five of the 54 retained AST comparisons.
 
 Ten web sites describe differences; they grant no access and do not alter review
 bindings. Stored revision and catalogue digests remain exact: a revision change
@@ -46,7 +48,7 @@ ordered string pairs), so sorting object keys cannot change their results.
 | 22 | `apps/server/src/memory/commands.ts:388` (`finishRecovery`) | Recovery ignores a command journal changed by another server. | FLAG: keep exact JSON text. Preserve exact concurrent command recovery check. |
 | 23 | `apps/server/src/memory/correct.ts:70` (`originalReceipt`) | Memory correction retry must match its saved dependencies. | FLAG: keep exact JSON text. Preserve exact memory correction retry binding. |
 | 24 | `apps/server/src/memory/invalidation.ts:204` (`recordInvalidation`) | Memory invalidation requires unchanged current input context. | FLAG: keep exact JSON text. Preserve exact memory input conflict detection. |
-| 25 | `apps/server/src/memory/invalidation.ts:205` (`recordInvalidation`) | Memory invalidation requires identical ordered event ID/digest pairs. | sameJson; values contain no object keys to reorder |
+| 25 | `apps/server/src/memory/invalidation.ts:205` (`recordInvalidation`) | Memory invalidation requires each event ID and its saved JSON text to match, in order. | sameJson; values contain no object keys to reorder |
 | 26 | `apps/server/src/memory/recall-delivery.ts:83` (`recordRecall`) | Recall delivery requires the originally checked memory input. | FLAG: keep exact JSON text. Preserve exact recall input conflict detection. |
 | 27 | `apps/server/src/models/access-changes.ts:128` (`checkOriginal`) | Model access change retry must match the original saved command. | FLAG: keep exact JSON text. Preserve exact model grant retry conflict detection. |
 | 28 | `apps/server/src/onboarding/commands.ts:158` (`matchesSavedCommand`) | Survey save retry must match the original decrypted answers. | FLAG: keep exact JSON text. Preserve exact survey retry conflict detection. |

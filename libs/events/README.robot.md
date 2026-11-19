@@ -122,6 +122,7 @@ with object keys sorted at every depth. Array order remains significant. Undefin
 object properties count as missing; null remains distinct from missing. JSON's
 `toJSON`, array-hole and non-finite number rules apply before sorting. Cyclic values
 and big integers retain JSON.stringify's errors. The helper has no Node imports.
+Strings keep their exact contents, including strings containing JSON.
 The main index exports it; `@opencrane/events/same-json` exposes only this helper
 for the computer image. Browser callers import the protocol re-export.
 Existing conflict, approval, dispatch and money checks retain exact JSON-text
