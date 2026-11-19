@@ -14,6 +14,8 @@ import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
 import { routineAsk } from './support/routine-ask.ts';
+import { advanceRoutineFixtureClock, checkSlowPayerPublication, sendWithFixtureTime }
+  from './support/routine-sender-clock.ts';
 import { stopRoutineAfterApproval } from '../src/routine-approval-stop.ts';
 import { pauseRoutineAfterRemoval } from '../src/routine-access-pause.ts';
 import { pauseRoutineAsAdmin } from '../src/routine-admin-pause.ts';
@@ -26,7 +28,8 @@ import { applyRoutineStop } from '../src/routine-stop-budget.ts';
 import { requestRoutineStop } from '../src/routine-stop.ts';
 import { createRoutineSender } from '../src/routine-sender.ts';
 import { createStore, foldRoutineHistory, grantStream, memberAuthorisation } from '@opencrane/authz';
-import { natsFixture, event } from '@opencrane/event-store/testing';
+import { natsFixture, event, type ManualClock }
+  from '@opencrane/event-store/testing';
 import { foldRoutine, routineActivationSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
@@ -697,12 +700,8 @@ async function handsOffOnce() {
 it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
 
 function advanceWake() {
-  const monotonic = performance.now.bind(performance);
-  function afterWake() {
-    return monotonic() + 14_000;
-  }
   now += 14_000;
-  vi.spyOn(performance, 'now').mockImplementation(afterWake);
+  advanceRoutineFixtureClock(14_000);
 }
 async function refusesAfterWake(kind: string) {
   const authority = sender();
@@ -879,13 +878,16 @@ async function wrongComputerLink() {
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
-async function refusesLateChange(kind: string) {
+async function refusesLateChangeWithDelay(kind: string, publicationClock?: ManualClock) {
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function changed(...args: Parameters<typeof append>) {
-    const result = await append(...args);
     const proposed = proposedEvent.parse(args[0].event);
+    if (publicationClock && proposed.type === 'computer.turn_started') {
+      publicationClock.advance(2100);
+    }
+    const result = await append(...args);
     if (!injected && proposed.type === 'computer.turn_started' && result.status === 'appended') {
       injected = true;
       if (kind === 'Stop') {
@@ -910,7 +912,7 @@ async function refusesLateChange(kind: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changed);
   try {
-    await sender().send(computer.wake);
+    await sendWithFixtureTime(sender, computer.wake);
     const link = await computer.wake();
     function completed() {
       return computer.starts > 0 || computer.closedSessions > 0;
@@ -924,9 +926,19 @@ async function refusesLateChange(kind: string) {
     await computer.close();
   }
 }
+async function refusesLateChange(kind: string) {
+  await refusesLateChangeWithDelay(kind);
+}
 it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
   'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
+
+async function refusesLatePayerAfterSlowPublication() {
+  await checkSlowPayerPublication(refusesLateChangeWithDelay);
+}
+it('reaches the late payer refusal after a slow start publication',
+  refusesLatePayerAfterSlowPublication);
+
 
 async function acceptsOtherThread() {
   const computer = await recordingComputer();
@@ -1143,17 +1155,7 @@ it.each(['Stop', 'Pause', 'Retire', 'Access', 'Denied', 'Expired', 'Admin'] as c
 
 
 async function startRunning() {
-  const fixtureTime = performance.now();
-  function fixedFixtureTime() {
-    return fixtureTime;
-  }
-  const monotonicClock = vi.spyOn(performance, 'now');
-  monotonicClock.mockImplementation(fixedFixtureTime);
-  try {
-    expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
-  } finally {
-    monotonicClock.mockRestore();
-  }
+  expect(await sendWithFixtureTime(sender, preparedComputer.wake)).toEqual({ status: 'sent' });
   await until(preparedComputer.executed);
   return preparedComputer.wake();
 }

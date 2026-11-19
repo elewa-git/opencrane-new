@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
 import { readBeforeDeadline, type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -21,7 +22,7 @@ export function field(data: unknown, name: string): string {
   return result;
 }
 function stable(prefix: string, ...parts: string[]) {
-  return `${prefix}-${createHash('sha256').update(parts.join('\0')).digest('hex').slice(0, 32)}`;
+  return `${prefix}-${sha256Hex(parts.join('\0')).slice(0, 32)}`;
 }
 export async function history(store: Pick<EventStore, 'readStream'>, subject: string,
   deadline = Infinity, signal?: AbortSignal) {

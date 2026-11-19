@@ -1,4 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 export class ConversationListChanged extends Error {}
@@ -22,9 +23,7 @@ function signature(secret: string, encoded: string) {
 }
 
 export function conversationListCursor(secret: string, identity: unknown, cursor?: string) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(identity));
-  const binding = hash.digest('hex');
+  const binding = sha256HexOfJson(identity);
   let before: [number, number] = [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER];
   if (cursor !== undefined) before = readPosition(secret, binding, cursor);
 

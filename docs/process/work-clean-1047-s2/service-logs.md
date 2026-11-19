@@ -1,0 +1,37 @@
+# Sanitised service logs
+
+Copied before teardown. Slot logs are complete; container logs retain the last 100 lines.
+Used the repository secret sanitiser and replaced private paths and email addresses.
+Withheld lines that the secret sanitiser could not approve.
+
+- [up.log](up.log)
+- [status.log](status.log)
+- [audit.log](services/audit.log)
+- [budgets.log](services/budgets.log)
+- [computers.log](services/computers.log)
+- [connection-custody.log](services/connection-custody.log)
+- [conversations.log](services/conversations.log)
+- [dispatcher.log](services/dispatcher.log)
+- [files.log](services/files.log)
+- [mcp-catalogue.log](services/mcp-catalogue.log)
+- [members.log](services/members.log)
+- [memory.log](services/memory.log)
+- [minio-tokens.log](services/minio-tokens.log)
+- [replay-mcp-catalogue.log](services/replay-mcp-catalogue.log)
+- [replay-members.log](services/replay-members.log)
+- [routines.log](services/routines.log)
+- [server.log](services/server.log)
+- [web.log](services/web.log)
+- [docker-opencrane-dev-1-models-1.log](services/docker-opencrane-dev-1-models-1.log)
+- [docker-opencrane-dev-1-scanner-1.log](services/docker-opencrane-dev-1-scanner-1.log)
+- [docker-opencrane-dev-1-minio-1.log](services/docker-opencrane-dev-1-minio-1.log)
+- [docker-opencrane-dev-1-clamav-1.log](services/docker-opencrane-dev-1-clamav-1.log)
+- [docker-opencrane-dev-1-openfga-1.log](services/docker-opencrane-dev-1-openfga-1.log)
+- [docker-opencrane-dev-1-openfga-migrate-1.log](services/docker-opencrane-dev-1-openfga-migrate-1.log)
+- [docker-opencrane-dev-1-postgres-1.log](services/docker-opencrane-dev-1-postgres-1.log)
+- [docker-opencrane-dev-1-nats-1.log](services/docker-opencrane-dev-1-nats-1.log)
+- [opencrane-dev-1-computer-293ad9e1dca7393714fd36f884ee8ee5.log](services/opencrane-dev-1-computer-293ad9e1dca7393714fd36f884ee8ee5.log)
+- [opencrane-dev-1-computer-530750581c929c9e05a1a2bcff59adce.log](services/opencrane-dev-1-computer-530750581c929c9e05a1a2bcff59adce.log)
+- [opencrane-dev-1-computer-8758be48bf6edde9f441c77886319c13.log](services/opencrane-dev-1-computer-8758be48bf6edde9f441c77886319c13.log)
+- [opencrane-dev-1-computer-ccf18945713e0068514ea91eb6009712.log](services/opencrane-dev-1-computer-ccf18945713e0068514ea91eb6009712.log)
+- [opencrane-dev-1-gateway-gateway-7d66c99646-vbfgs.log](services/opencrane-dev-1-gateway-gateway-7d66c99646-vbfgs.log)

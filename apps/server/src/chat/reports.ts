@@ -1,3 +1,4 @@
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { FileRefusal } from '../files/refusals.ts';
 import { artifactListSchema } from '@opencrane/events';
@@ -8,7 +9,6 @@ import {
   commandActivityLabelSchema,
 } from '@opencrane/events';
 import { computerSummary, type ComputerSummary, type TurnSummary } from '@opencrane/auth';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readEventAt, readStreamSummary, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
@@ -66,15 +66,13 @@ function requireCommandPreviewShape(report: Report): void {
   }
 }
 function reportDigest(report: Report) {
-  const hash = createHash('sha256');
   let stableReport: unknown = report;
   if ('preview' in report) {
     // The bridge does not keep a preview after restart; its sequence still identifies this report.
     const { preview: _preview, ...journalFields } = report;
     stableReport = journalFields;
   }
-  hash.update(JSON.stringify(stableReport));
-  return hash.digest('hex');
+  return sha256HexOfJson(stableReport);
 }
 
 export function canCombineReports(first: unknown, next: unknown, textLength: number) {
@@ -312,9 +310,7 @@ function reportEvent(report: Report, context: ReportContext,
   keys: ReturnType<typeof conversationKeys>, batch: Report[] | undefined, digest: string) {
   const subject = `conversation-${report.conversationId}`;
   const data = reportData(report, context.silo, context.assistantId, keys);
-  const commandHash = createHash('sha256');
-  commandHash.update(`${context.computerId}:${report.sequence}`);
-  const id = `bridge-${commandHash.digest('hex')}`;
+  const id = `bridge-${sha256Hex(`${context.computerId}:${report.sequence}`)}`;
   const earlier = batch?.slice(0, -1);
   const preceding = earlier?.map(receiptFor);
   const event = {

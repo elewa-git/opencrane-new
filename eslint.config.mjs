@@ -81,6 +81,30 @@ export default tseslint.config(
     },
   },
   {
+    files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
+    ignores: ['**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{
+          name: 'node:crypto',
+          importNames: ['createHash'],
+          message: 'Import sha256Hex or sha256HexOfJson from @opencrane/events/digest.',
+        }],
+      }],
+    },
+  },
+  {
+    files: [
+      'libs/events/src/digest.ts', // Own the shared Node SHA-256 hex implementation.
+      'libs/models/src/connection-custody.ts', // Feed conditional identity parts into one hash.
+      'libs/models/src/oauth-attempt.ts', // Encode the OAuth challenge as base64url.
+      'apps/computer/src/bridge-socket.ts', // Compare raw digest bytes in constant time.
+      'apps/server/src/members/bootstrap.ts', // Compare raw digest bytes in constant time.
+      'apps/server/src/overview/rows.ts', // Hash progress and ordered rows with separate updates.
+    ],
+    rules: { 'no-restricted-imports': 'off' },
+  },
+  {
     files: ['**/*.test.ts', '**/*.spec.ts', '**/*.test.mjs'],
     rules: {
       'max-lines': ['error', { max: 1500, skipBlankLines: true, skipComments: true }],

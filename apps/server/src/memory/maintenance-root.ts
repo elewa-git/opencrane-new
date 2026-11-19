@@ -1,5 +1,5 @@
+import { sha256HexOfJson as digestIdentity } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation, grantStream } from '@opencrane/authz';
 import { computerSummary } from '@opencrane/auth';
@@ -320,10 +320,4 @@ export async function admitMaintenanceRoot(options: MemoryOptions, intent: Inten
     }
     throw error;
   }
-}
-
-function digestIdentity(fields: string[]) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(fields));
-  return hash.digest('hex');
 }

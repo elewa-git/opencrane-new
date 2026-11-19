@@ -1,0 +1,4 @@
+Quiet qualification: PASS
+Two complete files, one worker: 454 cases passed, none failed or skipped.
+Long chat: history 161 ms; list 139 ms; socket ready 1033 ms.
+The original 1500 ms assertion and production access deadlines are unchanged.

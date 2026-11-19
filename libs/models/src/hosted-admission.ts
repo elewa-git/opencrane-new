@@ -1,5 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, hostedImageCheckedSchema, hostedImageCheckRequestedSchema,
   hostedImageScanClaimedSchema,
@@ -196,9 +197,8 @@ export async function claimHostedImageScan(store: EventStore, silo: string,
   }
 
   const subject = `mcp-${claim.serverId}`;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, subject, 'mcp.image_scan_claimed', claim.attemptId]));
-  const event = envelope(silo, subject, 'mcp.image_scan_claimed', claim, hash.digest('hex'));
+  const eventId = sha256HexOfJson([silo, subject, 'mcp.image_scan_claimed', claim.attemptId]);
+  const event = envelope(silo, subject, 'mcp.image_scan_claimed', claim, eventId);
   try {
     const appended = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
     if (appended.status !== 'appended' || appended.outcome?.kind !== 'appended') {
@@ -263,9 +263,8 @@ export async function writeHostedAdmission(store: EventStore, silo: string, raw:
   const checkedNow = await currentMalwareEvidence(result, silo, scanEvidence, validateEvidence);
   if (!checkedNow) return conflict;
   const subject = `mcp-${result.serverId}`;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, subject, 'mcp.image_checked', result.attemptId]));
-  const event = envelope(silo, subject, 'mcp.image_checked', result, hash.digest('hex'), now);
+  const eventId = sha256HexOfJson([silo, subject, 'mcp.image_checked', result.attemptId]);
+  const event = envelope(silo, subject, 'mcp.image_checked', result, eventId, now);
   const appendInput = { event, expectedSequence: rows.at(-1)!.sequence };
   const appended = await store.append(appendInput);
   if (appended.status !== 'appended') return appended;

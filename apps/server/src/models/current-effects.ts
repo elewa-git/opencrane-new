@@ -1,4 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
@@ -57,9 +58,7 @@ function signature(secret: string, encoded: string) {
 }
 function continuation(secret: string, silo: string, query: CurrentEffectsQuery) {
   const identity = [silo, query.limit];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(identity));
-  const binding = hash.digest('hex');
+  const binding = sha256HexOfJson(identity);
   const schema = z.tuple([z.literal(binding), z.int().nonnegative(), z.int().positive()]);
   let saved: z.infer<typeof schema> | undefined;
   if (query.continuation !== undefined) {

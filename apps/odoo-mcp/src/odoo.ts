@@ -1,6 +1,6 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { createHash } from 'node:crypto';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { z } from 'zod';
 
@@ -112,7 +112,7 @@ export async function readDraft(upstream: Upstream, bearer: string, orderId: num
   const snapshot = snapshotSchema.parse({ ...facts, lines });
   const version = losslessJson(JSON.stringify(snapshot)).digest;
   const note = snapshot.note === false ? '' : snapshot.note;
-  const noteDigest = createHash('sha256').update(note, 'utf8').digest('hex');
+  const noteDigest = sha256Hex(note);
   const displayLines = lines.map(displayLine);
   const display = { name: escapeText(snapshot.name), note: escapeText(note),
     author: escapeText(snapshot.write_uid[1]), lines: displayLines };

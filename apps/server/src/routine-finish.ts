@@ -1,5 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { computerSummary, isComputerLifecycle, type ComputerSummary } from '@opencrane/auth';
@@ -315,9 +316,7 @@ async function verifiedOutcome(store: EventStore, silo: string, input: Input, ru
 }
 function finishEvent(silo: string, subject: string, input: Input, run: Run,
   success: Awaited<ReturnType<typeof proveRoutineSuccess>> | undefined): EventEnvelope {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, input.routineId, input.occurrenceId]));
-  const commandId = `routine-finish:${hash.digest('hex')}`;
+  const commandId = `routine-finish:${sha256HexOfJson([silo, input.routineId, input.occurrenceId])}`;
   const { definition: _definition, slot: _slot, firedAt: _firedAt,
     startBy: _startBy, source: _source, ...identity } = run;
   const data = success

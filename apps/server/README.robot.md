@@ -7484,8 +7484,11 @@ before a turn can be sent. The start check refuses it too. A Stop for this root 
 refuses the receipt. `test/routine-session.test.ts` and `test/routine-sender.test.ts` cover
 receipt recovery with an uncertain hold; the hand-off fixture starts without a
 competing reservation. The uncertain-write fixture holds its test clock until the
-send fault, and the sender fixture holds its test clock after a long wake. Slow host
-scheduling therefore cannot expire the access period before either fault is injected.
+send fault. The sender fixture also holds its test clock after a long wake and
+during successful send setup for late access changes. It restores the clock before
+measuring running-turn interruption. A delayed-publication case checks that the
+payer change is reached and normal time resumes. Slow host scheduling therefore
+cannot expire the access period before the intended change is injected.
 
 `test/routine-handoff.test.ts` starts with a saved checked due while delivery is off.
 It restarts NATS, enables the internal test delivery, then checks that one session,

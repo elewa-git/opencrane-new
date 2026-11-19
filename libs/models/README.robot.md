@@ -7,6 +7,8 @@ checks use `store.clock` for their two-second access limits. The budget actor us
 same clock for serial admission and the fallback access deadline. These checks retain
 all existing lengths. Other models timing remains on the real clock until its separate
 migration. Tests that combine both paths start their manual clock near the real monotonic time.
+The actor queue fixture starts on a whole millisecond so its exact sleep assertion
+does not depend on floating-point subtraction.
 `fixture` accepts `{ clock }` in a named trailing options object after `executionMode`.
 The default fixture still uses real time. `accessDeadline` takes named options
 `{ clock, checkAccess?, deadline? }`; budget waiting helpers accept a named clock option.

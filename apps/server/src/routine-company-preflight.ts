@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { snapshotPositions, type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -23,9 +23,7 @@ function destinationDigest(rows: StoredEvent[]) {
       data.kind !== 'remote' || !('locator' in data) ||
       typeof data.locator !== 'string') refuse();
   const destination = new URL(data.locator).origin;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(destination));
-  return hash.digest('hex');
+  return sha256HexOfJson(destination);
 }
 
 function matchesExactTool(rows: StoredEvent[], run: Run) {

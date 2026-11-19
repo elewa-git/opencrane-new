@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import type { StoredEvent } from '@opencrane/event-store';
 import { isDeepStrictEqual } from 'node:util';
 import { isComputerLifecycle } from '@opencrane/auth';
@@ -110,12 +110,10 @@ export async function loadRoutineRootPreparation(store: Arguments[0], keys: Argu
   const admission = prepared.admission;
   const model = rootPreparationModel(admission);
   const firstCallBoundCents = reservationCents(model, 2000);
-  const hash = createHash('sha256');
   const fingerprintFields = [run, rows[0], previous, admission.enabled, admission.choice,
     model, priceTableId, firstCallBoundCents];
   const fingerprint = JSON.stringify(fingerprintFields);
-  hash.update(fingerprint);
-  const preparationDigest = hash.digest('hex');
+  const preparationDigest = sha256Hex(fingerprint);
   const binding = { requesterId: run.definition.ownerId, conversationId: run.conversationId,
     turnId: run.turnId, assistantId, payingGroupId: run.definition.payingGroupId,
     ...selected, allowanceCents: 1000, preparationDigest };

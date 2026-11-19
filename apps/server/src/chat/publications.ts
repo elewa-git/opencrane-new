@@ -1,4 +1,5 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { sha256Hex as digest } from '@opencrane/events/digest';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
@@ -38,11 +39,6 @@ function hasCompleteSource(value: Binding) {
 }
 const bindingSchema = bindingShape.refine(hasCompleteSource);
 class PublicationConflict extends Error {}
-function digest(value: string) {
-  const hash = createHash('sha256');
-  hash.update(value);
-  return hash.digest('hex');
-}
 function signature(secret: string, encoded: string) {
   const hmac = createHmac('sha256', secret);
   hmac.update(`child-publication:${encoded}`);

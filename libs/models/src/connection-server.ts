@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 import { toolPolicyFromRows } from './tool-policy.ts';
@@ -20,9 +20,7 @@ export function connectionServer(rows: StoredEvent[], connectionId: string,
   const remote = endpoint.safeParse(registration?.event.data);
   let endpointDigest: string | undefined;
   if (remote.success) {
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify(remote.data.locator));
-    endpointDigest = hash.digest('hex');
+    endpointDigest = sha256HexOfJson(remote.data.locator);
   }
   const available = policy.published && policy.accountMode === accountMode &&
     policy.connectionId === connectionId &&

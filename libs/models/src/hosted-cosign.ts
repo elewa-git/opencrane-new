@@ -1,5 +1,5 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,9 +21,7 @@ async function pinnedBinary(source: string, directory: string) {
     throw new Error('Verifier unavailable');
   }
   const bytes = await readFile(binary);
-  const hasher = createHash('sha256');
-  hasher.update(bytes);
-  const digest = hasher.digest('hex');
+  const digest = sha256Hex(bytes);
   if (digest !== pinnedCosignDigest) throw new Error('Verifier unavailable');
   return binary;
 }

@@ -1,7 +1,7 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { memberAuthorisation } from '@opencrane/authz';
 import { MemberAccessRefused } from '@opencrane/models';
 import { applyToolPolicy, emptyToolPolicy, isToolPolicyAvailable } from '@opencrane/projections';
-import { createHash } from 'node:crypto';
 import type { MemberAccessRow, ToolExplanation, ToolPolicy } from '@opencrane/protocol';
 import type { GroupOptions } from '../members/group-routes.ts';
 import type { memberInventory } from '../members/inventory.ts';
@@ -156,10 +156,8 @@ export function explainTool(inventory: Inventory, assistantId: string, toolName:
 }
 
 export function toolReviewRevision(inventoryRevision: string, policy: ToolPolicy) {
-  const hash = createHash('sha256');
   const positions = [inventoryRevision, policy.sequence, policy.policyRevision];
-  hash.update(JSON.stringify(positions));
-  return hash.digest('hex');
+  return sha256HexOfJson(positions);
 }
 
 export async function extendToolAvailability(options: GroupOptions, memberId: string,

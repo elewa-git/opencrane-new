@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { setImmediate } from 'node:timers/promises';
 import { memoryForgottenEventSchema, memoryCorrectedEventSchema,
   memoryCleanupRecordedEventSchema, memoryCleanupRecordedDataSchema,
@@ -64,9 +64,7 @@ function cleanupRecord(saved: MemoryChange, outcome: 'completed' | 'unavailable'
   }
   const reference = [saved.silo, saved.id, 'memory.cleanup_recorded'];
   if (outcome === 'unavailable') reference.push('unavailable');
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(reference));
-  const id = hash.digest('hex');
+  const id = sha256HexOfJson(reference);
   const data: ReturnType<typeof memoryCleanupRecordedDataSchema.parse> = {
     schemaVersion: 1, scopeId: target.scopeId,
     scopeKind: target.scopeKind, ownerId: target.ownerId,

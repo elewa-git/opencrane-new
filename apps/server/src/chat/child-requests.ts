@@ -1,5 +1,5 @@
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { childStartFailure, childStartState } from './child-failure.ts';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { childRetryInputSchema } from '@opencrane/protocol';
@@ -35,9 +35,7 @@ const assistantSchema = assistantPayer.extend({
 });
 export function stageId(options: Options, input: Input, stage: string) {
   const identity = JSON.stringify([options.silo, input.conversationId, input.sourceMessageId]);
-  const hash = createHash('sha256');
-  hash.update(identity);
-  return `${stage}-${hash.digest('hex')}`;
+  return `${stage}-${sha256Hex(identity)}`;
 }
 function refused(): never {
   throw new ChildRequestRefused('Child request unavailable');
@@ -336,9 +334,7 @@ async function saveRetry(options: Options, memberId: string,
   const saved = savedIntent(options, memberId, loaded);
   const retrying = { ...loaded, failed: false };
   const checked = await check(options, memberId, retrying, [memberId]);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([options.silo, conversationId, requestId, retry.retryId]));
-  const id = `child-retry-${hash.digest('hex')}`;
+  const id = `child-retry-${sha256HexOfJson([options.silo, conversationId, requestId, retry.retryId])}`;
   const subject = `conversation-${conversationId}`;
   let previous: StoredEvent | undefined;
   for (const row of loaded.rows) {

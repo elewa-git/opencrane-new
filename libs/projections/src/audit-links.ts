@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { EventEnvelope } from '@opencrane/events';
 import type { AuditRecord } from '@opencrane/protocol';
@@ -18,7 +18,7 @@ export function visibleEventId(event: EventEnvelope,
 
 export function commandRef(event: EventEnvelope): string | undefined {
   if (event.type === 'memory.maintenance_recorded' || !event.commandId) return undefined;
-  return createHash('sha256').update(event.commandId).digest('hex');
+  return sha256Hex(event.commandId);
 }
 
 function firstId(...values: unknown[]): string | undefined {

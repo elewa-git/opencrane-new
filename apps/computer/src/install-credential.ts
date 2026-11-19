@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { chmodSync, chownSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { record } from './http.ts';
 import { credentialIdentity } from './credential-identity.ts';
@@ -32,9 +33,7 @@ async function install() {
     identity = credentialIdentity(value, input['verifier'], claims);
   }
   // Keep only a verifier on disk. UID 1000 must not obtain a usable bridge pass here.
-  const hash = createHash('sha256');
-  hash.update(value);
-  const digest = hash.digest('hex');
+  const digest = sha256Hex(value);
   const temporary = `${DIRECTORY}/${randomUUID()}.tmp`;
   try {
     const saved = JSON.stringify({ digest, expiresAt, ...identity });

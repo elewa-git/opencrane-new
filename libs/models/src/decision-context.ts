@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { sessionConfiguration } from '@opencrane/events';
@@ -112,8 +112,5 @@ function isConversationClosed(row: StoredEvent) {
 }
 
 export function digestContext(facts: unknown) {
-  const encoded = JSON.stringify(facts);
-  const digest = createHash('sha256');
-  digest.update(encoded);
-  return digest.digest('hex');
+  return sha256HexOfJson(facts);
 }

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { computerSummary } from '@opencrane/auth';
 import { readStreamSummary, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { computerTurnStartedDataSchema, type EventEnvelope } from '@opencrane/events';
@@ -80,9 +80,7 @@ async function affectedWork(store: EventStore, event: EventEnvelope, session: Se
 async function saveStop(store: EventStore, trigger: EventEnvelope, work: Work,
   stopId: string, deadline: number) {
   const subject = `conversation-${work.conversationId}`;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([trigger.silo, stopId, work.conversationId, work.turnId]));
-  const id = hash.digest('hex');
+  const id = sha256HexOfJson([trigger.silo, stopId, work.conversationId, work.turnId]);
   const payload = { conversationId: work.conversationId, turnId: work.turnId,
     reason: 'budget', stopId };
   const event = envelope(trigger.silo, subject, 'agent.turn_stop_requested', payload, id);

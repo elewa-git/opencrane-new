@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
@@ -63,7 +63,7 @@ async function authoriseCapture(config: AuthConfig, files: FileOptions, view: Li
   const fresh = async () => {
     if (!sessionFor(request, config, new Date()) || JSON.stringify(await viewAccess(view, memberId, conversationId)) !== JSON.stringify(computer)) throw new Error('Access changed');
   };
-  const fileId = createHash('sha256').update(JSON.stringify([files.silo, conversationId, memberId, `screenshot-${key}`])).digest('hex');
+  const fileId = sha256HexOfJson([files.silo, conversationId, memberId, `screenshot-${key}`]);
   return { computer, memberId, conversationId, fileId, key, fresh };
 }
 

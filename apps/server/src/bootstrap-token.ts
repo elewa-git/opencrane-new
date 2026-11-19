@@ -1,4 +1,5 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { randomBytes } from 'node:crypto';
 import { mkdir, lstat, open } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
@@ -40,7 +41,7 @@ async function installToken() {
   const token = randomBytes(32).toString('base64url');
   const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try {
-    await file.writeFile(JSON.stringify({ silo, hash: createHash('sha256').update(token).digest('hex'),
+    await file.writeFile(JSON.stringify({ silo, hash: sha256Hex(token),
       expiresAt: new Date(Date.now() + 86_400_000).toISOString() }));
     await file.sync();
   } finally { await file.close(); }

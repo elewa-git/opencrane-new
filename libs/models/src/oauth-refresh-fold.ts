@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import type { StoredEvent } from '@opencrane/event-store';
 import { connectionOAuthExchangeClaimedDataSchema,
@@ -11,9 +11,7 @@ type State = { sequence: number; data?: Saved;
   refreshAttempt?: StoredEvent; refreshClaim?: StoredEvent };
 
 export function connectionOperationId(silo: string, subject: string, changeRef: string) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, subject, changeRef]));
-  return hash.digest('hex');
+  return sha256HexOfJson([silo, subject, changeRef]);
 }
 
 /** Rebuild a replacement only after its matching attempt and claim, without private effects. */

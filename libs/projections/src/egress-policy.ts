@@ -1,15 +1,13 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { egressDestinationDataSchema, type EgressRule }
   from '@opencrane/events';
 import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 
 export function egressGrantStream(silo: string, rule: EgressRule) {
-  const subjectDigest = createHash('sha256');
-  subjectDigest.update(JSON.stringify([silo, rule.scope, rule.subjectId]));
-  const destinationDigest = createHash('sha256');
-  destinationDigest.update(JSON.stringify([rule.host, rule.port]));
-  return `egress-grant-${subjectDigest.digest('hex')}-${destinationDigest.digest('hex')}`;
+  const subjectDigest = sha256HexOfJson([silo, rule.scope, rule.subjectId]);
+  const destinationDigest = sha256HexOfJson([rule.host, rule.port]);
+  return `egress-grant-${subjectDigest}-${destinationDigest}`;
 }
 type RuleState = EgressRule & { silo: string; allowed: boolean };
 // Check policy agreement only. Membership, live work and dispatch checks still decide admission.

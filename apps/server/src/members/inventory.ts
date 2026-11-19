@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { assistantCreatedDataSchema, grantGivenDataSchema, grantRevokedDataSchema,
   teamCreatedDataSchema } from '@opencrane/events';
@@ -333,17 +333,15 @@ export async function memberInventory(options: GroupOptions, memberId: string, d
   const personalConnections = versionAbsence(inputs.rows, 'connection', unavailable, absenceChecked);
   const routine = await routineSummary(routineCheck, deadline);
   const routines = routineAbsence(routine.status, unavailable, absenceChecked);
-  const hash = createHash('sha256');
   const reviewedInputs = [3, inputs.positions, inputs.categoryPositions, inputs.generation,
     routine.version, content];
-  hash.update(JSON.stringify(reviewedInputs));
   function assistantId(assistant: Assistant) {
     return assistant.assistantId;
   }
   const assistantIds = assistants.map(assistantId);
   return { rows, assistantIds, grantInputsComplete, complete: unavailable.size === 0,
     unavailableSections: Array.from(unavailable),
-    reviewRevision: hash.digest('hex'), checkCurrent, ownedSharedWork: [],
+    reviewRevision: sha256HexOfJson(reviewedInputs), checkCurrent, ownedSharedWork: [],
     personalConnections, routines,
     personalComputer: content.computers, retainedHistory: content.history };
 }
@@ -400,7 +398,5 @@ function versionAbsence(rows: StoredEvent[], category: string, unavailable: Set<
 
 export function reviewedRevision(inventoryRevision: string, memberSequence: number,
   ownershipSequence: number) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([inventoryRevision, memberSequence, ownershipSequence]));
-  return hash.digest('hex');
+  return sha256HexOfJson([inventoryRevision, memberSequence, ownershipSequence]);
 }

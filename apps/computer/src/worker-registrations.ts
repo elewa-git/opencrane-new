@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { connectionBinding, type Binding, type Registration } from './worker-request.ts';
 
 type Owner = Pick<Binding, 'siloId' | 'computerId' | 'generation'>;
@@ -64,9 +64,7 @@ function add(state: State, registration: Registration, input: string, now: numbe
       registration.generation !== state.owner.generation) {
     refuse();
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([registration, input]));
-  const fingerprint = hash.digest('hex');
+  const fingerprint = sha256HexOfJson([registration, input]);
   const previous = state.seen.get(registration.operationId);
   if (previous !== undefined) {
     if (previous !== fingerprint) {

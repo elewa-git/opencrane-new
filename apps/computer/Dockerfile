@@ -98,6 +98,7 @@ COPY --from=project libs/models/src/private-callers.ts /app/libs/models/src/priv
 COPY --from=project libs/events/package.json /app/libs/events/package.json
 COPY --from=project LICENSE /app/libs/events/LICENSE
 COPY --from=project libs/events/src/ids.ts /app/libs/events/src/ids.ts
+COPY --from=project libs/events/src/digest.ts /app/libs/events/src/digest.ts
 COPY --from=project libs/events/src/session-configuration.ts /app/libs/events/src/session-configuration.ts
 COPY --from=project libs/events/src/tool-call.ts /app/libs/events/src/tool-call.ts
 COPY --from=project libs/events/src/command-activity-label.ts /app/libs/events/src/command-activity-label.ts

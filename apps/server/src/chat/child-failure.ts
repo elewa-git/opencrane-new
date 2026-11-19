@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { childStartFailedEventSchema, childRetryRequestedEventSchema, type ChildRequest }
   from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -64,9 +64,7 @@ export async function recordChildStartFailure(options: Pick<ChatOptions, 'store'
   for (const row of rows) {
     if (row.event.subject === subject) sequence = row.sequence;
   }
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([options.silo, intent.conversationId, intent.requestId, attempt]));
-  const id = `child-failure-${hash.digest('hex')}`;
+  const id = `child-failure-${sha256HexOfJson([options.silo, intent.conversationId, intent.requestId, attempt])}`;
   const event = { id, commandId: id, subject, type: 'conversation.child_start_failed',
     silo: options.silo, source: 'opencrane-server', time: new Date().toISOString(),
     principal: { kind: 'system', id: 'opencrane-server' },

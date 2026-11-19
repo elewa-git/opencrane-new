@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { prepareRemote, type RemoteNetwork } from './remote-https.ts';
 import type { Permit, Route } from './mcp-dispatch-contract.ts';
@@ -17,9 +17,7 @@ function hasCallerCredentialHeaders(req: IncomingMessage) {
 }
 
 export function dispatchDigest(body: string) {
-  const hash = createHash('sha256');
-  hash.update(body);
-  return hash.digest('hex');
+  return sha256Hex(body);
 }
 
 export interface PermitConsumer {
@@ -42,7 +40,6 @@ export function consumePermit(req: IncomingMessage, body: string, state: PermitC
   }
   return permit;
 }
-
 
 export interface PersonalDispatchRequest {
   permit: Permit;

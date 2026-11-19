@@ -1,5 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { MemoryRefused } from './access.ts';
 import { sourceStatuses } from './detail-sources.ts';
@@ -116,9 +117,7 @@ export async function listFacts(options: MemoryOptions, requester: string, scope
   const state = await memorySnapshot(options, scope);
   const identity = [options.silo, requester, scope.scopeId, query.q.normalize('NFC'),
     'pin-exact-rank-id', state.position, state.generation];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(identity));
-  const binding = hash.digest('hex');
+  const binding = sha256HexOfJson(identity);
   const { offset, asOf } = readCursor(secret, binding, query.cursor);
   const values = [options.silo, scope.scopeId, state.position, state.generation,
     terms.prefix, terms.exact];

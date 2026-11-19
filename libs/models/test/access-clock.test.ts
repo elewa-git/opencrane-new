@@ -67,7 +67,10 @@ function payingDeadline(expired: boolean) {
 it.each([false, true])('uses manual time for group authority (expired: %s)', payingDeadline);
 
 async function actorDeadline(expired: boolean) {
-  const clock = manualClock(performance.now() + 5000);
+  const processTime = performance.now();
+  // Use whole milliseconds because this fixture checks exact timer arguments.
+  const fixtureStartedAt = Math.ceil(processTime) + 5000;
+  const clock = manualClock(fixtureStartedAt);
   nats = await natsFixture({ clock });
   const actor = new BudgetActor(nats.store, 'test');
   await actor.start(100, 100, 'group');
@@ -87,6 +90,19 @@ async function actorDeadline(expired: boolean) {
   expect(sleep).toHaveBeenCalledWith(2000, expect.any(AbortSignal));
 }
 it.each([false, true])('uses manual time for the actor queue (expired: %s)', actorDeadline);
+
+async function actorDeadlineAfterFractionalProcessTime() {
+  const monotonicClock = vi.spyOn(performance, 'now');
+  monotonicClock.mockReturnValueOnce(1999.999999999999);
+  try {
+    await actorDeadline(false);
+  } finally {
+    monotonicClock.mockRestore();
+  }
+}
+it('keeps actor queue timing exact after a fractional process timestamp',
+  actorDeadlineAfterFractionalProcessTime);
+
 
 async function fallbackDeadline(expired: boolean) {
   const clock = manualClock();

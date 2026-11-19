@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { artifactListSchema, fileUploadedDataSchema } from '@opencrane/events';
 import type { WebSocket, RawData } from 'ws';
 import { z } from 'zod';
@@ -21,9 +21,7 @@ export async function publishArtifacts(context: ArtifactPublication, memberId: s
   const rows = await ownConversation(files.store, files.silo, conversationId, memberId, false, true);
   let remaining = 20 * 1024 * 1024;
   for (const artifact of artifacts) {
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify([conversationId, turnId, artifact.id]));
-    const key = `artifact-${hash.digest('hex')}`;
+    const key = `artifact-${sha256HexOfJson([conversationId, turnId, artifact.id])}`;
     function alreadyPublished(row: typeof rows[number]) { return row.event.id === key; }
     // Count saved files too, so replay keeps the original turn allowance.
     if ('size' in artifact) remaining -= artifact.size;
@@ -50,12 +48,8 @@ export async function publishArtifacts(context: ArtifactPublication, memberId: s
 
 async function bindPublication(files: FileOptions, memberId: string,
   conversationId: string, turnId: string, artifacts: Artifacts) {
-  const identity = createHash('sha256');
-  identity.update(JSON.stringify([conversationId, turnId]));
-  const key = `artifact-set-${identity.digest('hex')}`;
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(artifacts));
-  const data = { conversationId, turnId, digest: hash.digest('hex') };
+  const key = `artifact-set-${sha256HexOfJson([conversationId, turnId])}`;
+  const data = { conversationId, turnId, digest: sha256HexOfJson(artifacts) };
   // Save the set before any upload, so an interrupted report cannot replace its allowance.
   const result = await fileCommand(files.store, files.silo, memberId, key,
     'agent.file_publication_started', data);
@@ -70,9 +64,7 @@ async function publishArtifact(files: FileOptions, readArtifact: NonNullable<Art
   if (remaining < 0) return { ...refused, reason: 'too_large' };
   try {
     const bytes = await readArtifact(artifact);
-    const digest = createHash('sha256');
-    digest.update(bytes);
-    if (bytes.length !== artifact.size || digest.digest('hex') !== artifact.sha256) {
+    if (bytes.length !== artifact.size || sha256Hex(bytes) !== artifact.sha256) {
       return { ...refused, reason: 'invalid_file' };
     }
     const result = await uploadFile(files, memberId, conversationId, key,

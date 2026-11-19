@@ -1,5 +1,5 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
@@ -16,9 +16,7 @@ const input = hostedImageInstallationSchema.omit({ attemptId: true }).extend({
 });
 
 function reference(silo: string, commandId: string) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([silo, commandId]));
-  return { serverId: hash.digest('hex'), changeRef: `chg_${commandId}` };
+  return { serverId: sha256HexOfJson([silo, commandId]), changeRef: `chg_${commandId}` };
 }
 
 export async function registerHosted(store: EventStore, binding: Binding, memberId: string,

@@ -1,5 +1,5 @@
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import type { ServerResponse } from 'node:http';
-import { createHash } from 'node:crypto';
 import { history } from './event-history.ts';
 import { data, type BudgetState } from './state.ts';
 import type { BudgetActor } from './actor.ts';
@@ -20,9 +20,7 @@ export async function grantModelCall(actor: BudgetActor,
   allow: (reservationId: string, requestId: string) => Promise<string>, native?: NativeCall) {
   // Use the verified turn binding; caller headers cannot choose a root.
   const rootId = native?.rootId ?? turnRootId(actor.state, call.conversationId, call.turnId);
-  const bodyHash = createHash('sha256');
-  bodyHash.update(raw);
-  const bodyDigest = bodyHash.digest('hex');
+  const bodyDigest = sha256Hex(raw);
   if (rootId === undefined) {
     const reservationId = await actor.reserve(call, amountCents, fresh, admittedAt);
     let decisionId: string;
@@ -38,15 +36,13 @@ export async function grantModelCall(actor: BudgetActor,
     return { reservationId, requestId: call.requestId };
   }
   try {
-    const retryHash = createHash('sha256');
     let identity = [actor.silo, rootId, call.computerId, call.generation,
       call.conversationId, call.turnId, call.threadId, bodyDigest];
     if (native) {
       // Keep changed bytes or bindings on the same call so the actor refuses replacement holds.
       identity = [actor.silo, 'native', native.callId];
     }
-    retryHash.update(JSON.stringify(identity));
-    const retryDigest = retryHash.digest('hex');
+    const retryDigest = sha256HexOfJson(identity);
     const expiry = native ? { accessExpiresAt: native.accessExpiresAt } : {};
     const retry = { retryDigest, bodyDigest, ...expiry };
     const nativeAccess = native ? nativeRetryAccess(actor, retryDigest, native, fresh) : undefined;

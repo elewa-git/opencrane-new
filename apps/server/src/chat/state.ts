@@ -1,5 +1,5 @@
+import { sha256HexOfJson as preferenceHash } from '@opencrane/events/digest';
 import { inheritedChildSubjects } from './child-access.ts';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { conversationArchiveSetDataSchema, conversationReadAdvancedDataSchema,
@@ -85,11 +85,6 @@ function preferenceEvent(options: ChatOptions, memberId: string,
 function preferenceId(silo: string, memberId: string, commandId: string) {
   const identity = [silo, memberId, commandId];
   return preferenceHash(identity);
-}
-function preferenceHash(value: unknown) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(value));
-  return hash.digest('hex');
 }
 
 function verifyRetry(saved: StoredEvent, expected: EventEnvelope) {

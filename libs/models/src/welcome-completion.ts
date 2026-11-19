@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { assistantCreatedDataSchema, onboardingCompletedDataSchema,
@@ -11,9 +11,7 @@ import { currentMembership } from './ownership.ts';
 type Store = Pick<EventStore, 'readStream' | 'head' | 'append' | 'clock'>;
 
 function completionId(silo: string, memberId: string, answerId: string): string {
-  const hash = createHash('sha256');
-  hash.update([silo, memberId, answerId].join('\0'));
-  const digest = hash.digest('hex');
+  const digest = sha256Hex([silo, memberId, answerId].join('\0'));
   const suffix = digest.slice(0, 32);
   return `welcome-complete-${suffix}`;
 }
@@ -48,9 +46,7 @@ function currentWelcome(rows: StoredEvent[]) {
 
 async function checkAssistant(store: Store, silo: string, memberId: string,
   assistantId: string) {
-  const hash = createHash('sha256');
-  hash.update([silo, memberId].join('\0'));
-  const digest = hash.digest('hex');
+  const digest = sha256Hex([silo, memberId].join('\0'));
   const suffix = digest.slice(0, 32);
   const expectedId = `personal-${suffix}`;
   if (assistantId !== expectedId) throw new Error('Invalid welcome assistant');

@@ -1,0 +1,4947 @@
+{
+  "selection": [
+    "libs/events",
+    "libs/event-store",
+    "libs/projections",
+    "libs/models",
+    "apps/computer",
+    "apps/ops",
+    "apps/odoo-mcp",
+    "apps/server"
+  ],
+  "selectedFiles": 543,
+  "firstPass": {
+    "status": "PASS with existing opt-in skips",
+    "method": "Per-file isolated coverage resumed after fixture corrections; failed and cancelled attempts remain FAIL.",
+    "batchFiles": {
+      "completedOriginal": 204,
+      "completedFirstRemainder": 32,
+      "finalRemainder": 307
+    },
+    "finalRemainder": {
+      "passedFiles": 301,
+      "skippedFiles": 6,
+      "passedCases": 5421,
+      "skippedCases": 67
+    }
+  },
+  "secondPass": {
+    "status": "PASS for runnable cases after isolated qualification; original full selection remains FAIL",
+    "fullSelectionStatus": "FAIL",
+    "passedFiles": 535,
+    "failedFiles": 2,
+    "skippedFiles": 6,
+    "passedCases": 13054,
+    "failedCases": 2,
+    "skippedCases": 69,
+    "selectedCases": 13125,
+    "qualifiedPassedCases": 13056,
+    "quietQualification": {
+      "status": "PASS",
+      "files": 2,
+      "passedCases": 454,
+      "failedCases": 0,
+      "skippedCases": 0,
+      "workers": 1
+    }
+  },
+  "files": [
+    {
+      "file": "apps/computer/test/approval-holds.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/approval-runner.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/apt-timeout.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/artifacts.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/bridge-gate-authority.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 45,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/bridge-gate.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/bridge-socket.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/codex-config.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/codex-install.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/command-label.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/command-redaction-licences.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/command-redaction.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 86,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/display-attacks.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/display-lock.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/execution-inventory.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 35,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/mcp-proxy.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 62,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/native-ancestry.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/native-requests.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-codex-launch.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-fault.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-proxy.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-recall-call.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-recall-catalogue.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-recall-preflight.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-recall-runner.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-result.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-session.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-stop.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-supervisor.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-termination.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-thread-loads.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 203,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/private-write-call.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/record-id-runtime.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/registry-forwarder.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/report-pressure.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/routine-threads.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/session-configuration.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/session-refusals.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/session-runner-outcomes.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/supervisor-identity.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/supervisor-stop.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/thread-load-lifecycle.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/thread-loads.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/tool-reports.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/turn-model.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/turn-runner-artifacts.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/turn-stop.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/turn-tools.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/worker-dispatch.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/worker-executor.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/worker-input.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/worker-registrations.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/computer/test/worker-request.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 92,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/odoo-mcp/test/adapter.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/odoo-mcp/test/fixture.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "file": "apps/odoo-mcp/test/read.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/assistant-choice.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/backfill-lifecycle.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/connection-cleanup.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/conversation-replay.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/credentials.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/departure-cleanup.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/gateway-configuration.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/hosted-image-check.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/hosted-image-local-tools.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/idle.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/kubernetes.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/lifecycle-k3d.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 11
+      }
+    },
+    {
+      "file": "apps/ops/test/mcp-hosted-k3d.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 37
+      }
+    },
+    {
+      "file": "apps/ops/test/mcp-personal-k3d.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 13
+      }
+    },
+    {
+      "file": "apps/ops/test/memory-cleanup.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 36,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/memory-correction.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 35,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/memory-prepare.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/memory-replay.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/nightly-memory.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/personal-keys.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/private-manifest.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/replay.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-custody.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-dispatch.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 35,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-due.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 46,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-leadership.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-missed-weekly.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-missed.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-scan.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/routine-skip.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 36,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/upgrade.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/wake.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/welcome-recovery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/worker-gateway.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/worker-memory-cleanup.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/worker-reactions.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/ops/test/worker-subscriptions.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/approval-listing-reads.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/approvals.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 79,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "file": "apps/server/test/assistant-artifacts.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/assistant-files.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/audit-browser.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/audit-child-publication.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/audit-dispatch.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/audit-membership.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/audit-resolution.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/auth-flow.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/auth-logging.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bootstrap-browser.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bootstrap-claim.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bootstrap-token.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-approvals.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-budget-stop.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-budget-watcher.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-channel.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-control.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 47,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-credentials.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-deadline.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-file-access.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-gate.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 81,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-k3d.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-opening.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-pausing.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-pressure-recovery.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-pressure.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-proxy.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-replay.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-retained-call.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-suspend.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-throughput.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/bridge-turn-tools.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/budget-admission-races.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/budget-choices.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/budget-refusal-restart.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/budget-renewal.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/budget-stop-socket.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/budget-stop-status.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 43,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-access-regression.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 68,
+        "failed": 1,
+        "skipped": 0
+      },
+      "quietQualification": {
+        "passed": 69,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-computer-state.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-display.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-http.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-membership.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-read-regressions.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-summary-memory.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat-summary.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/chat.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-activation.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 36,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-bridge-retry.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-failure.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-first-input.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-origin.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-participants.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-publication.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 97,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-recovery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-requests.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-retry.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-root-preparation.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-root.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-start.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-summon.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/child-turn-admission.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/company-opt-in-read.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/company-opt-in-write.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/computer-turns.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-change-read.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-profile-admin-read.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-profile-disable.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 60,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-profile-list.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-profile-read.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-profile-revoke.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-selection-change-read.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 36,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/connection-selection-http.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 47,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/correct-backend-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 40,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/current-effects.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/dev-private-services.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/direct-chat-http.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/direct-chat.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/dispatcher-status.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/disposable-object-target.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/duplicate-window.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/effect-change.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/egress-changes.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/email-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/ephemeral-ports.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/executor-stop.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/file-command-refusals.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/file-reasons.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/file-scanner.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/file-storage-failures.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/file-upload-failures.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/forget-backend-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/group-ownership-reads.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/groups.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/hosted-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/hosted-capture.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/hosted-registration.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integration-access-gateway.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integration-access-reads.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integration-access.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integration-changes.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integration-facts.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integration-publication.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/integrations.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 97,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/inventory.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 74,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/invitations.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 111,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/journey-integration-fixture.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/lint-deps.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-activity.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-admission.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-delays.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-k3d.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 2
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-pause.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-proxy.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-timings.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view-unavailable.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/live-view.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/logging.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/logout-contract.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/main-retained-call.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/main.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/mcp-discovery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/mcp-instance-http.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/mcp-instance-worker.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-guard-http.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 56,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-inventory-volume.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-inventory.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-joined.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 104,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-refusals.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-removal.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-roles.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/member-routine-presence.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-bridge-loss.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-context-record.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 88,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-dispatch.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 98,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-initial-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 116,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-invalidation.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 51,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-main.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-maintenance-preparation.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-mcp.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 226,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-recall-proof.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-replacement-journey.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-reports.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-startup.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-stop-journey.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 29,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-stop.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-worker.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory-write-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/memory.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 247,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/model-access.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 46,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/models-main.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/models-managed.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/object-backup.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 47,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/object-restore.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/office-upload.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 76,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/org-overview.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/organisation-check.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/ownership-access.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/ownership-coordination.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/ownership-ordering.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/ownership.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-correct-forget-native.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-correct-tools.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 67,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-forget-tools.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 75,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-key-consent.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-key-dispatch.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-key-notice.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-key-review.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-key-routes.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-key-turn.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-memory-tools.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 112,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-payer.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-recall-tools.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 94,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/personal-remember-tools.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 67,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/private-codex.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/private-context.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/private-memory-catalogue.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/private-output.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/private-tools-approval.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/private-turn-channel.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 59,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-binding-guards.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-bindings.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-drain.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-login.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-routine-presence.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-startup.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-switch-on.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 52,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-turn-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/provider-visual-contract.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/providers.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 62,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/realtime-guards.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/realtime-replicas-check.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/realtime-replicas-isolation.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/realtime-replicas.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/realtime.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/recall-backend-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/recovery-custody.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/recovery-event-target.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/recovery-restore.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/recovery-stop.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/remember-backend-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/remote-catalogue-dispatch.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/remote-catalogue-watch.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/removal-gateway.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-admin-pause.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-approval-expiry-stop.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-approval-expiry.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 35,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-assistant-evidence.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-assistant-pause.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-company-broker.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-company-preflight.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 59,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-composition.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 87,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-delivery-owner.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-finish.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 55,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-handoff.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 73,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-list.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 47,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-pause.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-reads.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-reassign.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-retire.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-runs.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-sender.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 114,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-session.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 384,
+        "failed": 1,
+        "skipped": 0
+      },
+      "quietQualification": {
+        "passed": 385,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/routine-success.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/saved-session-guards.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/saved-upload-guards.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/screenshot-browser.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "file": "apps/server/test/screenshots.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/server.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/shared-assistant.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 47,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/shared-child-reports.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/shared-child.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/shared-runtime.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/shutdown.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/spending-effects.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/spending.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 45,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/startup-mcp.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/survey-http.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/svg-upload.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/takeover-http.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/takeover.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/telemetry-shutdown.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/tool-declarations.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/tool-reports.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/turn-admission-cost.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/turn-credentials.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/turn-input.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/turn-tools.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/upload-refusals.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/upload.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/view-delivery.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/view-lease.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 38,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/view-sessions.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/websocket-auth.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/write-priority.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "apps/server/test/writer-lease.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/append-event.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/append-outcomes.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/append.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/backup.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/clock.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/cluster-failover.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/cluster-quorum.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/cluster-routes.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/cluster-stream.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/computer-volume-export.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 69,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/computer-volume-inventory.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 72,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/conversation-command.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/event-backup.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/event-restore.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/failover-check.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/fixtures.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/history-checked.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/metadata-readiness.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/ports.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/provision.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/read-event-at.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/read-retry.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/route-readiness.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/security.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/event-store/test/stream-summary.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/assistant-choice.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/budget-refusal.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/child-activation.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/child-publication.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/child-request.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/child-retry.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/child-start-failed.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/credential-release.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/decision-call-id.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/delegation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/digest.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/egress.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 46,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/envelope.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/generated-examples.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 348,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/group-mode.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/ids.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/lossless-json.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/mcp-instance.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/memory-cleanup.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/memory-correction.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/memory-forgotten.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/memory-maintenance.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/money.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/nightly-cap.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/parse.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 27,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/provider-turn-validation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/registry.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/remote-dispatch.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/root-stop.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/routine-fold.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/routine-schedule.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/routines.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/security-rules.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 482,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/session-configuration.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/shared-child.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/survey.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/takeover-refused.test.ts",
+      "firstPassBatch": "completedFirstRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/events/test/toolset.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 56,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/access-clock.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/accounting.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/actor.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/approval-cancellation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 13,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/approval-record.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/authority-standalone.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/authority-volume.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/authority.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/bearer-connections.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/bearer-identity.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/budget-recovery.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/budget-scope.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/budget-stop-handler.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/budget-stop-message.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/budget-stop.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/call-retry-guards.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/call-retry.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/codex-mcp.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/codex-native-capture.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "file": "libs/models/test/company-opt-in.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/company-profile-reader.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/company-selection.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/connection-custody.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 615,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/connection-selection-fold.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/connection-selection.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 141,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/connection-stage-lock.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/conversation-activity.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/credential-broker.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 66,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-activity.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-clock.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-cost.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-fence.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 75,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-grants.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-precedence.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/decision-refusal.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/delegation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/delegations.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/descendant-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/direct-mode.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/dispatch.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/effects-read.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/egress-admission.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 72,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/egress-gateway.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/egress-guard.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 56,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/egress-receipt.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/egress-relay.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/egress-startup.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/gateway-delivery.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 41,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/gateway-generation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/gateway-reload.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/gateway-renderer.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/gateway-start.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/gateway.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 82,
+        "failed": 0,
+        "skipped": 1
+      }
+    },
+    {
+      "file": "libs/models/test/grants-backfill.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hold-leadership.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hold-recovery.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hosted-admission-boundary.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hosted-admission-proof.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hosted-admission.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hosted-licences.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hosted-verification.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/hosted-vulnerabilities.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 15,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/idle.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/loss-backfill.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/managed-decision.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/managed-gateway.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/mcp-dispatch.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 222,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/mcp-instance.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/mcp-personal-concurrency.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/members.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/memory-context.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 75,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/memory-rights.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/model-request.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/native-budget.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 46,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/native-call-access.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/native-call-check.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/native-request-authority.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/native-retry-identity.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 38,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/oauth-exchange.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 32,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/oauth-identity.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/oauth-selection.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 37,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/ownership-confirmation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/ownership-migration.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/participation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/personal-account.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/ports.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/pricing.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 30,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/provider-retirement.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/provider-secrets.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/provider-turn-contract.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/provider-turn-guards.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/provider-turn-replay.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/reconcile.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/root-append-retry.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/root-budget.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 22,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/root-dispatch.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/root-stop-evidence.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 76,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/routing.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/session-configuration-claims.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/shared-assistant.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/shared-child-credentials.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/models/test/shared-descendant-admission.test.ts",
+      "firstPassBatch": "completedOriginal",
+      "secondFullSelection": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/audit-maintenance.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/audit-routines.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/audit.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/child-requests.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/computers.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/conversations.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/egress-policy.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/files.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/inventory.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/keys.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/legacy-conversation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/mcp-evidence.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/mcp-snapshot-security.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 34,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/memory-keys.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/memory-maintenance.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/memory-restore.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/memory.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 21,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/preparation.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/rebuild.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/routines.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/runner.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/startup-mcp.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/streaming.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/survey.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": "libs/projections/test/tool-grant-references.test.ts",
+      "firstPassBatch": "finalRemainder",
+      "secondFullSelection": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      }
+    }
+  ]
+}

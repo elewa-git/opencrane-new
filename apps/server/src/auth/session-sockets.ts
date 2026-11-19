@@ -1,14 +1,8 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex as cookieDigest } from '@opencrane/events/digest';
 import type { Server } from 'node:http';
 import type { WebSocket } from 'ws';
 
 const servers = new WeakMap<Server, Map<string, Set<WebSocket>>>();
-
-function cookieDigest(cookie: string): string {
-  const hash = createHash('sha256');
-  hash.update(cookie);
-  return hash.digest('hex');
-}
 
 export function trackSessionSocket(server: Server, cookie: string, socket: WebSocket): void {
   let sessions = servers.get(server);

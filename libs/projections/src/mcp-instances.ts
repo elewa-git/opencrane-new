@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { mcpInstanceStartSchema, mcpInstanceStopSchema,
   mcpInstanceObservedSchema, type EventEnvelope } from '@opencrane/events';
 import type { Projection } from './runner.ts';
@@ -9,9 +9,7 @@ const identitySchema = mcpInstanceStartSchema.pick({ siloId: true, userId: true,
 export function mcpInstanceId(raw: unknown): string {
   const key = identitySchema.parse(raw);
   const fields = [key.siloId, key.userId, key.profileId, key.serverId, key.startupAccessGeneration];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(fields));
-  return hash.digest('hex');
+  return sha256HexOfJson(fields);
 }
 export interface McpInstanceState {
   start: Start;

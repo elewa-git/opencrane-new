@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jente Rosseel
 // Adapt the OC1 Secret and HMAC checks. Keep their notice in connection-custody.NOTICE.
+import { sha256Hex } from '@opencrane/events/digest';
 import { createHash } from 'node:crypto';
 import { digest, equalDigest } from './connection-custody-digest.ts';
 import { personalKeyCommandSchema } from '@opencrane/protocol';
@@ -499,9 +500,7 @@ function metadataFor(input: CustodyStage) {
     if (['endpointDigest', 'operationId', 'expectedSequence', 'appendUntil'].includes(field)) {
       annotations[`${prefix}${field}`] = String(value);
     } else {
-      const hash = createHash('sha256');
-      hash.update(String(value));
-      labels[`${prefix}${field}`] = `sha256-${hash.digest('hex').slice(0, 40)}`;
+      labels[`${prefix}${field}`] = `sha256-${sha256Hex(String(value)).slice(0, 40)}`;
     }
   }
   return { labels, annotations };

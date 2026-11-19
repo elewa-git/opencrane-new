@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import type { memberAuthorisation } from '@opencrane/authz';
 import { assistantCreatedDataSchema, assistantSettingsChangedDataSchema,
   grantGivenDataSchema, grantRevokedDataSchema, memberRemovedDataSchema,
@@ -213,9 +213,7 @@ export function departureCleanupHandler(store: EventStore,
 }
 
 function cleanupId(trigger: EventEnvelope, type: string, subject: string, resource: string) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([trigger.silo, trigger.id, type, subject, resource]));
-  return hash.digest('hex');
+  return sha256HexOfJson([trigger.silo, trigger.id, type, subject, resource]);
 }
 
 async function suspendPersonalComputers(store: EventStore, trigger: EventEnvelope,

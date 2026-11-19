@@ -1,3 +1,4 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { decisionContext, decisionIdentity, digestContext } from './decision-context.ts';
 import { personalToolAccess, toolAccessWithinDeadline } from './tool-authority.ts';
 import { createLogger, type Logger } from '@opencrane/observability';
@@ -35,7 +36,7 @@ import { preparePersonalCall, type PersonalToolContext } from './personal-tool-c
 import type { toolCredentialReleaseSchema } from '@opencrane/events';
 import type { z as Zod } from 'zod';
 import { MemoryToolRefused, prepareMemoryContext, prepareMemorySend } from './memory-context.ts';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import type { JSONWebKeySet } from 'jose';
@@ -67,7 +68,6 @@ function queuedPosition(conversation: StoredEvent[], turn: StoredEvent) {
   // Use history already loaded before access checks. Legacy turns may have no message.
   return queued?.sequence ?? turn.sequence;
 }
-
 
 function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   // Refuse before holding money when the gateway or another client has hung up.
@@ -110,7 +110,7 @@ export async function startDecision(
     let auditAttempted = false;
     let requestId: string = randomUUID();
     const route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
-    let contextDigest = createHash('sha256').update('unverified').digest('hex');
+    let contextDigest = sha256Hex('unverified');
     let callId: string | undefined;
     let toolFacts: { logicalRequestId: string; serverId: string; toolName: string } | undefined;
     let correlation: { conversationId: string; turnId: string } | undefined;

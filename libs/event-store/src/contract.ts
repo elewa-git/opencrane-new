@@ -1,6 +1,6 @@
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
-import { createHash } from 'node:crypto';
 import {
   getEventDefinition,
   conversationEventId,
@@ -175,16 +175,12 @@ function validCurrentMemoryWrite(event: EventEnvelope): boolean {
   }
   // Refuse an ownership mismatch before it can stop a later replay.
   const scopeFields = [identity.silo, identity.scopeKind, identity.ownerId];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(scopeFields));
-  if (identity.scopeId !== hash.digest('hex')) {
+  if (identity.scopeId !== sha256HexOfJson(scopeFields)) {
     return false;
   }
   const binding = [identity.silo, identity.scopeId, identity.scopeKind, identity.ownerId,
     identity.memoryId, identity.revision];
-  const keyHash = createHash('sha256');
-  keyHash.update(JSON.stringify(binding));
-  const expectedKeyId = `key:${keyHash.digest('hex')}`;
+  const expectedKeyId = `key:${sha256HexOfJson(binding)}`;
   const value = memoryValueEventSchema.parse(event);
   return value.data.keyId === expectedKeyId;
 }

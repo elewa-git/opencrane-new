@@ -1,6 +1,7 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { startupContractRejection } from './startup-credentials.ts';
 import { remoteEndpoint } from '@opencrane/models';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history } from '@opencrane/models';
@@ -8,7 +9,7 @@ import { getEventDefinition, hostedCredentialContractSchema } from '@opencrane/e
 
 export function remoteReference(silo: string, locator: string) {
   const url = remoteEndpoint(locator);
-  const serverId = createHash('sha256').update(`${silo}\n${url.href}`).digest('hex');
+  const serverId = sha256Hex(`${silo}\n${url.href}`);
   return { serverId, changeRef: `chg_${serverId}`, locator: url.href };
 }
 

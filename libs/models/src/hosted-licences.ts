@@ -1,5 +1,5 @@
+import { sha256Hex as digest } from '@opencrane/events/digest';
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,12 +15,6 @@ const gatePath = fileURLToPath(new URL('./hosted-licences.py', import.meta.url))
 const pinnedSyftDigest = 'd46a9a61a6ae3d367f0a03748c5e9c59253e586c4388ab26ddcacebc2efa0d92';
 type Options = { cosign: string; syft: string; osiPath: string; reviewPath: string };
 type RegistryRead = Parameters<typeof verifyHostedImage>[2];
-
-function digest(value: string | Uint8Array) {
-  const hash = createHash('sha256');
-  hash.update(value);
-  return hash.digest('hex');
-}
 
 async function readReview(path: string) {
   try {

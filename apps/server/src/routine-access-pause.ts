@@ -1,5 +1,6 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory } from '@opencrane/authz';
@@ -44,11 +45,9 @@ function receipt(row: StoredEvent, event: EventEnvelope) {
 export async function pauseRoutineAfterRemoval(store: EventStore, silo: string, raw: unknown) {
   try {
     const input = inputSchema.parse(raw);
-    const hash = createHash('sha256');
     const identity = [silo, input.routineId, input.occurrenceId, input.cause];
     const identityText = JSON.stringify(identity);
-    hash.update(identityText);
-    const commandId = `routine-access:${hash.digest('hex')}`;
+    const commandId = `routine-access:${sha256Hex(identityText)}`;
     const subject = `routine-${input.routineId}`;
     const rows = await history(store, subject, silo, performance.now() + 10_000);
     let state: RoutineState | undefined;

@@ -1,3 +1,4 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { readDeploymentQualification } from
   '../../../../scripts/private-memory-qualification/deployment.ts';
 import { computerSummary, type ComputerSummary, type TurnSummary,
@@ -15,7 +16,6 @@ import {
   currentMembership,
   providerTurnAdmission,
 } from '@opencrane/models';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readStreamSummary, readEventAt, WrongSiloError, type AppendCommand, type EventStore,
   type StoredEvent, type AppendResult } from '@opencrane/event-store';
@@ -116,9 +116,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
     }
   }
   const type = status === 'started' ? 'computer.turn_started' : 'computer.turn_closed';
-  const hash = createHash('sha256');
-  hash.update(`${context.computerId}:${input.turnId}:${type}`);
-  const id = hash.digest('hex');
+  const id = sha256Hex(`${context.computerId}:${input.turnId}:${type}`);
   const eventData: TurnBinding & {
     assistantId: string; computerId: string; status?: 'completed' | 'failed';
     executionMode?: ExecutionMode; sharingClass?: ContextClass | undefined;
@@ -452,7 +450,6 @@ function isFinalAdmissionRefusal(error: unknown): error is Error {
   return error instanceof PayingGroupRefused &&
     error.message !== 'Paying group authority changed; try again';
 }
-
 
 async function admitTurn(store: EventStore, context: TurnContext, conversation: ChatFacts,
   facts: ComputerFacts, data: TurnBinding, requested: unknown, mode: ExecutionMode) {

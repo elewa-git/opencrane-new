@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { toolApprovalRequestedDataSchema, toolDispatchRecordedDataSchema,
   type EventEnvelope } from '@opencrane/events';
@@ -15,7 +15,6 @@ export interface ReviewKeys {
   encrypt(silo: string, conversation: string, text: string): { ciphertext: string; keyId: string };
   decrypt(silo: string, conversation: string, value: unknown): string;
 }
-const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
@@ -79,11 +78,11 @@ function prepareApproval(silo: string, bound: Binding,
     policySequence: policy.policy.policyRevision,
     ...(policy.dispatchBinding ? { dispatchBinding: policy.dispatchBinding } : {}),
     digestVersion: 'lossless-json-v1' as const,
-    argumentsDigest: hash(policy.args.canonical),
+    argumentsDigest: sha256Hex(policy.args.canonical),
   };
   const text = JSON.stringify(details);
-  const reviewDigest = hash(text);
-  const approvalId = hash(JSON.stringify([silo, binding, reviewDigest]));
+  const reviewDigest = sha256Hex(text);
+  const approvalId = sha256Hex(JSON.stringify([silo, binding, reviewDigest]));
   return { binding, text, reviewDigest, approvalId, stepUp: review.stepUp, missingFields };
 }
 
@@ -122,7 +121,8 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
   }
   const readOptions = { now, deadline, conversationRows };
   const current = await readApproval(store, silo, approvalId, readOptions);
-  if (hash(keys.decrypt(silo, bound.conversationId, current.request)) !== reviewDigest) throw new Error('Review unavailable');
+  const savedReview = keys.decrypt(silo, bound.conversationId, current.request);
+  if (sha256Hex(savedReview) !== reviewDigest) throw new Error('Review unavailable');
   return current;
 }
 
@@ -380,7 +380,7 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
     const current = await readApproval(store, silo, id, readOptions);
     const { request } = current;
     const text = keys.decrypt(silo, conversationId, request);
-    if (hash(text) !== request.reviewDigest) throw new Error('Review digest mismatch');
+    if (sha256Hex(text) !== request.reviewDigest) throw new Error('Review digest mismatch');
     const card = approvalCard(current, memberId, text);
     cards.push(card);
   }

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { readEventAt, readStreamSummary, type EventStore } from '@opencrane/event-store';
 import { computerTurnClosedDataSchema, decisionRecordedDataSchema,
@@ -62,17 +62,13 @@ export async function recordBudgetRefusal(store: EventStore, turn: RefusedTurn,
   requireRecoveryLive(control);
   const requesterId = z.string().parse(facts.message?.authorId);
   const identity = ['budget-turn-refusal', turn.silo, turn.conversationId, turn.turnId];
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(identity));
-  const id = hash.digest('hex');
+  const id = sha256HexOfJson(identity);
   const context = { ...turn, requesterId };
-  const contextHash = createHash('sha256');
-  contextHash.update(JSON.stringify(context));
   const decision = {
     requestId: id, requesterId, assistantId: turn.assistantId,
     conversationId: turn.conversationId, turnId: turn.turnId,
     route: 'model', outcome: 'deny', reason: 'budget_exhausted',
-    contextDigest: contextHash.digest('hex'),
+    contextDigest: sha256HexOfJson(context),
   };
   const data = decisionRecordedDataSchema.parse(decision);
   const event: EventEnvelope = {

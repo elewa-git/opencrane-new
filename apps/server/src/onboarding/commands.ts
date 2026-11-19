@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { AppendCommand } from '@opencrane/event-store';
 import { surveyAnswersSchema, parseEventByType, personaRevisedDataSchema,
@@ -27,9 +28,7 @@ export class SurveyUnknown extends Error {}
 
 function encrypt(options: ChatOptions, memberId: string, value: string) {
   const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
-  const hash = createHash('sha256');
-  hash.update(Buffer.from(encrypted.ciphertext, 'base64'));
-  return { ...encrypted, ciphertextDigest: hash.digest('hex') };
+  return { ...encrypted, ciphertextDigest: sha256Hex(Buffer.from(encrypted.ciphertext, 'base64')) };
 }
 function eventData(options: ChatOptions, memberId: string, input: z.infer<typeof commandSchema>,
   history: Awaited<ReturnType<typeof surveyHistory>>) {

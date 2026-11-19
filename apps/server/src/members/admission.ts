@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { legacyMemberRole } from '@opencrane/events';
@@ -86,9 +86,7 @@ export async function deriveAdmission(store: EventStore, silo: string, issuer: s
   if (existing.length > 1) return { status: 'ambiguous' as const };
   if (existing[0]) return existing[0];
   for (let number = 0; number < 20; number++) {
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify([silo, issuer, subject, number]));
-    const memberId = `admission-${hash.digest('hex')}`;
+    const memberId = `admission-${sha256HexOfJson([silo, issuer, subject, number])}`;
     const rows = await history(store, `member-${memberId}`, silo, deadline);
     const state = admission(rows, issuer, subject, now);
     if (state.membership === 'removed') continue;

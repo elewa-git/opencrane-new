@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from './digest.ts';
 
 export interface JsonValue { canonical: string; value: string | boolean | null | Map<string, JsonValue> | JsonValue[]; kind: 'string' | 'number' | 'literal' | 'object' | 'array' }
 /** lossless-json-v1: UTF-16 key order, JSON string escaping and untouched number lexemes. */
@@ -70,7 +70,7 @@ export function losslessJson(text: string) {
   }
   const result = read(0); space();
   if (at !== text.length) return bad();
-  return { ...result, digest: createHash('sha256').update(result.canonical).digest('hex') };
+  return { ...result, digest: sha256Hex(result.canonical) };
 }
 function quote(value: string): string {
   const escapes = new Map([['"', '\\"'], ['\\', '\\\\'], ['\b', '\\b'], ['\f', '\\f'], ['\n', '\\n'], ['\r', '\\r'], ['\t', '\\t']]);

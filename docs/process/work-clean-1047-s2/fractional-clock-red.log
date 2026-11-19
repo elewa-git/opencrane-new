@@ -1,0 +1,163 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/access-clock.test.ts --maxWorkers=1 -t fractional process timestamp
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ libs/models/test/access-clock.test.ts (19 tests | 1 failed | 18 skipped) 1033ms
+   × keeps actor queue timing exact after a fractional process timestamp 1030ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/access-clock.test.ts > keeps actor queue timing exact after a fractional process timestamp
+AssertionError: expected "sleep" to be called with arguments: [ 2000, Any<AbortSignal> ]
+
+Received:
+
+  1st sleep call:
+
+  [
+-   2000,
+-   Any<AbortSignal>,
++   2000.000000000001,
++   AbortSignal {
++     Symbol(kEvents): Map {
++       "abort" => {
++         "next": undefined,
++         "resistStopPropagation": false,
++         "size": 0,
++       },
++     },
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): Map {},
++     Symbol(kAborted): true,
++     Symbol(kReason): AbortError {
++       "message": "This operation was aborted",
++     },
++     Symbol(kComposite): false,
++   },
+  ]
+
+  2nd sleep call:
+
+  [
+-   2000,
+-   Any<AbortSignal>,
++   1000,
++   AbortSignal {
++     Symbol(kEvents): Map {
++       "abort" => {
++         "next": undefined,
++         "resistStopPropagation": false,
++         "size": 0,
++       },
++     },
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): Map {},
++     Symbol(kAborted): true,
++     Symbol(kReason): AbortError {
++       "message": "This operation was aborted",
++     },
++     Symbol(kComposite): false,
++   },
+  ]
+
+  3rd sleep call:
+
+  [
+-   2000,
+-   Any<AbortSignal>,
++   1000,
++   AbortSignal {
++     Symbol(kEvents): Map {
++       "abort" => {
++         "next": undefined,
++         "resistStopPropagation": false,
++         "size": 0,
++       },
++     },
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): Map {},
++     Symbol(kAborted): true,
++     Symbol(kReason): AbortError {
++       "message": "This operation was aborted",
++     },
++     Symbol(kComposite): false,
++   },
+  ]
+
+  4th sleep call:
+
+  [
+-   2000,
+-   Any<AbortSignal>,
++   1000,
++   AbortSignal {
++     Symbol(kEvents): Map {
++       "abort" => {
++         "next": undefined,
++         "resistStopPropagation": false,
++         "size": 0,
++       },
++     },
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): Map {},
++     Symbol(kAborted): true,
++     Symbol(kReason): AbortError {
++       "message": "This operation was aborted",
++     },
++     Symbol(kComposite): false,
++   },
+  ]
+
+  5th sleep call:
+
+  [
+-   2000,
+-   Any<AbortSignal>,
++   1000,
++   AbortSignal {
++     Symbol(kEvents): Map {
++       "abort" => {
++         "next": undefined,
++         "resistStopPropagation": false,
++         "size": 0,
++       },
++     },
++     Symbol(events.maxEventTargetListeners): 0,
++     Symbol(events.maxEventTargetListenersWarned): false,
++     Symbol(kHandlers): Map {},
++     Symbol(kAborted): true,
++     Symbol(kReason): AbortError {
++       "message": "This operation was aborted",
++     },
++     Symbol(kComposite): false,
++   },
+  ]
+
+
+Number of calls: 5
+
+ ❯ actorDeadline libs/models/test/access-clock.test.ts:87:17
+     85|     expect(actor.state.reservations[0]?.settledCents).toBe(0);
+     86|   }
+     87|   expect(sleep).toHaveBeenCalledWith(2000, expect.any(AbortSignal));
+       |                 ^
+     88| }
+     89| it.each([false, true])('uses manual time for the actor queue (expired:…
+ ❯ actorDeadlineAfterFractionalProcessTime libs/models/test/access-clock.test.ts:95:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 skipped (19)
+   Start at  02:34:43
+   Duration  4.64s (transform 49%, import 28%, tests 23%)
+
+  Transform  transforming modules took 2.16s · 49% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

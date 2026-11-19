@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { routineActivationSchema } from '@opencrane/events';
 import { stopUnconfirmedRoutine } from './routine-delivery-stop.ts';
 import type { connectBridge } from './chat/bridge.ts';
@@ -18,7 +18,6 @@ export async function inspectRoutineSender(...args: Parameters<typeof readRoutin
     throw new Error('Routine sender unavailable');
   }
 }
-
 
 type Arguments = Parameters<typeof readRoutineActivation>;
 type Link = Pick<Awaited<ReturnType<typeof connectBridge>>,
@@ -74,9 +73,7 @@ async function appendRoutineSendCheck(store: Arguments[0], worker: Arguments[2],
   }
   const data = routineActivationSchema.parse(activation.event.data);
   const expectedSequence = await store.head(subject, checked.deadline);
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify([worker.silo, run.occurrenceId, checked.senderAttemptId]));
-  const authorisationId = hash.digest('hex');
+  const authorisationId = sha256HexOfJson([worker.silo, run.occurrenceId, checked.senderAttemptId]);
   const id = type === 'routine.run_send_authorised'
     ? authorisationId : `${authorisationId}-release`;
   const event = { id, commandId: id, silo: worker.silo, subject,

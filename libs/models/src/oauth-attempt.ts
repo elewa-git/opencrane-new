@@ -1,3 +1,4 @@
+import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -45,10 +46,10 @@ const privateSchema = z.strictObject({
   nonce: z.string().regex(/^[A-Za-z0-9_-]{43}$/u).optional(),
 });
 
-function digest(value: string, encoding: 'hex' | 'base64url' = 'hex') {
+function challengeDigest(value: string) {
   const hash = createHash('sha256');
   hash.update(value);
-  return hash.digest(encoding);
+  return hash.digest('base64url');
 }
 function privateMaterial() {
   const state = randomBytes(32).toString('base64url');
@@ -125,7 +126,7 @@ export async function prepareOAuthAttempt(custody: Custody, rawContext: unknown,
       subject = `connection-oauth-${context.userId}`;
     }
     const operationId = connectionOperationId(context.siloId, subject, context.changeRef);
-    const attemptDigest = digest(JSON.stringify([context, configuration, requestedScopes]));
+    const attemptDigest = sha256HexOfJson([context, configuration, requestedScopes]);
     const owner = attemptOwner(context);
     const stage = { ...owner, siloId: context.siloId, serverId: context.serverId,
       connectionId: context.connectionId, profileId: context.profileId,
@@ -137,7 +138,7 @@ export async function prepareOAuthAttempt(custody: Custody, rawContext: unknown,
     }
     const material = privateSchema.parse(JSON.parse(prepared.contents));
     return { status: 'prepared' as const, stage: prepared.stage, identity: prepared.identity,
-      stateDigest: digest(material.state), challenge: digest(material.verifier, 'base64url'),
+      stateDigest: sha256Hex(material.state), challenge: challengeDigest(material.verifier),
       requestedScopes };
   } catch {
     // Hide validation and custody errors because their values can include private material.
@@ -150,8 +151,8 @@ export function oauthConsentUrl(configuration: z.infer<typeof oauthConfiguration
   prepared: Extract<Preparation<ConnectionStage>, { status: 'prepared' }>,
   contents: string) {
   const material = privateSchema.parse(JSON.parse(contents));
-  if (digest(material.state) !== prepared.stateDigest ||
-      digest(material.verifier, 'base64url') !== prepared.challenge) {
+  if (sha256Hex(material.state) !== prepared.stateDigest ||
+      challengeDigest(material.verifier) !== prepared.challenge) {
     throw new Error('OAuth custody unavailable');
   }
   const url = new URL(configuration.consentEndpoint);
@@ -168,5 +169,5 @@ export function oauthConsentUrl(configuration: z.infer<typeof oauthConfiguration
 
 /** Bind public operator settings, including the configured identity verifier, to a generation. */
 export function oauthConfigurationDigest(configuration: z.infer<typeof oauthConfigurationSchema>) {
-  return digest(JSON.stringify(configuration));
+  return sha256HexOfJson(configuration);
 }

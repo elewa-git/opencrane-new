@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256HexOfJson as accountDigest } from '@opencrane/events/digest';
 import type { StoredEvent } from '@opencrane/event-store';
 import type { connectionCustody, CompanyConnectionStage } from './connection-custody.ts';
 import { foldCompanyConnection } from './company-bearer.ts';
@@ -7,12 +7,6 @@ type Custody = Pick<ReturnType<typeof connectionCustody>, 'recover'>;
 
 function refuse(): never {
   throw new Error('Company profile unavailable');
-}
-
-function accountDigest(account: object) {
-  const hash = createHash('sha256');
-  hash.update(JSON.stringify(account));
-  return hash.digest('hex');
 }
 
 /** Read a saved verified account and check its exact private credential still exists. */

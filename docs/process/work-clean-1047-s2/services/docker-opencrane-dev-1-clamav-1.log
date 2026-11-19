@@ -1,0 +1,41 @@
+Thu Nov 19 05:53:33 2026 -> Limits: Global time limit set to 120000 milliseconds.
+Thu Nov 19 05:53:33 2026 -> Limits: Global size limit set to 83886080 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: File size limit set to 22020096 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: Recursion level limit set to 16.
+Thu Nov 19 05:53:33 2026 -> Limits: Files limit set to 2000.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxEmbeddedPE limit set to 41943040 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxHTMLNormalize limit set to 41943040 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxHTMLNoTags limit set to 8388608 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxScriptNormalize limit set to 20971520 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxZipTypeRcg limit set to 1048576 bytes.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxPartitions limit set to 50.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxIconsPE limit set to 100.
+Thu Nov 19 05:53:33 2026 -> Limits: MaxRecHWP3 limit set to 16.
+Thu Nov 19 05:53:33 2026 -> Limits: PCREMatchLimit limit set to 100000.
+Thu Nov 19 05:53:33 2026 -> Limits: PCRERecMatchLimit limit set to 2000.
+Thu Nov 19 05:53:33 2026 -> Limits: PCREMaxFileSize limit set to 104857600.
+Thu Nov 19 05:53:33 2026 -> Archive support enabled.
+Thu Nov 19 05:53:33 2026 -> Image (graphics) scanning support enabled.
+Thu Nov 19 05:53:33 2026 -> Detection using image fuzzy hash enabled.
+Thu Nov 19 05:53:33 2026 -> Alerting of encrypted archives _and_ documents enabled.
+Thu Nov 19 05:53:33 2026 -> Heuristic alerting enabled for scans that exceed set maximums.
+Thu Nov 19 05:53:33 2026 -> Heuristic alerts enabled.
+Thu Nov 19 05:53:33 2026 -> Portable Executable support enabled.
+Thu Nov 19 05:53:33 2026 -> ELF support enabled.
+Thu Nov 19 05:53:33 2026 -> Mail files support enabled.
+Thu Nov 19 05:53:33 2026 -> OLE2 support enabled.
+Thu Nov 19 05:53:33 2026 -> PDF support enabled.
+Thu Nov 19 05:53:33 2026 -> SWF support enabled.
+Thu Nov 19 05:53:33 2026 -> HTML support enabled.
+Thu Nov 19 05:53:33 2026 -> XMLDOCS support enabled.
+Thu Nov 19 05:53:33 2026 -> HWP3 support enabled.
+Thu Nov 19 05:53:33 2026 -> OneNote support enabled.
+Thu Nov 19 05:53:33 2026 -> Self checking every 600 seconds.
+Thu Nov 19 05:57:49 2026 -> instream(172.21.0.7@50352): Eicar-Test-Signature FOUND
+Thu Nov 19 05:59:36 2026 -> instream(172.21.0.7@35320): Eicar-Test-Signature FOUND
+Thu Nov 19 06:01:02 2026 -> instream(172.21.0.7@43112): Eicar-Test-Signature FOUND
+Thu Nov 19 06:03:34 2026 -> SelfCheck: Database status OK.
+LibClamAV Warning: **************************************************
+LibClamAV Warning: ***  The virus database is older than 7 days!  ***
+LibClamAV Warning: ***   Please update it as soon as possible.    ***
+LibClamAV Warning: **************************************************

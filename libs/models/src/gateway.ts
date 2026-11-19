@@ -1,9 +1,10 @@
+import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { toolObservation, toolObservationSchema, recordToolObservation } from './tool-dispatch.ts';
 import { providerGatewayRoutes } from './provider-gateway.ts';
 import { egressGatewayRoute } from './egress-gateway.ts';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { appendFile, open, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
@@ -303,7 +304,7 @@ export async function startGateway(options: GatewayModelRoute & {
 }) {
   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';
   const expected = AGENTGATEWAY_SHA256_BY_BUILD[build];
-  if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
+  if (sha256Hex(await readFile(options.binary)) !== expected) throw new Error('Gateway digest mismatch');
   const config = gatewayConfig(options.port, options.readinessPort, options.decisionUrl,
     options.keyFile, options.issuer, options.upstream, options.mcpRoutes,
     options.egressDecisionUrl, options.managedCalls);

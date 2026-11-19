@@ -1,4 +1,5 @@
-import { createHash, createPublicKey } from 'node:crypto';
+import { sha256Hex as hash } from '@opencrane/events/digest';
+import { createPublicKey } from 'node:crypto';
 import { z } from 'zod';
 import { verifyPublisherSignature } from './hosted-cosign.ts';
 
@@ -37,11 +38,6 @@ type Verification = { verdict: 'pass'; evidence: Evidence } |
 // Keep registry access outside this verifier. The worker supplies the checked image bytes.
 type RegistryRead = (repository: string, resource: string, signal: AbortSignal) => Promise<Uint8Array>;
 
-function hash(value: string | Uint8Array) {
-  const hasher = createHash('sha256');
-  hasher.update(value);
-  return hasher.digest('hex');
-}
 function trustEvidence(trust: Trust) {
   const key = createPublicKey(trust.publicKey);
   const encoded = key.export({ type: 'spki', format: 'der' });

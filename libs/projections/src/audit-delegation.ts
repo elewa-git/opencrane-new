@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from '@opencrane/events/digest';
 import { z } from 'zod';
 import { delegationStartedDataSchema, delegationCompletedDataSchema,
   parseEventByType, type EventEnvelope } from '@opencrane/events';
@@ -41,7 +41,7 @@ export async function saveDelegationStart(db: Query, event: EventEnvelope,
 }
 
 export function delegationPublicId(eventId: string): string {
-  return createHash('sha256').update(eventId).digest('hex');
+  return sha256Hex(eventId);
 }
 
 export function modernDelegationData(event: EventEnvelope): Record<string, unknown> | undefined {
