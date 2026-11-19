@@ -15,7 +15,7 @@ function suppliesDefaults() {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(time));
   const event = serverEvent(fields);
-  expect(event).toEqual({ ...fields, id: expect.any(String), time,
+  expect(event).toEqual({ ...fields, id: event.id, time,
     source: 'opencrane-server', correlation: {} });
   expect(event.id).toMatch(/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u);
   expect(serverEvent(fields).id).not.toBe(event.id);
