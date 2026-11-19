@@ -200,6 +200,7 @@ async function seedApprovalChat(store: EventStore, silo: string,
         position = await appendApprovalMessage(store, event, position);
       }
       await waitForApprovalHistory(db.db, position);
+      console.log(`PASS long-chat seed batch ${batchIndex + 1}/60 at position ${position}`);
     }
   } finally {
     await db.close();
@@ -228,8 +229,10 @@ async function waitForApprovalHistory(db: Query, position: number) {
   while (true) {
     const saved = await db.query<{ sequence: string }>(
       "SELECT sequence FROM projection_checkpoints WHERE name='conversations'");
-    if (Number(saved.rows[0]?.sequence) >= position) break;
-    assert(performance.now() < deadline, 'The long chat reaches the conversation projection');
+    const checkpoint = Number(saved.rows[0]?.sequence);
+    if (checkpoint >= position) break;
+    assert(performance.now() < deadline,
+      `The long chat reaches the conversation projection: expected ${position}, saved ${checkpoint}`);
     await delay(100);
   }
 }
