@@ -879,13 +879,16 @@ async function wrongComputerLink() {
 }
 it('keeps routine instructions off a connection for another computer', wrongComputerLink);
 
-async function refusesLateChange(kind: string) {
+async function refusesLateChange(kind: string, delayPublication = false) {
   const computer = await recordingComputer();
   const append = nats.store.append.bind(nats.store);
   let injected = false;
   async function changed(...args: Parameters<typeof append>) {
-    const result = await append(...args);
     const proposed = proposedEvent.parse(args[0].event);
+    if (delayPublication && proposed.type === 'computer.turn_started') {
+      await delay(2100);
+    }
+    const result = await append(...args);
     if (!injected && proposed.type === 'computer.turn_started' && result.status === 'appended') {
       injected = true;
       if (kind === 'Stop') {
@@ -927,6 +930,13 @@ async function refusesLateChange(kind: string) {
 it.each(['Stop', 'budget ceiling', 'grant', 'payer', 'worker', 'routine.paused', 'member',
   'computer'])(
   'refuses late %s after saving the start and before releasing credentials', refusesLateChange);
+
+async function refusesLatePayerAfterSlowPublication() {
+  await refusesLateChange('payer', true);
+}
+it('reaches the late payer refusal after a slow start publication',
+  refusesLatePayerAfterSlowPublication);
+
 
 async function acceptsOtherThread() {
   const computer = await recordingComputer();
