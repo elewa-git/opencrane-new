@@ -21,8 +21,11 @@ const latestTypes = ['message.posted', 'agent.turn_started'];
 export function decisionConversationReader(store: EventStore, db: Query,
   silo: string): DecisionConversationReader {
   async function read(request: DecisionConversationRead) {
-    const lookup = { ...request, silo, metadataTypes, latestTypes,
-      ignoredTypes: outputReportTypes };
+    // Translate the remaining budget because PostgreSQL deadlines use performance.now().
+    const projectionStarted = performance.now();
+    const remaining = request.deadline - store.clock.now();
+    const lookup = { ...request, deadline: projectionStarted + remaining,
+      silo, metadataTypes, latestTypes, ignoredTypes: outputReportTypes };
     const indexed = await decisionConversationPositions(db, lookup);
     if (indexed.checkpointPosition > request.head) {
       const latest = await store.head(undefined, request.deadline);

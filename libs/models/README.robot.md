@@ -678,6 +678,8 @@ The models process supplies `decisionConversationReader` to `startDecision`.
 The reader uses the conversation projection's event index to load creation,
 participation and closing records, the current turn's records and queued message,
 and the latest message and turn start. It excludes the shared list of output reports.
+The reader converts the remaining event-store clock budget to the PostgreSQL clock.
+All lookup queries share that database deadline; event reads keep their original deadline.
 It first proves that the index contains every global event position from one through
 the lower of its checkpoint and the captured event position, without gaps. It also
 compares the conversation's row count and latest position with an independent
