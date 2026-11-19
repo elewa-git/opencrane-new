@@ -386,6 +386,15 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   return cards;
 }
 
+export function readStoredApprovalReview(text: string) {
+  try {
+    return approvalReviewSchema.parse(JSON.parse(text));
+  } catch (cause) {
+    // Treat malformed saved content as an unavailable review, not invalid browser input.
+    throw new Error('Review unavailable', { cause });
+  }
+}
+
 function approvalCard(current: Awaited<ReturnType<typeof readApproval>>, memberId: string,
   text: string): ApprovalCard {
   const { request, state, canRetry, requestedAt, decidedAt, usedAt, endedAt,
@@ -393,7 +402,7 @@ function approvalCard(current: Awaited<ReturnType<typeof readApproval>>, memberI
   const canDeny = memberId === request.requesterId && state === 'requested';
   const missingFields = request.missingFields ?? [];
   const canApprove = canDeny && missingFields.length === 0;
-  const review = approvalReviewSchema.parse(JSON.parse(text));
+  const review = readStoredApprovalReview(text);
   const card = { requestedAt, decidedAt, usedAt, endedAt, cancelReason, uses, canApprove,
     canDeny, canRetry: canRetry && memberId === request.requesterId, toolReplied,
     missingFields, approvalId: request.approvalId, conversationId: request.conversationId,

@@ -5249,3 +5249,9 @@ start prevents the edit. A failed edit or finish leaves the latest record
 `changing`, so company routine preflight refuses. The event carries no client
 secret or token. Callers must use both commands around every OAuth scope and
 client edit before they install a company sender.
+
+## Stored approval reviews
+
+`readStoredApprovalReview` validates the JSON and review schema in saved approval
+content. A malformed stored review refuses reads and decisions as unavailable;
+it never becomes a browser input error. Review digests are still checked separately.

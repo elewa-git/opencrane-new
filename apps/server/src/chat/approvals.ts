@@ -1,6 +1,6 @@
 import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { approvalReviewSchema } from '@opencrane/protocol';
+import { readStoredApprovalReview } from '@opencrane/models';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createHmac } from 'node:crypto';
@@ -232,7 +232,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   }
   if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
   const text = request.review;
-  approvalReviewSchema.parse(JSON.parse(text));
+  readStoredApprovalReview(text);
   const reviewDigest = sha256Hex(text);
   if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
   const activity = await approvalActivity(options.store, options.silo, request.assistantId,
