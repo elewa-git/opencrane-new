@@ -57,10 +57,7 @@ test('unknown override values fail closed', async function invalidOverride() {
   await assert.rejects(check, /Unknown host-risk override/u);
 });
 
-test('local accepted exception is explicit and retained with both failures', async function localOverride(context) {
-  const messages: string[] = [];
-  function capture(message: string) { messages.push(message); }
-  context.mock.method(console, 'warn', capture);
+function localFixture(uid = 'local-node') {
   const { command: probe, calls } = fixture([unsafe]);
   async function command(args: string[]) {
     if (args.includes('nodes')) return JSON.stringify({ items: [
@@ -70,10 +67,19 @@ test('local accepted exception is explicit and retained with both failures', asy
   }
   async function localCommand(program: string, args: string[]) {
     if (program === 'node') return JSON.stringify(unsafe);
+    if (args.includes('exec')) return uid;
     if (args.includes('context')) return JSON.stringify('unix:///var/run/docker.sock');
     return JSON.stringify([{ Name: '/k3d-ocn-server-0', State: { Running: true },
       Config: { Labels: { 'k3d.cluster': 'ocn' } } }]);
   }
+  return { command, localCommand, calls };
+}
+
+test('local accepted exception is explicit and retained with both failures', async function localOverride(context) {
+  const messages: string[] = [];
+  function capture(message: string) { messages.push(message); }
+  context.mock.method(console, 'warn', capture);
+  const { command, localCommand, calls } = localFixture();
   const record = await checkPackageHosts({ command, localCommand, namespace: 'test',
     image: 'image@sha256:abc', override: 'accepted-dev-box-366' });
   assert.equal(record.override, 'accepted-dev-box-366');
@@ -134,4 +140,14 @@ test('probe Pods have only read-only host mounts and no service token', async fu
     probes++;
   }
   assert.equal(probes, 2);
+});
+
+
+test('a matching local container name cannot waive another cluster node', async function falseLocalNode() {
+  const { command, localCommand } = localFixture('foreign-node');
+  async function check() {
+    await checkPackageHosts({ command, localCommand, namespace: 'test',
+      image: 'image@sha256:abc', override: 'accepted-dev-box-366' });
+  }
+  await assert.rejects(check, /Local k3d node identity differs from the installation target/u);
 });
