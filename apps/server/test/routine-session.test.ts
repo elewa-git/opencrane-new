@@ -1,3 +1,4 @@
+import { expectRoutineInputAuthorityCycles } from './support/routine-input-authority.ts';
 import { readConversationProse } from '@opencrane/events';
 import { holdFixtureClock, withRoutineFixtureClock }
   from '../../ops/test/support/routine-clock.ts';
@@ -621,6 +622,11 @@ function routineInputTests() {
     expect(await rows()).toEqual(saved);
   }
   it('saves one readable owner-attributed user input across competing retries', savesOnce);
+  function armAuthorityCheck(action: () => Promise<void>) { duringCheck = action; }
+  async function checksAuthorityOncePerBoundary() {
+    await expectRoutineInputAuthorityCycles(prepare, armAuthorityCheck);
+  }
+  it('checks input authority once at each required boundary', checksAuthorityOncePerBoundary);
 
   it('recovers the original prose after a lost reply, restart and deduplication expiry', recovers);
   it.each(lostAccess)('refuses input after losing %s', losesAccess);
