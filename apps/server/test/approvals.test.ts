@@ -1402,14 +1402,25 @@ async function refusesForeignTakeoverCancellation() {
     await setup.append(subject, 'tool.approval_requested', request);
     await saveTakeover(setup);
     const before = await history(setup.nats.store, subject, 'test');
+    const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+    const foreignConversationReads: string[] = [];
+    async function* recordForeignConversation(...args: Parameters<typeof readStream>) {
+      if (args[0] === 'conversation-other-conversation') {
+        foreignConversationReads.push(args[0]);
+      }
+      yield* readStream(...args);
+    }
+    vi.spyOn(setup.nats.store, 'readStream').mockImplementation(recordForeignConversation);
     const response = await setup.app.inject({ method: 'POST',
       url: '/api/conversations/conversation/approvals',
       headers: { ...session, 'x-csrf-token': csrf },
       payload: { approvalId, decision: 'rejected' } });
+    expect(foreignConversationReads).toEqual([]);
     expect(response.statusCode, response.body).toBe(403);
     expect(response.json()).toEqual({ status: 'refused' });
     expect(await history(setup.nats.store, subject, 'test')).toEqual(before);
   } finally {
+    vi.restoreAllMocks();
     await setup.close();
   }
 }
