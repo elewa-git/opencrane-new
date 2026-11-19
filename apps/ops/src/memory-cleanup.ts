@@ -51,6 +51,7 @@ async function cleanupHistory(store: EventStore, trigger: EventEnvelope) {
     if (recordedFor(row.event, saved, 'unavailable')) unavailable = true;
   }
   // Require the saved deletion target. A queue message cannot choose another fact.
+  // eslint-disable-next-line no-restricted-syntax -- Preserve exact saved deletion target proof.
   if (!original || JSON.stringify(original) !== JSON.stringify(saved)) {
     throw new Error('Memory change was not saved');
   }
