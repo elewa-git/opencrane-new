@@ -51,6 +51,7 @@ async function sameState(db: Query): Promise<boolean> {
     rows(db, replayMemberTables.inventory, 'silo, subject, link_kind, link_id'),
   ]));
   return comparisons.every(([current, rebuilt]) =>
+    // eslint-disable-next-line no-restricted-syntax -- Preserve exact member replay verification.
     JSON.stringify(current) === JSON.stringify(rebuilt),
   );
 }
@@ -167,6 +168,7 @@ async function sameMcpState(db: Query): Promise<boolean> {
     ]),
   ]);
   return comparisons.every(([current, rebuilt]) =>
+    // eslint-disable-next-line no-restricted-syntax -- Preserve exact MCP catalogue replay verification.
     JSON.stringify(current) === JSON.stringify(rebuilt),
   );
 }
@@ -273,6 +275,7 @@ export async function rebuildComputersProjection(
     await rebuilt.initialise(replayComputers);
     try {
       await rebuilt.run(replayComputers, { toSequence: liveCheckpoint });
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact computer replay verification.
       const unchanged = JSON.stringify(await rows(locked, 'computers', 'silo, assistant_id'))
         === JSON.stringify(await rows(locked, replayComputersTable, 'silo, assistant_id'));
       if (verify && !unchanged) throw new Error('Rebuilt computers state differs from the live projection');

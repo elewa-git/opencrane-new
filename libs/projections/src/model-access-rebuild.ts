@@ -56,6 +56,7 @@ export async function rebuildModelAccessProjection(db: Db, source: EventSource,
       await runner.run(replayModelAccess, { toSequence: checkpoint });
       const current = await projectionRows(locked, '');
       const replayed = await projectionRows(locked, '_replay');
+      // eslint-disable-next-line no-restricted-syntax -- Preserve exact model access replay verification.
       const unchanged = JSON.stringify(current) === JSON.stringify(replayed);
       if (verify && !unchanged) {
         throw new Error('Rebuilt model access differs from the live projection');
