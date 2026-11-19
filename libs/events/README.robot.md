@@ -24,7 +24,9 @@ digest and exit code; raw command text and output are rejected.
 
 `message.posted` has optional `attachmentIds` with at most 100 file ids. New human
 commands include the field, even when empty. Older events without it still parse.
-The ids carry no file bytes. Conversation prose uses `utterance` with at most
+The ids carry no file bytes. All newly readable text uses `storageSafeTextSchema`: reject NUL and unpaired UTF-16
+surrogates before append, while allowing valid surrogate pairs. This includes command
+previews, approval reviews and routine instructions. Conversation prose uses `utterance` with at most
 1,048,576 characters. The same field carries replies, reasoning summaries and child
 results. Approval details use `review`; routine definitions use plaintext `instructions`.
 Old encrypted conversation records require a development reset. Memory and personal

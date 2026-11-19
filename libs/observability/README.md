@@ -4,7 +4,7 @@
 
 Shared logs and optional traces for OpenCrane services and background work.
 It gives services the same log format and removes sensitive fields and private
-ids from selected web addresses to protect people's details. Traces are timing
+ids from selected web addresses and private database error text to protect people's details. Traces are timing
 records that help explain how long each step of a request took.
 
 ## Where it fits

@@ -157,4 +157,4 @@ export { sessionConfiguration, type SessionConfiguration,
 export { sessionAssistantSchema, type SessionAssistant } from './session-assistant.ts';
 
 export { recordIdPattern, recordIdSchema } from './ids.ts';
-export { conversationProseSchema, readConversationProse } from './conversation-prose.ts';
+export { storageSafeTextSchema, conversationProseSchema, readConversationProse } from './conversation-prose.ts';

@@ -35,7 +35,7 @@ flowchart LR
 - Name the background jobs that follow each kind of saved change.
 - Rebuild routine definitions and preview their scheduled dates without starting work.
 - Derive session settings and tool choices from saved facts.
-- Bound conversation prose, keep memory and personal answers encrypted, and exclude credentials.
+- Bound conversation prose to text PostgreSQL can store, keep memory and personal answers encrypted, and exclude credentials.
 
 ## Processes it handles
 

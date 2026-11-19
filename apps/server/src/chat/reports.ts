@@ -1,5 +1,5 @@
 import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
-import { recordIdSchema } from '@opencrane/events';
+import { recordIdSchema, storageSafeTextSchema } from '@opencrane/events';
 import { FileRefusal } from '../files/refusals.ts';
 import { artifactListSchema } from '@opencrane/events';
 import { publishArtifacts, type ArtifactPublication } from '../files/artifacts.ts';
@@ -21,11 +21,11 @@ class MemoryReportRejected extends ReportRejected {}
 
 const existingReportSchema = z.object({
   artifacts: artifactListSchema.optional(), sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: recordIdSchema,
-  turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
+  turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: storageSafeTextSchema.max(128_000).optional(),
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   activityLabel: commandActivityLabelSchema.optional(),
-  preview: z.string().min(1).max(16_384).optional(),
+  preview: storageSafeTextSchema.min(1).max(16_384).optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),
   nativeTermination: z.literal('turn_completed').optional(),

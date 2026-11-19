@@ -1,3 +1,4 @@
+import { storageSafeTextSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { readEventAt,
@@ -28,7 +29,7 @@ export const chatInput = z.union([
   z.object({ id, conversationId, mode: z.literal('group'),
     participantIds: z.array(id).min(2).max(97), groupId: id.optional(),
     groupSnapshotPosition: z.int().nonnegative().optional() }).strict(),
-  z.object({ id, conversationId, text: z.string().trim().max(32_000),
+  z.object({ id, conversationId, text: storageSafeTextSchema.trim().max(32_000),
     attachmentIds: z.array(id).min(1).max(100).optional(),
     executionMode: z.literal('memory_free').optional() }).strict().refine(hasMessageContent),
   z.object({ id, conversationId, stopTurnId: id }).strict(),

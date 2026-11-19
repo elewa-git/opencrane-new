@@ -1,6 +1,6 @@
 import { assistantGrantSchema } from './assistant-grant.ts';
 import { recordIdSchema } from './ids.ts';
-import { conversationProseSchema } from './conversation-prose.ts';
+import { conversationProseSchema, storageSafeTextSchema } from './conversation-prose.ts';
 import { artifactRefusalSchema } from './file-events.ts';
 import { credentialReleaseSchema } from './credential-release.ts';
 import { budgetCallRetrySchema } from './budget-root.ts';
@@ -373,7 +373,7 @@ export const toolApprovalRequestedDataSchema = z.object({
   digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
   missingFields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).max(20).optional(),
-  review: z.string().max(32768), reviewDigest: digestSchema,
+  review: storageSafeTextSchema.max(32768), reviewDigest: digestSchema,
   routine: routineApprovalBindingSchema.optional(),
 }).strict();
 

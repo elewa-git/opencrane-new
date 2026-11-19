@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { storageSafeTextSchema } from './conversation-prose.ts';
 import { digestSchema, id } from './data.ts';
 import { commandActivityLabels } from './command-activity-label.ts';
 
 export const commandActivityLabelSchema = z.enum(commandActivityLabels);
-const commandViewSchema = z.object({ preview: z.string().max(32768) }).strict();
+const commandViewSchema = z.object({ preview: storageSafeTextSchema.max(32768) }).strict();
 
 // Retain only the reviewed, redacted command preview.
 export const agentCommandRanDataSchema = z.object({

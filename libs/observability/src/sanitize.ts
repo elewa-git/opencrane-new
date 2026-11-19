@@ -16,6 +16,8 @@ function sanitizeValue(value: unknown, depth: number): unknown {
   if (value === null || typeof value !== 'object') {
     return value;
   }
+  const databaseError = safeDatabaseError(value);
+  if (databaseError) return databaseError;
   if (depth >= MAX_DEPTH) {
     return TRUNCATED;
   }
@@ -27,6 +29,15 @@ function sanitizeValue(value: unknown, depth: number): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([name, nested]) => [name, isSensitiveFieldName(name, nested) ? REDACTED_VALUE : sanitizeValue(nested, depth + 1)]),
   );
+}
+
+function safeDatabaseError(value: object): Record<string, string> | undefined {
+  const code: unknown = Reflect.get(value, 'code');
+  const severity: unknown = Reflect.get(value, 'severity');
+  if (typeof code !== 'string' || !/^[A-Z0-9]{5}$/u.test(code) ||
+      typeof severity !== 'string') return undefined;
+  // PostgreSQL messages, stacks, detail and context may quote private parameter values.
+  return { type: 'DatabaseError', code, message: 'Database operation failed' };
 }
 
 /**
