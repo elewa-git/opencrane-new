@@ -308,3 +308,15 @@ async function missingPackagedImport() {
   }
 }
 test('packaged fixture refuses a local import missing from its file list', missingPackagedImport);
+
+async function copiesProductionImports() {
+  const directory = await mkdtemp(join(tmpdir(), 'packaged-imports-'));
+  try {
+    await copyPackagedFixture(directory);
+    const copied = await readFile(join(directory, 'infra/dev-stack/package-review.ts'), 'utf8');
+    assert.match(copied, /export type PackageReview/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+test('packaged fixture copies every production module import', copiesProductionImports);
