@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import type { tokenIssuer } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
-import { recordIdSchema } from '@opencrane/events';
+import { recordIdSchema, type EventEnvelope } from '@opencrane/events';
 import { history, readToolPolicy } from '@opencrane/models';
 import { integrationFactsSchema } from '@opencrane/protocol';
 import { demoLocator } from './test/demo-remote.ts';
@@ -23,6 +23,10 @@ export type ApprovalToolRequest = {
   callId: string;
   slot: 'morning' | 'afternoon';
 };
+
+export function completedApprovalMessage(message: EventEnvelope): EventEnvelope[] {
+  return [message];
+}
 
 export function approvalToolBody(input: ApprovalToolRequest) {
   const metadata = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28',
