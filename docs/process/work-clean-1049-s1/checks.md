@@ -48,6 +48,10 @@ Both survive the saved-event comparison. The routine samples pass their id and
 stored time explicitly; their id derivations outside these expressions are unchanged.
 `budget-migration.ts` is unchanged, including its `models` source and validation.
 
+When an old object omitted correlation, the unchanged event schema supplied
+`{}` during append validation. The helper supplies that same value earlier;
+append still stores the parsed event returned by `validateCommand`.
+
 ## Lint refusal
 
 A temporary production file under `apps/server/src` contained these probes:
@@ -89,6 +93,82 @@ A focused rerun reproduced `ENOENT` in `startGateway` before any tested behaviou
 Run the repository's checksum-verified gateway fetch script, then restart both
 package runs. No test wait or timeout was changed.
 
+## Queued native-budget check
+
+An initial broad run failed: the queued-revocation case in
+`libs/models/test/native-budget.test.ts` reached its existing 30-second test limit.
+The isolated case then passed. That pass does not prove the original cause.
+
+Two coordination waits observed only a signal, leaving an early work rejection
+unobserved while waiting for that signal. Race each signal against its work so
+an early refusal reaches the test with its error. Keep every test and product
+time limit unchanged. The exact early error in the original timeout is NOT PROVED.
+
+After this diagnostic correction, the whole file passed twice: 46 tests each,
+in 157.49 and 128.21 seconds. Models typecheck and changed-file ESLint passed.
+The failed broad attempt is retained separately and does not count as a passing
+gate. The complete twice-run package gate remains pending.
+
+## Package gate attempts
+
+The first broad attempt stopped after the native-budget timeout above. A later
+attempt failed the long-chat read performance check: 1,940 ms against its
+unchanged 1,500 ms limit. An isolated rerun also failed a socket timing check
+at 2,525 ms. Host load was elevated during these runs; that observation does
+not prove the cause. No access code or performance limit was changed.
+
+A bulk attempt excluding those two timing-sensitive files failed the saved-reload
+case in `mcp-dispatch.test.ts` while starting the catalogue replay command.
+The original child-process failure remains NOT PROVED. A diagnostic rerun first
+hit its existing test limit, and a later isolated rerun passed. Its non-zero
+conversations replay check was an expected refusal, not the original catalogue
+failure. Temporary diagnostics were removed without changing the replay helper.
+None of these stopped or failed attempts counts as a passing package gate.
+
+The first serial two-file run passed all 115 tests in 688.64 seconds. The second
+passed 114 tests and failed the socket readiness assertion at 1,876 ms against
+1,500 ms while another secondary stack was active. Native-budget passed in both.
+Do not count the failed group as a passing package run.
+
+After that stack stopped, a temporary event-loop diagnostic passed the isolated
+case: history 251 ms, list 103 ms, socket readiness 1,185 ms, maximum event-loop
+delay 67 ms. This does not prove the cause of the earlier failure. The first
+instrumentation attempt was invalid because its histogram was out of scope;
+correct it before collecting these measurements. Remove all instrumentation
+and restore the original test before the complete file rerun.
+
+The restored, unchanged chat-access file then failed socket readiness again at
+1,583 ms; stop that attempt instead of counting its remaining cases as a gate.
+For comparison, temporarily restore all migrated server and models callers to
+the base revision, verify that source diff is empty, and run the isolated case
+with the same limits. It passed at 1,088 ms for socket readiness (history 203 ms,
+list 104 ms). Restore the slice and the unchanged test immediately afterwards.
+Both isolated versions pass; the original full-file cause remains NOT PROVED.
+
+Run the two timing-sensitive files serially and the other 423 files with at most
+two workers, twice each. Use the shared disposable test database and run all
+commands under `nice -n 10`. Keep every existing wait and timeout unchanged.
+
+## Source checks
+
+| Check | Result |
+| --- | --- |
+| Workspace, package and dev-stack typecheck | PASS |
+| Event catalogue | PASS: 174 event types |
+| Knip | PASS: two existing configuration hints |
+| ESLint on changed code, zero warnings, 8 GiB heap | PASS |
+| Dependency boundaries | PASS: existing baseline unchanged |
+| Lint debt, whole-stream reads and README checks | PASS |
+| Changelog fragment | PASS |
+| Markdownlint, without file arguments | PASS |
+| Fixed-id and fixed-time envelope comparisons | PASS: seven samples |
+
+Run tests, typecheck and lint under `nice -n 10`. The changed-file ESLint check
+uses the `lint:code` configuration; the complete repository ESLint run belongs
+to CI. No web source changed, so web tests and the web build are NOT RUN locally.
+The helper and registration test files passed twice together: 57 tests per run.
+The native-budget file also passed twice separately: 46 tests per run.
+
 ## Make it right
 
 Share server source, UUID, current ISO time and empty correlation defaults in
@@ -97,6 +177,7 @@ Keep local principal, command id, correlation and fixed-time decisions with thei
 existing owners. Keep the existing models envelope validator for its callers.
 No new dependency, error handler, access rule or append-result check is added.
 The new helper takes one named object and remains below every size limit.
+Reuse the installed Zod UUID validator in both new tests, removing the copied pattern.
 
 Shipped code: 309 added plus 263 deleted lines, 572 total. The root lint
 configuration adds 21 lines and removes six lines outside that shipped-code count.
