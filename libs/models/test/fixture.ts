@@ -1,4 +1,4 @@
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { createEventStore, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import type { DecisionConversationRead } from '../src/decision-conversation.ts';
 import { decisionConversationReader } from '../src/decision-conversation.ts';
 import { freePort } from '@opencrane/event-store/testing';
@@ -80,9 +80,12 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
-  const decisionRunner = new ProjectionRunner(db, nats.store, logger);
+  const projectionStore = await createEventStore(nats.connection, nats.store.clock);
+  const decisionRunner = new ProjectionRunner(db, projectionStore, logger);
   await decisionRunner.initialise(conversations);
-  const conversationHistory = decisionConversationReader(nats.store, db, 'test');
+  // Keep gateway reads separate from backend query probes, as in the real processes.
+  const decisionDb = pgDb(dbs.queue);
+  const conversationHistory = decisionConversationReader(nats.store, decisionDb, 'test');
   const append = async (subject: string, type: string, payload: unknown) => {
     let data = payload;
     if (type === 'mcp.server_discovered') {
