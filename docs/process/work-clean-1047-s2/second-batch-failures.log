@@ -1,0 +1,20 @@
+Second complete eight-package selection: FAIL
+535 files passed; 2 failed; 6 skipped (543 selected).
+13,054 cases passed; 2 failed; 69 skipped (13,125 selected).
+Duration: 8057.48 seconds.
+
+Observed load after the timing failure: 14.88.
+Observed load after the root-setup failure: 7.42.
+Both original thresholds and all production code remain unchanged.
+
+apps/server/test/chat-access-regression.test.ts
+keeps history, list and socket fast on a session with 1,502 events
+AssertionError: expected 1615.5496420000127 to be less than 1500
+    at longAgentSession (<worktree>/apps/server/test/chat-access-regression.test.ts:845:22)
+    at file://<worktree>/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20
+
+apps/server/test/routine-session.test.ts
+routine root routine activation refuses routine dispatch after saved Expired before cleanup: model
+Error: Routine root refused
+    at allocateRoutineRoot (<worktree>/apps/server/src/routine-root.ts:52:11)
+    at allocated (<worktree>/apps/server/test/routine-session.test.ts:1707:7)

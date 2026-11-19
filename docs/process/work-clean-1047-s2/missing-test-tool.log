@@ -1,0 +1,33 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/memory-dispatch.test.ts --maxWorkers=1 --bail=1
+
+ RUN  v5.0.3 <worktree>
+
+ ❯ apps/server/test/memory-dispatch.test.ts (98 tests | 1 failed) 4636ms
+   × stops recall before the backend after a saved block 1908ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/memory-dispatch.test.ts > stops recall before the backend after a saved block
+Error: ENOENT: no such file or directory, open '<worktree>/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'
+ ❯ startGateway libs/models/src/gateway.ts:307:17
+    305|   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin…
+    306|   const expected = AGENTGATEWAY_SHA256_BY_BUILD[build];
+    307|   if (sha256Hex(await readFile(options.binary)) !== expected) throw ne…
+       |                 ^
+    308|   const config = gatewayConfig(options.port, options.readinessPort, op…
+    309|     options.keyFile, options.issuer, options.upstream, options.mcpRout…
+ ❯ fixture libs/models/test/fixture.ts:242:17
+ ❯ prepare apps/server/test/memory-dispatch.test.ts:64:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (98)
+   Start at  23:38:22
+   Duration  20.52s (transform 58%, tests 23%, import 19%)
+
+  Transform  transforming modules took 11.82s · 58% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

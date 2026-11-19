@@ -1,0 +1,8 @@
+npm notice run npx
+npm notice run 'eslint' apps/server/src/digest-lint-probe.ts --max-warnings 0
+
+<worktree>/apps/server/src/digest-lint-probe.ts
+  1:10  error  'createHash' import from 'node:crypto' is restricted. Import sha256Hex or sha256HexOfJson from @opencrane/events/digest  no-restricted-imports
+  2:36  error  Import recordIdSchema or recordIdPattern instead of copying the ID pattern                                               no-restricted-syntax
+
+✖ 2 problems (2 errors, 0 warnings)

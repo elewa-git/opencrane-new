@@ -1,0 +1,42 @@
+[
+  {
+    "file": "apps/odoo-mcp/test/fixture.test.ts",
+    "notRunCases": 1
+  },
+  {
+    "file": "apps/ops/test/lifecycle-k3d.test.ts",
+    "notRunCases": 11
+  },
+  {
+    "file": "apps/ops/test/mcp-hosted-k3d.test.ts",
+    "notRunCases": 37
+  },
+  {
+    "file": "apps/ops/test/mcp-personal-k3d.test.ts",
+    "notRunCases": 13
+  },
+  {
+    "file": "apps/server/test/approvals.test.ts",
+    "notRunCases": 1
+  },
+  {
+    "file": "apps/server/test/bridge-k3d.test.ts",
+    "notRunCases": 1
+  },
+  {
+    "file": "apps/server/test/live-view-k3d.test.ts",
+    "notRunCases": 2
+  },
+  {
+    "file": "apps/server/test/screenshot-browser.test.ts",
+    "notRunCases": 1
+  },
+  {
+    "file": "libs/models/test/codex-native-capture.test.ts",
+    "notRunCases": 1
+  },
+  {
+    "file": "libs/models/test/gateway.test.ts",
+    "notRunCases": 1
+  }
+]

@@ -1,0 +1,36 @@
+npm notice run npx
+npm notice run 'vitest' run libs/events libs/event-store libs/projections libs/models apps/computer apps/ops apps/odoo-mcp apps/server --maxWorkers=2 --bail=1
+
+ RUN  v5.0.3 <worktree>
+ ❯ apps/server/test/routine-sender.test.ts (113 tests | 1 failed) 242607ms
+   × refuses late payer after saving the start and before releasing credentials 10903ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/routine-sender.test.ts > refuses late payer after saving the start and before releasing credentials
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ refusesLateChange apps/server/test/routine-sender.test.ts:919:22
+    917|     }
+    918|     await until(completed);
+    919|     expect(injected).toBe(true);
+       |                      ^
+    920|     expect(computer.starts).toBe(0);
+    921|     expect(link.socket.readyState).toBe(link.socket.OPEN);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 203 passed | 1 skipped (543)
+      Tests  1 failed | 7175 passed | 302 skipped (7538)
+   Start at  23:39:30
+   Duration  8442.89s (tests 98%, import 2%)
+
+    Isolate  205 workers spawned · ~229ms startup each (spawn + environment, per file)
+             at least ~23.28s faster with isolate: false — reuses workers across files instead of one per file

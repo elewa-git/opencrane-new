@@ -1,0 +1,38 @@
+[
+  {
+    "site": "providerSecretRef",
+    "input": [
+      "silo_fixed",
+      "provider_fixed",
+      "command_fixed"
+    ],
+    "old": "secret:provider-5b58f41c89359c3e02de62fd3c2005e86306035539e7bc596a0004fcbca8b1ef",
+    "new": "secret:provider-5b58f41c89359c3e02de62fd3c2005e86306035539e7bc596a0004fcbca8b1ef",
+    "equal": true
+  },
+  {
+    "site": "dispatchDigest",
+    "input": "{\"tool\":\"lookup\",\"arguments\":{\"text\":\"é 🏗️\",\"nested\":{\"z\":2,\"a\":1}}}",
+    "old": "587692576850969aafcc18019beb3c5b070e34dd5b5fa6f305de0a35a3cebbc4",
+    "new": "587692576850969aafcc18019beb3c5b070e34dd5b5fa6f305de0a35a3cebbc4",
+    "equal": true
+  },
+  {
+    "site": "memoryScopeId",
+    "input": [
+      "silo_fixed",
+      "person",
+      "member_fixed"
+    ],
+    "old": "eb6f294c7b4fbdc33547894e74e677f1cc76b9710df1a9f71a17a4ca1896ce69",
+    "new": "eb6f294c7b4fbdc33547894e74e677f1cc76b9710df1a9f71a17a4ca1896ce69",
+    "equal": true
+  },
+  {
+    "site": "routineReference",
+    "input": "event_fixed",
+    "old": "d58a0574211eee57b6f0d2bb24ccbc37",
+    "new": "d58a0574211eee57b6f0d2bb24ccbc37",
+    "equal": true
+  }
+]
