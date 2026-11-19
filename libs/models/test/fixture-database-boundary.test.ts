@@ -30,9 +30,13 @@ async function separateProjectionReads() {
     await setup.stopDispatch();
     await setup.runtime.stop();
     const backendPositions = vi.spyOn(setup.nats.store, 'head');
+    const backendQueries = vi.spyOn(setup.db, 'query');
+    const backendLocks = vi.spyOn(setup.db, 'lock');
     await setup.append('conversation-other', 'agent.turn_started', {
       assistantId: 'other', conversationId: 'other', turnId: 'other-turn' });
     expect(backendPositions).not.toHaveBeenCalled();
+    expect(backendQueries).not.toHaveBeenCalled();
+    expect(backendLocks).not.toHaveBeenCalled();
   } finally {
     vi.restoreAllMocks();
     await setup.close();
