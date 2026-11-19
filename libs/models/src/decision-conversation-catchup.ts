@@ -2,7 +2,6 @@ import { peekStreamSummary, readStreamSummary, type EventStore, type StoredEvent
   from '@opencrane/event-store';
 import { createLogger } from '@opencrane/observability';
 import { decisionChatSummary } from './decision-summary.ts';
-import type { DecisionConversationRead } from './decision-conversation.ts';
 
 export class ConversationHistoryApplying extends Error {
   constructor() {
@@ -14,13 +13,13 @@ const pending = new WeakMap<EventStore, Set<string>>();
 const logger = createLogger('conversation-history');
 
 export function caughtUpConversation(store: EventStore, silo: string,
-  request: DecisionConversationRead, latest: number) {
-  const subject = `conversation-${request.conversationId}`;
+  conversationId: string, capturedPosition: number, latest: number) {
+  const subject = `conversation-${conversationId}`;
   function snapshot(rows: StoredEvent[], sequence: number) {
     function captured(row: StoredEvent) {
-      return row.sequence <= request.head;
+      return row.sequence <= capturedPosition;
     }
-    return { conversation: rows.filter(captured), sequence: Math.min(sequence, request.head) };
+    return { conversation: rows.filter(captured), sequence: Math.min(sequence, capturedPosition) };
   }
   const ready = peekStreamSummary(store, silo, subject, decisionChatSummary, latest);
   if (ready) return snapshot(ready.summary, ready.sequence);
