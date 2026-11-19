@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { peekStreamSummary, readStreamSummary, type StoredEvent, type SummaryKind }
+import { peekStreamSummary, readStreamSummary, systemClock, type StoredEvent, type SummaryKind }
   from '../src/index.ts';
 import { event } from './testing.ts';
 
@@ -23,7 +23,7 @@ async function onlyReturnsCompletePrefix() {
     const row = { sequence: 2, event: event('creation') };
     yield await Promise.resolve(row);
   }
-  const store = { readStream };
+  const store = { readStream, clock: systemClock };
   expect(peekStreamSummary(store, 'test', 'member-alice', kind, 2)).toBeUndefined();
   expect(reads).toBe(0);
   const rows = await readStreamSummary(store, 'test', 'member-alice', kind, Infinity, copy);

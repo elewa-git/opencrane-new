@@ -689,8 +689,8 @@ The reader then reads conversation activity after the projection's saved global
 position, through the request's captured position, only when that range spans at most
 64 global positions. A larger gap uses an already caught-up event-store summary.
 Without one it refuses with `Conversation history is catching up` and starts a separate
-background catch-up. The refused request consumes no approval and dispatches no
-call. Later confirmations retain the same access deadline and read only activity after that captured position.
+background catch-up, bounded to ten seconds on the event store’s selected clock.
+The refused request consumes no approval and dispatches no call. Later confirmations retain the same access deadline and read only activity after that captured position.
 Sparse snapshots keep their checked position even when they omit output reports,
 so approval confirmation cannot replay those reports inside the short write check.
 
