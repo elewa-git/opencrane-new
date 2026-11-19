@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { afterEach, expect, it, vi } from 'vitest';
 import { serverEvent } from '../src/index.ts';
 
@@ -17,7 +18,7 @@ function suppliesDefaults() {
   const event = serverEvent(fields);
   expect(event).toEqual({ ...fields, id: event.id, time,
     source: 'opencrane-server', correlation: {} });
-  expect(event.id).toMatch(/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u);
+  expect(z.uuid().safeParse(event.id).success).toBe(true);
   expect(serverEvent(fields).id).not.toBe(event.id);
   expect(Object.hasOwn(event, 'principal')).toBe(false);
   expect(Object.hasOwn(event, 'commandId')).toBe(false);

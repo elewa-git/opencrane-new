@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { remoteFixture } from "@opencrane/models/testing/remote-mcp";
@@ -24,7 +25,7 @@ async function keepsRegistrationIdSeparateFromCommand() {
   expect(rows).toHaveLength(1);
   const event = rows[0]!.event;
   expect(event.id).not.toBe(change.changeRef);
-  expect(event.id).toMatch(/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/u);
+  expect(z.uuid().safeParse(event.id).success).toBe(true);
   expect(event.commandId).toBe(change.changeRef);
   expect(event.source).toBe('opencrane-server');
 }
