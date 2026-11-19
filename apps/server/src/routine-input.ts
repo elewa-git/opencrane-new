@@ -67,8 +67,6 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
   const conversationId = run.conversationId;
   let position: number;
   if (previous) {
-    verify(previous);
-    await preparation.checkAccess();
     // Renew access before replying with the saved input.
     verify(previous);
     await preparation.checkAccess();
@@ -80,7 +78,6 @@ async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparatio
       source: 'opencrane-server', time: new Date().toISOString(),
       principal: { kind: 'system' as const, id: worker.workerId }, data };
     // Recheck access before the conditional append.
-    await preparation.checkAccess();
     const deadline = await preparation.checkAccess();
     async function checkAccess() {
       await preparation.checkCurrent();
