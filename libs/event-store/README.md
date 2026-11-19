@@ -22,7 +22,7 @@ for local NATS services.
 
 ```mermaid
 flowchart LR
-  parent["libs/<br/>shared libraries"] --> store["libs/event-store<br/>saved event log"]
+  parent["libs/<br/>shared libraries"] --> store["libs/event-store<br/>event wrappers and saved log"]
   server["apps/server<br/>back end"] -->|checks positions and saves changes| store
   models["libs/models<br/>AI access and spending"] <-->|saves changes and checks their outcome| store
   ops["apps/ops<br/>background workers"] -->|saves and reads| store
@@ -33,6 +33,7 @@ flowchart LR
 
 ## What it is responsible for
 
+- Build the standard wrapper for server events, keeping supplied ids and timestamps.
 - Save a valid event only if the relevant history has not changed since the caller
   read it. Report a conflict when another change came first. For some changes,
   check the whole log position as well as one item's history.
