@@ -15,14 +15,16 @@ export async function seedApprovalHistory(store: EventStore, db: Query,
   input: ApprovalHistorySeed) {
   const subject = `conversation-${input.data.conversationId}`;
   let position = await store.head(subject);
-  // Keep setup traffic behind projection progress instead of creating an unbounded backlog.
-  for (let batchIndex = 0; batchIndex < 60; batchIndex++) {
-    for (let messageIndex = 0; messageIndex < 50; messageIndex++) {
+  const messagesPerBatch = 10;
+  const batchCount = 3_000 / messagesPerBatch;
+  // Bound queued work while every projection processes the same saved events under load.
+  for (let batchIndex = 0; batchIndex < batchCount; batchIndex++) {
+    for (let messageIndex = 0; messageIndex < messagesPerBatch; messageIndex++) {
       const event = envelope(input.silo, subject, 'message.posted', input.data);
       position = await appendApprovalMessage(store, event, position);
     }
     await waitForApprovalHistory(db, position);
-    console.log(`PASS long-chat seed batch ${batchIndex + 1}/60 at position ${position}`);
+    console.log(`PASS long-chat seed batch ${batchIndex + 1}/${batchCount} at position ${position}`);
   }
 }
 

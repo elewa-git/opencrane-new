@@ -2043,6 +2043,8 @@ The models process gets a separate control port for checking loaded configuratio
 The stack never forwards it. After a fresh CORE run, `stage-b-live.ts` starts the
 guarded demo transport. Run `journey.sh` with `APPROVAL_JOURNEY_ONLY=1` to seed
 3,000 completed messages and request a demo write with the free Stage B model stub.
+Seed ten messages and their completion events at a time, then require their conversation
+projection checkpoint before publishing more. Each wait keeps its 30-second limit.
 Check browser approval, the returned tool result, exact forwarded bytes, single use,
 denial and browser Stop, at 1280 and 390 pixels. Approve an exact request on the native turn
 before pressing Stop; sending those same bytes afterwards must refuse without an effect.

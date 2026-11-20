@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { it } from 'vitest';
+import { it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { readChatFacts } from '../src/chat/chat-summary.ts';
@@ -38,7 +38,9 @@ async function seededHistoryBoundsProjectionBacklog() {
     batches++;
     return { rows: [{ sequence: String(projectedPosition) }] };
   }
-  const db = { query: observeProjection } as Query;
+  const query = vi.fn();
+  query.mockImplementation(observeProjection);
+  const db: Query = { query };
   const data = { conversationId: 'chat', authorId: 'assistant', authorKind: 'agent' as const,
     contentType: 'text' as const, ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
   try {
