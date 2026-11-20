@@ -7,6 +7,9 @@ export type ProviderJourneyStep = {
 };
 
 function failureDetail(step: ProviderJourneyStep, error: unknown): string {
+  if (error instanceof Error && error.message.includes('strict mode violation:')) {
+    return `More than one control matched the current operation. ${step.detail}`;
+  }
   if (error instanceof AssertionError && step.expectedHttpStatus !== undefined
       && error.expected === step.expectedHttpStatus && typeof error.actual === 'number'
       && Number.isInteger(error.actual) && error.actual >= 100 && error.actual <= 599) {

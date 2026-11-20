@@ -5,7 +5,8 @@ export function providerSetup(page: Page): Locator {
 }
 
 export async function checkProviderStatus(page: Page): Promise<void> {
-  const check = page.getByRole('button', { name: 'Check status', exact: true });
+  const setup = providerSetup(page);
+  const check = setup.getByRole('button', { name: 'Check status', exact: true });
   if (await check.isVisible()) {
     await check.click();
   }
