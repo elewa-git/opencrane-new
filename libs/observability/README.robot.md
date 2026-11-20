@@ -28,8 +28,9 @@ after serialisation, including child bindings and Error properties. Text followi
 a query is dropped too; Fastify route messages retain their fixed `not found` suffix.
 Conversation history paths mask the conversation id. Organisation history detail
 paths mask the audit id. Member change paths mask both the member id and command
-id, including role and removal changes. Redaction is not permission
-to log secrets.
+id, including role and removal changes. PostgreSQL errors retain their SQLSTATE code and a fixed safe message. Their
+message, stack, detail and context can quote private values, so none is emitted.
+Redaction is not permission to log secrets.
 An invalid log line is replaced with a fixed error record instead of being emitted raw.
 
 `startTelemetry` defaults to disabled unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.

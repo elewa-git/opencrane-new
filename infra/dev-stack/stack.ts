@@ -683,7 +683,6 @@ async function up(fresh: boolean) {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
-    CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
     MODEL_GATEWAY_CONTROL_PORT: settings['MODEL_GATEWAY_CONTROL_PORT']!,
     MODEL_STUB_MCP_GENERATION: approvalRoute.generation,
     MODEL_STUB_MCP_REVISION: approvalRevision,
@@ -696,7 +695,6 @@ async function up(fresh: boolean) {
     const models = modelsEnvironment(modelSettings, directory, managed, real);
     if (secondary) {
       await mkdir(`${directory}/models`, { recursive: true, mode: 0o700 });
-      await mkdir(`${directory}/conversation-keys`, { recursive: true, mode: 0o700 });
       const database = new URL(models['DATABASE_URL']!);
       database.hostname = 'postgres';
       database.port = '5432';
@@ -762,7 +760,6 @@ async function up(fresh: boolean) {
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
       ...ownerMemorySettings,
-      CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
       DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
       PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`, ...custody,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,

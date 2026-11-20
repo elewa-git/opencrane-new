@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { NatsConnection } from '@nats-io/transport-node';
 import { z } from 'zod';
-import { captureBounds, descriptorSchema, infoSchema, readIdentities } from './event-backup.ts';
+import { hashBackupBytes } from './backup-bytes.ts';
+import { captureBounds, descriptorSchema, infoSchema, readIdentities,
+  eventBackupMaximumBytes } from './event-backup.ts';
 
 interface Options {
   directory: string;
@@ -16,7 +18,49 @@ interface Options {
 }
 type Descriptor = z.infer<typeof descriptorSchema>;
 type Bounds = ReturnType<typeof captureBounds>;
-const maximumBytes = 64 * 1024 * 1024;
+const maximumBytes = eventBackupMaximumBytes;
+
+/** Restore a checked offline set. Existing streams require an explicitly owned retry. */
+export async function restoreOfflineEventBackup(target: NatsConnection,
+  descriptor: Descriptor, archive: Buffer, options: Options & { resume?: boolean }) {
+  const bounds = captureBounds(target, options);
+  try {
+    const maxBytes = restoreLimit(options);
+    if (options.disposable !== true || !target.info?.server_id || target.info.cluster ||
+        Reflect.get(target.info, 'domain') || descriptor.silo !== options.silo ||
+        descriptor.config['num_replicas'] !== 1 ||
+        !isDeepStrictEqual(descriptor.config['subjects'], ['ev.>']) ||
+        archive.length > maxBytes || archive.length !== descriptor.byteCount ||
+        hashBackupBytes(archive) !== descriptor.sha256) throw refusal();
+    const current = await bounds.request('$JS.API.STREAM.INFO.EVENTS', {});
+    const absent = z.object({ error: z.object({ code: z.literal(404), err_code: z.literal(10059) }) });
+    let restored: z.infer<typeof infoSchema>;
+    if (absent.safeParse(current).success) {
+      if (options.resume === true) throw refusal();
+      restored = await transfer(target, bounds, descriptor, archive);
+    } else {
+      if (options.resume !== true) throw refusal();
+      // Read back before resending anything: a lost reply may hide a completed native restore.
+      restored = infoSchema.parse(current);
+      checkInfo(restored, descriptor);
+    }
+    const targetDescriptor = { ...descriptor, created: restored.created };
+    await checkHistory(bounds, targetDescriptor, maxBytes);
+    return targetDescriptor;
+  } catch (cause) {
+    throw new Error('Offline event restore refused; keep the installation isolated', { cause });
+  } finally {
+    bounds.dispose();
+  }
+}
+
+function restoreLimit(options: Options) {
+  const maxBytes = options.maxBytes ?? maximumBytes;
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > maximumBytes ||
+      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw refusal();
+  return maxBytes;
+}
 
 function refusal() {
   return new Error('Event restore refused; keep target isolated');
@@ -102,10 +146,7 @@ export async function restoreEventBackup(source: NatsConnection, target: NatsCon
   options: Options): Promise<{ descriptor: Descriptor; targetDescriptor: Descriptor }> {
   const bounds = captureBounds(target, options);
   try {
-    const maxBytes = options.maxBytes ?? maximumBytes;
-    const timeoutMs = options.timeoutMs ?? 60_000;
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > maximumBytes ||
-        !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) throw refusal();
+    const maxBytes = restoreLimit(options);
     checkConnections(source, target, options.disposable);
     const text = readPrivateFile(join(options.directory, 'descriptor.json'), 1024 * 1024);
     const descriptor = descriptorSchema.parse(JSON.parse(text.toString('utf8')));

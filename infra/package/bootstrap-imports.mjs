@@ -32,7 +32,8 @@ function checkRuntimeSources(sources) {
 function checkImports(sources) {
   checkRuntimeSources(sources);
   const pending = ['infra/package/bootstrap.ts', 'infra/dev-stack/owner-bootstrap.ts',
-    'infra/dev-stack/secondary-models.ts', 'infra/package/scheduled-backup-run.ts'];
+    'infra/dev-stack/secondary-models.ts', 'infra/package/scheduled-backup-run.ts',
+    'infra/package/pilot-restore-run.ts'];
   const visited = new Set();
   while (pending.length > 0) {
     const file = pending.pop();

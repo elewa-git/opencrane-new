@@ -395,9 +395,9 @@ test('the package includes the owner bootstrap command', () => {
   assert.match(manifest, /enableServiceLinks: false/u);
 });
 
-test('a chat turn has private keys, a stub model and a computer runtime', () => {
+test('a chat turn needs no conversation keys and has a computer runtime', () => {
   const manifest = render();
-  assert.match(manifest, /name: conversation-keys/u);
+  assert.doesNotMatch(manifest, /name: conversation-keys/u);
   assert.match(manifest, /infra\/dev-stack\/secondary-models\.ts/u);
   assert.match(manifest, /"kind": "SandboxTemplate"/u);
   assert.match(manifest, /name: computer-runtime/u);
@@ -414,8 +414,6 @@ test('the computer can reach only the private gateway without DNS', () => {
 });
 
 test('the installer sets the computer gateway from a validated Service IP', async () => {
-  const installSource = readFileSync('infra/dev-stack/packaged.ts', 'utf8');
-  assert.match(installSource, /await configureComputerGateway\(owner\);\s*await waitForBootstrap\(owner\);/u);
   let service = { spec: { type: 'ClusterIP', clusterIP: '10.43.0.27' } };
   const patches = [];
   const owner = { worktree: process.cwd(), slot: 'test', context: 'k3d-test-target',
@@ -466,16 +464,15 @@ test('the installer sets the computer gateway from a validated Service IP', asyn
   assert.equal(patches.length, 1);
 });
 
-test('preparation keeps the binary wrapping key in the file Secret', async () => {
+test('preparation needs no conversation key or wrapping Secret', async () => {
   const { key, settings, secrets } = await preparedSecretsFixture();
   const runtime = settings.get('package-runtime');
   const runtimeFiles = secrets.get('runtime-files');
   const runtimeSecret = secrets.get('runtime');
   assert.equal(runtime.DEV_OWNER_EMAIL, 'owner@example.test');
   assert.equal(runtimeSecret.DEV_OWNER_EMAIL.toString('utf8'), 'owner@example.test');
-  assert.deepEqual(runtimeFiles['conversation-wrap-key'], key);
-  assert.equal(runtime.CONVERSATION_WRAP_KEY_FILE,
-    '/run/opencrane/files/conversation-wrap-key');
+  assert.equal(runtimeFiles['conversation-wrap-key'], undefined);
+  assert.equal(runtime.CONVERSATION_WRAP_KEY_FILE, undefined);
   assert.equal(runtime['conversation-wrap-key'], undefined);
   assert.equal(runtime.CONVERSATION_WRAP_KEY, undefined);
   assert.equal(runtimeSecret['conversation-wrap-key'], undefined);
@@ -878,3 +875,83 @@ function credentialReadinessChecksLease() {
   assert.equal(container.readinessProbe.timeoutSeconds, 5);
 }
 test('storage credential readiness checks the lease validity', credentialReadinessChecksLease);
+
+
+test('restore installation holds bootstrap, writers and models until verified admission', () => {
+  values.pilotRestore = { enabled: true, backupId: '11111111-1111-4111-8111-111111111111' };
+  try {
+    const restored = resources();
+    assert.equal(restored.some(isBootstrapJob), false);
+    for (const resource of restored) {
+      if (resource?.kind !== 'Deployment') continue;
+      const name = resource.metadata.name;
+      if (name === 'server' || name === 'openfga' || name.startsWith('worker-')) {
+        assert.equal(resource.spec.replicas, 0, name);
+      }
+    }
+    const server = namedResource('Deployment', 'server');
+    assert.equal(server.spec.template.spec.containers.some(isModelsContainer), false);
+    const api = server.spec.template.spec.containers.find(isServerContainer);
+    assert.ok(api.env.some(isRestoreReadOnly));
+    assert.equal(api.env.find(isNatsCertificate)?.value, '/run/opencrane/files/projection.crt');
+    assert.equal(namedResource('CronJob', 'pilot-backup').spec.suspend, true);
+    const restore = namedResource('CronJob', 'pilot-restore');
+    assert.equal(restore.spec.suspend, true);
+    const job = restore.spec.jobTemplate.spec.template.spec;
+    assert.equal(job.enableServiceLinks, false);
+    assert.ok(job.containers[0].command.includes('infra/package/pilot-restore-run.ts'));
+    assert.ok(job.containers[0].volumeMounts.some(isReadOnlyBackup));
+    assert.ok(namedResource('PersistentVolumeClaim', 'pilot-restore'));
+    const permissions = namedResource('Role', 'package-restore');
+    assert.ok(permissions.rules.find(isPodRule).verbs.includes('watch'));
+  } finally {
+    delete values.pilotRestore;
+  }
+});
+
+function isBootstrapJob(resource) {
+  return resource?.kind === 'Job' && resource.metadata.name === 'bootstrap';
+}
+function isModelsContainer(container) { return container.name === 'models'; }
+function isServerContainer(container) { return container.name === 'server'; }
+function isRestoreReadOnly(setting) {
+  return setting.name === 'PILOT_RESTORE_READ_ONLY' && setting.value === 'true';
+}
+function isReadOnlyBackup(mount) {
+  return mount.name === 'backups' && mount.readOnly === true;
+}
+
+function isNatsCertificate(setting) { return setting.name === 'NATS_CERT_FILE'; }
+
+function isPodRule(rule) { return rule.resources.includes('pods'); }
+
+function restoreScalingIsRestricted() {
+  const permissions = namedResource('Role', 'package-restore');
+  const scalable = new Set();
+  const readable = new Set();
+  for (const rule of permissions.rules) {
+    if (rule.resources.includes('deployments/scale') &&
+        rule.verbs.some(changesScale)) {
+      for (const name of rule.resourceNames ?? ['*']) scalable.add(name);
+    }
+    if (rule.resources.includes('deployments') &&
+        ['get', 'list', 'watch'].every(hasVerb.bind(null, rule))) {
+      for (const name of rule.resourceNames ?? ['*']) readable.add(name);
+    }
+  }
+  assert.deepEqual([...scalable].sort(), ['openfga', 'server']);
+  assert.deepEqual([...readable].sort(), ['backup-catalogue', 'openfga', 'server',
+    'worker-audit', 'worker-budgets', 'worker-computers', 'worker-conversations',
+    'worker-dispatcher', 'worker-files', 'worker-mcp-catalogue', 'worker-members']);
+  assert.ok(permissions.rules.find(isPodRule).verbs.includes('watch'));
+  for (const resource of ['persistentvolumeclaims', 'serviceaccounts', 'secrets']) {
+    function readsResource(rule) {
+      return rule.resources.includes(resource) && rule.verbs.includes('get');
+    }
+    assert.ok(permissions.rules.some(readsResource), resource);
+  }
+}
+function changesScale(verb) { return ['patch', 'update', '*'].includes(verb); }
+function hasVerb(rule, verb) { return rule.verbs.includes(verb); }
+test('restore account scales only server and OpenFGA and retains required reads',
+  restoreScalingIsRestricted);

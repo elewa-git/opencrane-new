@@ -18,7 +18,7 @@ import { members, computers, conversations, pgDb, ProjectionRunner, connectMembe
 import { createLogger } from '@opencrane/observability';
 import { envelope, history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 async function refusesRoutineIdentifiers(app: FastifyInstance, store: EventStore,
@@ -71,14 +71,14 @@ it('serves private chat commands and reads to joined members, refusing other org
   const nats = await natsFixture(), dbs = await databases(), fga = await openfga();
   const directory = await mkdtemp(`${tmpdir()}/chat-http-`);
   const config = { ...testAuthConfig(), expectedOrgId: 'org-test' }, binding = await createStore(fga.apiUrl, 'test');
-  const db = pgDb(dbs.queue), auth = memberAuthorisation(binding), keys = conversationKeys(directory);
+  const db = pgDb(dbs.queue), auth = memberAuthorisation(binding);
   const runner = new ProjectionRunner(db, nats.store, createLogger('chat', { level: 'silent' }));
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
   let dispatcherReady = false;
   function readDispatcherReady() {
     return Promise.resolve(dispatcherReady);
   }
-  const chat = { silo: 'test', store: nats.store, db, keys, binding, feed,
+  const chat = { silo: 'test', store: nats.store, db, binding, feed,
     dispatcherReady: readDispatcherReady };
   const app = buildServer(config, { chat });
   try {
@@ -111,7 +111,7 @@ it('serves private chat commands and reads to joined members, refusing other org
     // Naming someone else does not let Alice in from another organisation.
     for (const [subject, status] of [['alice', 200], ['bob', 403]] as const) {
       const allowed = { ...config, extraIdentities: [{ issuer: config.issuerUrl, subject }] };
-      const allowedApp = buildServer(allowed, { chat: { silo: 'test', store: nats.store, db, keys, binding, feed } });
+      const allowedApp = buildServer(allowed, { chat: { silo: 'test', store: nats.store, db, binding, feed } });
       try {
         expect((await allowedApp.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(status);
       } finally { await allowedApp.close(); }
@@ -161,7 +161,7 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect(teamRow?.assistantKind).toBe('team');
     const lifecycleRead = vi.spyOn(nats.store, 'readStream');
     lifecycleRead.mockClear();
-    await chatRows({ silo: 'test', store: nats.store, db, keys, binding, feed },
+    await chatRows({ silo: 'test', store: nats.store, db, binding, feed },
       conversationId, 'agent_session');
     for (const mode of ['direct', 'group'] as const) {
       const nonAssistantFeed = await chatRows(chat, conversationId, mode);

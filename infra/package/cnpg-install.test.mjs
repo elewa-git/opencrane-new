@@ -44,12 +44,12 @@ function validFixture() {
   };
   const fields = `SILO_ID OIDC_ISSUER_URL OIDC_CLIENT_ID OIDC_REDIRECT_URI OIDC_COOKIE_SECRET
     OIDC_EXPECTED_ORG_ID OPENFGA_STORE_ID OPENFGA_MODEL_ID OWNER_BOOTSTRAP_READY
-    CONVERSATION_KEYS_DIR CONVERSATION_WRAP_KEY_FILE MODEL_KEY_FILE MODEL_JWKS_FILE
+    MODEL_KEY_FILE MODEL_JWKS_FILE
     PACKAGE_OWNER_SUBJECT DEV_OWNER_EMAIL CLIENT_SECRET`;
   for (const key of fields.split(/\s+/u)) runtime[key] = canary;
   secrets.runtime = secret(runtime);
   const files = {};
-  const fileNames = `conversation-wrap-key token-signing-key.pem zitadel-client-secret
+  const fileNames = `token-signing-key.pem zitadel-client-secret
     model-jwks.json model-stub-key scanner-ca.crt`;
   for (const key of fileNames.split(/\s+/u)) files[key] = canary;
   secrets.runtimefiles = secret(files);
@@ -100,6 +100,32 @@ async function fixtureInputFiles(directory, fixture) {
   const approved = fixture.applicationImage ?? applicationImage;
   const application = applicationApprovalFixture(directory, approved, { scanner: true });
   return { valuesFile, bin: application.bin, privateDirectory };
+}
+
+function patchesComputerGateway(call) {
+  return call.program === 'kubectl' && call.args.includes('patch') &&
+    call.args.includes('computer-runtime');
+}
+
+function usesBootstrapJob(call) {
+  return call.program === 'kubectl' && call.args.includes('job') &&
+    call.args.includes('bootstrap');
+}
+
+function readsBootstrapJob(call) {
+  return usesBootstrapJob(call) && call.args.includes('get');
+}
+
+function checkBootstrapOrder(calls, restoring) {
+  const gateway = calls.findIndex(patchesComputerGateway);
+  assert.ok(gateway >= 0, 'Configure the private computer gateway');
+  if (restoring) {
+    assert.equal(calls.some(usesBootstrapJob), false,
+      'An empty restore target must never run or wait for owner bootstrap');
+    return;
+  }
+  const bootstrap = calls.findIndex(readsBootstrapJob);
+  assert.ok(bootstrap > gateway, 'Configure the gateway before waiting for bootstrap');
 }
 
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
@@ -174,6 +200,15 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
         }
       }
       assert.deepEqual(helmCommands, ['template', 'install']);
+      checkBootstrapOrder(calls, fixture.values.pilotRestore?.enabled === true);
+      if (fixture.values.pilotRestore?.enabled) {
+        for (const name of ['nats', 'postgres']) {
+          function waited(call) {
+            return call.args.includes('rollout') && call.args.includes(`statefulset/${name}`);
+          }
+          assert.ok(calls.some(waited), 'Wait for core storage without owner bootstrap');
+        }
+      }
       assert.equal(result.stderr, '');
     } else {
       assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
@@ -732,3 +767,13 @@ async function localApplicationCannotReachRendering() {
 }
 test('matching builder-written application pins refuse before Helm rendering',
   localApplicationCannotReachRendering);
+
+async function installsEmptyRestoreTargetWithoutBootstrap() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.values.pilotRestore = { enabled: true, backupId: 'pilot-backup' };
+  fixture.install = true;
+  await runFixture(fixture, undefined, true);
+}
+test('restore package installation never waits for or runs owner bootstrap',
+  installsEmptyRestoreTargetWithoutBootstrap);

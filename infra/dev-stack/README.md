@@ -30,7 +30,7 @@ flowchart LR
 - Keep two spare test stacks separate from each other and the owner's stack.
 - Check listener addresses, upload scanning and worker readiness before browser checks.
 - Prepare test sign-in and a free stand-in AI provider.
-- Preserve private survey and memory keys across restarts of the same stack.
+- Preserve private survey and memory keys across restarts; chats need no key storage.
 - Apply safe background subscription changes while services are stopped.
 - Run browser journeys and keep screenshots and original results.
 - Check the claimed stack and protected target before private memory collection.

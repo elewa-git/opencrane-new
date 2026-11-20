@@ -91,7 +91,7 @@ it('admits an authorised call after unrelated audit and chat history grows', asy
       const requestId = randomUUID();
       const event = index % 2 ? envelope('test', `conversation-${requestId}`, 'agent.message_delta', {
         conversationId: requestId, turnId: 'turn-other', messageId: 'message-other',
-        ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text',
+        utterance: 'Saved conversation prose', contentType: 'text',
       }) : envelope('test', `decision-${requestId}`, 'decision.recorded', {
         requestId, route: 'model', outcome: 'deny', reason: 'approval_required', contextDigest: '0'.repeat(64),
       });
@@ -280,9 +280,9 @@ it.each([
 it.each([
   { type: 'agent.command_ran', payload: { commandDigest: 'a'.repeat(64), exitCode: 0 } },
   { type: 'agent.file_changed', payload: { path: 'notes/summary.md', changeType: 'created' } },
-  { type: 'agent.reasoning_summarised', payload: { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' } },
+  { type: 'agent.reasoning_summarised', payload: { utterance: 'Saved reply' } },
   ...['agent.message_delta', 'agent.message_completed'].map(type => ({ type,
-    payload: { messageId: 'message', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' } })),
+    payload: { messageId: 'message', utterance: 'Saved reply', contentType: 'text' } })),
 ])('admits a tool continuation when its $type report arrives during admission', async ({ type, payload }) => {
   const f = await fixture();
   const append = f.nats.store.append.bind(f.nats.store);
@@ -1314,7 +1314,7 @@ async function fencesDistinctPayingGroupAfterAudit() {
       conversationId: 'finance', assistantId: 'assistant', createdBy: 'alice',
       mode: 'agent_session', payingGroupId: 'finance',
     });
-    setup.keys.provision('test', 'finance');
+
     await setup.append('computer-assistant', 'computer.turn_started', {
       assistantId: 'assistant', computerId: 'computer', conversationId: 'finance',
       turnId: 'finance-turn', threadId: 'finance-thread', requesterId: 'alice',

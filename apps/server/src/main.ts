@@ -1,3 +1,4 @@
+import type { OnboardingOptions } from './onboarding/options.ts';
 import { seedOwnership, providerSecrets, oauthConfigurationFromFile, connectionCustodyFromFile } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
@@ -8,7 +9,7 @@ import type { FileOptions } from './files/routes.ts';
 // server to its underlying HTTP server. Run with:
 //   node --experimental-strip-types src/main.ts
 import { requireLegacyClosesProjected } from './chat/participation.ts';
-import { conversationKeys } from './chat/keys.ts';
+import { conversationKeys } from '@opencrane/projections';
 import { startChildRecovery } from './chat/child-recovery.ts';
 import { startBridges } from './chat/start.ts';
 import type { ChatOptions } from './chat/routes.ts';
@@ -28,6 +29,7 @@ await startServiceProtection('serverDelivery');
 // A no-op unless an exporter is configured. The process owns shutdown.
 startTelemetry({ serviceName: 'opencrane-server' });
 
+const readOnly = process.env['PILOT_RESTORE_READ_ONLY'] === 'true';
 const port = Number(process.env['PORT'] ?? 8080);
 const host = process.env['HOST'] ?? '0.0.0.0';
 const heartbeatIntervalMs = Number(process.env['WS_HEARTBEAT_INTERVAL_MS'] ?? 15_000);
@@ -62,20 +64,18 @@ if (databaseUrl) {
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
 }
 const personalKeyDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
-let onboarding: ChatOptions | undefined;
+let onboarding: OnboardingOptions | undefined;
 if (realtime && events && modelDb && personalKeyDirectory) {
   onboarding = { silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(personalKeyDirectory) };
 }
-const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
 const readinessFile = process.env['DEV_DISPATCHER_READY_FILE'];
 function readDispatcherReady() {
   return dispatcherReady(readinessFile);
 }
-const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
+const chat: ChatOptions | undefined = realtime && events && modelDb ? { silo: realtime.binding.silo, store: events.store,
   db: modelDb.db, feed: realtime.feed, binding: realtime.binding,
-  dispatcherReady: readDispatcherReady,
-  keys: conversationKeys(keyDirectory, process.env['CONVERSATION_WRAP_KEY_FILE']) } : undefined;
+  dispatcherReady: readDispatcherReady } : undefined;
 if (chat) await requireLegacyClosesProjected(chat.store, chat.db);
 if (realtime && chat) realtime.chat = chat;
 let files: FileOptions | undefined;
@@ -98,7 +98,7 @@ const bridgeOptions = chat ? Object.assign(chat, {
   ...(catalogue ? { catalogue } : {}),
   ...(oauthFile ? { loadOAuthConfiguration: oauthConfigurationFromFile(oauthFile) } : {}),
   ...(budgetDecisionUrl ? { childStartUrl: budgetDecisionUrl } : {}) }) : undefined;
-const closeBridges = bridgeOptions ? await startBridges(bridgeOptions,
+const closeBridges = bridgeOptions && !readOnly ? await startBridges(bridgeOptions,
   process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
   process.env['TOKEN_SIGNING_KEY_FILE']!, process.env['TOKEN_ISSUER']!) : undefined;
 const budget = budgetDecisionUrl && process.env['TOKEN_SIGNING_KEY_FILE'] && process.env['TOKEN_ISSUER'] ? {
@@ -112,8 +112,11 @@ const membership = events && silo ? {
 } : undefined;
 const app = buildProductionServer(authConfig, {
   processOwnsTelemetry: true,
+  readOnly,
   ...(onboarding ? { onboarding } : {}),
-  ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
+  ...(chat ? { chat } : {}),
+  ...(chat && !readOnly ? { liveView: { ...chat,
+    open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(files ? { files } : {}),
   ...(realtime && events && modelDb ? { providers: {
@@ -163,7 +166,7 @@ const app = buildProductionServer(authConfig, {
     computers, binding: realtime.binding } } : {}),
 });
 
-if (events && silo) {
+if (events && silo && !readOnly) {
   try {
     await seedOwnership(events.store, silo);
   } catch (error) {
@@ -171,7 +174,7 @@ if (events && silo) {
     app.log.error({ err: error, operation: 'ownership.seed' }, 'Ownership seed unavailable');
   }
 }
-const closeChildRecovery = chat ? startChildRecovery(chat, createLogger('child-recovery')) : undefined;
+const closeChildRecovery = chat && !readOnly ? startChildRecovery(chat, createLogger('child-recovery')) : undefined;
 const address = await app.listen({ port, host });
 const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime,
   undefined, heartbeatIntervalMs);

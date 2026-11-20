@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: openfga
 spec:
-  replicas: 1
+  replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
   selector:
     matchLabels: { app: openfga }
   template:
@@ -51,7 +51,7 @@ kind: Deployment
 metadata:
   name: server
 spec:
-  replicas: 1
+  replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
   selector:
     matchLabels: { app: server }
   template:
@@ -100,6 +100,13 @@ spec:
           image: {{ required "server pin" .Values.images.server | quote }}
           command: [node, --experimental-strip-types, apps/server/src/main.ts]
           env:
+            {{- if .Values.pilotRestore.enabled }}
+            - { name: NATS_CERT_FILE, value: /run/opencrane/files/projection.crt }
+            - { name: NATS_KEY_FILE, value: /run/opencrane/files/projection.key }
+            - { name: NATS_NKEY_SEED_FILE, value: /run/opencrane/files/projection.seed }
+            - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
+            {{- end }}
+            - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
@@ -111,7 +118,6 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
-            - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
             - { name: storage-lease, mountPath: /run/storage, readOnly: true }
           ports: [{ containerPort: 8080 }]
@@ -140,6 +146,7 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 64Mi }
             limits: { cpu: 100m, memory: 128Mi }
+        {{- if not .Values.pilotRestore.enabled }}
         - name: models
           image: {{ .Values.images.server | quote }}
           command: [node, --experimental-strip-types, infra/dev-stack/secondary-models.ts]
@@ -155,7 +162,6 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
-            - { name: keys, mountPath: /var/lib/opencrane/conversation-keys }
             - { name: model-state, mountPath: /var/lib/opencrane/models }
           ports:
             - { containerPort: 43000, name: model-gateway }
@@ -166,6 +172,7 @@ spec:
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits: { cpu: 500m, memory: 512Mi }
+        {{- end }}
       volumes:
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
@@ -179,8 +186,6 @@ spec:
           secret:
             secretName: {{ .Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
-        - name: keys
-          persistentVolumeClaim: { claimName: conversation-keys }
         - name: model-state
           emptyDir: {}
         - name: kubeconfig

@@ -35,3 +35,6 @@ natsCluster:
   renderOnly: false
   routeCASecret: ""
   peerCertificateSecrets: []
+pilotRestore:
+  enabled: false
+  backupId: ""

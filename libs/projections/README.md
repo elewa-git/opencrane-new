@@ -34,7 +34,7 @@ flowchart LR
 - Keep tool reviews, publication records and provider choices separate from permission to act.
 - Keep spending records as integer euro cents.
 - Build a safe organisation history without copying private text or credentials.
-- Encrypt conversation content and keep memory keys separate from searchable text.
+- Project readable conversations and keep memory keys separate from searchable text.
 - Hide forgotten memory facts and dependent copies before opening their text.
 - Rebuild tables without sending messages, changing permissions or starting work.
 

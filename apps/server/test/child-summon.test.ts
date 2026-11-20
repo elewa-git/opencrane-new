@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { activateRequestedChild } from '../src/chat/child-activation.ts';
@@ -132,7 +133,7 @@ async function recoversWithContext(stage: string) {
   const rows = await chatHistory(context.nats.store, 'test', saved.childConversationId);
   expect(rows).toHaveLength(2);
   expect(rows.slice(0, existing.length)).toEqual(existing);
-  expect(context.keys.decrypt('test', saved.childConversationId, rows[1]!.event.data))
+  expect(readConversationProse(rows[1]!.event.data))
     .toBe('@Assistant source canary');
   const beforeRetry = await context.nats.store.head();
   vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 600_001);

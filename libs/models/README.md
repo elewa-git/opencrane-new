@@ -64,7 +64,7 @@ Not built yet:
    the change as an [event](../../GLOSSARY.md#event). Background workers update
    the permission service and spending read tables from those saved changes.
 4. **An assistant uses a tool.** The library checks the reviewed tool and its rule.
-   A tool that needs approval can use only its own approval, once.
+   A tool that needs approval saves a readable review and can use only its own approval, once.
    Changed access or a blocked tool prevents a new send.
 5. **A person chooses a personal account.** The library checks the saved account and
    which assistants may use it. Each call checks access again before releasing its key;

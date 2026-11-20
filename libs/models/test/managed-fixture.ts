@@ -88,7 +88,7 @@ export async function managedFixture(problem = '') {
   }
   const options = { secrets, gatewayUrl: 'http://unused.test' };
   const decision = await startDecision(setup.actor, setup.identity, setup.binding,
-    0, setup.keys, options);
+    0, options);
   onTestFinished(decision.close);
   Object.assign(setup.options, { managedCalls: true, decisionUrl: decision.url });
   await setup.restart();

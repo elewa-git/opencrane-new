@@ -195,7 +195,7 @@ export async function egressFixture(enabled = true, guarded = false,
   let productionDecision: Awaited<ReturnType<typeof startDecision>> | undefined;
   if (production) {
     productionDecision = await startDecision(production.actor, production.identity,
-      production.binding, 0, undefined, undefined, undefined, registry);
+      production.binding, 0, undefined, undefined, registry);
     decisionUrl = productionDecision.url;
   }
   let port = await freePort();
@@ -286,7 +286,7 @@ export async function egressFixture(enabled = true, guarded = false,
     registry = runtime.registry;
     const decisionPort = Number(new URL(decisionUrl).port);
     productionDecision = await startDecision(production.actor, production.identity,
-      production.binding, decisionPort, undefined, undefined, undefined, registry);
+      production.binding, decisionPort, undefined, undefined, registry);
   }
   async function close() {
     await runtime?.close();

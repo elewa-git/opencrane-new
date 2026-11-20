@@ -77,14 +77,10 @@ checkpoint and receipts. It maps `CONTENT_DATABASE_URL` to the secret's `DATABAS
 the existing server read-role URL, for the gateway configuration lock. It never uses
 `PROJECTION_DATABASE_URL` for this connection. Offline Helm rendering checks both
 references; this does not qualify live gateway delivery in a packaged install. The
-`runtimeFiles` secret holds certificates, model files, the local stub key and
-a fresh 32-byte conversation wrapping key. An init container copies those
-files into memory, gives them to the `node` user and sets mode 0400. The
-server, model process, workers and bootstrap Job mount the copy read-only.
-The server and model process share a private volume. They wrap each
-conversation key before saving it on the volume, which stays with the claimed
-install when its Pod restarts. Preparing a new key Secret for an existing volume
-would make its keys unreadable; a fresh install gets a fresh volume and Secret.
+`runtimeFiles` secret holds certificates, model files and the local stub key.
+An init container copies those files into memory, gives them to the `node` user
+and sets mode 0400. The server, model process, workers and bootstrap Job mount
+the copy read-only. Conversations need no key volume or wrapping Secret.
 The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
@@ -1895,6 +1891,24 @@ module differs from the retained bundle range. The build change is unproved, so
 this grant stays BLOCKED. The [receipt](../../docs/process/p5-4-images16/receipt.md)
 records the boundary. `scripts/p5-4-images16.test.mjs` runs the refusal fixtures.
 
+## Reset development conversations
+
+Conversation encryption is deferred. New messages, replies, reasoning summaries,
+child results, redacted command previews, approval reviews and routine instructions
+are plaintext event fields. Their shared text rule refuses NUL and unpaired UTF-16
+surrogates before append. Current membership and conversation permissions still
+protect browser and file reads. Event logs, database dumps and backups contain
+readable conversation data and belong in private operator storage.
+Memory facts and personal survey answers keep their separate encryption.
+
+No customer data requires conversion. Stop and remove the package in your claimed
+secondary slot with `infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"`.
+Prepare a fresh installation using `package-prepare`, then `package-up` for that
+same slot. The ordinary development install uses `infra/dev-stack/up.sh --fresh`
+instead. Both replace development data; keep any needed old fixture with its old
+software and keys separately. Do not replay old encrypted conversation events into
+this version or reuse those backups. Create a new backup baseline after the reset.
+
 ## Scheduled pilot backup
 
 The ordinary standalone package schedules `pilot-backup` at 02:00 UTC daily. It
@@ -1902,7 +1916,7 @@ uses one NATS server and PostgreSQL's existing `pg_dumpall`, including every
 non-template database (`projections`, `handlers`, `openfga` and `postgres`). The
 separate `backups` PVC holds private mode-0700 sets under `/backups/sets`. It is
 never the live `files` bucket or its volume. This local copy does not protect
-against losing the developer machine. Restore and computer homes are excluded.
+against losing the developer machine. Computer homes are excluded.
 The CNPG and three-peer previews do not emit this pilot schedule.
 
 The Job stops the server (including the model gateway) and dispatcher and waits
@@ -1922,7 +1936,8 @@ continue, so it is not a promise that the physical WAL bytes remain unchanged.
 `backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
 object capture. All three parts share the backup id and event sequence. Their manifest includes
 integer byte counts, SHA-256, capture timestamps, image pins, chart version,
-event stream configuration and positions, database names and LSN, and an object
+event stream configuration and positions, database names, LSN and the saved OpenFGA
+store and model references, and an object
 inventory with each key, size and checksum. The `files` part is UTF-8 JSON lines;
 each line adds base64 `data` to that object's inventory entry.
 
@@ -1985,3 +2000,86 @@ source, layer, licence and promotion checks before installation.
 | --- | --- |
 | [chart](chart/README.md) | Describes the local installation and its required settings. |
 | [chart/templates](chart/templates/README.md) | Describes the programs, storage and network rules to install. |
+
+Catalogue `list` and `show` commands load only backup-file validation. They do not
+load capture clients or require connections to running services.
+
+## Restore one pilot backup
+
+Restore only a completed scheduled pilot set into a new, empty installation.
+Use the same chart and all eight immutable images recorded by that set, its silo
+identity, sign-in issuer and organisation, and original person subject mappings.
+Supply fresh service credentials and the retained secret-store references.
+Memory facts and survey answers still require their existing separate key custody.
+Conversation reads require no chat key. Computer homes are outside this backup.
+Checksums detect changed bytes; manifests are unsigned. Keep the entire set in
+trusted private operator storage. Older package versions require their own software.
+
+Prepare a second claimed secondary slot with `package-prepare`. Before `package-up`,
+add `pilotRestore: { enabled: true, backupId: BACKUP_ID }` to its private values.
+Restore mode omits bootstrap, holds server, OpenFGA and workers at zero replicas,
+suspends scheduled backup and omits the model gateway. Storage services start on
+fresh volumes. Do not run ordinary fresh-install checks before recovery completes.
+A regular installation is refused as non-empty, without stopping its readers.
+
+Copy the complete checked set from the source catalogue into private operator
+storage. Stop the source installation before recovery to demonstrate offline use.
+In the destination, copy that directory to `/backups/sets/BACKUP_ID` through the
+restore-mode catalogue. Preserve directory mode 0700 and file mode 0600, owned by
+uid 1000. Then stop the catalogue and wait for its Pod to disappear. Do not run
+Helm, change workloads, edit restored data or write to the stores during recovery.
+Use the destination slot's recorded Kubernetes context for these commands:
+
+```sh
+namespace="opencrane-package-$DEV_STACK_ID"
+kubectl -n "$namespace" scale deployment/backup-catalogue --replicas=0
+kubectl -n "$namespace" wait --for=delete pod -l app=backup-catalogue --timeout=60s
+kubectl -n "$namespace" create job --from=cronjob/pilot-restore restore-manual
+kubectl -n "$namespace" wait --for=condition=complete job/restore-manual --timeout=600s
+kubectl -n "$namespace" logs job/restore-manual -c backup
+```
+
+The Job reads the set through a read-only mount and validates private regular files,
+part checksums, exact package versions, timestamps and complete inventories before
+mutation. It requires no event stream, application databases, application roles or
+uploaded objects. An advisory database lock excludes concurrent runners. A durable
+mode-0600 journal in `/restore/state` on `pilot-restore` binds the manifest digest
+to the service-account and volume identities before any data is loaded. Keep the volume root group-managed
+and its state directory private. This lets Kubernetes skip recursive permission
+changes on remount, so journal files keep mode 0600. The ten-minute Job deadline bounds
+an eight-minute operation; native events retain their 60-second and 64 MiB limits.
+
+Recovery first transfers the native event snapshot and verifies event identities,
+subjects, positions and retained range. It then loads all four databases with SQL
+errors fatal, renews application role credentials, rebuilds all fourteen installed
+projections in a separate database and compares every content table with the dump.
+Only replayed content becomes readable. The saved dispatcher checkpoint stays held.
+OpenFGA is rebuilt from events and checked against the saved rights. The source LSN
+must match the manifest; logical restore does not recreate a physical WAL position.
+Finally, the Job checks the exact event-backed file inventory, uploads original
+object keys and reads every size and SHA-256 back. It does not rescan historical files.
+New uploads on ordinary installations keep the normal scanner checks.
+
+Final verification repeats native history, projection, rights and file comparisons.
+Only then does the Job open the server for authenticated reads and mark completion.
+The server refuses API writes, including owner claims, with `restore_read_only`.
+Its NATS identity cannot append. The restore account can scale only server and
+OpenFGA; it can inspect workers and the catalogue but cannot start them. Approval reads compute terminal state without saving it.
+Dispatcher, models, tools, routines, computers and scheduled backups remain held.
+Sign-in uses the restored membership and does not create another owner. Use the
+normal conversation and file routes to verify authorised and denied reads.
+
+After interruption, keep restore mode and the same volumes, set and credentials.
+Create another Job from the same CronJob. The journal resumes owned stages;
+partially loaded databases are reset only within that recorded empty installation.
+The journal records a native attempt before sending bytes. An uncertain native
+completion is checked by readback, without retransmitting. If an interrupted attempt
+has no complete readable stream, recovery refuses and needs operator investigation. Existing file objects must already match their checksums. A
+completed rerun briefly closes reading and verifies again without reloading data.
+A different set, replaced volume, foreign content or concurrent runner refuses.
+Runtime patches use mode-0600 files in the Job's private memory-backed temporary
+directory. Only filenames enter arguments; patch values stay private. SQL enters
+PostgreSQL through stdin. Each patch file is removed after its command.
+Failures report a safe stage and reason, retain their internal cause and leave
+writers held. Inspect the failed Job and journal; never delete them to bypass an
+empty-target refusal. There is no command here to release effects after recovery.

@@ -391,7 +391,6 @@ async function write(
   if ('assistantId' in input) {
     await assistantCreationDetails(options, memberId, input);
   }
-  if ('mode' in input) options.keys.provision(options.silo, input.conversationId);
   async function checkFresh(operation: 'retry' | 'append') {
     // Check access just before the append; slow history reads have their own time limit.
     let snapshot;
@@ -427,7 +426,7 @@ async function write(
     return fresh.deadline;
   }
   const context = { silo: options.silo, memberId };
-  return chatCommand(options.store, options.keys, context, input, checkFresh);
+  return chatCommand(options.store, context, input, checkFresh);
 }
 
 async function groupCreationAuthority(options: ChatOptions,

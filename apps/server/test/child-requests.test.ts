@@ -17,7 +17,7 @@ import { computers, conversations, connectMemberFeed, pgDb, ProjectionRunner, re
 import { childRequestedDataSchema } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { reviewChildRequest, requestChild, createRequestedChild }
   from '../src/chat/child-requests.ts';
 
@@ -47,7 +47,7 @@ async function initialiseWithNats(fixture: typeof nats) {
   directory = await mkdtemp(`${tmpdir()}/child-requests-`);
   const db = pgDb(storage.queue);
   const binding = await createStore(fga.apiUrl, 'test');
-  options = { silo: 'test', store: nats.store, db, binding, keys: conversationKeys(directory) };
+  options = { silo: 'test', store: nats.store, db, binding };
   auth = memberAuthorisation(binding, nats.store);
   runner = new ProjectionRunner(db, nats.reader, createLogger('child-test'));
   await runner.initialise(computers);
@@ -80,12 +80,12 @@ async function parent(mode = 'group', author = 'alice', lost = false) {
   }
   if (mode === 'direct') data = { ...data, participantIds: ['alice', 'bob'] };
   await save(`conversation-${conversationId}`, 'conversation.created', data);
-  const keys = conversationKeys(directory);
-  keys.provision('test', conversationId);
+
+
   const input = { id: `source-${counter}`, conversationId, text: '@Assistant source canary' };
   const context = { silo: 'test', memberId: author };
   async function post() {
-    return chatCommand(nats.store, keys, context, input);
+    return chatCommand(nats.store, context, input);
   }
   if (lost) await loseReply(post);
   await post();
@@ -176,8 +176,7 @@ async function savesAndReplaysAfterExpiry() {
   const positionAfterLoss = await nats.store.head();
   const source = { id: input.sourceMessageId, conversationId: input.conversationId,
     text: '@Assistant source canary' };
-  await chatCommand(nats.store, conversationKeys(directory),
-    { silo: 'test', memberId: 'alice' }, source);
+  await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, source);
   expect(await nats.store.head()).toBe(positionAfterLoss);
   const retry = await requestChild(options, 'alice', { ...input, requestId: 'another-request' });
   expect(retry).toEqual(intent);
@@ -251,7 +250,7 @@ async function parentReaders(conversationId: string) {
   function memberId(_silo: string, _issuer: string, subject: string) {
     return Promise.resolve(subject);
   }
-  const chat = { ...options, keys: conversationKeys(directory), feed: { memberId } };
+  const chat = { ...options, feed: { memberId } };
   const app = buildServer(config, { chat });
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const realtime = { feed, binding: options.binding, chat };

@@ -1,4 +1,5 @@
 import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
+import { readConversationProse } from '@opencrane/events';
 import { childStartFailure, childStartState } from './child-failure.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -21,7 +22,7 @@ export class ChildRequestChanged extends ChatConflict {}
 export class ChildRequestRace extends ChildRequestChanged {}
 export class ChildRequestFailed extends ChatConflict {}
 
-type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
+type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db'>;
 const inputSchema = z.strictObject({
   conversationId: chatIdSchema, sourceMessageId: chatIdSchema, requestId: chatIdSchema,
   assistantId: chatIdSchema, payingGroupId: chatIdSchema,
@@ -244,12 +245,12 @@ function verifyCreation(options: Options, memberId: string, loaded: Loaded,
     principal: { kind: 'human' as const, id: memberId } };
   verifySaved(previous, expected);
 }
-function inputText(options: Options, conversationId: string, data: unknown) {
+function inputText(data: unknown) {
   try {
-    return options.keys.decrypt(options.silo, conversationId, data);
-  } catch {
-    // Keep key read failures retryable; unreadable input is not a proven refusal.
-    throw new ChatConflict('Child input unavailable');
+    return readConversationProse(data);
+  } catch (cause) {
+    // Keep malformed source data retryable; it is not a proven access refusal.
+    throw new ChatConflict('Child input unavailable', { cause });
   }
 }
 export async function checkedChildInput(options: Options, memberId: string, value: unknown) {
@@ -271,17 +272,17 @@ export async function checkedChildInput(options: Options, memberId: string, valu
   if (await participationClosed(options.store, options.silo, childConversationId,
     fresh.deadline)) throw new ChildRequestClosed('Conversation closed');
   const source = messagePostedDataSchema.parse(loaded.source.event.data);
-  const text = inputText(options, loaded.input.conversationId, source);
+  const text = inputText(source);
   const data = { conversationId: childConversationId, authorId: memberId,
     authorKind: 'human', contentType: source.contentType };
   function verifyInput(row: StoredEvent, expected: StoredEvent['event']) {
     const parsed = messagePostedDataSchema.safeParse(row.event.data);
-    if (!parsed.success || inputText(options, childConversationId, parsed.data) !== text ||
+    if (!parsed.success || inputText(parsed.data) !== text ||
         !isDeepStrictEqual(row.event.correlation, {})) {
       throw new ChildRequestChanged('Child input changed');
     }
-    // Decryption checks the child's key reference; compare text without creating another key.
-    const expectedData = { ...data, ciphertext: parsed.data.ciphertext, keyId: parsed.data.keyId };
+    // Compare the copied prose and identity with the reviewed source.
+    const expectedData = { ...data, utterance: text };
     verifySaved(row, { ...expected, data: expectedData });
   }
   function isFirstInput(row: StoredEvent) {
@@ -302,10 +303,7 @@ export async function addChildFirstInput(options: Options, memberId: string, val
   const checked = await checkedChildInput(options, memberId, value);
   if (checked.previous) return checked.previous;
   const { intent, subject, creation, fresh, verifyInput } = checked;
-  const childId = intent.data.childConversationId;
-  options.keys.provision(options.silo, childId);
-  const encrypted = options.keys.encrypt(options.silo, childId, checked.text);
-  const data = { ...checked.data, ...encrypted };
+  const data = { ...checked.data, utterance: checked.text };
   return save(options, memberId, intent.data.firstInputId, subject, 'message.posted', data,
     creation.sequence, fresh, verifyInput);
 }

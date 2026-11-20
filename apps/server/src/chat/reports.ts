@@ -1,5 +1,5 @@
 import { sha256Hex, sha256HexOfJson } from '@opencrane/events/digest';
-import { recordIdSchema } from '@opencrane/events';
+import { recordIdSchema, storageSafeTextSchema } from '@opencrane/events';
 import { FileRefusal } from '../files/refusals.ts';
 import { artifactListSchema } from '@opencrane/events';
 import { publishArtifacts, type ArtifactPublication } from '../files/artifacts.ts';
@@ -13,7 +13,6 @@ import { z } from 'zod';
 import { readEventAt, readStreamSummary, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import { readChatFacts, type ChatFacts } from './chat-summary.ts';
-import type { conversationKeys } from './keys.ts';
 import { chatWrite } from './write-priority.ts';
 
 // Permanent refusals need operator attention; reconnecting cannot repair them.
@@ -22,11 +21,11 @@ class MemoryReportRejected extends ReportRejected {}
 
 const existingReportSchema = z.object({
   artifacts: artifactListSchema.optional(), sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: recordIdSchema,
-  turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
+  turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: storageSafeTextSchema.max(128_000).optional(),
   rootId: z.string().optional(), senderAttemptId: z.string().optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   activityLabel: commandActivityLabelSchema.optional(),
-  preview: z.string().min(1).max(16_384).optional(),
+  preview: storageSafeTextSchema.min(1).max(16_384).optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   sharingClass: z.literal('shared_only').optional(),
   nativeTermination: z.literal('turn_completed').optional(),
@@ -96,8 +95,7 @@ export function canCombineReports(first: unknown, next: unknown, textLength: num
   return JSON.stringify(leftIdentity) === JSON.stringify(rightIdentity);
 }
 
-export async function recordReports(store: EventStore, keys: ReturnType<typeof conversationKeys>,
-  context: ReportContext, values: unknown[]) {
+export async function recordReports(store: EventStore, context: ReportContext, values: unknown[]) {
   const reports: Report[] = [];
   let text = '';
   for (const value of values) {
@@ -111,15 +109,15 @@ export async function recordReports(store: EventStore, keys: ReturnType<typeof c
   }
   const last = reports.at(-1);
   if (!last || reports.length > 64) throw new ReportRejected('Invalid report batch');
-  if (reports.length === 1) return recordReport(store, keys, context, last);
+  if (reports.length === 1) return recordReport(store, context, last);
   const combined = { ...last, text };
-  return recordReport(store, keys, context, combined, reports);
+  return recordReport(store, context, combined, reports);
 }
 
 export async function recordBridgeReports(store: EventStore,
-  keys: ReturnType<typeof conversationKeys>, context: ReportContext, values: unknown[]) {
+  context: ReportContext, values: unknown[]) {
   try {
-    return await recordReports(store, keys, context, values);
+    return await recordReports(store, context, values);
   } catch (error) {
     if (!(error instanceof MemoryReportRejected)) {
       throw error;
@@ -140,7 +138,7 @@ export async function recordBridgeReports(store: EventStore,
     }
     let result: 'recorded' | 'duplicate' = 'duplicate';
     for (const loss of losses) {
-      const saved = await recordReport(store, keys, context, loss);
+      const saved = await recordReport(store, context, loss);
       if (saved === 'recorded') {
         result = saved;
       }
@@ -161,8 +159,7 @@ export async function reportPosition(store: EventStore, silo: string, computerId
   while (sequences.has(position + 1)) position++;
   return position;
 }
-export async function recordReport(store: EventStore, keys: ReturnType<typeof conversationKeys>,
-  context: ReportContext, value: unknown, batch?: Report[],
+export async function recordReport(store: EventStore, context: ReportContext, value: unknown, batch?: Report[],
   deadline = performance.now() + 10_000): Promise<'duplicate' | 'recorded'> {
   const report = reportSchema.parse(value);
   requireCommandPreviewShape(report);
@@ -174,11 +171,11 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   const authorId = reportAuthor(report, context.assistantId, created, facts.message);
   requirePrivateExitShape(report);
   requireMemoryFreeContent(report, facts);
-  const digest = reportDigest(batch?.at(-1) ?? report);
   const subject = `conversation-${report.conversationId}`;
   if (facts.reportPosition !== undefined) {
-    return verifyRecordedReport(store, keys, context, report, batch, facts.reportPosition, digest);
+    return verifyRecordedReport(store, context, report, batch, facts.reportPosition);
   }
+  const digest = reportDigest(batch?.at(-1) ?? report);
   await requireSharedReportTurn(store, context, report, created, authorId);
   await requirePrivateExitTurn(store, context, report);
   let previousSequence = facts.lastReportSequence;
@@ -191,13 +188,13 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   const publication = await publishReportArtifacts(store, report, context, facts, authorId, deadline);
   facts = publication.facts;
   deadline = publication.deadline;
-  const event = reportEvent(report, context, keys, batch, digest);
+  const event = reportEvent(report, context, batch, digest);
   const command: AppendCommand = { expectedSequence: facts.sequence, historyChecked: true, event };
   const append = store.append.bind(store, command);
   const result = await chatWrite(store, subject, 'report', append);
   if (result.status === 'conflict' && performance.now() < deadline) {
     // Reload after a competing append, including memory evidence. Never repeat an uncertain append.
-    return recordReport(store, keys, context, value, batch, deadline);
+    return recordReport(store, context, value, batch, deadline);
   }
   if (result.status === 'rejected') throw new ReportRejected('Report append rejected');
   if (result.status !== 'appended') throw new Error('Report append unavailable');
@@ -291,14 +288,14 @@ function reportAuthor(report: Report, assistantId: string,
   return message.authorId;
 }
 
-async function verifyRecordedReport(store: EventStore, keys: ReturnType<typeof conversationKeys>,
-  context: ReportContext, report: Report, batch: Report[] | undefined, position: number,
-  digest: string) {
+async function verifyRecordedReport(store: EventStore, context: ReportContext,
+  report: Report, batch: Report[] | undefined, position: number) {
   if (batch) {
     // Replay can split a previously saved batch. Check every original digest and position.
-    for (const original of batch) await recordReport(store, keys, context, original);
+    for (const original of batch) await recordReport(store, context, original);
     return 'duplicate' as const;
   }
+  const digest = reportDigest(report);
   const subject = `conversation-${report.conversationId}`;
   const previous = await readEventAt(store, subject, position, performance.now() + 10_000);
   if (previous) verifyReportReplay(previous, report, digest);
@@ -307,9 +304,9 @@ async function verifyRecordedReport(store: EventStore, keys: ReturnType<typeof c
 }
 
 function reportEvent(report: Report, context: ReportContext,
-  keys: ReturnType<typeof conversationKeys>, batch: Report[] | undefined, digest: string) {
+  batch: Report[] | undefined, digest: string) {
   const subject = `conversation-${report.conversationId}`;
-  const data = reportData(report, context.silo, context.assistantId, keys);
+  const data = reportData(report, context.assistantId);
   const id = `bridge-${sha256Hex(`${context.computerId}:${report.sequence}`)}`;
   const earlier = batch?.slice(0, -1);
   const preceding = earlier?.map(receiptFor);
@@ -334,7 +331,7 @@ async function requireSharedReportTurn(store: EventStore,
     if (turn) return { ...turn };
     return undefined;
   }
-  // Check saved admission before encrypting output. A computer's claim is not proof.
+  // Check saved admission before saving output. A computer's claim is not proof.
   const subject = `computer-${context.assistantId}`;
   const turn = await readStreamSummary(store, context.silo, subject,
     computerSummary, performance.now() + 10_000, take);
@@ -416,16 +413,15 @@ function validateReportContextClass(report: z.infer<typeof reportSchema>,
     throw new ReportRejected('Turn context class mismatch');
   }
 }
-function commandReportData(report: z.infer<typeof existingReportSchema>, silo: string,
-  keys: ReturnType<typeof conversationKeys>) {
+function commandReportData(report: z.infer<typeof existingReportSchema>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
   const data = { ...common, commandDigest: z.string().parse(report.commandDigest),
     exitCode: z.number().parse(report.exitCode), activityLabel: report.activityLabel };
   if (!report.preview) return data;
-  const view = keys.encrypt(silo, report.conversationId, report.preview);
+  const view = { preview: report.preview };
   return { ...data, view };
 }
-function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
+function reportData(report: z.infer<typeof reportSchema>, assistantId: string) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
   if (report.type === 'agent.native_request_refused') {
     return { ...common, nativeRequestId: report.nativeRequestId,
@@ -440,9 +436,9 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     return { ...common, callId: report.callId, serverId: report.serverId,
       toolName: report.toolName, status: report.status, durationMs: report.durationMs };
   } else if (report.type === 'agent.command_ran') {
-    return commandReportData(report, silo, keys);
+    return commandReportData(report);
   } else if (report.type === 'agent.reasoning_summarised') {
-    return { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
+    return { ...common, utterance: z.string().parse(report.text) };
   } else if (report.type === 'agent.turn_started') {
     const data: typeof common & { assistantId: string; threadId?: string;
       executionMode?: 'restricted' | 'memory_free'; sharingClass?: 'shared_only' } = {
@@ -459,7 +455,7 @@ function reportData(report: z.infer<typeof reportSchema>, silo: string, assistan
     return common;
   } else {
     return { ...common, messageId: z.string().parse(report.messageId), contentType: 'text',
-      ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
+      utterance: z.string().parse(report.text) };
   }
 }
 

@@ -1,3 +1,4 @@
+
 import { once } from 'node:events';
 import * as crypto from 'node:crypto';
 import { dirname } from 'node:path';
@@ -106,7 +107,7 @@ afterEach(close);
 
 async function humanMessage(id: string, authorId: string) {
   const data = { conversationId: 'conversation', authorKind: 'human', authorId,
-    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', `${authorId} statement`) };
+    contentType: 'text', ...({ utterance: `${authorId} statement` }) };
   const event = envelope('test', 'conversation-conversation', 'message.posted', data, id);
   await setup.nats.seed([event]);
 }
@@ -127,13 +128,12 @@ function status(type: string, sequence: number) {
     turnId: 'turn', assistantId: 'assistant', requesterId: 'alice', type };
 }
 function save(value: unknown, store: EventStore = setup.nats.store) {
-  return recordReport(store, setup.keys, context, value);
+  return recordReport(store, context, value);
 }
 async function coldHistory() {
   const cold = await createEventStore(setup.nats.connection);
   return history(cold, 'conversation-conversation', 'test');
 }
-function decrypt(data: unknown) { return setup.keys.decrypt('test', 'conversation', data); }
 async function assertNoReportSaved() {
   const rows = await coldHistory();
   for (const row of rows) expect(row.event.report).toBeUndefined();
@@ -142,22 +142,19 @@ async function assertNoReportSaved() {
 }
 async function rejectsContent(type: string) {
   await recall();
-  const encrypt = vi.spyOn(setup.keys, 'encrypt');
   const hash = vi.mocked(crypto.createHash);
   hash.mockClear();
   await expect(save(report(type))).rejects.toThrow(new ReportRejected(refusal));
-  expect(encrypt).not.toHaveBeenCalled();
   expect(hash).not.toHaveBeenCalled();
   await assertNoReportSaved();
 }
 it.each(['agent.message_delta', 'agent.message_completed', 'agent.reasoning_summarised'])(
-  'refuses recalled %s before encryption or hashing', rejectsContent);
+  'refuses recalled %s before saving or hashing', rejectsContent);
 
 async function rejectsBatchesAndHiddenText() {
   await recall();
-  const encrypt = vi.spyOn(setup.keys, 'encrypt');
   const values = [report('agent.message_delta'), report('agent.message_delta', 2)];
-  await expect(recordReports(setup.nats.store, setup.keys, context, values))
+  await expect(recordReports(setup.nats.store, context, values))
     .rejects.toThrow(new ReportRejected(refusal));
   await expect(save(report('agent.turn_completed'))).rejects.toThrow(refusal);
   const command = { ...status('agent.command_ran', 1), commandDigest: 'b'.repeat(64), exitCode: 0 };
@@ -165,7 +162,6 @@ async function rejectsBatchesAndHiddenText() {
   const artifacts = [{ id: 'a'.repeat(64), name: 'report.txt', size: 5, sha256: 'b'.repeat(64) }];
   const completed = { ...status('agent.turn_completed', 1), artifacts };
   await expect(save(completed)).rejects.toThrow(refusal);
-  expect(encrypt).not.toHaveBeenCalled();
   await assertNoReportSaved();
 }
 it('refuses batched deltas and text hidden on a completion report', rejectsBatchesAndHiddenText);
@@ -227,9 +223,7 @@ async function rejectsChangedTurn(state: string) {
   }
   const facts = await readChatFacts(setup.nats.store, 'test', 'conversation', 'turn');
   expect(facts.memoryContext?.status).toBe(state === 'closed' ? 'ended' : state);
-  const encrypt = vi.spyOn(setup.keys, 'encrypt');
   await expect(save(report())).rejects.toThrow(refusal);
-  expect(encrypt).not.toHaveBeenCalled();
   await assertNoReportSaved();
   expect(await save(status('agent.output_lost', 1))).toBe('recorded');
   expect(await save(status('agent.turn_completed', 2))).toBe('recorded');
@@ -253,7 +247,7 @@ async function rejectsEvidenceDuringAppend() {
   }
   vi.spyOn(setup.nats.store, 'append').mockImplementation(recallBeforeAppend);
   const values = [report('agent.message_delta'), report('agent.message_delta', 2)];
-  await expect(recordReports(setup.nats.store, setup.keys, context, values))
+  await expect(recordReports(setup.nats.store, context, values))
     .rejects.toThrow(refusal);
   expect(raced).toBe(true);
   await assertNoReportSaved();
@@ -275,13 +269,11 @@ async function excludesEarlierRepliesAfterColdReplay() {
   await humanMessage('next', 'alice');
   const rows = await coldHistory();
   const current = rows.at(-1)!;
-  const decryptions = vi.fn(decrypt);
-  const aliceContext = privateContext(rows, current, 'alice', decryptions);
+  const aliceContext = privateContext(rows, current, 'alice');
   expect(aliceContext?.exchanges).toMatchObject([
     { member: 'alice statement', assistant: [] },
   ]);
-  expect(decryptions).toHaveBeenCalledTimes(1);
-  const bobContext = privateContext(rows, current, 'bob', decrypt);
+  const bobContext = privateContext(rows, current, 'bob');
   expect(bobContext?.exchanges).toMatchObject([
     { member: 'bob statement', assistant: ['Bob memory-free reply'] },
   ]);
@@ -293,7 +285,7 @@ it('excludes replies saved before recall on cold replay and keeps each requester
 
 async function savesMemoryFreeReports() {
   const values = [report('agent.message_delta'), report('agent.message_delta', 2)];
-  expect(await recordReports(setup.nats.store, setup.keys, context, values)).toBe('recorded');
+  expect(await recordReports(setup.nats.store, context, values)).toBe('recorded');
   expect(await save(values[0])).toBe('duplicate');
   expect(await save(values[1])).toBe('duplicate');
   expect(await save(report('agent.reasoning_summarised', 3))).toBe('recorded');
@@ -301,7 +293,7 @@ async function savesMemoryFreeReports() {
   expect(await save(status('agent.turn_completed', 5))).toBe('recorded');
   await humanMessage('next', 'alice');
   const rows = await coldHistory();
-  const rebuilt = privateContext(rows, rows.at(-1)!, 'alice', decrypt);
+  const rebuilt = privateContext(rows, rows.at(-1)!, 'alice');
   expect(rebuilt?.exchanges).toMatchObject([
     { member: 'alice statement', assistant: [canary] },
   ]);
@@ -317,7 +309,7 @@ async function permanentlyRefusesContent() {
   const address = sockets.address();
   if (!address || typeof address === 'string') throw new Error('Missing socket address');
   const connection = once(sockets, 'connection');
-  const options = { silo: 'test', store: setup.nats.store, keys: setup.keys };
+  const options = { silo: 'test', store: setup.nats.store };
   const input = { url: `ws://127.0.0.1:${address.port}`, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test' };
   const bridge = await connectBridge(options, input);

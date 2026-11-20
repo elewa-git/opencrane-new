@@ -48,7 +48,7 @@ async function decisionGrowth(chatLength: number) {
     }
     for (let index = 2; index < chatLength; index++) {
       const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-        contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+        contentType: 'text', utterance: 'Saved conversation prose' };
       await append('conversation-conversation', 'message.posted', message, `message-${index}`);
     }
     let earlierTurns = 0;

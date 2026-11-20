@@ -15,7 +15,7 @@ export async function prepareRoutineInput(...args: Parameters<typeof loadRoutine
 }
 
 export async function loadRoutineInput(...args: Parameters<typeof loadRoutinePreparation>) {
-  const [, keys, worker] = args;
+  const [, worker] = args;
   const preparation = await loadRoutinePreparation(...args);
   const run = preparation.run;
   const conversationId = run.conversationId;
@@ -25,22 +25,14 @@ export async function loadRoutineInput(...args: Parameters<typeof loadRoutinePre
       run.messageId !== `routine-input-${run.occurrenceId}`) {
     throw new Error('Routine input refused');
   }
-  const instructions = keys.decrypt(worker.silo, `routine-${run.routineId}`,
-    run.definition.instructions);
+  const instructions = run.definition.instructions;
   const text = `Routine instructions (user data):\n\n${instructions}`;
   const metadata = { conversationId, authorId: run.definition.ownerId,
     authorKind: 'system' as const, contentType: 'text' as const };
-  function checkCustody(value: unknown) {
-    if (keys.decrypt(worker.silo, `routine-${run.routineId}`,
-      run.definition.instructions) !== instructions ||
-      keys.decrypt(worker.silo, conversationId, value) !== text) {
-      throw new Error('Routine input refused');
-    }
-  }
   function verify(row: StoredEvent) {
     const event = row.event;
     const data = messagePostedDataSchema.parse(event.data);
-    const { ciphertext: _ciphertext, keyId: _keyId, ...savedMetadata } = data;
+    const { utterance, ...savedMetadata } = data;
     if (event.id !== run.messageId || event.commandId !== run.messageId ||
         event.type !== 'message.posted' || event.silo !== worker.silo ||
         event.subject !== `conversation-${conversationId}` ||
@@ -49,7 +41,7 @@ export async function loadRoutineInput(...args: Parameters<typeof loadRoutinePre
         !isDeepStrictEqual(savedMetadata, metadata)) {
       throw new Error('Routine input refused');
     }
-    checkCustody(data);
+    if (utterance !== text) throw new Error('Routine input refused');
   }
   let previous: StoredEvent | undefined;
   for (const row of rows) {
@@ -60,39 +52,31 @@ export async function loadRoutineInput(...args: Parameters<typeof loadRoutinePre
       previous = row;
     }
   }
-  function encrypt() {
-    const encrypted = keys.encrypt(worker.silo, conversationId, text);
-    const data = { ...metadata, ...encrypted };
+  function inputData() {
+    const data = { ...metadata, utterance: text };
     return messagePostedDataSchema.parse(data);
   }
-  return { preparation, rows, previous, verify, checkCustody, encrypt };
+  return { preparation, rows, previous, verify, inputData };
 }
 
 async function saveRoutineInput(...args: Parameters<typeof loadRoutinePreparation>) {
-  const [store, , worker] = args;
-  const { preparation, rows, previous, verify, checkCustody, encrypt } =
+  const [store, worker] = args;
+  const { preparation, rows, previous, verify, inputData } =
     await loadRoutineInput(...args);
   const run = preparation.run;
   const conversationId = run.conversationId;
   let position: number;
   if (previous) {
-    verify(previous);
-    await preparation.checkAccess();
-    // Check custody after the first access read, then renew access before replying.
-    verify(previous);
+    // The loaded input is already verified. Renew access before returning its receipt.
     await preparation.checkAccess();
     position = previous.sequence;
   } else {
-    const data = encrypt();
-    checkCustody(data);
+    const data = inputData();
     const event = { id: run.messageId, commandId: run.messageId, type: 'message.posted',
       subject: `conversation-${conversationId}`, silo: worker.silo,
       source: 'opencrane-server', time: new Date().toISOString(),
       principal: { kind: 'system' as const, id: worker.workerId }, data };
-    // A key can disappear during the first access read. Recheck it before the final
-    // short publication check, which reads no key file.
-    await preparation.checkAccess();
-    checkCustody(data);
+    // Recheck access before the conditional append.
     const deadline = await preparation.checkAccess();
     async function checkAccess() {
       await preparation.checkCurrent();

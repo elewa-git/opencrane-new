@@ -1,3 +1,4 @@
+import type { OnboardingOptions } from './options.ts';
 import { parseEventByType, surveyRestartedDataSchema, surveyStepSavedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
   welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
@@ -193,13 +194,13 @@ export async function savedCommand(options: ChatOptions, memberId: string, comma
   }
   return { row, reference };
 }
-export function decryptAnswers(options: ChatOptions, memberId: string, event: EventEnvelope) {
+export function decryptAnswers(options: OnboardingOptions, memberId: string, event: EventEnvelope) {
   const data = surveyStepSavedDataSchema.parse(event.data);
   const text = options.keys.decrypt(options.silo, `personal:${memberId}`, data);
   const answers: unknown = JSON.parse(text);
   return answers;
 }
-export function decryptPersona(options: ChatOptions, memberId: string, event: EventEnvelope) {
+export function decryptPersona(options: OnboardingOptions, memberId: string, event: EventEnvelope) {
   const data = personaRevisedDataSchema.parse(event.data);
   const encrypted = { ciphertext: data.encrypted, keyId: data.keyRef };
   return options.keys.decrypt(options.silo, `personal:${memberId}`, encrypted);

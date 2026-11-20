@@ -90,11 +90,12 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
     return Promise.resolve(String(replicas.get(args[2]!)));
   }
   async function databasePart(destination: string) {
-    await writeFile(destination, 'fixture database');
-    return { databases: ['postgres'], lsn: '0/123' };
+    await writeFile(destination, 'fixture database', { mode: 0o600 });
+    return { databases: ['postgres'], lsn: '0/123',
+      access: { storeId: 'saved-store', modelId: 'saved-model' } };
   }
   async function filesPart(destination: string) {
-    await writeFile(destination, 'fixture files');
+    await writeFile(destination, 'fixture files', { mode: 0o600 });
     return { bucket: 'files', objects: [] };
   }
   vi.spyOn(runtime.source, 'kube').mockImplementation(kube);

@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
@@ -157,7 +158,7 @@ async function recoversWithoutPost(stage: string) {
     expect(rows[1]!.event.id).toBe(intent.firstInputId);
     const creation = conversationCreatedDataSchema.parse(rows[0]!.event.data);
     expect(creation).toMatchObject({ initialJoins: intent.initialJoins });
-    expect(context.keys.decrypt('test', intent.childConversationId, rows[1]!.event.data))
+    expect(readConversationProse(rows[1]!.event.data))
       .toBe('@Assistant source canary');
     const status = await context.request(input.conversationId, `children/${input.requestId}`);
     expect(status.json()).toMatchObject({ state: 'queued' });
@@ -559,18 +560,13 @@ async function retriesUnavailableSaveOrKey(kind: string) {
   const row = await reference(input.conversationId);
   const reads = vi.spyOn(context.nats.store, 'readStream');
   let readsBeforeUnavailable = 0;
-  function unreadable(): never {
-    throw new Error('Key unavailable');
-  }
   function unavailable() {
     readsBeforeUnavailable = reads.mock.calls.length;
     const result = { status: 'unavailable' as const, cause: new Error('Append unavailable') };
     return Promise.resolve(result);
   }
-  const fault = kind === 'key'
-    ? vi.spyOn(context.keys, 'decrypt').mockImplementation(unreadable)
-    : vi.spyOn(context.nats.store, 'append').mockImplementation(unavailable);
-  const message = kind === 'key' ? 'Child input unavailable' : 'Child request outcome unavailable';
+  const fault = vi.spyOn(context.nats.store, 'append').mockImplementation(unavailable);
+  const message = 'Child request outcome unavailable';
   await expect(recoverChildRequest(context.options, row)).rejects.toThrow(message);
   expect(fault).toHaveBeenCalled();
   if (kind === 'append') {
@@ -585,7 +581,7 @@ async function retriesUnavailableSaveOrKey(kind: string) {
   expect(child).toHaveLength(3);
   expect(child[1]!.event.id).toBe(intent.firstInputId);
 }
-it.each(['append', 'key'])('keeps an unavailable %s retryable without saving failure',
+it.each(['append'])('keeps an unavailable %s retryable without saving failure',
   retriesUnavailableSaveOrKey);
 
 async function hidesFailedStatus(kind: string) {

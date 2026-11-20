@@ -289,7 +289,7 @@ it.each(['corrected', 'forgotten'] as const)(
 async function unrelatedActivity() {
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
     authorKind: 'human', authorId: 'alice', contentType: 'text',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', keyId: 'key:fixture' }, 'cause');
+    utterance: 'Saved conversation prose' }, 'cause');
   const position = await setup.store.head('conversation-chat');
   expect(await invalidate()).toEqual({ status: 'refused' });
   expect(await setup.store.head('conversation-chat')).toBe(position);
@@ -338,7 +338,7 @@ async function harmlessActivity() {
     mime: 'text/plain', objectKey: 'test/chat/file' });
   await append('conversation-chat', 'message.posted', { conversationId: 'chat',
     authorKind: 'human', authorId: 'alice', contentType: 'text',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', keyId: 'key:fixture' });
+    utterance: 'Saved conversation prose' });
   await unrelatedChange('corrected');
 }
 it('leaves unchanged facts alone after messages and uploads', harmlessActivity);

@@ -1,12 +1,12 @@
+import { agentCommandRanDataSchema, readConversationProse } from '@opencrane/events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { z } from 'zod';
-import { dirname } from 'node:path';
+
 import { afterEach, expect, it, vi } from 'vitest';
 import { readEventAt, wireSubject, type StoredEvent, type AppendCommand } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { countReads, event as fixtureEvent, expectNoWholeReads,
   natsFixture } from '@opencrane/event-store/testing';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
@@ -14,7 +14,6 @@ import { readChatCommandFacts, readChatFacts } from '../src/chat/chat-summary.ts
 import { chatDisplayData } from '../src/chat/display.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
-let keys: ReturnType<typeof conversationKeys>;
 const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
 const subject = 'conversation-chat';
 const report = { conversationId: 'chat', turnId: 'message', assistantId: 'assistant',
@@ -32,8 +31,7 @@ function event(id: string, type: string, data: Record<string, unknown>): EventEn
 }
 async function setup() {
   nats = await natsFixture();
-  keys = conversationKeys(`${dirname(nats.env().NATS_CA_FILE)}/keys`);
-  keys.provision('test', 'chat');
+
   const joined = fixtureEvent('joined', 'member-alice', 'member.joined');
   joined.data = { ...joined.data, memberId: 'alice' };
   await nats.seed([joined,
@@ -41,11 +39,11 @@ async function setup() {
       conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     }),
     event('message', 'message.posted', { conversationId: 'chat', authorId: 'alice',
-      authorKind: 'human', contentType: 'text', ...keys.encrypt('test', 'chat', 'Hello') }),
+      authorKind: 'human', contentType: 'text', ...({ utterance: 'Hello' }) }),
   ]);
 }
 async function record(sequence: number, previousSequence: number) {
-  return recordReport(nats.store, keys, context, { ...report, sequence, previousSequence });
+  return recordReport(nats.store, context, { ...report, sequence, previousSequence });
 }
 async function warmReportReadsOnlyNewRows() {
   await setup();
@@ -87,25 +85,26 @@ async function reportReplayMakesNoAppend() {
 }
 it('checks report repeats before an append that opts into historyChecked', reportReplayMakesNoAppend);
 
-it('encrypts the masked command with the conversation message key', async () => {
+it('stores the masked command as a readable preview', async () => {
   await setup();
   const preview = 'rg ••• •••';
   const command = { sequence: 1, previousSequence: 0, conversationId: 'chat',
     turnId: 'message', assistantId: 'assistant', type: 'agent.command_ran',
     commandDigest: 'a'.repeat(64), exitCode: 0, activityLabel: 'Searched files', preview };
-  expect(await recordReport(nats.store, keys, context, command)).toBe('recorded');
+  expect(await recordReport(nats.store, context, command)).toBe('recorded');
   const history = await chatHistory(nats.store, 'test', 'chat');
   const saved = history.find(row => row.event.type === 'agent.command_ran');
   expect(saved).toBeDefined();
-  expect(JSON.stringify(saved?.event)).not.toContain(preview);
-  const data = z.record(z.string(), z.unknown()).parse(saved?.event.data);
-  expect(keys.decrypt('test', 'chat', data['view'])).toBe(preview);
-  expect(chatDisplayData('agent.command_ran', data)).not.toHaveProperty('view');
+  const data = agentCommandRanDataSchema.parse(saved?.event.data);
+  expect(data.view).toEqual({ preview });
+  const display = chatDisplayData('agent.command_ran', data);
+  expect(display).toMatchObject({ preview });
+  expect(display).not.toHaveProperty('view');
   const { preview: _preview, ...journalReplay } = command;
-  expect(await recordReport(nats.store, keys, context, journalReplay)).toBe('duplicate');
+  expect(await recordReport(nats.store, context, journalReplay)).toBe('duplicate');
 });
 
-it('accepts a large masked preview and records it only as encrypted view', async () => {
+it('accepts a large masked preview and records it as a redacted view', async () => {
   await setup();
   const preview = `echo ${'••• '.repeat(4_000)}…`;
   expect(preview.length).toBeLessThanOrEqual(16_384);
@@ -114,13 +113,13 @@ it('accepts a large masked preview and records it only as encrypted view', async
     turnId: 'message', assistantId: 'assistant', type: 'agent.command_ran',
     commandDigest: 'a'.repeat(64), exitCode: 0, activityLabel: 'Ran a command',
     preview };
-  expect(await recordReport(nats.store, keys, context, command)).toBe('recorded');
-  expect(await recordReport(nats.store, keys, context, command)).toBe('duplicate');
+  expect(await recordReport(nats.store, context, command)).toBe('recorded');
+  expect(await recordReport(nats.store, context, command)).toBe('duplicate');
 });
 
 it('refuses a command preview on a different report kind', async () => {
   await setup();
-  await expect(recordReport(nats.store, keys, context, {
+  await expect(recordReport(nats.store, context, {
     ...report, sequence: 1, previousSequence: 0, preview: 'rg ••• •••',
   })).rejects.toThrow('Command preview report mismatch');
 });
@@ -139,7 +138,7 @@ async function refusesAClaimedSharedClassOnAPrivateSession() {
     sharingClass: 'shared_only',
     type: 'agent.turn_started',
   };
-  await expect(recordReport(nats.store, keys, context, forged))
+  await expect(recordReport(nats.store, context, forged))
     .rejects.toThrow('Turn context class mismatch');
   const rows = await chatHistory(nats.store, 'test', 'chat');
   expect(rows).toHaveLength(2);
@@ -218,16 +217,16 @@ async function keepsReplayAndGapRules() {
   expect(await record(1, 0)).toBe('recorded');
   const append = vi.spyOn(nats.store, 'append');
   const lost = { ...report, sequence: 1, previousSequence: 0, type: 'agent.output_lost' };
-  expect(await recordReport(nats.store, keys, context, lost)).toBe('duplicate');
-  await expect(recordReport(nats.store, keys, context, {
+  expect(await recordReport(nats.store, context, lost)).toBe('duplicate');
+  await expect(recordReport(nats.store, context, {
     ...report, sequence: 1, previousSequence: 0, text: 'Changed',
   })).rejects.toThrow('Report sequence reused');
   await expect(record(2, 0)).rejects.toThrow('Report sequence gap');
-  await expect(recordReport(nats.store, keys, context, {
+  await expect(recordReport(nats.store, context, {
     ...report, sequence: 2, previousSequence: 1, requesterId: 'bob',
   })).rejects.toThrow('Requester mismatch');
   expect(append).not.toHaveBeenCalled();
-  expect(await recordReport(nats.store, keys, context, {
+  expect(await recordReport(nats.store, context, {
     ...report, sequence: 2,
   })).toBe('recorded');
 }
@@ -240,12 +239,12 @@ async function picksUpPostsAndClosure() {
   await record(1, 0);
   await nats.seed([event('new-message', 'message.posted', {
     conversationId: 'chat', authorId: 'bob', authorKind: 'human', contentType: 'text',
-    ...keys.encrypt('test', 'chat', 'New request'),
+    ...({ utterance: 'New request' }),
   })]);
   const next = { ...report, turnId: 'new-message', requesterId: 'bob',
     sequence: 2, previousSequence: 1 };
-  expect(await recordReport(nats.store, keys, context, next)).toBe('recorded');
-  await recordReport(nats.store, keys, context, {
+  expect(await recordReport(nats.store, context, next)).toBe('recorded');
+  await recordReport(nats.store, context, {
     ...next, sequence: 3, previousSequence: 2, type: 'agent.turn_completed',
   });
   const nextStart = { ...start, turnId: 'new-message' };
@@ -270,7 +269,7 @@ async function refusesIncorrectReportReadBack(position: 'missing' | 'different')
     return { ...result, sequence: await nats.store.head(subject) };
   }
   vi.spyOn(nats.store, 'append').mockImplementation(wrongPosition);
-  await expect(recordReport(nats.store, keys, context, value)).rejects.toThrow(
+  await expect(recordReport(nats.store, context, value)).rejects.toThrow(
     'Report sequence reused');
 }
 it.each(['missing', 'different'] as const)(
@@ -339,17 +338,17 @@ async function checksRegroupedReplay(partlySaved: boolean) {
   await setup();
   const originals = [originalReport(1), originalReport(2), originalReport(3),
     originalReport(4)];
-  await recordReports(nats.store, keys, context, originals.slice(0, 2));
-  if (!partlySaved) await recordReports(nats.store, keys, context, originals.slice(2));
+  await recordReports(nats.store, context, originals.slice(0, 2));
+  if (!partlySaved) await recordReports(nats.store, context, originals.slice(2));
   const append = vi.spyOn(nats.store, 'append');
-  expect(await recordReports(nats.store, keys, context, originals.slice(1, 3))).toBe('duplicate');
+  expect(await recordReports(nats.store, context, originals.slice(1, 3))).toBe('duplicate');
   expect(append).toHaveBeenCalledTimes(partlySaved ? 1 : 0);
   expect(await reportPosition(nats.store, 'test', 'computer')).toBe(partlySaved ? 3 : 4);
   const rows = await chatHistory(nats.store, 'test', 'chat');
   let text = '';
   for (const row of rows) {
     if (row.event.type === 'agent.message_delta') {
-      text += keys.decrypt('test', 'chat', row.event.data);
+      text += readConversationProse(row.event.data);
     }
   }
   expect(text).toBe(partlySaved ? 'piece 1 piece 2 piece 3 ' : 'piece 1 piece 2 piece 3 piece 4 ');
@@ -360,7 +359,7 @@ it.each([false, true])('checks every regrouped original (partly saved %s)',
 async function refusesChangedBatchOriginal(change: 'earlier' | 'later' | 'reordered') {
   await setup();
   const originals = [originalReport(1), originalReport(2), originalReport(3)];
-  await recordReports(nats.store, keys, context, originals);
+  await recordReports(nats.store, context, originals);
   const submitted = [...originals];
   if (change === 'earlier') submitted[0] = originalReport(1, 'changed');
   if (change === 'later') submitted[1] = originalReport(2, 'changed');
@@ -369,7 +368,7 @@ async function refusesChangedBatchOriginal(change: 'earlier' | 'later' | 'reorde
     submitted[1] = originalReport(2, originals[0]!.text);
   }
   const append = vi.spyOn(nats.store, 'append');
-  await expect(recordReports(nats.store, keys, context, submitted))
+  await expect(recordReports(nats.store, context, submitted))
     .rejects.toThrow('Report sequence reused');
   expect(append).not.toHaveBeenCalled();
 }
@@ -400,10 +399,10 @@ async function savesStopWithoutRereadingStreamedReports() {
   const startedAt = performance.now();
   const input = { id: 'stop', conversationId: 'chat', stopTurnId: 'message' };
   const commandContext = { silo: 'test', memberId: 'admin' };
-  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  const saved = await chatCommand(nats.store, commandContext, input);
   expect(saved.status).toBe('appended');
   expect(performance.now() - startedAt).toBeLessThan(2000);
-  expect(await chatCommand(nats.store, keys, commandContext, input)).toEqual(saved);
+  expect(await chatCommand(nats.store, commandContext, input)).toEqual(saved);
 }
 it('saves Stop within two seconds without rereading an already consumed reply',
   savesStopWithoutRereadingStreamedReports);
@@ -426,10 +425,10 @@ async function keepsChatCommandsSeparateFromInvalidMemoryEvidence() {
   await nats.seed([completed, lateMemory]);
   const commandContext = { silo: 'test', memberId: 'admin' };
   const input = { id: 'next-message', conversationId: 'chat', text: 'Another request' };
-  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  const saved = await chatCommand(nats.store, commandContext, input);
   expect(saved.status).toBe('appended');
   const stop = { id: 'next-stop', conversationId: 'chat', stopTurnId: 'next-message' };
-  const stopped = await chatCommand(nats.store, keys, commandContext, stop);
+  const stopped = await chatCommand(nats.store, commandContext, stop);
   expect(stopped.status).toBe('appended');
   const reading = readChatFacts(nats.store, 'test', 'chat', 'message');
   await expect(reading).rejects.toThrow('Memory evidence arrived after the turn closed');
@@ -462,31 +461,31 @@ async function bindsOnlyCleanOwnUploadsToTheMessage() {
   const commandContext = { silo: 'test', memberId: 'admin' };
   const input = { id: 'files-only', conversationId: 'chat', text: '',
     attachmentIds: ['clean-file'] };
-  const saved = await chatCommand(nats.store, keys, commandContext, input);
+  const saved = await chatCommand(nats.store, commandContext, input);
   expect(saved.status).toBe('appended');
   const rows = await chatHistory(nats.store, 'test', 'chat');
   const posted = rows.find(row => row.event.id === input.id);
   expect(posted?.event.data).toMatchObject({ attachmentIds: ['clean-file'] });
-  expect(await chatCommand(nats.store, keys, commandContext, input)).toEqual(saved);
+  expect(await chatCommand(nats.store, commandContext, input)).toEqual(saved);
   const changed = { ...input, attachmentIds: ['other-file'] };
-  await expect(chatCommand(nats.store, keys, commandContext, changed))
+  await expect(chatCommand(nats.store, commandContext, changed))
     .rejects.toThrow('Id reused');
-  await expect(chatCommand(nats.store, keys, commandContext, {
+  await expect(chatCommand(nats.store, commandContext, {
     id: 'foreign-file', conversationId: 'chat', text: '', attachmentIds: ['missing'],
   })).rejects.toThrow('Attachment unavailable');
   for (const fileId of ['foreign-file', 'rejected-file', 'other-chat-file',
     'assistant-file', 'screen-file']) {
     const refused = { id: `refused-${fileId}`, conversationId: 'chat', text: '',
       attachmentIds: [fileId] };
-    await expect(chatCommand(nats.store, keys, commandContext, refused))
+    await expect(chatCommand(nats.store, commandContext, refused))
       .rejects.toThrow('Attachment unavailable');
   }
   const duplicated = { id: 'duplicate-files', conversationId: 'chat', text: '',
     attachmentIds: ['clean-file', 'clean-file'] };
-  await expect(chatCommand(nats.store, keys, commandContext, duplicated))
+  await expect(chatCommand(nats.store, commandContext, duplicated))
     .rejects.toThrow('Duplicate attachment');
   const empty = { id: 'empty-message', conversationId: 'chat', text: '' };
-  await expect(chatCommand(nats.store, keys, commandContext, empty))
+  await expect(chatCommand(nats.store, commandContext, empty))
     .rejects.toThrow();
   const finalRows = await chatHistory(nats.store, 'test', 'chat');
   expect(finalRows.filter(row => row.event.type === 'message.posted')).toHaveLength(2);
@@ -510,7 +509,7 @@ async function refusesAnOldReportId(operation: 'message' | 'stop', warm: boolean
   } else {
     input = { id: oldReport.id, conversationId: 'chat', text: 'Next request' };
   }
-  await expect(chatCommand(nats.store, keys, commandContext, input)).rejects.toThrow('Id reused');
+  await expect(chatCommand(nats.store, commandContext, input)).rejects.toThrow('Id reused');
   expect(await chatHistory(nats.store, 'test', 'chat')).toEqual(before);
 }
 it.each(['message', 'stop'] as const)(
@@ -531,7 +530,7 @@ async function keepsTheFirstCommandPosition() {
   const original = await readChatCommandFacts(nats.store, 'test', 'chat', 'message');
   const repeated = event('message', 'message.posted', {
     conversationId: 'chat', authorId: 'admin', authorKind: 'human', contentType: 'text',
-    ...keys.encrypt('test', 'chat', 'Changed request'),
+    ...({ utterance: 'Changed request' }),
   });
   await nats.connection.request(wireSubject(subject), JSON.stringify(repeated));
   const warm = await readChatCommandFacts(nats.store, 'test', 'chat', 'message');

@@ -44,7 +44,7 @@ async function admitsAndSettles() {
   await recovered.start();
   const options = { secrets: setup.secrets, gatewayUrl: 'http://unused.test' };
   const restarted = await startDecision(recovered, setup.identity, setup.binding,
-    0, setup.keys, options);
+    0, options);
   onTestFinished(restarted.close);
   expect(reads).not.toHaveBeenCalled();
   expect(recovered.state.reservations).toEqual(setup.actor.state.reservations);

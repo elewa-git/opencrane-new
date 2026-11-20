@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { turnToolReaders } from './turn-tool-readers.ts';
 /* eslint max-lines: ["error", { max: 520, skipBlankLines: true, skipComments: true }] */
 import type { ArtifactPublication } from '../files/artifacts.ts';
@@ -27,7 +28,7 @@ import { cleanClosedConversation, recoverTerminalTurns,
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
-export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
+export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'db'> &
   Partial<Pick<ChatOptions, 'binding' | 'feed'>> & {
     keyDirectory?: string;
     childStartUrl?: string;
@@ -118,15 +119,15 @@ function attachmentsBefore(
   return attachments;
 }
 
-export function turnMessage(options: WatchOptions, conversation: AgentSession,
-  rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
+export function turnMessage(conversation: AgentSession, rows: ChatRows,
+  uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
   const posted = messagePostedDataSchema.parse(message.event.data);
   const configuration = sessionConfiguration({ conversation, requestedMode: executionMode,
     assistantKind: conversation.assistantKind, memoryEnabled: executionMode === 'restricted' });
   const attachments = configuration.attachments
     ? attachmentsBefore(rows, uploads, message.sequence, posted.attachmentIds) : [];
   const requester = z.object({ authorId: z.string() }).parse(message.event.data);
-  const text = options.keys.decrypt(options.silo, conversation.conversationId, message.event.data);
+  const text = readConversationProse(message.event.data);
   const turn = { type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
     requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
     attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
@@ -346,7 +347,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   // Retry busy computers until they accept the turn, without flooding the connection.
   const resendDue = !accepted && performance.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
   if (previousDelivery?.turnId === message.event.id && !resendDue) return;
-  const turn = turnMessage(options, conversation, rows, uploads, message, mode) as
+  const turn = turnMessage(conversation, rows, uploads, message, mode) as
     ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
   const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn));
   async function buildTools() {

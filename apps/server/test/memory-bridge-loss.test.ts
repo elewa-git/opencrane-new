@@ -1,5 +1,6 @@
+import { readConversationProse } from '@opencrane/events';
 import { once } from 'node:events';
-import { dirname } from 'node:path';
+
 import { createHash } from 'node:crypto';
 import { WebSocketServer, type RawData } from 'ws';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -11,11 +12,10 @@ import { conversations, pgDb, ProjectionRunner, readConversation } from '@opencr
 import { createLogger } from '@opencrane/observability';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordBridgeReports, reportPosition } from '../src/chat/reports.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
-let keys: ReturnType<typeof conversationKeys>;
 let sockets: WebSocketServer;
 let link: Awaited<ReturnType<typeof connectBridge>>;
 let peer: import('ws').WebSocket;
@@ -33,7 +33,7 @@ function receive(raw: RawData) {
 }
 async function connect(store: EventStore = nats.store) {
   const connected = once(sockets, 'connection');
-  const options = { ...context, store, keys };
+  const options = { ...context, store };
   const input = { ...context, url, bearer: 'test' };
   link = await connectBridge(options, input);
   await connected;
@@ -43,16 +43,15 @@ async function connect(store: EventStore = nats.store) {
 async function prepare() {
   replies = [];
   nats = await natsFixture();
-  keys = conversationKeys(`${dirname(nats.env().NATS_CA_FILE)}/keys`);
   for (const memberId of ['alice', 'bob']) {
-    keys.provision('test', memberId);
+
     const owner = { silo: 'test', memberId };
     const creation = { id: `create-${memberId}`, conversationId: memberId,
       assistantId: 'assistant' };
-    await chatCommand(nats.store, keys, owner, creation);
+    await chatCommand(nats.store, owner, creation);
     const message = { id: `turn-${memberId}`, conversationId: memberId,
       text: `${memberId} independent question` };
-    await chatCommand(nats.store, keys, owner, message);
+    await chatCommand(nats.store, owner, message);
   }
   const data = { conversationId: 'alice', turnId: 'turn-alice', requesterId: 'alice',
     assistantId: 'assistant', computerId: 'computer', generation: 1, threadId: 'thread',
@@ -184,10 +183,10 @@ async function keepsOtherRequesterDurable() {
   await send(bob);
   const rows = await chatHistory(nats.store, 'test', 'bob');
   const saved = rows.filter(hasReport);
-  expect(keys.decrypt('test', 'bob', saved[0]!.event.data)).toBe('Bob memory-free answer');
+  expect(readConversationProse(saved[0]!.event.data)).toBe('Bob memory-free answer');
   const alice = await chatHistory(nats.store, 'test', 'alice');
-  expect(keys.decrypt('test', 'alice', alice[1]!.event.data)).toBe('alice independent question');
-  expect(keys.decrypt('test', 'bob', rows[1]!.event.data)).toBe('bob independent question');
+  expect(readConversationProse(alice[1]!.event.data)).toBe('alice independent question');
+  expect(readConversationProse(rows[1]!.event.data)).toBe('bob independent question');
   const storage = await databases();
   try {
     const db = pgDb(storage.queue);
@@ -263,7 +262,7 @@ async function refusesInvalidReports() {
     { ...report(), commandDigest: 'a'.repeat(64) },
   ];
   for (const invalid of mismatches) {
-    await expect(recordBridgeReports(nats.store, keys, context, [invalid])).rejects.toThrow();
+    await expect(recordBridgeReports(nats.store, context, [invalid])).rejects.toThrow();
   }
   expect(await savedReports()).toEqual([]);
 }
@@ -282,11 +281,11 @@ async function recoversPartlySavedBatch() {
     return saved;
   }
   vi.spyOn(nats.store, 'append').mockImplementation(loseSecondAcknowledgement);
-  await expect(recordBridgeReports(nats.store, keys, context, values))
+  await expect(recordBridgeReports(nats.store, context, values))
     .rejects.toThrow('Test loses second acknowledgement');
   const cold = await createEventStore(nats.connection);
-  expect(await recordBridgeReports(cold, keys, context, values)).toBe('recorded');
-  expect(await recordBridgeReports(cold, keys, context, values)).toBe('duplicate');
+  expect(await recordBridgeReports(cold, context, values)).toBe('recorded');
+  expect(await recordBridgeReports(cold, context, values)).toBe('duplicate');
   expect(await reportPosition(cold, 'test', 'computer')).toBe(3);
   const saved = await savedReports();
   expect(saved).toHaveLength(3);

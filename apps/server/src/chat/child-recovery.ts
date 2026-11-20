@@ -10,7 +10,7 @@ import { childStartState, recordChildStartFailure } from './child-failure.ts';
 import { createRequestedChild, addChildFirstInput, ChildRequestClosed,
   ChildRequestChanged, ChildRequestRefused, ChildRequestRace } from './child-requests.ts';
 
-type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db' | 'keys'>;
+type Options = Pick<ChatOptions, 'store' | 'silo' | 'binding' | 'db'>;
 const referenceSchema = z.strictObject({
   silo: z.string(), parent_id: chatIdSchema, intent_id: chatIdSchema,
   intent_position: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER),

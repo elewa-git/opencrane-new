@@ -25,7 +25,7 @@ import { chatMessageSchema, chatParticipantsSchema, chatFeedSchema } from '@open
 import type { ChatOptions } from '../src/chat/routes.ts';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer } from '../src/websocket.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { Client } from 'minio/dist/esm/minio.mjs';
 import { ownConversation, fileCommand } from '../src/files/commands.ts';
 import { viewAccess } from '../src/computers/view-access.ts';
@@ -83,10 +83,10 @@ async function fixture(countChecks = false) {
   const binding = await createStore(fgaProxy?.apiUrl ?? fga.apiUrl, 'test');
   const db = pgDb(dbs.queue);
   const auth = memberAuthorisation(binding);
-  const keys = conversationKeys(directory);
+
   const runner = new ProjectionRunner(db, nats.store, createLogger('review'));
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const options: ChatOptions = { silo: 'test', store: nats.store, db, keys, binding, feed };
+  const options: ChatOptions = { silo: 'test', store: nats.store, db, binding, feed };
   const objects = new Client({ endPoint: '127.0.0.1' });
   function unusedScan(): Promise<never> {
     throw new Error('Reads must not scan a file');
@@ -131,12 +131,12 @@ async function fixture(countChecks = false) {
     };
   }
   async function agentSession(conversationId: string) {
-    keys.provision('test', conversationId);
+
     await append(`conversation-${conversationId}`, 'conversation.created', {
       conversationId, createdBy: 'alice', mode: 'agent_session', assistantId: 'assistant',
     });
     const author = { silo: 'test', memberId: 'alice' };
-    await chatCommand(nats.store, keys, author, { id: `${conversationId}-turn`, conversationId, text: 'Hello' });
+    await chatCommand(nats.store, author, { id: `${conversationId}-turn`, conversationId, text: 'Hello' });
     await runner.run(conversations);
   }
   async function close() {
@@ -148,7 +148,7 @@ async function fixture(countChecks = false) {
     await fga.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { app, nats, db, keys, runner, headers, append, agentSession, close,
+  return { app, nats, db, runner, headers, append, agentSession, close,
     config, options, objects, feed, fgaProxy, auth };
 }
 
@@ -292,7 +292,7 @@ async function openTeamAssistantChat(context: Fixture, conversationId: string) {
   await context.append('assistant-shared', 'assistant.created', {
     assistantId: 'shared', kind: 'team', ownerId: 'sales', payingGroupId: 'sales',
   });
-  context.keys.provision('test', conversationId);
+
   await context.append(`conversation-${conversationId}`, 'conversation.created', {
     conversationId, createdBy: 'alice', mode: 'agent_session',
     assistantId: 'shared', payingGroupId: 'sales',
@@ -323,7 +323,7 @@ it('refuses participant changes on a direct chat', directChatRejectsParticipants
 async function directChatRejectsParticipants() {
   const context = await fixture();
   try {
-    context.keys.provision('test', 'direct');
+
     await context.append('conversation-direct', 'conversation.created', {
       conversationId: 'direct', createdBy: 'alice', mode: 'direct',
       participantIds: ['alice', 'bob'],
@@ -354,7 +354,7 @@ async function humanChatDispatcherReadiness() {
       context.options.dispatcherReady = function unavailableDispatcher() {
         return Promise.resolve(false);
       };
-      context.keys.provision('test', conversationId);
+
       await context.append(`conversation-${conversationId}`, 'conversation.created', {
         conversationId, createdBy: 'alice', mode, participantIds: ['alice', 'bob'],
       });
@@ -381,7 +381,7 @@ async function idleDirectChatSocket() {
   const context = await fixture(true);
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
-    context.keys.provision('test', 'direct-idle');
+
     await context.append('conversation-direct-idle', 'conversation.created', {
       conversationId: 'direct-idle', createdBy: 'alice', mode: 'direct',
       participantIds: ['alice', 'bob'],
@@ -418,7 +418,7 @@ async function teamSocketReconnectsForUnappliedChange() {
     await context.append('assistant-shared', 'assistant.created', {
       assistantId: 'shared', kind: 'team', ownerId: 'sales', payingGroupId: 'sales',
     });
-    context.keys.provision('test', 'team-chat-timeout');
+
     await context.append('conversation-team-chat-timeout', 'conversation.created', {
       conversationId: 'team-chat-timeout', createdBy: 'alice', mode: 'agent_session',
       assistantId: 'shared', payingGroupId: 'sales',
@@ -515,7 +515,7 @@ async function teamSocketAccessChanges() {
     await context.append('assistant-shared', 'assistant.created', {
       assistantId: 'shared', kind: 'team', ownerId: 'sales', payingGroupId: 'sales',
     });
-    context.keys.provision('test', 'team-chat');
+
     await context.append('conversation-team-chat', 'conversation.created', {
       conversationId: 'team-chat', createdBy: 'alice', mode: 'agent_session',
       assistantId: 'shared', payingGroupId: 'sales',
@@ -535,7 +535,7 @@ async function teamSocketAccessChanges() {
     await delay(300);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
     await context.auth.handler.handle(roleChange, context.db);
-    const encrypted = context.keys.encrypt('test', 'team-chat', 'After access catches up');
+    const encrypted = ({ utterance: 'After access catches up' });
     await context.append('conversation-team-chat', 'message.posted', {
       conversationId: 'team-chat', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted,
@@ -803,7 +803,7 @@ async function longAgentSession() {
     await context.agentSession('long');
     const count = 1500;
     const previousHead = await context.nats.store.head();
-    const encrypted = context.keys.encrypt('test', 'long', 'delta');
+    const encrypted = ({ utterance: 'delta' });
     for (let index = 0; index < count; index++) {
       const event = envelope('test', 'conversation-long', 'agent.message_delta', {
         conversationId: 'long', turnId: 'long-turn', messageId: 'reply', contentType: 'text', ...encrypted,
@@ -1075,7 +1075,7 @@ async function manyConversations() {
     for (let index = 0; index < 160; index++) {
       const conversationId = `session-${index}`;
       const owner = index < 30 ? 'alice' : 'bob';
-      context.keys.provision('test', conversationId);
+
       let data: unknown = {
         conversationId, createdBy: owner, mode: 'agent_session', assistantId: 'assistant',
       };
@@ -1085,7 +1085,7 @@ async function manyConversations() {
         };
       }
       await context.append(`conversation-${conversationId}`, 'conversation.created', data);
-      const encrypted = context.keys.encrypt('test', conversationId, 'Private title');
+      const encrypted = ({ utterance: 'Private title' });
       const message = {
         conversationId, authorId: owner, authorKind: 'human', contentType: 'text', ...encrypted,
       };
@@ -1111,12 +1111,12 @@ it('checks the first and last send on a direct chat with 1,500 messages',
 async function longDirectChatStatus() {
   const context = await fixture();
   try {
-    context.keys.provision('test', 'pair');
+
     await context.append('conversation-pair', 'conversation.created', {
       conversationId: 'pair', createdBy: 'alice', mode: 'direct',
       participantIds: ['alice', 'bob'],
     });
-    const encrypted = context.keys.encrypt('test', 'pair', 'Hello');
+    const encrypted = ({ utterance: 'Hello' });
     for (let index = 0; index < 1500; index++) {
       const data = {
         conversationId: 'pair', authorId: 'alice', authorKind: 'human',
@@ -1154,11 +1154,11 @@ async function seedStreamingList(context: Fixture) {
   for (let index = 0; index < 150; index++) {
     const conversationId = `session-${index}`;
     const owner = index < 30 ? 'alice' : 'bob';
-    context.keys.provision('test', conversationId);
+
     const creation = { conversationId, createdBy: owner,
       mode: 'agent_session', assistantId: 'assistant' };
     await context.append(`conversation-${conversationId}`, 'conversation.created', creation);
-    const encrypted = context.keys.encrypt('test', conversationId, `Secret ${conversationId}`);
+    const encrypted = ({ utterance: `Secret ${conversationId}` });
     const message = { conversationId, authorId: owner, authorKind: 'human',
       contentType: 'text', ...encrypted };
     await context.append(`conversation-${conversationId}`, 'message.posted', message, false);
@@ -1170,7 +1170,7 @@ function streamReplies(context: Fixture) {
   let running = true;
   let sent = 0;
   async function pump(conversationId: string) {
-    const encrypted = context.keys.encrypt('test', conversationId, 'delta');
+    const encrypted = ({ utterance: 'delta' });
     while (running) {
       const data = { conversationId, turnId: 'turn', messageId: 'reply',
         contentType: 'text', ...encrypted };
@@ -1316,7 +1316,7 @@ async function participationRemoval(blocked: boolean) {
     if (blocked) {
       client = await openChatSocket(context, 'agent');
       pause = pauseFirstHistoryRead(context);
-      const encrypted = context.keys.encrypt('test', 'agent', 'Never deliver this');
+      const encrypted = ({ utterance: 'Never deliver this' });
       await context.append('conversation-agent', 'message.posted', {
         conversationId: 'agent', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...encrypted,
@@ -1353,13 +1353,13 @@ it('limits late joins and re-joins to their latest interval, including titles an
 async function lateParticipantHistory() {
   const context = await fixture();
   try {
-    context.keys.provision('test', 'group');
+
     const creation = await context.append('conversation-group', 'conversation.created', {
       conversationId: 'group', mode: 'group', createdBy: 'alice',
       participantIds: ['alice', 'hidden-person'],
     });
     async function message(text: string) {
-      const encrypted = context.keys.encrypt('test', 'group', text);
+      const encrypted = ({ utterance: text });
       await context.append('conversation-group', 'message.posted', {
         conversationId: 'group', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...encrypted,
@@ -1416,7 +1416,7 @@ it('shows masked command text only to a current conversation member', async () =
   try {
     await context.agentSession('agent');
     const preview = 'rg ••• •••';
-    const view = context.keys.encrypt('test', 'agent', preview);
+    const view = { preview };
     await context.append('conversation-agent', 'agent.command_ran', {
       conversationId: 'agent', turnId: 'agent-turn', commandDigest: 'a'.repeat(64),
       exitCode: 0, activityLabel: 'Searched files', view,
@@ -1518,7 +1518,7 @@ async function participationVolume(sharedChild = false) {
       requestKind: 'shell', outcome: 'declined',
     }, false);
     await context.runner.run(conversations);
-    const encrypted = context.keys.encrypt('test', 'volume', 'Saved history');
+    const encrypted = ({ utterance: 'Saved history' });
     const previousHead = await context.nats.store.head();
     for (let offset = 0; offset < 100_000; offset += 100) {
       const batch = [];
@@ -1692,7 +1692,7 @@ it('checks legacy participation once and skips modern events during repeated chu
   retainsVerifiedLegacyParticipation, 120_000);
 
 async function createParticipantGroup(context: Fixture, participantIds = ['alice', 'bob']) {
-  context.keys.provision('test', 'participants');
+
   await context.append('conversation-participants', 'conversation.created', {
     conversationId: 'participants', mode: 'group', createdBy: 'alice', participantIds,
   });
@@ -1937,7 +1937,7 @@ async function leavesGroupAndRevokesReaders(blocked: boolean) {
     client = await openChatSocket(context, 'participants', true, 'bob');
     if (blocked) {
       pause = pauseFirstHistoryRead(context);
-      const encrypted = context.keys.encrypt('test', 'participants', 'Never deliver this');
+      const encrypted = ({ utterance: 'Never deliver this' });
       await context.append('conversation-participants', 'message.posted', {
         conversationId: 'participants', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...encrypted,
@@ -2011,7 +2011,7 @@ async function checksParticipantAdmissionAfterColdHistory() {
   try {
     await createParticipantGroup(context);
     const expectedAccessPosition = await participantPosition(context);
-    const encrypted = context.keys.encrypt('test', 'participants', 'Saved history');
+    const encrypted = ({ utterance: 'Saved history' });
     await context.append('conversation-participants', 'message.posted', {
       conversationId: 'participants', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted,
@@ -2097,7 +2097,7 @@ async function desktopWithColdFactsAndDelayedProjection() {
       granteeKind: 'member', grantedBy: 'alice',
     });
     const events = [];
-    const encrypted = context.keys.encrypt('test', 'cold-desktop', 'Long saved chat');
+    const encrypted = ({ utterance: 'Long saved chat' });
     for (let index = 0; index < 1000; index++) {
       const data = { conversationId: 'cold-desktop', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...encrypted };
@@ -2164,7 +2164,7 @@ async function childSession(context: Fixture, conversationId = 'child',
   const assistantData = { assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
     payingGroupId: 'child-team' };
   await context.append('assistant-child-assistant', 'assistant.created', assistantData);
-  context.keys.provision('test', conversationId);
+
   if (seedRecordsBeforeCreation) {
     await seedChildRecordsBeforeCreation(context, conversationId);
   }
@@ -2183,7 +2183,7 @@ async function childSession(context: Fixture, conversationId = 'child',
   };
   const creation = await context.append(`conversation-${conversationId}`,
     'conversation.created', childData);
-  const encrypted = context.keys.encrypt('test', conversationId, 'Hello shared history');
+  const encrypted = ({ utterance: 'Hello shared history' });
   const messageData = { conversationId, authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted };
   await context.append(`conversation-${conversationId}`, 'message.posted', messageData, false);
@@ -2198,7 +2198,7 @@ async function seedChildRecordsBeforeCreation(context: Fixture, conversationId: 
 
 async function seedEarlierChildProjectionRows(context: Fixture, position: number) {
   // Keep earlier child rows at a real event position while the child stream starts with creation.
-  const messageText = context.keys.encrypt('test', 'child', 'Earlier shared child message');
+  const messageText = ({ utterance: 'Earlier shared child message' });
   const messageData = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...messageText };
   await context.db.query(
@@ -2224,7 +2224,7 @@ async function seedChildApproval(context: Fixture, conversationId: string, appro
   const reviewText = JSON.stringify({ action: 'Send report', tool: 'write',
     target: 'private-target', data: 'private-arguments', destination: 'private-destination',
     account: 'private-profile', consequence: 'Save the report' });
-  const encrypted = context.keys.encrypt('test', conversationId, reviewText);
+  const encrypted = ({ review: reviewText });
   const reviewDigest = createHash('sha256').update(reviewText).digest('hex');
   const request = { ...saved, conversationId, assistantId: 'child-assistant', approvalId,
     requesterId: 'bob', ...encrypted, reviewDigest };
@@ -2282,7 +2282,7 @@ async function deniesInheritedChild(removal: string) {
     expect(firstRead.body).toContain('Hello shared history');
     client = await openChatSocket(context, 'child', true, 'bob');
     pause = pauseFirstHistoryRead(context);
-    const encrypted = context.keys.encrypt('test', 'child', 'Never deliver child content');
+    const encrypted = ({ utterance: 'Never deliver child content' });
     const messageData = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted };
     await context.append('conversation-child', 'message.posted', messageData, false);
@@ -2427,7 +2427,7 @@ async function explicitChildJoin() {
     const laterMessage = await originalQuery<{ event_id: string }>(
       `SELECT event_id FROM conversation_feed
         WHERE silo = $1 AND conversation_id = $2 AND type = 'message.posted'
-          AND data->>'ciphertext' IS NOT NULL ORDER BY position DESC LIMIT 1`,
+          AND data->>'utterance' IS NOT NULL ORDER BY position DESC LIMIT 1`,
       ['test', 'child']);
     const laterMessageId = laterMessage.rows[0]?.event_id;
     expect(laterMessageId).toBeDefined();
@@ -2543,7 +2543,7 @@ async function hidesOtherRequesterReview() {
     const example = getEventDefinition('tool.approval_requested')?.example;
     const saved = toolApprovalRequestedDataSchema.parse(example);
     const approvalId = 'a'.repeat(64);
-    const encrypted = context.keys.encrypt('test', 'child', text);
+    const encrypted = ({ review: text });
     const request = { ...saved, conversationId: 'child', assistantId: 'child-assistant',
       approvalId, requesterId: 'alice', ...encrypted, reviewDigest: digest.digest('hex') };
     await context.append(`approval-${approvalId}`, 'tool.approval_requested', request, false);
@@ -2556,20 +2556,17 @@ async function hidesOtherRequesterReview() {
     const requester = await childRead(context, 'approvals', 'alice');
     expect(requester.statusCode, requester.body).toBe(200);
     expect(requester.body).toContain('private-arguments');
-    const decrypt = vi.spyOn(context.keys, 'decrypt');
-    decrypt.mockClear();
-    await childRead(context, 'approvals');
-    expect(decrypt).not.toHaveBeenCalled();
-    decrypt.mockRestore();
+    const hidden = await childRead(context, 'approvals');
+    expect(hidden.body).not.toContain('private-arguments');
   } finally {
     await context.close();
   }
 }
-it('hides another requester’s child approval review before decryption',
+it('hides another requester’s child approval review before returning prose',
   hidesOtherRequesterReview, 120_000);
 
 async function appendCloseOutput(context: Fixture, type: string, text = 'Late answer') {
-  const encrypted = context.keys.encrypt('test', 'child', text);
+  const encrypted = ({ utterance: text });
   const data = { conversationId: 'child', turnId: 'close-turn', messageId: 'close-answer',
     contentType: 'text', ...encrypted };
   return context.append('conversation-child', type, data, false);
@@ -2600,7 +2597,7 @@ async function frozenChildOutput(memberId: string) {
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
   try {
     const creation = await childSession(context);
-    const humanText = context.keys.encrypt('test', 'child', 'Earlier human post');
+    const humanText = ({ utterance: 'Earlier human post' });
     for (let index = 0; index < 101; index++) {
       const data = { conversationId: 'child', authorId: 'alice', authorKind: 'human',
         contentType: 'text', ...humanText };
@@ -2634,7 +2631,7 @@ async function frozenChildOutput(memberId: string) {
     const publicationExample = getEventDefinition('conversation.child_result_published')!.example;
     const publicationData = { ...z.record(z.string(), z.unknown()).parse(publicationExample),
       conversationId: 'child', childConversationId: 'grandchild',
-      ...context.keys.encrypt('test', 'child', 'Late child publication') };
+      ...({ utterance: 'Late child publication' }) };
     const publication = await context.append('conversation-child',
       'conversation.child_result_published', publicationData, false);
     const publicationPosition = await context.nats.store.head('conversation-child');
@@ -2645,7 +2642,7 @@ async function frozenChildOutput(memberId: string) {
     }
     const latePosts: Array<{ id: string; position: number }> = [];
     for (const authorKind of ['system', 'agent'] as const) {
-      const encryptedPost = context.keys.encrypt('test', 'child', `Late ${authorKind} post`);
+      const encryptedPost = ({ utterance: `Late ${authorKind} post` });
       const postData = { conversationId: 'child', authorId: authorKind,
         authorKind, contentType: 'text', ...encryptedPost };
       const post = await context.append('conversation-child', 'message.posted', postData, false);
@@ -2657,7 +2654,7 @@ async function frozenChildOutput(memberId: string) {
     }
     const latePostIds = latePosts.map(latePostId);
     // Retain saved human posts that raced close admission.
-    const encrypted = context.keys.encrypt('test', 'child', 'Retained human post');
+    const encrypted = ({ utterance: 'Retained human post' });
     const humanData = { conversationId: 'child', authorId: 'bob', authorKind: 'human',
       contentType: 'text', ...encrypted };
     const human = await context.append('conversation-child', 'message.posted', humanData, false);

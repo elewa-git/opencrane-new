@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -9,28 +10,28 @@ import { expect, it } from 'vitest';
 import { z } from 'zod';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordReport, recordReports, reportPosition } from '../src/chat/reports.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 
 it('saves 2700 streaming reports through the bridge within ten seconds', async () => {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/bridge-throughput-`);
-  const keys = conversationKeys(directory);
+
   const server = createServer();
   const sockets = new WebSocketServer({ server });
-  keys.provision('test', 'long');
+
   const context = { silo: 'test', memberId: 'alice' };
-  await chatCommand(nats.store, keys, context,
+  await chatCommand(nats.store, context,
     { id: 'create-long', conversationId: 'long', assistantId: 'assistant' });
-  await chatCommand(nats.store, keys, context,
+  await chatCommand(nats.store, context,
     { id: 'request-long', conversationId: 'long', text: 'Long reply' });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No test port');
   const connection = once(sockets, 'connection');
-  const link = await connectBridge({ silo: 'test', store: nats.store, keys }, {
+  const link = await connectBridge({ silo: 'test', store: nats.store }, {
     url: `ws://127.0.0.1:${address.port}`, computerId: 'computer',
     assistantId: 'assistant', bearer: 'test',
   });
@@ -76,7 +77,7 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
       const stopStarted = performance.now();
       const stop = { id: 'stop-long', conversationId: 'long', stopTurnId: 'request-long' };
       async function stopWhileStreaming() {
-        const result = await chatCommand(nats.store, keys, context, stop, checkStopAccess);
+        const result = await chatCommand(nats.store, context, stop, checkStopAccess);
         stopMs = performance.now() - stopStarted;
         return result;
       }
@@ -99,7 +100,7 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
     let savedText = '';
     for await (const row of nats.store.readStream('conversation-long')) {
       if (row.event.type === 'agent.message_delta') {
-        savedText += keys.decrypt('test', 'long', row.event.data);
+        savedText += readConversationProse(row.event.data);
       }
     }
     expect(savedText).toBe('word '.repeat(2700));
@@ -109,13 +110,13 @@ it('saves 2700 streaming reports through the bridge within ten seconds', async (
       { requesterId: 'other' }, { executionMode: 'restricted' }, { previousSequence: 99 }];
     for (const mismatch of mismatches) {
       const values = [reportFor(2701), { ...reportFor(2702), ...mismatch }];
-      await expect(recordReports(nats.store, keys, reportContext, values))
+      await expect(recordReports(nats.store, reportContext, values))
         .rejects.toThrow('Report batch mismatch');
     }
     for (const sequence of [1, 12, 31, 1350, 2700]) {
-      expect(await recordReport(nats.store, keys, reportContext, reportFor(sequence)))
+      expect(await recordReport(nats.store, reportContext, reportFor(sequence)))
         .toBe('duplicate');
-      await expect(recordReport(nats.store, keys, reportContext, reportFor(sequence, 'changed')))
+      await expect(recordReport(nats.store, reportContext, reportFor(sequence, 'changed')))
         .rejects.toThrow('Report sequence reused');
     }
   } finally {

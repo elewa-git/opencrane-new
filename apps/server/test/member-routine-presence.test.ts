@@ -214,8 +214,8 @@ async function racing(kind: string, failure = '') {
       } else if (kind === 'chat') {
         const message = { ...event('chat', 'conversation-unrelated', 'message.posted'),
           data: { conversationId: 'unrelated', authorId: 'someone-else', authorKind: 'human',
-            ciphertext: Buffer.from('Unrelated test message').toString('base64'),
-            keyId: 'key:unrelated', contentType: 'text' } };
+            utterance: 'Saved conversation prose',
+            contentType: 'text' } };
         await nats.seed([message]);
         await project();
       } else {

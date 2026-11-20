@@ -31,12 +31,12 @@ async function excludesRestrictedAttachments() {
     return row.event.id === message.id;
   }
   const uploads = [upload.file];
-  const unrestricted = turnMessage(fixture.options, conversation, rows, uploads, posted,
+  const unrestricted = turnMessage(conversation, rows, uploads, posted,
     'memory_free');
   expect(unrestricted.attachments).toEqual([
     { fileId: upload.file.fileId, name: 'notes.txt', mime: 'text/plain' },
   ]);
-  const restricted = turnMessage(fixture.options, conversation, rows, uploads, posted,
+  const restricted = turnMessage(conversation, rows, uploads, posted,
     'restricted');
   expect(restricted.attachments).toEqual([]);
   expect(restricted.omittedAttachments).toBe(0);

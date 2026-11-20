@@ -7,7 +7,8 @@ export default defineConfig({
   test: {
     include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/*.test.mjs',
       'infra/package/upgrade-recovery*.test.ts', 'infra/package/bootstrap.test.ts',
-      'infra/package/backup-capture.test.ts', 'infra/package/scheduled-backup*.test.ts'],
+      'infra/package/backup-capture.test.ts', 'infra/package/scheduled-backup*.test.ts',
+      'infra/package/pilot-restore*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     coverage: { provider: 'v8' },

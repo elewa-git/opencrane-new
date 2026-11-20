@@ -44,8 +44,6 @@ async function prepare(stage = 'complete') {
 async function savesOnce() {
   const saved = await prepare();
   const before = await context.nats.store.head();
-  const provision = vi.spyOn(context.keys, 'provision');
-  const encrypted = vi.spyOn(context.keys, 'encrypt');
   const heads = vi.spyOn(context.nats.store, 'head');
   const reads = vi.spyOn(context.nats.store, 'readStream');
   const activated = await activateRequestedChild(context.options, 'alice', saved.input, 1);
@@ -67,8 +65,6 @@ async function savesOnce() {
   for (const [subject] of heads.mock.calls) {
     if (subject) expect(subject).not.toMatch(/^conversation-/u);
   }
-  expect(provision).not.toHaveBeenCalled();
-  expect(encrypted).not.toHaveBeenCalled();
   await waitForDuplicateWindow(context.nats);
   const head = await context.nats.store.head();
   const connection = await context.nats.client('command');
@@ -149,7 +145,7 @@ async function refusesStoredChange(kind: string) {
         if (kind === 'author') altered = { ...altered, principal: { kind: 'human', id: 'bob' } };
         if (kind === 'silo') altered = { ...altered, silo: 'foreign' };
         if (kind === 'input') {
-          const encrypted = context.keys.encrypt('test', saved.data.childConversationId, 'changed');
+          const encrypted = ({ utterance: 'changed' });
           altered = { ...altered, data: { ...eventData.parse(row.event.data), ...encrypted } };
         }
       }
@@ -238,7 +234,7 @@ async function uncertain(kind: string) {
   }
   let fault;
   if (kind === 'IAM') fault = vi.spyOn(authz, 'memberAuthorisation').mockImplementation(changed);
-  else fault = vi.spyOn(context.keys, 'decrypt').mockImplementation(broken);
+  else fault = vi.spyOn(context.nats.store, 'readStream').mockImplementation(broken);
   const before = await context.nats.store.head();
   await expect(activateRequestedChild(context.options, 'alice', saved.input, 1)).rejects.toThrow();
   expect(await context.nats.store.head()).toBe(before);

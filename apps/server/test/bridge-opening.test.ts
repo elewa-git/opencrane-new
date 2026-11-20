@@ -7,7 +7,7 @@ import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { natsFixture, event } from '@opencrane/event-store/testing';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { openBridgeSocket } from '../src/chat/bridge-opening.ts';
 
 async function cancelledHandshakeClosesSocket() {
@@ -64,7 +64,7 @@ async function cancelledReportRecoveryDoesNotSaveBudgetRefusal() {
     conversationId: 'private', turnId: 'message', threadId: 'thread',
     requesterId: 'alice', task: 'chat_turn', status: 'failed', budgetStopId: 'stop' };
   const message = { conversationId: 'private', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+    contentType: 'text', utterance: 'Saved conversation prose' };
   try {
     const savedClose = { ...event('close', 'computer-assistant', 'computer.turn_closed'),
       data: close };
@@ -93,7 +93,7 @@ async function cancelledReportRecoveryDoesNotSaveBudgetRefusal() {
     if (!address || typeof address === 'string') throw new Error('Fixture unavailable');
     const input = { url: `ws://127.0.0.1:${address.port}/bridge`,
       computerId: 'computer', assistantId: 'assistant', bearer: 'fixture' };
-    const options = { silo: 'test', store: nats.store, keys: conversationKeys('/tmp') };
+    const options = { silo: 'test', store: nats.store };
     const wake = { signal: control.signal, deadline: performance.now() + 30_000 };
     async function decisionSaved() {
       const decisions = nats.store.readStream('decision-*');

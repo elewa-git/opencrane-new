@@ -1,3 +1,4 @@
+import type { OnboardingOptions } from './onboarding/options.ts';
 import { registerOverviewRoutes } from './overview/routes.ts';
 import { registerRoutineReads } from './routine-routes.ts';
 import { registerTakeoverRoutes } from './computers/takeover-routes.ts';
@@ -27,7 +28,8 @@ import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 import { registerFileRoutes, type FileOptions } from './files/routes.ts';
 // Builds the Fastify instance. Kept separate from main.ts so tests can
 // build a server without binding a real port.
-import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance,
+  type FastifyRequest, type FastifyReply } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
 import { shutdownTelemetry, type LogDestination } from '@opencrane/observability';
 import { registerAuthRoutes } from './auth/routes.ts';
@@ -60,8 +62,9 @@ export interface BuildServerOptions {
   memory?: import('./memory/access.ts').MemoryOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
+  readOnly?: boolean;
   takeoverRequestsEnabled?: boolean;
-  onboarding?: ChatOptions;
+  onboarding?: OnboardingOptions;
   files?: FileOptions;
   integrations?: IntegrationOptions;
   mcpInstances?: McpInstanceOptions;
@@ -81,13 +84,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   // id everywhere else; without this Fastify would call the same value `reqId`.
   const app = Fastify({ loggerInstance: logger, logController: new LogController({ requestIdLogLabel: 'request_id' }) });
 
-  // Flush telemetry when the server closes. A collector that cannot be
-  // reached must not make closing the server fail, so the error is logged.
-  if (!options.processOwnsTelemetry) app.addHook('onClose', async () => {
-    await shutdownTelemetry((err) => {
-      app.log.error({ err }, 'telemetry shutdown failed');
-    });
-  });
+  configureServerLifecycle(app, options);
 
   app.get('/healthz', () => {
     return { status: 'ok' };
@@ -136,7 +133,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerAuditRoutes(app, authConfig, options.audit);
   registerLiveView(app, authConfig, options.liveView);
 
-  registerApprovalRoutes(app, authConfig, options.chat);
+  registerApprovalRoutes(app, authConfig, options.chat, options.readOnly);
   registerBudgetStopRoutes(app, authConfig, options.chat);
   registerFileRoutes(app, authConfig, options.files);
   registerScreenshots(app, authConfig, options.files, options.liveView);
@@ -148,4 +145,26 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
 export function buildProductionServer(config: AuthConfig, options: BuildServerOptions) {
   const productionOptions = { ...options, takeoverRequestsEnabled: false };
   return buildServer(config, productionOptions);
+}
+
+async function holdRestoredWrites(request: FastifyRequest, reply: FastifyReply) {
+  const signOut = request.url.split('?')[0] === '/auth/logout';
+  if (request.method !== 'GET' && request.method !== 'HEAD' && !signOut) {
+    return reply.code(503).send({ status: 'unavailable', reason: 'restore_read_only' });
+  }
+  return;
+}
+
+function configureServerLifecycle(app: FastifyInstance, options: BuildServerOptions) {
+  if (options.readOnly) app.addHook('onRequest', holdRestoredWrites);
+  if (options.processOwnsTelemetry) return;
+  const close = shutdownServerTelemetry.bind(null, app);
+  app.addHook('onClose', close);
+}
+
+async function shutdownServerTelemetry(app: FastifyInstance) {
+  function failed(err: unknown) {
+    app.log.error({ err }, 'telemetry shutdown failed');
+  }
+  await shutdownTelemetry(failed);
 }

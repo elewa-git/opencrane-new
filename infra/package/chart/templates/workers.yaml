@@ -6,7 +6,7 @@ kind: Deployment
 metadata:
   name: worker-{{ $mode }}
 spec:
-  replicas: 1
+  replicas: {{ ternary 0 1 $root.Values.pilotRestore.enabled }}
   selector:
     matchLabels: { app: worker-{{ $mode }} }
   template:

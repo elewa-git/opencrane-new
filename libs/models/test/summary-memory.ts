@@ -62,7 +62,7 @@ function* computerRows(subject: string, from: number) {
     }
   }
 }
-function ciphertext(subject: string, index: number) {
+function prose(subject: string, index: number) {
   const encoded = Buffer.from(`${subject}:${index}`).toString('base64');
   const prefix = encoded.replace(/=+$/u, '');
   const padding = 'x'.repeat(32000 - prefix.length);
@@ -72,7 +72,7 @@ function* chatRows(subject: string, from: number) {
   for (let index = Math.floor((from - 1) / 3); index < turns; index++) {
     const sequence = index * 3 + 1;
     const message = { conversationId: subject, authorId: requesterId, authorKind: 'human',
-      contentType: 'text', ciphertext: ciphertext(subject, index), keyId: 'key:1' };
+      contentType: 'text', utterance: prose(subject, index) };
     if (sequence >= from) yield row(subject, sequence, 'message.posted', message);
     const turn = { conversationId: subject, turnId: uuid(`${subject}-turn-${index}`),
       assistantId };

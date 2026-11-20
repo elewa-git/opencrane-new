@@ -1549,7 +1549,7 @@ P3-2 adds event-backed single-use approvals at the MCP decision seam. The
 ambiguous keys and malformed Unicode. The original HTTP body is forwarded unchanged.
 A reviewed tool's `review` descriptor declares its action, consequence, target field
 and complete list of safe scalar fields; missing, extra or nested fields refuse.
-Reviews use the conversation's encrypted-content/key-reference convention. Neither
+Reviews use bounded plaintext `review` and the existing digest. Neither
 the model nor browser supplies approval authority or replacement review text.
 
 `approvalCards` includes the saved `turnId` in each card. The browser uses it to
@@ -1557,9 +1557,11 @@ check whether that turn stopped. Callers must supply `approvalRows` containing
 the discovered approval request events; this function never discovers them by
 scanning the silo log.
 `approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
-record expiry/cancellation through conditional appends. Shared child callers set
+record expiry/cancellation through conditional appends. With `readOnly: true`, cards
+use the same checks to display terminal state without saving or granting retry.
+Shared child callers set
 `requesterOnly: true` on `approvalCards`. It excludes other requesters before
-loading approval history or decrypting their review. Existing callers retain their
+loading approval history or reading their review. Existing callers retain their
 current behaviour. Safe shared approval metadata is deferred to a later contract.
 A request is bound to silo,
 requester, conversation, logical turn, assistant, server, tool/schema revision,
@@ -1572,8 +1574,8 @@ The P3-1 credential-free connection is the supported fixture here (`profile: non
 No credential or tool-charge stage is invented: P3-8 owns those, and must reserve
 before consumption and audit credential release before forwarding. P3-5 owns native
 Codex waiting, grant renewal, notification and continuation; this slice never
-redispatches from replay. `CONVERSATION_KEYS_DIR` must identify the same secret-store
-adapter for the server and decision process; unavailable keys refuse Ask admission.
+redispatches from replay. Ask admission needs no conversation key. Malformed reviews and mismatched digests
+still refuse reads and decisions.
 The shared gateway fixture is exported as `@opencrane/models/testing` for API tests.
 
 P3-15 adds `readEffect`, `listEffects` and `resolveEffect` for monetary uncertainty.
@@ -1768,7 +1770,7 @@ a close from any source refuses it.
 
 The chat summary keeps events in their saved order, except `outputReportTypes`.
 A posted message keeps only `{ conversationId }` in its data. No decision reads
-its encrypted text. Each call copies rows up to its captured log position. The
+its prose. Each call copies rows up to its captured log position. The
 unchanged `confirm()` checks later activity, including approval invalidation.
 The shared two-second budget, disconnect check before reservation, watched access
 streams and all existing refusal rules remain in place.
@@ -1821,7 +1823,7 @@ tests retain their original security checks.
 
 The synthetic reader in `test/summary-memory.ts` supplies a posted message, a turn
 start and a turn completion for every turn. Each message carries a distinct
-32,000-character ciphertext placeholder. Source rows are not kept by the reader.
+32,000-character prose placeholder. Source rows are not kept by the reader.
 Ids are 36-character UUIDs. Events include request, conversation and turn
 correlation ids, with strings copied as on decoding. Node 22.23.3 uses `--expose-gc`
 and a 256 MiB heap cap. Collected heap with and without the store gives retained
@@ -4964,7 +4966,7 @@ records alone, foreign people, requests, turns, routines and silos refuse.
 The routine-session tests cover saved expiry after use, owner retry and another unsent
 use, including a NATS restart before verification and cold replay of the saved Stop.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
-read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
+read mutates state, opens review prose, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
 
 ## Typed memory access refusals (P4-15 PR 3i)
@@ -4987,7 +4989,7 @@ Clock passage alone proves nothing. A saved expiry can follow approval if the ca
 never used. Requested, approved or used records alone, foreign people, requests, turns,
 routines and silos refuse.
 `readRootStopEvidence` repeats these checks before budget or bridge cleanup. No approval
-read mutates state, opens review ciphertext, reads credentials, wakes or sends work.
+read mutates state, opens review prose, reads credentials, wakes or sends work.
 Existing routine dispatch checks refuse the saved Stop before cleanup, including free calls.
 
 ## Release audit confirmation (P3-8 PR 5a; Part of #49)
@@ -5247,3 +5249,9 @@ start prevents the edit. A failed edit or finish leaves the latest record
 `changing`, so company routine preflight refuses. The event carries no client
 secret or token. Callers must use both commands around every OAuth scope and
 client edit before they install a company sender.
+
+## Stored approval reviews
+
+`readStoredApprovalReview` validates the JSON and review schema in saved approval
+content. A malformed stored review refuses reads and decisions as unavailable;
+it never becomes a browser input error. Review digests are still checked separately.

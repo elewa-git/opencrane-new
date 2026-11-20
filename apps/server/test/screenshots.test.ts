@@ -34,8 +34,8 @@ function desktop(width = 2, height = 2) {
 
 it('captures once, scans and stores a PNG whose file and preview survive replay', async () => {
   const fixture = await viewFixture(() => desktop()), services = await uploadServices();
-  const { config, runner, nats, binding, feed, db, keys } = fixture;
-  const options = { silo: 'test', store: nats.store, binding, feed, db, keys };
+  const { config, runner, nats, binding, feed, db } = fixture;
+  const options = { silo: 'test', store: nats.store, binding, feed, db };
   const app = buildServer(config, { chat: options, files: { ...options, ...services }, liveView: { ...options, open: () => desktop() } });
   const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1', 'idempotency-key': 'capture',
     cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}` };
@@ -106,8 +106,8 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
 
 it('refuses stale authority, arbitrary capture input, failed scans and oversized desktops without publishing a file', async () => {
   const fixture = await viewFixture(() => desktop()), services = await uploadServices();
-  const { config, nats, binding, feed, db, keys } = fixture;
-  const options = { silo: 'test', store: nats.store, binding, feed, db, keys };
+  const { config, nats, binding, feed, db } = fixture;
+  const options = { silo: 'test', store: nats.store, binding, feed, db };
   const fileOptions = { ...options, objects: services.objects, scan: services.scan };
   const view = { ...options, open: () => desktop() };
   const app = buildServer(config, { files: fileOptions, liveView: view });
@@ -157,8 +157,8 @@ async function refusesTeamScreenshotBeforeCapture() {
   }
   const fixture = await viewFixture(open);
   const services = await uploadServices();
-  const { config, nats, binding, feed, db, keys } = fixture;
-  const options = { silo: 'test', store: nats.store, binding, feed, db, keys };
+  const { config, nats, binding, feed, db } = fixture;
+  const options = { silo: 'test', store: nats.store, binding, feed, db };
   const files = { ...options, ...services };
   const view = { ...options, open };
   const app = buildServer(config, { files, liveView: view });

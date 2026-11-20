@@ -1,3 +1,4 @@
+import type { PackageReview } from './package-review.ts';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -25,14 +26,12 @@ const secretKeys: Record<string, string[]> = {
     'OIDC_CLIENT_SECRET_ENV_VAR',
     'OIDC_EXPECTED_ORG_ID', 'OPENFGA_API_URL', 'OPENFGA_STORE_ID', 'OPENFGA_MODEL_ID',
     'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
-    'CONVERSATION_KEYS_DIR', 'CONVERSATION_WRAP_KEY_FILE',
     'MODEL_UPSTREAM', 'MODEL_KEY_FILE',
     'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT', 'DEV_OWNER_EMAIL',
     'MINIO_URL', 'MINIO_CREDENTIALS_FILE', 'SCANNER_URL', 'SCANNER_CA_FILE',
     'SCANNER_MANIFEST_DIGEST',
   ],
   runtimeFiles: [
-    'conversation-wrap-key',
     'ca.crt', 'command.crt', 'command.key', 'command.seed',
     'projection.crt', 'projection.key', 'projection.seed',
     'dispatcher.crt', 'dispatcher.key', 'dispatcher.seed',
@@ -79,11 +78,7 @@ type PackageOwner = {
 type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
   images: Record<string, string>;
   natsCluster?: { enabled: boolean };
-};
-type PackageReview = {
-  requiredSecrets: string[];
-  chartVersion: string;
-  images: Record<string, string>;
+  pilotRestore?: { enabled: boolean; backupId: string };
 };
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
@@ -510,9 +505,13 @@ export async function installPackage(valuesFile: string) {
   if (!owner.releaseSecretUid) throw new Error('Helm did not record its release');
   await saveOwner(owner);
   await configureComputerGateway(owner);
-  await waitForBootstrap(owner);
-  await checkedKubectl(['-n', namespace, 'rollout', 'status', 'statefulset/objects',
-    '--timeout=120s'], 150_000);
+  if (!values.pilotRestore?.enabled) await waitForBootstrap(owner);
+  const storage = ['objects'];
+  if (values.pilotRestore?.enabled) storage.push('nats', 'postgres');
+  for (const service of storage) {
+    await checkedKubectl(['-n', namespace, 'rollout', 'status', `statefulset/${service}`,
+      '--timeout=120s'], 150_000);
+  }
   const deployments = [
     'scanner', 'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
     'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',

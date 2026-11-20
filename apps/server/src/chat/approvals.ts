@@ -1,6 +1,6 @@
 import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { approvalReviewSchema } from '@opencrane/protocol';
+import { readStoredApprovalReview } from '@opencrane/models';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createHmac } from 'node:crypto';
@@ -103,7 +103,8 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
   }
 }
 
-export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
+export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
+  options?: ChatOptions, readOnly = false) {
   registerOriginalCallStatusRoute(app, config, options);
   const route = { method: ['GET', 'POST'] as ('GET' | 'POST')[],
     url: '/api/conversations/:conversationId/approvals', handler };
@@ -128,11 +129,10 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         const deadline = performance.now() + 10_000;
         const approvalRows = await approvalRequestEvents(configured, conversationId,
           access.historyPosition, deadline);
-        const readOptions = { deadline, approvalRows,
+        const readOptions = { deadline, approvalRows, readOnly,
           requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
-          configured.store, configured.silo, conversationId, memberId, configured.keys,
-          readOptions);
+          configured.store, configured.silo, conversationId, memberId, readOptions);
         return reply.send({ cards, csrf });
       }
       if (!isApprovalCsrfValid(req, csrf)) {
@@ -231,8 +231,8 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     return reply.code(403).send({ status: 'refused' });
   }
   if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
-  const text = options.keys.decrypt(options.silo, conversationId, request);
-  approvalReviewSchema.parse(JSON.parse(text));
+  const text = request.review;
+  readStoredApprovalReview(text);
   const reviewDigest = sha256Hex(text);
   if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
   const activity = await approvalActivity(options.store, options.silo, request.assistantId,

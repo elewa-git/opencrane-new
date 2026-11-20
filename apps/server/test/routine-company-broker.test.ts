@@ -241,7 +241,7 @@ async function fixture(options: FixtureOptions = {}) {
         release.argumentsDigest,
       expiresAt: new Date(issuedAt + 900_000).toISOString(), stepUp: false,
       ...(options.missingFields ? { missingFields: ['target'] } : {}),
-      ciphertext: 'ZmFrZS1lbmNyeXB0ZWQ=', keyId: 'key:1', reviewDigest: digest('review'),
+      review: 'Saved conversation prose', reviewDigest: digest('review'),
       routine,
     });
     const decidedBy = options.decisionActor ?? userId;

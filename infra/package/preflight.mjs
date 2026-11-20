@@ -119,9 +119,25 @@ async function checkScanner(values, review) {
   }
 }
 
+function checkPilotRestore(values) {
+  const restore = values.pilotRestore;
+  if (restore === undefined) return;
+  if (!restore || typeof restore !== 'object' || Array.isArray(restore) ||
+      typeof restore.enabled !== 'boolean' || typeof restore.backupId !== 'string') {
+    throw new Error('Unsupported pilot restore setting');
+  }
+  for (const key of Object.keys(restore)) {
+    if (!['enabled', 'backupId'].includes(key)) throw new Error('Unsupported pilot restore setting');
+  }
+  if (restore.enabled && (values.postgres?.mode === 'cnpg' || values.natsCluster?.enabled ||
+      !/^[a-zA-Z0-9_-]{1,128}$/u.test(restore.backupId))) {
+    throw new Error('Pilot restore needs a backup id and standalone storage');
+  }
+}
+
 async function check(values, review) {
   const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres', 'natsCluster',
-    'scanner'];
+    'scanner', 'pilotRestore'];
   for (const key of Object.keys(values)) {
     if (!allowedKeys.includes(key)) throw new Error('Unsupported package setting');
   }
@@ -145,6 +161,7 @@ async function check(values, review) {
   for (const role of ['server', 'web']) {
     if (role in review.images) requireImage(role, values.images[role], values.images[role]);
   }
+  checkPilotRestore(values);
   checkPostgres(values, review);
   checkNatsCluster(values, review);
   await checkScanner(values, review);

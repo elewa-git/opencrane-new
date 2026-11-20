@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
@@ -57,7 +58,7 @@ async function questionHasNoAnswer(test: Backend, foreign: string) {
     if (row.event.type !== 'message.posted') {
       continue;
     }
-    const question = test.setup.keys.decrypt('test', 'chat', row.event.data);
+    const question = readConversationProse(row.event.data);
     expect(question === 'Recall my destination').toBe(true);
     expect(question.includes(factText)).toBe(false);
     expect(question.includes(foreign)).toBe(false);

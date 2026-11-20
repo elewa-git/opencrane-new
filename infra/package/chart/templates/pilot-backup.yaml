@@ -7,30 +7,51 @@ spec:
   accessModes: [ReadWriteOnce]
   resources:
     requests: { storage: 5Gi }
+{{- $root := . -}}
+{{- range $restore := list false true }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: package-backup
+  name: {{ ternary "package-restore" "package-backup" $restore }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: package-backup
+  name: {{ ternary "package-restore" "package-backup" $restore }}
 rules:
   - apiGroups: [apps]
     resources: [deployments]
     resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
-      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit]
+      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit{{ if $restore }},
+      backup-catalogue{{ end }}]
     verbs: [get, list, watch]
   - apiGroups: [apps]
     resources: [deployments/scale]
+    {{- if $restore }}
+    resourceNames: [server, openfga]
+    {{- else }}
     resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
       worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit]
+    {{- end }}
     verbs: [get, patch, update]
+  {{- if $restore }}
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    resourceNames: [backups, pilot-restore, data-nats-0, data-postgres-0, data-objects-0]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    resourceNames: [package-restore]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [{{ $root.Values.secrets.runtime | quote }}]
+    verbs: [get, patch]
+  {{- end }}
   - apiGroups: [""]
     resources: [pods]
-    verbs: [get, list]
+    verbs: [get, list{{ if $restore }}, watch{{ end }}]
   - apiGroups: [""]
     resources: [pods/exec]
     resourceNames: [postgres-0]
@@ -39,22 +60,25 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: package-backup
+  name: {{ ternary "package-restore" "package-backup" $restore }}
 subjects:
-  - { kind: ServiceAccount, name: package-backup }
+  - { kind: ServiceAccount, name: {{ ternary "package-restore" "package-backup" $restore }} }
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: package-backup
+  name: {{ ternary "package-restore" "package-backup" $restore }}
+{{- end }}
+{{- $root := . -}}
+{{- range $restore := list false true }}
 ---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: pilot-backup
+  name: {{ ternary "pilot-restore" "pilot-backup" $restore }}
 spec:
-  schedule: "0 2 * * *"
+  schedule: {{ ternary "0 0 1 1 *" "0 2 * * *" $restore | quote }}
   timeZone: Etc/UTC
-  suspend: false
+  suspend: {{ or $restore $root.Values.pilotRestore.enabled }}
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   successfulJobsHistoryLimit: 3
@@ -62,44 +86,59 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      activeDeadlineSeconds: 360
+      activeDeadlineSeconds: {{ ternary 600 360 $restore }}
       template:
         metadata:
-          labels: { app: pilot-backup }
+          labels: { app: {{ ternary "pilot-restore" "pilot-backup" $restore }} }
         spec:
-          serviceAccountName: package-backup
+          enableServiceLinks: false
+          serviceAccountName: {{ ternary "package-restore" "package-backup" $restore }}
           restartPolicy: Never
           securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
           initContainers:
             - name: kubeconfig
-              image: {{ .Values.images.server | quote }}
+              image: {{ $root.Values.images.server | quote }}
               command: [node, infra/package/kubeconfig.mjs]
               volumeMounts:
                 - { name: kubeconfig, mountPath: /run/kubeconfig }
             - name: private-directories
-              image: {{ .Values.images.server | quote }}
+              image: {{ $root.Values.images.server | quote }}
               command: [sh, -ec]
               args:
                 - >-
-                  mkdir -p /backups/sets /run/opencrane/files &&
+                  {{ if $restore }}mkdir -p /restore/state && chown 1000:1000 /restore/state &&
+                  chmod 0700 /restore/state &&{{ else }}mkdir -p /backups/sets &&
+                  chown 1000:1000 /backups/sets && chmod 0700 /backups/sets &&{{ end }}
+                  mkdir -p /run/opencrane/files &&
                   cp /run/opencrane-source/* /run/opencrane/files/ &&
-                  chown 1000:1000 /backups/sets /run/opencrane/files/* &&
-                  chmod 0700 /backups/sets && chmod 0400 /run/opencrane/files/*
+                  chown 1000:1000 /run/opencrane/files/* && chmod 0400 /run/opencrane/files/*
               securityContext: { runAsUser: 0, allowPrivilegeEscalation: false }
               volumeMounts:
-                - { name: backups, mountPath: /backups }
+                - { name: backups, mountPath: /backups, readOnly: {{ $restore }} }
+                {{- if $restore }}
+                - { name: restore, mountPath: /restore }
+                {{- end }}
                 - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
                 - { name: runtime-files, mountPath: /run/opencrane/files }
           containers:
             - name: backup
-              image: {{ .Values.images.server | quote }}
-              command: [node, --experimental-strip-types, infra/package/scheduled-backup-run.ts, run]
+              image: {{ $root.Values.images.server | quote }}
+              command: [node, --experimental-strip-types,
+                {{- if $restore }}
+                  infra/package/pilot-restore-run.ts, {{ $root.Values.pilotRestore.backupId | quote }}]
+                {{- else }}
+                  infra/package/scheduled-backup-run.ts, run]
+                {{- end }}
               envFrom:
-                - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
-                - secretRef: { name: {{ .Values.secrets.bootstrap | quote }} }
+                - secretRef: { name: {{ $root.Values.secrets.runtime | quote }} }
+                - secretRef: { name: {{ $root.Values.secrets.bootstrap | quote }} }
               env:
+                - { name: RUNTIME_SECRET, value: {{ $root.Values.secrets.runtime | quote }} }
+                - name: KUBE_NAMESPACE
+                  valueFrom:
+                    fieldRef: { fieldPath: metadata.namespace }
                 - { name: KUBECONFIG, value: /run/kubeconfig/config.json }
-                - { name: BACKUP_IMAGES, value: {{ toJson .Values.images | quote }} }
+                - { name: BACKUP_IMAGES, value: {{ toJson $root.Values.images | quote }} }
               securityContext:
                 runAsNonRoot: true
                 runAsUser: 1000
@@ -110,7 +149,10 @@ spec:
                 requests: { cpu: 50m, memory: 128Mi }
                 limits: { cpu: 500m, memory: 768Mi }
               volumeMounts:
-                - { name: backups, mountPath: /backups }
+                - { name: backups, mountPath: /backups, readOnly: {{ $restore }} }
+                {{- if $restore }}
+                - { name: restore, mountPath: /restore }
+                {{- end }}
                 - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
                 - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
                 - { name: object-owner, mountPath: /run/object-owner, readOnly: true }
@@ -123,11 +165,16 @@ spec:
             - name: runtime-files
               emptyDir: { medium: Memory }
             - name: runtime-file-source
-              secret: { secretName: {{ .Values.secrets.runtimeFiles | quote }}, defaultMode: 256 }
+              secret: { secretName: {{ $root.Values.secrets.runtimeFiles | quote }}, defaultMode: 256 }
             - name: object-owner
-              secret: { secretName: {{ .Values.secrets.objects | quote }} }
+              secret: { secretName: {{ $root.Values.secrets.objects | quote }} }
             - name: temporary
               emptyDir: { medium: Memory, sizeLimit: 128Mi }
+            {{- if $restore }}
+            - name: restore
+              persistentVolumeClaim: { claimName: pilot-restore }
+            {{- end }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -157,7 +204,7 @@ spec:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 100m, memory: 512Mi }
           volumeMounts:
-            - { name: backups, mountPath: /backups, readOnly: true }
+            - { name: backups, mountPath: /backups, readOnly: {{ not .Values.pilotRestore.enabled }} }
       volumes:
         - name: backups
           persistentVolumeClaim: { claimName: backups }
@@ -172,4 +219,14 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress: []
   egress: []
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pilot-restore
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 64Mi }
 {{- end }}

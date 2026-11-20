@@ -19,7 +19,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
-import { conversationKeys, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { reviewToolPolicy, readToolPolicy, modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage, models, settlementHandler, startDecision, startGateway } from '../src/index.ts';
 
@@ -134,7 +134,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   }
   let clock = Date.now();
   let actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
-  const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
+
 
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
@@ -221,7 +221,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const dispatchOptions: McpDispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {},
     requireCatalogue: function requireCatalogue(_serverId: string) {} };
   let decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
-    binding, 0, keys, undefined, dispatchOptions);
+    binding, 0, undefined, dispatchOptions);
   let gatewayChild: ChildProcess | undefined;
   function rememberGatewayChild(child: ChildProcess,
     stop: (signal?: NodeJS.Signals) => Promise<void>) {
@@ -312,7 +312,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
   return { databaseUrl: dbs.queue.options.connectionString,
     gatewayChild: () => gatewayChild,
-    dispatchOptions, mcpPrecondition, tokens, keys, stopDispatch, refuseMcpConnection,
+    dispatchOptions, mcpPrecondition, tokens, stopDispatch, refuseMcpConnection,
     upstreamBody: () => upstreamBody, get actor() { return actor; }, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
@@ -403,7 +403,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
       actor = new BudgetActor(nats.store, 'test', actor.now);
       await actor.start();
       decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
-        binding, decisionPort, keys, undefined, dispatchOptions);
+        binding, decisionPort, undefined, dispatchOptions);
       options = { ...options, decisionUrl: decision.url };
       gateway = await startGateway(options);
     },

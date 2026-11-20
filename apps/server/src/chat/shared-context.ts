@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 
@@ -6,8 +7,7 @@ type Exchange = { at: string; member: string; assistant: string[] }
   | { at: string; outcome: 'not_completed' };
 type Turn = { message: StoredEvent; replies: StoredEvent[]; completed: boolean; lost: boolean };
 
-export function sharedContext(rows: StoredEvent[], message: StoredEvent,
-  decrypt: (data: unknown) => string) {
+export function sharedContext(rows: StoredEvent[], message: StoredEvent) {
   const turns = new Map<string, Turn>();
   for (const row of rows) {
     const data = z.record(z.string(), z.unknown()).parse(row.event.data);
@@ -29,7 +29,7 @@ export function sharedContext(rows: StoredEvent[], message: StoredEvent,
   const result = { exchanges: [] as Exchange[], omittedExchanges: turns.size };
   const newestFirst = [...turns.values()].reverse();
   for (const turn of newestFirst) {
-    const exchange = exchangeFor(turn, decrypt);
+    const exchange = exchangeFor(turn);
     result.exchanges.unshift(exchange);
     result.omittedExchanges--;
     if (Buffer.byteLength(JSON.stringify(result)) > maximumBytes) {
@@ -54,10 +54,10 @@ function applyReport(turn: Turn, row: StoredEvent, data: Record<string, unknown>
   if (type === 'agent.message_completed' && isText(data)) turn.replies.push(row);
 }
 
-function exchangeFor(turn: Turn, decrypt: (data: unknown) => string): Exchange {
+function exchangeFor(turn: Turn): Exchange {
   const at = turn.message.event.time;
   if (!turn.completed || turn.lost) return { at, outcome: 'not_completed' };
   const assistant: string[] = [];
-  for (const reply of turn.replies) assistant.push(decrypt(reply.event.data));
-  return { at, member: decrypt(turn.message.event.data), assistant };
+  for (const reply of turn.replies) assistant.push(readConversationProse(reply.event.data));
+  return { at, member: readConversationProse(turn.message.event.data), assistant };
 }

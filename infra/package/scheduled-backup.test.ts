@@ -40,7 +40,7 @@ async function fixture() {
     expect(stopped).toBe(true);
     const name = destination.split('/').at(-1)!;
     observations.push(name);
-    await writeFile(destination, `${name} at sequence 42`);
+    await writeFile(destination, `${name} at sequence 42`, { mode: 0o600 });
     return { position: 42 };
   }
   function resume() {

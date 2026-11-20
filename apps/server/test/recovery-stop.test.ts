@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
@@ -7,7 +8,7 @@ import { reportJournal, type BridgeReport } from '../../computer/test/server.ts'
 import { parseTurn, turnRunner } from '../../computer/test/server.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { chatDisplayData, hasDisplayText } from '../src/chat/display.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordReport } from '../src/chat/reports.ts';
 import { transcript } from '../../web/test/chat-state.ts';
 
@@ -20,7 +21,7 @@ interface StopOrderCase {
 async function keepsTerminalOutcome(testCase: StopOrderCase) {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/recovery-stop-`);
-  const keys = conversationKeys(directory);
+
   const person = { silo: 'test', memberId: 'alice' };
   const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
   const reports: BridgeReport[] = [];
@@ -66,26 +67,26 @@ async function keepsTerminalOutcome(testCase: StopOrderCase) {
     const displayData = chatDisplayData(event.type, event.data);
     let data: unknown = displayData;
     if (hasDisplayText(event.type)) {
-      data = { ...displayData, text: keys.decrypt('test', 'chat', event.data) };
+      data = { ...displayData, text: readConversationProse(event.data) };
     }
     const display = { id: event.id, position: row.sequence,
       type: event.type, time: event.time, data };
     return chatRowSchema.parse(display);
   }
   try {
-    keys.provision('test', 'chat');
+
     const create = { id: 'create', conversationId: 'chat', assistantId: 'assistant' };
-    await chatCommand(nats.store, keys, person, create);
+    await chatCommand(nats.store, person, create);
     const message = { id: 'message', conversationId: 'chat', text: 'Reply',
       executionMode: 'memory_free' };
-    await chatCommand(nats.store, keys, person, message);
+    await chatCommand(nats.store, person, message);
     const turn = { id: 'message', conversationId: 'chat', assistantId: 'assistant',
       requesterId: 'alice', executionMode: 'memory_free', text: 'Reply', token: 'initial',
       expiresAt: Date.now() + 60_000 };
     const input = parseTurn(turn);
     const starting = runner.start(input);
     await vi.waitFor(hasStartReport);
-    expect(await recordReport(nats.store, keys, context, reports[0])).toBe('recorded');
+    expect(await recordReport(nats.store, context, reports[0])).toBe('recorded');
     const grantReply = { token: 'fresh', expiresAt: Date.now() + 60_000 };
     runner.acknowledge(reports[0]!.sequence, grantReply);
     await starting;
@@ -93,12 +94,12 @@ async function keepsTerminalOutcome(testCase: StopOrderCase) {
       threadId: 'thread', itemId: 'reply', delta: 'Partial reply before Stop',
     } };
     runner.complete(partialReply);
-    expect(await recordReport(nats.store, keys, context, reports[1])).toBe('recorded');
+    expect(await recordReport(nats.store, context, reports[1])).toBe('recorded');
     if (testCase.order === 'failure_then_stop') {
       modelFailed();
     }
     const stop = { id: 'stop', conversationId: 'chat', stopTurnId: 'message' };
-    await chatCommand(nats.store, keys, person, stop);
+    await chatCommand(nats.store, person, stop);
     const beforeRestart = await chatHistory(nats.store, 'test', 'chat');
     const liveRows = beforeRestart.map(displayRow);
     const stoppingTranscript = transcript(liveRows, 'alice', 'message');
@@ -131,8 +132,8 @@ async function keepsTerminalOutcome(testCase: StopOrderCase) {
     reloaded.replay(reports[1]!.sequence, new Map(), replay);
     expect(replayed).toHaveLength(1);
     const failure = replayed[0]!;
-    expect(await recordReport(nats.store, keys, context, failure)).toBe('recorded');
-    expect(await recordReport(nats.store, keys, context, failure)).toBe('duplicate');
+    expect(await recordReport(nats.store, context, failure)).toBe('recorded');
+    expect(await recordReport(nats.store, context, failure)).toBe('duplicate');
     const afterRestart = await chatHistory(nats.store, 'test', 'chat');
     const terminalRow = displayRow(afterRestart.at(-1)!);
     liveRows.push(terminalRow);

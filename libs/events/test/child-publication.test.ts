@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { childResultPublishedDataSchema } from '../src/index.ts';
 
 const common = { conversationId: 'parent', publishedBy: 'alice', childConversationId: 'child',
-  reviewDigest: 'a'.repeat(64), ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1',
+  reviewDigest: 'a'.repeat(64), utterance: 'Reviewed child result',
   contentType: 'text' };
 const source = { resultEventId: 'saved-result', resultPosition: 20, turnId: 'saved-turn' };
 

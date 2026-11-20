@@ -5,7 +5,7 @@ import type { StoredEvent } from '@opencrane/event-store';
 import { fileUploadedDataSchema, messagePostedDataSchema } from '@opencrane/events';
 import { buildTurnTools, mayOfferTurnTools, toolsForMessage,
   type TurnDelivery, type TurnToolServerState } from '../src/chat/turn-tools.ts';
-import { turnMessage, type AgentSession, type WatchOptions } from '../src/chat/bridge-conversation.ts';
+import { turnMessage, type AgentSession } from '../src/chat/bridge-conversation.ts';
 import { agentSessionData } from '../src/chat/reports.ts';
 import { parseComputerTurn } from '../../computer/test/support/turn-parser.ts';
 
@@ -152,16 +152,10 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
   }
   const messageEvent = envelope('test', 'conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'person', authorKind: 'human',
-    ciphertext: 'a'.repeat(16), keyId: 'key:unused', contentType: 'text',
+    utterance: '界'.repeat(32_000), contentType: 'text',
   });
   const message: StoredEvent = { sequence: 101, event: messageEvent };
   const rows = uploadRows;
-  // turnMessage uses only silo and decryption here; the large text makes this real byte count useful.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Other WatchOptions fields are unused.
-  const options = {
-    silo: 'test',
-    keys: { decrypt: () => '界'.repeat(32_000) },
-  } as unknown as WatchOptions;
   const conversationDetails = agentSessionData({
     conversationId: 'chat', assistantId: 'assistant', createdBy: 'person',
     mode: 'agent_session',
@@ -172,13 +166,13 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
     createdAt: new Date().toISOString(),
     assistantKind: 'personal',
   };
-  const turn = turnMessage(options, conversation, rows, uploads, message, 'memory_free');
+  const turn = turnMessage(conversation, rows, uploads, message, 'memory_free');
   expect(turn.attachments).toHaveLength(100);
   const messageData = messagePostedDataSchema.parse(messageEvent.data);
   const boundEvent = { ...messageEvent,
     data: { ...messageData, attachmentIds: ['file-1'] } };
   const boundMessage: StoredEvent = { sequence: 101, event: boundEvent };
-  const boundTurn = turnMessage(options, conversation, rows, uploads,
+  const boundTurn = turnMessage(conversation, rows, uploads,
     boundMessage, 'memory_free');
   expect(boundTurn.attachments.map(file => file.fileId)).toEqual(['file-1']);
   const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn), 'utf8');

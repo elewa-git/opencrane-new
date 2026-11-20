@@ -36,8 +36,8 @@ export async function summonFixture(nats?: Parameters<typeof childFixture>[0]) {
       data = { conversationId, mode, createdBy: 'alice', assistantId: 'helper' };
     }
     await context.append(`conversation-${conversationId}`, 'conversation.created', data);
-    context.keys.provision('test', conversationId);
-    const encrypted = context.keys.encrypt('test', conversationId, '@Assistant source canary');
+
+    const encrypted = ({ utterance: '@Assistant source canary' });
     const source = await context.append(`conversation-${conversationId}`, 'message.posted',
       { conversationId, authorId, authorKind: 'human', contentType: 'text', ...encrypted }, false);
     return { conversationId, requestId: `request-${counter}`, sourceMessageId: source.id,

@@ -876,8 +876,7 @@ async function allowsUnrelatedChanges() {
   await seedRecallFact('unloaded');
   await changeLoadedMemory('correct', 'unloaded');
   const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', keyId: 'key:message',
-    contentType: 'text' };
+    utterance: 'Saved conversation prose', contentType: 'text' };
   await setup.append('conversation-conversation', 'message.posted', message);
   const upload = { conversationId: 'conversation', fileId: 'upload', uploadedBy: 'alice',
     name: 'note.txt', size: 5, sha256: 'a'.repeat(64), mime: 'text/plain',
@@ -923,7 +922,7 @@ async function refusesAfterColdReplay() {
   await actor.start();
   const identity = { ...setup.identity, memory: setup.tokens };
   const decision = await startDecision(actor, identity, setup.binding, 0,
-    setup.keys, undefined, setup.dispatchOptions);
+    undefined, setup.dispatchOptions);
   try {
     const request = { method: 'POST', headers: setup.headers, body: JSON.stringify({
       model: 'gpt-6-luna', input: 'Hello', stream: true, max_output_tokens: 128 }) };
@@ -1237,7 +1236,7 @@ it('refuses repeated memory changes at the original access deadline',
 
 async function renewalBridge(store = setup.nats.store, withBinding = true) {
   const message = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', 'conversation', 'Continue') };
+    contentType: 'text', ...({ utterance: 'Continue' }) };
   const event = envelope('test', 'conversation-conversation', 'message.posted', message, 'turn');
   await setup.nats.seed([event]);
   const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
@@ -1255,7 +1254,7 @@ async function renewalBridge(store = setup.nats.store, withBinding = true) {
     connected.resolve(peer);
   }
   server.on('connection', capture);
-  const options: Parameters<typeof connectBridge>[0] = { silo: 'test', store, keys: setup.keys };
+  const options: Parameters<typeof connectBridge>[0] = { silo: 'test', store };
   if (withBinding) options.binding = setup.binding;
   const input = { computerId: 'computer', assistantId: 'assistant', bearer: 'fixture',
     url: `ws://127.0.0.1:${address.port}` };

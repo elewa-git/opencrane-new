@@ -30,7 +30,7 @@ type SenderOptions = { enabled?: boolean; replay?: boolean;
   custodyRecordVersion?: string;
   confirmCredentialUse?: (authorisedVersion: string) => Promise<string> };
 
-function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promise<void>) {
+function companyCheckedWorker(worker: Arguments[1], confirmCompany?: () => Promise<void>) {
   if (!confirmCompany) return worker;
   const checkCompany: () => Promise<void> = confirmCompany;
   async function checkCurrent(deadline: number) {
@@ -44,10 +44,9 @@ function companyCheckedWorker(worker: Arguments[2], confirmCompany?: () => Promi
 }
 
 function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivation>>,
-  selection: Arguments[4], keys: Arguments[1], silo: string) {
+  selection: Arguments[3]) {
   const run = checked.run;
-  const instructions = keys.decrypt(silo, `routine-${run.routineId}`,
-    run.definition.instructions);
+  const instructions = run.definition.instructions;
   const frame = { type: 'turn', id: checked.turnId, messageId: checked.messageId,
     threadId: selection.threadId,
     rootId: checked.rootId, senderAttemptId: checked.senderAttemptId,
@@ -58,7 +57,7 @@ function routineTurnBytes(checked: Awaited<ReturnType<typeof readRoutineActivati
   return JSON.stringify(frame);
 }
 
-async function appendRoutineSendCheck(store: Arguments[0], worker: Arguments[2],
+async function appendRoutineSendCheck(store: Arguments[0], worker: Arguments[1],
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
   confirmCompany: () => Promise<void>, configurationDigest: string,
   custodyRecordVersion: string,
@@ -98,7 +97,7 @@ async function appendRoutineSendCheck(store: Arguments[0], worker: Arguments[2],
   }
 }
 
-async function checkCompanyCredentialForSend(store: Arguments[0], worker: Arguments[2],
+async function checkCompanyCredentialForSend(store: Arguments[0], worker: Arguments[1],
   checked: Awaited<ReturnType<typeof readRoutineActivation>>,
   admission: Parameters<typeof stopUnconfirmedRoutine>[2], options: SenderOptions) {
   const confirmCompany = options.confirmCompany;
@@ -153,10 +152,10 @@ async function checkCompanyCredentialForSend(store: Arguments[0], worker: Argume
 // Keep this internal switch off until company calls, lifecycle Stop and Ask are connected.
 export function createRoutineSender(options: SenderOptions,
   ...supplied: Arguments) {
-  const [store, keys, worker, raw, selection, senderAttemptId] = supplied;
+  const [store, worker, raw, selection, senderAttemptId] = supplied;
   const confirmCompany = options.confirmCompany;
   const checkedWorker = companyCheckedWorker(worker, confirmCompany);
-  const args: Arguments = [store, keys, checkedWorker, raw,
+  const args: Arguments = [store, checkedWorker, raw,
     { ...selection }, senderAttemptId];
   const enabled = options.enabled === true && options.replay !== true;
   let used = false;
@@ -169,15 +168,15 @@ export function createRoutineSender(options: SenderOptions,
     let admitted: Awaited<ReturnType<typeof claimRoutineActivation>> | undefined;
     let sent = false;
     try {
-      args[3] = structuredClone(raw);
+      args[2] = structuredClone(raw);
       admitted = await claimRoutineActivation(...args);
       if (!admitted.published) return unknown;
       link = await wake();
       const checked = await readRoutineActivation(...args);
       const run = checked.run;
-      if (link.computerId !== args[4].computerId ||
+      if (link.computerId !== args[3].computerId ||
           link.assistantId !== run.definition.assistantId) return unknown;
-      const bytes = routineTurnBytes(checked, args[4], keys, worker.silo);
+      const bytes = routineTurnBytes(checked, args[3]);
       await checked.fresh();
       const admission = { routineId: admitted.run.routineId,
         eventId: admitted.receipt.eventId, position: admitted.receipt.position };
@@ -192,7 +191,7 @@ export function createRoutineSender(options: SenderOptions,
       // Treat a missing transport reply as a possible delivery.
       sent = true;
       const accepted = await sendRoutineTurn(link, bytes, checked.turnId, checkStart,
-        args[2], signal);
+        args[1], signal);
       if (!accepted) {
         return await unconfirmedDelivery(store, worker.silo, admitted, sent);
       }
@@ -214,7 +213,7 @@ export function createRoutineSender(options: SenderOptions,
       if (report.conversationId !== checked.receipt.conversationId ||
           report.turnId !== checked.turnId || report.messageId !== checked.messageId ||
           report.rootId !== checked.rootId || report.senderAttemptId !== checked.senderAttemptId ||
-          report.threadId !== args[4].threadId || report.executionMode !== 'restricted') {
+          report.threadId !== args[3].threadId || report.executionMode !== 'restricted') {
         throw new Error('Routine start unavailable');
       }
       await confirmCompany?.();
@@ -236,7 +235,7 @@ export function createRoutineSender(options: SenderOptions,
 }
 
 async function sendRoutineTurn(link: Link, bytes: string, turnId: string,
-  check: Parameters<Link['bindRoutineStart']>[1], worker: Arguments[2], signal?: AbortSignal) {
+  check: Parameters<Link['bindRoutineStart']>[1], worker: Arguments[1], signal?: AbortSignal) {
   if (signal?.aborted) {
     return false;
   }

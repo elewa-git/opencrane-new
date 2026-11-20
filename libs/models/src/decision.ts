@@ -19,7 +19,7 @@ import { admitProviderVerification, runProviderVerification, verifyProviderCapab
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
 import { configureBudget } from './budget-config.ts';
 import { respondBudgetRefusal } from './budget-scope.ts';
-import { approvalDecision, type ReviewKeys } from './approvals.ts';
+import { approvalDecision } from './approvals.ts';
 import { readBody } from './decision-request-body.ts';
 import { AuthorityRefused, decisionAuthorityFence } from './authority.ts';
 import { readDecisionGrants } from './decision-grants.ts';
@@ -84,7 +84,7 @@ function linkApprovalAttempt(tool: { logicalRequestId: string }, approvalId: str
 export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
     memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
-  binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
+  binding: Binding, port = 0, providers?: ProviderVerificationOptions,
   dispatchOptions?: McpDispatchOptions & { childStart?: ChildStartHandler;
     maintenancePrepare?: MaintenancePrepare },
   egress?: EgressRelayRegistry,
@@ -276,7 +276,7 @@ export async function startDecision(
           serverId: match[1]!, connectionId: match[2]!,
         };
         const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo,
-          approvalBinding, policy, keys, actor.now, fresh, requestId, conversation);
+          approvalBinding, policy, actor.now, fresh, requestId, conversation);
         linkApprovalAttempt(toolFacts, approvalId);
         let release: Zod.infer<typeof toolCredentialReleaseSchema> | undefined;
         if (outcome === 'allow' && policy.personal) {

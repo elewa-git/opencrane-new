@@ -62,3 +62,19 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
+{{- range $name, $value := .Values.pilotRestore -}}
+{{- if not (has $name (list "enabled" "backupId")) -}}
+{{- fail "Unsupported pilot restore setting" -}}
+{{- end -}}
+{{- end -}}
+{{- if not (kindIs "bool" .Values.pilotRestore.enabled) -}}
+{{- fail "Unsupported pilot restore mode" -}}
+{{- end -}}
+{{- if .Values.pilotRestore.enabled -}}
+{{- if or (ne .Values.postgres.mode "standalone") .Values.natsCluster.enabled -}}
+{{- fail "Pilot restore requires standalone PostgreSQL and NATS" -}}
+{{- end -}}
+{{- if not (regexMatch "^[a-zA-Z0-9_-]{1,128}$" .Values.pilotRestore.backupId) -}}
+{{- fail "Pilot restore needs a backup id" -}}
+{{- end -}}
+{{- end -}}

@@ -1,3 +1,4 @@
+import { packageDatabaseRoles, grantPackageReads } from './package-database.ts';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -54,24 +55,15 @@ async function databaseReady() {
   }
 }
 
-function password(name: string) {
-  const value = required(name);
-  assert(/^[a-f0-9]{64}$/u.test(value), `Invalid generated password: ${name}`);
-  return value;
-}
-
 async function prepareDatabases() {
   const pool = new Pool({ connectionString: required('POSTGRES_ADMIN_URL') });
   try {
-    const roles = [
-      ['projection', password('PROJECTION_PASSWORD')],
-      ['server', password('SERVER_PASSWORD')],
-      ['dispatcher', password('DISPATCHER_PASSWORD')],
-      ['openfga', password('OPENFGA_PASSWORD')],
-    ];
-    for (const [name, secret] of roles) {
-      const found = await pool.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [name]);
-      if (!found.rows.length) await pool.query(`CREATE ROLE ${name} LOGIN PASSWORD '${secret}'`);
+    const roles = packageDatabaseRoles();
+    for (const role of roles) {
+      const found = await pool.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role.name]);
+      if (!found.rows.length) {
+        await pool.query(`CREATE ROLE ${role.name} LOGIN PASSWORD '${role.password}'`);
+      }
     }
     const databases = [
       ['projections', 'projection'], ['handlers', 'dispatcher'], ['openfga', 'openfga'],
@@ -86,13 +78,7 @@ async function prepareDatabases() {
   } finally {
     await pool.end();
   }
-  const projection = new Pool({ connectionString: required('PROJECTION_DATABASE_URL') });
-  try {
-    await projection.query('GRANT USAGE ON SCHEMA public TO server');
-    await projection.query('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO server');
-  } finally {
-    await projection.end();
-  }
+  await grantPackageReads(required('PROJECTION_DATABASE_URL'));
 }
 
 async function openFgaReady() {

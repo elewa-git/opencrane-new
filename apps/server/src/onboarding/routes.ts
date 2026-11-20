@@ -1,9 +1,10 @@
+import type { OnboardingOptions } from './options.ts';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest, FastifyError } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
 import { surveyAnswersSchema } from '@opencrane/events';
 import { isAuthorityChanged, AuthorityApplying } from '@opencrane/models';
-import { chatAccess, isChatRefused, ChatAccessApplying, type ChatOptions } from '../chat/access.ts';
+import { chatAccess, isChatRefused, ChatAccessApplying } from '../chat/access.ts';
 import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { surveyCommand, SurveyConflict, SurveyUnknown } from './commands.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
@@ -18,7 +19,7 @@ const parameters = z.strictObject({ commandId: idSchema });
 const revisionParameters = z.strictObject({ revisionId: idSchema });
 const pageParameters = z.strictObject({ limit: z.coerce.number().int().min(1).max(50).optional(),
   before: z.coerce.number().int().positive().optional() });
-export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
+export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, options?: OnboardingOptions) {
   app.get('/api/onboarding', handler);
   app.get('/api/personal/changes/:commandId', handler);
   app.get('/api/onboarding/persona/revisions', handler);
@@ -86,7 +87,7 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
   }
 }
 
-function writeOnboardingRoute(request: FastifyRequest, options: ChatOptions,
+function writeOnboardingRoute(request: FastifyRequest, options: OnboardingOptions,
   memberId: string) {
   const path = request.routeOptions.url;
   if (path === '/api/onboarding/welcome/archive') {
@@ -101,12 +102,12 @@ function writeOnboardingRoute(request: FastifyRequest, options: ChatOptions,
 }
 
 type History = Awaited<ReturnType<typeof surveyHistory>>;
-async function readWelcomeAssignment(request: FastifyRequest, options: ChatOptions,
+async function readWelcomeAssignment(request: FastifyRequest, options: OnboardingOptions,
   memberId: string, history: History): Promise<boolean | null> {
   if (request.routeOptions.url !== '/api/onboarding/welcome' || history.welcome) return null;
   return welcomeAssistantAssigned(options, memberId);
 }
-async function readSpecial(request: FastifyRequest, options: ChatOptions,
+async function readSpecial(request: FastifyRequest, options: OnboardingOptions,
   memberId: string, history: History) {
   const path = request.routeOptions.url;
   if (path === '/api/personal/changes/:commandId') {
@@ -131,7 +132,7 @@ async function readSpecial(request: FastifyRequest, options: ChatOptions,
   }
   return undefined;
 }
-function readWelcome(options: ChatOptions, memberId: string, history: History,
+function readWelcome(options: OnboardingOptions, memberId: string, history: History,
   assistantAssigned: boolean | null) {
   const welcome = history.welcome;
   if (!welcome) {
@@ -183,7 +184,7 @@ function listRevisions(request: FastifyRequest, history: History) {
     approval: history.approval };
 }
 async function readRevision(request: FastifyRequest, reply: FastifyReply,
-  options: ChatOptions, memberId: string, history: History) {
+  options: OnboardingOptions, memberId: string, history: History) {
   const { revisionId } = revisionParameters.parse(request.params);
   function matchesId(reference: typeof history.revisions[number]) {
     return reference.eventId === revisionId || String(reference.revision) === revisionId;

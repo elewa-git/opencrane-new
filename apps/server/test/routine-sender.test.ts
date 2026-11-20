@@ -1,3 +1,4 @@
+import { routineEvent as record } from './support/routine-event.ts';
 /* eslint max-lines: ["error", { max: 1980, skipBlankLines: true, skipComments: true }] */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -13,6 +14,8 @@ import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
 import { assistantProcessor } from '../src/chat/bridge-poll.ts';
 import { createLogger } from '@opencrane/observability';
+import { holdFixtureClock } from '../../ops/test/support/routine-clock.ts';
+import { expectRoutineInput } from './support/routine-prose.ts';
 import { routineAsk } from './support/routine-ask.ts';
 import { advanceRoutineFixtureClock, checkSlowPayerPublication, sendWithFixtureTime }
   from './support/routine-sender-clock.ts';
@@ -33,7 +36,7 @@ import { natsFixture, event, type ManualClock }
 import { foldRoutine, routineActivationSchema, type EventEnvelope,
   type RoutineState } from '@opencrane/events';
 import { BudgetActor, envelope, history, priceTableId, rootTotals } from '@opencrane/models';
-import { conversationKeys } from '@opencrane/projections';
+
 import { openfga } from '../../../libs/authz/test/services.ts';
 import { joinedMember, routine } from '../../../libs/authz/test/routine-fixture.ts';
 import * as routineSession from '../src/routine-session.ts';
@@ -45,7 +48,6 @@ import { inspectRoutineSender } from '../src/routine-sender.ts';
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
-let keys: ReturnType<typeof conversationKeys>;
 let actor: BudgetActor;
 let directory: string;
 let now: number;
@@ -68,9 +70,6 @@ function checkCurrent() {
 function worker() {
   return { silo: 'test', binding, workerId: 'routine-worker', checkCurrent, now: clock };
 }
-function record(id: string, subject: string, type: string, data: unknown): EventEnvelope {
-  return { ...event(id, subject, type), source: 'opencrane-server', commandId: id, data };
-}
 function forbidden(): never {
   throw new Error('private-service-canary');
 }
@@ -90,13 +89,12 @@ async function setup() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
   directory = await mkdtemp('/tmp/routine-sender-');
-  keys = conversationKeys(directory);
-  keys.provision('test', 'routine-orders');
+
   now = Date.parse('2026-10-11T07:00:00Z');
   owned = true;
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = keys.encrypt('test', 'routine-orders', 'Private routine instructions');
+  const instructions = 'Private routine instructions';
   const definition = { ...original.definition, instructions };
   const active = { ...created, data: { ...original, definition, status: 'active' } };
   const events = [joinedMember('alice')];
@@ -171,7 +169,7 @@ async function prepareSenderFixture() {
   projection.mockImplementation(projectSession);
   try {
     const link = await preparedComputer.wake();
-    return await prepareRoutineComputer(nats.store, keys, worker(), input, actor, link, 1);
+    return await prepareRoutineComputer(nats.store, worker(), input, actor, link, 1);
   } catch (cause) {
     throw new Error(`Sender fixture stage: ${stage}`, { cause });
   } finally {
@@ -190,10 +188,10 @@ async function cleanup() {
 beforeEach(setup);
 afterEach(cleanup);
 function admit() {
-  return admitRoutineActivation(nats.store, keys, worker(), input, selection, 'sender-attempt');
+  return admitRoutineActivation(nats.store, worker(), input, selection, 'sender-attempt');
 }
 function inspect(senderAttemptId = 'sender-attempt') {
-  return inspectRoutineSender(nats.store, keys, worker(), input, selection, senderAttemptId);
+  return inspectRoutineSender(nats.store, worker(), input, selection, senderAttemptId);
 }
 function modernExhaustion(shape: 'reasons' | 'work', stopId?: string) {
   if (shape === 'reasons') {
@@ -217,7 +215,7 @@ async function refusesSavedModernExhaustion(shape: 'reasons' | 'work') {
   const exhausted = record(`exhausted-${shape}`, 'budget-test', 'budget.exhausted',
     modernExhaustion(shape, stopId));
   await nats.seed([exhausted]);
-  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+  const checked = await readRoutineActivation(nats.store, worker(), input, selection,
     'sender-attempt');
   await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
 }
@@ -334,7 +332,7 @@ async function retainsUncertainHold() {
   await actor.uncertain(hold, 'settle_timeout');
   const before = await nats.store.head();
   expect(await inspect()).toMatchObject({ status: 'unknown', rootId: root.rootId });
-  const checked = await readRoutineActivation(nats.store, keys, worker(), input, selection,
+  const checked = await readRoutineActivation(nats.store, worker(), input, selection,
     'sender-attempt');
   await expect(checked.fresh()).rejects.toThrow('Routine activation refused');
   expect(rootTotals(actor.state, root.rootId)).toEqual({
@@ -403,7 +401,7 @@ function sender(enabled = true, replay = false) {
   const options = { enabled, replay, confirmCompany,
     configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
     confirmCredentialUse };
-  return createRoutineSender(options, nats.store, keys, worker(), input, selection,
+  return createRoutineSender(options, nats.store, worker(), input, selection,
     'sender-attempt');
 }
 async function missingCompanyConfirmation() {
@@ -412,7 +410,7 @@ async function missingCompanyConfirmation() {
   }
   const options = { enabled: true, configurationDigest: 'a'.repeat(64),
     custodyRecordVersion: '1', confirmCredentialUse };
-  const authority = createRoutineSender(options, nats.store, keys, worker(),
+  const authority = createRoutineSender(options, nats.store, worker(),
     input, selection, 'sender-attempt');
   const append = vi.spyOn(nats.store, 'append');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
@@ -445,7 +443,7 @@ async function missingCredentialUseCheck() {
   }
   const options = { enabled: true, confirmCompany, configurationDigest: 'a'.repeat(64),
     custodyRecordVersion: '1' };
-  const authority = createRoutineSender(options, nats.store, keys, worker(), input,
+  const authority = createRoutineSender(options, nats.store, worker(), input,
     selection, 'sender-attempt');
   expect(await authority.send(preparedComputer.wake)).toEqual({ status: 'unknown' });
   const rows = await history(nats.store, 'routine-orders', 'test');
@@ -468,7 +466,7 @@ async function refusesCredentialVersionChangedBeforeReleaseReply() {
   const options = { enabled: true, confirmCompany,
     configurationDigest: 'a'.repeat(64), custodyRecordVersion: '1',
     confirmCredentialUse };
-  const authority = createRoutineSender(options, nats.store, keys, worker(), input,
+  const authority = createRoutineSender(options, nats.store, worker(), input,
     selection, 'sender-attempt');
   const append = nats.store.append.bind(nats.store);
   let releaseReplyDelayed = false;
@@ -573,7 +571,7 @@ async function startComputer(computerId = 'computer') {
     issuer: 'https://routine.test/' });
   const connection = { computerId, assistantId: 'sales-assistant',
     bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
-  const options = { silo: 'test', store: nats.store, keys, binding };
+  const options = { silo: 'test', store: nats.store, binding };
   let link = await connectBridge(options, connection, tokens);
   function trackFrames() {
     const send = link.socket.send.bind(link.socket);
@@ -690,11 +688,7 @@ async function handsOffOnce() {
     expect(rootTotals(actor.state, root.rootId)).toEqual({
       settledCents: 0, heldCents: 0, availableCents: 1000 });
     const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
-    expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
-    function isInput(row: typeof rows[number]) {
-      return row.event.type === 'message.posted';
-    }
-    expect(rows.filter(isInput)).toHaveLength(1);
+    expectRoutineInput(rows);
   } finally { await computer.close(); }
 }
 it('hands an admitted routine to the real bridge and journal once with distinct ids', handsOffOnce);
@@ -751,7 +745,7 @@ async function inert(enabled: boolean, replay: boolean) {
   const before = await nats.store.head();
   const wake = vi.fn(forbidden);
   const authority = enabled ? sender(enabled, replay)
-    : createRoutineSender({}, nats.store, keys, worker(), input, selection, 'sender-attempt');
+    : createRoutineSender({}, nats.store, worker(), input, selection, 'sender-attempt');
   expect(await authority.send(wake)).toEqual({ status: 'unknown' });
   expect(wake).not.toHaveBeenCalled();
   expect(await nats.store.head()).toBe(before);
@@ -759,8 +753,9 @@ async function inert(enabled: boolean, replay: boolean) {
 it.each([[false, false], [true, true]])('does not wake or send enabled=%s replay=%s', inert);
 
 async function losesReply(stage: string) {
-  const authority = sender();
   const computer = await recordingComputer();
+  const authority = sender();
+  function currentAuthority() { return authority; }
   const append = nats.store.append.bind(nats.store);
   let lost = false;
   async function loseStart(...args: Parameters<typeof append>) {
@@ -778,6 +773,9 @@ async function losesReply(stage: string) {
     if (stage === 'send') {
       const send = link.socket.send.bind(link.socket);
       function loseSend(bytes: Parameters<typeof send>[0]) {
+        const text = z.string().parse(bytes);
+        const frame = frameSchema.parse(JSON.parse(text));
+        expect(frame['type']).toBe('turn');
         send(bytes);
         lost = true;
         forbidden();
@@ -788,7 +786,7 @@ async function losesReply(stage: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(loseStart);
   try {
-    await authority.send(wake);
+    await sendWithFixtureTime(currentAuthority, wake);
     function replyLost() {
       return lost;
     }
@@ -821,6 +819,7 @@ async function refusesChangedStart(field: string) {
   function alter(bytes: Parameters<typeof send>[0]) {
     const text = z.string().parse(bytes);
     const frame = frameSchema.parse(JSON.parse(text));
+    expect(frame['type']).toBe('turn');
     frame[field] = 'different';
     send(JSON.stringify(frame));
   }
@@ -828,12 +827,16 @@ async function refusesChangedStart(field: string) {
   function closed() {
     return link.socket.readyState === link.socket.CLOSED || computer.closedSessions > 0;
   }
+  const monotonicClock = holdFixtureClock();
   try {
     await authority.send(computer.wake);
     await until(closed);
     expect(await savedStarts()).toEqual([]);
     expect(computer.starts).toBe(0);
-  } finally { await computer.close(); }
+  } finally {
+    monotonicClock.mockRestore();
+    await computer.close();
+  }
 }
 it.each(['messageId', 'id', 'rootId', 'senderAttemptId', 'threadId',
   'conversationId', 'assistantId', 'requesterId'])(
@@ -959,7 +962,7 @@ async function acceptsOtherThread() {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changed);
   try {
-    await sender().send(computer.wake);
+    await sendWithFixtureTime(sender, computer.wake);
     const link = await computer.wake();
     function completed() {
       return computer.starts > 0 || link.socket.readyState === link.socket.CLOSED;
@@ -998,7 +1001,7 @@ async function refusesRelevantComputerChange(kind: string) {
   }
   vi.spyOn(nats.store, 'append').mockImplementation(changeBeforeAppend);
   try {
-    await sender().send(computer.wake);
+    await sendWithFixtureTime(sender, computer.wake);
     const link = await computer.wake();
     function completed() {
       return computer.starts > 0 || computer.closedSessions > 0;
@@ -1028,7 +1031,8 @@ async function keepsNativeSession() {
   const second = await link.prepareRoutineThread(preparationIdentity('other-turn'));
   expect(second).toBe('native-thread-2');
   expect(selection.threadId).toBe('native-thread-1');
-  await sender().send(computer.wake);
+  const result = await sendWithFixtureTime(sender, computer.wake);
+  expect(result).toEqual({ status: 'sent' });
   await until(computer.executed);
   expect(computer.nativeStarts).toBe(2);
   expect(computer.executedThreads).toEqual(['native-thread-1']);
@@ -1119,7 +1123,7 @@ async function pollRoutine() {
   function connectionId() {
     return 1;
   }
-  const options = { silo: 'test', store: nats.store, keys, db: undefined! };
+  const options = { silo: 'test', store: nats.store, db: undefined! };
   const logger = createLogger('routine-stop-test', { level: 'silent' });
   const processor = assistantProcessor(options, preparedComputer.tokens, new Set(), forbidden,
     connectionId, logger, connected);
@@ -1399,8 +1403,8 @@ it('cancels a delayed native start reply without executing another turn', delaye
 
 async function runningNeighbour(link: Awaited<ReturnType<typeof preparedComputer.wake>>) {
   await apply([joinedMember('bob')]);
-  keys.provision('test', 'neighbour-chat');
-  const encrypted = keys.encrypt('test', 'neighbour-chat', 'Private routine instructions');
+
+  const encrypted = ({ utterance: 'Private routine instructions' });
   await nats.seed([
     record('neighbour-chat', 'conversation-neighbour-chat', 'conversation.created',
       { conversationId: 'neighbour-chat', assistantId: 'sales-assistant', createdBy: 'bob',
@@ -1502,7 +1506,7 @@ async function stoppedBeforeGrant() {
     send(bytes, {});
   }
   sending.mockImplementation(holdGrant);
-  expect(await sender().send(preparedComputer.wake)).toEqual({ status: 'sent' });
+  expect(await sendWithFixtureTime(sender, preparedComputer.wake)).toEqual({ status: 'sent' });
   function acknowledged() {
     expect(held).toBeDefined();
   }
@@ -1877,7 +1881,7 @@ async function stopHeldAcknowledgement(kind: 'Stop' | 'Admin' | 'Denied') {
     send(bytes);
   }
   vi.spyOn(link.socket, 'send').mockImplementation(recordFrame);
-  const sending = sender().send(preparedComputer.wake);
+  const sending = sendWithFixtureTime(sender, preparedComputer.wake);
   let stopEventId: string | undefined;
   try {
     await held.promise;

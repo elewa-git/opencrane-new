@@ -779,7 +779,7 @@ Caller-supplied paths must match these fixed locations and already exist. Startu
 checks ownership, permissions, access and real paths without changing existing
 permissions or contents. Restart refuses lost directories or changed settings.
 It preserves encrypted survey values, revision keys and destroyed-key refusal.
-Models receives only its listed files, conversation keys, provider credentials
+Models receives only its listed files, provider credentials
 and working directory; it cannot mount either private directory through their parent.
 The secondary stub's match-count credential lives in `models/model-managed-stub`.
 Computers receive neither private directory. Native memory remains disabled.

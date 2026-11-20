@@ -169,8 +169,8 @@ async function bridgeTurn(setup: Setup, catalogue: ReturnType<typeof connectMcpC
   const created = { conversationId, assistantId: 'assistant', createdBy: 'alice',
     mode: 'agent_session' as const };
   await setup.append(`conversation-${conversationId}`, 'conversation.created', created);
-  setup.keys.provision('test', conversationId);
-  const encrypted = setup.keys.encrypt('test', conversationId, 'Read the demo quote');
+
+  const encrypted = ({ utterance: 'Read the demo quote' });
   const message = { conversationId, authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted };
   await setup.append(`conversation-${conversationId}`, 'message.posted', message);
@@ -195,8 +195,7 @@ async function bridgeTurn(setup: Setup, catalogue: ReturnType<typeof connectMcpC
   if (!address || typeof address === 'string') {
     throw new Error('Missing bridge port');
   }
-  const options = { silo: 'test', store: setup.nats.store, keys: setup.keys,
-    db: setup.db, binding: setup.binding, catalogue };
+  const options = { silo: 'test', store: setup.nats.store, db: setup.db, binding: setup.binding, catalogue };
   const input = { url: `ws://127.0.0.1:${address.port}`, computerId: 'computer',
     assistantId: 'assistant', bearer: 'fixture' };
   const link = await connectBridge(options, input);

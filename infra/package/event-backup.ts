@@ -51,7 +51,8 @@ interface Options {
 }
 
 const refusal = () => new Error('Event backup refused');
-const maximumBytes = 64 * 1024 * 1024;
+export const eventBackupMaximumBytes = 64 * 1024 * 1024;
+const maximumBytes = eventBackupMaximumBytes;
 const maximumMs = 60_000;
 
 export function captureBounds(connection: NatsConnection,

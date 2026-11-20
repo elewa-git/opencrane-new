@@ -22,6 +22,7 @@ flowchart LR
   package -->|installs apps| apps["Server, website and workers<br/>product services"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
+  package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
   package -->|prepares computer settings| computer["apps/computer<br/>assistant computer"]
 ```
 
@@ -29,13 +30,13 @@ flowchart LR
 
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
-- Keep private settings in named Secrets and refuse public network exposure.
+- Keep private settings in named Secrets and refuse public network exposure. Chats need no key volume.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log, sign-in and a first owner for local testing.
 - Set the installation's public organisation name.
 - Give assistant computers the private gateway address and short-lived passes.
 - Save scheduled backups of events, databases and uploaded files together.
-- Provide bounded capture and restore helpers that check data before recovery.
+- Restore one complete pilot backup into empty storage, then open authenticated reading.
 - Remove only the install owned by the claimed stack, including after interruption.
 
 Not built yet:
@@ -60,7 +61,10 @@ Not built yet:
 5. **A backup runs.** The job stops writes, drains read tables and saves matching
    events, databases and files. It publishes a complete backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-6. **A developer checks or removes an install.** Fresh-install checks use new storage
+6. **A developer restores a pilot.** A separate empty installation checks the matching
+   backup, rebuilds tables and permissions, and restores files. Reading opens only
+   after verification. Workers and effects remain stopped.
+7. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
 

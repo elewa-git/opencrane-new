@@ -29,8 +29,7 @@ async function initialise() {
   app = undefined!;
   setup = await fixture();
   await setup.runner.initialise(conversations);
-  const chat = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
-    binding: setup.binding, feed: { memberId } };
+  const chat = { silo: 'test', store: setup.nats.store, db: setup.db, binding: setup.binding, feed: { memberId } };
   app = buildServer(config, { chat });
   await finish('turn');
   turnId = await message();
@@ -49,7 +48,7 @@ afterEach(close);
 async function message(conversationId = 'conversation') {
   const saved = await setup.append(`conversation-${conversationId}`, 'message.posted', {
     conversationId, authorKind: 'human', authorId: 'alice',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   return saved.id;
 }
 function read(id = turnId, sub = 'alice', orgId = 'org-test') {
@@ -193,7 +192,7 @@ async function hidesAmountsAndRefusesPrivateTurns() {
   expect((await read(visible, 'member')).statusCode).toBe(403);
   const agent = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'agent', authorId: 'assistant',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' });
+    utterance: 'Saved conversation prose', contentType: 'text' });
   expect((await read(agent.id)).statusCode).toBe(403);
 }
 it('limits cents to the author and refuses hidden turns regardless of role',
@@ -415,13 +414,11 @@ async function readOnlyAndRestart() {
   const response = await read();
   expect(response.json()).toMatchObject({ calls });
   await app.close();
-  const restartedChat = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
-    binding: setup.binding, feed: { memberId } };
+  const restartedChat = { silo: 'test', store: setup.nats.store, db: setup.db, binding: setup.binding, feed: { memberId } };
   app = buildServer(config, { chat: restartedChat });
   expect((await read()).json()).toEqual(response.json());
   const fresh = await connectEventStore(setup.nats.env('command'));
-  const chat = { silo: 'test', store: fresh.store, db: setup.db, keys: setup.keys,
-    binding: setup.binding, feed: { memberId } };
+  const chat = { silo: 'test', store: fresh.store, db: setup.db, binding: setup.binding, feed: { memberId } };
   const second = buildServer(config, { chat });
   try {
     const request = { url: `/api/conversations/conversation/budget-stops?turnId=${turnId}`,

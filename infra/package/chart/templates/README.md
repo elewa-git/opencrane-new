@@ -14,7 +14,8 @@ an exact log position. It keeps the existing database users and emits no backup 
 ## What it is responsible for
 
 - Starts the apps, database, saved event log and permissions service.
-- Schedules one pilot backup of events, databases and files, with a read-only catalogue.
+- Schedules one pilot backup of events, databases and files, with a private catalogue.
+- Holds a new installation empty for restore, then opens verified reading with effects stopped.
 - Runs persistent file storage and an authenticated scanner with a private ClamAV listener.
 - Describes an optional database standby with its own storage on another node.
 - Gives background workers the settings and access needed for their jobs.
@@ -30,7 +31,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
 | `data.yaml` | Describes the database, optional backup and recovery settings, event log and saved storage. |
-| `pilot-backup.yaml` | Runs the nightly three-part pilot backup and its private catalogue. |
+| `pilot-backup.yaml` | Runs the pilot backup, restricted restore Job and private catalogue. |
 | `backup.yaml` | Describes one paused database backup schedule for preview only. |
 | `_backup.tpl` | Checks local storage addresses and existing private-setting references. |
 | `_recovery.tpl` | Requires one exact recovery source, backup and log position. |
@@ -50,12 +51,13 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs, files, scanner, scheduled backups and database previews"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, files, scanner, pilot backup and restore, and database previews"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```
 
 The setup job and its private file mounts appear in both the default and three-peer render.
+Restore mode omits that job and holds app replicas until the restore checks pass.
 The installer checks prepared certificates, eligible nodes and image compatibility
 before admitting three peers. The shipped image still refuses this mode. The [operator notes](../../README.robot.md#three-peer-nats-rendering)
 explain its settings and the live checks still needed.

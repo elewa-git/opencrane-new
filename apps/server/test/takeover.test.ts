@@ -24,7 +24,7 @@ async function setup() {
   fixture = await viewFixture(noDesktop);
   await fixture.append('conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
     resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
@@ -95,7 +95,7 @@ async function racesIntent(other: 'intent' | 'turn') {
   }, true);
   const message = await fixture.append('conversation-other', 'message.posted', {
     conversationId: 'other', authorId: 'alice', authorKind: 'human',
-    ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+    utterance: 'Saved conversation prose', contentType: 'text',
   });
   const append = options.store.append.bind(options.store);
   const both = Promise.withResolvers<void>();
@@ -176,7 +176,7 @@ async function writerAfterQuietProof(changed: 'member' | 'request') {
   } else {
     await fixture.append('conversation-chat', 'message.posted', {
       conversationId: 'chat', authorId: 'alice', authorKind: 'human',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:test', contentType: 'text',
+      utterance: 'Saved conversation prose', contentType: 'text',
     });
   }
   const slot = requesterWriterSlot(options, 'alice', command);

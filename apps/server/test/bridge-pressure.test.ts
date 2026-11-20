@@ -7,16 +7,16 @@ import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { until } from '@opencrane/authz/testing';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { chatCommand } from '../src/chat/commands.ts';
 
 it.each(['count', 'bytes'])('bounds queued report %s while another thread is acknowledged independently', async limit => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-pressure-`);
-  const keys = conversationKeys(directory), server = createServer(), wss = new WebSocketServer({ server });
+  const server = createServer(), wss = new WebSocketServer({ server });
   for (const conversationId of ['slow', 'fast']) {
-    keys.provision('test', conversationId);
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' });
-    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `message-${conversationId}`, conversationId, text: 'Hello' });
+
+    await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: `create-${conversationId}`, conversationId, assistantId: 'assistant' });
+    await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: `message-${conversationId}`, conversationId, text: 'Hello' });
   }
   let release!: () => void, writes = 0;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -28,7 +28,7 @@ it.each(['count', 'bytes'])('bounds queued report %s while another thread is ack
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   const connected = new Promise<import('ws').WebSocket>(resolve => wss.once('connection', resolve));
-  const link = await connectBridge({ silo: 'test', store, keys }, { url: `ws://127.0.0.1:${address.port}`, computerId: 'computer', assistantId: 'assistant', bearer: 'test' });
+  const link = await connectBridge({ silo: 'test', store }, { url: `ws://127.0.0.1:${address.port}`, computerId: 'computer', assistantId: 'assistant', bearer: 'test' });
   const socket = await connected;
   const acks: string[] = [];
   socket.on('message', raw => { acks.push(Buffer.isBuffer(raw) ? raw.toString() : ''); });

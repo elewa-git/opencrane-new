@@ -24,7 +24,7 @@ async function listingFixture() {
   }
   const config = testAuthConfig({ expectedOrgId: 'org-test' });
   const chat = { silo: 'test', store: setup.nats.store, db: setup.db,
-    keys: setup.keys, binding: setup.binding, feed: { memberId: identity } };
+    binding: setup.binding, feed: { memberId: identity } };
   const app = buildServer(config, { chat });
   const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 0,
     exp: Math.floor(Date.now() / 1000) + 3600 };
@@ -47,8 +47,8 @@ type ListingFixture = Awaited<ReturnType<typeof listingFixture>>;
 
 async function seedUnrelated(setup: ListingFixture, count: number, prefix: string) {
   const conversationId = `noise-${prefix}`;
-  setup.keys.provision('test', conversationId);
-  const encrypted = setup.keys.encrypt('test', conversationId, 'Unrelated reply');
+
+  const encrypted = ({ utterance: 'Unrelated reply' });
   for (let offset = 0; offset < count; offset += 100) {
     const batch: EventEnvelope[] = [];
     const end = Math.min(offset + 100, count);
@@ -73,7 +73,7 @@ async function seedApproval(setup: ListingFixture, index: number, decided = true
   const hash = createHash('sha256');
   hash.update(text);
   const reviewDigest = hash.digest('hex');
-  const encrypted = setup.keys.encrypt('test', 'conversation', text);
+  const encrypted = ({ review: text });
   const digest = 'a'.repeat(64);
   const data = { approvalId, conversationId: 'conversation', turnId: 'turn',
     assistantId: 'assistant', requesterId: 'alice', tool: 'read', serverId: 'fixture',
@@ -156,7 +156,7 @@ async function idleListingReads() {
       // Missing rows must never select a second discovery path through the silo log.
       // @ts-expect-error Approval discovery rows are required even for direct callers.
       const missingRows = approvalCards(setup.nats.store, 'test', 'conversation',
-        'alice', setup.keys);
+        'alice');
       const result = await Promise.allSettled([missingRows]);
       expect(probe.totals.beforeCheckpoint).toBe(0);
       expect(result[0]?.status).toBe('rejected');

@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { z } from 'zod';
 import type { StoredEvent } from '@opencrane/event-store';
 
@@ -22,8 +23,7 @@ function recordMemoryTurn(row: StoredEvent, turnIds: Set<string>) {
 }
 
 // Read replies across the stream. An earlier turn can finish after the next message is posted.
-export function privateContext(rows: StoredEvent[], message: StoredEvent, requesterId: string,
-  decrypt: (data: unknown) => string): PrivateContext | undefined {
+export function privateContext(rows: StoredEvent[], message: StoredEvent, requesterId: string): PrivateContext | undefined {
   const messages: StoredEvent[] = [];
   const completed = new Set<string>();
   const lost = new Set<string>();
@@ -51,12 +51,12 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
       replies.set(turnId, texts);
     }
   }
-  // Exclude the whole turn before decryption, including replies saved before its first recall.
+  // Exclude the whole turn before reading prose, including replies saved before its first recall.
   for (const turnId of memoryTurns) replies.delete(turnId);
   if (!messages.length) return undefined;
   const result: PrivateContext = { exchanges: [], omittedExchanges: messages.length };
   for (const earlier of messages.reverse()) {
-    const exchange = exchangeFor(earlier, completed, lost, replies, decrypt);
+    const exchange = exchangeFor(earlier, completed, lost, replies);
     result.exchanges.unshift(exchange);
     result.omittedExchanges--;
     if (Buffer.byteLength(JSON.stringify(result)) > PRIVATE_CONTEXT_LIMIT_BYTES) {
@@ -69,15 +69,15 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
 }
 
 function exchangeFor(message: StoredEvent, completed: Set<string>, lost: Set<string>,
-  replies: Map<string, StoredEvent[]>, decrypt: (data: unknown) => string) {
+  replies: Map<string, StoredEvent[]>) {
   const at = message.event.time;
   const turnId = message.event.id;
   if (!completed.has(turnId) || lost.has(turnId)) {
     return { at, outcome: 'not_completed' as const };
   }
   const assistant: string[] = [];
-  for (const reply of replies.get(turnId) ?? []) assistant.push(decrypt(reply.event.data));
-  return { at, member: decrypt(message.event.data), assistant };
+  for (const reply of replies.get(turnId) ?? []) assistant.push(readConversationProse(reply.event.data));
+  return { at, member: readConversationProse(message.event.data), assistant };
 }
 
 

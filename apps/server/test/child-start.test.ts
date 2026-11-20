@@ -200,7 +200,7 @@ async function signedDecisionRoute() {
   const dispatch = { routes: [], requireLeader, childStart };
   const identity = { issuer: 'https://child.test/', jwks: context.tokens.jwks };
   const decision = await startDecision(actor, identity, context.options.binding,
-    0, undefined, undefined, dispatch);
+    0, undefined, dispatch);
   try {
     const pass = await context.tokens.computer({ silo: 'test', computerId: selected.computerId,
       assistantId: 'helper', generation: 1 });

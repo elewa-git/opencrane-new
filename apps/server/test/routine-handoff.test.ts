@@ -13,7 +13,7 @@ import { isEventStoreUnavailable } from '@opencrane/event-store';
 import { foldRoutine, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { BudgetActor, history, priceTableId, rootTotals, readRootStopEvidence }
   from '@opencrane/models';
-import { conversationKeys, ProjectionRunner, routines } from '@opencrane/projections';
+import { ProjectionRunner, routines } from '@opencrane/projections';
 import { database } from '@opencrane/projections/testing';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { memorySink } from '@opencrane/observability/testing';
@@ -23,6 +23,7 @@ import { dispatchRoutineCandidates, withRoutineLeadership, runRoutineScheduler, 
 import { dispatchForRelease, observeDispatch, reportDispatchFailure, traceRoutineAppends,
   waitForDispatchHandler,
   type RoutineDispatchObservation } from './support/routine-dispatch-observation.ts';
+import { expectRoutineStreamProse } from './support/routine-prose.ts';
 import { shortDuplicateWindowFixture, waitForDuplicateWindow }
   from './support/duplicate-window.ts';
 import { openfga } from '../../../libs/authz/test/services.ts';
@@ -48,7 +49,6 @@ let dispatchObservation: RoutineDispatchObservation;
 let stop: AbortController;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let binding: Awaited<ReturnType<typeof createStore>>;
-let keys: ReturnType<typeof conversationKeys>;
 let actor: BudgetActor;
 let budgetOwned: boolean;
 let budgetOwner: ReturnType<typeof bindRoutineBudgetOwner>;
@@ -101,12 +101,11 @@ async function setup() {
   fga = await openfga();
   binding = await createStore(fga.apiUrl, 'test');
   directory = await mkdtemp('/tmp/routine-composition-');
-  keys = conversationKeys(directory);
-  keys.provision('test', 'routine-orders');
+
   now = Date.parse('2026-10-11T07:00:00Z');
   const created = routine('routine.created');
   const original = foldRoutine(undefined, created).definition!;
-  const instructions = keys.encrypt('test', 'routine-orders', 'Private routine instructions');
+  const instructions = 'Private routine instructions';
   const definition = { ...original.definition, instructions };
   const active = { ...created, data: { ...original, definition, status: 'active' } };
   const events = [joinedMember('alice')];
@@ -224,7 +223,7 @@ async function startComputer() {
   const tokens = await tokenIssuer(tokenOptions);
   const connection = { computerId: 'computer', assistantId: 'sales-assistant',
     generation: 1, bearer: 'fixture-bridge', url: `ws://127.0.0.1:${address.port}/bridge` };
-  const options = { silo: 'test', store: nats.store, keys, binding };
+  const options = { silo: 'test', store: nats.store, binding };
   const link = await connectBridge(options, connection, tokens);
   const send = link.socket.send.bind(link.socket);
   function track(bytes: Parameters<typeof send>[0]) {
@@ -462,7 +461,7 @@ async function dispatchWork(options: Options = { enabled: true }, continuation =
   let progress;
   const identity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
   const companyPreflight = options.companyPreflight ?? syntheticCompanyPreflight;
-  const production = createRoutineDelivery(nats.store, keys, identity, actor, wake,
+  const production = createRoutineDelivery(nats.store, identity, actor, wake,
     budgetOwner, companyPreflight);
   const receive: Handoff = async function receive(due, lease) {
     dispatchObservation.phase = 'handoff';
@@ -482,7 +481,7 @@ async function dispatchWork(options: Options = { enabled: true }, continuation =
       checkCurrent, signal: lease.signal, now: clock };
     const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };
     const invocation = createRoutineComposition({ ...options, companyPreflight },
-      nats.store, keys, worker, input,
+      nats.store, worker, input,
       actor, due.turnId);
     return invocation.send(wake);
   };
@@ -536,11 +535,12 @@ async function runState() {
 }
 async function assertSingleRun() {
   const run = (await runState()).activeRun!;
-  const subjects = [`conversation-${run.conversationId}`, 'budget-test', 'routine-orders'];
+  const conversationSubject = `conversation-${run.conversationId}`;
+  const subjects = [conversationSubject, 'budget-test', 'routine-orders'];
   const counts = new Map<string, number>();
   for (const subject of subjects) {
     const rows = await history(nats.store, subject, 'test');
-    expect(JSON.stringify(rows)).not.toContain('Private routine instructions');
+    expectRoutineStreamProse(rows, subject, conversationSubject);
     for (const row of rows) {
       counts.set(row.event.type, (counts.get(row.event.type) ?? 0) + 1);
     }
@@ -921,7 +921,7 @@ async function productionDeliveryUsesCheckedDue() {
   dispatchObservation.phase = 'projection';
   await runner.run(routines);
   const workerIdentity = { silo: 'test', binding, workerId: 'routine-worker', now: clock };
-  const production = createRoutineDelivery(nats.store, keys, workerIdentity, actor, wake,
+  const production = createRoutineDelivery(nats.store, workerIdentity, actor, wake,
     budgetOwner, syntheticCompanyPreflight);
   function handoff(...args: Parameters<typeof production>) {
     dispatchObservation.phase = 'handoff';

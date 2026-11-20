@@ -17,7 +17,7 @@ import type { GroupOptions } from '../src/members/group-routes.ts';
 import { removalStatus } from '../src/members/removal.ts';
 import { invitationChange } from '../src/members/invitations.ts';
 import { recordMemberRefusal } from '../src/members/refusals.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
@@ -287,13 +287,13 @@ async function removesDuringOtherMembersPosts() {
   await join(memberId);
   await join('posting-member');
   const input = await review(memberId);
-  const keys = conversationKeys(keyDirectory);
-  keys.provision('test', 'busy-chat');
+
+
   const save = nats.store.append.bind(nats.store);
   const readHead = nats.store.head.bind(nats.store);
   let posts = 0;
   async function postMessage() {
-    const encrypted = keys.encrypt('test', 'busy-chat', 'Another member keeps posting');
+    const encrypted = ({ utterance: 'Another member keeps posting' });
     const data = { conversationId: 'busy-chat', authorId: 'posting-member',
       authorKind: 'human', contentType: 'text', ...encrypted };
     const record = { ...event(`busy-post-${++posts}`, 'conversation-busy-chat',
@@ -362,9 +362,9 @@ async function projectsDuringInventory(targetChanges: boolean) {
           silo: 'test',
         });
       } else {
-        const keys = conversationKeys(keyDirectory);
-        keys.provision('test', 'projected-other-chat');
-        const encrypted = keys.encrypt('test', 'projected-other-chat', 'Another member posts');
+
+
+        const encrypted = ({ utterance: 'Another member posts' });
         const data = { conversationId: 'projected-other-chat', authorId: 'inventory-poster',
           authorKind: 'human', contentType: 'text', ...encrypted };
         await appendEvent(nats.store, {

@@ -6,9 +6,9 @@ import { bindRoutineBudgetOwner, routineBudgetOwnerMatches }
   from './routine-delivery-owner.ts';
 
 type Preparation = Parameters<typeof prepareRoutineComputer>;
-type Ready = { link: Preparation[5]; generation: number };
+type Ready = { link: Preparation[4]; generation: number };
 type Wake = (assistantId: string, signal?: AbortSignal) => Promise<Ready>;
-type DeliveryWorker = Pick<Preparation[2], 'silo' | 'binding' | 'workerId' | 'now'>;
+type DeliveryWorker = Pick<Preparation[1], 'silo' | 'binding' | 'workerId' | 'now'>;
 type Leadership = { signal: AbortSignal; checkCurrent: (deadline: number) => Promise<boolean> };
 type CheckedDue = { status: 'confirmed'; executionAvailable: false; routineId: string;
   occurrenceId: string; turnId: string };
@@ -28,8 +28,8 @@ type CompanyDeliveryOptions = {
 
 /** Bind the saved company account and credential to the existing routine hand-off. */
 export function createRoutineCompanyDelivery(options: CompanyDeliveryOptions,
-  store: Preparation[0], keys: Preparation[1], identity: DeliveryWorker,
-  actor: Preparation[4], wake: Wake,
+  store: Preparation[0], identity: DeliveryWorker,
+  actor: Preparation[3], wake: Wake,
   owner: ReturnType<typeof bindRoutineBudgetOwner>) {
   const enabled = options.enabled === true && options.replay !== true;
   const preflightFromCustody = routineCompanyPreflightFromCustody(store, identity.binding,
@@ -41,7 +41,7 @@ export function createRoutineCompanyDelivery(options: CompanyDeliveryOptions,
     }
     return { ...checked, confirmCurrent };
   }
-  const deliver = createRoutineDelivery(store, keys, identity, actor, wake, owner, preflight);
+  const deliver = createRoutineDelivery(store, identity, actor, wake, owner, preflight);
   async function receive(due: CheckedDue, leadership: Leadership) {
     if (!enabled) return { status: 'unknown' as const };
     return deliver(due, leadership);
@@ -50,8 +50,7 @@ export function createRoutineCompanyDelivery(options: CompanyDeliveryOptions,
 }
 
 /** Carry the claimed occurrence into the saved preparation and one sender attempt. */
-export function createRoutineDelivery(store: Preparation[0], keys: Preparation[1],
-  identity: DeliveryWorker, actor: Preparation[4], wake: Wake,
+export function createRoutineDelivery(store: Preparation[0], identity: DeliveryWorker, actor: Preparation[3], wake: Wake,
   owner: ReturnType<typeof bindRoutineBudgetOwner>, companyPreflight: CompanyPreflight) {
   async function receive(due: CheckedDue, leadership: Leadership) {
     if (due.status !== 'confirmed' || due.executionAvailable !== false ||
@@ -72,7 +71,7 @@ export function createRoutineDelivery(store: Preparation[0], keys: Preparation[1
     }
     const worker = { ...identity, signal: leadership.signal, checkCurrent };
     const input = { routineId: due.routineId, occurrenceId: due.occurrenceId };
-    const composition = createRoutineComposition({ enabled: true, companyPreflight }, store, keys, worker,
+    const composition = createRoutineComposition({ enabled: true, companyPreflight }, store, worker,
       input, actor, due.turnId);
     return composition.send(wake);
   }
@@ -81,9 +80,8 @@ export function createRoutineDelivery(store: Preparation[0], keys: Preparation[1
 
 // Keep this internal entry disabled until company calls and Ask are connected.
 export function createRoutineComposition(options: Options,
-  store: Preparation[0], keys: Preparation[1],
-  suppliedWorker: Preparation[2] & { signal?: AbortSignal }, raw: unknown,
-  actor: Preparation[4], senderAttemptId: string) {
+  store: Preparation[0], suppliedWorker: Preparation[1] & { signal?: AbortSignal }, raw: unknown,
+  actor: Preparation[3], senderAttemptId: string) {
   const enabled = options.enabled === true && options.replay !== true;
   const companyPreflight = options.companyPreflight;
   const worker = { ...suppliedWorker };
@@ -97,7 +95,7 @@ export function createRoutineComposition(options: Options,
     used = true;
     try {
       const input = structuredClone(raw);
-      const prepared = await loadRoutinePreparation(store, keys, worker, input);
+      const prepared = await loadRoutinePreparation(store, worker, input);
       await prepared.checkAccess();
       const ready = await wake(prepared.run.definition.assistantId, worker.signal);
       const company = await companyPreflight(prepared.run, ready.generation);
@@ -107,13 +105,13 @@ export function createRoutineComposition(options: Options,
         throw new Error('Routine company unavailable');
       }
       // Reload history and access after wake; its wait may exceed the earlier write deadline.
-      const selection = await prepareRoutineComputer(store, keys, worker, input, actor,
+      const selection = await prepareRoutineComputer(store, worker, input, actor,
         ready.link, ready.generation, company.confirmCurrent);
       const senderOptions = { ...options, confirmCompany: company.confirmCurrent,
         configurationDigest: company.configurationDigest,
         custodyRecordVersion: company.custodyRecordVersion,
         confirmCredentialUse: company.confirmCredentialUse };
-      const sender = createRoutineSender(senderOptions, store, keys, worker, input,
+      const sender = createRoutineSender(senderOptions, store, worker, input,
         selection, senderAttemptId);
       function connected() {
         return Promise.resolve(ready.link);

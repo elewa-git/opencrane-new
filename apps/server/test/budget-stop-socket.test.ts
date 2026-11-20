@@ -41,8 +41,7 @@ async function initialise() {
   await setup.runner.initialise(computers);
   await setup.runner.run(computers);
   feed = await connectMemberFeed(setup.databaseUrl!);
-  const chat = { silo: 'test', store: setup.nats.store, db: setup.db, keys: setup.keys,
-    binding: setup.binding, feed: { memberId } };
+  const chat = { silo: 'test', store: setup.nats.store, db: setup.db, binding: setup.binding, feed: { memberId } };
   app = buildServer(config, { chat });
   const realtime = { feed, binding: setup.binding, chat };
   wss = attachWebSocketServer(app.server, app.log, config, realtime);
@@ -67,7 +66,7 @@ async function close() {
 beforeEach(initialise, 60_000);
 afterEach(close, 30_000);
 async function message() {
-  const encrypted = setup.keys.encrypt('test', 'conversation', 'A saved request');
+  const encrypted = ({ utterance: 'A saved request' });
   const saved = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind: 'human', authorId: 'alice',
     ...encrypted, contentType: 'text' });
@@ -354,7 +353,7 @@ it('refuses a member registered only in another silo', foreignMember);
 
 const nonHumanAuthors = ['agent', 'system'] as const;
 async function nonHumanTurn(authorKind: typeof nonHumanAuthors[number]) {
-  const encrypted = setup.keys.encrypt('test', 'conversation', 'An automatic message');
+  const encrypted = ({ utterance: 'An automatic message' });
   const automatic = await setup.append('conversation-conversation', 'message.posted', {
     conversationId: 'conversation', authorKind, authorId: 'assistant',
     ...encrypted, contentType: 'text' });

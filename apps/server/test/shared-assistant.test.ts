@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { Pool } from 'pg';
 import { createServer } from 'node:http';
 import { generateKeyPairSync } from 'node:crypto';
@@ -30,7 +31,7 @@ import {
 import { createLogger } from '@opencrane/observability';
 import { lifecycleHandlers } from '../../ops/test/server.ts';
 import { buildServer } from '../src/server.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import * as privateHistory from '../src/chat/private-context.ts';
 import { turnMessage, type AgentSession } from '../src/chat/bridge-conversation.ts';
 import { assistantSnapshot } from '../src/chat/bridge-conversation.ts';
@@ -116,7 +117,7 @@ async function initialise() {
   }
   await runner.run(members);
   chat = { silo: 'test', store: nats.store, db, binding,
-    feed: { memberId }, keys: conversationKeys(directory) };
+    feed: { memberId } };
   app = buildServer(config, { chat });
 }
 beforeAll(initialise, 120_000);
@@ -635,7 +636,7 @@ async function refusesOnlyOneTurn(refusal: string, sharedChild = false) {
 }
 async function seedClosedChildInput(conversationId: string, assistantId: string,
   payingGroupId: string) {
-  chat!.keys.provision('test', conversationId);
+
   const created = { conversationId, assistantId, payingGroupId, createdBy: 'alice',
     mode: 'agent_session', contextKind: 'shared_child',
     initialJoins: [{ participantId: 'alice', parentJoinEventId: 'join', parentJoinPosition: 1 }],
@@ -644,7 +645,7 @@ async function seedClosedChildInput(conversationId: string, assistantId: string,
       firstInputId: `message-${conversationId}` } };
   await append(`conversation-${conversationId}`, 'conversation.created', created, false);
   const message = { conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text',
-    ...chat!.keys.encrypt('test', conversationId, 'Start work') };
+    ...({ utterance: 'Start work' }) };
   const row = envelope('test', `conversation-${conversationId}`, 'message.posted',
     message, `message-${conversationId}`);
   await nats.seed([row]);
@@ -831,7 +832,7 @@ async function privateServerFixture(name: string, personal = false) {
     assistantId, computerId, generation: 1, podUid: 'pod' });
   for (const member of ['alice', 'bob']) {
     const conversationId = `${name}-${member}`;
-    chat.keys.provision('test', conversationId);
+
     await append(`conversation-${conversationId}`, 'conversation.created', {
       conversationId, assistantId, createdBy: member, mode: 'agent_session', payingGroupId: group });
   }
@@ -842,7 +843,7 @@ async function privateServerFixture(name: string, personal = false) {
   const tokens = await tokenIssuer({ privateKeyPath: keyPath, issuer: 'https://bridge.test/' });
   const context = { silo: 'test', assistantId, computerId, binding: auth.binding };
   async function post(member: string, id: string, text = id, memoryFree = false) {
-    const result = await chatCommand(nats.store, chat!.keys, { silo: 'test', memberId: member },
+    const result = await chatCommand(nats.store, { silo: 'test', memberId: member },
       { id, text, conversationId: `${name}-${member}`,
         ...(memoryFree ? { executionMode: 'memory_free' as const } : {}) });
     expect(result.status).toBe('appended');
@@ -993,7 +994,7 @@ const readsLongPrivateContextOnlyAfterTheTurn = async () => {
   const test = await privateServerFixture('long-context');
   try {
     await test.post('alice', 'long-first');
-    const content = chat!.keys.encrypt('test', 'long-context-alice', 'delta');
+    const content = ({ utterance: 'delta' });
     const events = [];
     for (let index = 0; index < 400; index++) {
       const event = envelope('test', 'conversation-long-context-alice', 'agent.message_delta', {
@@ -1002,7 +1003,7 @@ const readsLongPrivateContextOnlyAfterTheTurn = async () => {
       events.push(event);
     }
     await nats.seed(events);
-    const nextContent = chat!.keys.encrypt('test', 'long-context-alice', 'next message');
+    const nextContent = ({ utterance: 'next message' });
     const nextMessage = envelope('test', 'conversation-long-context-alice', 'message.posted', {
       conversationId: 'long-context-alice', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...nextContent,
@@ -1057,14 +1058,14 @@ const storesLostOutputAcceptsReplayOverTextAnd = async () => {
       assistantId: test.context.assistantId, requesterId: 'alice' };
     const output = { ...base, sequence: 1, previousSequence: 0, type: 'agent.message_completed',
       messageId: 'reply', text: 'output-canary' };
-    expect(await recordReport(nats.store, chat!.keys, test.context, output)).toBe('recorded');
-    expect(await recordReport(nats.store, chat!.keys, test.context,
+    expect(await recordReport(nats.store, test.context, output)).toBe('recorded');
+    expect(await recordReport(nats.store, test.context,
       { ...base, sequence: 1, previousSequence: 0, type: 'agent.output_lost' })).toBe('duplicate');
-    expect(await recordReport(nats.store, chat!.keys, test.context,
+    expect(await recordReport(nats.store, test.context,
       { ...base, sequence: 2, previousSequence: 1, type: 'agent.output_lost' })).toBe('recorded');
-    await recordReport(nats.store, chat!.keys, test.context,
+    await recordReport(nats.store, test.context,
       { ...base, sequence: 3, previousSequence: 2, type: 'agent.turn_started', threadId: 'lost-thread' });
-    await expect(recordReport(nats.store, chat!.keys, test.context,
+    await expect(recordReport(nats.store, test.context,
       { ...base, sequence: 3, previousSequence: 2, type: 'agent.output_lost' })).rejects.toThrow('Report sequence reused');
     const rows = await history(nats.store, 'conversation-output-lost-alice', 'test');
     expect(rows.at(-2)?.event.type).toBe('agent.output_lost');
@@ -1341,8 +1342,8 @@ async function childHistoryFixture(name: string) {
   const test = await privateServerFixture(name);
   const conversationId = `${name}-child`;
   const parentId = `${name}-parent`;
-  chat!.keys.provision('test', conversationId);
-  chat!.keys.provision('test', parentId);
+
+
   const created = { conversationId, createdBy: 'alice', mode: 'agent_session' as const,
     contextKind: 'shared_child' as const, assistantId: test.context.assistantId,
     payingGroupId: `private-${name}`,
@@ -1351,7 +1352,7 @@ async function childHistoryFixture(name: string) {
       intentEventId: 'intent', intentPosition: 3, requestId: name, firstInputId: `${name}-first` } };
   await append(`conversation-${conversationId}`, 'conversation.created', created, false);
   async function message(id: string, authorId: string, text: string, target = conversationId) {
-    const content = chat!.keys.encrypt('test', target, text);
+    const content = ({ utterance: text });
     const data = { conversationId: target, authorId, authorKind: 'human',
       contentType: 'text', ...content };
     await nats.seed([envelope('test', `conversation-${target}`, 'message.posted', data, id)]);
@@ -1417,12 +1418,12 @@ async function sharesOnlyChildHistory() {
     const firstMessage = rows.find(isFirstInput)!;
     const conversation: AgentSession = { ...test.created,
       createdAt: firstMessage.event.time, assistantKind: 'team' };
-    const frame = turnMessage(chat!, conversation, rows, [], firstMessage, 'restricted');
+    const frame = turnMessage(conversation, rows, [], firstMessage, 'restricted');
     expect(frame).toMatchObject({ text: 'Reviewed source', sharingClass: 'shared_only' });
     const savedText: string[] = [];
     for (const row of rows) {
       if (['message.posted', 'agent.message_completed'].includes(row.event.type)) {
-        savedText.push(chat!.keys.decrypt('test', test.conversationId, row.event.data));
+        savedText.push(readConversationProse(row.event.data));
       }
     }
     const exposed = JSON.stringify([test.frames, frame, rows, savedText]);

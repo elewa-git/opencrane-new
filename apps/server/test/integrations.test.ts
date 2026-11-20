@@ -681,7 +681,7 @@ async function checksAccessAfterBudgetHistory(change: string) {
       }
       if (change === 'chat') {
         await append(fixture('message.posted', 'conversation-unrelated', {
-          conversationId: 'unrelated', ciphertext: Buffer.from('private-canary').toString('base64'),
+          conversationId: 'unrelated', utterance: 'private-canary',
         }));
       }
     }
@@ -710,7 +710,7 @@ it('serves safe admin changes and requester actions while refusing foreign users
   await append(fixture('approval.decided', 'approval-private', { reason: 'private-approval-canary' }));
   const privateMessageData = {
     conversationId: 'private',
-    ciphertext: Buffer.from('private-text-canary').toString('base64'),
+    utterance: 'private-text-canary',
   };
   const privateMessage = fixture('message.posted', 'conversation-private', privateMessageData);
   await append(privateMessage);
@@ -2076,7 +2076,7 @@ async function readsCeilingAfterHistory(change: string) {
       }
       if (change === 'chat') {
         await append(fixture('message.posted', 'conversation-unrelated', {
-          conversationId: 'unrelated', ciphertext: Buffer.from('private-canary').toString('base64'),
+          conversationId: 'unrelated', utterance: 'private-canary',
         }));
       }
     }

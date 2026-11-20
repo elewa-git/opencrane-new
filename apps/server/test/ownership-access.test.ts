@@ -50,8 +50,7 @@ async function fixture() {
     assistantId: 'assistant', payingGroupId: 'group' };
   await append('conversation-chat', 'conversation.created', conversation);
   const message = { conversationId: 'chat', authorId: 'charlie', authorKind: 'human',
-    contentType: 'text', ciphertext: Buffer.from('Encrypted fixture message').toString('base64'),
-    keyId: 'key:test' };
+    contentType: 'text', utterance: 'Saved conversation prose' };
   await append('conversation-chat', 'message.posted', message);
   const computer = { assistantId: 'assistant', computerId: 'computer', generation: 1 };
   await append('computer-assistant', 'computer.ready', computer);

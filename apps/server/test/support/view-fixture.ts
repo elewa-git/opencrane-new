@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { conversationKeys } from '../../src/chat/keys.ts';
+
 import type { LiveViewOptions } from '../../src/computers/view.ts';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -34,10 +34,10 @@ export async function viewFixture(
     if (project) await auth.handler.handle(event, db);
     return event;
   };
-  const directory = await mkdtemp(`${tmpdir()}/view-keys-`), keys = conversationKeys(directory);
+  const directory = await mkdtemp(`${tmpdir()}/view-keys-`);
   const serverOptions = {
     ...(logDestination ? { logDestination } : {}),
-    chat: { silo: 'test', store: nats.store, binding, feed, db, keys },
+    chat: { silo: 'test', store: nats.store, binding, feed, db },
     liveView: { silo: 'test', store: nats.store, binding, feed, db, open },
     memberReads: { silo: 'test', store: memberStore, binding, feed, db },
   };
@@ -52,5 +52,5 @@ export async function viewFixture(
     await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'desktop', sandboxUid: 'sandbox', generation: 1, tokenId: 'token:test' });
     await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture' });
   await runner.initialise(conversations); await runner.run(conversations); await runner.initialise(computers); await runner.run(computers);
-  return { app, config, append, nats, binding, fga, runner, db, feed, keys, close: async () => { await app.close(); await feed.close(); await nats.close(); await dbs.close(); await fga.close(); await rm(directory, { recursive: true, force: true }); } };
+  return { app, config, append, nats, binding, fga, runner, db, feed, close: async () => { await app.close(); await feed.close(); await nats.close(); await dbs.close(); await fga.close(); await rm(directory, { recursive: true, force: true }); } };
 }

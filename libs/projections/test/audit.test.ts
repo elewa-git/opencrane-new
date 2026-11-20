@@ -55,12 +55,12 @@ it('includes every provider and routine event in the safe history', () => {
   }
 });
 
-it('keeps encrypted command views out of audit rows', async () => {
+it('keeps redacted command views out of audit rows', async () => {
   const db = await database('pg');
   try {
     await auditTrail.create(db.db);
     const event = fixture('agent.command_ran', 'command-view', {
-      view: { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:fixture' },
+      view: { preview: 'Saved conversation prose' },
     });
     await auditTrail.apply(db.db, event, 1);
     const result = await db.db.query<{ metadata: Record<string, unknown> }>(
@@ -126,7 +126,7 @@ it('joins forthcoming typed families, withholds private details and keeps absent
     await append({ ...fixture('takeover.started', 'foreign-requester', { requestedBy: 'bob' }, false), correlation: { conversation: 'conversation', turn: 'turn' } });
     const privateMessageData = {
       conversationId: 'conversation',
-      ciphertext: Buffer.from(canary).toString('base64'),
+      utterance: canary,
     };
     const privateMessage = fixture('message.posted', 'private-message', privateMessageData);
     const privateConversationMessage = { ...privateMessage, subject: 'conversation-conversation' };

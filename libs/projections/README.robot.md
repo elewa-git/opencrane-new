@@ -11,7 +11,7 @@ routine records retain only the existing safe audit metadata; schedules, keys
 and private inputs do not enter the history table. Rebuild audit after upgrading
 to include earlier records.
 
-The conversation feed retains an encrypted command `view` beside the plain
+The conversation feed retains a redacted command `view` beside the plain
 activity label. The audit projection drops `view` from `agent.command_ran` so
 organisation readers receive only the safe activity summary.
 
@@ -264,15 +264,10 @@ failure. Ordinary `ProjectionRunner.rebuild(auditTrail)` also supports drop/rebu
 with readers stopped. Neither path runs reactions. Test:
 `PG_TEST_URL=… npx vitest run libs/projections/test/audit.test.ts`.
 
-`conversationKeys(directory)` is the existing dev encrypted-content adapter shared
-by the chat server and approval decision process. It stores per-conversation keys
-with private filesystem permissions, exposes only key references in events, and
-refuses decryption with a different silo/conversation binding. A packaged install
-passes `CONVERSATION_WRAP_KEY_FILE` as the optional second argument. That file is
-a 32-byte Kubernetes Secret generated in the claimed slot. The adapter uses
-AES-256-GCM to wrap each new conversation key before saving it on the package's
-private volume. Both processes use the same Secret. A missing, changed or damaged
-wrapping key stops decryption; rotating it requires rewrapping existing keys.
+`conversationKeys(directory)` remains the development encrypted-content adapter for
+personal settings, bound to the silo and `personal:<memberId>`. Conversation events
+and their projections contain readable prose and need no key. The memory adapter
+and its revision-key destruction remain separate and unchanged.
 
 The members worker also maintains the flat-group view (`groups`, `group_members`,
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
@@ -817,7 +812,7 @@ real NATS, PostgreSQL and OpenFGA. Fresh-install qualification: NOT RUN.
 TypeScript folds this activity from creation, visible posted/completed messages and the
 first close. Ordinary late joins start at zero; shared-child joins retain their released
 history. An index supports the ordered member query. The server authorises each candidate
-before displaying metadata, applying private choices or searching decrypted titles.
+before displaying metadata, applying private choices or searching readable titles.
 `conversationListRevision` reads one generation record and includes only the supplied
 candidates, which the server must authorise first. It uses their activity, join, latest
 participation and archive positions. Read markers and internal reports leave these
@@ -1077,7 +1072,7 @@ run pages. Terminal updates change data only, preserving the original paging pos
 Skipped dates and missed ranges are single rows. A missed range is identified within
 its silo/routine by schedule revision and first/last local dates. It is never expanded.
 Legacy facts remain `legacy-needs-migration` with `executionAvailable: false`.
-Instructions remain ciphertext; projection and replay accept no decryption port.
+Instructions remain bounded plaintext; projection and replay need no instruction keys.
 
 `rebuildRoutineProjection` holds the runner lock and uses the ordinary runner inside
 one PostgreSQL transaction. Drop/create, receipts, checkpoint and generation roll back

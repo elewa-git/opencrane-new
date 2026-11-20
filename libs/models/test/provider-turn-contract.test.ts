@@ -224,7 +224,7 @@ async function keepsModeAfterBudgetReplay() {
     });
     const replay = new BudgetActor(setup.nats.store, 'test');
     await replay.start();
-    const decision = await startDecision(replay, setup.identity, setup.binding, 0, setup.keys);
+    const decision = await startDecision(replay, setup.identity, setup.binding, 0);
     const enabled = await managedProviderCallsEnabled(setup.nats.store, 'test', Infinity);
     expect(enabled).toBe(true);
     expect(replay.state.reservations).toHaveLength(0);

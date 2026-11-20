@@ -95,7 +95,7 @@ async function initialise() {
   const verificationOptions = { secrets,
     gatewayUrl: `http://127.0.0.1:${port}` };
   decision = await startDecision(actor, { issuer, jwks: tokens.jwks }, binding,
-    0, undefined, verificationOptions);
+    0, verificationOptions);
   await writeFile(`${secretDirectory}/legacy-key`, 'fixture-only');
   const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
   const gatewayOptions = { binary, port, readinessPort, decisionUrl: decision.url,

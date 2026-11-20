@@ -1,3 +1,4 @@
+import { bridgeProcessSettings } from './support/bridge-process.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
@@ -42,8 +43,9 @@ async function setup(applyOwnershipSeed = true) {
   await mkdir(`${directory}/personal-keys`, { mode: 0o700 });
   const binding = await createStore(fga.apiUrl, 'acme');
   const databaseUrl = storage.queue.options.connectionString;
+  const bridge = await bridgeProcessSettings(directory);
   const env = {
-    ...TEST_OIDC_ENV, ...nats.env(), SILO_ID: 'acme', DATABASE_URL: databaseUrl,
+    ...bridge, ...TEST_OIDC_ENV, ...nats.env(), SILO_ID: 'acme', DATABASE_URL: databaseUrl,
     OIDC_EXPECTED_ORG_ID: 'org-acme', OPENFGA_API_URL: binding.apiUrl,
     OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId,
     MEMORY_KEY_DIRECTORY: `${directory}/memory-keys`,

@@ -1,5 +1,6 @@
 import { assistantGrantSchema } from './assistant-grant.ts';
 import { recordIdSchema } from './ids.ts';
+import { conversationProseSchema, storageSafeTextSchema } from './conversation-prose.ts';
 import { artifactRefusalSchema } from './file-events.ts';
 import { credentialReleaseSchema } from './credential-release.ts';
 import { budgetCallRetrySchema } from './budget-root.ts';
@@ -21,8 +22,7 @@ import { routineApprovalBindingSchema } from './routine-approval.ts';
 // `.strict()`, so an extra field is rejected like a wrong one.
 //
 // Two security rules from events.md rule 5 are schema rules here, not prose:
-// - message and agent text travel only as `ciphertext` plus `keyId` (see
-//   `ciphertextSchema`), including streamed deltas;
+// - conversation prose has bounded named fields; memory and personal answers stay encrypted;
 // - tool arguments and commands travel only as a sha-256 digest, and
 //   credentials only as a `secretRef`, never a token or password value.
 import { z } from 'zod';
@@ -64,13 +64,6 @@ export const ciphertextSchema = z
   .string()
   .min(16, 'ciphertext must be real encrypted output (base64), not a placeholder or plaintext value')
   .regex(BASE64_PATTERN, 'ciphertext must be standard base64 with correct padding and no whitespace');
-
-// A reference to the key that encrypted some ciphertext, or to a secret in the
-// secret store, never the key or secret itself. The fixed prefix stops a raw
-// token or password from validating by accident.
-export const keyIdSchema = z
-  .string()
-  .regex(/^key:[A-Za-z0-9_-]+$/, 'keyId must be an opaque reference, e.g. "key:<id>", never the key itself');
 
 // An MCP server is registered as a URL or as an image (plan.md, "Installing
 // an MCP server"), and `locator` means something different for each, so the
@@ -121,10 +114,6 @@ const HOSTED_IMAGE_PATTERN = new RegExp(`^${IMAGE_REGISTRY}(?:/${IMAGE_COMPONENT
 const hostedLocatorSchema = z
   .string()
   .regex(HOSTED_IMAGE_PATTERN, 'locator must be an image pinned by digest, "<registry>/<repository>@sha256:<hex>"');
-
-// The encrypted-text pair: reused wherever conversation or memory text
-// would otherwise appear, per events.md rule 5.
-const encryptedText = { ciphertext: ciphertextSchema, keyId: keyIdSchema };
 
 // --- Organisation, members and teams ---------------------------------
 
@@ -329,24 +318,20 @@ export const agentTurnFailedDataSchema = z
     nativeTermination: z.literal('turn_completed').optional() })
   .strict();
 
-// Risky type: the bridge reports a completed assistant message, but the
-// text itself never travels in the event — only a reference to its
-// ciphertext, exactly like message.posted.
+// Retain the complete reply so replay can rebuild readable conversations.
 export const agentMessageCompletedDataSchema = z
   .object({
     conversationId: id,
     turnId: id,
     messageId: id,
-    ...encryptedText,
+    utterance: conversationProseSchema,
     contentType: z.enum(['text', 'markdown']),
   })
   .strict();
 
-// Reasoning summaries follow the same retention (and so the same
-// encryption) rule as chat messages (plan.md, Conversation stream and
-// audit).
+// Retain reasoning summaries with the conversation.
 export const agentReasoningSummarisedDataSchema = z
-  .object({ conversationId: id, turnId: id, ...encryptedText })
+  .object({ conversationId: id, turnId: id, utterance: conversationProseSchema })
   .strict();
 
 export const agentNativeConsentRefusedDataSchema = z.object({
@@ -379,7 +364,7 @@ export const conversationClosedDataSchema = z
 
 // --- Tools, approvals and effects ---------------------------------------
 
-// Review text is encrypted with the conversation key. Digests bind it to the exact call.
+// Bind the reviewed details to the exact call with the existing digest.
 export const toolApprovalRequestedDataSchema = z.object({
   approvalId: id, conversationId: id, turnId: id, assistantId: id, requesterId: id,
   tool: id, serverId: id, toolRevision: digestSchema, schemaDigest: digestSchema,
@@ -388,7 +373,7 @@ export const toolApprovalRequestedDataSchema = z.object({
   digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
   missingFields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).max(20).optional(),
-  ciphertext: ciphertextSchema.max(32768), keyId: keyIdSchema, reviewDigest: digestSchema,
+  review: storageSafeTextSchema.max(32768), reviewDigest: digestSchema,
   routine: routineApprovalBindingSchema.optional(),
 }).strict();
 

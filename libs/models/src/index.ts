@@ -136,3 +136,5 @@ export { savePersonalKey, type PersonalKeyDependencies, type PersonalKeySaveInpu
   from './personal-key-save.ts';
 
 export { assistantMayUsePersonalKey, savedAssistantConsent } from './personal-key-consent.ts';
+
+export { readStoredApprovalReview } from './approvals.ts';

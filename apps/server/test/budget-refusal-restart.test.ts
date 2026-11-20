@@ -35,8 +35,8 @@ async function prepareTeam(view: Awaited<ReturnType<typeof viewFixture>>) {
   const conversation = { conversationId: 'private', assistantId: 'shared',
     createdBy: 'alice', mode: 'agent_session', payingGroupId: 'team' };
   await view.append('conversation-private', 'conversation.created', conversation, true);
-  view.keys.provision('test', 'private');
-  const content = view.keys.encrypt('test', 'private', 'Please continue');
+
+  const content = ({ utterance: 'Please continue' });
   const message = { conversationId: 'private', authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...content };
   return view.append('conversation-private', 'message.posted', message);
@@ -83,8 +83,7 @@ async function recoversNoticeAfterComputerRestart() {
       exp: Math.floor(Date.now() / 1000) + 3600 };
     const headers = { cookie: `${view.config.cookieName}=${encodeSession(view.config, session)}`,
       origin: new URL(view.config.redirectUri).origin };
-    const options = { silo: 'test', store: view.nats.store, keys: view.keys,
-      db: view.db, binding: view.binding, feed: view.feed };
+    const options = { silo: 'test', store: view.nats.store, db: view.db, binding: view.binding, feed: view.feed };
     const realtime = { feed: view.feed, binding: view.binding, chat: options };
     sockets = attachWebSocketServer(view.app.server, view.app.log, view.config, realtime);
     const address = await view.app.listen({ host: '127.0.0.1', port: 0 });

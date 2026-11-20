@@ -120,7 +120,7 @@
   },
   "apps/server/src/chat/bridge-conversation.ts": {
     "max-params": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/server/src/chat/bridge-opening.ts": {
@@ -214,7 +214,7 @@
   },
   "apps/server/src/chat/reports.ts": {
     "max-params": {
-      "count": 3
+      "count": 1
     }
   },
   "apps/server/src/chat/routes.ts": {
@@ -451,7 +451,7 @@
       "count": 1
     },
     "max-params": {
-      "count": 3
+      "count": 1
     }
   },
   "apps/server/src/routine-bridge.ts": {
@@ -484,7 +484,7 @@
       "count": 1
     },
     "max-params": {
-      "count": 4
+      "count": 3
     }
   },
   "apps/server/src/routine-sender.ts": {
@@ -557,7 +557,7 @@
   },
   "libs/models/src/approvals.ts": {
     "max-params": {
-      "count": 7
+      "count": 6
     }
   },
   "libs/models/src/authority.ts": {

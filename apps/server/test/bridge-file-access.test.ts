@@ -8,7 +8,7 @@ import type { EventEnvelope } from '@opencrane/events';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { chatCommand } from '../src/chat/commands.ts';
 import { fileCommand } from '../src/files/commands.ts';
 
@@ -16,8 +16,8 @@ async function refusesQueuedFileAfterRemoval() {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/bridge-file-access-`);
   const server = createServer();
-  const keys = conversationKeys(directory);
-  keys.provision('test', 'chat');
+
+
   const joined = event('joined', 'member-alice', 'member.joined');
   joined.data = { ...joined.data, memberId: 'alice' };
   const assistant: EventEnvelope = event('assistant', 'assistant-assistant', 'assistant.created');
@@ -25,7 +25,7 @@ async function refusesQueuedFileAfterRemoval() {
   await nats.seed([joined, assistant]);
   const member = { silo: 'test', memberId: 'alice' };
   const creation = { id: 'create', conversationId: 'chat', assistantId: 'assistant' };
-  await chatCommand(nats.store, keys, member, creation);
+  await chatCommand(nats.store, member, creation);
   const bytes = Buffer.from('Private queued file');
   const hash = createHash('sha256');
   hash.update(bytes);
@@ -53,7 +53,7 @@ async function refusesQueuedFileAfterRemoval() {
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No computer port');
-  const options = { silo: 'test', store: nats.store, keys };
+  const options = { silo: 'test', store: nats.store };
   const input = { computerId: 'computer', assistantId: 'assistant', bearer: 'computer',
     url: `ws://127.0.0.1:${address.port}/bridge` };
   const link = await connectBridge(options, input);

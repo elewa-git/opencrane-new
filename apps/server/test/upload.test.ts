@@ -1,3 +1,4 @@
+import { readConversationProse } from '@opencrane/events';
 import { z } from 'zod';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
@@ -270,7 +271,6 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     const { fileUploadedDataSchema } = await import('@opencrane/events');
     const { uploadComputer } = await import('./support/upload-computer.ts');
     const { connectBridge } = await import('../src/chat/bridge.ts');
-    const { conversationKeys } = await import('../src/chat/keys.ts');
     const { chatCommand } = await import('../src/chat/commands.ts');
     const { tokenIssuer } = await import('@opencrane/auth');
     const { generateKeyPairSync } = await import('node:crypto');
@@ -281,14 +281,14 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
     await writeFile(`${directory}/key`, key.privateKey, { mode: 0o600 });
     const tokens = await tokenIssuer({ privateKeyPath: `${directory}/key`, issuer: 'https://upload.test/' });
-    const keys = conversationKeys(`${directory}/keys`); keys.provision('test', 'conversation');
+
     for (const type of ['computer.claimed', 'computer.ready']) {
       await nats.store.append({ expectedSequence: (await history(nats.store, 'computer-assistant', 'test')).at(-1)?.sequence ?? 0,
         event: envelope('test', 'computer-assistant', type, { computerId: 'computer', assistantId: 'assistant', generation: 1,
           ...(type === 'computer.claimed' ? { tokenId: 'token:test' } : { podUid: 'pod' }) }) });
     }
     const connection = { url: `${computer.url.replace('http:', 'ws:')}/bridge`, computerId: 'computer', assistantId: 'assistant', bearer: computer.credential.value };
-    let link = await connectBridge({ ...options, keys }, connection, tokens);
+    let link = await connectBridge({ ...options }, connection, tokens);
     try {
       const row = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'file.uploaded')!;
       const file = fileUploadedDataSchema.parse(row.event.data);
@@ -320,30 +320,30 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       await nats.store.append({ expectedSequence: (await history(nats.store, 'computer-assistant', 'test')).at(-1)!.sequence,
         event: envelope('test', 'computer-assistant', 'computer.ready', { computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'replacement' }) });
       connection.url = `${computer.url.replace('http:', 'ws:')}/bridge`;
-      link = await connectBridge({ ...options, keys }, connection, tokens);
+      link = await connectBridge({ ...options }, connection, tokens);
       await link.deliver(file, bytes);
       expect(await computer.mtime(path)).toBe(modified);
       expect(await computer.read(path)).toBe(editedPdf);
       expect(await computer.read(path + '.md')).toBe(editedText);
-      await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'read-pdf', conversationId: 'conversation', text: 'Read the uploaded PDF.' });
+      await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'read-pdf', conversationId: 'conversation', text: 'Read the uploaded PDF.' });
       link.socket.send(JSON.stringify({ type: 'turn', id: 'read-pdf', conversationId: 'conversation', assistantId: 'assistant',
         text: `UPLOAD_PDF_PROOF Read ${path}.md and tell me the project code.`, token: 'preparing', expiresAt: Date.now()+120_000 }));
       await until(async () => (await history(nats.store, 'conversation-conversation', 'test')).some(row => row.event.type === 'agent.turn_completed'), 60_000);
       const answer = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'agent.message_completed')!;
-      expect(keys.decrypt('test', 'conversation', answer.event.data)).toContain('The project code is Willow-47.');
+      expect(readConversationProse(answer.event.data)).toContain('The project code is Willow-47.');
       const requests = (await computer.requests()).trim().split('\n').map(line => z.object({ input: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(line) as unknown));
       expect(requests[0]!.input.some(item => item['type'] === 'additional_tools')).toBe(true);
       const output = requests.at(-1)!.input.find(item => item['type'] === 'custom_tool_call_output');
       expect(Array.isArray(output?.['output'])).toBe(true);
       expect(JSON.stringify(output)).toContain('Project code: Willow-47.');
       const question = 'What is the project code in the attached PDF?';
-      await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'read-inline', conversationId: 'conversation', text: question });
+      await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'read-inline', conversationId: 'conversation', text: question });
       link.socket.send(JSON.stringify({ type: 'turn', id: 'read-inline', conversationId: 'conversation', assistantId: 'assistant',
         text: question, attachments: [{ fileId: file.fileId, name: file.name, mime: file.mime }], token: 'preparing', expiresAt: Date.now()+120_000 }));
       await until(async () => (await history(nats.store, 'conversation-conversation', 'test')).some(row =>
         row.event.type === 'agent.turn_completed' && z.object({ turnId: z.string() }).parse(row.event.data).turnId === 'read-inline'), 60_000);
       const inlineAnswer = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'agent.message_completed')!;
-      expect(keys.decrypt('test', 'conversation', inlineAnswer.event.data)).toContain('The project code is Willow-47.');
+      expect(readConversationProse(inlineAnswer.event.data)).toContain('The project code is Willow-47.');
       const inlineRequests = (await computer.requests()).trim().split('\n');
       expect(inlineRequests).toHaveLength(requests.length + 1);
       const inlineRequest = z.object({ input: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(inlineRequests.at(-1)!) as unknown);
@@ -377,11 +377,10 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
   const { natsFixture } = await import('@opencrane/event-store/testing');
   const { connectBridge } = await import('../src/chat/bridge.ts');
   const { chatCommand, chatHistory } = await import('../src/chat/commands.ts');
-  const { conversationKeys } = await import('../src/chat/keys.ts');
   const { fileCommand } = await import('../src/files/commands.ts');
   const { envelope } = await import('@opencrane/models');
   const directory = await mkdtemp(`${tmpdir()}/file-bridge-`), server = createServer(), nats = await natsFixture();
-  const keys = conversationKeys(directory); keys.provision('test', 'conversation');
+
   const assistant = envelope('test', 'assistant-assistant', 'assistant.created', {
     assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
   });
@@ -391,7 +390,7 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
     role: 'member', invitationId: 'invite-alice',
   });
   await nats.seed([joined]);
-  await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
+  await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   const bytes = Buffer.alloc(160_000, 'a'), sha256 = createHash('sha256').update(bytes).digest('hex');
   const file = { conversationId: 'conversation', fileId: 'file', name: 'notes.txt', mime: 'text/plain', size: bytes.length, sha256, objectKey: 'test/file', uploadedBy: 'alice' };
   await fileCommand(nats.store, 'test', 'alice', 'upload', 'file.uploaded', file);
@@ -406,7 +405,7 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
   let link: Awaited<ReturnType<typeof connectBridge>> | undefined;
   try {
     for (let i = 0; i < 2; i++) {
-      link = await connectBridge({ silo: 'test', store: nats.store, keys }, { url: `ws://127.0.0.1:${address.port}/bridge`,
+      link = await connectBridge({ silo: 'test', store: nats.store }, { url: `ws://127.0.0.1:${address.port}/bridge`,
         computerId: 'computer', assistantId: 'assistant', bearer: 'computer' });
       await link.deliver(file, bytes);
       expect(writes).toBe(1);

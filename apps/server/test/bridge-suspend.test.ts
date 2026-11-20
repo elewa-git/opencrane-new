@@ -11,14 +11,14 @@ import { until } from '@opencrane/authz/testing';
 import { bridgeChannel } from '../../computer/test/server.ts';
 import { suspendComputer } from '../../ops/test/server.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
-import { conversationKeys } from '../src/chat/keys.ts';
+
 import { recordReport } from '../src/chat/reports.ts';
 import { bridgePod } from './support/bridge-pod.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 
 it.each(process.env['BRIDGE_SUSPEND_K3D'] === '1' ? ['local', 'k3d'] : ['local'])('recovers scan head 3, message 4, start report 5, suspend 6 after %s replacement and executes exactly once', async environment => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-suspend-`);
-  const server = createServer(), keys = conversationKeys(`${directory}/keys`);
+  const server = createServer();
   const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
   let sequence = 0;
   const append = async (type: string, data = {}) => {
@@ -29,10 +29,10 @@ it.each(process.env['BRIDGE_SUSPEND_K3D'] === '1' ? ['local', 'k3d'] : ['local']
   };
   await append('computer.claimed', { generation: 1, tokenId: 'token:first' });
   const ready = await append('computer.ready', { generation: 1, podUid: 'first' });
-  keys.provision('test', 'conversation');
-  await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
+
+  await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   expect(await nats.store.head()).toBe(3); // The idle scan saw no message.
-  await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'conversation', text: 'Run once' });
+  await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'conversation', text: 'Run once' });
   let runs = 0;
   function credential() {
     return { value: 'computer', expiresAt: Date.now() + 600_000 };
@@ -56,7 +56,7 @@ it.each(process.env['BRIDGE_SUSPEND_K3D'] === '1' ? ['local', 'k3d'] : ['local']
     const first = new Promise<unknown>(resolve => socket.once('message', resolve)); socket.send(JSON.stringify({ type: 'resume', since: 0 })); socket.send(JSON.stringify(input));
     const raw = await first;
     if (!Buffer.isBuffer(raw)) throw new Error('Missing report');
-    await recordReport(nats.store, keys, context, JSON.parse(raw.toString()) as unknown);
+    await recordReport(nats.store, context, JSON.parse(raw.toString()) as unknown);
     expect(await nats.store.head()).toBe(5);
     await suspendComputer(nats.store, { ...context, latest: ready });
     expect(await nats.store.head()).toBe(6);

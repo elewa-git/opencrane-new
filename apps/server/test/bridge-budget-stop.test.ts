@@ -156,8 +156,8 @@ async function budgetBridge(realChannel = false) {
     const created = { conversationId, assistantId, createdBy: 'alice',
       mode: 'agent_session', payingGroupId: payer };
     await view.append(`conversation-${conversationId}`, 'conversation.created', created);
-    view.keys.provision('test', conversationId);
-    const encrypted = view.keys.encrypt('test', conversationId, 'Keep working');
+
+    const encrypted = ({ utterance: 'Keep working' });
     const posted = { conversationId, authorId: 'alice', authorKind: 'human',
       contentType: 'text', executionMode: 'memory_free', ...encrypted };
     const saved = await view.append(`conversation-${conversationId}`, 'message.posted', posted);

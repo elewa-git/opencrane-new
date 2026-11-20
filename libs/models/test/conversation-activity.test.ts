@@ -61,12 +61,12 @@ async function activityFixture() {
 
 const creation = { mode: 'agent_session', createdBy: 'alice', assistantId: 'assistant' };
 const postedMessage = {
-  authorId: 'alice', authorKind: 'human', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
-  keyId: 'key:1', contentType: 'text',
+  authorId: 'alice', authorKind: 'human', utterance: 'A saved human message',
+  contentType: 'text',
 };
 const assistantMessage = {
-  turnId: 'turn', messageId: 'reply', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
-  keyId: 'key:1', contentType: 'text',
+  turnId: 'turn', messageId: 'reply', utterance: 'A saved assistant reply',
+  contentType: 'text',
 };
 const toolCall = { turnId: 'turn', callId: 'call', serverId: 'tools', toolName: 'read' };
 const lateReports = [

@@ -35,7 +35,7 @@ import { isRoutineStartReport, needsPrivateExit } from './bridge-report-kind.ts'
 import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
-type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
+type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store'> &
   Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string } &
   { childStartUrl?: string } &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
@@ -87,7 +87,7 @@ async function acknowledgeReport(options: ReportOptions, input: BridgeInput,
   const context = { ...input, ...options,
     readArtifact: pullArtifact.bind(undefined, socket), routineStart: options.routineStart };
   const childStage = await checkedReportStage(options, report);
-  const result = await recordBridgeReports(options.store, options.keys, context, batch.values);
+  const result = await recordBridgeReports(options.store, context, batch.values);
   await options.output.release(report.sequence, result === 'recorded');
   // Keep computer suspend protection until the private process is confirmed gone.
   const waitForPrivateExit = await needsPrivateExit(options.store, options.silo, report);

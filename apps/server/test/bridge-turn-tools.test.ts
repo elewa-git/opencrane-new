@@ -76,8 +76,7 @@ function conversationEvents(memoryFree = false) {
   });
   const message = envelope('test', 'conversation-chat', 'message.posted', {
     conversationId: 'chat', authorId: 'person', authorKind: 'human',
-    contentType: 'text', ciphertext: 'a'.repeat(16), keyId: 'key:unused',
-    ...(memoryFree ? { executionMode: 'memory_free' } : {}),
+    contentType: 'text', utterance: 'Saved conversation prose', ...(memoryFree ? { executionMode: 'memory_free' } : {}),
   });
   return [storedEvent(1, created), storedEvent(2, message)];
 }
@@ -333,7 +332,7 @@ async function checksComputerSupport(supported: boolean) {
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing bridge port');
-  const options = { silo: 'test', store: test.watchOptions.store, keys: test.watchOptions.keys };
+  const options = { silo: 'test', store: test.watchOptions.store };
   // Supply an empty saved report stream without changing the tool and conversation fixtures.
   function emptyReports() { return Promise.resolve(0); }
   const head = vi.fn(emptyReports);

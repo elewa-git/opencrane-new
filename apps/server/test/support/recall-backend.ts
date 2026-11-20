@@ -142,7 +142,7 @@ async function startComputer(setup: Setup, memory: MemoryOptions, remember: bool
   computer.driver.grant = grant;
   const deployment = await initialQualificationFixture();
   expect(deployment.result.result).toBe('PASS');
-  const options = { ...memory, keys: setup.keys };
+  const options = { ...memory };
   const connection = { url: computer.socket.url, computerId: 'computer',
     assistantId: 'assistant', bearer: computerPass };
   const link = await connectBridge(options, connection, setup.tokens);
@@ -163,16 +163,16 @@ function isTurnStart(method: string) {
 async function prepareChat(setup: Setup, memory: MemoryOptions,
   computer: Awaited<ReturnType<typeof startComputer>>, conversationId: string, threadId: string) {
   const { native, link } = computer;
-  const options = { ...memory, keys: setup.keys };
+  const options = { ...memory };
   const conversation = { conversationId, assistantId: 'assistant', createdBy: 'alice',
     mode: 'agent_session' as const, createdAt: new Date().toISOString(),
     assistantKind: 'personal' as const };
   const created = { conversationId, assistantId: 'assistant', createdBy: 'alice',
     mode: 'agent_session' };
   await setup.append(`conversation-${conversationId}`, 'conversation.created', created);
-  setup.keys.provision('test', conversationId);
+
   const message = { conversationId, authorId: 'alice', authorKind: 'human',
-    contentType: 'text', ...setup.keys.encrypt('test', conversationId, 'Recall my destination') };
+    contentType: 'text', ...({ utterance: 'Recall my destination' }) };
   const posted = await setup.append(`conversation-${conversationId}`, 'message.posted', message);
   const turnId = posted.id;
   const admitted = { conversationId, turnId, requesterId: 'alice',

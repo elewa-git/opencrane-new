@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
@@ -38,20 +39,20 @@ const owner = {
   authenticated: true, authenticatedSubject: 'test-owner',
 };
 
-test('complete fixture passes', () => {
+void test('complete fixture passes', () => {
   checkInstallId(fixture.installId, fixture.previousInstallId);
   checkFresh(fixture);
   checkOwner(owner);
 });
 
-test('reused install id fails', () => {
+void test('reused install id fails', () => {
   function reuseInstallId() {
     checkInstallId('first-install', 'first-install');
   }
   assertRefusal(reuseInstallId, 'Helm install ID was reused');
 });
 
-test('missing install id fails', () => {
+void test('missing install id fails', () => {
   function omitInstallId() {
     checkInstallId('', 'first-install');
   }
@@ -73,7 +74,7 @@ const staleCases = [
   ['reused store id', { storeId: 'old-store' }],
 ] as const;
 for (const [reason, change] of staleCases) {
-  test(`leftover silo data fails: ${reason}`, () => {
+  void test(`leftover silo data fails: ${reason}`, () => {
     assert.throws(() => checkFresh({ ...fixture, ...change }));
   });
 }
@@ -93,7 +94,7 @@ const ownerCases = [
   ['other signed-in subject', { authenticatedSubject: 'another' }],
 ] as const;
 for (const [reason, change] of ownerCases) {
-  test(`missing, unverified or non-owner identity fails acceptance: ${reason}`, () => {
+  void test(`missing, unverified or non-owner identity fails acceptance: ${reason}`, () => {
     assert.throws(() => checkOwner({ ...owner, ...change }));
   });
 }
@@ -107,7 +108,7 @@ function assertRefusal(operation: () => void, reason: string) {
   assert.throws(operation, exactReason);
 }
 
-test('internally consistent foreign issuer fails the trusted issuer comparison', () => {
+void test('internally consistent foreign issuer fails the trusted issuer comparison', () => {
   const foreignOwner = { ...owner, issuer: 'https://other.example',
     identityRows: [{ ...owner.identityRows[0]!, issuer: 'https://other.example' }] };
   function acceptForeignIssuer() {
@@ -116,7 +117,7 @@ test('internally consistent foreign issuer fails the trusted issuer comparison',
   assertRefusal(acceptForeignIssuer, 'Untrusted owner issuer');
 });
 
-test('internally consistent foreign subject fails the expected subject comparison', () => {
+void test('internally consistent foreign subject fails the expected subject comparison', () => {
   const foreignOwner = { ...owner, subject: 'other', authenticatedSubject: 'other',
     identityRows: [{ ...owner.identityRows[0]!, subject: 'other' }],
     ownerEvents: [
@@ -134,7 +135,7 @@ const memoryTables = [
   'memory_maintenance_runs', 'memory_maintenance_bindings',
 ];
 for (const table of memoryTables) {
-  test(`retained ${table} row refuses a fresh install`, () => {
+  void test(`retained ${table} row refuses a fresh install`, () => {
     function acceptRetainedMemory() {
       checkFresh({ ...fixture, rowCounts: { ...fixture.rowCounts, [table]: 1 } });
     }
@@ -168,7 +169,7 @@ const runnerCases: RunnerCase[] = [
 ];
 
 for (const scenario of runnerCases) {
-  test(`actual runner: ${scenario.name}`, async () => {
+  void test(`actual runner: ${scenario.name}`, async () => {
     const home = await mkdtemp(join(tmpdir(), 'fresh-twice-'));
     try {
       await exerciseRunner(home, scenario);
@@ -268,7 +269,7 @@ try {
   const output = result.stdout.trim();
   const lines = output.split('\n');
   const lastLine = lines.at(-1)!;
-  return JSON.parse(lastLine) as { reason: string; cause?: string };
+  return z.object({ reason: z.string(), cause: z.string().optional() }).parse(JSON.parse(lastLine));
 }
 
 async function exerciseRunner(home: string, scenario: RunnerCase) {
@@ -307,4 +308,16 @@ async function missingPackagedImport() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-test('packaged fixture refuses a local import missing from its file list', missingPackagedImport);
+void test('packaged fixture refuses a local import missing from its file list', missingPackagedImport);
+
+async function copiesProductionImports() {
+  const directory = await mkdtemp(join(tmpdir(), 'packaged-imports-'));
+  try {
+    await copyPackagedFixture(directory);
+    const copied = await readFile(join(directory, 'infra/dev-stack/package-review.ts'), 'utf8');
+    assert.match(copied, /export type PackageReview/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+void test('packaged fixture copies every production module import', copiesProductionImports);

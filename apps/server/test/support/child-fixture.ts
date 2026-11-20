@@ -11,7 +11,7 @@ import { envelope } from '@opencrane/models';
 import { Client } from 'minio/dist/esm/minio.mjs';
 import type { ChatOptions } from '../../src/chat/routes.ts';
 import { buildServer } from '../../src/server.ts';
-import { conversationKeys } from '../../src/chat/keys.ts';
+
 import { testAuthConfig } from './test-auth-config.ts';
 
 export async function childFixture(existingNats?: Awaited<ReturnType<typeof natsFixture>>) {
@@ -23,10 +23,10 @@ export async function childFixture(existingNats?: Awaited<ReturnType<typeof nats
   const binding = await createStore(fga.apiUrl, 'test');
   const db = pgDb(dbs.queue);
   const auth = memberAuthorisation(binding);
-  const keys = conversationKeys(directory);
+
   const runner = new ProjectionRunner(db, nats.store, createLogger('review'));
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const options: ChatOptions = { silo: 'test', store: nats.store, db, keys, binding, feed };
+  const options: ChatOptions = { silo: 'test', store: nats.store, db, binding, feed };
   const objects = new Client({ endPoint: '127.0.0.1' });
   function unusedScan(): Promise<never> {
     throw new Error('Reads must not scan a file');
@@ -78,7 +78,7 @@ export async function childFixture(existingNats?: Awaited<ReturnType<typeof nats
     await fga.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { app, nats, db, keys, runner, headers, append, close,
+  return { app, nats, db, runner, headers, append, close,
     config, options, objects, feed, fga, auth, directory,
     databaseUrl: dbs.queue.options.connectionString! };
 }
@@ -92,8 +92,8 @@ export async function childSession(context: Awaited<ReturnType<typeof childFixtu
   let sourceMessageId = 'hidden-source';
   let sourcePosition = parentJoinPosition + 1;
   if (options.parentSource) {
-    context.keys.provision('test', 'parent');
-    const encrypted = context.keys.encrypt('test', 'parent', 'The parent source message');
+
+    const encrypted = ({ utterance: 'The parent source message' });
     const sourceData = { conversationId: 'parent', authorId: 'alice', authorKind: 'human',
       contentType: 'text', ...encrypted };
     const source = await context.append('conversation-parent', 'message.posted', sourceData, false);
@@ -105,7 +105,7 @@ export async function childSession(context: Awaited<ReturnType<typeof childFixtu
   const assistantData = { assistantId: 'child-assistant', kind: 'team', ownerId: 'child-team',
     payingGroupId: 'child-team' };
   await context.append('assistant-child-assistant', 'assistant.created', assistantData);
-  context.keys.provision('test', conversationId);
+
   const initialJoins = [];
   for (const participantId of ['alice', 'bob']) {
     const join = { participantId, parentJoinEventId: parent.id, parentJoinPosition };
@@ -121,7 +121,7 @@ export async function childSession(context: Awaited<ReturnType<typeof childFixtu
   };
   const creation = await context.append(`conversation-${conversationId}`,
     'conversation.created', childData);
-  const encrypted = context.keys.encrypt('test', conversationId, 'Hello shared history');
+  const encrypted = ({ utterance: 'Hello shared history' });
   const messageData = { conversationId, authorId: 'alice', authorKind: 'human',
     contentType: 'text', ...encrypted };
   await context.append(`conversation-${conversationId}`, 'message.posted', messageData, false);
