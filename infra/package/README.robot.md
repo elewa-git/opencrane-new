@@ -228,7 +228,9 @@ Paid qualification remains a separate, explicitly authorised journey.
 and actions to the open, named dialog, waits for the named step and uses an enabled Check
 status control while the original change is applying. A disabled control does not
 stop the runner from following automatic advancement to the next step. Closed replacement dialogs are not
-key-entry targets. `journey-provider-settings.test.ts` reproduces that pending
+key-entry targets. Verification and model-selection status reads use that same
+open dialog even when a background provider row also offers Check status.
+`journey-provider-settings.test.ts` reproduces that pending
 creation and key-save path in Chromium at 1280 and 390 px. The live journey saves
 both new-key form screenshots before typing, checks the browser refusal, and
 confirms HTTP 401 for that same synthetic wrong credential from the server Pod.

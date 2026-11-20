@@ -1,12 +1,12 @@
 {
   "status": "FAIL",
-  "source": "0e216de4ff012e5b658ac75aab56f7e34c0082f3",
+  "source": "c1c1e28cab57d2613465e4b00a36e63bfc3e2a11",
   "outcomes": [
     {
-      "check": "admin invitation and sign-in",
+      "check": "wrong-key reachability",
       "result": "FAIL",
-      "errorType": "AssertionError",
-      "detail": "The separate admin must accept the owner invitation."
+      "errorType": "Error",
+      "detail": "Verification must report failed reachability for the wrong key."
     }
   ],
   "paidCalls": 0,

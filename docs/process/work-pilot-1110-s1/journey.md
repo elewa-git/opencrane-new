@@ -2,6 +2,22 @@
 
 ## Current correction — 20 November 2026 UTC
 
+The next fresh packaged run on `c1c1e28ca` is **FAIL** at wrong-key reachability.
+Owner, admin and member setup passed. The key-entry checks passed at both widths.
+The runner then matched two visible Check status buttons: one in the providers
+table and one in the open setup dialog. See [the result](live/round-3-attempt-2.json)
+and [safe browser failure](live/round-3-attempt-2-failure.txt). The test-first
+`bddd5a1a7` reproduces that exact Chromium strict-mode violation at both widths.
+Status reads now use the open named setup dialog for verification and model selection.
+`dbc5b2905` pins a specific safe reason without copying locator diagnostics.
+
+Startup command logs and screenshots were retained, but the collector had a regex
+syntax error and service logs were **NOT SAVED** before namespace teardown. The safe
+browser failure was recovered before slot cleanup. This collection failure is not
+reported as PASS. The collector syntax is corrected and collection failure now holds
+teardown for log recovery. The slot was released. The next full fresh run remains
+**NOT RUN**. Paid calls and paid cents remain zero.
+
 The first diagnostic run on source `0e216de4f` is **FAIL** at the admin invitation.
 The owner signed in, then the invitation request returned HTTP 503. Its retained
 safe assertion records `503 !== 200`. Service logs show the ownership permission
