@@ -5,7 +5,7 @@ navigation, before Settings key entry. Full journey after the latest driver fix:
 **NOT RUN**. The two-hour queue window ended without another complete five-minute
 low-load window. The two live blockers remain open; this PR must not merge yet.
 
-Date: 20 November 2026 UTC. Latest driver source:
+Date: 20 November 2026 UTC. Website fixture and navigation fix source:
 `5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d`. The last installed source was
 `b2879c0d57e4450838c44282a3a7d60a6de2b2dc`. No application behaviour was changed in
 this round. Paid calls: **0**; actual external charges: **0 cents**.
@@ -93,7 +93,11 @@ receipt. Earlier safe logs remain in `live/logs/`.
    Inspection failures retain their rejected promises and still fail the journey;
    they are handled in time for its catch to save the receipt.
 
-The four driver regressions passed twice after the final change. The two Settings
+During cleanup, `4a5a3579d` adds a failing check for a disclosure error received
+while the browser closes. The completion helper checks inspections before and
+after shutdown, before recording PASS. This guard has not run in a fresh package.
+
+The five driver regressions passed twice after the final change. The two Settings
 cases each cover 1280 and 390 px. No retry, longer timeout, sleep, skipped response
 check or weaker assertion was introduced in the driver.
 
@@ -157,10 +161,10 @@ here. Always copy screenshots and logs before package-down and down.
 
 These are the builder's own checks. No full root suite ran locally.
 
-- PASS: all four changed driver regressions twice after the final fix. Chromium
+- PASS: all five changed driver regressions twice after the final fix. Chromium
   reproduced both the hidden/disabled control failures and discarded-response
   failure before their corresponding fixes. A failed disclosure inspection still
-  refuses navigation.
+  refuses navigation, and a late failure during shutdown refuses PASS.
 - PASS: the five Models web suites twice, 130 cases each. The rendered current
   website fixture also passed the two viewport and accessibility checks above.
 - PASS: focused provider custody and chart isolation checks twice, 10 cases each.
@@ -189,7 +193,7 @@ are linked from the PR Evidence section.
 - **BLOCKING — packaged merge journey: PARTIAL.** `11891a853` pins restricted
   destination and wrong-key refusal; `f43c3a4dc` pins missing Settings controls;
   `8ec37ebc6` adds the separate free provider and checked commands. This round fixes
-  the three driver failures above. The latest full live proof remains NOT RUN.
+  the three driver failures above and preserves failures received during shutdown. The latest full live proof remains NOT RUN.
 - **FIX — backup CronJob isolation: PASS.** `76847bdd9` records the missed aliased
   mount; `7fa01e9a9` resolves mounts to PVC claims across Pod specifications,
   including CronJobs and init containers. `a1671b1be` and `2eb0b9b4e` also pin the
