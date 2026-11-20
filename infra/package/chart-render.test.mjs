@@ -1072,3 +1072,33 @@ function rendersSeparateQualificationProvider() {
 }
 test('packaged provider qualification uses a separate free stand-in with private custody',
   rendersSeparateQualificationProvider);
+
+function takeProviderMount(container) {
+  const retained = [];
+  const transferred = [];
+  for (const mount of container.volumeMounts) {
+    if (mount.name === 'provider-secrets') transferred.push(mount);
+    else retained.push(mount);
+  }
+  container.volumeMounts = retained;
+  return { name: container.name, volumeMounts: transferred };
+}
+
+function detectsRelocatedProviderContainers() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  backup.volumes.push({ name: 'provider-secrets',
+    persistentVolumeClaim: { claimName: 'provider-secrets' } });
+  for (const container of server.containers) {
+    if (container.name === 'server' || container.name === 'models') {
+      backup.initContainers.push(takeProviderMount(container));
+    }
+  }
+  assert.throws(() => assertPrivateProviderMounts(resources),
+    { code: 'ERR_ASSERTION' }, 'Matching container names in another workload must not grant custody');
+}
+test('provider isolation refuses the same container names and mounts moved into the backup',
+  detectsRelocatedProviderContainers);
