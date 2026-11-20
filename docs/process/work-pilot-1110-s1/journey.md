@@ -1,104 +1,128 @@
 # Packaged connected-provider journey
 
-Journey on a fresh packaged install: **FAIL** — startup and owner sign-in passed;
-Settings setup failed before the provider key field became visible. The remaining
-provider, custody and member-chat steps are **NOT RUN**.
+Latest completed packaged journey: **FAIL** at API response-body inspection during
+navigation, before Settings key entry. Full journey after the latest driver fix:
+**NOT RUN**. The two-hour queue window ended without another complete five-minute
+low-load window. The two live blockers remain open; this PR must not merge yet.
 
-## Latest journey run
+Date: 20 November 2026 UTC. Latest driver source:
+`5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d`. The last installed source was
+`b2879c0d57e4450838c44282a3a7d60a6de2b2dc`. No application behaviour was changed in
+this round. Paid calls: **0**; actual external charges: **0 cents**.
 
-Date: 20 November 2026 UTC. Branch head: `6640c9e701a89e3431b119999f6cae65eac324e1`.
-Package preparation fetched the CI-approved application and scanner images, and
-the fresh packaged namespace passed startup checks. Owner sign-in and both
-Settings screenshots passed. The browser then timed out while filling the
-wrong-key step: the `API key` locator resolved to a hidden
-`replace-provider-key` input. No wrong key was entered, so HTTP 401 refusal and
-disclosure checks were **NOT RUN**. Right-key connection, quoted test, model
-selection, switch-on, key mode checks before and after Pod recreation, and member
-replies at 1280 and 390 px were **NOT RUN**. No paid calls were made.
+## What a person sees
+
+**PASS — rendered website fixture, not a fresh packaged journey.** At 1280 and
+390 px, Models & providers offers Connect a provider. After entering a connection
+name and choosing Next, its open setup dialog shows one password field labelled
+“API key Required”. The closed replacement dialog contributes no second accessible
+field with that name. The empty field fits both viewports and is directly usable.
+No product label or visibility change was needed.
+
+The check built the current website, reused its existing provider API fixture and
+ran the corrected browser helper. It checked one open setup dialog, one visible
+key field, one matching field in Chromium's accessibility tree, password type,
+empty value and no horizontal overflow. No key was entered or submitted. The
+screenshots were visually checked before publication:
+
+- [1280 px key form](fixture/new-key-entry-1280.png).
+- [390 px key form](fixture/new-key-entry-390.png).
+- [Fixture assertions and source](fixture/result.json).
+
+The driver now selects the page-header Connect button, scopes entry to the open
+named dialog and uses the exact field label. It waits for the named Key step or an
+enabled Check status control while the original command applies. It never sends
+that command again. Back is scoped to the dialog footer.
+
+## Live conditions
+
+These results describe the last completed packaged run. They do not turn the
+website fixture or source tests into live proof.
 
 | Condition | Result |
 | --- | --- |
-| Fresh packaged namespace, approved images and service startup | PASS |
-| Owner sign-in through the shipped browser | PASS |
-| Settings screenshots at 1280 and 390 px | PASS |
-| Wrong-key Settings field, 401 refusal and disclosure check | FAIL: key field resolved but was hidden; 30-second fill timeout |
+| Fresh packaged namespace, new PVCs and approved images | PASS |
+| Application startup, free provider readiness and browser origin | PASS |
+| Owner sign-in | PASS |
+| API response-body inspection while navigating | FAIL: Chromium discarded the old response body |
+| New-key field through the fresh packaged browser | NOT RUN to completion |
+| Wrong key refused with HTTP 401 and never disclosed | NOT RUN |
 | Right key, quoted test, model selection and switch-on | NOT RUN |
-| Synthetic credential modes before and after Pod recreation | NOT RUN |
-| Member replies and screenshots at 1280 and 390 px | NOT RUN |
-| Startup and service logs saved before teardown | PASS; sanitised logs are in `live/logs/`; unsafe logs are marked withheld |
-| Stack teardown and slot release | PASS; slot 1 reports free |
+| Synthetic 0600 files and the 0700 key folder before and after Pod recreation | NOT RUN |
+| Member chat with a reply at 1280 and 390 px | NOT RUN |
+| Live values, manifests, logs and events disclosure checks | NOT RUN |
+| Startup and service logs copied before teardown | PASS |
+| Package teardown and release of this worktree's claims | PASS |
+| Full fresh journey after the final navigation fix | NOT RUN: waiting cutoff reached |
 
-The browser failure and safe diagnostic are in [live/result.json](live/result.json)
-and [live/browser-failure.txt](live/browser-failure.txt). Captured Settings screenshots are
-in `live/admin-settings-1280.png` and `live/admin-settings-390.png`. No product
-code was changed. The package install used the restricted free qualification
-stand-in; the fleet marker stayed present and `DEV_REAL_PROVIDER` was not set or
-bypassed.
-
-## Previous journey attempt
-
-The earlier attempt below used product code identical to this branch head but
-stopped at an invalid invitation fixture. Its result remains useful history; the
-latest run above is the current live verdict.
-
-Date: 20 November 2026 UTC. The installed runtime source was `2eb0b9b4e`; its
-product code is identical to `eacd06709`. Later changes affect the browser test
-fixture and documentation. Application approval
-[44672116271](https://github.com/elewa-git/opencrane-new/actions/runs/44672116271)
+[The live result](live/result.json), [safe browser failure](live/browser-failure.txt)
+and [image bindings](live/images.json) identify the failed installed run.
+Application approval
+[44693318189](https://github.com/elewa-git/opencrane-new/actions/runs/44693318189)
 and scanner approval
-[44672120365](https://github.com/elewa-git/opencrane-new/actions/runs/44672120365)
-passed for that installed source. The branch was rebased on `origin/main` at
-`c791103b3`; the rebase finished.
-Receipt edits change no application code.
-The paid-provider check is separate and NOT RUN. Paid calls: **0**; actual external
-charges: **0 cents**. Only synthetic provider credentials were prepared. No
-provider credential was entered before the invitation fixture failed.
+[44693322108](https://github.com/elewa-git/opencrane-new/actions/runs/44693322108)
+passed for that exact source. Builders did not approve images.
 
-## Live verdicts
+[Service states](live/logs/round-2-services.json) and
+[bounded server records](live/logs/round-2-server.txt) come from logs copied before
+teardown. Full sanitised startup and per-container logs were retained privately at
+`<home>/.fleet/receipts/pilot-1110-s1/fix-round2/attempt-1/` and `attempt-2/`.
+Raw records that could contain private request data are withheld from the public
+receipt. Earlier safe logs remain in `live/logs/`.
 
-| Condition | Result |
-| --- | --- |
-| Fresh packaged namespace, approved images and service startup | PASS |
-| Owner sign-in through the shipped browser | PASS |
-| Admin invitation in the first test fixture | FAIL: new member id was not a UUID |
-| Corrected invitation fixture | NOT RUN after correction |
-| Settings wrong-key refusal, right key, quoted test, selection and switch-on | NOT RUN |
-| Member replies and screenshots at 1280 and 390 px | NOT RUN |
-| Synthetic credential modes before and after Pod recreation | NOT RUN |
-| Live credential disclosure checks | NOT RUN |
-| Logs saved before teardown; all claims released | PASS |
+## Attempts and failing-first fixes
 
-The queue stopped at its two-hour waiting limit. Another secondary journey and
-then host load above six prevented a new complete five-minute observation window.
-The fleet marker, access checks, assertions and test timeouts stayed intact. The
-source fixes are present, but the first two findings still need their live proof.
-The failing browser result is retained in [live/result.json](live/result.json).
-No screenshots were produced because the first failure preceded provider setup.
+1. The supplied run failed because a page-wide API key locator selected the hidden
+   replacement input before the new-key step was ready. No wrong key was entered.
+   [Its diagnostic](live/previous-browser-failure.txt) is retained. `a53c56a00`
+   reproduces that failure in Chromium; `593c17f77` follows the open setup dialog,
+   exact labels and the visible Check status path.
+2. A fresh install of `593c17f77` passed startup, sign-in and Settings screenshots at
+   both widths. The driver then tried to click a disabled Check status button while
+   setup advanced automatically. No key was entered. `d966766c3` reproduces the
+   disabled-then-detached timeout; `b2879c0d5` waits for an enabled control or the next
+   step. Logs were copied before teardown.
+3. A fresh install of `b2879c0d5` passed startup and owner sign-in. Its response
+   inspector was still reading an API reply when navigation discarded the old
+   document. The rejected promise terminated Node before a new result was written.
+   The retained failure and service logs establish this result; `live/result.json`
+   records it explicitly rather than retaining the previous attempt's stage.
+   `18ba6f843` reproduces the exact Chromium protocol error and separately proves
+   that a failed disclosure inspection must refuse navigation. `5c4c8146a` waits
+   for current network activity and pending body inspections before navigating.
+   Inspection failures retain their rejected promises and still fail the journey;
+   they are handled in time for its catch to save the receipt.
 
-## Fresh install and browser steps
+The four driver regressions passed twice after the final change. The two Settings
+cases each cover 1280 and 390 px. No retry, longer timeout, sleep, skipped response
+check or weaker assertion was introduced in the driver.
 
-The task's fleet marker stayed present throughout. The installed package and
-browser driver never set `DEV_REAL_PROVIDER`. The installed package ran provider mode with qualification enabled. The route
-keeps ordinary Settings, custody, access, price consent, default selection and
-switch-on admission; those browser steps remain NOT RUN here. Its configured upstream was
-`model-qualification:43003`, a separate Deployment running `model-stub.ts`.
-All other model upstreams and fallback key settings were refused by admission tests.
-Unit checks verified HTTP 401 for an incorrect bearer credential; the live
-wrong-key browser step remains NOT RUN.
+## Single-journey waiting and release
 
-Before the installation claim, both slots reported free, no package stack was up and
-the one-minute load stayed below six for at least five minutes. Checks ran every
-30 seconds. The owner stack was not used. An early unused claim followed an
-unsuccessful 299-second check because the shell wrapper did not stop after the
-assertion failed. That claim was released before services started. The wrapper
-then used `set -euo pipefail`, and the installation claim followed a complete
-361-second observation window. A later claim cross-check found the other
-slot occupied; it refused to start services and released its unused claim. A new
-complete window was required after that as well.
+Before each installation claim, both secondary slots were free, no package stack
+was running and the one-minute load stayed below six for a full five minutes.
+Checks ran every 30 seconds. The successful installation claims followed windows
+ending at 07:02:53 and 08:20:53 UTC, each at 300 seconds.
 
-The packaged fresh-install path uses a new owned namespace and new PVCs, rather
-than the Compose `up.sh --fresh` path. `package-prepare` refuses a live Compose
-stack in the claimed slot. Commands, in order:
+A separate candidate window ended at 08:06:53 UTC, but another secondary stack
+became busy during the final pre-claim check. This worktree cancelled its unclaimed
+launch, started no services and waited for a new full window. It did not use the
+other stack or the owner stack.
+
+After the navigation fix, load rose above six again. The queue stopped at its
+08:39:53 UTC cutoff. The last observation had both slots free but load 8.02, with
+no complete low-load window. [The queue record](live/queue.json) marks the corrected
+full journey NOT RUN. This worktree has no remaining claimed stack.
+
+The fleet marker stayed present. Neither the installed package nor the browser
+driver set or bypassed `DEV_REAL_PROVIDER`. Only synthetic provider credentials
+were prepared; none reached Settings in the completed runs.
+
+## Fresh packaged install recipe
+
+The package uses a new owned namespace and new PVCs. It does not start a Compose
+stack with `up.sh --fresh`: package preparation refuses a live Compose stack in the
+claimed slot. Use the same guarded secondary path for the remaining live proof:
 
 ```sh
 infra/dev-stack/claim.sh
@@ -114,74 +138,65 @@ infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
 infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
 
-Preparation fetched successful exact-source application and scanner approvals
-from GitHub. Builders did not approve images. Test, preparation and startup
-commands ran under `nice -n 10`. The runner opened real Chromium and signed in as
-the owner through the shipped browser route. Its planned member steps use a
-separate identity and personal, memory-free sessions. Neither those steps nor
-private memory delivery are qualified here.
+Run preparation, startup, tests and builds under `nice -n 10`. Fetch successful
+exact-source application and scanner approvals from GitHub. Keep the free upstream
+fixed to `model-qualification:43003`, with provider mode, ordinary custody, access,
+price consent, default selection and switch-on admission intact.
 
-The first install started successfully but its browser test failed before provider
-setup: the fixture supplied a label as a new member identifier. The invitation API
-correctly refused it with HTTP 409 because a new invitation requires a UUID.
-`c5bb3e8f7` records the failing journey; `eacd06709` supplies fresh UUIDs. Startup
-and service logs were copied, with secrets and private addresses removed, before
-teardown. This changed no membership or access rule.
+The runner captures both key-entry widths before typing, uses the wrong synthetic
+key through Settings, checks its refusal and confirms HTTP 401 for that same key
+from the server Pod. The private probe passes it through stdin and records only a
+status. It then connects the right synthetic key, accepts the quoted test, chooses
+models, selects the chat default and switches on. Before and after recreating the
+server Pod it checks uid 1000, the 0700 key folder, 0600 files and unchanged credential
+bytes. It expects a member reply at both widths and checks disclosure in API
+replies, values, manifests, logs and events. Those live conditions remain NOT RUN
+here. Always copy screenshots and logs before package-down and down.
 
-## Source checks
+## Source checks in this round
 
-PASS means the builder's own check passed. These fixtures do not replace the live
-journey. No full root suite ran locally. Vitest used two workers and the shared
-disposable test database; all tests and typechecks ran under `nice -n 10`.
+These are the builder's own checks. No full root suite ran locally.
 
-- PASS: affected package render, preflight and installer suites twice, 359 and
-  360 cases. Focused custody, destination, stub and launcher checks passed in a
-  complete 276-case run. The final four isolation checks passed twice.
-- PASS: affected server/managed-model runtime tests twice, 38 cases each, with
-  disposable NATS, PostgreSQL, OpenFGA and the pinned gateway.
-- PASS: models browser unit tests, 128 then 130 cases; the three new chat setup
-  tests passed twice again after cleanup. The six changed Node checks also passed
-  twice after cleanup.
-- PASS: runtime build-context, copied fixture imports and narrow saved-image
-  source admission checks twice. The context check used a normal Docker build.
-  Exact-source CI application approval passed all 20 saved-image checks.
-- PASS: complete default rendered bytes match the immutable main baseline under
-  the same Helm binary. Both Helm 3 and Helm 4 passed twice. Changing a default
-  workload annotation made the comparison fail.
-- PASS: workspace typecheck, event catalogue (174 types), Knip, changelog, scoped
-  ESLint, Markdown, README and lint-debt checks. Knip reported its two existing
-  configuration hints. Infrastructure files remain excluded by the repository's
-  ESLint configuration and are checked by their TypeScript projects.
+- PASS: all four changed driver regressions twice after the final fix. Chromium
+  reproduced both the hidden/disabled control failures and discarded-response
+  failure before their corresponding fixes. A failed disclosure inspection still
+  refuses navigation.
+- PASS: the five Models web suites twice, 130 cases each. The rendered current
+  website fixture also passed the two viewport and accessibility checks above.
+- PASS: focused provider custody and chart isolation checks twice, 10 cases each.
+  They include remount mode repair/refusal, the separate qualification provider and
+  the aliased/same-name backup CronJob regressions. This is source proof, not a live
+  remount or backup qualification.
+- PASS: full workspace, package and dev-stack typecheck; event catalogue agreement
+  for 174 types; Knip; changelog; scoped ESLint; Markdown without file arguments;
+  and the website development build. Knip retained its two existing configuration
+  hints. Infrastructure is excluded by repository ESLint settings and checked by
+  its TypeScript project.
+- PASS: public privacy and secret scans before each push. Both new screenshots
+  were visually checked and contain an empty field, no credential or private
+  address. Tests, lint, typecheck and builds ran under `nice -n 10`.
 
-One extra focused repeat hit the unchanged launcher deadline while the host load
-was 28. Assertions and deadlines stayed unchanged; its isolated three-case repeat
-passed. Earlier CI runs found missing runtime imports, omitted source paths in the
-saved-image allowlist and a renderer-version-dependent hash. Each cause gained a
-failing check before correction; approval and image checks were not relaxed.
+`git fetch origin` found main unchanged at `c791103b3`. `git rebase origin/main`
+finished with the branch up to date. Final hosted checks and exact-head approvals
+are linked from the PR Evidence section.
 
-Hosted CI for `eacd06709`: PASS, including all four test shards, source checks,
-browser fixtures and image fixtures. Application and scanner approvals also passed.
+## Original review findings
 
-## Findings, failing checks and cleanup
+- **BLOCKING — private modes on remount: PARTIAL.** `3557f4d11` records the failing
+  checks; `d29236da6` adds `OnRootMismatch` and startup repair/refusal before either
+  application container starts. The focused checks passed twice in this round.
+  The synthetic before/after Pod-recreation condition remains NOT RUN.
+- **BLOCKING — packaged merge journey: PARTIAL.** `11891a853` pins restricted
+  destination and wrong-key refusal; `f43c3a4dc` pins missing Settings controls;
+  `8ec37ebc6` adds the separate free provider and checked commands. This round fixes
+  the three driver failures above. The latest full live proof remains NOT RUN.
+- **FIX — backup CronJob isolation: PASS.** `76847bdd9` records the missed aliased
+  mount; `7fa01e9a9` resolves mounts to PVC claims across Pod specifications,
+  including CronJobs and init containers. `a1671b1be` and `2eb0b9b4e` also pin the
+  workload name. The focused mutation regressions passed twice in this round.
 
-1. Private key remount: `3557f4d11` records the failing mode checks and
-   `d29236da6` adds `OnRootMismatch` plus a startup check that repairs private modes
-   before either application container starts. It refuses links and unexpected
-   file types. Removing the mode repair made the test fail.
-2. Packaged merge journey: `11891a853` records the missing restricted route and
-   wrong-key rejection; `f43c3a4dc` records missing Settings switch-on controls.
-   `8ec37ebc6` adds the separate free stand-in and uses the existing command APIs
-   from Settings. Bypassing destination admission made its refusal test fail.
-3. Backup isolation: `76847bdd9` records the skipped CronJob regression.
-   `7fa01e9a9` walks all rendered Pod specifications, including CronJobs, and
-   resolves container/init mounts to PVC claims. `a1671b1be` adds a same-name
-   workload relocation regression; `2eb0b9b4e` checks the workload as well as the
-   container. Adding an aliased provider PVC mount only to the real backup
-   CronJob's init container made the rendered isolation check fail.
-
-Cleaned the changed functions against the engineering table: kept one owner for
-runtime settings and admission, used named command values, split decoding steps,
-removed replaced logic, kept functions small and added no dependency or limit
-exception. The provider key PVC remains excluded from backup and restore;
-recovery policy is deferred to #15. No backup or monthly-budget live qualification
-is claimed here.
+The changed functions were checked against the engineering cleanup table: shared
+one owner for step progress and navigation, used named values and small functions,
+removed replaced page-wide key entry, preserved errors, and added no dependency or
+limit exception. No access, money or memory check was weakened. Paid-provider,
+monthly-budget, key recovery and private-memory live qualification are not claimed.

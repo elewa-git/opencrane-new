@@ -1,16 +1,18 @@
 {
+  "source": "5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d",
   "status": "NOT RUN",
-  "reason": "No complete low-load window before the waiting cutoff",
-  "cutoff": "2026-11-20T05:23:00Z",
+  "cutoff": "2026-11-20T08:39:53Z",
   "lastObservation": {
-    "at": "2026-11-20T05:23:37Z",
+    "at": "2026-11-20T08:39:23Z",
     "slotsFree": [
       true,
       true
     ],
     "packageUp": false,
-    "load": 9.2,
+    "load": 8.02,
     "continuousSeconds": 0,
     "ready": false
-  }
+  },
+  "reason": "No fresh five-minute low-load window after the last fix before the waiting cutoff",
+  "claimsFromThisWorktreeReleased": true
 }
