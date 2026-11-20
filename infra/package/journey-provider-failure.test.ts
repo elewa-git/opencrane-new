@@ -37,3 +37,15 @@ function refusesPrivateErrorNames(): void {
 
 test('failure categories allow only fixed names and never copy an upstream error name',
   refusesPrivateErrorNames);
+
+function recordsHttpRefusal(): void {
+  const step = { check: 'invite admin', detail: 'The owner must be able to save the invitation.',
+    expectedHttpStatus: 200 };
+  const error = new assert.AssertionError({ actual: 503, expected: 200,
+    operator: 'strictEqual', message: 'private request content' });
+  assert.equal(providerFailure(step, error).detail,
+    'Expected HTTP 200; received HTTP 503. The owner must be able to save the invitation.');
+}
+
+test('an HTTP refusal records its numeric status without assertion or request content',
+  recordsHttpRefusal);
