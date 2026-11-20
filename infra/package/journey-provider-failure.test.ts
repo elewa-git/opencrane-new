@@ -59,3 +59,15 @@ function recordsAmbiguousControl(): void {
 
 test('an ambiguous browser control has a specific reason without copying locator diagnostics',
   recordsAmbiguousControl);
+
+function refusesNonHttpValues(): void {
+  const step = { check: 'invite admin', detail: 'The invitation must be saved.',
+    expectedHttpStatus: 200 };
+  for (const actual of ['private-token /private/path', 99, 600, 200.5]) {
+    const error = new assert.AssertionError({ actual, expected: 200,
+      operator: 'strictEqual', message: 'private request' });
+    assert.equal(providerFailure(step, error).detail, step.detail);
+  }
+}
+
+test('non-HTTP assertion values never enter the public failure reason', refusesNonHttpValues);
