@@ -13,10 +13,12 @@ export async function createProviderConnection(page: Page, name: string): Promis
   await waitForProviderStep(page, 'Step 2 of 6 · Key');
 }
 
-export async function waitForProviderStep(page: Page, title: string): Promise<void> {
+async function waitForProviderStep(page: Page, title: string): Promise<void> {
   const setup = providerSetup(page);
   const nextStep = setup.getByRole('heading', { name: title, exact: true });
-  const check = setup.getByRole('button', { name: 'Check status', exact: true });
+  const statusButton = setup.getByRole('button', { name: 'Check status', exact: true });
+  const enabledButtons = setup.locator('button:enabled');
+  const check = statusButton.and(enabledButtons);
   const deadline = Date.now() + 30_000;
   // Read the pending change through the control offered to the person; never resend it.
   while (Date.now() < deadline) {
