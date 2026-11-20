@@ -1,0 +1,1 @@
+[{"step":"wrong token refused without retaining the input","result":"PASS"},{"step":"one-time token creates the first owner","result":"PASS"},{"step":"used token refuses a second owner claim","result":"PASS"},{"step":"diagnosis only: projected assignment appears after manual reload","result":"PASS"}]

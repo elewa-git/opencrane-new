@@ -1,5 +1,50 @@
 # Install hardening source checks
 
+## Personal assignment updates
+
+Round 2, 20 November 2026. Test-first commit `c9a572b19` reproduces the missing
+subscription before a conversation exists. The browser stayed `idle`; the server
+returned an unsupported-message error instead of a context update. Both final
+regression files were run against the original entry points before the fix:
+[browser red](assignment-browser-red.txt), [server red](assignment-server-red.txt).
+
+Fix `f4ce844c1` adds the signed-in member's `chat-context` subscription and shares
+the existing HTTP context builder and chat-session validation. It checks active
+membership before and after reads and requires `acts_for` for the assistant id.
+The browser applies the assignment without another HTTP context read or a reload.
+It stops listening when assigned, when another conversation is selected or on page exit.
+No event, dependency, access rule, money rule or memory check was relaxed.
+
+Removing both active-member checks made the non-member refusal test fail by
+receiving a context message instead of close code 1008
+([mutation evidence](assignment-membership-mutation.txt)). The original checks were
+restored before the passing runs. The fresh old-image diagnostic also confirms
+that a manual reload reveals the projected assignment; see the [journey receipt](journey.md).
+
+The final local gates below passed on the product fix. All tests, lint and
+TypeScript checks ran under `nice -n 10`. Server Vitest runs used at most two
+workers and the shared disposable PostgreSQL URL. Browser builds used one worker.
+No full root test suite ran locally.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Changed browser tests and workspace/private-reply regressions, twice | PASS | 167/167 each; [first](source-gates/web-round-1.log), [second](source-gates/web-round-2.log) |
+| Changed server tests and HTTP/realtime guards, twice | PASS | 5/5 each; [19.68 s](source-gates/server-round-2.log), [19.47 s](source-gates/server-round-3.log) |
+| Full workspace, package and dev-stack typecheck | PASS | [Complete command](source-gates/typecheck-final.log) exited 0 |
+| Event catalogue | PASS | [174 types](source-gates/events-final.log) agree |
+| Knip | PASS | [No unused-code findings](source-gates/knip-final.log); two existing configuration hints |
+| Scoped ESLint | PASS | [14 changed code files](source-gates/eslint-final.log); no errors or warnings |
+| Changelog | PASS | [Branch release note](source-gates/changelog-final.log); changelog unchanged |
+| Markdown | PASS | [Complete configured scope](source-gates/markdown-final.log), without file arguments |
+| README structure | PASS | [Existing baseline retained](source-gates/readmes-final.log) |
+| Whole-stream reads | PASS | [No new reads](source-gates/reads-final.log); 310 known and five rebuild reads |
+| Complete fresh packaged journey on fixed source | NOT RUN | Awaiting CI and both image approvals |
+
+The earlier results below are tied to their stated source and do not stand in
+for these new checks.
+
+## Previous source checks
+
 Date: 20 November 2026. Source: `77fc69f35a6b65cc94bf263ddefa121488ad75c1`,
 rebased onto `ed3662d85`. The rebase finished and the checkout was clean before
 the packaged qualification. See the [journey receipt](journey.md) for live results.
