@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, memberInvitedDataSchema, memberJoinedDataSchema, parseEventByType } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
+import { currentMembership, seedOwnership } from '@opencrane/models';
 import { readEnv, readOwnerEmail, root } from './config.ts';
 
 // Create the development owner when a fresh local stack has no owner yet.
@@ -48,6 +49,17 @@ async function waitFor(check: () => Promise<boolean>) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
+
+async function ownershipApplied() {
+  const membership = await currentMembership(events.store, settings['SILO_ID']!, memberId,
+    undefined, performance.now() + 10_000);
+  for (const fact of membership.facts) {
+    if (!await authz.applied(fact.event.id)) {
+      return false;
+    }
+  }
+  return membership.role === 'owner';
+}
 try {
   const seedSequence = await events.store.head(`ownership-${settings['SILO_ID']!}`);
   assert.equal(seedSequence, 0, 'Dev owner bootstrap is refused after ownership seeding');
@@ -80,6 +92,9 @@ try {
     return row?.status === 'joined' && row.role === 'owner';
   });
   await waitFor(async () => (await authz.check(memberId, 'owner')).allowed);
+  // Finish ownership setup before startup admits the owner's first checked command.
+  await seedOwnership(events.store, settings['SILO_ID']!);
+  await waitFor(ownershipApplied);
   const row = await member();
   console.log(`PASS dev-only owner bootstrap: ${row?.member_id} ${row?.role}; OpenFGA owner=true`);
 } finally {

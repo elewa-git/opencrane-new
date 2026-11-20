@@ -1,5 +1,22 @@
 # Packaged connected-provider journey
 
+## Current correction — 20 November 2026 UTC
+
+The first diagnostic run on source `0e216de4f` is **FAIL** at the admin invitation.
+The owner signed in, then the invitation request returned HTTP 503. Its retained
+safe assertion records `503 !== 200`. Service logs show the ownership permission
+update completed after that request. No provider key was entered. Startup and
+service logs were copied before teardown; package teardown and slot release passed.
+See [the diagnostic result](live/round-3-attempt-1.json) and
+[the safe failure](live/round-3-attempt-1-failure.txt).
+
+Test-first `ad5387c80` reproduces bootstrap reporting success with no ownership seed,
+using real NATS and OpenFGA. Bootstrap now seeds ownership and uses its existing
+readiness wait to require all current owner permission receipts. The initial owner
+permission check stays in place. No invitation is resent and no timeout is raised.
+The corrected fresh packaged journey remains **NOT RUN** pending approved images
+and another complete clear slot/load window. Paid calls and paid cents remain zero.
+
 Latest fresh packaged journey at head `195414ef71ffe3e8a65a7b5c2d32d26eeed89cd6`:
 **FAIL** during Settings setup. It passed package startup, sign-in, and the visible key
 field checks at both widths. The runner recorded `errorType: Error` but no more specific

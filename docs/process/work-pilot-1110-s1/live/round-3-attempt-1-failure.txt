@@ -1,0 +1,6 @@
+AssertionError [ERR_ASSERTION]: The owner can invite a separate journey identity
+
+503 !== 200
+
+    at invite (file://[worktree]/infra/package/provider-journey.test.mjs:128:10)
+    at async file://[worktree]/infra/package/provider-journey.test.mjs:377:17

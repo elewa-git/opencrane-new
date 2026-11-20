@@ -1,48 +1,12 @@
 {
   "status": "FAIL",
-  "source": "195414ef71ffe3e8a65a7b5c2d32d26eeed89cd6",
+  "source": "0e216de4ff012e5b658ac75aab56f7e34c0082f3",
   "outcomes": [
     {
-      "check": "Fresh packaged namespace and approved-image installation",
-      "result": "PASS"
-    },
-    {
-      "check": "Owner, admin and member sign-in; Settings screenshots at 1280 and 390 px",
-      "result": "PASS"
-    },
-    {
-      "check": "One visible new-key field at both widths",
-      "result": "PASS"
-    },
-    {
-      "check": "Settings setup",
+      "check": "admin invitation and sign-in",
       "result": "FAIL",
-      "errorType": "Error",
-      "detail": "The runner did not record a more specific failed check."
-    },
-    {
-      "check": "Wrong-key HTTP 401 refusal and disclosure check",
-      "result": "NOT RUN"
-    },
-    {
-      "check": "Right key, quoted test, model selection and switch-on",
-      "result": "NOT RUN"
-    },
-    {
-      "check": "Synthetic key modes and bytes before and after Pod recreation",
-      "result": "NOT RUN"
-    },
-    {
-      "check": "Member replies at 1280 and 390 px",
-      "result": "NOT RUN"
-    },
-    {
-      "check": "Sanitised logs and screenshots copied before teardown",
-      "result": "PASS"
-    },
-    {
-      "check": "Package teardown and secondary slot release",
-      "result": "PASS"
+      "errorType": "AssertionError",
+      "detail": "The separate admin must accept the owner invitation."
     }
   ],
   "paidCalls": 0,

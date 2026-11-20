@@ -9,3 +9,5 @@ chat default and switch on from Settings. A restricted, separate free provider
 supports packaged qualification with wrong-key refusal and ordinary key custody.
 Provider journey failures name the step and expected condition without copying
 credentials or private paths into the public result.
+Fresh owner bootstrap finishes applying ownership permissions before opening the
+installation for checked owner commands.
