@@ -26,8 +26,10 @@ async function capturesBeforeClosing() {
     async function run() {
       await page.getByText('Missing draft').waitFor({ timeout: 50 });
     }
-    async function capture(error) {
-      failure = await captureJourneyFailure(page, error, options);
+    async function capture(error, failedContext) {
+      assert(failedContext === context, 'Failure capture received another browser context');
+      const failedPage = failedContext.pages().at(-1);
+      failure = await captureJourneyFailure(failedPage, error, options);
     }
     await assert.rejects(closeAfterJourney(context, run, capture), { name: 'TimeoutError' });
     assert.equal(page.isClosed(), true);
