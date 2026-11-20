@@ -93,6 +93,33 @@ async function followsAutomaticAdvance(): Promise<void> {
 test('new-key setup follows automatic advancement while Check status is disabled at both widths',
   followsAutomaticAdvance);
 
+async function followsAdvanceDuringStatusClick(): Promise<void> {
+  const browser = await chromium.launch({ headless: true });
+  const pendingControl = '<button onclick="showKey()">Check status</button>';
+  const advancingControl = '<button style="margin-left:100px" ' +
+    'onpointerover="showKey()" onclick="showKey()">Check status</button>';
+  const advancingFixture = fixture.replace(pendingControl, advancingControl);
+  try {
+    for (const width of [1280, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      page.setDefaultTimeout(1000);
+      await page.setContent(advancingFixture);
+      await createProviderConnection(page, 'Package free provider');
+      await enterProviderKey(page, 'synthetic-fixture-key');
+      const setup = page.getByRole('dialog', { name: 'Connect a provider', exact: true });
+      const key = setup.getByLabel('API key Required', { exact: true });
+      assert.equal(await key.isVisible(), true);
+      assert.equal(await key.inputValue(), 'synthetic-fixture-key');
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+test('setup advances while the status click loses its button at both widths',
+  followsAdvanceDuringStatusClick);
+
 async function checksOnlyOpenSetup(): Promise<void> {
   const browser = await chromium.launch({ headless: true });
   try {
