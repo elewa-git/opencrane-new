@@ -25,7 +25,8 @@ async function refuseInvalidSessions() {
   function writeLog(line: string) {
     logLines.push(line);
   }
-  const fixture = await viewFixture(openDesktop, undefined, { write: writeLog });
+  const logDestination = { write: writeLog };
+  const fixture = await viewFixture(openDesktop, undefined, logDestination);
   try {
     const { app, config, nats } = fixture;
     const wrongOrganisationArguments = {
