@@ -924,10 +924,17 @@ test('provider storage avoids recursive remount changes and checks modes before 
 function assertPrivateProviderMounts(resources) {
   const mounts = [];
   for (const resource of resources.values()) {
-    const pod = resource.spec?.template?.spec;
-    for (const container of [...(pod?.initContainers ?? []), ...(pod?.containers ?? [])]) {
+    const pod = resource.kind === 'Pod' ? resource.spec :
+      resource.spec?.jobTemplate?.spec?.template?.spec ?? resource.spec?.template?.spec;
+    const claims = new Map();
+    for (const volume of pod?.volumes ?? []) {
+      claims.set(volume.name, volume.persistentVolumeClaim?.claimName);
+    }
+    const containers = [...(pod?.initContainers ?? []), ...(pod?.containers ?? []),
+      ...(pod?.ephemeralContainers ?? [])];
+    for (const container of containers) {
       for (const mount of container.volumeMounts ?? []) {
-        if (mount.name === 'provider-secrets') {
+        if (claims.get(mount.name) === 'provider-secrets') {
           mounts.push({ container: container.name, ...mount });
         }
       }
