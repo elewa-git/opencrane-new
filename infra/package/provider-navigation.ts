@@ -10,6 +10,8 @@ export async function navigateWithReplies(page: Page, url: string,
 
 export async function finishBrowserReplies(browser: Browser,
   replies: Promise<void>[]): Promise<void> {
+  // Read current bodies before closing, then check replies that finish during shutdown.
   await Promise.all(replies);
   await browser.close();
+  await Promise.all(replies);
 }

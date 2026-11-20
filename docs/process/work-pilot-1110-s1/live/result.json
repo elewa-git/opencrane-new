@@ -21,11 +21,12 @@
   ],
   "errorType": "Error",
   "reason": "Chromium discarded a response body during navigation",
-  "latestFix": {
+  "paidCalls": 0,
+  "paidCents": 0,
+  "navigationFix": {
     "source": "5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d",
     "journey": "NOT RUN",
     "reason": "The two-hour queue window ended without another complete low-load window"
   },
-  "paidCalls": 0,
-  "paidCents": 0
+  "completionGuardJourney": "NOT RUN: added after the queue cutoff"
 }

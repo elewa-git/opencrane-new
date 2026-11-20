@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
-import { navigateWithReplies } from './provider-navigation.ts';
+import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
 import { createProviderConnection, providerSetup, saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
@@ -364,7 +364,8 @@ try {
   await memberChats(member);
   stage = 'credential disclosure checks';
   await checkDisclosure();
-  await Promise.all(responses);
+  await finishBrowserReplies(browser, responses);
+  browser = undefined;
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'PASS', source: git.stdout.trim(),
     outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
