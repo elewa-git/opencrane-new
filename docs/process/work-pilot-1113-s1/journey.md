@@ -2,7 +2,8 @@
 
 Journey on a fresh dev stack: NOT RUN
 
-Date: 20 November 2026. Source implementation: `08071525c`.
+Date: 20 November 2026. Source implementation: `32dc94d96`, rebased onto
+`c791103b3`. The source gates were repeated after the rebase.
 
 ## Installation precheck
 
