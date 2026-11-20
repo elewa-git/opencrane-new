@@ -82,7 +82,8 @@ async function rejectTemporaryPostgres() {
     expect(probe(container, 'pg_isready -U postgres')).toBe(0);
     const configuredProbe = definition.healthcheck.test[1];
     expect(probe(container, configuredProbe)).toBe(2);
-    const releaseArgs = ['exec', container, 'sh', '-c', 'printf "ready\\n" > /tmp/finish-init'];
+    const releaseArgs = ['exec', '--user', 'postgres', container, 'sh', '-c',
+      'printf "ready\\n" > /tmp/finish-init'];
     await docker(releaseArgs);
     function finalServerReady() {
       return probe(container, 'pg_isready -h 127.0.0.1 -U postgres') === 0;
