@@ -1,6 +1,53 @@
 # Install hardening journey
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: NOT RUN
+
+Round 2, 20 November 2026. Product fix: `f4ce844c1`; test-first commit: `c9a572b19`.
+The local source gates pass. The complete packaged journey on the fixed source
+is pending CI and both image approvals. The earlier full qualification below remains FAIL.
+No independent-review verdict is claimed.
+
+## Reproduced workspace failure
+
+A separate fresh packaged diagnostic used the previously approved source
+`81bf17f5c53adca14ae310618684c319ec45edd1`. Both secondary slots were free and
+one-minute load stayed below 6 for more than five minutes before the claim.
+It repeated all nine pre-Helm refusals, both real wrong-organisation checks,
+zero member/event creation, first-owner claim, wrong-token refusal, token reuse
+and Secure/HttpOnly owner cookies. This diagnostic did not run admin/member chat.
+
+The computer worker recorded `assistant.created` at 15:14:17 UTC and
+`computer.ready` at 15:14:35 UTC. The open workspace still showed no assistant
+and no usable composer. A direct `GET /api/chat` returned 200 with an assigned
+assistant. One manual reload made the composer visible and enabled. See the
+[recorded checks](diagnostic/reload-diagnosis.json),
+[page before reload](diagnostic/before-manual-reload.png),
+[page after reload](diagnostic/after-manual-reload.png) and
+[provisioning times](diagnostic/provisioning.log).
+
+The server could read the projection. The browser had read `/api/chat` only once
+and opened its live connection only after a conversation was selected or created.
+An empty assistant assignment was a successful read, so read-failure recovery
+never refreshed it. The new `chat-context` subscription uses the HTTP context
+builder and the existing session, active membership and `acts_for` checks. The
+browser applies its own assignment and closes this subscription once assigned.
+No retry, sleep, longer timeout or forced reload was added to the product.
+The manual reload above is diagnostic evidence, not a passing product journey.
+
+One-minute load ranged from 2.26 to 10.71 during the diagnostic, including startup
+and cleanup. The peak sample was at 15:15:36 UTC. The
+[30-second load samples](diagnostic/load-during-run.log) and
+[admission log](diagnostic/capacity.log) retain the measurements.
+The retained dispatcher log contains no timeout or pool-error line; see the
+[dispatcher check](diagnostic/dispatcher-load-check.txt).
+This short run does not qualify sustained load.
+
+[Safe logs and outcomes](diagnostic/outcomes.json) were kept before teardown.
+The package, its slot claim and its temporary sign-in app were removed.
+
+## Earlier full qualification
+
+The remaining sections retain the failed full qualification from the previous round.
 
 Date: 20 November 2026. Packaged source:
 `77fc69f35a6b65cc94bf263ddefa121488ad75c1`, rebased onto `ed3662d85`.
@@ -136,9 +183,8 @@ The failure screenshot shows that state after provisioning completed.
 The workspace reads its context when opened. An initially absent assignment is
 not a read failure, so the existing read-failure recovery does not refresh it.
 No browser reload, request retry, sleep, longer timeout or product change was used
-to turn this result into a pass. Whether this first-owner handoff should wait,
-update itself or explicitly lead the person through a refresh remains unresolved
-in this round. A further speculative qualification attempt was not made.
+to turn this result into a pass. The later manual-reload diagnostic above confirms the missing live update.
+The fix now watches the personal assignment while the workspace is unassigned.
 
 ## Accepted local host gap
 

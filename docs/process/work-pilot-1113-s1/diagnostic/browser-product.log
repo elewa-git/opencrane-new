@@ -1,0 +1,4 @@
+PASS wrong token refused without retaining the input
+PASS one-time token creates the first owner
+PASS used token refuses a second owner claim
+PASS diagnosis only: projected assignment appears after manual reload
