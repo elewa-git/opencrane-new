@@ -340,6 +340,9 @@ The shared transport accepts successful push, schedule or manual runs; this work
 produces push and manual runs. Only output for the exact checkout revision and branch
 grants approval. Preflight fetches it again from github.com and requires both application
 roles to match its digest.
+The workflow listing filters by source and branch. The consumer checks each run's completed
+status and successful conclusion because GitHub's `status=success` listing has omitted a
+successful exact-source run.
 Local files, replacement pins and inherited enterprise GitHub routing cannot approve images.
 A separate `natsCluster` review still requires three replicas and matching role bindings.
 

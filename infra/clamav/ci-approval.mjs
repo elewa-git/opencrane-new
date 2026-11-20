@@ -30,8 +30,10 @@ function requireApproval(condition) {
 
 function approvedRun(revision, branch, name) {
   const workflow = `.github/workflows/${name}-package.yml`;
+  // GitHub can omit a successful run when the listing uses status=success.
+  // Check each returned run's status and exact source below instead.
   const query = `repos/${repository}/actions/workflows/${name}-package.yml/runs` +
-    `?status=success&head_sha=${revision}&branch=${encodeURIComponent(branch)}&per_page=20`;
+    `?head_sha=${revision}&branch=${encodeURIComponent(branch)}&per_page=20`;
   const result = JSON.parse(run('gh', ['api', '--hostname=github.com', query]));
   for (const candidate of result.workflow_runs) {
     if (candidate.status !== 'completed' || candidate.conclusion !== 'success') continue;
