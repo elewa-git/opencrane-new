@@ -1,5 +1,36 @@
 # Install hardening source checks
 
+## Round 3 source checks and live result
+
+Own checks only. No independent-review verdict is claimed. Product TypeScript
+is unchanged after `bf0a059d8`; the final token-probe commits change host-side
+qualification only. All tests, lint and typechecks ran under `nice -n 10`.
+No full root suite ran locally.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Fast-Enter regression plus composer/workspace/direct-chat scope, twice | PASS | 230/230 each; [red](round-3-final/checks/composer-red.txt), [first](round-3-final/checks/composer-green-1.txt), [second](round-3-final/checks/composer-green-2.txt) |
+| Changed infrastructure base scope, twice | PASS | 646/646 each; [first](round-3-final/checks/package-1.txt), [second](round-3-final/checks/package-2.txt) |
+| Final qualification scope, twice | PASS | 8/8 each; [first](round-3-final/checks/token-probe-green-1.txt), [second](round-3-final/checks/token-probe-green-2.txt) |
+| Earlier changed browser scope, twice | PASS | 167/167 each |
+| Focused server context scope, twice | PASS | 2/2 each |
+| Bootstrap scope, twice | PASS | 38/38 each |
+| Complete workspace/package/dev-stack typecheck | PASS | [Local output](round-3-final/checks/typecheck-product.txt); exact-product CI also passed |
+| Event catalogue | PASS | [174 types](round-3-final/checks/events.txt) |
+| Knip | PASS | [No unused-code finding](round-3-final/checks/knip.txt); two existing configuration hints |
+| Scoped product ESLint and supplemental JavaScript/style checks | PASS | No warnings; infrastructure's normal ignore is unchanged |
+| Changelog, Markdown, README structure and whole-stream reads | PASS | [Check receipts](round-3-final/checks/) |
+| Privacy and secret scans | PASS | Run before each push; retained evidence paths use placeholders |
+| Exact-product CI and both real image approval consumers | PASS | `bf0a059d8`; installed digests in the final receipt |
+| Latest fresh packaged journey | FAIL | [Member 390 px reply stalled](round-3-final/receipt.md) |
+| Corrected member token reuse and unchanged-role checks live | NOT RUN | Stopped at the failed chat; strict fixture tests pass |
+
+The safe failure reason and masked screenshot were captured in both later failed
+runs. The exact executable-import test also prevents the missing-helper startup
+fault seen in the first attempt. The latest dispatcher restart cause and a full
+fresh PASS remain outstanding. The earlier checks below retain their own source
+bindings and do not replace this FAIL.
+
 ## Personal assignment updates
 
 Round 2, 20 November 2026. Test-first commit `c9a572b19` reproduces the missing

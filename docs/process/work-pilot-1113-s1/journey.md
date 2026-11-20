@@ -2,6 +2,27 @@
 
 Journey on a fresh dev stack: FAIL
 
+## Latest round 3 result
+
+20 November 2026. The fresh install from approved product `bf0a059d8` remains
+FAIL at member chat at 390 px. All nine refusals, wrong-organisation sign-in,
+owner token checks, owner/admin chat and cookies at both widths, member 1280 px
+chat and cookies, and member 390 px cookies passed. The initial empty owner
+workspace also received its assignment without a reload. The corrected member
+token-reuse probe is NOT RUN because chat failed first.
+
+The safe reason is `member 390px reply`, `BROWSER_TIMEOUT`, screenshot `PASS`.
+Creation returned HTTP 200, but no message POST followed. The content projection
+finished in 14 ms; the dispatcher restarted three times and its permission queue
+recorded PostgreSQL pool timeouts. The precise restart cause remains unconfirmed.
+No retry, timeout increase or weakened check was used. All owned resources were
+removed after current service logs and screenshots were retained. Sampled load
+was 1.15–4.56. See the [final round receipt](round-3-final/receipt.md).
+
+The rapid-Enter regression is fixed test-first, but the original member failure
+also accepted creation before its list catch-up stalled. It is not claimed fixed.
+The overall journey remains FAIL; this draft must not merge.
+
 ## Latest correction attempt
 
 20 November 2026, 22:15 UTC. Source `48a44288f` had green CI and both real

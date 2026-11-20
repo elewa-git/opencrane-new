@@ -1,0 +1,3 @@
+npm notice run lint:reads
+npm notice run node scripts/check-whole-stream-reads.mjs
+Whole-stream reads — known: 310; rebuild: 5.

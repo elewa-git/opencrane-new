@@ -165,6 +165,8 @@ before closing its browser context.
 Its tracked `tls-cleanup.mjs` and `join-handoff.mjs` helpers close tunnels and
 prepare joined access. The executable-import test reaches the slot refusal before
 configuration, so missing local imports fail without starting a stack.
+The original owner's reuse must return `token_used`. The member probe requires
+HTTP 409 with `owner_exists` and verifies that both identities keep their roles.
 Screenshots mask form inputs, including sign-in and token fields. Screenshot failure
 is recorded separately and never replaces the original journey failure.
 

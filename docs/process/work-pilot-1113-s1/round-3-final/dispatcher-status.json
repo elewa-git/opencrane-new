@@ -1,0 +1,27 @@
+{
+  "restartCount": 3,
+  "lastState": {
+    "terminated": {
+      "containerID": "containerd://3deb3f60ff510b01e89fef5f67b9778db28410b3696ef4b30b68d219fdeed107",
+      "exitCode": 1,
+      "finishedAt": "2026-11-20T23:21:21Z",
+      "reason": "Error",
+      "startedAt": "2026-11-20T23:20:53Z"
+    }
+  },
+  "state": {
+    "running": {
+      "startedAt": "2026-11-20T23:21:49Z"
+    }
+  },
+  "resources": {
+    "limits": {
+      "cpu": "300m",
+      "memory": "384Mi"
+    },
+    "requests": {
+      "cpu": "20m",
+      "memory": "64Mi"
+    }
+  }
+}
