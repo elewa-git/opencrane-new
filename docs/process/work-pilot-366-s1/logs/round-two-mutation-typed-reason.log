@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: unknown override values fail closed
+not ok 1 - unknown override values fail closed
+  ---
+  duration_ms: 6.582461
+  type: 'test'
+  location: '<isolated-copy>/infra/dev-stack/package-hosts.test.ts:91:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Unknown host-risk override; omit OPENCRANE_ACCEPT_DEV_HOST_RISK',
+    +   reason: undefined
+    -   reason: 'unknown_override'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unknown_override'
+    message:
+  actual:
+  error: 'Unknown host-risk override; omit OPENCRANE_ACCEPT_DEV_HOST_RISK'
+  stack: |-
+    checkPackageHosts (file://<isolated-copy>/infra/dev-stack/package-hosts.ts:179:11)
+    check (file://<isolated-copy>/infra/dev-stack/package-hosts.test.ts:94:11)
+    waitForActual (node:assert:630:21)
+    Function.rejects (node:assert:767:31)
+    TestContext.invalidOverride (file://<isolated-copy>/infra/dev-stack/package-hosts.test.ts:96:16)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.invalidOverride (file://<isolated-copy>/infra/dev-stack/package-hosts.test.ts:96:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 275.321303

@@ -140,3 +140,12 @@ The separate fresh core stack passed its built-in journey at both browser widths
 Private fleet receipt `core-20261120-0441` holds the startup log, 16 service
 logs and screenshots copied before teardown. Both claimed slots were released.
 The [journey receipt](journey.md) gives the individual outcomes and limits.
+
+## Final review fixes
+
+The [fix receipt](round-two.md) records all four findings, failing-first and
+mutation evidence, and the local gates. Host and override identity tests passed
+twice with 41 cases per run. Removing each of the seven authority guards failed
+its own refusal test; the node-binding, UID and typed-reason mutations also
+failed their named tests. The installer behaviour is unchanged, so the authorised
+journey rerun is **NOT RUN** and the existing recorded journeys remain **PASS**.

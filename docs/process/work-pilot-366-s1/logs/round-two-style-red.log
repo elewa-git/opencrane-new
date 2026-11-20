@@ -1,0 +1,9 @@
+# Subtest: host parsing names separate intermediate values
+not ok 1 - host parsing names separate intermediate values
+# Subtest: identity parsing names endpoint and prefix-stripped name
+not ok 2 - identity parsing names endpoint and prefix-stripped name
+# Subtest: newcomer diagram has at most eight boxes and retains host check
+not ok 3 - newcomer diagram has at most eight boxes and retains host check
+# tests 3
+# pass 0
+# fail 3

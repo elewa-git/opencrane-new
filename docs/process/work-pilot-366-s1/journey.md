@@ -63,3 +63,13 @@ chat, live view, audit and budget checks at both 390 px and 1280 px. The
 workspace screenshot at 1280 px was inspected. Ten screenshots, startup output
 and 16 service logs were copied to private fleet receipt `core-20261120-0441`
 before `down.sh`. Teardown exited zero and the slot was free.
+
+## Behaviour-preserving review fixes
+
+Journey rerun: **NOT RUN**, as authorised for these review fixes. The source diff
+`d52da1d372080e71bee0ea7b7656505547da72fa..700007b4d394e0ac2e7eca3e48d052a357bffc9c`
+strengthens fixtures, adds internal typed refusal reasons, names parsing steps
+and simplifies the package diagram. Installer decisions, operator output,
+commands and record contents are unchanged. The packaged and core journeys above
+remain **PASS** on their recorded source. No secondary stack was claimed for
+these fixes. See the [fix receipt](round-two.md) for tests and mutation evidence.

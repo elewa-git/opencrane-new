@@ -1,0 +1,28 @@
+TAP version 13
+# Subtest: host parsing names separate intermediate values
+ok 1 - host parsing names separate intermediate values
+  ---
+  duration_ms: 2.145049
+  type: 'test'
+  ...
+# Subtest: identity parsing names endpoint and prefix-stripped name
+ok 2 - identity parsing names endpoint and prefix-stripped name
+  ---
+  duration_ms: 0.718885
+  type: 'test'
+  ...
+# Subtest: newcomer diagram has at most eight boxes and retains host check
+ok 3 - newcomer diagram has at most eight boxes and retains host check
+  ---
+  duration_ms: 0.770945
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 167.120682

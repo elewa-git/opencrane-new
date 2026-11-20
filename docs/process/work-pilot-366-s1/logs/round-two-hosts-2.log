@@ -1,0 +1,256 @@
+TAP version 13
+# Subtest: check every target node, clean up probes and record each result
+ok 1 - check every target node, clean up probes and record each result
+  ---
+  duration_ms: 28.459813
+  type: 'test'
+  ...
+# Subtest: refuse a failing second node before installation and clean its probe
+ok 2 - refuse a failing second node before installation and clean its probe
+  ---
+  duration_ms: 6.964744
+  type: 'test'
+  ...
+# Subtest: package refusal shows F1 and F2 fixes without exposing unrelated errors
+ok 3 - package refusal shows F1 and F2 fixes without exposing unrelated errors
+  ---
+  duration_ms: 6.157761
+  type: 'test'
+  ...
+# Subtest: a dev override cannot waive checks for a remote node
+ok 4 - a dev override cannot waive checks for a remote node
+  ---
+  duration_ms: 2.587626
+  type: 'test'
+  ...
+# Subtest: unknown override values fail closed
+ok 5 - unknown override values fail closed
+  ---
+  duration_ms: 0.948257
+  type: 'test'
+  ...
+# Subtest: local accepted exception is explicit and retained with both failures
+ok 6 - local accepted exception is explicit and retained with both failures
+  ---
+  duration_ms: 5.819465
+  type: 'test'
+  ...
+# Subtest: an unreadable node refuses and removes its probe
+ok 7 - an unreadable node refuses and removes its probe
+  ---
+  duration_ms: 3.181759
+  type: 'test'
+  ...
+# Subtest: target changes during probes refuse installation
+ok 8 - target changes during probes refuse installation
+  ---
+  duration_ms: 4.610585
+  type: 'test'
+  ...
+# Subtest: probe Pods have only read-only host mounts and no service token
+ok 9 - probe Pods have only read-only host mounts and no service token
+  ---
+  duration_ms: 7.517286
+  type: 'test'
+  ...
+# Subtest: a matching local container name cannot waive another cluster node
+ok 10 - a matching local container name cannot waive another cluster node
+  ---
+  duration_ms: 4.051628
+  type: 'test'
+  ...
+# Subtest: override authority requires Docker-context Unix endpoint
+ok 11 - override authority requires Docker-context Unix endpoint
+  ---
+  duration_ms: 4.200911
+  type: 'test'
+  ...
+# Subtest: override authority requires permitted k3d name
+ok 12 - override authority requires permitted k3d name
+  ---
+  duration_ms: 2.580046
+  type: 'test'
+  ...
+# Subtest: override authority requires container count
+ok 13 - override authority requires container count
+  ---
+  duration_ms: 2.463874
+  type: 'test'
+  ...
+# Subtest: override authority requires exact container name
+ok 14 - override authority requires exact container name
+  ---
+  duration_ms: 4.184828
+  type: 'test'
+  ...
+# Subtest: override authority requires Running container
+ok 15 - override authority requires Running container
+  ---
+  duration_ms: 5.324732
+  type: 'test'
+  ...
+# Subtest: override authority requires cluster label
+ok 16 - override authority requires cluster label
+  ---
+  duration_ms: 1.849767
+  type: 'test'
+  ...
+# Subtest: override authority requires DOCKER_HOST Unix endpoint
+ok 17 - override authority requires DOCKER_HOST Unix endpoint
+  ---
+  duration_ms: 3.545371
+  type: 'test'
+  ...
+# Subtest: swap off and crash dumps off pass
+ok 18 - swap off and crash dumps off pass
+  ---
+  duration_ms: 4.439512
+  type: 'test'
+  ...
+# Subtest: active plain encrypted swap with a boot random key passes
+ok 19 - active plain encrypted swap with a boot random key passes
+  ---
+  duration_ms: 1.300869
+  type: 'test'
+  ...
+# Subtest: refuse unencrypted swap with the exact F1 fix
+ok 20 - refuse unencrypted swap with the exact F1 fix
+  ---
+  duration_ms: 0.788199
+  type: 'test'
+  ...
+# Subtest: refuse unverified mapper with the exact F1 fix
+ok 21 - refuse unverified mapper with the exact F1 fix
+  ---
+  duration_ms: 0.487865
+  type: 'test'
+  ...
+# Subtest: refuse malformed swap list with the exact F1 fix
+ok 22 - refuse malformed swap list with the exact F1 fix
+  ---
+  duration_ms: 0.288756
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption ""
+ok 23 - refuse unproved boot encryption ""
+  ---
+  duration_ms: 0.402093
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /etc/swap.key plain,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 24 - refuse unproved boot encryption "cryptswap /dev/sda2 /etc/swap.key plain,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.264098
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom luks,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 25 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom luks,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.239028
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom swap,cipher=aes-xts-plain64,size=256\\n"
+ok 26 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.736583
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,cipher=aes-xts-plain64,size=256\\n"
+ok 27 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.978905
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,noauto,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 28 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,noauto,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.55711
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\ncryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 29 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\ncryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.221053
+  type: 'test'
+  ...
+# Subtest: a crypttab name alone cannot prove active encryption
+ok 30 - a crypttab name alone cannot prove active encryption
+  ---
+  duration_ms: 0.309905
+  type: 'test'
+  ...
+# Subtest: every active swap entry must pass
+ok 31 - every active swap entry must pass
+  ---
+  duration_ms: 0.302372
+  type: 'test'
+  ...
+# Subtest: refuse crash output "|/usr/share/apport/apport %p\\n" with the F2 fix
+ok 32 - refuse crash output "|/usr/share/apport/apport %p\\n" with the F2 fix
+  ---
+  duration_ms: 0.367862
+  type: 'test'
+  ...
+# Subtest: refuse crash output "|/bin/false\\n" with the F2 fix
+ok 33 - refuse crash output "|/bin/false\\n" with the F2 fix
+  ---
+  duration_ms: 2.377319
+  type: 'test'
+  ...
+# Subtest: refuse crash output "core\\n" with the F2 fix
+ok 34 - refuse crash output "core\\n" with the F2 fix
+  ---
+  duration_ms: 0.215999
+  type: 'test'
+  ...
+# Subtest: refuse crash output "/var/crash/core.%p\\n" with the F2 fix
+ok 35 - refuse crash output "/var/crash/core.%p\\n" with the F2 fix
+  ---
+  duration_ms: 0.153238
+  type: 'test'
+  ...
+# Subtest: refuse crash output "/dev/null\\n" with the F2 fix
+ok 36 - refuse crash output "/dev/null\\n" with the F2 fix
+  ---
+  duration_ms: 0.175957
+  type: 'test'
+  ...
+# Subtest: refuse crash output " \\n" with the F2 fix
+ok 37 - refuse crash output " \\n" with the F2 fix
+  ---
+  duration_ms: 0.148796
+  type: 'test'
+  ...
+# Subtest: refuse crash output "" with the F2 fix
+ok 38 - refuse crash output "" with the F2 fix
+  ---
+  duration_ms: 0.137131
+  type: 'test'
+  ...
+# Subtest: empty pattern with PID suffix still persists a dump
+ok 39 - empty pattern with PID suffix still persists a dump
+  ---
+  duration_ms: 0.253458
+  type: 'test'
+  ...
+# Subtest: report both host failures together
+ok 40 - report both host failures together
+  ---
+  duration_ms: 0.346724
+  type: 'test'
+  ...
+# Subtest: read fixture host files without changing them, and refuse missing observations
+ok 41 - read fixture host files without changing them, and refuse missing observations
+  ---
+  duration_ms: 5.36869
+  type: 'test'
+  ...
+1..41
+# tests 41
+# suites 0
+# pass 41
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 381.648921

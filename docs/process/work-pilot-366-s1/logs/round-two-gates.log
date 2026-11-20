@@ -1,0 +1,73 @@
+Full typecheck: PASS (exit 0)
+npm notice run typecheck
+npm notice run npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack
+npm notice run typecheck
+npm notice run tsc --noEmit
+npm notice run @opencrane/demo-mcp@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run @opencrane/odoo-mcp@0.1.0 typecheck
+npm notice run @opencrane/ops@0.1.0 typecheck
+npm notice run @opencrane/server@0.1.0 typecheck
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck
+npm notice run typecheck:package
+npm notice run tsc --noEmit -p infra/package/tsconfig.json
+npm notice run typecheck:dev-stack
+npm notice run tsc --noEmit -p infra/dev-stack/tsconfig.json
+
+Final dev-stack typecheck: PASS (exit 0)
+npm notice run typecheck:dev-stack
+npm notice run tsc --noEmit -p infra/dev-stack/tsconfig.json
+
+Final package typecheck: PASS (exit 0)
+npm notice run typecheck:package
+npm notice run tsc --noEmit -p infra/package/tsconfig.json
+
+Event catalogue: PASS (exit 0)
+npm notice run check:events
+npm notice run node --experimental-strip-types scripts/check-event-catalogue.mjs
+check:events — OK: 174 event types agree between the registry and the catalogue.
+
+Knip: PASS (exit 0)
+npm notice run npx
+npm notice run 'knip'
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+
+Changelog lint: PASS (exit 0)
+npm notice run lint:changelog
+npm notice run node scripts/changelog-gather.mjs --check
+
+Supplementary scoped ESLint: PASS (exit 0)
+npm notice run npx
+npm notice run 'eslint' --config /tmp/pilot-366-eslint.config.mjs --max-warnings 0 infra/dev-stack/package-hosts.ts infra/dev-stack/package-hosts.test.ts infra/package/host-preflight.mjs
+
+Markdown lint: PASS (exit 0)
+npm notice run npx
+npm notice run 'markdownlint-cli2'
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: *.md docs/**/*.md spikes/README.md spikes/*/README.md apps/*/README*.md libs/*/README*.md infra/*/README*.md tools/*/README*.md !docs/design/chat/README.robot.md !docs/design/handoff-v2/[0-9]*/README.robot.md
+Linting: 564 files
+Summary: 0 issues in 0 files
+
+README lint: PASS (exit 0)
+Folder READMEs pass; package and robot exceptions match the baseline.
+
+Privacy check: PASS (exit 0)
+PASS: tracked text contains no private owner email or host home directory
+
+Staged secret scan: PASS (exit 0)
+secret-scan: CLEAN
+
+Source commit secret scan: PASS (exit 0)
+secret-scan: CLEAN

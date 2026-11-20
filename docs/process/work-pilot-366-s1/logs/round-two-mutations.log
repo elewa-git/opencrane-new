@@ -1,0 +1,10 @@
+node-binding: PASS; own test fails with rule removed
+docker-host: PASS; own test fails with rule removed
+docker-context: PASS; own test fails with rule removed
+permitted-name: PASS; own test fails with rule removed
+container-count: PASS; own test fails with rule removed
+exact-name: PASS; own test fails with rule removed
+running: PASS; own test fails with rule removed
+cluster-label: PASS; own test fails with rule removed
+uid: PASS; own test fails with rule removed
+typed-reason: PASS; own test fails with rule removed
