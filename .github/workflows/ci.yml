@@ -176,7 +176,7 @@ jobs:
           infra/dev-stack/zitadel-setup.test.ts infra/dev-stack/zitadel-errors.test.ts
           infra/package/fresh-twice.test.ts
           infra/package/browser-capture.test.ts infra/package/journey-*.test.ts
-          infra/package/qualification-failure.test.mjs
+          infra/package/qualification-*.test.mjs
           infra/package/company-qualification.test.ts
           infra/package/nats-placement.test.ts
           infra/package/nats-placement-collect.test.ts
