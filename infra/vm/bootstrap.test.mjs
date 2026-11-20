@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 
@@ -24,12 +24,15 @@ function successful(result) {
   return result.stdout;
 }
 
-test('shellcheck accepts bootstrap and the shared runtime helper', function checkShell() {
-  execFileSync('shellcheck', ['infra/vm/bootstrap.sh', 'infra/devbox/runtime.sh'], { cwd: root });
-});
+function checkShell() {
+  const files = ['infra/vm/bootstrap.sh', 'infra/devbox/runtime.sh', 'infra/devbox/setup.sh'];
+  const checked = spawnSync('shellcheck', files, { cwd: root, encoding: 'utf8' });
+  successful(checked);
+}
 
-test('dry run prints node protection, downloads, runtime and storage without writing', function dry() {
-  const output = successful(container('', ['--dry-run']));
+function dry() {
+  const result = container('', ['--dry-run']);
+  const output = successful(result);
   for (const step of ['swapoff', 'core_pattern', 'kdump', 'sha256sum', 'runsc',
     'k3s.service', 'gvisor', 'local-path', 'agent-sandbox', 'ready']) {
     assert.ok(output.includes(step), `Missing dry-run step: ${step}`);
@@ -38,7 +41,7 @@ test('dry run prints node protection, downloads, runtime and storage without wri
     test ! -e /etc/rancher/k3s
     test ! -e /var/lib/opencrane-vm`, ['--dry-run']);
   successful(checked);
-});
+}
 
 const refusals = [
   ['Docker binary', 'mkdir -p /usr/local/bin; touch /usr/local/bin/docker; chmod +x /usr/local/bin/docker'],
@@ -49,28 +52,29 @@ const refusals = [
   ['microk8s', 'mkdir -p /var/snap/microk8s'],
 ];
 
-for (const [name, setup] of refusals) {
-  test(`refuses ${name} before mutation, including in dry run`, function refuse() {
+function registerRefusal(name, setup) {
+  function refuse() {
     for (const args of [[], ['--dry-run']]) {
       const result = container(setup, args);
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, /Refusing existing/);
       assert.doesNotMatch(result.stdout, /apt-get|swapoff|Download/);
     }
-  });
+  }
+  test(`refuses ${name} before mutation, including in dry run`, refuse);
 }
 
-test('refuses unsupported OS and unknown options', function invalidInput() {
+function invalidInput() {
   const result = container('printf "ID=debian\\nVERSION_ID=12\\n" > /etc/os-release');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Ubuntu/);
   assert.equal(container('', ['--unknown']).status, 2);
-});
+}
 
 const fakeHost = `
 mkdir -p /fixture-bin
 export PATH=/fixture-bin:$PATH
-for program in apt-get swapoff sysctl systemctl tar; do
+for program in apt-get swapoff sysctl systemctl tar kexec; do
   printf '#!/bin/sh\\nexit 0\\n' > /fixture-bin/$program
   chmod +x /fixture-bin/$program
 done
@@ -87,7 +91,7 @@ CURL
 chmod +x /fixture-bin/*
 `;
 
-test('rerun keeps the same configuration on its own simulated host', function idempotent() {
+function idempotent() {
   const commands = fakeHost + `
     bash ${script} >/dev/null
     mkdir -p /var/lib/kubelet
@@ -101,5 +105,26 @@ test('rerun keeps the same configuration on its own simulated host', function id
     grep -q 'io.containerd.runsc.v1' \\
       /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
   `;
-  successful(container(commands, ['--dry-run']));
-});
+  const result = container(commands, ['--dry-run']);
+  successful(result);
+}
+
+function replacedBinary() {
+  const commands = fakeHost + `
+    bash ${script} >/dev/null
+    rm /fixture-bin/sha256sum
+    printf 'foreign binary' > /usr/local/bin/k3s
+  `;
+  const result = container(commands);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing existing changed k3s binary/);
+}
+
+test('shellcheck accepts bootstrap and the shared runtime helper', checkShell);
+test('dry run prints node protection, downloads, runtime and storage without writing', dry);
+test('refuses unsupported OS and unknown options', invalidInput);
+test('rerun keeps the same configuration on its own simulated host', idempotent);
+test('an ownership marker cannot approve a replaced k3s binary', replacedBinary);
+for (const [name, setup] of refusals) {
+  registerRefusal(name, setup);
+}

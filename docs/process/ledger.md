@@ -105,6 +105,18 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ## Measurements
 
+### Pilot VM sizing
+
+On 20 November 2026, the existing exact-source application approval consumer
+refused at metadata lookup before a slot was claimed. The
+[receipt](work-pilot-1162-s1/journey.md) retains the refusal and resource-window
+observations. No package, one-person journey or three-person concurrent journey
+ran. Per-pod and total idle/peak CPU, RAM and occupied disk remain NOT RUN.
+There is no measured minimum vCPU, RAM or disk recommendation, and no measured
+headroom. Do not use an unmeasured estimate to choose a paid VM.
+The [VM guide](../../infra/vm/README.md) describes the bootstrap; its first real
+run still waits for the pilot VM. Container configuration tests are not VM proof.
+
 ### Lint size debt
 
 On 13 November 2026, the [size-debt receipt](clean-120-s1.md#final-full-lint)
