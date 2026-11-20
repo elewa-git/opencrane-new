@@ -1,0 +1,83 @@
+{
+  "namespace": "opencrane-package-1",
+  "namespaceUid": "93a4ff60-7386-45fd-bf72-28473ef548eb",
+  "createdAt": "2026-11-20T14:21:25Z",
+  "claims": [
+    {
+      "name": "backups",
+      "uid": "8031e3b0-19a4-4c71-8b46-20c8f8f1af08",
+      "createdAt": "2026-11-20T14:23:10Z",
+      "volume": "pvc-8031e3b0-19a4-4c71-8b46-20c8f8f1af08",
+      "phase": "Bound"
+    },
+    {
+      "name": "data-nats-0",
+      "uid": "948f297e-2304-40e1-8ca6-27a006c56f00",
+      "createdAt": "2026-11-20T14:23:10Z",
+      "volume": "pvc-948f297e-2304-40e1-8ca6-27a006c56f00",
+      "phase": "Bound"
+    },
+    {
+      "name": "data-objects-0",
+      "uid": "de73bc0b-a019-4ce0-8c89-49d03b5aec94",
+      "createdAt": "2026-11-20T14:23:10Z",
+      "volume": "pvc-de73bc0b-a019-4ce0-8c89-49d03b5aec94",
+      "phase": "Bound"
+    },
+    {
+      "name": "data-postgres-0",
+      "uid": "c3ce5353-8a98-4095-b769-fb07d9fd5925",
+      "createdAt": "2026-11-20T14:23:10Z",
+      "volume": "pvc-c3ce5353-8a98-4095-b769-fb07d9fd5925",
+      "phase": "Bound"
+    },
+    {
+      "name": "home-computer-756b0c11349b8aebfccf7fe47026c230",
+      "uid": "3014b958-239e-4a2b-989e-10ae38fe6926",
+      "createdAt": "2026-11-20T14:25:44Z",
+      "volume": "pvc-3014b958-239e-4a2b-989e-10ae38fe6926",
+      "phase": "Bound"
+    },
+    {
+      "name": "home-computer-78875b06133978c5d36da8cf236fef80",
+      "uid": "313eec50-7f4a-46db-b4d3-24f3f10f2244",
+      "createdAt": "2026-11-20T14:25:25Z",
+      "volume": "pvc-313eec50-7f4a-46db-b4d3-24f3f10f2244",
+      "phase": "Bound"
+    },
+    {
+      "name": "home-computer-8758be48bf6edde9f441c77886319c13",
+      "uid": "f8896b8e-7caf-43d8-a8d0-088be5e43f8d",
+      "createdAt": "2026-11-20T14:24:08Z",
+      "volume": "pvc-f8896b8e-7caf-43d8-a8d0-088be5e43f8d",
+      "phase": "Bound"
+    },
+    {
+      "name": "pilot-restore",
+      "uid": "f65a7a3a-1fce-4d05-b06d-299ccf4d1ba9",
+      "createdAt": "2026-11-20T14:23:10Z",
+      "phase": "Pending"
+    },
+    {
+      "name": "provider-secrets",
+      "uid": "46489fc0-8fba-40b8-9c11-8aac956c89eb",
+      "createdAt": "2026-11-20T14:23:10Z",
+      "volume": "pvc-46489fc0-8fba-40b8-9c11-8aac956c89eb",
+      "phase": "Bound"
+    }
+  ],
+  "images": [
+    {
+      "container": "server",
+      "image": "k3d-ocn-registry:5000/opencrane/package@sha256:c72e5ee9bf82ff7f35dfad33331335abd11d23c85b3af7b23b0ff0300b4ab2c6"
+    },
+    {
+      "container": "storage-credentials",
+      "image": "k3d-ocn-registry:5000/opencrane/package@sha256:c72e5ee9bf82ff7f35dfad33331335abd11d23c85b3af7b23b0ff0300b4ab2c6"
+    },
+    {
+      "container": "models",
+      "image": "k3d-ocn-registry:5000/opencrane/package@sha256:c72e5ee9bf82ff7f35dfad33331335abd11d23c85b3af7b23b0ff0300b4ab2c6"
+    }
+  ]
+}
