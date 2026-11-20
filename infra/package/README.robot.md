@@ -22,7 +22,9 @@ keep each screen's fallback. This setting grants no access and adds no API route
 that the value reaches the web container.
 
 The root `.dockerignore` excludes repository test folders and test files from the
-package build. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
+package build. Its allow-list includes provider startup, model settings and the fleet
+guard. `runtime-context.test.mjs` checks their actual Docker build context before
+the application image is built. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
 The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
 It keeps the image scanner files used by the server's image evidence import,
