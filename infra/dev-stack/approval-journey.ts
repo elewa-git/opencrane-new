@@ -214,4 +214,3 @@ async function seedApprovalChat(store: EventStore, silo: string,
 function failDatabase(error: Error) {
   throw error;
 }
-

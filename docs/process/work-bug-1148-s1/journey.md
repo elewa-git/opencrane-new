@@ -1,49 +1,74 @@
 # Long-chat approval and Stop journey
 
-Date: 19 November 2026 UTC. Builder's own qualification only.
+Date: 20 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
-CORE: PASS at 390 and 1280 pixels. Long-chat approval, execution and Stop refusal:
-NOT RUN, because history setup failed before tool discovery. No independent review
-result is claimed. The PR remains a draft.
+Rebased source: NOT RUN. Finding 4 remains blocking; the PR remains a draft.
+No independent review result is claimed.
 
-## Fresh secondary attempt
+## Actual fresh attempts
 
-Source: `0e089c95aa1db43ca2f46a7c69c1b2c3a2d5f038`.
-Receipt identifier: `live-20261119T200258Z`.
-Secondary slot: 1. Started at 20:02 UTC; torn down at 20:23 UTC.
+Every startup used `claim.sh` and `up.sh --fresh` on secondary slot 1, after both
+slots were free, no package stack was running and load had remained below six
+for five minutes. The [availability samples](availability-round3.csv) retain the
+observations, including earlier preflight refusals before any startup.
 
-Before claiming, both secondary slots reported free, no package stack was up, and
-one-minute load remained below six for 328 seconds. Checks ran every 30 seconds.
-Used `claim.sh`, then `up.sh --fresh`, with the default CORE qualification.
+| Receipt identifier | Source | CORE | Focused journey |
+| --- | --- | --- | --- |
+| `live-20261119T234555Z` | `c14be2419` | PASS, both widths | FAIL: first batch expected 556, observed 516 at thirty seconds; later reached 556 |
+| `live-20261120T001755Z` | `8e5056f7a` | FAIL: uploaded-text reply at 1280 px never reached Done within 120 seconds | NOT RUN |
+| `live-20261120T003423Z` | `8e5056f7a` | PASS, both widths | FAIL: launcher stopped during seed setup after about twenty minutes |
 
-| Check | 390 px | 1280 px |
+The qualifying low-load intervals lasted 302, 304 and 305 seconds respectively.
+The third attempt started before the original availability deadline of 00:44:57 UTC.
+No further claim was made after that deadline.
+
+[Final mobile CORE capture](core-390.png) and
+[final desktop CORE capture](core-1280.png) show the successful CORE chat and Stop.
+The [earlier desktop failure](core-upload-failure-1280.png) remains recorded separately.
+The earlier attempt in [round two](rework2.md) also remains a failure.
+
+## Final focused result
+
+| Condition | 390 px | 1280 px |
 | --- | --- | --- |
-| CORE chat, reload and native Stop | PASS | PASS |
-| CORE uploads and live-view revocation | PASS | PASS |
-| Existing guarded TLS launcher ready | PASS, shared fixture | PASS, shared fixture |
-| Seed 3,000 completed earlier messages | FAIL during setup | NOT RUN |
-| Discover, review and publish the tool | NOT RUN | NOT RUN |
-| Browser approval and exactly one real demo effect | NOT RUN | NOT RUN |
-| Long-chat native Stop and next tool call refused | NOT RUN | NOT RUN |
+| CORE chat, reload, Stop, uploads and live-view revocation | PASS | PASS |
+| Guarded TLS launcher ready | PASS, shared setup | PASS, shared setup |
+| Complete 3,000 earlier messages and their completions | FAIL during setup | NOT RUN |
+| Long chat answers with native tool approval and returned result | NOT RUN | NOT RUN |
+| Exact forwarded bytes, one use, denial and reload | NOT RUN | NOT RUN |
+| Browser Stop followed by the same approved request returning 403, without an effect | NOT RUN | NOT RUN |
 
-[CORE mobile screenshot](first-core-390.png) and [CORE desktop screenshot](first-core-1280.png)
-show the earlier CORE chat and Stop, not a long-chat approval outcome.
+The final probe found 2,461 messages and 2,460 completions. The interrupted message
+had no completion. Both projections settled at position 5,380. The demo recorder
+contained zero effects; approval and execution had not begun. Paid calls: zero.
+The [checkpoint trace](seed-checkpoints-round3.csv) shows continued progress.
 
-The seed failed at `waitForApprovalHistory` with the existing assertion that history
-must reach the conversation projection. The retained worker log shows successful
-seed records and no handler error. It does not contain the expected and observed
-checkpoint values, so the delay's cause is not established. Added those diagnostics
-and batch progress for the next fresh run. No longer deadline or retry was added.
+The first run's hundred-record burst exceeded its thirty-second projection wait.
+A committed real-NATS regression failed at that burst size before the fixture was
+changed to twenty records per batch. The final run reported no individual checkpoint
+assertion before the launcher stopped. The output-file interval was 00:49:22.448–
+01:09:32.518; the elapsed time is consistent with its unchanged twenty-minute limit.
+The saved error contains only the failed child command, without timeout metadata.
 
-Startup, service and container logs and all screenshots were copied into the private
-fleet receipt before `down.sh`. The final slot status was free. No owner stack was
-used. Another secondary claim later prevented an immediate new fresh run.
+PostgreSQL used its half-core allocation and was throttled in 848 of 849 measured
+scheduling periods during seeding. Resource limits and deadlines were unchanged.
+The separate many-models 503 remains unexplained. See the
+[final fix receipt](rework3.md) for the measurements and test-first change.
 
-The earlier first-round attempt failed before approval with gateway 404. Its result
-remains recorded in [the first fix receipt](rework1.md). It is not evidence of this
-round's source passing the slice journey.
+Startup, service, container and pod logs, screenshots, checkpoint/load samples and
+readback files were retained in the private fleet receipts before every teardown.
+All three used stacks were stopped with `down.sh` and ultimately reported free.
+Only free stand-in providers were used.
+
+## Current source
+
+Main moved during qualification. The rebase onto
+`c791103b365ced8fd56195ded9d0dcfabf202597` finished. Synthetic prose and the live seed
+now use main's existing plaintext event contract; assertions remain intact.
+Fresh qualification of this rebased source is NOT RUN. The successful CORE captures
+above qualify only the source named in the actual-attempt table.
 
 ## Reproduction
 
