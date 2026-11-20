@@ -314,6 +314,9 @@ try {
 
 try {
   await mkdir(output, { recursive: true });
+  // Save the wrong key privately so the collector can remove it from failure logs.
+  const privateFileOptions = { mode: 0o600 };
+  await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
   browser = await chromium.launch({ headless: true, channel: 'chromium' });
   stage = 'owner sign-in';
   const ownerPage = await login('owner');

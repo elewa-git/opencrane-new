@@ -20,7 +20,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 - Describes an optional database standby with its own storage on another node.
 - Gives background workers the settings and access needed for their jobs.
 - Prepares storage, database setup and the first owner.
-- Shares connected-provider keys only between the server and models containers.
+- Prepares private key permissions before giving server and models access.
 - Describes assistant computers and limits their network connections.
 - Refuses public network access, missing private setting names and unpinned images.
 

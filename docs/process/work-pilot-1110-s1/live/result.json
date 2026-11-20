@@ -1,0 +1,12 @@
+{
+  "status": "FAIL",
+  "outcomes": [
+    {
+      "check": "admin invitation and sign-in",
+      "result": "FAIL"
+    }
+  ],
+  "errorType": "AssertionError",
+  "paidCalls": 0,
+  "paidCents": 0
+}
