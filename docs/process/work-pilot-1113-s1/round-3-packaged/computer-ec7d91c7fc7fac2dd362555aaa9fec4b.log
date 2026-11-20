@@ -1,0 +1,133 @@
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.134170067Z _XSERVTransmkdir: Owner of /tmp/.X11-unix should be set to root
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.139617702Z
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.139659144Z Xvnc KasmVNC 1.5.0.17265facc40ab50db5740cdf0d12c61173edafc9 - built Jun 11 2026 12:29:08
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.139665676Z Copyright (C) 1999-2026 KasmVNC Team and many others (see README.me)
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.139669143Z See http://kasmweb.com for information on KasmVNC.
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.139672987Z Underlying X server release 12101007
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.139676188Z
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.141409383Z  2026-11-20 20:50:20,139 [INFO] ICE: Using public IP 127.0.0.1 from args
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.141445505Z  2026-11-20 20:50:20,140 [INFO] vncext: VNC extension running!
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.164697399Z  2026-11-20 20:50:20,162 [INFO] vncext: Listening for websocket connections on 0.0.0.0 interface(s), port 6901
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.814658683Z  2026-11-20 20:50:20,814 [PRIO] ffmpeg: Could not open libavformat.so
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.815086749Z  2026-11-20 20:50:20,814 [INFO] VNCServerST: CPU capability: SSE2 yes, SSE4.1 yes, SSE4.2 yes, AVX512f no
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.815095504Z  2026-11-20 20:50:20,815 [INFO] VNCServerST: Hardware video encoding acceleration capability: unavailable
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:20.816503958Z  2026-11-20 20:50:20,815 [INFO] vncext: created VNC server for screen 0
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:21.152905061Z  2026-11-20 20:50:21,151 [INFO] Input: Mouse horizontal scroll factor: 50.000000
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:21.152962185Z  2026-11-20 20:50:21,151 [INFO] Input: Mouse vertical scroll factor: 50.000000
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:21.153523074Z [mi] mieq: warning: overriding existing handler (nil) with 0x55dd8b5f3d70 for event 2
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:21.153537185Z [mi] mieq: warning: overriding existing handler (nil) with 0x55dd8b5f3d70 for event 3
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:21.171092427Z  2026-11-20 20:50:21,170 [INFO] websocket 0: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:22.170232168Z  2026-11-20 20:50:22,169 [INFO] websocket 1: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:23.157453805Z {"report":"ready","bridge":"ready","codexUid":1000}
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:23.158769341Z  2026-11-20 20:50:23,158 [INFO] websocket 2: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:24.159667739Z  2026-11-20 20:50:24,159 [INFO] websocket 3: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:25.160711753Z  2026-11-20 20:50:25,159 [INFO] websocket 4: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:26.156933142Z  2026-11-20 20:50:26,156 [INFO] websocket 5: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:27.155386783Z  2026-11-20 20:50:27,155 [INFO] websocket 6: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:28.164678107Z  2026-11-20 20:50:28,164 [INFO] websocket 7: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:29.162018014Z  2026-11-20 20:50:29,160 [INFO] websocket 8: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:30.164068385Z  2026-11-20 20:50:30,163 [INFO] websocket 9: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:31.159366555Z  2026-11-20 20:50:31,155 [INFO] websocket 10: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:32.155885466Z  2026-11-20 20:50:32,154 [INFO] websocket 11: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:33.156184082Z  2026-11-20 20:50:33,155 [INFO] websocket 12: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:34.154247328Z  2026-11-20 20:50:34,153 [INFO] websocket 13: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:35.162560029Z  2026-11-20 20:50:35,159 [INFO] websocket 14: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:36.157688650Z  2026-11-20 20:50:36,157 [INFO] websocket 15: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:37.156972347Z  2026-11-20 20:50:37,156 [INFO] websocket 16: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:38.159413121Z  2026-11-20 20:50:38,157 [INFO] websocket 17: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:39.155757556Z  2026-11-20 20:50:39,155 [INFO] websocket 18: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:40.155447018Z  2026-11-20 20:50:40,154 [INFO] websocket 19: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:41.157465753Z  2026-11-20 20:50:41,157 [INFO] websocket 20: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:42.155158918Z  2026-11-20 20:50:42,154 [INFO] websocket 21: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:43.157637114Z  2026-11-20 20:50:43,156 [INFO] websocket 22: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:44.154764974Z  2026-11-20 20:50:44,154 [INFO] websocket 23: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:45.161370665Z  2026-11-20 20:50:45,160 [INFO] websocket 24: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:46.166222804Z  2026-11-20 20:50:46,166 [INFO] websocket 25: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:47.155110176Z  2026-11-20 20:50:47,154 [INFO] websocket 26: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:48.158676491Z  2026-11-20 20:50:48,157 [INFO] websocket 27: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:49.154748903Z  2026-11-20 20:50:49,154 [INFO] websocket 28: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:50.155082640Z  2026-11-20 20:50:50,154 [INFO] websocket 29: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:51.155235546Z  2026-11-20 20:50:51,155 [INFO] websocket 30: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:52.155194284Z  2026-11-20 20:50:52,154 [INFO] websocket 31: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:53.154687947Z  2026-11-20 20:50:53,154 [INFO] websocket 32: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:54.158409894Z  2026-11-20 20:50:54,157 [INFO] websocket 33: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:55.156377067Z  2026-11-20 20:50:55,156 [INFO] websocket 34: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:56.161213008Z  2026-11-20 20:50:56,160 [INFO] websocket 35: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:57.155654817Z  2026-11-20 20:50:57,155 [INFO] websocket 36: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:58.154940401Z  2026-11-20 20:50:58,154 [INFO] websocket 37: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:50:59.155629169Z  2026-11-20 20:50:59,155 [INFO] websocket 38: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:00.161534039Z  2026-11-20 20:51:00,161 [INFO] websocket 39: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:01.161176647Z  2026-11-20 20:51:01,159 [INFO] websocket 40: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:02.156619012Z  2026-11-20 20:51:02,156 [INFO] websocket 41: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:03.157549606Z  2026-11-20 20:51:03,157 [INFO] websocket 42: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:04.155791502Z  2026-11-20 20:51:04,155 [INFO] websocket 43: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:05.156626137Z  2026-11-20 20:51:05,156 [INFO] websocket 44: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:06.158510673Z  2026-11-20 20:51:06,158 [INFO] websocket 45: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:07.156014589Z  2026-11-20 20:51:07,155 [INFO] websocket 46: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:08.154881607Z  2026-11-20 20:51:08,154 [INFO] websocket 47: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:09.158305804Z  2026-11-20 20:51:09,157 [INFO] websocket 48: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:10.154331347Z  2026-11-20 20:51:10,153 [INFO] websocket 49: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:11.157503110Z  2026-11-20 20:51:11,157 [INFO] websocket 50: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:12.154402214Z  2026-11-20 20:51:12,154 [INFO] websocket 51: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:13.154767361Z  2026-11-20 20:51:13,154 [INFO] websocket 52: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:14.160417115Z  2026-11-20 20:51:14,160 [INFO] websocket 53: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:15.157764923Z  2026-11-20 20:51:15,157 [INFO] websocket 54: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:16.164407632Z  2026-11-20 20:51:16,164 [INFO] websocket 55: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:17.155413346Z  2026-11-20 20:51:17,155 [INFO] websocket 56: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:18.154399686Z  2026-11-20 20:51:18,154 [INFO] websocket 57: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:19.154700528Z  2026-11-20 20:51:19,154 [INFO] websocket 58: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:20.155355179Z  2026-11-20 20:51:20,154 [INFO] websocket 59: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:21.154712012Z  2026-11-20 20:51:21,154 [INFO] websocket 60: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:22.160387348Z  2026-11-20 20:51:22,160 [INFO] websocket 61: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:23.155175781Z  2026-11-20 20:51:23,154 [INFO] websocket 62: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:24.160313487Z  2026-11-20 20:51:24,156 [INFO] websocket 63: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:25.154833893Z  2026-11-20 20:51:25,154 [INFO] websocket 64: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:26.156978480Z  2026-11-20 20:51:26,155 [INFO] websocket 65: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:27.154575594Z  2026-11-20 20:51:27,154 [INFO] websocket 66: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:28.155396209Z  2026-11-20 20:51:28,155 [INFO] websocket 67: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:29.154456504Z  2026-11-20 20:51:29,153 [INFO] websocket 68: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:30.160005200Z  2026-11-20 20:51:30,159 [INFO] websocket 69: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:31.158609761Z  2026-11-20 20:51:31,158 [INFO] websocket 70: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:32.155442933Z  2026-11-20 20:51:32,155 [INFO] websocket 71: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:33.158090276Z  2026-11-20 20:51:33,157 [INFO] websocket 72: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:34.159987750Z  2026-11-20 20:51:34,158 [INFO] websocket 73: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:35.155000133Z  2026-11-20 20:51:35,154 [INFO] websocket 74: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:36.155978117Z  2026-11-20 20:51:36,155 [INFO] websocket 75: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:37.155457255Z  2026-11-20 20:51:37,155 [INFO] websocket 76: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:38.154880802Z  2026-11-20 20:51:38,154 [INFO] websocket 77: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:39.156931986Z  2026-11-20 20:51:39,156 [INFO] websocket 78: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:40.160060289Z  2026-11-20 20:51:40,159 [INFO] websocket 79: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:41.154663677Z  2026-11-20 20:51:41,154 [INFO] websocket 80: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:42.154454409Z  2026-11-20 20:51:42,154 [INFO] websocket 81: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:43.156350527Z  2026-11-20 20:51:43,155 [INFO] websocket 82: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:44.156818979Z  2026-11-20 20:51:44,156 [INFO] websocket 83: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:45.155166166Z  2026-11-20 20:51:45,154 [INFO] websocket 84: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:46.163044237Z  2026-11-20 20:51:46,160 [INFO] websocket 85: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:47.155323330Z  2026-11-20 20:51:47,154 [INFO] websocket 86: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:48.154496250Z  2026-11-20 20:51:48,154 [INFO] websocket 87: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:49.154413568Z  2026-11-20 20:51:49,154 [INFO] websocket 88: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:50.154237571Z  2026-11-20 20:51:50,154 [INFO] websocket 89: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:51.154496383Z  2026-11-20 20:51:51,154 [INFO] websocket 90: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:52.156114216Z  2026-11-20 20:51:52,155 [INFO] websocket 91: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:53.154343354Z  2026-11-20 20:51:53,154 [INFO] websocket 92: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:54.154713830Z  2026-11-20 20:51:54,154 [INFO] websocket 93: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:55.155273634Z  2026-11-20 20:51:55,155 [INFO] websocket 94: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:56.155721773Z  2026-11-20 20:51:56,155 [INFO] websocket 95: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:57.155421762Z  2026-11-20 20:51:57,154 [INFO] websocket 96: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:58.154412692Z  2026-11-20 20:51:58,154 [INFO] websocket 97: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:51:59.155212208Z  2026-11-20 20:51:59,154 [INFO] websocket 98: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:00.156092952Z  2026-11-20 20:52:00,155 [INFO] websocket 99: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:01.157607247Z  2026-11-20 20:52:01,157 [INFO] websocket 100: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:02.157389792Z  2026-11-20 20:52:02,156 [INFO] websocket 101: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:03.155272194Z  2026-11-20 20:52:03,155 [INFO] websocket 102: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:04.155655788Z  2026-11-20 20:52:04,155 [INFO] websocket 103: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:05.156636057Z  2026-11-20 20:52:05,156 [INFO] websocket 104: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:06.156456599Z  2026-11-20 20:52:06,156 [INFO] websocket 105: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:07.155191380Z  2026-11-20 20:52:07,153 [INFO] websocket 106: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:08.156348190Z  2026-11-20 20:52:08,156 [INFO] websocket 107: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:09.158567414Z  2026-11-20 20:52:09,158 [INFO] websocket 108: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:10.154882542Z  2026-11-20 20:52:10,154 [INFO] websocket 109: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:11.155909726Z  2026-11-20 20:52:11,154 [INFO] websocket 110: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:12.156546997Z  2026-11-20 20:52:12,155 [INFO] websocket 111: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:13.155228140Z  2026-11-20 20:52:13,154 [INFO] websocket 112: got client connection from 127.0.0.1
+[pod/computer-ec7d91c7fc7fac2dd362555aaa9fec4b/computer] 2026-11-20T20:52:14.158843084Z  2026-11-20 20:52:14,158 [INFO] websocket 113: got client connection from 127.0.0.1

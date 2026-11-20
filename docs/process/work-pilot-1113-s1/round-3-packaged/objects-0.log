@@ -1,0 +1,11 @@
+[pod/objects-0/objects] 2026-11-20T20:45:42.153858194Z INFO: Formatting 1st pool, 1 set(s), 1 drives per set.
+[pod/objects-0/objects] 2026-11-20T20:45:42.153974677Z INFO: WARNING: Host local has more than 0 drives of set. A host failure will result in data becoming unavailable.
+[pod/objects-0/objects] 2026-11-20T20:45:42.238617529Z MinIO Object Storage Server
+[pod/objects-0/objects] 2026-11-20T20:45:42.238651484Z Copyright: 2015-2026 MinIO, Inc.
+[pod/objects-0/objects] 2026-11-20T20:45:42.238655493Z License: GNU AGPLv3 - https://www.gnu.org/licenses/agpl-3.0.html
+[pod/objects-0/objects] 2026-11-20T20:45:42.238658347Z Version: DEVELOPMENT.GOGET (go1.24.9 linux/amd64)
+[pod/objects-0/objects] 2026-11-20T20:45:42.238660447Z
+[pod/objects-0/objects] 2026-11-20T20:45:42.238662956Z API: http://10.42.0.55:9000  http://127.0.0.1:9000
+[pod/objects-0/objects] 2026-11-20T20:45:42.238665362Z WebUI: http://127.0.0.1:9001
+[pod/objects-0/objects] 2026-11-20T20:45:42.238667502Z
+[pod/objects-0/objects] 2026-11-20T20:45:42.238669804Z Docs: https://docs.min.io
