@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { closeFixtureServers } from './tls-cleanup.mjs';
 import { qualifyJoinedWorkspace } from './join-handoff.mjs';
+import { assertMemberTokenRefusal, assertClaimRole } from './qualification-token.mjs';
 
 const root = process.cwd();
 const failureTools = await import(pathToFileURL(join(root,
@@ -208,6 +209,7 @@ async function claimOwner(page) {
   assert.equal(await page.getByLabel('Bootstrap token').inputValue(), '', 'Token input was retained');
   await page.screenshot({ path: join(output, 'token-reuse-1280.png'), fullPage: true });
   record('used token refuses a second owner claim');
+  return claimed.body.memberId;
 }
 
 async function invite(ownerPage, role, user) {
@@ -314,7 +316,7 @@ async function visitProduct(ownerContext) {
   await session(ownerPage, setup.users.owner);
   record('owner Secure and HttpOnly session at 1280px');
   stage = 'owner 1280px claim';
-  await claimOwner(ownerPage);
+  const ownerMemberId = await claimOwner(ownerPage);
   stage = 'owner 1280px workspace';
   await chat(ownerPage, 'owner', 1280);
   const ownerPhone = await newContext(390);
@@ -363,7 +365,11 @@ async function visitProduct(ownerContext) {
             headers: { origin: input.origin }, data: { token: input.token,
               displayName: 'Member traveller', email: 'member@example.test' },
           });
-          assert.equal((await response.json()).reason, 'token_used', 'A member reused the owner token');
+          assertMemberTokenRefusal(response.status(), await response.json());
+          const expectedMember = { memberId: invitation.memberId, role: 'member' };
+          const expectedOwner = { memberId: ownerMemberId, role: 'owner' };
+          await assertClaimRole(page, input.origin, expectedMember);
+          await assertClaimRole(ownerPage, input.origin, expectedOwner);
           record('member cannot reuse the installation token to become owner');
         }
       }
