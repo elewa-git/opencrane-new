@@ -49,3 +49,13 @@ function recordsHttpRefusal(): void {
 
 test('an HTTP refusal records its numeric status without assertion or request content',
   recordsHttpRefusal);
+
+function recordsAmbiguousControl(): void {
+  const step = { check: 'wrong-key reachability', detail: 'Read the failed verification result.' };
+  const error = new Error('locator.isVisible: Error: strict mode violation: private-token /private');
+  assert.equal(providerFailure(step, error).detail,
+    'More than one control matched the current operation. Read the failed verification result.');
+}
+
+test('an ambiguous browser control has a specific reason without copying locator diagnostics',
+  recordsAmbiguousControl);
