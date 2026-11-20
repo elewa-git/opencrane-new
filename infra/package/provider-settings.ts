@@ -27,12 +27,15 @@ async function waitForProviderStep(page: Page, title: string): Promise<void> {
   const statusButton = setup.getByRole('button', { name: 'Check status', exact: true });
   const enabledButtons = setup.locator('button:enabled');
   const check = statusButton.and(enabledButtons);
+  const progress = nextStep.or(check);
   const deadline = Date.now() + 30_000;
   // Read the pending change through the control offered to the person; never resend it.
   while (Date.now() < deadline) {
-    await nextStep.or(check).waitFor();
+    await progress.waitFor();
     if (await nextStep.isVisible()) return;
-    await check.click();
+    // Keep the heading as a harmless click target if advancement removes Check status
+    // while Playwright moves to it. Waiting only for the old button would miss that step.
+    await progress.click();
   }
   throw new Error('Provider setup did not reach the next step');
 }

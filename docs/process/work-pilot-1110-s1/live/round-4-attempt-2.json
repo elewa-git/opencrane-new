@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "source": "e6add58ec08711f6ee7522b5c04a3dab3be8a9fb",
+  "outcomes": [
+    {
+      "check": "create provider connection",
+      "result": "FAIL",
+      "errorType": "TimeoutError",
+      "detail": "The saved connection must advance to its Key step."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

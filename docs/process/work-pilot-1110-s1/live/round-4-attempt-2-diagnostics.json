@@ -1,0 +1,49 @@
+{
+  "source": "e6add58ec08711f6ee7522b5c04a3dab3be8a9fb",
+  "dispatcher": {
+    "pod": "worker-dispatcher-696498c7c7-z4zlf",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  "failure": "The enabled Check status button disappeared during the action; its locator kept waiting after automatic advancement.",
+  "load1Maximum": 7.51,
+  "dispatcherRestarts": 0,
+  "queuePoolTimeouts": 211,
+  "waitSnapshot": "Ten handler connections were idle, with no blocking transactions, at collection time. This is not a measurement of earlier checked-out pool slots.",
+  "firstContainerLogStream": "SAVED before teardown",
+  "paidCalls": 0,
+  "paidCents": 0
+}

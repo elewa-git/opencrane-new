@@ -1,15 +1,68 @@
 # Packaged connected-provider journey
 
 **PARTIAL — the full journey has not passed.** Paid calls: **0**; external charges:
-**0 cents**. The latest installed source is `ba03d8519435dff14bf42d6339975d9dc874e912`.
-Its fresh run reached provider setup and the quoted test, then failed while waiting
-for a chat-default binding. The test-first pool-starvation fix passed its source checks. A fresh
-run with that fix is **NOT RUN**.
+**0 cents**. The latest fresh installed source is
+`e6add58ec08711f6ee7522b5c04a3dab3be8a9fb`. The dispatcher stayed running with the
+pool fix installed, but the browser failed while waiting for a status button.
+A matching disappearing-button race was reproduced independently.
+The test-first driver correction passed twice. A fresh run after that correction
+is **NOT RUN**.
 
 These are the builder's own checks. No independent review result is claimed.
 Hosted checks and image approvals are linked in the PR's Evidence section.
 
 ## Latest fresh run
+
+**FAIL — 20 November 2026 UTC, secondary slot 1.** The new namespace and PVCs used
+exact-source approved images. Both slots were free, no competing package/journey
+was detected, and load remained below six for 329 seconds before claim. The local
+host exception retained F1/F2 refusals as an accepted dev-box gap. No host setting
+was changed or qualified for production.
+
+Owner/admin/member setup and Settings at 1280/390 px passed. Provider creation was
+processed, including its permission reaction. The driver then waited for an enabled
+Check status button that had disappeared during automatic advancement. Its original
+30-second click deadline expired. No restart occurred. The current dispatcher log
+and continuous first-container stream were saved before teardown. The final wait
+snapshot had ten idle handler connections and no blocking transactions. Queue
+workers still reported pool-acquisition timeouts; no claim that every pool failure
+is fixed is made. Load peaked at 7.51, with 15-second samples retained.
+
+Test-first `cb59372a6` reproduces the detached-control timeout in Chromium. The
+pre-fix run failed at 1280 px before reaching 390 px; both widths pass with the fix. The fixture advances while Playwright moves to Check status. The
+corrected action locator also retains the expected next heading, so re-resolution
+can finish on that harmless target after the button disappears. The existing
+next-step, visible-key, refusal, disclosure and deadline assertions are unchanged.
+All 17 driver/native-source checks passed twice after this correction.
+
+A private launch guard initially missed a Python import and stopped before claim.
+It was corrected, and a new five-minute clear window was observed before the actual
+run. It is not counted as a fresh installed journey.
+
+- [Result](live/round-4-attempt-2.json),
+  [safe browser failure](live/round-4-attempt-2-failure.txt) and
+  [dispatcher/driver diagnosis](live/round-4-attempt-2-diagnostics.json).
+- [Fresh binding](live/round-4-attempt-2-binding.json),
+  [Pod states](live/round-4-attempt-2-pods.json),
+  [load samples](live/round-4-attempt-2-load.json) and
+  [queue record](live/round-4-queue-2.json).
+
+| Condition in this installed run | Result |
+| --- | --- |
+| Fresh namespace/PVCs, approved images and package readiness | PASS |
+| Owner/admin/member setup; Settings at both widths | PASS |
+| Provider creation and its permission reaction | PASS |
+| Driver advances to the visible Key step | FAIL |
+| Dispatcher remains running with no restarts | PASS |
+| First-container log stream, service/startup logs and load saved | PASS |
+| New-key forms, wrong-key HTTP 401, quoted test and model selection | NOT RUN |
+| Default, switch-on and member replies at both widths | NOT RUN |
+| Synthetic 0600/0700 custody before/after Pod recreation | NOT RUN |
+| Final values/manifests/logs/event disclosure inspection | NOT RUN |
+| Package teardown and claim release | PASS |
+| Full fresh run after the driver correction | NOT RUN |
+
+## Earlier round 4 attempt
 
 **FAIL — 20 November 2026 UTC, secondary slot 1.** Both slots were free, no package
 or competing journey was running, and load stayed below six for 301 seconds before
@@ -94,9 +147,10 @@ and all three SIGKILL recovery cases. All 44 upgrade checks passed.
 - **BLOCKING — private modes on remount: PARTIAL.** Retained failing-first
   `3557f4d11`, repair/refusal and `OnRootMismatch`. Focused source checks passed
   twice. Live synthetic before/after Pod-recreation proof remains NOT RUN.
-- **BLOCKING — full packaged journey: PARTIAL.** The fresh run now passed setup,
-  wrong-key HTTP 401 and the quoted test, but failed at the chat default. The
-  reproduced dispatcher starvation fix still needs a fresh approved-image journey.
+- **BLOCKING — full packaged journey: PARTIAL.** The first run passed setup and
+  wrong-key HTTP 401, then failed at the chat default. With the pool fix installed,
+  the dispatcher stayed running, but a reproduced disappearing-button race blocked
+  setup. The corrected full journey remains NOT RUN.
 - **FIX — backup CronJob isolation: PASS (source).** Retained failing-first
   `76847bdd9` and claim-based checks across workloads and init containers, including
   aliased and same-name mounts. Focused checks passed twice. No new live backup
@@ -104,13 +158,14 @@ and all three SIGKILL recovery cases. All 44 upgrade checks passed.
 
 ## Source checks and rebase
 
-PASS: sixteen driver/native-source checks twice; eleven focused custody, provider
+PASS: seventeen final driver/native-source checks twice; eleven focused custody, provider
 and CronJob checks twice; twenty real dispatcher/runtime checks twice; all 44
 upgrade checks; full post-fix workspace/package/dev-stack typecheck; event catalogue
 agreement for 174 types; Knip; changelog; Markdown; changed handler ESLint with zero
 warnings. The branch-wide scoped ESLint invocation also passed; 34 infrastructure
 files are excluded by repository configuration. Public privacy and secret scans
-passed before the source push.
+passed before each source push. Final package/dev-stack typechecks also passed
+after the browser correction.
 
 Tests, lint, builds and typechecking used `nice -n 10`. No full root suite ran.
 The initial fetch found main unchanged at `ed3662d85`, already contained in the

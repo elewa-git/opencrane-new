@@ -1,21 +1,12 @@
 {
   "status": "FAIL",
-  "source": "ba03d8519435dff14bf42d6339975d9dc874e912",
+  "source": "e6add58ec08711f6ee7522b5c04a3dab3be8a9fb",
   "outcomes": [
     {
-      "check": "wrong credential receives HTTP 401 from the separate stand-in",
-      "result": "PASS",
-      "status": 401
-    },
-    {
-      "check": "wrong key refused without disclosure",
-      "result": "PASS"
-    },
-    {
-      "check": "select chat default",
+      "check": "create provider connection",
       "result": "FAIL",
-      "errorType": "Error",
-      "detail": "Selecting the chat default must save its model binding."
+      "errorType": "TimeoutError",
+      "detail": "The saved connection must advance to its Key step."
     }
   ],
   "paidCalls": 0,

@@ -13,3 +13,5 @@ Fresh owner bootstrap finishes applying ownership permissions before opening the
 installation for checked owner commands.
 Dispatch reuses its reserved database connection when reactions fill the pool,
 including the queue-setting reads needed to save new jobs.
+Follow automatic provider setup advancement when its status button disappears
+during a click.

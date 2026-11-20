@@ -230,6 +230,10 @@ status control while the original change is applying. A disabled control does no
 stop the runner from following automatic advancement to the next step. Closed replacement dialogs are not
 key-entry targets. Verification and model-selection status reads use that same
 open dialog even when a background provider row also offers Check status.
+The setup driver keeps the expected next heading in its click target too. If
+automatic advancement removes Check status while the pointer moves, Playwright
+can finish on that heading instead of waiting for the old button. The next-step
+and visible-key assertions still apply at both widths.
 `journey-provider-settings.test.ts` reproduces that pending
 creation and key-save path in Chromium at 1280 and 390 px. The live journey saves
 both new-key form screenshots before typing, checks the browser refusal, and
