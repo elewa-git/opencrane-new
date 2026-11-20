@@ -856,3 +856,19 @@ function publicModeUsesTokenWithoutExposure() {
 }
 test('public settings install uses the token path and keeps all network resources private',
   publicModeUsesTokenWithoutExposure);
+
+for (const [name, field, value] of [
+  ['missing hostname', 'host', ''], ['hostname with a scheme', 'host', 'https://pilot.example.test'],
+  ['hostname with a port', 'host', 'pilot.example.test:443'], ['IP address', 'host', '127.0.0.1'],
+  ['missing TLS reference', 'tlsSecret', ''], ['implicit choice', 'enabled', 'true'],
+]) {
+  function refusesPublicAddress() {
+    const values = chartValues();
+    values.exposure.public = { enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls' };
+    values.exposure.public[field] = value;
+    const rendered = renderChart(values);
+    assert.equal(rendered.status, 1);
+    assert.match(rendered.stderr, /Public address/u);
+  }
+  test(`chart refuses public address with ${name}`, refusesPublicAddress);
+}

@@ -416,3 +416,44 @@ for (const flag of ['ingress', 'loadBalancer', 'funnel']) {
   }
   test(`public-address choice does not admit legacy ${flag}`, keepsLegacyRefusal);
 }
+
+const addressRefusals = [
+  ['missing hostname', 'host', undefined, /plain DNS name/u],
+  ['scheme in hostname', 'host', 'https://pilot.example.test', /plain DNS name/u],
+  ['port in hostname', 'host', 'pilot.example.test:443', /plain DNS name/u],
+  ['IP address', 'host', '127.0.0.1', /plain DNS name/u],
+  ['wildcard', 'host', '*.example.test', /plain DNS name/u],
+  ['missing TLS reference', 'tlsSecret', undefined, /TLS secret name/u],
+  ['invalid TLS reference', 'tlsSecret', 'private/secret', /TLS secret name/u],
+  ['implicit choice', 'enabled', 'true', /explicit enabled choice/u],
+];
+for (const [name, field, value, expected] of addressRefusals) {
+  function refusesAddress() {
+    const setup = publicFixture();
+    try {
+      setup.values.exposure.public[field] = value;
+      const result = checkPublic(setup);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, expected);
+    } finally {
+      rmSync(setup.directory, { recursive: true });
+    }
+  }
+  test(`public address refuses ${name}`, refusesAddress);
+}
+
+function refusesMissingPrivateSettings() {
+  const setup = publicFixture();
+  try {
+    const env = applicationApprovalFixture(setup.directory, reviewedImage).env;
+    delete env.PACKAGE_PUBLIC_SETTINGS_FILE;
+    const result = check(setup.values, setup.review, setup.directory, env);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Public sign-in settings file is unavailable or invalid/u);
+    assert.doesNotMatch(result.stderr, /TypeError|undefined|ENOENT/u);
+  } finally {
+    rmSync(setup.directory, { recursive: true });
+  }
+}
+test('public address refuses absent private settings without exposing dependency output',
+  refusesMissingPrivateSettings);
