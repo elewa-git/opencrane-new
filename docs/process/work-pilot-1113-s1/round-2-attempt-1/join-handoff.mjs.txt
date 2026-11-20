@@ -1,0 +1,5 @@
+export async function qualifyJoinedWorkspace(join, accessReady, openWorkspace) {
+  await join();
+  await accessReady();
+  return openWorkspace();
+}

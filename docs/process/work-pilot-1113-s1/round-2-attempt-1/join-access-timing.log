@@ -1,0 +1,5 @@
+2026-11-20T16:24:26.984Z join HTTP 200
+2026-11-20T16:24:27.158Z members projection completed
+2026-11-20T16:24:27.777Z GET /api/chat started
+2026-11-20T16:24:27.791Z GET /api/chat refused 403
+2026-11-20T16:24:28.361Z OpenFGA join projection completed
