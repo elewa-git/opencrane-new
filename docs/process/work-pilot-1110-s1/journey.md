@@ -2,16 +2,91 @@
 
 **PARTIAL — the full journey has not passed.** Paid calls: **0**; external charges:
 **0 cents**. The latest fresh installed source is
-`e6add58ec08711f6ee7522b5c04a3dab3be8a9fb`. The dispatcher stayed running with the
-pool fix installed, but the browser failed while waiting for a status button.
-A matching disappearing-button race was reproduced independently.
-The test-first driver correction passed twice. A fresh run after that correction
-is **NOT RUN**.
+`5ad52ff2f6822f7d2f364430ce1493ce3ae4a2f9`. Its run failed while advancing provider
+creation to Key. It had no dispatcher restart. Both live blocking findings remain
+open; this PR must remain draft and must not merge on these receipts.
 
 These are the builder's own checks. No independent review result is claimed.
 Hosted checks and image approvals are linked in the PR's Evidence section.
 
 ## Latest fresh run
+
+**FAIL — 20 November 2026 UTC, secondary slot 1.** The new namespace and PVCs used
+exact-source approved application and scanner images. Both slots were free, no
+other package/journey was running, and load stayed below six for 330 seconds before
+claim. This task did not stop, borrow or use any other stack. The documented local
+host exception retained its F1/F2 swap and crash-dump refusals. That is an accepted
+dev-box gap, never production host qualification.
+
+Owner/admin/member setup passed. Settings opened at 1280 and 390 px; the desktop
+capture still shows the provider list loading. Creation reached its event and
+permission reaction. The corrected driver followed the offered status reads, but
+Key did not appear before its unchanged deadline. The safe failure is the driver's
+explicit next-step error, rather than the earlier detached-button click timeout.
+No later key, model, custody or chat step is claimed for this run.
+
+The dispatcher stayed running with zero restarts. Its continuous first-container
+stream and current service log were saved. The logs record 213 pool-acquisition
+errors across queue and handler failures. The provider permission reaction first
+failed on acquisition, then completed through its existing queue retry. The final
+snapshot had ten idle handler connections and no blocked transactions. That is not
+a measurement of earlier pool checkouts and does not prove there was no earlier
+contention. No OOM, liveness-probe, pool-leak or complete setup-stall fix is claimed.
+
+Load was 2.92 at the final queue check, peaked at **19.19** during startup and was
+still above twelve near the browser failure. Fifteen-second load and available
+memory samples and a process/resource sample were retained. Only this package
+namespace was present when sampled during the high load. The failure happened
+under heavy box load; the evidence does **not** establish that load is its only
+cause. No timeout, retry, pool/resource limit, probe, access/money check or assertion
+was loosened to make the run pass.
+
+- [Result](live/round-4-attempt-3.json),
+  [safe failure](live/round-4-attempt-3-failure.txt) and
+  [dispatcher/reaction diagnosis](live/round-4-attempt-3-diagnostics.json).
+- [Fresh namespace, PVC and image binding](live/round-4-attempt-3-binding.json),
+  [Pod states](live/round-4-attempt-3-pods.json),
+  [load samples](live/round-4-attempt-3-load.json) and
+  [queue observations](live/round-4-queue-3.json).
+
+Startup, service, browser and continuous dispatcher logs, host-check refusals,
+termination states and wait/resource samples were copied into the private receipt
+before teardown. Package teardown completed and the claim was released. The
+worktree is retained for review.
+
+| Condition in this installed run | Result |
+| --- | --- |
+| Fresh namespace/PVCs, approved images and package readiness | PASS |
+| Owner/admin/member setup; Settings route at both widths | PASS |
+| Complete desktop provider-list screenshot | PARTIAL — captured loading |
+| Provider creation reaches its event and permission reaction | PASS |
+| Advance to the visible Key step | FAIL |
+| Dispatcher stays running with no restarts | PASS |
+| Current/first-container logs, host record and load retained before teardown | PASS |
+| New-key forms and wrong-key HTTP 401 | NOT RUN |
+| Right key, agreed quoted test and model selection | NOT RUN |
+| Default, switch-on and member replies at both widths | NOT RUN |
+| Synthetic 0600/0700 custody before/after Pod recreation | NOT RUN |
+| Final values/manifests/logs/event disclosure inspection | NOT RUN |
+| Package teardown and claim release | PASS |
+| Complete requested journey | FAIL |
+
+## Remaining blocker and owner hold
+
+This is the authorised last fix round. The Key-step gate still fails live after
+the status-control corrections. The assumption that following those controls is
+enough to finish provider setup is not established. Hold the two live blockers for
+the owner under the [engineering discipline](../standards.md#engineering-discipline-make-it-work-then-make-it-right).
+Do not make another change on that assumption or turn the last-round limit into a
+PASS. The retained load and reaction evidence must inform the next decision.
+
+A test-first fatal-dispatch starvation fix and a separately reproduced detached
+status-control fix are retained below. They pass their own regressions; neither
+is claimed to complete this slice. The original CronJob isolation FIX remains
+PASS in source. Private remount custody and the complete packaged journey remain
+PARTIAL because their required live proof is missing.
+
+## Second round 4 attempt
 
 **FAIL — 20 November 2026 UTC, secondary slot 1.** The new namespace and PVCs used
 exact-source approved images. Both slots were free, no competing package/journey
@@ -150,7 +225,7 @@ and all three SIGKILL recovery cases. All 44 upgrade checks passed.
 - **BLOCKING — full packaged journey: PARTIAL.** The first run passed setup and
   wrong-key HTTP 401, then failed at the chat default. With the pool fix installed,
   the dispatcher stayed running, but a reproduced disappearing-button race blocked
-  setup. The corrected full journey remains NOT RUN.
+  setup. The subsequent run also failed at Key; see the latest run above.
 - **FIX — backup CronJob isolation: PASS (source).** Retained failing-first
   `76847bdd9` and claim-based checks across workloads and init containers, including
   aliased and same-name mounts. Focused checks passed twice. No new live backup
