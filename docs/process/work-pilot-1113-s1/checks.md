@@ -1,16 +1,20 @@
 # Install hardening source checks
 
-Source implementation: `08071525c`. Live qualification is
+Source implementation: `32dc94d96`. Live qualification is
 [NOT RUN](journey.md); source checks cannot qualify the capability.
 
 ## Test-first evidence
 
-- `b0645a188`: the explicit public mode was unsupported, the chart did not mount
+The observations below preceded the original implementation. The listed hashes
+are the rebased test commits. During the rebase, the first chart test was also
+seen failing for its missing token mount before the implementation was replayed.
+
+- `292ecbbab`: the explicit public mode was unsupported, the chart did not mount
   a token and the owner bootstrap still attempted its development command.
   The targeted checks failed before the implementation.
-- `2a7f4253b`: the new hostname and explicit-choice tests exposed acceptance of an
+- `d43b902f2`: the new hostname and explicit-choice tests exposed acceptance of an
   IP address and a string-valued chart switch. Both refused after the fix.
-- `1ba83c661`: removing the token record still let the installer succeed. The
+- `2d357da93`: removing the token record still let the installer succeed. The
   new refusal test failed with actual status 0 instead of 1 before the fix.
 - Removing each of the six public sign-in requirements in isolated child-process
   module loads made its matching CLI refusal test fail with actual status 0.
@@ -31,8 +35,8 @@ development identity key; the preparation map now has its explicit text-record t
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Workspace, package and dev-stack typecheck | PASS | Final complete root command exited 0 |
-| Complete package scope, twice | PASS | 639/639 each; no skips; 1,316.83 s and 796.82 s |
-| Token and bootstrap integration suites, twice | PASS | 58/58 each; 213.46 s and 186.73 s |
+| Complete rebased package scope, twice | PASS | 643/643 each; no skips; 770.56 s and 960.84 s |
+| Token and bootstrap integration suites, twice | PASS | 58/58 each; 168.07 s and 136.83 s |
 | Public-address focused CLI, chart and installer checks | PASS | 47/47 before the complete repeats |
 | Event catalogue | PASS | 174 registered event types match the catalogue |
 | Knip | PASS | Two existing configuration hints; no unused-code finding |
@@ -49,10 +53,23 @@ used the shared disposable database and at most two workers. No full root test
 suite ran. Existing real NATS and Docker fixtures remained within the allowed test
 scope. No secondary journey, owner stack, Docker daemon or host network was changed.
 
+## Rebase
+
+Main advanced to `c791103b3` while the first checks ran. The branch was rebased
+onto it. Both sets of appended tests were retained; template and preparation
+conflicts keep main's backup restore and removal of conversation-key storage.
+The README diagram retains the restore process and stays within eight nodes.
+The updated lockfile was installed with `npm ci` before restarting the gates.
+
+Before that rebase, the same four package files passed 639/639 twice, and the
+same four token/bootstrap files passed 58/58 twice. Those are historical results;
+the completed-check table records the rebased runs. All eight guard removals were
+repeated and detected on the rebased source too.
+
 ## Test commands
 
 ```sh
-nice -n 10 node --experimental-strip-types --test --test-concurrency=1 \
+nice -n 10 node --experimental-strip-types --test --test-concurrency=2 \
   infra/package/preflight.test.mjs infra/package/chart.test.mjs \
   infra/package/chart-render.test.mjs infra/package/cnpg-install.test.mjs
 nice -n 10 node --experimental-strip-types --test --test-concurrency=2 \
