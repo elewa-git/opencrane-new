@@ -1,0 +1,208 @@
+TAP version 13
+# Subtest: check every target node, clean up probes and record each result
+ok 1 - check every target node, clean up probes and record each result
+  ---
+  duration_ms: 21.136371
+  type: 'test'
+  ...
+# Subtest: refuse a failing second node before installation and clean its probe
+ok 2 - refuse a failing second node before installation and clean its probe
+  ---
+  duration_ms: 5.184011
+  type: 'test'
+  ...
+# Subtest: a dev override cannot waive checks for a remote node
+ok 3 - a dev override cannot waive checks for a remote node
+  ---
+  duration_ms: 2.581198
+  type: 'test'
+  ...
+# Subtest: unknown override values fail closed
+ok 4 - unknown override values fail closed
+  ---
+  duration_ms: 0.670888
+  type: 'test'
+  ...
+# Subtest: local accepted exception is explicit and retained with both failures
+ok 5 - local accepted exception is explicit and retained with both failures
+  ---
+  duration_ms: 5.983188
+  type: 'test'
+  ...
+# Subtest: an unreadable node refuses and removes its probe
+ok 6 - an unreadable node refuses and removes its probe
+  ---
+  duration_ms: 5.077394
+  type: 'test'
+  ...
+# Subtest: target changes during probes refuse installation
+ok 7 - target changes during probes refuse installation
+  ---
+  duration_ms: 3.390343
+  type: 'test'
+  ...
+# Subtest: probe Pods have only read-only host mounts and no service token
+ok 8 - probe Pods have only read-only host mounts and no service token
+  ---
+  duration_ms: 2.978996
+  type: 'test'
+  ...
+# Subtest: a matching local container name cannot waive another cluster node
+ok 9 - a matching local container name cannot waive another cluster node
+  ---
+  duration_ms: 3.177338
+  type: 'test'
+  ...
+# Subtest: swap off and crash dumps off pass
+ok 10 - swap off and crash dumps off pass
+  ---
+  duration_ms: 3.134982
+  type: 'test'
+  ...
+# Subtest: active plain encrypted swap with a boot random key passes
+ok 11 - active plain encrypted swap with a boot random key passes
+  ---
+  duration_ms: 0.781838
+  type: 'test'
+  ...
+# Subtest: refuse unencrypted swap with the exact F1 fix
+ok 12 - refuse unencrypted swap with the exact F1 fix
+  ---
+  duration_ms: 0.563022
+  type: 'test'
+  ...
+# Subtest: refuse unverified mapper with the exact F1 fix
+ok 13 - refuse unverified mapper with the exact F1 fix
+  ---
+  duration_ms: 0.267729
+  type: 'test'
+  ...
+# Subtest: refuse malformed swap list with the exact F1 fix
+ok 14 - refuse malformed swap list with the exact F1 fix
+  ---
+  duration_ms: 0.219834
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption ""
+ok 15 - refuse unproved boot encryption ""
+  ---
+  duration_ms: 0.292321
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /etc/swap.key plain,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 16 - refuse unproved boot encryption "cryptswap /dev/sda2 /etc/swap.key plain,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.155065
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom luks,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 17 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom luks,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.171201
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom swap,cipher=aes-xts-plain64,size=256\\n"
+ok 18 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.628856
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,cipher=aes-xts-plain64,size=256\\n"
+ok 19 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.809516
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,noauto,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 20 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,noauto,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.421812
+  type: 'test'
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\ncryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\n"
+ok 21 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\ncryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.209008
+  type: 'test'
+  ...
+# Subtest: a crypttab name alone cannot prove active encryption
+ok 22 - a crypttab name alone cannot prove active encryption
+  ---
+  duration_ms: 0.305334
+  type: 'test'
+  ...
+# Subtest: every active swap entry must pass
+ok 23 - every active swap entry must pass
+  ---
+  duration_ms: 0.33273
+  type: 'test'
+  ...
+# Subtest: refuse crash output "|/usr/share/apport/apport %p\\n" with the F2 fix
+ok 24 - refuse crash output "|/usr/share/apport/apport %p\\n" with the F2 fix
+  ---
+  duration_ms: 0.245547
+  type: 'test'
+  ...
+# Subtest: refuse crash output "|/bin/false\\n" with the F2 fix
+ok 25 - refuse crash output "|/bin/false\\n" with the F2 fix
+  ---
+  duration_ms: 2.057238
+  type: 'test'
+  ...
+# Subtest: refuse crash output "core\\n" with the F2 fix
+ok 26 - refuse crash output "core\\n" with the F2 fix
+  ---
+  duration_ms: 0.137722
+  type: 'test'
+  ...
+# Subtest: refuse crash output "/var/crash/core.%p\\n" with the F2 fix
+ok 27 - refuse crash output "/var/crash/core.%p\\n" with the F2 fix
+  ---
+  duration_ms: 0.22429
+  type: 'test'
+  ...
+# Subtest: refuse crash output "/dev/null\\n" with the F2 fix
+ok 28 - refuse crash output "/dev/null\\n" with the F2 fix
+  ---
+  duration_ms: 0.115399
+  type: 'test'
+  ...
+# Subtest: refuse crash output " \\n" with the F2 fix
+ok 29 - refuse crash output " \\n" with the F2 fix
+  ---
+  duration_ms: 0.13683
+  type: 'test'
+  ...
+# Subtest: refuse crash output "" with the F2 fix
+ok 30 - refuse crash output "" with the F2 fix
+  ---
+  duration_ms: 0.11918
+  type: 'test'
+  ...
+# Subtest: empty pattern with PID suffix still persists a dump
+ok 31 - empty pattern with PID suffix still persists a dump
+  ---
+  duration_ms: 0.305421
+  type: 'test'
+  ...
+# Subtest: report both host failures together
+ok 32 - report both host failures together
+  ---
+  duration_ms: 0.297708
+  type: 'test'
+  ...
+# Subtest: read fixture host files without changing them, and refuse missing observations
+ok 33 - read fixture host files without changing them, and refuse missing observations
+  ---
+  duration_ms: 4.989597
+  type: 'test'
+  ...
+1..33
+# tests 33
+# suites 0
+# pass 33
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 287.635528

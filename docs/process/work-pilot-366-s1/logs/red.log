@@ -1,0 +1,568 @@
+TAP version 13
+# Subtest: swap off and crash dumps off pass
+ok 1 - swap off and crash dumps off pass
+  ---
+  duration_ms: 6.118725
+  type: 'test'
+  ...
+# Subtest: active plain encrypted swap with a boot random key passes
+ok 2 - active plain encrypted swap with a boot random key passes
+  ---
+  duration_ms: 0.648671
+  type: 'test'
+  ...
+# Subtest: refuse unencrypted swap with the exact F1 fix
+not ok 3 - refuse unencrypted swap with the exact F1 fix
+  ---
+  duration_ms: 2.084504
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:29:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:.*disable swap.*fresh random key at each boot/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeSwap (file://[checkout]/infra/package/host-preflight.test.mjs:32:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unverified mapper with the exact F1 fix
+not ok 4 - refuse unverified mapper with the exact F1 fix
+  ---
+  duration_ms: 0.65222
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:29:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:.*disable swap.*fresh random key at each boot/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeSwap (file://[checkout]/infra/package/host-preflight.test.mjs:32:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse malformed swap list with the exact F1 fix
+not ok 5 - refuse malformed swap list with the exact F1 fix
+  ---
+  duration_ms: 0.390299
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:29:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:.*disable swap.*fresh random key at each boot/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeSwap (file://[checkout]/infra/package/host-preflight.test.mjs:32:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption ""
+not ok 6 - refuse unproved boot encryption ""
+  ---
+  duration_ms: 0.492735
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /etc/swap.key plain,swap,cipher=aes-xts-plain64,size=256\\n"
+not ok 7 - refuse unproved boot encryption "cryptswap /dev/sda2 /etc/swap.key plain,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.713688
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom luks,swap,cipher=aes-xts-plain64,size=256\\n"
+not ok 8 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom luks,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.34615
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom swap,cipher=aes-xts-plain64,size=256\\n"
+not ok 9 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.76578
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,cipher=aes-xts-plain64,size=256\\n"
+not ok 10 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.983922
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,noauto,swap,cipher=aes-xts-plain64,size=256\\n"
+not ok 11 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,noauto,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 1.537403
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\ncryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\n"
+not ok 12 - refuse unproved boot encryption "cryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\ncryptswap /dev/sda2 /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256\\n"
+  ---
+  duration_ms: 0.430463
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:45:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.unsafeBoot (file://[checkout]/infra/package/host-preflight.test.mjs:48:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: a crypttab name alone cannot prove active encryption
+not ok 13 - a crypttab name alone cannot prove active encryption
+  ---
+  duration_ms: 0.933379
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:51:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.inactiveEncryption (file://[checkout]/infra/package/host-preflight.test.mjs:54:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: every active swap entry must pass
+not ok 14 - every active swap entry must pass
+  ---
+  duration_ms: 1.396779
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:56:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F1:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.mixedSwap (file://[checkout]/infra/package/host-preflight.test.mjs:59:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output "|/usr/share/apport/apport %p\\n" with the F2 fix
+not ok 15 - refuse crash output "|/usr/share/apport/apport %p\\n" with the F2 fix
+  ---
+  duration_ms: 0.922307
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output "|/bin/false\\n" with the F2 fix
+not ok 16 - refuse crash output "|/bin/false\\n" with the F2 fix
+  ---
+  duration_ms: 0.482244
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output "core\\n" with the F2 fix
+not ok 17 - refuse crash output "core\\n" with the F2 fix
+  ---
+  duration_ms: 0.52542
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output "/var/crash/core.%p\\n" with the F2 fix
+not ok 18 - refuse crash output "/var/crash/core.%p\\n" with the F2 fix
+  ---
+  duration_ms: 0.250566
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output "/dev/null\\n" with the F2 fix
+not ok 19 - refuse crash output "/dev/null\\n" with the F2 fix
+  ---
+  duration_ms: 0.275071
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output " \\n" with the F2 fix
+not ok 20 - refuse crash output " \\n" with the F2 fix
+  ---
+  duration_ms: 0.259253
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: refuse crash output "" with the F2 fix
+not ok 21 - refuse crash output "" with the F2 fix
+  ---
+  duration_ms: 0.382435
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:64:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:.*core_pattern.*core_uses_pid=0/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.dumps (file://[checkout]/infra/package/host-preflight.test.mjs:67:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: empty pattern with PID suffix still persists a dump
+not ok 22 - empty pattern with PID suffix still persists a dump
+  ---
+  duration_ms: 0.810396
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:70:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /F2:/u. Input:
+
+    ''
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.pidSuffix (file://[checkout]/infra/package/host-preflight.test.mjs:73:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: report both host failures together
+not ok 23 - report both host failures together
+  ---
+  duration_ms: 1.110554
+  type: 'test'
+  location: '[checkout]/infra/package/host-preflight.test.mjs:75:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    0 !== 2
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.bothFailures (file://[checkout]/infra/package/host-preflight.test.mjs:79:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 2
+# fail 21
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 216.21543

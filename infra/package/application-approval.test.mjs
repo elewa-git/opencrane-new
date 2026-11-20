@@ -34,6 +34,13 @@ function acceptsCiOutput() {
 }
 test('application preflight accepts successful exact-source CI output', acceptsCiOutput);
 
+function acceptsUnfilteredSuccessfulRun() {
+  const result = check({ filteredEmpty: true });
+  assert.equal(result.status, 0, result.stderr);
+}
+test('application preflight accepts a successful exact-source run omitted by GitHub status filtering',
+  acceptsUnfilteredSuccessfulRun);
+
 function refusesBuilderApproval() {
   const result = check({ noJob: true });
   assert.notEqual(result.status, 0, 'Builder-written matching pins and proof cannot approve an image');

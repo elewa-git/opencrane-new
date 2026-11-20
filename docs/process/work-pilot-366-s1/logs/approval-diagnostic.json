@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-11-20T01:50:12Z",
+  "source": "4e637fef0e1024dbbf42e411cb79b22cbe10e0be",
+  "applicationRun": 44640305759,
+  "directRun": {
+    "status": "completed",
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "headBranch": "work/pilot-366-s1"
+  },
+  "exactSourceQueryWithStatusSuccess": {
+    "total_count": 0,
+    "workflow_runs": []
+  },
+  "exactSourceQueryWithoutStatus": {
+    "total_count": 1,
+    "runIds": [
+      44640305759
+    ]
+  },
+  "fetchApplicationApproval": {
+    "stage": "metadata",
+    "reason": "malformed"
+  },
+  "fetchScannerApproval": "PASS",
+  "approvalGuardChanged": false
+}

@@ -14,7 +14,7 @@ import { expireCertificate } from './expired-certificate-fixture.mjs';
 const source = resolve('.');
 const applicationImage = 'k3d-ocn-registry:5000/opencrane/package@sha256:' + 'a'.repeat(64);
 const canary = 'private-canary:%/?@';
-const generatedPassword = 'a'.repeat(64);
+const generatedPassword = '0123456789abcdef'.repeat(4);
 const refusal = 'CNPG installation inputs are incomplete or incompatible';
 const nextStep = 'A Helm release already uses this namespace';
 function encoded(value) {
@@ -128,6 +128,89 @@ function checkBootstrapOrder(calls, restoring) {
   assert.ok(bootstrap > gateway, 'Configure the gateway before waiting for bootstrap');
 }
 
+function checkFixtureArguments(calls, fixture, privateDirectory, renders) {
+  for (const call of calls) {
+    if (call.program === 'kubectl' && call.args.includes('run')) {
+      assert.equal(call.args[call.args.indexOf('--image') + 1], fixture.values.images.server,
+        'Host probes must use the current CI-approved application image');
+    }
+    if (fixture.cluster) {
+      assert.ok(!call.args.includes('--context=k3d-ocn') && !call.args.includes('k3d-ocn'),
+        'Never fall back to the shared cluster');
+    }
+    for (const argument of call.args) {
+      assert.ok(!argument.includes(privateDirectory),
+        `${call.program} arguments must not include the private values directory`);
+    }
+    if (call.program === 'openssl') {
+      for (const argument of call.args) {
+        assert.ok(!isAbsolute(argument), 'OpenSSL arguments must use relative filenames');
+      }
+    }
+    if (call.program === 'helm') {
+      assert.equal(renders, true, 'Helm must not run with incomplete inputs');
+      if (fixture.install) {
+        assert.ok(['template', 'install'].includes(call.args[0]));
+      } else {
+        assert.equal(call.args[0], 'template', 'Helm must never apply a refusal fixture');
+      }
+    }
+  }
+}
+
+async function checkSuccessfulInstall(directory, fixture, calls, result) {
+  const savedOwner = JSON.parse(await readFile(`${directory}/package-owner.json`, 'utf8'));
+  assert.ok(savedOwner.hostPreflight.checkedAt);
+  assert.equal(savedOwner.hostPreflight.nodes.length, fixture.nodes?.items.length ?? 1);
+  assert.deepEqual(savedOwner.hostPreflight.nodes[0].failures, []);
+  assert.equal(savedOwner.hostPreflight.override, undefined);
+  const helmCommands = [];
+  for (const call of calls) {
+    if (call.program === 'helm') {
+      helmCommands.push(call.args[0]);
+    }
+  }
+  assert.deepEqual(helmCommands, ['template', 'install']);
+  checkBootstrapOrder(calls, fixture.values.pilotRestore?.enabled === true);
+  if (fixture.values.pilotRestore?.enabled) {
+    for (const name of ['nats', 'postgres']) {
+      function waited(call) {
+        return call.args.includes('rollout') && call.args.includes(`statefulset/${name}`);
+      }
+      assert.ok(calls.some(waited), 'Wait for core storage without owner bootstrap');
+    }
+  }
+  assert.equal(result.stderr, '');
+}
+
+function isPostgresResource(resource) {
+  return resource.metadata.name === 'postgres';
+}
+function isClusterResource(resource) {
+  return resource.kind === 'Cluster';
+}
+function isStatefulSetResource(resource) {
+  return resource.kind === 'StatefulSet';
+}
+async function checkRenderedDatabase(directory, fixture, callText) {
+  const rendered = await readFile(`${directory}/rendered.yaml`, 'utf8');
+  const resources = [];
+  for (const document of parseAllDocuments(rendered)) {
+    assert.deepEqual(document.errors, []);
+    resources.push(document.toJS());
+  }
+  const databaseResources = resources.filter(isPostgresResource);
+  if (fixture.values.postgres.mode === 'cnpg') {
+    const database = databaseResources.find(isClusterResource);
+    assert.equal(database.spec.imageName, fixture.review.images.postgres);
+  } else {
+    const database = databaseResources.find(isStatefulSetResource);
+    assert.equal(database.spec.replicas, 1);
+    assert.ok(!callText.includes('postgresql.cnpg.io'));
+    assert.ok(!callText.includes('deployments'));
+  }
+}
+
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
   const directory = await mkdtemp(`${tmpdir()}/cnpg-install-`);
   try {
@@ -159,6 +242,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     if (environmentValues) {
       env.PACKAGE_VALUES_FILE = valuesFile;
     }
+    await writeFile(`${directory}/calls.jsonl`, '');
     const result = spawnSync(process.execPath, args, { cwd: directory, env, encoding: 'utf8' });
     const expectedStatus = fixture.install && !expected ? 0 : 1;
     assert.equal(result.status, expectedStatus, result.stderr);
@@ -167,77 +251,18 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     assert.ok(!result.stderr.includes(generatedPassword), 'Errors must discard generated passwords');
     assert.ok(!result.stdout.includes(generatedPassword), 'Output must discard generated passwords');
     const callText = await readFile(`${directory}/calls.jsonl`, 'utf8');
-    if (fixture.cluster) assert.ok(!callText.includes('k3d-ocn'), 'Never fall back to the shared cluster');
     assert.ok(!callText.includes(canary), 'Arguments must not include private values');
     assert.ok(!callText.includes(generatedPassword), 'Arguments must not include passwords');
     const trimmedCalls = callText.trim();
-    const callLines = trimmedCalls.split('\n');
+    const callLines = trimmedCalls ? trimmedCalls.split('\n') : [];
     const calls = callLines.map(JSON.parse);
-    for (const call of calls) {
-      for (const argument of call.args) {
-        assert.ok(!argument.includes(privateDirectory),
-          `${call.program} arguments must not include the private values directory`);
-      }
-      if (call.program === 'openssl') {
-        for (const argument of call.args) {
-          assert.ok(!isAbsolute(argument), 'OpenSSL arguments must use relative filenames');
-        }
-      }
-      if (call.program === 'helm') {
-        assert.equal(renders, true, 'Helm must not run with incomplete inputs');
-        if (fixture.install) {
-          assert.ok(['template', 'install'].includes(call.args[0]));
-        } else {
-          assert.equal(call.args[0], 'template', 'Helm must never apply a refusal fixture');
-        }
-      }
-    }
+    checkFixtureArguments(calls, fixture, privateDirectory, renders);
     if (fixture.install && !expected) {
-      const helmCommands = [];
-      for (const call of calls) {
-        if (call.program === 'helm') {
-          helmCommands.push(call.args[0]);
-        }
-      }
-      assert.deepEqual(helmCommands, ['template', 'install']);
-      checkBootstrapOrder(calls, fixture.values.pilotRestore?.enabled === true);
-      if (fixture.values.pilotRestore?.enabled) {
-        for (const name of ['nats', 'postgres']) {
-          function waited(call) {
-            return call.args.includes('rollout') && call.args.includes(`statefulset/${name}`);
-          }
-          assert.ok(calls.some(waited), 'Wait for core storage without owner bootstrap');
-        }
-      }
-      assert.equal(result.stderr, '');
+      await checkSuccessfulInstall(directory, fixture, calls, result);
     } else {
       assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
     }
-    if (renders) {
-      const rendered = await readFile(`${directory}/rendered.yaml`, 'utf8');
-      const resources = [];
-      for (const document of parseAllDocuments(rendered)) {
-        assert.deepEqual(document.errors, []);
-        resources.push(document.toJS());
-      }
-      function postgres(resource) {
-        return resource.metadata.name === 'postgres';
-      }
-      const databaseResources = resources.filter(postgres);
-      if (fixture.values.postgres.mode === 'cnpg') {
-        function cluster(resource) {
-          return resource.kind === 'Cluster';
-        }
-        assert.equal(databaseResources.find(cluster).spec.imageName, fixture.review.images.postgres);
-      } else {
-        function statefulSet(resource) {
-          return resource.kind === 'StatefulSet';
-        }
-        assert.equal(databaseResources.find(statefulSet).spec.replicas, 1);
-        assert.ok(!callText.includes('postgresql.cnpg.io'));
-        assert.ok(!callText.includes('deployments'));
-      }
-    }
+    if (renders) await checkRenderedDatabase(directory, fixture, callText);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -610,7 +635,7 @@ for (const reason of clusterRefusals) {
     if (reason === 'lost target') fixture.loseTarget = true;
     let expected = 'Package command failed';
     if (reason === 'runtime' || reason === 'bootstrap') expected = 'Invalid package NATS replica settings';
-    if (reason === 'lost target') expected = refusal;
+    if (reason === 'lost target') expected = 'Package ownership differs from the recorded namespace';
     await runFixture(fixture, expected);
   }
   test(`R3 inputs refuse before Helm: ${reason}`, refusesClusterInputs);

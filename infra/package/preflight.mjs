@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { collectHost, hostFailures } from './host-preflight.mjs';
 import { fetchApplicationApproval } from './application-approval.mjs';
 import { fetchScannerApproval } from '../clamav/approval.mjs';
 
@@ -185,9 +186,15 @@ async function check(values, review) {
 }
 
 try {
-  const values = readJson(process.argv[2]);
-  const review = readJson(process.argv[3]);
-  await check(values, review);
+  if (process.argv[2] === '--host') {
+    const failures = hostFailures(collectHost());
+    if (failures.length > 0) throw new Error(failures.join('\n'));
+    console.log('PASS F1 and F2: host swap and crash dump settings');
+  } else {
+    const values = readJson(process.argv[2]);
+    const review = readJson(process.argv[3]);
+    await check(values, review);
+  }
 } catch (error) {
   if (error instanceof SyntaxError) console.error('Invalid package JSON');
   else console.error(error.message);

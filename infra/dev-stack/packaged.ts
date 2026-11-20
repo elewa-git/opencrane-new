@@ -12,6 +12,7 @@ import { commandTimeout, type CommandLimits } from './command-limits.ts';
 import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
+import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from './package-hosts.ts';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 
 const execute = promisify(execFile);
@@ -74,6 +75,7 @@ type PackageOwner = {
   heartbeatAt: string;
   releaseSecretUid?: string;
   installId?: string;
+  hostPreflight?: HostCheckRecord;
 };
 type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
   images: Record<string, string>;
@@ -466,12 +468,19 @@ async function configureComputerGateway(owner: PackageOwner) {
 }
 
 export async function installPackage(valuesFile: string) {
-  const { values, review } = await readReviewedValues(valuesFile);
   const owner = await verifyPackageOwner();
   function checkedKubectl(args: string[], timeoutMs?: number, signal?: AbortSignal,
     deadline?: number) {
     return ownedKubectl(owner, args, timeoutMs, signal, deadline);
   }
+  const { values, review } = await readReviewedValues(valuesFile);
+  const hostOptions: HostCheckOptions = {
+    command: checkedKubectl, namespace, image: values.images['server']!,
+    localCommand: command };
+  const override = process.env['OPENCRANE_ACCEPT_DEV_HOST_RISK'];
+  if (override !== undefined) hostOptions.override = override;
+  owner.hostPreflight = await checkPackageHosts(hostOptions);
+  await saveOwner(owner);
   await checkCnpgInstallation(values, namespace, checkedKubectl);
   const secrets = await checkNamedSecrets(values, review, owner);
   if (values.natsCluster?.enabled) {

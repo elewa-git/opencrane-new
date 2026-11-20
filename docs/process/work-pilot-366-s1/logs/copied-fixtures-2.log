@@ -1,0 +1,541 @@
+TAP version 13
+# Subtest: complete fixture passes
+ok 1 - complete fixture passes
+  ---
+  duration_ms: 3.8603
+  type: 'test'
+  ...
+# Subtest: reused install id fails
+ok 2 - reused install id fails
+  ---
+  duration_ms: 1.682669
+  type: 'test'
+  ...
+# Subtest: missing install id fails
+ok 3 - missing install id fails
+  ---
+  duration_ms: 0.483263
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: reused PVC UID
+ok 4 - leftover silo data fails: reused PVC UID
+  ---
+  duration_ms: 0.377616
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: old PVC
+ok 5 - leftover silo data fails: old PVC
+  ---
+  duration_ms: 0.718786
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: old event
+ok 6 - leftover silo data fails: old event
+  ---
+  duration_ms: 0.340764
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: old silo event
+ok 7 - leftover silo data fails: old silo event
+  ---
+  duration_ms: 0.263199
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: conversation event
+ok 8 - leftover silo data fails: conversation event
+  ---
+  duration_ms: 0.462753
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: PV still claimed
+ok 9 - leftover silo data fails: PV still claimed
+  ---
+  duration_ms: 1.542806
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: extra member
+ok 10 - leftover silo data fails: extra member
+  ---
+  duration_ms: 2.080291
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: conversation row
+ok 11 - leftover silo data fails: conversation row
+  ---
+  duration_ms: 0.619163
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: file row
+ok 12 - leftover silo data fails: file row
+  ---
+  duration_ms: 0.373976
+  type: 'test'
+  ...
+# Subtest: leftover silo data fails: reused store id
+ok 13 - leftover silo data fails: reused store id
+  ---
+  duration_ms: 0.44027
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: no identity row
+ok 14 - missing, unverified or non-owner identity fails acceptance: no identity row
+  ---
+  duration_ms: 1.035967
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: missing configured email
+ok 15 - missing, unverified or non-owner identity fails acceptance: missing configured email
+  ---
+  duration_ms: 0.322402
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: unverified email
+ok 16 - missing, unverified or non-owner identity fails acceptance: unverified email
+  ---
+  duration_ms: 0.269876
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: role member
+ok 17 - missing, unverified or non-owner identity fails acceptance: role member
+  ---
+  duration_ms: 0.257176
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: not joined
+ok 18 - missing, unverified or non-owner identity fails acceptance: not joined
+  ---
+  duration_ms: 0.493735
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: different member email
+ok 19 - missing, unverified or non-owner identity fails acceptance: different member email
+  ---
+  duration_ms: 0.314695
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: different join event
+ok 20 - missing, unverified or non-owner identity fails acceptance: different join event
+  ---
+  duration_ms: 1.208161
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: missing join event
+ok 21 - missing, unverified or non-owner identity fails acceptance: missing join event
+  ---
+  duration_ms: 0.353604
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: OpenFGA owner false
+ok 22 - missing, unverified or non-owner identity fails acceptance: OpenFGA owner false
+  ---
+  duration_ms: 0.319561
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: unauthenticated sign-in
+ok 23 - missing, unverified or non-owner identity fails acceptance: unauthenticated sign-in
+  ---
+  duration_ms: 0.505941
+  type: 'test'
+  ...
+# Subtest: missing, unverified or non-owner identity fails acceptance: other signed-in subject
+ok 24 - missing, unverified or non-owner identity fails acceptance: other signed-in subject
+  ---
+  duration_ms: 0.35018
+  type: 'test'
+  ...
+# Subtest: internally consistent foreign issuer fails the trusted issuer comparison
+ok 25 - internally consistent foreign issuer fails the trusted issuer comparison
+  ---
+  duration_ms: 0.32377
+  type: 'test'
+  ...
+# Subtest: internally consistent foreign subject fails the expected subject comparison
+ok 26 - internally consistent foreign subject fails the expected subject comparison
+  ---
+  duration_ms: 0.321397
+  type: 'test'
+  ...
+# Subtest: retained memory_facts row refuses a fresh install
+ok 27 - retained memory_facts row refuses a fresh install
+  ---
+  duration_ms: 0.533429
+  type: 'test'
+  ...
+# Subtest: retained memory_changes row refuses a fresh install
+ok 28 - retained memory_changes row refuses a fresh install
+  ---
+  duration_ms: 0.238742
+  type: 'test'
+  ...
+# Subtest: retained memory_dependencies row refuses a fresh install
+ok 29 - retained memory_dependencies row refuses a fresh install
+  ---
+  duration_ms: 0.210986
+  type: 'test'
+  ...
+# Subtest: retained memory_maintenance_runs row refuses a fresh install
+ok 30 - retained memory_maintenance_runs row refuses a fresh install
+  ---
+  duration_ms: 0.27444
+  type: 'test'
+  ...
+# Subtest: retained memory_maintenance_bindings row refuses a fresh install
+ok 31 - retained memory_maintenance_bindings row refuses a fresh install
+  ---
+  duration_ms: 0.456909
+  type: 'test'
+  ...
+# Subtest: actual runner: foreign stack-owner only
+ok 32 - actual runner: foreign stack-owner only
+  ---
+  duration_ms: 1157.053094
+  type: 'test'
+  ...
+# Subtest: actual runner: foreign package-owner.json only
+ok 33 - actual runner: foreign package-owner.json only
+  ---
+  duration_ms: 1077.211226
+  type: 'test'
+  ...
+# Subtest: actual runner: changed namespace UID only
+ok 34 - actual runner: changed namespace UID only
+  ---
+  duration_ms: 884.424806
+  type: 'test'
+  ...
+# Subtest: actual runner: existing namespace only
+ok 35 - actual runner: existing namespace only
+  ---
+  duration_ms: 810.395265
+  type: 'test'
+  ...
+# Subtest: actual runner: claimed PV only
+ok 36 - actual runner: claimed PV only
+  ---
+  duration_ms: 843.86273
+  type: 'test'
+  ...
+# Subtest: actual runner: valid start makes progress
+ok 37 - actual runner: valid start makes progress
+  ---
+  duration_ms: 920.621505
+  type: 'test'
+  ...
+# Subtest: packaged fixture refuses a local import missing from its file list
+ok 38 - packaged fixture refuses a local import missing from its file list
+  ---
+  duration_ms: 1201.923482
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: valid
+ok 39 - actual two-run journey: valid
+  ---
+  duration_ms: 6713.42523
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: collector failure
+ok 40 - actual two-run journey: collector failure
+  ---
+  duration_ms: 3313.252593
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: collector and cleanup failure
+ok 41 - actual two-run journey: collector and cleanup failure
+  ---
+  duration_ms: 3992.913184
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: cleanup failure
+ok 42 - actual two-run journey: cleanup failure
+  ---
+  duration_ms: 6235.375862
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: missing width
+ok 43 - actual two-run journey: missing width
+  ---
+  duration_ms: 7883.144889
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: foreign receipt
+ok 44 - actual two-run journey: foreign receipt
+  ---
+  duration_ms: 4923.814432
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: reused install
+ok 45 - actual two-run journey: reused install
+  ---
+  duration_ms: 6727.542454
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: reused PVC
+ok 46 - actual two-run journey: reused PVC
+  ---
+  duration_ms: 9355.755086
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: reused PV
+ok 47 - actual two-run journey: reused PV
+  ---
+  duration_ms: 10173.053312
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: missing PV
+ok 48 - actual two-run journey: missing PV
+  ---
+  duration_ms: 3989.854849
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: old install
+ok 49 - actual two-run journey: old install
+  ---
+  duration_ms: 3481.509149
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: reused store
+ok 50 - actual two-run journey: reused store
+  ---
+  duration_ms: 6162.219512
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: retained data
+ok 51 - actual two-run journey: retained data
+  ---
+  duration_ms: 2798.380466
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: failed owner
+ok 52 - actual two-run journey: failed owner
+  ---
+  duration_ms: 2924.115719
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: foreign context
+ok 53 - actual two-run journey: foreign context
+  ---
+  duration_ms: 1805.267419
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: foreign claim
+ok 54 - actual two-run journey: foreign claim
+  ---
+  duration_ms: 983.991956
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: reused namespace
+ok 55 - actual two-run journey: reused namespace
+  ---
+  duration_ms: 6291.216247
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: reused release
+ok 56 - actual two-run journey: reused release
+  ---
+  duration_ms: 5955.618342
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: foreign image
+ok 57 - actual two-run journey: foreign image
+  ---
+  duration_ms: 3287.392022
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: collector after teardown
+ok 58 - actual two-run journey: collector after teardown
+  ---
+  duration_ms: 3193.159498
+  type: 'test'
+  ...
+# Subtest: actual two-run journey: dirty source
+ok 59 - actual two-run journey: dirty source
+  ---
+  duration_ms: 3065.355228
+  type: 'test'
+  ...
+# Subtest: collector and inherited ownership calls keep private paths out of spawned argv
+ok 60 - collector and inherited ownership calls keep private paths out of spawned argv
+  ---
+  duration_ms: 1690.430167
+  type: 'test'
+  ...
+# Subtest: package forward keeps kubeconfig in the child environment
+ok 61 - package forward keeps kubeconfig in the child environment
+  ---
+  duration_ms: 1655.269179
+  type: 'test'
+  ...
+# Subtest: collector refuses fresh input that grows past 1 MiB after stat
+ok 62 - collector refuses fresh input that grows past 1 MiB after stat
+  ---
+  duration_ms: 1365.99016
+  type: 'test'
+  ...
+# Subtest: collector refuses stream input that grows past 1 MiB after stat
+ok 63 - collector refuses stream input that grows past 1 MiB after stat
+  ---
+  duration_ms: 1525.225016
+  type: 'test'
+  ...
+# Subtest: collector refuses target input that grows past 1 MiB after stat
+ok 64 - collector refuses target input that grows past 1 MiB after stat
+  ---
+  duration_ms: 1281.339918
+  type: 'test'
+  ...
+# Subtest: collector refuses review input that grows past 1 MiB after stat
+ok 65 - collector refuses review input that grows past 1 MiB after stat
+  ---
+  duration_ms: 2097.485446
+  type: 'test'
+  ...
+# Subtest: collector refuses package input that grows past 1 MiB after stat
+ok 66 - collector refuses package input that grows past 1 MiB after stat
+  ---
+  duration_ms: 2368.776175
+  type: 'test'
+  ...
+# Subtest: collector refuses stack input that grows past 1 MiB after stat
+ok 67 - collector refuses stack input that grows past 1 MiB after stat
+  ---
+  duration_ms: 1631.885387
+  type: 'test'
+  ...
+# Subtest: prepares three private identities accepted by pinned NATS and preserves them on retry
+not ok 68 - prepares three private identities accepted by pinned NATS and preserves them on retry
+  ---
+  duration_ms: 33580.527225
+  type: 'test'
+  location: '[checkout]/infra/package/prepare-nats-routes.test.mjs:262:1'
+  failureType: 'testCodeFailure'
+  error: 'Preparation fixture exceeded its existing process deadline'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: true
+  operator: 'notStrictEqual'
+  stack: |-
+    run (file://[checkout]/infra/package/prepare-nats-routes.test.mjs:159:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async preparesDistinctIdentities (file://[checkout]/infra/package/prepare-nats-routes.test.mjs:250:5)
+    async TestContext.preparesTargetIdentities (file://[checkout]/infra/package/prepare-nats-routes.test.mjs:260:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: prepares route identities in the existing local cluster when no target is recorded
+ok 69 - prepares route identities in the existing local cluster when no target is recorded
+  ---
+  duration_ms: 11424.327918
+  type: 'test'
+  ...
+# Subtest: refuses safely: missing reference
+ok 70 - refuses safely: missing reference
+  ---
+  duration_ms: 2409.492449
+  type: 'test'
+  ...
+# Subtest: refuses safely: duplicate reference
+ok 71 - refuses safely: duplicate reference
+  ---
+  duration_ms: 2255.004455
+  type: 'test'
+  ...
+# Subtest: refuses safely: client reference
+ok 72 - refuses safely: client reference
+  ---
+  duration_ms: 2335.786916
+  type: 'test'
+  ...
+# Subtest: refuses safely: wrong namespace
+ok 73 - refuses safely: wrong namespace
+  ---
+  duration_ms: 1482.704633
+  type: 'test'
+  ...
+# Subtest: refuses safely: foreign owner
+ok 74 - refuses safely: foreign owner
+  ---
+  duration_ms: 1828.976066
+  type: 'test'
+  ...
+# Subtest: refuses safely: wrong pin
+ok 75 - refuses safely: wrong pin
+  ---
+  duration_ms: 3632.29053
+  type: 'test'
+  ...
+# Subtest: refuses safely: partial preparation
+ok 76 - refuses safely: partial preparation
+  ---
+  duration_ms: 11224.41178
+  type: 'test'
+  ...
+# Subtest: refuses safely: expired certificate
+ok 77 - refuses safely: expired certificate
+  ---
+  duration_ms: 31564.736628
+  type: 'test'
+  ...
+# Subtest: refuses safely: client issuer
+ok 78 - refuses safely: client issuer
+  ---
+  duration_ms: 28290.457782
+  type: 'test'
+  ...
+# Subtest: refuses safely: changed object
+ok 79 - refuses safely: changed object
+  ---
+  duration_ms: 28019.635034
+  type: 'test'
+  ...
+# Subtest: refuses safely: foreign object
+ok 80 - refuses safely: foreign object
+  ---
+  duration_ms: 8756.483218
+  type: 'test'
+  ...
+# Subtest: refuses safely: changed reference
+ok 81 - refuses safely: changed reference
+  ---
+  duration_ms: 26951.204391
+  type: 'test'
+  ...
+# Subtest: refuses safely: command failure
+ok 82 - refuses safely: command failure
+  ---
+  duration_ms: 20359.656909
+  type: 'test'
+  ...
+# Subtest: refuses safely: partial objects
+ok 83 - refuses safely: partial objects
+  ---
+  duration_ms: 27237.407257
+  type: 'test'
+  ...
+# Subtest: refuses safely: replaced object
+ok 84 - refuses safely: replaced object
+  ---
+  duration_ms: 27320.90892
+  type: 'test'
+  ...
+# Subtest: refuses safely: wrong SAN
+ok 85 - refuses safely: wrong SAN
+  ---
+  duration_ms: 27120.327106
+  type: 'test'
+  ...
+# Subtest: route preparation refuses a target lost after the namespace check
+ok 86 - route preparation refuses a target lost after the namespace check
+  ---
+  duration_ms: 3220.87595
+  type: 'test'
+  ...
+1..86
+# tests 86
+# suites 0
+# pass 85
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 325262.625328

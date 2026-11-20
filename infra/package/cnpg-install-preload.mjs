@@ -24,7 +24,12 @@ let installed = false;
 function kubernetes(args) {
   const context = fixture.cluster ? 'k3d-opencrane-target-1' : 'k3d-ocn';
   assert(args.includes(`--context=${context}`) || args[args.indexOf('--context') + 1] === context);
-  if (args.includes('nodes')) return fixture.nodes;
+  if (args.includes('nodes')) return fixture.nodes ?? { items: [
+    { metadata: { name: 'fixture-node', uid: 'fixture-node-uid' } },
+  ] };
+  if (args.includes('run') || args.includes('wait') || args.includes('delete')) return '';
+  if (args.includes('logs')) return { swaps: 'Filename Type Size Used Priority\n',
+    corePattern: '\n', coreUsesPid: '0\n', crypttab: '', mappings: [] };
   if (args.includes('namespace')) {
     if (fixture.loseTarget) rmSync('target-owner.json', { force: true });
     return fixture.namespace;
@@ -92,6 +97,8 @@ function execute(program, args, options, callback) {
     return;
   }
   if (program === 'helm') {
+    const owner = JSON.parse(readFileSync('package-owner.json', 'utf8'));
+    assert.ok(owner.hostPreflight?.checkedAt, 'Record host checks before any Helm command');
     if (fixture.install) {
       const valuesName = args[args.indexOf('--values') + 1];
       const valuesPath = new URL(valuesName, 'file://' + options.cwd + '/');

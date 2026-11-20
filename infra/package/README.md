@@ -19,17 +19,18 @@ in the recorded Kubernetes cluster.
 flowchart LR
   stack["infra/dev-stack<br/>stack ownership"] -->|checks and launches| package["infra/package<br/>local Helm install"]
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
-  package -->|installs apps| apps["Server, website and workers<br/>product services"]
+  package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
+  package -->|installs apps and prepares computer settings| apps["Server, website, workers and computer<br/>product services"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
   package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
-  package -->|prepares computer settings| computer["apps/computer<br/>assistant computer"]
 ```
 
 ## What it is responsible for
 
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
+- Refuse unsafe host swap and crash dumps before Helm runs on any target node.
 - Keep private settings in named Secrets and refuse public network exposure. Chats need no key volume.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log, sign-in and a first owner for local testing.
@@ -51,7 +52,7 @@ Not built yet:
 1. **A developer prepares an install.** They claim a spare stack and stop its ordinary
    local services. Preparation records ownership and creates private settings for
    the package in the chosen cluster.
-2. **The package starts.** Image and settings checks run before Helm installs anything.
+2. **The package starts.** Host, image and settings checks run before Helm installs anything.
    A setup job prepares the databases, event log and first owner; workers start an
    assistant's computer when needed.
 3. **A developer opens the website.** A local port forward connects their browser
@@ -81,6 +82,14 @@ For a running install, follow the [operator commands](README.robot.md) to claim 
 spare stack, prepare private values, start Helm, forward the website and clean up.
 That guide also explains image approval and the private development owner setting.
 A fresh install replaces the selected install's data.
+
+Each host must have swap off, or plain encrypted swap with a fresh random key at
+each boot. Host crash dumps must be off or never persisted: this preflight accepts
+an empty `kernel.core_pattern` with `kernel.core_uses_pid=0`, and refuses every
+reporter pipe and file pattern. The checks only read host settings. The explicit
+[dev-box override](README.robot.md#host-disk-protection) records the accepted risk;
+it is off by default and cannot authorise a remote host. The same guide gives the
+exact settings and commands to rerun the production F1 and F2 disk probes.
 
 ## Where to read more
 

@@ -1,0 +1,525 @@
+TAP version 13
+# Subtest: check every target node, clean up probes and record each result
+ok 1 - check every target node, clean up probes and record each result
+  ---
+  duration_ms: 19.274058
+  type: 'test'
+  ...
+# Subtest: refuse a failing second node before installation and clean its probe
+not ok 2 - refuse a failing second node before installation and clean its probe
+  ---
+  duration_ms: 6.895149
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:54:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'node-2: F1: disable swap, or use plain dm-crypt swap with a fresh random key at each boot (/etc/crypttab: NAME DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256); activate only that mapped swap device and reboot to verify the boot configuration.\n' +
+          'node-2: F2: disable host crash reporters (including apport and systemd-coredump); persist kernel.core_pattern= and kernel.core_uses_pid=0 in /etc/sysctl.d/99-no-core.conf, apply those settings and verify they remain after reboot.',
+    -   reason: 'unsafe_settings'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unsafe_settings'
+    message:
+  actual:
+  error: |-
+    node-2: F1: disable swap, or use plain dm-crypt swap with a fresh random key at each boot (/etc/crypttab: NAME DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256); activate only that mapped swap device and reboot to verify the boot configuration.
+    node-2: F2: disable host crash reporters (including apport and systemd-coredump); persist kernel.core_pattern= and kernel.core_uses_pid=0 in /etc/sysctl.d/99-no-core.conf, apply those settings and verify they remain after reboot.
+  stack: |-
+    requireHostResults (file://<repo>/infra/dev-stack/package-hosts.ts:152:11)
+    checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:181:3)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:57:5)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.refusal (file://<repo>/infra/dev-stack/package-hosts.test.ts:59:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.refusal (file://<repo>/infra/dev-stack/package-hosts.test.ts:59:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: package refusal shows F1 and F2 fixes without exposing unrelated errors
+not ok 3 - package refusal shows F1 and F2 fixes without exposing unrelated errors
+  ---
+  duration_ms: 8.875451
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:63:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+
+    + undefined
+    - 'unsafe_settings'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'unsafe_settings'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.visibleHostRefusal (file://<repo>/infra/dev-stack/package-hosts.test.ts:72:12)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: a dev override cannot waive checks for a remote node
+not ok 4 - a dev override cannot waive checks for a remote node
+  ---
+  duration_ms: 3.967369
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:81:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Host-risk override requires verified local k3d nodes',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Host-risk override requires verified local k3d nodes'
+  stack: |-
+    checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:166:11)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:84:5)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.remoteOverride (file://<repo>/infra/dev-stack/package-hosts.test.ts:87:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.remoteOverride (file://<repo>/infra/dev-stack/package-hosts.test.ts:87:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: unknown override values fail closed
+not ok 5 - unknown override values fail closed
+  ---
+  duration_ms: 2.071154
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:90:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Unknown host-risk override; omit OPENCRANE_ACCEPT_DEV_HOST_RISK',
+    -   reason: 'unknown_override'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unknown_override'
+    message:
+  actual:
+  error: 'Unknown host-risk override; omit OPENCRANE_ACCEPT_DEV_HOST_RISK'
+  stack: |-
+    checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:158:11)
+    check (file://<repo>/infra/dev-stack/package-hosts.test.ts:93:11)
+    waitForActual (node:assert:630:21)
+    Function.rejects (node:assert:767:31)
+    TestContext.invalidOverride (file://<repo>/infra/dev-stack/package-hosts.test.ts:95:16)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.invalidOverride (file://<repo>/infra/dev-stack/package-hosts.test.ts:95:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: local accepted exception is explicit and retained with both failures
+ok 6 - local accepted exception is explicit and retained with both failures
+  ---
+  duration_ms: 13.026696
+  type: 'test'
+  ...
+# Subtest: an unreadable node refuses and removes its probe
+ok 7 - an unreadable node refuses and removes its probe
+  ---
+  duration_ms: 3.636954
+  type: 'test'
+  ...
+# Subtest: target changes during probes refuse installation
+not ok 8 - target changes during probes refuse installation
+  ---
+  duration_ms: 4.269977
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:167:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Installation nodes changed',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Installation nodes changed'
+  stack: |-
+    requireSameNodes (file://<repo>/infra/dev-stack/package-hosts.ts:130:57)
+    checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:180:3)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:178:5)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.nodeDrift (file://<repo>/infra/dev-stack/package-hosts.test.ts:180:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.nodeDrift (file://<repo>/infra/dev-stack/package-hosts.test.ts:180:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: probe Pods have only read-only host mounts and no service token
+ok 9 - probe Pods have only read-only host mounts and no service token
+  ---
+  duration_ms: 4.606027
+  type: 'test'
+  ...
+# Subtest: a matching local container name cannot waive another cluster node
+not ok 10 - a matching local container name cannot waive another cluster node
+  ---
+  duration_ms: 3.655338
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:205:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Local k3d node identity differs from the installation target',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Local k3d node identity differs from the installation target'
+  stack: |-
+    requireLocalContainer (file://<repo>/infra/dev-stack/package-hosts.ts:108:11)
+    async localHost (file://<repo>/infra/dev-stack/package-hosts.ts:122:5)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:208:5)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.falseLocalNode (file://<repo>/infra/dev-stack/package-hosts.test.ts:211:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.falseLocalNode (file://<repo>/infra/dev-stack/package-hosts.test.ts:211:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires Docker-context Unix endpoint
+not ok 11 - override authority requires Docker-context Unix endpoint
+  ---
+  duration_ms: 2.81214
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:228:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Cannot verify the underlying k3d host through a remote Docker endpoint',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Cannot verify the underlying k3d host through a remote Docker endpoint'
+  stack: |-
+    requireLocalDocker (file://<repo>/infra/dev-stack/package-hosts.ts:84:11)
+    async localHost (file://<repo>/infra/dev-stack/package-hosts.ts:119:3)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:231:7)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires permitted k3d name
+not ok 12 - override authority requires permitted k3d name
+  ---
+  duration_ms: 6.695117
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:228:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Host-risk override requires verified local k3d nodes',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Host-risk override requires verified local k3d nodes'
+  stack: |-
+    requireLocalContainer (file://<repo>/infra/dev-stack/package-hosts.ts:91:11)
+    localHost (file://<repo>/infra/dev-stack/package-hosts.ts:122:11)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:231:7)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires container count
+not ok 13 - override authority requires container count
+  ---
+  duration_ms: 3.177135
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:228:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Cannot verify the underlying k3d host',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Cannot verify the underlying k3d host'
+  stack: |-
+    requireLocalContainer (file://<repo>/infra/dev-stack/package-hosts.ts:101:11)
+    async localHost (file://<repo>/infra/dev-stack/package-hosts.ts:122:5)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:231:7)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires exact container name
+not ok 14 - override authority requires exact container name
+  ---
+  duration_ms: 2.976799
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:228:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Cannot verify the underlying k3d host',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Cannot verify the underlying k3d host'
+  stack: |-
+    requireLocalContainer (file://<repo>/infra/dev-stack/package-hosts.ts:101:11)
+    async localHost (file://<repo>/infra/dev-stack/package-hosts.ts:122:5)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:231:7)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires Running container
+not ok 15 - override authority requires Running container
+  ---
+  duration_ms: 3.392624
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:228:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Cannot verify the underlying k3d host',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Cannot verify the underlying k3d host'
+  stack: |-
+    requireLocalContainer (file://<repo>/infra/dev-stack/package-hosts.ts:101:11)
+    async localHost (file://<repo>/infra/dev-stack/package-hosts.ts:122:5)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:231:7)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires cluster label
+not ok 16 - override authority requires cluster label
+  ---
+  duration_ms: 2.327733
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:228:3'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Cannot verify the underlying k3d host',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Cannot verify the underlying k3d host'
+  stack: |-
+    requireLocalContainer (file://<repo>/infra/dev-stack/package-hosts.ts:101:11)
+    async localHost (file://<repo>/infra/dev-stack/package-hosts.ts:122:5)
+    async checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:22)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:231:7)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.authorityGuard (file://<repo>/infra/dev-stack/package-hosts.test.ts:234:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: override authority requires DOCKER_HOST Unix endpoint
+not ok 17 - override authority requires DOCKER_HOST Unix endpoint
+  ---
+  duration_ms: 4.435289
+  type: 'test'
+  location: '<repo>/infra/dev-stack/package-hosts.test.ts:238:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      Comparison {
+        message: 'Cannot verify the underlying k3d host through a remote Docker endpoint',
+    -   reason: 'unverifiable_host'
+      }
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unverifiable_host'
+    message:
+  actual:
+  error: 'Cannot verify the underlying k3d host through a remote Docker endpoint'
+  stack: |-
+    requireLocalDocker (file://<repo>/infra/dev-stack/package-hosts.ts:79:11)
+    localHost (file://<repo>/infra/dev-stack/package-hosts.ts:119:9)
+    checkPackageHosts (file://<repo>/infra/dev-stack/package-hosts.ts:164:28)
+    async check (file://<repo>/infra/dev-stack/package-hosts.test.ts:248:5)
+    async waitForActual (node:assert:644:5)
+    async Function.rejects (node:assert:767:25)
+    async TestContext.dockerHost (file://<repo>/infra/dev-stack/package-hosts.test.ts:251:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  operator: 'rejects'
+  stack: |-
+    async TestContext.dockerHost (file://<repo>/infra/dev-stack/package-hosts.test.ts:251:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 4
+# fail 13
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 344.154193

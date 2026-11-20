@@ -1,0 +1,29 @@
+TAP version 13
+# Subtest: refuse a failing second node before installation and clean its probe
+not ok 1 - refuse a failing second node before installation and clean its probe
+  ---
+  duration_ms: 15.002032
+  type: 'test'
+  location: '<isolated-copy>/infra/dev-stack/package-hosts.test.ts:54:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected rejection.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    reason: 'unsafe_settings'
+    message:
+  operator: 'rejects'
+  stack: |-
+    async TestContext.refusal (file://<isolated-copy>/infra/dev-stack/package-hosts.test.ts:59:3)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 302.151475

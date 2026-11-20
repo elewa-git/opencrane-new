@@ -21,7 +21,7 @@ flowchart LR
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
   stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
-  stack -->|checks and launches| package["infra/package<br/>Helm install"]
+  stack -->|checks hosts and launches| package["infra/package<br/>Helm install"]
 ```
 
 ## What it is responsible for
@@ -34,7 +34,7 @@ flowchart LR
 - Apply safe background subscription changes while services are stopped.
 - Run browser journeys and keep screenshots and original results.
 - Check the claimed stack and protected target before private memory collection.
-- Keep package operations on their recorded cluster and remove only owned resources.
+- Check package hosts, record any explicit local risk exception and remove only owned resources.
 - Provide guarded demo checks and a daily fresh-stack check.
 
 Not built yet:

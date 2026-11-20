@@ -31,7 +31,13 @@ if (!application) {
 }
 if (args[0] === 'api') {
   if (!args.includes('--hostname=github.com')) process.exit(2);
-  process.stdout.write(${JSON.stringify(JSON.stringify({ workflow_runs: options.noJob ? [] : [run] }))});
+  const filtered = args.some(function hasStatusFilter(argument) {
+    return argument.includes('status=success');
+  });
+  const missing = ${JSON.stringify(Boolean(options.noJob))} ||
+    (${JSON.stringify(Boolean(options.filteredEmpty))} && filtered);
+  const runs = missing ? [] : [${JSON.stringify(run)}];
+  process.stdout.write(JSON.stringify({ workflow_runs: runs }));
 } else {
   if (!args.includes('https://github.com/elewa-git/opencrane-new')) process.exit(2);
   const destination = args[args.indexOf('--dir') + 1];
