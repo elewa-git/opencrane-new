@@ -1,4 +1,5 @@
 /* eslint max-lines: ["error", { max: 750, skipBlankLines: true, skipComments: true }] */
+import { PersonalAssignment } from './personal-assignment';
 import { PrivateReplyState } from './private-reply';
 import { sendUpload } from './upload';
 import { canStartUpload, uploadWaitReason } from './chat-session-upload';
@@ -90,6 +91,7 @@ export class ChatSession implements OnDestroy {
     uploadWaitReason(this.uploadBatch.batchRunning() || this.uploadBatch.uploading()
       || this.uploadBatch.hasQueued(),
       this.uploadBatch.awaitingDelivery()));
+  private readonly assignment = new PersonalAssignment(this.socket, this);
   private creationId = '';
   /** Change this when the feed changes; old event positions and transcript then become invalid. */
   private generation = 0;
@@ -151,19 +153,16 @@ export class ChatSession implements OnDestroy {
       const context = chatContextSchema.parse(await requestChat('/api/chat'));
       const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await requestChat('/auth/me'));
       if (revision !== this.revision) return;
-      this.memberId.set(context.memberId);
-      this.role.set(context.role);
+      this.assignment.apply(context);
       this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You');
-      this.assistantId.set(context.assistantId);
-      this.personalConnections.set(context.personalConnections === true);
       this.denied.set(false);
-      if (context.memoryAdmission) this.memoryAdmission.set(context.memoryAdmission);
       await this.list(revision);
       if (revision !== this.revision) return;
       this.railLoading.set(false);
       const id = new URL(location.href).searchParams.get('conversation');
       if (id) await this.resumeRequested(id, revision);
       else if (this.conversations()[0]) await this.select(this.conversations()[0]!.conversationId);
+      if (!this.selected()) this.assignment.watch();
     } catch (error) {
       if (revision === this.revision) {
         this.fail(error);
@@ -371,6 +370,7 @@ export class ChatSession implements OnDestroy {
     await this.stopState.stop();
   }
   ngOnDestroy(): void {
+    this.assignment.destroy();
     this.privateState.destroy();
     this.clearUpload();
     this.stopState.reset();

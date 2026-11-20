@@ -8,6 +8,7 @@ Tool policy can name the hosted workload that supplied its tools and the admin's
 Replies carry the person's allowed assistants and refusals for assistants without consent.
 They show safe profile status and connection needs without returning a key.
 
+Chat context updates can deliver a newly assigned personal assistant before a conversation exists.
 Chat replies can name the files attached to a saved message. Older replies still work.
 Conversation lists can also carry one completed welcome with its own kind and route.
 Activity replies can show masked views to current chat members; older activity keeps its plain label.
@@ -52,7 +53,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 ```mermaid
 flowchart LR
   web["apps/web<br/>browser app"] -.->|chat replies and default modes, masked views, file ids, service readiness and private clearances| protocol["libs/protocol<br/>shared reply shapes"]
-  server["apps/server<br/>back end"] -.->|chat, personal key consent, status and calls| protocol
+  server["apps/server<br/>back end"] -.->|chat context updates, consent, status and calls| protocol
   projections["libs/projections<br/>read tables"] -.->|safe history and family filters| protocol
   models["libs/models<br/>AI rules and spending"] -.-> protocol
   protocol -.-> zod["Zod<br/>data checks"]
