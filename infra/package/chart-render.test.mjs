@@ -79,9 +79,9 @@ function clusterValues() {
   return values;
 }
 
-function renderChart(values) {
+function renderChart(values, chart = 'infra/package/chart') {
   const options = { encoding: 'utf8', input: JSON.stringify(values) };
-  const args = ['template', 'chart-test', 'infra/package/chart',
+  const args = ['template', 'chart-test', chart,
     '--namespace', 'cluster-test', '--values', '-'];
   const result = spawnSync('helm', args, options);
   assert.equal(result.error, undefined);
@@ -891,10 +891,29 @@ for (const [name, field, value] of [
   test(`chart refuses public address with ${name}`, refusesPublicAddress);
 }
 
-function defaultModelBytesStayTheSame() {
+async function originalChartRender(values) {
+  const directory = await mkdtemp(join(tmpdir(), 'original-package-chart-'));
+  try {
+    const baseline = 'c791103b365ced8fd56195ded9d0dcfabf202597';
+    const args = ['archive', baseline, 'infra/package/chart'];
+    const archive = spawnSync('git', args);
+    assert.equal(archive.status, 0, 'The original chart must be available in repository history');
+    const extracted = spawnSync('tar', ['-x', '-C', directory], { input: archive.stdout });
+    assert.equal(extracted.status, 0, 'The original chart must be extracted without changes');
+    const result = renderChart(values, join(directory, 'infra/package/chart'));
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function defaultModelBytesStayTheSame() {
   const values = chartValues();
   const original = renderChart(values);
   assert.equal(original.status, 0, original.stderr);
+  // Compare immutable source with the same renderer; Helm versions format YAML differently.
+  assert.equal(original.stdout, await originalChartRender(values));
   const digest = createHash('sha256');
   digest.update(original.stdout);
   assert.equal(digest.digest('hex'),
