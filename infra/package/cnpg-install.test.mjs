@@ -854,3 +854,10 @@ for (const [role, name, value, expected] of publicRuntimeRefusals) {
   }
   test(`public address rechecks stored ${role}.${name} before any Helm command`, refusesStoredSettings);
 }
+
+async function refusesAbsentTokenRecord() {
+  const fixture = publicInstallFixture();
+  delete fixture.secrets.runtimefiles.data['bootstrap-token.json'];
+  await runFixture(fixture, 'Required secret field is absent: runtimeFiles.bootstrap-token.json');
+}
+test('public settings require the mounted token record before Helm', refusesAbsentTokenRecord);
