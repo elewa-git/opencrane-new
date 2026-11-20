@@ -106,6 +106,9 @@ node totals, including system pods and runtime overhead. Block I/O bytes are
 traffic counters, not occupied disk space. Capture filesystem/PVC use and cached
 image bytes separately. Do not count unrelated owner workloads as pilot use.
 
+The recorded local attempt is partial: one-person chat and resource observations
+are available, but desktop viewing and three-person qualification are incomplete.
+Keep the observations in the Measurements ledger without a minimum machine size.
 Derive a VM recommendation only after both journeys pass. State CPU/RAM spare
 capacity and disk reserve for the OS, images, retained events/files and backups;
 include sample duration and workload limits. A shared k3d result estimates VM demand,

@@ -18,7 +18,7 @@ flowchart LR
   ci -->|prepares both fixture jobs| web["apps/web<br/>development build"]
   ci -->|reports line counts| summary["Job summary<br/>test size and weekly changes"]
   debt["scripts/check-lint-debt<br/>size limits"] -->|reads base commit| ci
-  ci -->|runs files| vitest["Vitest<br/>root tests"]
+  ci -->|runs files with one or two workers| vitest["Vitest<br/>root tests"]
   actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   ci -->|pulls exact Linux images and retries downloads| docker["Docker<br/>test containers"]

@@ -1,0 +1,17 @@
+utc,phase,volumes,usedBytes
+2026-11-20T14:33:10Z,startup,0,0
+2026-11-20T14:33:40Z,startup,0,0
+2026-11-20T14:34:10Z,startup,0,0
+2026-11-20T14:34:40Z,startup,0,0
+2026-11-20T14:35:10Z,startup,4,40431616
+2026-11-20T14:35:42Z,startup,4,66654208
+2026-11-20T14:36:13Z,startup,5,70799360
+2026-11-20T14:36:44Z,1-person/one-person-idle,5,70914048
+2026-11-20T14:37:16Z,1-person/one-person-idle,5,71065600
+2026-11-20T14:37:48Z,1-person/sign-in-owner-1280,5,71434240
+2026-11-20T14:38:20Z,1-person/one-person-upload-desktop-1280,5,73797632
+2026-11-20T14:38:51Z,1-person/one-person-upload-desktop-1280,5,74211328
+2026-11-20T14:39:23Z,1-person/one-person-upload-desktop-390,5,75395072
+2026-11-20T14:39:55Z,1-person/one-person-upload-desktop-390,5,76472320
+2026-11-20T14:40:27Z,1-person/one-person-idle-computer,5,78438400
+2026-11-20T14:40:58Z,1-person/one-person-idle-computer,5,81399808

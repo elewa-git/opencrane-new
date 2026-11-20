@@ -1,0 +1,49 @@
+TAP version 13
+# Subtest: a failed viewer write closes both connections and keeps packaged HTTP available
+not ok 1 - a failed viewer write closes both connections and keeps packaged HTTP available
+  ---
+  duration_ms: 263.215686
+  type: 'test'
+  location: '[checkout]/infra/package/web-proxy.test.mjs:115:1'
+  failureType: 'testCodeFailure'
+  error: 'A viewer EPIPE must not terminate the packaged web process'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    node:events:497
+          throw er; // Unhandled 'error' event
+          ^
+
+    Error: Fixture viewer transport closed
+        at process.control (file://[checkout]/infra/package/web-proxy-fixture.mjs:49:19)
+        at process.emit (node:events:519:28)
+        at emit (node:internal/child_process:949:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Socket instance at:
+        at Socket.onerror (node:internal/streams/readable:1028:14)
+        at Socket.emit (node:events:519:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+      code: 'EPIPE'
+    }
+
+    Node.js v22.23.3
+
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.viewerWriteFailure (file://[checkout]/infra/package/web-proxy.test.mjs:110:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 487.545579

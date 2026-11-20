@@ -1,0 +1,233 @@
+[
+  {
+    "width": 1280,
+    "stages": [
+      {
+        "stage": "ticket_issue",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 0
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 84,
+        "elapsedMs": 90,
+        "phase": "admission",
+        "checkedAtMonotonic": 158058.345221
+      },
+      {
+        "stage": "ticket_issue",
+        "outcome": "ok",
+        "durationMs": 91,
+        "elapsedMs": 91
+      },
+      {
+        "stage": "websocket_upgrade",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 0
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 85,
+        "elapsedMs": 86,
+        "phase": "upgrade",
+        "checkedAtMonotonic": 158264.652912
+      },
+      {
+        "stage": "start_audit",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 90
+      },
+      {
+        "stage": "start_audit",
+        "outcome": "ok",
+        "durationMs": 7,
+        "elapsedMs": 97
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 83,
+        "elapsedMs": 182,
+        "phase": "post_audit",
+        "checkedAtMonotonic": 158361.988395
+      },
+      {
+        "stage": "lease_resume",
+        "outcome": "ok",
+        "durationMs": 0,
+        "elapsedMs": 182
+      },
+      {
+        "stage": "upstream_open",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 183
+      },
+      {
+        "stage": "pod_lookup",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 184
+      },
+      {
+        "stage": "pod_lookup",
+        "outcome": "ok",
+        "durationMs": 450,
+        "elapsedMs": 634
+      },
+      {
+        "stage": "upstream_open",
+        "outcome": "ok",
+        "durationMs": 467,
+        "elapsedMs": 650
+      },
+      {
+        "stage": "websocket_upgrade",
+        "outcome": "ok",
+        "durationMs": 656,
+        "elapsedMs": 653
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 477,
+        "elapsedMs": 827,
+        "phase": "renewal",
+        "validUntil": 1500.5375550000172,
+        "checkedAtMonotonic": 158613.776157
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 404,
+        "elapsedMs": 1027,
+        "phase": "renewal",
+        "validUntil": 1752.3817870000203,
+        "checkedAtMonotonic": 158886.409451
+      },
+      {
+        "stage": "stop",
+        "outcome": "disconnected",
+        "durationMs": 0,
+        "elapsedMs": 1031,
+        "validUntil": 2025.0219870000146
+      }
+    ]
+  },
+  {
+    "width": 390,
+    "stages": [
+      {
+        "stage": "ticket_issue",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 0
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 88,
+        "elapsedMs": 92,
+        "phase": "admission",
+        "checkedAtMonotonic": 224525.650296
+      },
+      {
+        "stage": "ticket_issue",
+        "outcome": "ok",
+        "durationMs": 92,
+        "elapsedMs": 92
+      },
+      {
+        "stage": "websocket_upgrade",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 0
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 65,
+        "elapsedMs": 66,
+        "phase": "upgrade",
+        "checkedAtMonotonic": 224768.991852
+      },
+      {
+        "stage": "start_audit",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 66
+      },
+      {
+        "stage": "start_audit",
+        "outcome": "ok",
+        "durationMs": 4,
+        "elapsedMs": 71
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 88,
+        "elapsedMs": 160,
+        "phase": "post_audit",
+        "checkedAtMonotonic": 224840.271265
+      },
+      {
+        "stage": "lease_resume",
+        "outcome": "ok",
+        "durationMs": 0,
+        "elapsedMs": 160
+      },
+      {
+        "stage": "upstream_open",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 160
+      },
+      {
+        "stage": "pod_lookup",
+        "outcome": "started",
+        "durationMs": 0,
+        "elapsedMs": 160
+      },
+      {
+        "stage": "pod_lookup",
+        "outcome": "ok",
+        "durationMs": 468,
+        "elapsedMs": 628
+      },
+      {
+        "stage": "upstream_open",
+        "outcome": "ok",
+        "durationMs": 482,
+        "elapsedMs": 642
+      },
+      {
+        "stage": "websocket_upgrade",
+        "outcome": "ok",
+        "durationMs": 644,
+        "elapsedMs": 644
+      },
+      {
+        "stage": "lease_check",
+        "outcome": "ok",
+        "durationMs": 344,
+        "elapsedMs": 917,
+        "phase": "renewal",
+        "validUntil": 1751.546674000012,
+        "checkedAtMonotonic": 225341.669552
+      },
+      {
+        "stage": "stop",
+        "outcome": "disconnected",
+        "durationMs": 0,
+        "elapsedMs": 1019,
+        "validUntil": 2001.5801149999897
+      }
+    ]
+  }
+]

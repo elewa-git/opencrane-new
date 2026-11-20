@@ -21,6 +21,7 @@ flowchart LR
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
   stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
+  stack -.->|reuses website proxy handling| package
   stack -->|checks hosts and launches| package["infra/package<br/>Helm install"]
 ```
 
