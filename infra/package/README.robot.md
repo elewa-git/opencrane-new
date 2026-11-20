@@ -1914,6 +1914,7 @@ same slot. The ordinary development install uses `infra/dev-stack/up.sh --fresh`
 instead. Both replace development data; keep any needed old fixture with its old
 software and keys separately. Do not replay old encrypted conversation events into
 this version or reuse those backups. Create a new backup baseline after the reset.
+
 ## Host disk protection
 
 Before any Helm command, `installPackage` runs a short-lived probe on **every**
