@@ -6,7 +6,7 @@ import { basename, extname, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { createGzip } from 'node:zlib';
 import { organisationPage } from '../package/web-page.mjs';
-import { forwardUpgrade } from '../package/web-upgrade.mjs';
+import { forwardUpgrade } from '../package/web.mjs';
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',

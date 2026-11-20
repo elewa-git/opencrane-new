@@ -501,9 +501,9 @@ run Angular's development server through `web-server.mjs --development`. Its HTM
 transform fills the installation name without changing Angular's response policy,
 proxying or live updates. The owner builds the production bundle and uses the
 static file mode of `web-server.mjs`, which reads the generated proxy configuration.
-Static mode and the package share `infra/package/web-upgrade.mjs` for WebSocket
-forwarding. It closes both peers after an error or disconnect, before another
-request can inherit a failed connection. Angular keeps its own development proxy.
+Static mode imports WebSocket forwarding from `infra/package/web.mjs`.
+It closes both peers after an error or disconnect. Importing the handler starts
+no listener. Angular keeps its own development proxy.
 Set `ORGANISATION_NAME` before a fresh start to
 save the installation's public name in `settings.env`. Startup passes that saved
 setting to the web server. It fills the public meta tag through the same

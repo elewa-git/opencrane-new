@@ -22,8 +22,9 @@ keep each screen's fallback. This setting grants no access and adds no API route
 that the value reaches the web container.
 
 The root `.dockerignore` excludes repository test folders and test files from the
-package build. It includes `web.mjs`, its shared `web-page.mjs` renderer and
-`web-upgrade.mjs`, shared with the development static server. The upgrade handler
+package build. It includes `web.mjs` and its shared `web-page.mjs` renderer.
+The development static server imports the upgrade handler from `web.mjs`;
+importing it does not start a package listener. The upgrade handler
 uses Node's HTTP upgrade response, preserves both initial byte buffers and closes
 both connections on either peer's error or closure. It logs connection errors
 through the structured logger before closing. A failed viewer write cannot stop
