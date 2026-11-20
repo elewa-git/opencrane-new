@@ -851,11 +851,7 @@ function protectsProviderRemounts() {
 test('provider storage avoids recursive remount changes and checks modes before startup',
   protectsProviderRemounts);
 
-function rendersPrivateProviderStorage() {
-  const values = chartValues();
-  values.models = { mode: 'provider' };
-  const resources = renderedResources(values);
-  const server = resources.get('Deployment/server').spec.template.spec;
+function assertPrivateProviderMounts(resources) {
   const mounts = [];
   for (const resource of resources.values()) {
     const pod = resource.spec?.template?.spec;
@@ -874,6 +870,14 @@ function rendersPrivateProviderStorage() {
     { container: 'models', name: 'provider-secrets',
       mountPath: '/var/lib/opencrane/provider-secrets', readOnly: true },
   ]);
+}
+
+function rendersPrivateProviderStorage() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  assertPrivateProviderMounts(resources);
   const volumes = new Map();
   for (const volume of server.volumes) volumes.set(volume.name, volume);
   assert.deepEqual(volumes.get('provider-secrets'), {
@@ -936,3 +940,17 @@ test('provider mode runs the projection required by default-model selection',
 function providerBackupMode(setting) {
   return setting.name === 'BACKUP_PROVIDER_MODE' && setting.value === 'true';
 }
+
+function detectsBackupKeyMount() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  backup.volumes.push({ name: 'innocent-alias',
+    persistentVolumeClaim: { claimName: 'provider-secrets' } });
+  backup.initContainers[0].volumeMounts.push({ name: 'innocent-alias', mountPath: '/leaked-keys' });
+  assert.throws(() => assertPrivateProviderMounts(resources),
+    { code: 'ERR_ASSERTION' }, 'A backup init container must never read provider keys');
+}
+test('provider isolation detects a key PVC mounted by an aliased backup init container',
+  detectsBackupKeyMount);
