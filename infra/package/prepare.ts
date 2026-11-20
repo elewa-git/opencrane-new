@@ -11,6 +11,8 @@ import {
 import { localOrigin, secondary } from '../dev-stack/identity.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 import { prepareScannerFiles } from '../dev-stack/scanner-settings.ts';
+import { readBootstrapToken } from '../../apps/server/src/bootstrap-token.ts';
+import { readPublicSettings, type PublicPackageValues } from './public-settings.mjs';
 import { readApprovedRelease } from '../clamav/release.mjs';
 
 const execute = promisify(execFile);
@@ -87,21 +89,49 @@ function modelRuntimeSettings() {
   };
 }
 
-async function prepareSettings(values: { natsCluster?: unknown; scanner: { approvedSha: string } }) {
-  const replicas = packageReplicas(values);
-  const ownerEmail = await readOwnerEmail();
-  assert(ownerEmail, 'Private dev-owner-email file is empty');
+async function packageAuthSettings(values: PublicPackageValues) {
+  let publicSettings: Record<string, string> = {};
+  if (values.exposure?.public?.enabled === true) {
+    publicSettings = readPublicSettings(values);
+  }
+  let ownerEmail: string | undefined;
+  if (values.exposure?.public?.enabled !== true) {
+    ownerEmail = await readOwnerEmail();
+    assert(ownerEmail, 'Private dev-owner-email file is empty');
+  } else {
+    const tokenFile = publicSettings['BOOTSTRAP_TOKEN_FILE'];
+    assert(tokenFile, 'Public installation requires a private BOOTSTRAP_TOKEN_FILE');
+    const token = await readBootstrapToken(tokenFile);
+    assert(token.silo === 'dev', 'Bootstrap token belongs to another silo');
+    await copyFile(tokenFile, `${directory}/package-bootstrap-token.json`);
+    await chmod(`${directory}/package-bootstrap-token.json`, 0o600);
+  }
   await generate(localOrigin);
+  const auth: Record<string, string> = await authEnv();
+  if (ownerEmail) {
+    const identitySettings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
+      users: { owner: { id: string } };
+    };
+    assert(identitySettings.users.owner.id, 'The separate test owner has no identity');
+    return { ...auth, DEV_OWNER_EMAIL: ownerEmail,
+      PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id };
+  }
+  // Use the organisation check alone when the operator chooses production sign-in.
+  delete auth['OIDC_EXTRA_IDENTITIES'];
+  return { ...auth, ...publicSettings,
+    BOOTSTRAP_TOKEN_FILE: '/var/lib/opencrane/bootstrap/token.json' };
+}
+
+async function prepareSettings(values: PublicPackageValues & {
+  natsCluster?: unknown; scanner: { approvedSha: string };
+}) {
+  const replicas = packageReplicas(values);
+  const auth = await packageAuthSettings(values);
   // Give the private Kubernetes service its own DNS name on the existing short-lived certificate.
   await issueCertificate(directory, 'server', '/CN=nats',
     'subjectAltName=DNS:nats,DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n', 30);
   const passwords = JSON.parse(await readFile(`${directory}/passwords.json`, 'utf8')) as
     Record<string, string>;
-  const auth = await authEnv();
-  const identitySettings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
-    users: { owner: { id: string } };
-  };
-  assert(identitySettings.users.owner.id, 'The separate test owner has no identity');
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`,
     issuer: `${localOrigin}/` });
   await writeFile(`${directory}/model-jwks.json`, JSON.stringify(issuer.jwks), { mode: 0o600 });
@@ -116,11 +146,12 @@ async function prepareSettings(values: { natsCluster?: unknown; scanner: { appro
   const serverDatabase = databaseUrl('server', passwords['server']!, 'projections');
   const projectionDatabase = databaseUrl('projection', passwords['projection']!, 'projections');
   const handlerDatabase = databaseUrl('dispatcher', passwords['dispatcher']!, 'handlers');
-  const commandForDispatcher = Object.fromEntries(Object.entries(commandSettings)
-    .map(([name, value]) => [`COMMAND_${name}`, value]));
+  const commandForDispatcher: Record<string, string> = {};
+  for (const [name, value] of Object.entries(commandSettings)) {
+    commandForDispatcher[`COMMAND_${name}`] = value;
+  }
   await writeEnv('package-runtime', {
     ...auth, ...commandSettings, ...commandForDispatcher,
-    DEV_OWNER_EMAIL: ownerEmail,
     OIDC_CLIENT_SECRET_FILE: '/run/opencrane/files/zitadel-client-secret',
     DATABASE_URL: serverDatabase,
     PROJECTION_DATABASE_URL: projectionDatabase,
@@ -130,7 +161,6 @@ async function prepareSettings(values: { natsCluster?: unknown; scanner: { appro
     OWNER_BOOTSTRAP_READY: 'pending',
     TOKEN_SIGNING_KEY_FILE: '/run/opencrane/files/token-signing-key.pem',
     TOKEN_ISSUER: `${localOrigin}/`,
-    PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
     ...modelRuntimeSettings(),
     MINIO_URL: 'http://objects:9000',
     MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
@@ -151,7 +181,8 @@ async function prepareSettings(values: { natsCluster?: unknown; scanner: { appro
   });
 }
 
-async function provisionSecrets(names: Record<string, string>, owner: PackageOwner) {
+async function provisionSecrets(names: Record<string, string>, owner: PackageOwner,
+  tokenBootstrap = false) {
   await createSecret(owner, names['postgres']!, 'postgres');
   await createSecret(owner, names['nats']!, 'package-nats', {
     'nats.conf': `${root}/infra/nats/nats.conf`,
@@ -161,7 +192,7 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
   await createSecret(owner, names['openfga']!, 'package-openfga');
   await createSecret(owner, names['bootstrap']!, 'package-bootstrap');
   await createSecret(owner, names['runtime']!, 'package-runtime');
-  await createSecret(owner, names['runtimeFiles']!, undefined, {
+  const runtimeFiles: Record<string, string> = {
     'ca.crt': `${directory}/ca.crt`,
     'command.crt': `${directory}/command.crt`,
     'command.key': `${directory}/command.key`,
@@ -177,7 +208,11 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
     'model-jwks.json': `${directory}/model-jwks.json`,
     'model-stub-key': `${directory}/model-stub-key`,
     'scanner-ca.crt': `${directory}/scanner-ca.crt`,
-  });
+  };
+  if (tokenBootstrap) {
+    runtimeFiles['bootstrap-token.json'] = `${directory}/package-bootstrap-token.json`;
+  }
+  await createSecret(owner, names['runtimeFiles']!, undefined, runtimeFiles);
 }
 
 async function prepareFileServices(values: {
@@ -218,12 +253,13 @@ async function main() {
     resolve(root, 'infra/package/reviewed-images.json')], valuesDirectory);
   stage = 'claim';
   const owner = await verifyPackageOwner();
-  const values = JSON.parse(await readFile(valuesFile, 'utf8')) as {
+  const values = JSON.parse(await readFile(valuesFile, 'utf8')) as PublicPackageValues & {
     images: Record<string, string>; scanner: { approvedSha: string };
     secrets: Record<string, string>; natsCluster?: unknown;
   };
   stage = 'development sign-in setup';
-  if (process.env['PACKAGE_SKIP_PROVIDER_SETUP'] !== '1') {
+  if (values.exposure?.public?.enabled !== true &&
+      process.env['PACKAGE_SKIP_PROVIDER_SETUP'] !== '1') {
     await command('node', ['--experimental-strip-types', 'infra/dev-stack/zitadel-setup.ts']);
   } else {
     // Use the slot's existing test account without making provider changes.
@@ -235,7 +271,7 @@ async function main() {
   stage = 'file services';
   await prepareFileServices(values, owner);
   stage = 'Kubernetes secrets';
-  await provisionSecrets(values.secrets, owner);
+  await provisionSecrets(values.secrets, owner, values.exposure?.public?.enabled === true);
   console.log('PASS private package secrets created from files in the claimed slot');
 }
 

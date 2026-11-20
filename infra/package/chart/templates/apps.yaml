@@ -85,6 +85,12 @@ spec:
               cp /run/opencrane-source/* /run/opencrane/files/ &&
               chown 1000:1000 /run/opencrane/files/* &&
               chmod 0400 /run/opencrane/files/*
+              {{- if .Values.exposure.public.enabled }} &&
+              cp /run/opencrane-source/bootstrap-token.json /var/lib/opencrane/bootstrap/token.json &&
+              chown -R 1000:1000 /var/lib/opencrane/bootstrap &&
+              chmod 0700 /var/lib/opencrane/bootstrap &&
+              chmod 0600 /var/lib/opencrane/bootstrap/token.json
+              {{- end }}
           securityContext:
             runAsUser: 0
             allowPrivilegeEscalation: false
@@ -92,6 +98,9 @@ spec:
           volumeMounts:
             - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files }
+            {{- if .Values.exposure.public.enabled }}
+            - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap }
+            {{- end }}
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
@@ -109,6 +118,9 @@ spec:
             - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
+            {{- if .Values.exposure.public.enabled }}
+            - { name: BOOTSTRAP_TOKEN_FILE, value: /var/lib/opencrane/bootstrap/token.json }
+            {{- end }}
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
             - name: KUBE_NAMESPACE
               valueFrom:
@@ -118,6 +130,9 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            {{- if .Values.exposure.public.enabled }}
+            - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap, readOnly: true }
+            {{- end }}
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
             - { name: storage-lease, mountPath: /run/storage, readOnly: true }
           ports: [{ containerPort: 8080 }]
@@ -174,6 +189,10 @@ spec:
             limits: { cpu: 500m, memory: 512Mi }
         {{- end }}
       volumes:
+        {{- if .Values.exposure.public.enabled }}
+        - name: bootstrap-token
+          emptyDir: { medium: Memory }
+        {{- end }}
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
         - name: storage-lease

@@ -302,6 +302,9 @@ async function writePrivateEnv(name: string, data: Record<string, string>) {
 async function bootstrapOwner(binding: { silo: string; apiUrl: string; storeId: string;
   authorizationModelId: string }) {
   const replicas = replicaSettings();
+  if (process.env['DEV_OWNER_BOOTSTRAP'] === '0') {
+    return;
+  }
   await mkdir(runtimeDirectory, { mode: 0o700 });
   await writePrivateEnv('settings', { SILO_ID: binding.silo });
   await writePrivateEnv('binding', { SILO_ID: binding.silo,
@@ -349,7 +352,7 @@ async function main() {
   stage = 'owner readiness update';
   await patchRuntime({ OWNER_BOOTSTRAP_READY: 'ready' });
   await restartDeployment('server');
-  console.log('PASS package databases, event stream, OpenFGA and separate owner');
+  console.log('PASS package databases, event stream, OpenFGA and owner claim readiness');
 }
 
 await main().catch(() => {
