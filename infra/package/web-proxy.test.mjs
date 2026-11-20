@@ -27,10 +27,12 @@ function upgrade(port) {
 
   function connectViewer(resolveViewer, rejectViewer) {
     const headers = { connection: 'Upgrade', upgrade: 'websocket' };
-    const client = request({ host: '127.0.0.1', port, path: '/ws/view', headers });
+    const options = { host: '127.0.0.1', port, path: '/ws/view', headers };
+    const client = request(options);
     function upgraded(response, socket, head) {
       assert.equal(response.statusCode, 101);
-      resolveViewer({ socket, head });
+      const viewer = { socket, head };
+      resolveViewer(viewer);
     }
     client.once('upgrade', upgraded);
     client.once('error', rejectViewer);
@@ -42,7 +44,8 @@ function healthy(port) {
   return new Promise(checkHealth);
 
   function checkHealth(resolveHealth, rejectHealth) {
-    const client = request({ host: '127.0.0.1', port, path: '/api/health' });
+    const options = { host: '127.0.0.1', port, path: '/api/health' };
+    const client = request(options);
     function received(response) {
       response.resume();
       response.once('end', finished);
@@ -60,7 +63,8 @@ async function viewerWriteFailure(context) {
   const sockets = new Set();
   let upgradedSocket;
   function respond(_request, response) {
-    response.writeHead(204).end();
+    response.writeHead(204);
+    response.end();
   }
   const backend = createServer(respond);
   function track(socket) {
@@ -99,7 +103,9 @@ async function viewerWriteFailure(context) {
   function stopResources() {
     viewer?.socket.destroy();
     child.kill();
-    for (const socket of sockets) socket.destroy();
+    for (const socket of sockets) {
+      socket.destroy();
+    }
     backend.close();
   }
   context.after(stopResources);
@@ -110,12 +116,16 @@ async function viewerWriteFailure(context) {
     const viewerClosed = once(viewer.socket, 'close');
     const backendClosed = once(upgradedSocket, 'close');
     const alive = childMessage(child);
-    child.send({ kind: 'viewer_write_failure' });
+    const failureMessage = { kind: 'viewer_write_failure' };
+    child.send(failureMessage);
     await viewerClosed;
-    child.send({ kind: 'ping' });
-    assert.equal((await alive).kind, 'alive', diagnostics);
+    const pingMessage = { kind: 'ping' };
+    child.send(pingMessage);
+    const reply = await alive;
+    assert.equal(reply.kind, 'alive', diagnostics);
     await backendClosed;
-    assert.equal(await healthy(ready.port), 204, 'Other requests remain available');
+    const status = await healthy(ready.port);
+    assert.equal(status, 204, 'Other requests remain available');
   } finally {
     const stopped = child.exitCode === null && child.signalCode === null
       ? once(child, 'exit') : undefined;
@@ -128,5 +138,6 @@ async function viewerWriteFailure(context) {
   }
 }
 
+const testOptions = { timeout: 10_000 };
 test('a failed viewer write closes both connections and keeps packaged HTTP available',
-  { timeout: 10_000 }, viewerWriteFailure);
+  testOptions, viewerWriteFailure);

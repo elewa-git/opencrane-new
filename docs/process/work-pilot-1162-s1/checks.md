@@ -1,7 +1,7 @@
 # Own checks for pilot VM bootstrap and sizing fixes
 
 Date: 20 November 2026. Branch: `work/pilot-1162-s1`.
-Source checked: `9ff04e9da075f687472a6754359fb19ace7b9a41`.
+Runtime exercised in the PARTIAL journey: `9ff04e9da075f687472a6754359fb19ace7b9a41`.
 
 ## Rebase and failing tests
 
@@ -35,6 +35,10 @@ ordinary-shard budget; browser fixtures retain one worker. The image CI job on
 `9ff04e9da` passed 59 tests, with one existing opt-in test skipped, in 115.71 seconds.
 No deadline, assertion, access check, money check or memory limit changed.
 
+The final fixture cleanup names HTTP request and control-message values and
+splits chained calls. Both focused repeats still pass 24/24, and supplementary
+lint passes. This changes neither runtime code nor journey assertions or deadlines.
+
 ## Safe bootstrap scope
 
 PASS: the host dry run refused its existing Docker socket before writes.
@@ -55,8 +59,8 @@ No full local root test suite or fleet batch ran.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Changed focused tests, first run | PASS | [24/24, no skips](logs/fix-1/qualified-tests-1.log) |
-| Changed focused tests, repeat | PASS | [24/24, no skips](logs/fix-1/qualified-tests-2.log) |
+| Changed focused tests, first run | PASS | [24/24, no skips](logs/fix-1/clarified-tests-1.log) |
+| Changed focused tests, repeat | PASS | [24/24, no skips](logs/fix-1/clarified-tests-2.log) |
 | Development static server | PASS | [3/3, including browser/build checks](logs/fix-1/final-dev-web-tests.log) |
 | Native configuration/supervisor reproduction | PASS | [19/19 with two workers](logs/fix-1/native-fixtures-reproduction.log) |
 | Workspace, package and dev-stack typecheck | PASS | [Output](logs/fix-1/worker-typecheck.log) |
