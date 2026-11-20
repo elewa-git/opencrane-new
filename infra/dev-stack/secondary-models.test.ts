@@ -40,3 +40,30 @@ async function suppressesStandInOnlyInRealMode() {
 
 test('secondary models skips the stand-in only for an explicit real mode',
   suppressesStandInOnlyInRealMode);
+
+async function restrictsPackagedQualification() {
+  const home = await mkdtemp(`${tmpdir()}/package-models-`);
+  try {
+    for (const upstream of ['api.openai.com:443', '127.0.0.1:443',
+      'model-qualification:43003.evil', 'model-qualification:43003']) {
+      const environment = { PATH: process.env['PATH'], HOME: home,
+        MODEL_DECISION_PORT: '0', MODEL_READINESS_PORT: '0',
+        PACKAGE_PROVIDER_MODE: '1', PACKAGE_PROVIDER_QUALIFICATION: '1',
+        OPENCRANE_FLEET_TASK: 'qualification-test', MODEL_UPSTREAM: upstream };
+      const args = ['--experimental-strip-types', 'infra/dev-stack/secondary-models.ts'];
+      const result = spawnSync(process.execPath, args,
+        { env: environment, timeout: 15_000, encoding: 'utf8' });
+      assert.equal(result.status, 1);
+      if (upstream === 'model-qualification:43003') {
+        assert.match(result.stderr, /Missing DATABASE_URL/u);
+        assert.doesNotMatch(result.stderr, /Approval stub/u);
+      } else {
+        assert.match(result.stderr, /Package qualification requires its separate stand-in/u);
+      }
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+test('packaged provider qualification retains the fleet marker and refuses other destinations',
+  restrictsPackagedQualification);
