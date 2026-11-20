@@ -1,6 +1,7 @@
 # Fresh CORE journey
 
-Journey on a fresh dev stack: FAIL at startup. CORE: NOT RUN. Supplemental live checks: NOT RUN.
+Journey on a fresh dev stack: FAIL. Fresh CORE and the explicit journey passed;
+the supplemental refusal probe exited 1 before it could report its assertions.
 
 Source: `12443a0e2`. No product code changed during this qualification attempt.
 
@@ -53,3 +54,44 @@ The full five-minute window had elapsed, but admission failed because the
 secondary-slot-free condition was no longer true. No startup logs, service logs,
 or screenshots were produced by this attempt. No dev-stack teardown command was
 run because this attempt owned no stack.
+
+## Fifth attempt — fresh CORE and refusal checks
+
+Journey on a fresh dev stack: FAIL. CORE: PASS. Explicit `journey.sh`: PASS.
+Supplemental live refusal checks: NOT VERIFIED. Teardown: PASS; both secondary
+slots are free.
+
+Source: `dc8b2eda2facdc839388ac7bdd5bb10a14348649`. This run used a fresh claimed
+secondary slot 1 and the stand-in provider. The built-in CORE journey ran at
+1280 × 900 and 390 × 844 px. It passed sign-in, streamed chat, reload and Stop,
+upload and preview refusals, desktop grant and revocation, private-history
+refusals, spending limits, computer lifecycle, member and catalogue replay, and
+sign-out and reauthentication. The approval sub-journey skipped because it
+waits for issue rows 4, 5 and 14.
+
+Both slots stayed free, no `package-*` stack was running, and 1-minute load
+remained below 6 for the full admission window. Ten samples covered 318 seconds;
+the [sample record](attempt-5-admission.jsonl) lists each observation. Slot 1
+was claimed. `up.sh --fresh --id 1` exited 0. `status.sh --id 1` reported all
+services healthy, and `journey.sh --id 1` exited 0 with the core browser and
+replay checks passing.
+
+The separate anonymous and Origin probe exited 1. Sign-in and its initial
+authentication checks passed, but the browser helper failed during cleanup
+when it tried to reauthenticate after sign-out. The sanitised diagnostic,
+with the provider URL and private stack path omitted, was:
+`Real browser logout failed at login for XHR: Login did not complete at provider
+input (net::ERR_ABORTED; page errors: none; console errors: none).` The probe
+printed its assertion summary only after that cleanup, so the required
+cookie-free POST and WebSocket results, direct HTTP upgrade result, global-head
+comparisons, and valid/invalid-session Origin audit counts are NOT VERIFIED.
+This run does not qualify those checks.
+
+Before teardown, 56 screenshots and 16 sanitised service logs were copied to the
+task receipt, along with the sanitised startup, status, journey and probe logs.
+`down.sh --id 1` completed. `status.sh --id 1` and `status.sh --id 2` both
+reported `free`; no package stack remained. No product source changed.
+
+Required PR checks at this source head were green: `checks`, `ci-ok`,
+`fixtures-browser`, `fixtures-image`, `select`, and test shards 1–4. The
+supplemental live checks remain the merge blocker.
