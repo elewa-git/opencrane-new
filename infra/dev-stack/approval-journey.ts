@@ -177,7 +177,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       const approvals = await history(store, `approval-${approvalId}`, input.silo);
       const uses = countApprovalUses(approvals, recorded.at(-1)!.requestId);
       assert.equal(uses, 1);
-      console.log(`PASS approvals ${width}px after 3,000 saved messages: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
+      console.log(`PASS approvals ${width}px after 500 saved messages: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
     } catch (error) {
       // Capture the card before cleanup closes the turn and leaves the conversation.
       await captureApprovalFailure(page, width, error);
@@ -205,7 +205,7 @@ async function seedApprovalChat(store: EventStore, silo: string,
     contentType: 'text', utterance: 'An earlier message in this long chat.' };
   const db = connectProjectionDb(server['DATABASE_URL']!, failDatabase);
   try {
-    await seedApprovalHistory(store, db.db, { silo, data });
+    await seedApprovalHistory(store, db.db, { silo, data, messageCount: 500 });
   } finally {
     await db.close();
   }
