@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { checkPackageHosts } from './package-hosts.ts';
+import { checkPackageHosts, HostCheckRefused } from './package-hosts.ts';
 import type { HostState } from '../package/host-preflight.mjs';
 import { packageCommandMessage } from './package-error.ts';
 
@@ -69,7 +69,8 @@ test('package refusal shows F1 and F2 fixes without exposing unrelated errors',
     } catch (error) {
       refusal = error;
     }
-    assert.equal((refusal as { reason: string }).reason, 'unsafe_settings');
+    assert.ok(refusal instanceof HostCheckRefused);
+    assert.equal(refusal.reason, 'unsafe_settings');
     const message = packageCommandMessage(refusal);
     assert.match(message, /node-1: F1: disable swap/u);
     assert.match(message, /node-1: F2: disable host crash reporters/u);
@@ -126,7 +127,9 @@ function localFixture(options: LocalFixtureOptions = {}) {
     const container = { Name: options.containerName ?? `/${name}`,
       State: { Running: options.running ?? true },
       Config: { Labels: { 'k3d.cluster': options.cluster ?? 'ocn' } } };
-    const containers = Array(options.count ?? 1).fill(container);
+    const containers = [];
+    const count = options.count ?? 1;
+    for (let index = 0; index < count; index++) containers.push(container);
     return JSON.stringify(containers);
   }
   return { command, localCommand, calls };
@@ -201,7 +204,6 @@ test('probe Pods have only read-only host mounts and no service token', async fu
   assert.equal(probes, 2);
 });
 
-
 test('a matching local container name cannot waive another cluster node', async function falseLocalNode() {
   const { command, localCommand } = localFixture({ uid: 'foreign-node' });
   async function check() {
@@ -211,7 +213,6 @@ test('a matching local container name cannot waive another cluster node', async 
   await assert.rejects(check, { reason: 'unverifiable_host',
     message: /Local k3d node identity differs from the installation target/u });
 });
-
 
 const authorityRefusals: Array<{ name: string; options: LocalFixtureOptions; message: RegExp }> = [
   { name: 'Docker-context Unix endpoint', options: { endpoint: 'tcp://remote:2375' },

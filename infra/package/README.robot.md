@@ -1928,6 +1928,10 @@ After an accepted check, the installer saves its time, node names, UIDs and
 refusals under `hostPreflight` in the private `package-owner.json` installation
 record. Without an override, `package-up` prints each failing node's F1/F2 fix
 and stops before Helm.
+Explicit host refusals carry `HostCheckRefused.reason` from the named
+`HostRefusalReason` union: `unsafe_settings`, `unknown_override` or
+`unverifiable_host`. Only `unsafe_settings` exposes the fixed per-node F1/F2
+advice through the package command; other errors keep the generic safe message.
 
 Local k3d nodes share their Docker host's kernel and swap. The installer also
 checks that underlying host after verifying local running node containers through

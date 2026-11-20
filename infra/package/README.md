@@ -20,11 +20,10 @@ flowchart LR
   stack["infra/dev-stack<br/>stack ownership"] -->|checks and launches| package["infra/package<br/>local Helm install"]
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
-  package -->|installs apps| apps["Server, website and workers<br/>product services"]
+  package -->|installs apps and prepares computer settings| apps["Server, website, workers and computer<br/>product services"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
   package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
-  package -->|prepares computer settings| computer["apps/computer<br/>assistant computer"]
 ```
 
 ## What it is responsible for

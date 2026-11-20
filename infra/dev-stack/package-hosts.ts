@@ -16,10 +16,21 @@ export type HostCheckRecord = {
 };
 type NodeList = { items: Array<{ metadata: { name: string; uid: string } }> };
 
-class HostSettingsRefused extends Error {}
+export type HostRefusalReason = 'unsafe_settings' | 'unknown_override' | 'unverifiable_host';
+
+export class HostCheckRefused extends Error {
+  readonly reason: HostRefusalReason;
+
+  constructor(reason: HostRefusalReason, message: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
 
 export function publicHostRefusal(error: unknown): string | undefined {
-  if (error instanceof HostSettingsRefused) return error.message;
+  if (error instanceof HostCheckRefused && error.reason === 'unsafe_settings') {
+    return error.message;
+  }
   return undefined;
 }
 
@@ -76,36 +87,42 @@ type LocalCommand = NonNullable<HostCheckOptions['localCommand']>;
 async function requireLocalDocker(command: LocalCommand) {
   const host = process.env['DOCKER_HOST'];
   if (host && !host.startsWith('unix://')) {
-    throw new Error('Cannot verify the underlying k3d host through a remote Docker endpoint');
+    throw new HostCheckRefused('unverifiable_host',
+      'Cannot verify the underlying k3d host through a remote Docker endpoint');
   }
   const endpoint = await command('docker', ['context', 'inspect',
     '--format', '{{json .Endpoints.docker.Host}}']);
-  if (!JSON.parse(endpoint).startsWith('unix://')) {
-    throw new Error('Cannot verify the underlying k3d host through a remote Docker endpoint');
+  const parsedEndpoint = JSON.parse(endpoint) as string;
+  if (!parsedEndpoint.startsWith('unix://')) {
+    throw new HostCheckRefused('unverifiable_host',
+      'Cannot verify the underlying k3d host through a remote Docker endpoint');
   }
 }
 
 async function requireLocalContainer(node: NodeList['items'][number], command: LocalCommand) {
   const name = node.metadata.name;
   if (!/^k3d-(ocn|opencrane-target-[12])-(server|agent)-\d+$/u.test(name)) {
-    throw new Error('Host-risk override requires verified local k3d nodes');
+    throw new HostCheckRefused('unverifiable_host',
+      'Host-risk override requires verified local k3d nodes');
   }
   const output = await command('docker', ['inspect', name]);
   const containers = JSON.parse(output) as Array<{
     Name: string; State: { Running: boolean }; Config: { Labels: Record<string, string> };
   }>;
   const container = containers[0];
-  const cluster = name.replace(/^k3d-/u, '').replace(/-(server|agent)-\d+$/u, '');
+  const prefixStrippedName = name.replace(/^k3d-/u, '');
+  const cluster = prefixStrippedName.replace(/-(server|agent)-\d+$/u, '');
   if (containers.length !== 1 || container?.Name !== `/${name}` ||
       !container.State.Running || container.Config.Labels['k3d.cluster'] !== cluster) {
-    throw new Error('Cannot verify the underlying k3d host');
+    throw new HostCheckRefused('unverifiable_host', 'Cannot verify the underlying k3d host');
   }
   // Bind the API node to this local cluster; names and Docker labels alone can be copied.
   const server = `k3d-${cluster}-server-0`;
   const uid = await command('docker', ['exec', server, 'kubectl', 'get', 'node', name,
     '-o', 'jsonpath={.metadata.uid}']);
   if (uid !== node.metadata.uid) {
-    throw new Error('Local k3d node identity differs from the installation target');
+    throw new HostCheckRefused('unverifiable_host',
+      'Local k3d node identity differs from the installation target');
   }
 }
 
@@ -115,7 +132,9 @@ async function localHost(nodes: NodeList, options: HostCheckOptions, source: str
     if (node.metadata.name.startsWith('k3d-')) local = true;
   }
   if (!local) return undefined;
-  if (!options.localCommand) throw new Error('Cannot verify the underlying k3d host');
+  if (!options.localCommand) {
+    throw new HostCheckRefused('unverifiable_host', 'Cannot verify the underlying k3d host');
+  }
   await requireLocalDocker(options.localCommand);
   // A k3d node shares the Docker host's memory and swap, outside its filesystem.
   for (const node of nodes.items) {
@@ -127,14 +146,16 @@ async function localHost(nodes: NodeList, options: HostCheckOptions, source: str
 }
 
 function requireSameNodes(before: NodeList, after: NodeList) {
-  if (before.items.length !== after.items.length) throw new Error('Installation nodes changed');
+  if (before.items.length !== after.items.length) {
+    throw new HostCheckRefused('unverifiable_host', 'Installation nodes changed');
+  }
   for (const original of before.items) {
     let matched = false;
     for (const current of after.items) {
       if (original.metadata.name === current.metadata.name &&
           original.metadata.uid === current.metadata.uid) matched = true;
     }
-    if (!matched) throw new Error('Installation nodes changed');
+    if (!matched) throw new HostCheckRefused('unverifiable_host', 'Installation nodes changed');
   }
 }
 
@@ -149,21 +170,25 @@ function requireHostResults(record: HostCheckRecord, override: string | undefine
     for (const message of messages) console.warn(message);
   } else if (messages.length > 0) {
     // Only these hostFailures messages are safe to show to the operator.
-    throw new HostSettingsRefused(messages.join('\n'));
+    throw new HostCheckRefused('unsafe_settings', messages.join('\n'));
   }
 }
 
 export async function checkPackageHosts(options: HostCheckOptions): Promise<HostCheckRecord> {
   if (options.override !== undefined && options.override !== 'accepted-dev-box-366') {
-    throw new Error('Unknown host-risk override; omit OPENCRANE_ACCEPT_DEV_HOST_RISK');
+    throw new HostCheckRefused('unknown_override',
+      'Unknown host-risk override; omit OPENCRANE_ACCEPT_DEV_HOST_RISK');
   }
   const output = await options.command(['get', 'nodes', '-o', 'json']);
   const nodes = JSON.parse(output) as NodeList;
-  if (!nodes.items.length) throw new Error('No installation nodes to check');
+  if (!nodes.items.length) {
+    throw new HostCheckRefused('unverifiable_host', 'No installation nodes to check');
+  }
   const source = await collectorSource();
   const underlying = await localHost(nodes, options, source);
   if (options.override && !underlying) {
-    throw new Error('Host-risk override requires verified local k3d nodes');
+    throw new HostCheckRefused('unverifiable_host',
+      'Host-risk override requires verified local k3d nodes');
   }
   const record: HostCheckRecord = { checkedAt: new Date().toISOString(), nodes: [] };
   for (const node of nodes.items) {
@@ -177,7 +202,8 @@ export async function checkPackageHosts(options: HostCheckOptions): Promise<Host
     record.nodes.push(result);
   }
   const current = await options.command(['get', 'nodes', '-o', 'json']);
-  requireSameNodes(nodes, JSON.parse(current) as NodeList);
+  const currentNodes = JSON.parse(current) as NodeList;
+  requireSameNodes(nodes, currentNodes);
   requireHostResults(record, options.override);
   return record;
 }

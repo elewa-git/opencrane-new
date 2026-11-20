@@ -10,7 +10,9 @@ const dumpFix = 'F2: disable host crash reporters (including apport and systemd-
 function bootEncrypted(name, crypttab) {
   const entries = [];
   for (const line of crypttab.split('\n')) {
-    const content = line.split('#')[0].trim();
+    const commentParts = line.split('#');
+    const commentFreeText = commentParts[0];
+    const content = commentFreeText.trim();
     if (!content) continue;
     const fields = content.split(/\s+/u);
     if (fields[0] === name) entries.push(fields);
@@ -38,7 +40,8 @@ function safeSwap(state) {
   if (!/^Filename\s+Type\s+Size\s+Used\s+Priority$/u.test(header ?? '')) return false;
   for (const line of lines) {
     if (line === '') continue;
-    const fields = line.trim().split(/\s+/u);
+    const trimmedRow = line.trim();
+    const fields = trimmedRow.split(/\s+/u);
     if (fields.length !== 5 || fields[1] !== 'partition' ||
         !encryptedSwap(fields[0], state)) return false;
   }
@@ -74,7 +77,8 @@ export function collectHost(prefix = '') {
   const lines = swaps.split('\n');
   lines.shift();
   for (const line of lines) {
-    const path = line.split(/\s+/u)[0];
+    const fields = line.split(/\s+/u);
+    const path = fields[0];
     if (!path || !/^\/dev\/(dm-\d+|mapper\/[a-zA-Z0-9_-]+)$/u.test(path)) continue;
     const device = statSync(`${prefix}${path}`);
     if (!device.isBlockDevice()) continue;
@@ -82,8 +86,10 @@ export function collectHost(prefix = '') {
     const major = ((device.rdev >>> 8) & 0xfff) | ((device.rdev / 2 ** 32) & 0xfffff000);
     const minor = (device.rdev & 0xff) | ((device.rdev >>> 12) & 0xffffff00);
     const base = `${prefix}/sys/dev/block/${major}:${minor}/dm`;
-    const name = readOptional(`${base}/name`).trim();
-    const uuid = readOptional(`${base}/uuid`).trim();
+    const nameValue = readOptional(`${base}/name`);
+    const name = nameValue.trim();
+    const uuidValue = readOptional(`${base}/uuid`);
+    const uuid = uuidValue.trim();
     const mapping = { path, name, uuid };
     state.mappings.push(mapping);
   }
