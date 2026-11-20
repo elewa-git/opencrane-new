@@ -1,32 +1,50 @@
 {
   "status": "FAIL",
-  "source": "b2879c0d57e4450838c44282a3a7d60a6de2b2dc",
+  "source": "195414ef71ffe3e8a65a7b5c2d32d26eeed89cd6",
   "outcomes": [
     {
-      "check": "Fresh packaged namespace and approved-image startup",
+      "check": "Fresh packaged namespace and approved-image installation",
       "result": "PASS"
     },
     {
-      "check": "Separate free provider ready",
+      "check": "Owner, admin and member sign-in; Settings screenshots at 1280 and 390 px",
       "result": "PASS"
     },
     {
-      "check": "API response-body inspection during navigation",
-      "result": "FAIL"
+      "check": "One visible new-key field at both widths",
+      "result": "PASS"
     },
     {
-      "check": "Key entry, refusal, model setup, remount and member replies",
+      "check": "Settings setup",
+      "result": "FAIL",
+      "errorType": "Error",
+      "detail": "The runner did not record a more specific failed check."
+    },
+    {
+      "check": "Wrong-key HTTP 401 refusal and disclosure check",
       "result": "NOT RUN"
+    },
+    {
+      "check": "Right key, quoted test, model selection and switch-on",
+      "result": "NOT RUN"
+    },
+    {
+      "check": "Synthetic key modes and bytes before and after Pod recreation",
+      "result": "NOT RUN"
+    },
+    {
+      "check": "Member replies at 1280 and 390 px",
+      "result": "NOT RUN"
+    },
+    {
+      "check": "Sanitised logs and screenshots copied before teardown",
+      "result": "PASS"
+    },
+    {
+      "check": "Package teardown and secondary slot release",
+      "result": "PASS"
     }
   ],
-  "errorType": "Error",
-  "reason": "Chromium discarded a response body during navigation",
   "paidCalls": 0,
-  "paidCents": 0,
-  "navigationFix": {
-    "source": "5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d",
-    "journey": "NOT RUN",
-    "reason": "The two-hour queue window ended without another complete low-load window"
-  },
-  "completionGuardJourney": "NOT RUN: added after the queue cutoff"
+  "paidCents": 0
 }

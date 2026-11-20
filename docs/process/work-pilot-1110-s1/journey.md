@@ -1,14 +1,33 @@
 # Packaged connected-provider journey
 
-Latest completed packaged journey: **FAIL** at API response-body inspection during
-navigation, before Settings key entry. Full journey after the latest driver fix:
-**NOT RUN**. The two-hour queue window ended without another complete five-minute
-low-load window. The two live blockers remain open; this PR must not merge yet.
+Latest fresh packaged journey at head `195414ef71ffe3e8a65a7b5c2d32d26eeed89cd6`:
+**FAIL** during Settings setup. It passed package startup, sign-in, and the visible key
+field checks at both widths. The runner recorded `errorType: Error` but no more specific
+check. Wrong-key refusal, credential custody, model setup and member chat are **NOT RUN**.
+The two live blockers remain open; this PR must not merge yet.
 
 Date: 20 November 2026 UTC. Website fixture and navigation fix source:
 `5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d`. The last installed source was
 `b2879c0d57e4450838c44282a3a7d60a6de2b2dc`. No application behaviour was changed in
 this round. Paid calls: **0**; actual external charges: **0 cents**.
+
+## Latest live run — 20 November 2026 UTC
+
+**FAIL — fresh packaged install, source `195414ef71ffe3e8a65a7b5c2d32d26eeed89cd6`.** The
+approved package installed and its services became ready. Owner, admin and member sign-in
+completed. Settings screenshots and the new-key form were captured at 1280 and 390 px;
+the runner confirmed one visible new-key field at both widths. It then exited during
+`Settings setup` with `errorType: Error`. The runner did not save a more specific check,
+so this receipt does not attribute a cause beyond that recorded failure. The wrong-key
+401 refusal and disclosure check, right-key connection, quoted test, model selection,
+switch-on, key modes before and after Pod recreation, and member replies are **NOT RUN**.
+
+Paid calls: **0**; paid cents: **0**. Package teardown and slot release passed. Screenshots
+are [admin Settings at 1280 px](live/admin-settings-1280.png),
+[admin Settings at 390 px](live/admin-settings-390.png),
+[new-key form at 1280 px](live/new-key-entry-1280.png), and
+[new-key form at 390 px](live/new-key-entry-390.png). Sanitised startup and service logs
+were retained privately before teardown. See [the run result](live/result.json).
 
 ## What a person sees
 
