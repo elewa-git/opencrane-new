@@ -618,7 +618,12 @@ and failure, refused clipboard access, and drawing two replies again. The Chromi
 check covers a removed or stalled renderer, saved replies after reload, and returning
 from another chat at 1280 and 390 pixels.
 
-After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
+After sign-in, choose **Open workspace** (`/workspace`). While the personal assistant
+id is absent, `PersonalAssignment` subscribes to `chat-context` on the authenticated
+socket. It applies the signed-in member's assignment and closes that subscription
+when an assistant is available. It does not repeat the HTTP read or reload the page.
+Access loss clears the workspace; a late frame cannot restore it. Selecting an
+existing conversation uses its normal subscription instead. Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`
 feed. Only `agent_session` rows are shown. A new draft creates a conversation at
 first send; message ids stay stable across explicit retries. Pending messages are

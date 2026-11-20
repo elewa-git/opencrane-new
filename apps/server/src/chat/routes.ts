@@ -14,7 +14,6 @@ import { conversationListQuery, conversationListCursor, newestListMatch,
   from './list-cursor.ts';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { ChatContext } from '@opencrane/protocol';
 import type { AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import {
@@ -33,7 +32,7 @@ import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
-import { memoryAdmission } from './memory-admission.ts';
+import { personalContext } from './context.ts';
 import { stateCommand, stateChange, listPreference } from './state.ts';
 import { closeCommand, closeChange } from './close.ts';
 import { welcomeListChoice } from './list-welcome.ts';
@@ -353,20 +352,6 @@ async function conversationList(options: ChatOptions, memberId: string,
   return { rows, nextCursor };
 }
 
-async function personalContext(options: ChatOptions, memberId: string) {
-  const result = await options.db.query<{ assistant_id: string }>(
-    "SELECT assistant_id FROM computers WHERE silo = $1 AND owner_id = $2 AND kind = 'personal'",
-    [options.silo, memberId]);
-  const member = await options.db.query<{ display_name: string | null; role: ChatContext['role'] }>(
-    'SELECT display_name, role FROM members WHERE silo = $1 AND member_id = $2', [options.silo, memberId]);
-  let assistantId: string | null = result.rows[0]?.assistant_id ?? null;
-  if (assistantId) {
-    const permission = await memberAuthorisation(options.binding).actsFor(memberId, assistantId);
-    if (!permission.allowed) assistantId = null;
-  }
-  return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId,
-    role: member.rows[0]?.role, memoryAdmission, personalConnections: true };
-}
 
 async function write(
   request: FastifyRequest, options: ChatOptions, memberId: string,

@@ -18,7 +18,7 @@ The browser uses the website's own address for server connections.
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
   web -->|sends requests and messages| server["apps/server<br/>back end"]
-  server -->|returns saved and live results| web
+  server -->|returns saved results and personal assignment updates| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
 
@@ -28,7 +28,7 @@ flowchart LR
 - Show the installation's name and provide sign-out from desktop and phone menus.
 - Offer Settings to owners and admins.
 - Support assistant sessions and direct or group chats with colleagues.
-- Show live and saved replies, safe formatting, code, images and diagrams.
+- Show a newly assigned personal assistant, live and saved replies, and formatted messages.
 - Keep private personal replies only in page memory and clear them when access ends.
 - Open recent and archived chats, load older messages and show saved action details.
 - Upload and preview files, explain refusals and show when files are ready to send.
