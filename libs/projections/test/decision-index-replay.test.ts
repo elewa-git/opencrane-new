@@ -55,7 +55,7 @@ async function matchesReplyBatching() {
   const setup = await setupIndex();
   try {
     const data = { turnId: 'turn', messageId: 'reply', contentType: 'text',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+      utterance: 'Earlier fixture message' };
     await setup.append('agent.message_delta', data);
     await setup.runner.run(conversations);
     await setup.append('agent.message_delta', data);

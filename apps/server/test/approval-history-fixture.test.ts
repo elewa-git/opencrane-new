@@ -11,7 +11,7 @@ async function seededHistoryHasNoWaitingTurn() {
   const nats = await natsFixture();
   try {
     const data = { conversationId: 'chat', authorId: 'assistant', authorKind: 'agent',
-      contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+      contentType: 'text', utterance: 'Earlier fixture message' };
     const message = envelope('test', 'conversation-chat', 'message.posted', data);
     const history = completedApprovalMessage(message);
     await nats.seed(history);
@@ -42,7 +42,7 @@ async function seededHistoryBoundsProjectionBacklog() {
   query.mockImplementation(observeProjection);
   const db: Query = { query };
   const data = { conversationId: 'chat', authorId: 'assistant', authorKind: 'agent' as const,
-    contentType: 'text' as const, ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+    contentType: 'text' as const, utterance: 'Earlier fixture message' };
   try {
     await seedApprovalHistory(nats.store, db, { silo: 'test', data });
     assert.equal(await nats.store.head(), 6_000, 'Keep all 3,000 messages and their completions');
