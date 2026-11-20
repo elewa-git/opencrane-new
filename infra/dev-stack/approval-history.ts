@@ -9,6 +9,7 @@ import { completedApprovalMessage } from './approval-tool.ts';
 export type ApprovalHistorySeed = {
   silo: string;
   data: MessagePostedData;
+  messageCount?: number;
 };
 
 export async function seedApprovalHistory(store: EventStore, db: Query,
@@ -16,7 +17,8 @@ export async function seedApprovalHistory(store: EventStore, db: Query,
   const subject = `conversation-${input.data.conversationId}`;
   let position = await store.head(subject);
   const messagesPerBatch = 10;
-  const batchCount = 3_000 / messagesPerBatch;
+  const messageCount = input.messageCount ?? 3_000;
+  const batchCount = messageCount / messagesPerBatch;
   // Bound queued work while every projection processes the same saved events under load.
   for (let batchIndex = 0; batchIndex < batchCount; batchIndex++) {
     for (let messageIndex = 0; messageIndex < messagesPerBatch; messageIndex++) {

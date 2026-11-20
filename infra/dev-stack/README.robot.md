@@ -628,18 +628,15 @@ infra/dev-stack/journey.sh
 infra/dev-stack/down.sh
 ```
 
-`up` includes CORE by default. Set `APPROVAL_JOURNEY_ONLY=1` when starting a fresh
-secondary stack to attempt tool approval and denial after 3,000 saved messages in
-one chat at both browser widths. Seed history in batches of 50 and wait for the
-conversation projection between batches. Set up the timed tool review after history
-preparation. This mode runs the common sign-in and membership checks, then the
-approval driver and shared cleanup. CORE remains a separate journey.
-The driver uses a scripted active turn and the recording stand-in tool through the
-real gateway; it makes no paid model call. It checks one approved send, single use
-and zero sends after denial. This mode currently fails at the first gateway request
-with HTTP 404, before an approval exists. Its tool helper uses the old publication
-event shape and needs the current acknowledged publication flow and guarded TLS
-fixture transport. It is not live qualification evidence.
+`up` includes CORE by default. After a fresh secondary CORE run, start the guarded
+TLS launcher and set `APPROVAL_JOURNEY_ONLY=1` for `journey.sh` to check tool approval
+and denial after 500 saved messages in one chat at both browser widths. Seed ten
+messages and their completion events per batch and wait for the conversation
+projection between batches. Set up the timed tool review after history preparation.
+This mode runs the common sign-in and membership checks, then the approval driver
+and shared cleanup. The source regression retains 3,000 messages and completions.
+The driver checks browser approval, exact forwarded bytes, single use, reload,
+denial and an already approved request refused after Stop, using the free model.
 
 Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
@@ -2042,7 +2039,7 @@ keeps the remaining live checks explicit.
 The models process gets a separate control port for checking loaded configuration.
 The stack never forwards it. After a fresh CORE run, `stage-b-live.ts` starts the
 guarded demo transport. Run `journey.sh` with `APPROVAL_JOURNEY_ONLY=1` to seed
-3,000 completed messages and request a demo write with the free Stage B model stub.
+500 completed messages and request a demo write with the free Stage B model stub.
 Seed ten messages and their completion events at a time, then require their conversation
 projection checkpoint before publishing more. Each wait keeps its 30-second limit.
 Check browser approval, the returned tool result, exact forwarded bytes, single use,
