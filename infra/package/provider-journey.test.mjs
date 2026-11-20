@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
+import { navigateWithReplies } from './provider-navigation.ts';
 import { createProviderConnection, providerSetup, saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
@@ -69,7 +70,7 @@ async function login(role) {
   page.setDefaultTimeout(30_000);
   const user = setup.users[role];
   assert(user, 'The claimed slot must have this separate test identity');
-  await page.goto(origin);
+  await navigateWithReplies(page, origin, responses);
   await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
   await page.locator('input[name=loginName]').waitFor();
   await page.waitForLoadState('networkidle');
@@ -90,7 +91,10 @@ function inspectReply(response) {
     const body = await response.text();
     for (const secret of secrets) assert(!body.includes(secret), 'An API reply disclosed a key');
   }
-  responses.push(inspect());
+  const inspection = inspect();
+  // Keep errors for the next navigation or final check so the receipt records the failure.
+  void Promise.allSettled([inspection]);
+  responses.push(inspection);
 }
 
 async function capture(page, name, width) {
@@ -174,7 +178,7 @@ async function waitForModels(page, providerId) {
 }
 
 async function connect(admin) {
-  await admin.goto(`${origin}/workspace`);
+  await navigateWithReplies(admin, `${origin}/workspace`, responses);
   await admin.getByRole('link', { name: 'Settings', exact: true }).click();
   await admin.getByRole('link', { name: /Models/ }).click();
   await admin.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
@@ -289,7 +293,7 @@ async function recreateProviderPod() {
 async function memberChats(member) {
   for (const width of [1280, 390]) {
     await member.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    await member.goto(`${origin}/workspace`);
+    await navigateWithReplies(member, `${origin}/workspace`, responses);
     const composer = member.getByRole('textbox', { name: 'Message your agent' });
     await composer.waitFor({ timeout: 120_000 });
     await member.keyboard.press('Control+n');
