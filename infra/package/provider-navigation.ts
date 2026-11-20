@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 
 export async function navigateWithReplies(page: Page, url: string,
   replies: Promise<void>[]): Promise<void> {
@@ -6,4 +6,10 @@ export async function navigateWithReplies(page: Page, url: string,
   await page.waitForLoadState('networkidle');
   await Promise.all(replies);
   await page.goto(url);
+}
+
+export async function finishBrowserReplies(browser: Browser,
+  replies: Promise<void>[]): Promise<void> {
+  await Promise.all(replies);
+  await browser.close();
 }

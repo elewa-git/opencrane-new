@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { once } from 'node:events';
 import { test } from 'node:test';
 import { chromium } from 'playwright';
-import { navigateWithReplies } from './provider-navigation.ts';
+import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
 
 function serve(request: IncomingMessage, response: ServerResponse): void {
   if (request.url === '/api/check') {
@@ -82,3 +82,19 @@ async function preservesInspectionFailures(): Promise<void> {
 
 test('a failed API disclosure inspection refuses navigation and remains a failed journey',
   preservesInspectionFailures);
+
+async function preservesLateInspectionFailures(): Promise<void> {
+  const browser = await chromium.launch({ headless: true });
+  const replies: Promise<void>[] = [];
+  function lateInspection(): void {
+    const inspection = Promise.reject(new Error('Late API disclosure check failed'));
+    void Promise.allSettled([inspection]);
+    replies.push(inspection);
+  }
+  browser.on('disconnected', lateInspection);
+  const completion = finishBrowserReplies(browser, replies);
+  await assert.rejects(completion, /Late API disclosure check failed/u);
+}
+
+test('an inspection failure arriving during browser shutdown still refuses a journey PASS',
+  preservesLateInspectionFailures);
