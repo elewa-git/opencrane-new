@@ -123,12 +123,17 @@ async function invite(ownerPage, role, membershipRole) {
   const email = `${userName}@example.test`;
   const data = { commandId: randomUUID(), memberId, email, role: membershipRole,
     personalAssistant: 'provision', expectedSequence: 0 };
+  stage = { check: `invite ${membershipRole}`, expectedHttpStatus: 200,
+    detail: 'The owner must be able to save the invitation.' };
   const response = await ownerPage.request.post(`${origin}/api/invitations`,
     { headers: { origin }, data });
   assert.equal(response.status(), 200, 'The owner can invite a separate journey identity');
   const invitation = await response.json();
   assert(invitation.invitationId, 'The invitation must be recorded');
+  step(`${membershipRole} sign-in`, 'The invited person must finish single sign-on.');
   const page = await login(role);
+  stage = { check: `${membershipRole} accepts invitation`, expectedHttpStatus: 200,
+    detail: 'The separately signed-in person must be able to accept the invitation.' };
   const joined = await page.request.post(`${origin}/members/join`, { headers: { origin },
     data: { memberId, invitationId: invitation.invitationId, commandId: randomUUID(),
       displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' } });

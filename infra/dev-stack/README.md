@@ -57,8 +57,8 @@ Not built yet:
    Each copy has its own ports, data and private keys. Cleanup removes only that copy.
 
 1. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
-   provider, then starts the apps. It waits for the website and dispatcher before
-   running the core browser journey by default. A focused approval run can start
+   provider, then starts the apps. It checks owner permissions, the website and
+   dispatcher before running the core browser journey by default. A focused approval run can start
    the services first and run its browser checks after the demo is ready. The status
    command shows recovery attempts for event delivery, acknowledgements and computer
    watcher reads.

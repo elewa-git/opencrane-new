@@ -78,6 +78,8 @@ then runs `prepare.ts` with the private values file. That command creates eight
 named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
+Owner bootstrap seeds ownership and checks its permission receipts before opening
+the server, so the first owner command does not race an unapplied ownership change.
 The default owner bootstrap links the separate development sign-in account to the
 privately configured owner member in this install. Public-address mode skips that
 bootstrap and uses the first-owner token claim described below. Neither path edits
