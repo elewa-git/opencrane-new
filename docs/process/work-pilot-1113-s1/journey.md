@@ -2,6 +2,25 @@
 
 Journey on a fresh dev stack: FAIL
 
+## Latest packaged run
+
+20 November 2026. The fresh packaged install tested product commit
+`b53d05e69496734966c4a10be02b691c5a595527`. Package preparation passed with the
+approved application and scanner images. All nine install refusals and real
+wrong-organisation sign-in at 1280 and 390 px passed. Owner claim, wrong-token
+refusal, token reuse refusal, owner chat and Secure and HttpOnly cookies passed
+at both widths. Admin sign-in, chat and Secure and HttpOnly cookies passed at
+both widths. Member sign-in and its Secure and HttpOnly cookie passed at 1280 px,
+and joined access was ready before the first protected read. Member 1280 px chat
+failed. The browser recorded `code=withheld; details withheld`, and its failure
+screenshot could not be captured. Member 390 px checks and the member token
+reuse check are NOT RUN. Package-down, stack down and temporary test app cleanup
+passed. Sampled one-minute load ranged from 1.03 to 7.48 during the packaged run.
+The full journey is FAIL. See the [packaged run receipt](round-3-packaged/outcomes.json),
+[browser results](round-3-packaged/browser-product.json),
+[safe browser log](round-3-packaged/browser-product.log),
+[load samples](round-3-packaged/load-during-run.log) and saved screenshots.
+
 Round 2, 20 November 2026. Product fix: `f4ce844c1`; test-first commit: `c9a572b19`.
 The local source gates, exact-source CI and both image approval consumers pass.
 The first full fixed-source run failed at the admin access handoff described below.

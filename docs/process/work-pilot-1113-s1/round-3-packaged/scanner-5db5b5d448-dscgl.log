@@ -1,0 +1,33 @@
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556300948Z Limits: Global time limit set to 120000 milliseconds.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556356957Z Limits: Global size limit set to 83886080 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556360736Z Limits: File size limit set to 22020096 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556363347Z Limits: Recursion level limit set to 16.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556366341Z Limits: Files limit set to 2000.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556369696Z Limits: MaxEmbeddedPE limit set to 41943040 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556372163Z Limits: MaxHTMLNormalize limit set to 41943040 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556385961Z Limits: MaxHTMLNoTags limit set to 8388608 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556389018Z Limits: MaxScriptNormalize limit set to 20971520 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556396110Z Limits: MaxZipTypeRcg limit set to 1048576 bytes.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556398686Z Limits: MaxPartitions limit set to 50.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556401199Z Limits: MaxIconsPE limit set to 100.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556403921Z Limits: MaxRecHWP3 limit set to 16.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556406524Z Limits: PCREMatchLimit limit set to 100000.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556409295Z Limits: PCRERecMatchLimit limit set to 2000.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556411826Z Limits: PCREMaxFileSize limit set to 104857600.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556415091Z Archive support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556417770Z Image (graphics) scanning support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556420466Z Detection using image fuzzy hash enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556423042Z Alerting of encrypted archives _and_ documents enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556425504Z Heuristic alerting enabled for scans that exceed set maximums.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556427981Z Heuristic alerts enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556432836Z Portable Executable support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556435501Z ELF support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556438064Z Mail files support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556440479Z OLE2 support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556443091Z PDF support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556445695Z SWF support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556448254Z HTML support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556450628Z XMLDOCS support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556453148Z HWP3 support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556455598Z OneNote support enabled.
+[pod/scanner-5db5b5d448-dscgl/engine] 2026-11-20T20:46:00.556458091Z Self checking disabled.
