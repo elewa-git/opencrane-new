@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: keeps a safe specific failure and real PNG before context closure
+ok 1 - keeps a safe specific failure and real PNG before context closure
+  ---
+  duration_ms: 941.341974
+  type: 'test'
+  ...
+# Subtest: private messages, codes and steps cannot enter failure receipts
+ok 2 - private messages, codes and steps cannot enter failure receipts
+  ---
+  duration_ms: 1.64447
+  type: 'test'
+  ...
+# Subtest: records unavailable screenshot without hiding the journey failure
+ok 3 - records unavailable screenshot without hiding the journey failure
+  ---
+  duration_ms: 1.410607
+  type: 'test'
+  ...
+# Subtest: the executable qualification runner resolves its helpers before checking the slot
+ok 4 - the executable qualification runner resolves its helpers before checking the slot
+  ---
+  duration_ms: 129.248991
+  type: 'test'
+  ...
+# Subtest: prepares joined access before the first protected workspace read
+ok 5 - prepares joined access before the first protected workspace read
+  ---
+  duration_ms: 1.735368
+  type: 'test'
+  ...
+# Subtest: qualification cleanup closes upgraded CONNECT tunnels
+ok 6 - qualification cleanup closes upgraded CONNECT tunnels
+  ---
+  duration_ms: 26.050556
+  type: 'test'
+  ...
+# Subtest: accepts the exact existing-owner refusal for the member identity
+ok 7 - accepts the exact existing-owner refusal for the member identity
+  ---
+  duration_ms: 2.381666
+  type: 'test'
+  ...
+# Subtest: rejects success, owner-token reuse reasons and malformed refusal bodies
+ok 8 - rejects success, owner-token reuse reasons and malformed refusal bodies
+  ---
+  duration_ms: 5.88179
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1892.042331
