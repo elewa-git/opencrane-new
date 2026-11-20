@@ -217,8 +217,7 @@ class ImageLayerTests(unittest.TestCase):
                      "--tmpfs", "/tmp:uid=1000,gid=1000,mode=1777",
                      "--mount", f"type=bind,src={fixture},"
                      "dst=/app/infra/package/bootstrap-runtime-fixture.mjs,readonly",
-                     "--env", "NODE_OPTIONS=--import=/app/infra/package/bootstrap-runtime-fixture.mjs",
-                     ]
+                     "--env", "NODE_OPTIONS=--import=/app/infra/package/bootstrap-runtime-fixture.mjs"]
         for setting in environment:
             arguments.extend(["--env", setting])
         arguments.extend([image, "node", "--experimental-strip-types", "infra/package/bootstrap.ts"])
