@@ -1,11 +1,11 @@
 {
   "status": "FAIL",
-  "source": "e6add58ec08711f6ee7522b5c04a3dab3be8a9fb",
+  "source": "5ad52ff2f6822f7d2f364430ce1493ce3ae4a2f9",
   "outcomes": [
     {
       "check": "create provider connection",
       "result": "FAIL",
-      "errorType": "TimeoutError",
+      "errorType": "Error",
       "detail": "The saved connection must advance to its Key step."
     }
   ],

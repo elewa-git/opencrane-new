@@ -1,0 +1,627 @@
+[
+  {
+    "pod": "backup-catalogue-56c597d7f9-zxw98",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "catalogue",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "bootstrap-nrvnd",
+    "phase": "Succeeded",
+    "containers": [
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "bootstrap",
+        "ready": false,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "computer-4dc9bdb503be303882b4f35cfb380ec5",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "computer",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "computer-8758be48bf6edde9f441c77886319c13",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "computer",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "computer-8f252009825e1e8620f9c1798894005f",
+    "phase": "Pending",
+    "containers": [
+      {
+        "name": "computer",
+        "ready": false,
+        "restartCount": 0,
+        "state": [
+          "waiting"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "model-qualification-7bcff9b5b7-5wqvx",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "stand-in",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "nats-0",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "nats",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "objects-0",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "objects",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "openfga-75c8b7c5b9-7gzxg",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "wait-for-postgres",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "migrate",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "openfga",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "postgres-0",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "postgres",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "scanner-7994c5b668-tvtgz",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "copy-evidence",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-databases",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "engine",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      },
+      {
+        "name": "https",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "server-67ff8bd459-qhgx8",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "private-provider-keys",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "models",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      },
+      {
+        "name": "server",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      },
+      {
+        "name": "storage-credentials",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "web-678f79b967-wvc8f",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "web",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-audit-6f955cf85-z9tnx",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-budgets-cf7f985f6-m9frt",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-computers-58c4f6bdcb-wlcrm",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-conversations-6ccf7cb8d4-w48lt",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-dispatcher-78cd4c8d7-vnhz4",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 1,
+        "state": [
+          "running"
+        ],
+        "lastTermination": {
+          "reason": "Error",
+          "exitCode": 1,
+          "finishedAt": "2026-11-20T14:53:24Z"
+        }
+      }
+    ]
+  },
+  {
+    "pod": "worker-files-8f7f7b899-g6n5l",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-mcp-catalogue-5cc4c4ddd9-wn6pz",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-members-7d69d99f8c-zm9bm",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  },
+  {
+    "pod": "worker-routines-6f7c8cb64b-srfrg",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "running"
+        ]
+      }
+    ]
+  }
+]
