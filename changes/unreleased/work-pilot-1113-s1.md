@@ -7,3 +7,5 @@ Development-owner and token bootstrap keep their own completion messages so imag
 verification checks both modes.
 Packaged sign-in checks retain a safe failure code and step, and capture a masked
 failure screenshot before closing the browser context.
+Typing or pasting and pressing Enter immediately sends the current message,
+even before the next screen update. Clearing the field cannot send earlier text.

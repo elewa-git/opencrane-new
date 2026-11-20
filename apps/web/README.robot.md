@@ -667,6 +667,8 @@ and unavailable replies at 1280px and 390px with reduced motion. It uses interce
 replies, checks wrapping, keyboard focus, 44px actions and the persistent reason. These
 checks do not qualify a fresh installation.
 
+The composer submits the text currently in its field. Enter does not wait for the
+parent draft to reach the next render, and cannot submit an earlier draft.
 Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
 Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel
 and preview dialogs use Escape and focus restoration. Phones use a top-bar menu,
