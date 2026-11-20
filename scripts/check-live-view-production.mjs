@@ -27,19 +27,23 @@ function serverInit() {
   return bytes;
 }
 
-function framebuffer() {
+function framebuffer(pixelFormat) {
   // Draw a red pixel at the origin through a real raw RFB rectangle.
   const bytes = Buffer.alloc(20);
   bytes.writeUInt16BE(1, 2);
   bytes.writeUInt16BE(1, 8);
   bytes.writeUInt16BE(1, 10);
-  bytes[18] = 255;
+  const red = pixelFormat.readUInt16BE(8);
+  const redPixel = red * 2 ** pixelFormat[14];
+  if (pixelFormat[6] === 1) bytes.writeUInt32BE(redPixel, 16);
+  else bytes.writeUInt32LE(redPixel, 16);
   return bytes;
 }
 
 function connectDesktop(socket) {
   let step = 0;
   let frameSent = false;
+  let pixelFormat;
   function renewLease() {
     const at = Date.now();
     const notice = { lease: 'valid', at, until: at + 1500 };
@@ -49,8 +53,12 @@ function connectDesktop(socket) {
     if (step === 0) socket.send(Buffer.from([1, 1]));
     else if (step === 1) socket.send(Buffer.alloc(4));
     else if (step === 2) socket.send(serverInit());
-    else if (!frameSent) {
-      socket.send(framebuffer());
+    else if (step === 3) {
+      assert.equal(bytes[0], 0, 'The viewer selects its pixel format');
+      assert.equal(bytes[4], 32, 'The fixture uses 32-bit pixels');
+      pixelFormat = Buffer.from(bytes);
+    } else if (bytes[0] === 3 && !frameSent) {
+      socket.send(framebuffer(pixelFormat));
       frameSent = true;
     }
     step++;
