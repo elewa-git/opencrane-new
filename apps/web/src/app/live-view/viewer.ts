@@ -1,2 +1,6 @@
-// Load the CommonJS viewer through an ES module so dynamic imports return its class.
-export { default } from '@novnc/novnc/lib/rfb.js';
+import viewerModule from '@novnc/novnc/lib/rfb.js';
+
+// The production build wraps the CommonJS default; development exposes the class directly.
+const viewer = typeof viewerModule === 'function' ? viewerModule : viewerModule.default;
+
+export default viewer;

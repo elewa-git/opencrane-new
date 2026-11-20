@@ -1457,7 +1457,11 @@ Builds reuse compiled files locally and in CI. Browser fixture checks prepare a
 development build before starting their test servers.
 
 The desktop viewer first asks for access, then connects its socket and display.
-It clears the picture when permission expires or the session closes.
+`src/app/live-view/viewer.ts` selects the noVNC constructor from the development or production
+CommonJS import shape. Its type declaration describes both shapes. The production
+browser regression builds `test/live-view-main.ts` and checks decoded RFB pixels at
+1280 and 390 pixels through the shared website proxy. The viewer clears the picture
+when permission expires or the session closes.
 
 ## Where to read more
 

@@ -32,7 +32,8 @@ flowchart LR
 - Keep private personal replies only in page memory and clear them when access ends.
 - Open recent and archived chats, load older messages and show saved action details.
 - Upload and preview files, explain refusals and show when files are ready to send.
-- Show tool approvals and the assistant's read-only desktop when permitted.
+- Show tool approvals and the assistant's read-only desktop when permitted, including
+  in the packaged website.
 - Show permitted memory facts and support personal saving, correction and forgetting.
 - Let members choose personal tool keys and which assistants may use them.
 - Let admins manage people, groups, assistants, model providers and tool servers.

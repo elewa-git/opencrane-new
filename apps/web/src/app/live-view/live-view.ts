@@ -16,7 +16,7 @@ import {
   type SimpleChanges,
 } from '@angular/core';
 import { LeaseChannel, type LeaseNotice } from './lease-channel';
-import type RFB from '@novnc/novnc/lib/rfb.js';
+import type { RFB } from '@novnc/novnc/lib/rfb.js';
 import type { CaptureViewModel } from '../chat/screenshot-capture';
 
 type ViewerConstructor = typeof RFB;

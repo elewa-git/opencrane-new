@@ -10,7 +10,7 @@ declare module '@novnc/novnc/lib/rfb.js' {
     onerror: ((event: Event) => void) | null;
     onclose: ((event: CloseEvent) => void) | null;
   }
-  export default class RFB extends EventTarget {
+  class RFB extends EventTarget {
     constructor(target: HTMLElement, socket: WebSocket | RawChannel);
     viewOnly: boolean;
     scaleViewport: boolean;
@@ -18,4 +18,7 @@ declare module '@novnc/novnc/lib/rfb.js' {
     focusOnClick: boolean;
     disconnect(): void;
   }
+  const viewer: typeof RFB | { default: typeof RFB };
+  export default viewer;
+  export type { RFB };
 }
