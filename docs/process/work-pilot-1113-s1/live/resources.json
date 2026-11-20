@@ -1,0 +1,194 @@
+[
+  {
+    "kind": "Pod",
+    "name": "backup-catalogue-6f9b9d4b57-4tlpc",
+    "uid": "9135780f-57d2-4ab7-970b-f4aa2e3e7d6f",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "bootstrap-v679h",
+    "uid": "30955baf-3b7b-4f17-86fb-309f181973cc",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "computer-a39df7e19bb5235d72898e6cc6fbc911",
+    "uid": "3345412d-6c34-42c1-86b4-8266481220ab",
+    "createdAt": "2026-11-20T13:58:39Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "nats-0",
+    "uid": "b5f7a02c-0f65-4414-8a15-d68b4f7bc1b0",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "objects-0",
+    "uid": "89650c53-0da1-4401-b173-3ee6b61363b2",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "openfga-75c8b7c5b9-nbfp9",
+    "uid": "2404de8c-4335-46dc-ba38-09571d85c170",
+    "createdAt": "2026-11-20T13:55:49Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "postgres-0",
+    "uid": "16987e2f-c0a0-4179-bf39-828b6248467c",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "scanner-577844f47d-6rnnl",
+    "uid": "dcf0391e-f4c4-4a80-a301-775ba55345fa",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "server-94c8796f9-jlglk",
+    "uid": "3195004e-e404-4be9-be58-8b2635870c87",
+    "createdAt": "2026-11-20T13:56:35Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "web-857b4cfcd9-g285w",
+    "uid": "c0d757c4-10ea-477e-a974-3ad89cc4374a",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-audit-f65f7b84c-tjjtj",
+    "uid": "35746d51-07f9-4be5-80e7-f41cf6354aba",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-budgets-6d4b9798b4-r4zrf",
+    "uid": "02422de5-692f-4de9-8dd3-a075d9ed6518",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-computers-74f6765b57-7j9qq",
+    "uid": "4853287b-39bd-485c-b3a4-b39a788da27e",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-conversations-547d6c8466-sh9bn",
+    "uid": "8a3cd14a-b29c-405e-b57c-4603513f5246",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-dispatcher-56d7976794-4zmdt",
+    "uid": "09e0abd4-e649-4a9a-93b5-e4ad6abe9cf6",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-files-59948bb9f4-txqsq",
+    "uid": "7fb99f6e-ab83-4fa8-85b7-f6a1e61f5575",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-mcp-catalogue-5d698f455d-nx9ml",
+    "uid": "b7d0ef5e-9b22-4017-ac15-4a81ad9d7807",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "Pod",
+    "name": "worker-members-cfff45655-l54gc",
+    "uid": "984c93d1-0675-42f6-b176-54e3f1f38778",
+    "createdAt": "2026-11-20T13:56:12Z"
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "name": "backups",
+    "uid": "9f190141-df87-49b0-8cbd-bb96bb6ce1a9",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "name": "data-nats-0",
+    "uid": "261dc40c-1c88-4e1b-a6a7-f80823c44794",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "name": "data-objects-0",
+    "uid": "9a3ca472-0bfd-43ee-b900-99ea5056342f",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "name": "data-postgres-0",
+    "uid": "55e7a55e-aa58-49be-85da-76e665eb6175",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "name": "home-computer-a39df7e19bb5235d72898e6cc6fbc911",
+    "uid": "f2634ab6-74a8-48af-8691-4344cffd00db",
+    "createdAt": "2026-11-20T13:58:39Z"
+  },
+  {
+    "kind": "PersistentVolumeClaim",
+    "name": "pilot-restore",
+    "uid": "fd64ccda-db96-443e-ba4c-967b1856a8a5",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "nats",
+    "uid": "e003bb58-6eee-459b-9494-29dc90c0f659",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "objects",
+    "uid": "6f0570ae-2544-4396-81f6-abf87c2ba6be",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "openfga",
+    "uid": "c82e997e-94fb-421d-b124-1867c0c79f4c",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "postgres",
+    "uid": "38a28ddb-cac1-4449-b5ea-ccd34e23452c",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "scanner",
+    "uid": "360fd0f6-1f1c-4172-af08-8c82f2abdea0",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "server",
+    "uid": "0adde782-6339-47ad-b798-bb0e4c1f30b5",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Service",
+    "name": "web",
+    "uid": "7b1ff508-9800-4ce2-8a23-c1bf82c2bfdf",
+    "createdAt": "2026-11-20T13:55:48Z"
+  },
+  {
+    "kind": "Job",
+    "name": "bootstrap",
+    "uid": "644a9daf-d5e0-42ed-963a-ddea738280c9",
+    "createdAt": "2026-11-20T13:55:48Z"
+  }
+]

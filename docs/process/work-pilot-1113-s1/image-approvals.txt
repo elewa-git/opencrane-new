@@ -1,0 +1,2 @@
+{"result":"PASS","name":"application","runId":44730045363,"image":"k3d-ocn-registry:5000/opencrane/package@sha256:262c2e1017d560f004cc5e145728694a8640e5f8ae204bc890328ea18128a096"}
+{"result":"PASS","name":"scanner","runId":44729074136,"image":"k3d-ocn-registry:5000/opencrane/scanner@sha256:9e930a1468700ae8ded1d5c69a7a32ce4f719b57d96c81d034fa540fdbf8706f"}
