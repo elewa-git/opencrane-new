@@ -2,6 +2,21 @@
 
 ## Current correction — 20 November 2026 UTC
 
+The latest fresh run on `1dc3d7406` is **FAIL** while creating the provider.
+This attempt used secondary slot 2. The create command returned HTTP 200 and the
+provider content projection completed, but setup did not reach the Key step within
+its existing deadline. The dispatcher restarted once; its retained current log has
+connection-pool timeouts. The previous container log and termination reason were
+not retained, so no OOM or other restart cause is claimed. Startup, service and
+browser logs were saved before teardown this time. The slot was released.
+
+See [result](live/round-3-attempt-3.json), [safe failure](live/round-3-attempt-3-failure.txt),
+[fresh namespace and PVC binding](live/round-3-attempt-3-binding.json) and
+[container states](live/round-3-attempt-3-pods.json). Wrong-key refusal, private modes
+before/after Pod recreation and member replies remain **NOT RUN** in this attempt.
+A separate diagnostic run was queued to retain previous-container details; it has
+not claimed a slot. No retry, timeout or memory limit was changed to hide this failure.
+
 The next fresh packaged run on `c1c1e28ca` is **FAIL** at wrong-key reachability.
 Owner, admin and member setup passed. The key-entry checks passed at both widths.
 The runner then matched two visible Check status buttons: one in the providers
