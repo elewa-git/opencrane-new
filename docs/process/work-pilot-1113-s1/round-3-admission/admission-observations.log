@@ -6,3 +6,4 @@
 2026-11-20T19:03:25Z: one journey process marker; no slot lock observed.
 2026-11-20T19:41:00Z: one journey process marker; both slots and package stacks free; load 0.7139.
 2026-11-20T19:44:10Z: one journey process marker remained; no slot lock observed; load 0.89.
+The first admission wrapper invocation stopped before slot claim because its capacity-log file was absent. No stack command ran. A new sampler wrote the retained capacity records.

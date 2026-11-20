@@ -16,8 +16,10 @@ approval workflows passed: [CI](https://github.com/elewa-git/opencrane-new/actio
 [application](https://github.com/elewa-git/opencrane-new/actions/runs/44783556179) and
 [scanner](https://github.com/elewa-git/opencrane-new/actions/runs/44783556418).
 
-The packaged journey was NOT RUN. The two-hour admission wait ended with another
-journey process still active. No five-minute capacity window qualified. An earlier
+The packaged journey was NOT RUN. The first admission wrapper stopped before a slot
+claim because its capacity-log file was absent; no stack command ran. After restarting
+the sampler with saved output, the two-hour admission wait ended with another journey
+process still active. No five-minute capacity window qualified. An earlier
 window reached 299 seconds before capacity lookups failed; the final recorded window
 reached 179 seconds with both slots and package stacks free. See the
 [earlier samples](round-3-admission/capacity-early.log),
