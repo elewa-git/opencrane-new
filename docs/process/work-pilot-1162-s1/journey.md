@@ -21,6 +21,9 @@ with cause `stage: metadata, reason: malformed`. It requires successful packagin
 output for the exact source commit and branch. The tested checkout was
 `1bbf2b733` (the failing-test commit, with the implementation still uncommitted).
 The [original safe refusal log](logs/image-approval.log) retains the result.
+After all source gates passed, the same real consumer refused again for committed
+implementation `412bb98758bd8c37a2c6686c0a0c38aeb3803b35`, with the same metadata cause.
+The [final attempt](logs/final-image-approval.log) records that committed source.
 No alternate image, fake approval, guard change or fleet-marker change was used.
 
 The [resource observations](logs/resource-window.jsonl) began with both secondary
