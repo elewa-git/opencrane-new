@@ -37,15 +37,15 @@ const setup = JSON.parse(await readFile(join(configuration.directory, 'zitadel.j
 const outcomes = [];
 const sockets = new Set();
 let browser;
-let currentPage;
 let stage = 'browser launch';
 let failureCaptured = false;
 let chatRequests = [];
 
-async function retainFailure(error) {
+async function retainFailure(error, context) {
   if (failureCaptured) return;
   failureCaptured = true;
-  const failure = await captureJourneyFailure(currentPage, error, { step: stage,
+  const page = context?.pages().at(-1);
+  const failure = await captureJourneyFailure(page, error, { step: stage,
     path: join(output, `failed-${input.phase}.png`) });
   failure.chatRequests = chatRequests;
   outcomes.push(failure);
@@ -145,7 +145,6 @@ function atApplication(url) {
 }
 
 async function signIn(page, user, path = '/') {
-  currentPage = page;
   await page.goto(`${input.origin}${path}`);
   if (path === '/claim') {
     await page.getByRole('link', { name: 'Sign in to claim', exact: true }).click();
@@ -228,7 +227,6 @@ async function invite(ownerPage, role, user) {
 }
 
 async function chat(page, role, width) {
-  currentPage = page;
   chatRequests = [];
   function recordChatResponse(response) {
     if (response.request().method() !== 'POST') return;
@@ -308,8 +306,7 @@ async function joinedAccess(memberId) {
   record('joined member access is applied before the first protected read');
 }
 
-async function product() {
-  const ownerContext = await newContext(1280);
+async function visitProduct(ownerContext) {
   const ownerPage = await ownerContext.newPage();
   stage = 'owner 1280px sign-in';
   await signIn(ownerPage, setup.users.owner, '/claim');
@@ -373,7 +370,12 @@ async function product() {
       await closeAfterJourney(context, visitRole, retainFailure);
     }
   }
-  await ownerContext.close();
+}
+
+async function product() {
+  const ownerContext = await newContext(1280);
+  const visit = visitProduct.bind(null, ownerContext);
+  await closeAfterJourney(ownerContext, visit, retainFailure);
 }
 
 async function wrongOrganisation() {

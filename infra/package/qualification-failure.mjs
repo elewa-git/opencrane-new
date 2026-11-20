@@ -28,7 +28,7 @@ export async function closeAfterJourney(context, run, capture) {
   try {
     return await run();
   } catch (error) {
-    await capture(error);
+    await capture(error, context);
     throw error;
   } finally {
     await context.close();
