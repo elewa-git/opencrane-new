@@ -1,0 +1,30 @@
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] _XSERVTransmkdir: Owner of /tmp/.X11-unix should be set to root
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] Xvnc KasmVNC 1.5.0.17265facc40ab50db5740cdf0d12c61173edafc9 - built Jun 11 2026 12:29:08
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] Copyright (C) 1999-2026 KasmVNC Team and many others (see README.me)
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] See http://kasmweb.com for information on KasmVNC.
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] Underlying X server release 12101007
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:52,666 [INFO] ICE: Using public IP 127.0.0.1 from args
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:52,670 [INFO] vncext: VNC extension running!
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:52,731 [INFO] vncext: Listening for websocket connections on 0.0.0.0 interface(s), port 6901
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:53,803 [INFO] websocket 0: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:54,736 [INFO] websocket 1: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:55,172 [PRIO] ffmpeg: Could not open libavformat.so
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:55,177 [INFO] VNCServerST: CPU capability: SSE2 yes, SSE4.1 yes, SSE4.2 yes, AVX512f no
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:55,178 [INFO] VNCServerST: Hardware video encoding acceleration capability: unavailable
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:55,185 [INFO] vncext: created VNC server for screen 0
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:55,733 [INFO] websocket 2: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:56,747 [INFO] websocket 3: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:56,985 [INFO] Input: Mouse horizontal scroll factor: 50.000000
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:56,986 [INFO] Input: Mouse vertical scroll factor: 50.000000
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] [mi] mieq: warning: overriding existing handler (nil) with 0x560ce0104d70 for event 2
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] [mi] mieq: warning: overriding existing handler (nil) with 0x560ce0104d70 for event 3
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:57,731 [INFO] websocket 4: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:58,728 [INFO] websocket 5: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:26:59,733 [INFO] websocket 6: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:27:00,718 [INFO] websocket 7: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer] {"report":"ready","bridge":"ready","codexUid":1000}
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:27:01,735 [INFO] websocket 8: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:27:02,721 [INFO] websocket 9: got client connection from 127.0.0.1
+[pod/computer-81f6298f7f15de9374615502b283b84a/computer]  2026-11-20 06:27:03,730 [INFO] websocket 10: got client connection from 127.0.0.1
