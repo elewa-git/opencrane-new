@@ -65,22 +65,26 @@ function closeCode(reason: StopReason) {
   return 1000;
 }
 
-export function registerLiveView(app: FastifyInstance, config: AuthConfig, options?: LiveViewOptions) {
-  const sessions = new ViewSessions();
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, autoPong: false,
-    handleProtocols: () => 'binary' });
-  const origin = new URL(config.redirectUri).origin;
-  function authenticate(headers: IncomingHttpHeaders) {
-    if (headers.origin !== origin || !config.expectedOrgId) throw new Error('Wrong origin');
-    const cookie = parseCookieHeader(headers.cookie)[config.cookieName];
-    if (!cookie) throw new Error('No session');
+type ViewRefusalReason = 'admission' | 'upgrade' | 'capacity' | 'unavailable';
+
+// Check sign-in separately so an Origin refusal still records a signed-in attempt.
+function readViewSession(app: FastifyInstance, config: AuthConfig, headers: IncomingHttpHeaders) {
+  const cookie = parseCookieHeader(headers.cookie)[config.cookieName];
+  if (!cookie) return undefined;
+  try {
     const session = decodeSession(config, cookie);
-    if (!isOrganisationSession(config, session)) throw new Error('Wrong silo');
+    if (!isOrganisationSession(config, session)) return undefined;
     return { session, cookie };
+  } catch (error) {
+    app.log.debug({ operation: 'view.session', err: error }, 'Invalid view session');
+    return undefined;
   }
+}
+
+function createViewRefusal(app: FastifyInstance, options?: LiveViewOptions) {
   async function refusal(
-    reason: 'admission' | 'upgrade' | 'capacity' | 'unavailable',
-    conversationId?: string, memberId?: string, authenticated = true,
+    authenticated: boolean, reason: ViewRefusalReason,
+    conversationId?: string, memberId?: string,
   ) {
     const attemptId = randomUUID();
     if (!authenticated) {
@@ -103,20 +107,30 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
     return attemptId;
   }
+  return refusal;
+}
+
+export function registerLiveView(app: FastifyInstance, config: AuthConfig, options?: LiveViewOptions) {
+  const sessions = new ViewSessions();
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, autoPong: false,
+    handleProtocols: () => 'binary' });
+  const origin = new URL(config.redirectUri).origin;
+  const refusal = createViewRefusal(app, options);
   app.post('/api/conversations/:conversationId/view', { bodyLimit: 1024 }, async (request, reply) => {
     reply.header('cache-control', 'no-store');
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     let memberId: string | undefined;
-    let authenticated = false;
+    const sessionIdentity = readViewSession(app, config, request.headers);
+    const authenticated = sessionIdentity !== undefined;
     const conversationId = admissionPath.exec(request.url)?.[1];
     const sessionId = randomUUID();
     const timing = viewTiming(app.log, sessionId);
     const admissionAt = performance.now();
     timing('ticket_issue', 'started');
     try {
-      const { session, cookie } = authenticate(request.headers);
-      // Audit a refusal only after the session is valid for this organisation.
-      authenticated = true;
+      if (!sessionIdentity) throw new Error('No session');
+      const { session, cookie } = sessionIdentity;
+      if (request.headers.origin !== origin) throw new Error('Wrong origin');
       if (!conversationId || request.headers['x-opencrane-view'] !== '1') throw new Error('CSRF check failed');
       memberId = (await deadline(options.feed.memberId(options.silo, config.issuerUrl, session.sub))) ?? undefined;
       if (!memberId) throw new Error('Member required');
@@ -133,11 +147,11 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     } catch (error) {
       if (isUnconfirmed(error)) {
         timing('ticket_issue', 'unavailable', performance.now() - admissionAt);
-        const attemptId = await refusal('unavailable', conversationId, memberId, authenticated);
+        const attemptId = await refusal(authenticated, 'unavailable', conversationId, memberId);
         return reply.code(503).send({ status: 'unavailable', attemptId });
       }
       timing('ticket_issue', 'denied', performance.now() - admissionAt);
-      const attemptId = await refusal('admission', conversationId, memberId, authenticated);
+      const attemptId = await refusal(authenticated, 'admission', conversationId, memberId);
       return reply.code(403).send({ status: 'refused', attemptId });
     }
   });
@@ -171,8 +185,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
     return timeStage(runCheck, undefined, reportCheckSucceeded, reportCheckFailed);
   }
-  function redeem(headers: IncomingHttpHeaders, conversationId: string) {
-    const { cookie } = authenticate(headers);
+  function redeem(headers: IncomingHttpHeaders, conversationId: string, cookie: string) {
     const protocols = headers['sec-websocket-protocol']?.split(',').map(s => s.trim());
     const key = protocols?.[1] ?? '';
     const ticket = sessions.takeTicket(key);
@@ -412,8 +425,12 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     const upgradeAt = performance.now();
     let timing = viewTiming(app.log, randomUUID());
     let ticket: Ticket | undefined;
+    const sessionIdentity = readViewSession(app, config, request.headers);
+    const authenticated = sessionIdentity !== undefined;
     try {
-      ticket = redeem(request.headers, conversationId);
+      if (!sessionIdentity) throw new Error('No session');
+      if (request.headers.origin !== origin) throw new Error('Wrong origin');
+      ticket = redeem(request.headers, conversationId, sessionIdentity.cookie);
       const expiresAt = monotonicClock.now() + (ticket.expires - Date.now());
       timing = viewTiming(app.log, ticket.sessionId);
       timing('websocket_upgrade', 'started');
@@ -428,10 +445,10 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     } catch (error) {
       timing('websocket_upgrade', 'error', performance.now() - upgradeAt);
       if (error instanceof ViewAccessUnconfirmed) {
-        await refusal('unavailable', conversationId, ticket?.memberId);
+        await refusal(authenticated, 'unavailable', conversationId, ticket?.memberId);
         socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
       } else {
-        await refusal('upgrade', conversationId, ticket?.memberId);
+        await refusal(authenticated, 'upgrade', conversationId, ticket?.memberId);
         forbid();
       }
     }
@@ -449,7 +466,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       return handleViewerUpgrade(request, socket, head, conversationId);
     }
     async function refuseCapacity() {
-      await refusal('capacity', conversationId);
+      const authenticated = readViewSession(app, config, request.headers) !== undefined;
+      await refusal(authenticated, 'capacity', conversationId);
       socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
     }
     void sessions.open(start, refuseCapacity);

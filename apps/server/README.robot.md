@@ -1882,8 +1882,9 @@ catalogue rows independently of the empty operator route list. Approval reviews 
 
 Read-only desktop sessions use `POST /api/conversations/:id/view` and
 `/ws/conversations/:id/view` for the WebSocket. The POST requires the session, exact Origin and
-`x-opencrane-view: 1`. It logs a refused POST with no valid session without adding an
-event; it saves signed-in refusals as `computer.view_refused`. Redeem the ticket
+`x-opencrane-view: 1`. Both routes log refusals with no valid organisation session without adding an
+event, including WebSocket capacity refusals. They save exactly one
+`computer.view_refused` for a valid session, including missing or hostile Origins. Redeem the ticket
 once as WebSocket subprotocols
 `binary, <ticket>`, with the same session and Origin. Both conversation participation
 and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`

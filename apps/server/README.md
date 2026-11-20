@@ -35,8 +35,8 @@ flowchart LR
 - Serve verified pilot restores with writes and assistant work held.
 - Carry chat messages, assistant work, live replies, stops and tool approvals.
 - Check and scan files before storing them or passing them to a computer.
-- Serve desktop views and screenshots to people with access, and refuse unsigned view
-  requests without adding events.
+- Serve desktop views and screenshots to people with access. Refuse signed-out view
+  requests without adding events, and audit signed-in refusals.
 - Manage members, groups, ownership, providers, tool servers and spending settings.
 - Return permitted history, saved results, memory facts and routine details.
 - Check AI calls and record their costs through the separate models process.
