@@ -59,7 +59,11 @@ spec:
       labels: { app: server }
     spec:
       serviceAccountName: package-worker
+{{- if eq (toString .Values.models.mode) "provider" }}
+      securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
+{{- else }}
       securityContext: { fsGroup: 1000 }
+{{- end }}
       initContainers:
         - name: kubeconfig
           image: {{ .Values.images.server | quote }}
@@ -104,6 +108,20 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+{{- if eq (toString .Values.models.mode) "provider" }}
+        - name: private-provider-keys
+          image: {{ .Values.images.server | quote }}
+          command: [node, infra/package/provider-secrets.mjs, /var/lib/opencrane/provider-secrets]
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: provider-secrets, mountPath: /var/lib/opencrane/provider-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
+{{- end }}
       containers:
         - name: server
           image: {{ required "server pin" .Values.images.server | quote }}

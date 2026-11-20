@@ -208,7 +208,7 @@ values. The default chart output stays byte-for-byte unchanged. Provider prepara
 writes neither a `model-stub-key` file nor `MODEL_UPSTREAM`, `MODEL_KEY_FILE` or any
 `MODEL_STUB_*` setting. Installation refuses inherited stand-in settings in this mode.
 
-Provider mode creates a 1 GiB `provider-secrets` PVC. Only the server and models
+Provider mode creates a 1 GiB `provider-secrets` PVC. Only the startup permission check, server and models
 containers mount it, respectively read-write and read-only. Both receive
 `PROVIDER_SECRETS_DIR=/var/lib/opencrane/provider-secrets/keys`. The existing secret
 store creates that subfolder with mode 0700 and key files with mode 0600. Workers,

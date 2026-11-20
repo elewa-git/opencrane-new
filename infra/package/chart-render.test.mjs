@@ -938,6 +938,8 @@ function rendersPrivateProviderStorage() {
     }
   }
   assert.deepEqual(mounts, [
+    { container: 'private-provider-keys', name: 'provider-secrets',
+      mountPath: '/var/lib/opencrane/provider-secrets' },
     { container: 'server', name: 'provider-secrets', mountPath: '/var/lib/opencrane/provider-secrets' },
     { container: 'models', name: 'provider-secrets',
       mountPath: '/var/lib/opencrane/provider-secrets', readOnly: true },

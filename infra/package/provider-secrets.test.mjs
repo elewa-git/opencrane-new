@@ -38,6 +38,7 @@ async function refusesLinkedCustody() {
   try {
     const elsewhere = join(directory, 'elsewhere');
     await mkdir(elsewhere);
+    await chmod(elsewhere, 0o755);
     await symlink(elsewhere, join(directory, 'keys'));
     const result = prepare(directory);
     assert.notEqual(result.status, 0);
