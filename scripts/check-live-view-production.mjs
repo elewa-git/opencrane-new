@@ -35,8 +35,11 @@ function framebuffer(pixelFormat) {
   bytes.writeUInt16BE(1, 10);
   const red = pixelFormat.readUInt16BE(8);
   const redPixel = red * 2 ** pixelFormat[14];
-  if (pixelFormat[6] === 1) bytes.writeUInt32BE(redPixel, 16);
-  else bytes.writeUInt32LE(redPixel, 16);
+  if (pixelFormat[6] === 1) {
+    bytes.writeUInt32BE(redPixel, 16);
+  } else {
+    bytes.writeUInt32LE(redPixel, 16);
+  }
   return bytes;
 }
 
@@ -47,18 +50,26 @@ function connectDesktop(socket) {
   function renewLease() {
     const at = Date.now();
     const notice = { lease: 'valid', at, until: at + 1500 };
-    socket.send(JSON.stringify(notice));
+    const message = JSON.stringify(notice);
+    socket.send(message);
   }
   function receive(bytes) {
-    if (step === 0) socket.send(Buffer.from([1, 1]));
-    else if (step === 1) socket.send(Buffer.alloc(4));
-    else if (step === 2) socket.send(serverInit());
-    else if (step === 3) {
+    if (step === 0) {
+      const securityTypes = Buffer.from([1, 1]);
+      socket.send(securityTypes);
+    } else if (step === 1) {
+      const securityAccepted = Buffer.alloc(4);
+      socket.send(securityAccepted);
+    } else if (step === 2) {
+      const initialDisplay = serverInit();
+      socket.send(initialDisplay);
+    } else if (step === 3) {
       assert.equal(bytes[0], 0, 'The viewer selects its pixel format');
       assert.equal(bytes[4], 32, 'The fixture uses 32-bit pixels');
       pixelFormat = Buffer.from(bytes);
     } else if (bytes[0] === 3 && !frameSent) {
-      socket.send(framebuffer(pixelFormat));
+      const frame = framebuffer(pixelFormat);
+      socket.send(frame);
       frameSent = true;
     }
     step++;
@@ -70,7 +81,8 @@ function connectDesktop(socket) {
   }
   socket.once('close', disconnected);
   socket.on('message', receive);
-  socket.send(Buffer.from('RFB 003.008\n'));
+  const version = Buffer.from('RFB 003.008\n');
+  socket.send(version);
 }
 
 function admitViewer(_request, response) {
@@ -79,16 +91,22 @@ function admitViewer(_request, response) {
 }
 
 function viewerState() {
-  const state = document.querySelector('dialog [role="status"] .message');
+  const state = globalThis.document.querySelector('dialog [role="status"] .message');
   const text = state?.textContent?.trim();
-  if (text === 'Viewing' || text === 'Disconnected' || text === 'Failed') return text;
+  if (text === 'Viewing' || text === 'Disconnected' || text === 'Failed') {
+    return text;
+  }
   return false;
 }
 
 function decodedPixel() {
-  const canvas = document.querySelector('dialog canvas');
-  if (!canvas || canvas.width !== 800 || canvas.height !== 600) return false;
-  const pixel = canvas.getContext('2d').getImageData(0, 0, 1, 1).data;
+  const canvas = globalThis.document.querySelector('dialog canvas');
+  if (!canvas || canvas.width !== 800 || canvas.height !== 600) {
+    return false;
+  }
+  const context = canvas.getContext('2d');
+  const image = context.getImageData(0, 0, 1, 1);
+  const pixel = image.data;
   return pixel[0] === 255 && pixel[1] === 0 && pixel[2] === 0 && pixel[3] === 255;
 }
 
@@ -116,7 +134,9 @@ async function main() {
   await execute('nice', buildArguments, buildOptions);
   const directory = await mkdtemp(join(tmpdir(), 'live-view-production-'));
   const backend = createServer(admitViewer);
-  function selectProtocol() { return 'binary'; }
+  function selectProtocol() {
+    return 'binary';
+  }
   const websocketOptions = { server: backend, handleProtocols: selectProtocol };
   const desktops = new WebSocketServer(websocketOptions);
   desktops.on('connection', connectDesktop);
@@ -138,7 +158,9 @@ async function main() {
     console.log('PASS production live viewer decodes RFB pixels at 1280 and 390 px');
   } finally {
     await browser?.close();
-    for (const socket of desktops.clients) socket.terminate();
+    for (const socket of desktops.clients) {
+      socket.terminate();
+    }
     desktops.close();
     website?.closeAllConnections();
     website?.close();
