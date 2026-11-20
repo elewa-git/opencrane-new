@@ -10,6 +10,7 @@ import { chromium } from 'playwright';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
+import { providerFailure } from './provider-failure.ts';
 import { createProviderConnection, providerSetup, saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
@@ -371,7 +372,7 @@ try {
     outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
   console.log('PASS packaged provider Settings, refusal, private restart and member chats at 1280/390');
 } catch (error) {
-  outcomes.push({ check: stage, result: 'FAIL' });
+  outcomes.push(providerFailure({ check: stage, detail: 'The current journey step must complete.' }, error));
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'FAIL', outcomes,
     errorType: error?.name ?? 'Error', paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
   let diagnostic = String(error?.stack ?? error);
