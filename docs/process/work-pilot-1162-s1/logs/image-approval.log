@@ -1,0 +1,3 @@
+{"level":50,"time":1795142729411,"pid":2423144,"hostname":"opencrane-dev-server","name":"application-approval","stage":"metadata","reason":"malformed","msg":"Application CI approval refused"}
+Application CI approval refused
+{"stage":"metadata","reason":"malformed"}

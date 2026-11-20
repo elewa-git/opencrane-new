@@ -13,10 +13,12 @@ starts the rest of OpenCrane. It uses k3d, a way to run a small
 [Kubernetes](../../GLOSSARY.md#kubernetes) system on one machine.
 [gVisor](../../GLOSSARY.md#gvisor) adds a security layer around each
 [computer](../../GLOSSARY.md#computer).
+The VM bootstrap reuses its verified runtime downloads without running developer setup.
 
 ```mermaid
 flowchart LR
   infra["infra<br/>infrastructure"] --> devbox["infra/devbox<br/>machine setup"]
+  vm["infra/vm<br/>prepares pilot host"] -.->|uses runtime helpers| devbox
   infra --> stack["infra/dev-stack<br/>local OpenCrane"]
   infra --> package["infra/package<br/>Helm install"]
   devbox -->|creates| cluster["k3d cluster<br/>local Kubernetes"]

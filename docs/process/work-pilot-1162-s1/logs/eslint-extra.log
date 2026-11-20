@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' --no-ignore --config /tmp/pilot-1162/eslint.config.mjs infra/vm/bootstrap.test.mjs

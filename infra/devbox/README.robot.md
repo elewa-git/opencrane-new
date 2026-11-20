@@ -43,6 +43,10 @@ them. It also waits for the four Agent Sandbox CRDs, its controller, and MinIO.
 HTTPS on the tailnet proxies to a loopback-only web server. It never enables
 Funnel. Tailnet access rules still determine which owner devices can reach it.
 
+The verified runtime pins, download helper and runtime/controller installation
+functions live in `runtime.sh`, shared with the VM bootstrap. The developer-box
+setup still owns Docker, k3d, registry, MinIO and developer swap configuration.
+
 ## Pinned versions
 
 - k3d 5.9.0, kubectl 1.37.1, Helm 3.19.1 and k3s 1.37.0+k3s1

@@ -1,0 +1,4 @@
+{"utc": "2026-11-20T02:40:55Z", "free": [true, true], "no_package": true, "load1": 4.62744140625, "quiet_seconds": 0}
+{"utc": "2026-11-20T02:41:31Z", "free": [true, true], "no_package": true, "load1": 3.6337890625, "quiet_seconds": 36}
+{"utc": "2026-11-20T02:42:06Z", "free": [true, true], "no_package": true, "load1": 3.740234375, "quiet_seconds": 71}
+{"utc": "2026-11-20T02:42:42Z", "free": [false, true], "no_package": true, "load1": 3.2802734375, "quiet_seconds": 0}
