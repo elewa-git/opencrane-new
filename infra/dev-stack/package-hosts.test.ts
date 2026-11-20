@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkPackageHosts } from './package-hosts.ts';
+import { packageCommandMessage } from './package-error.ts';
 
 const safe = { swaps: 'Filename Type Size Used Priority\n', corePattern: '\n',
   coreUsesPid: '0\n', crypttab: '', mappings: [] };
@@ -45,6 +46,24 @@ test('refuse a failing second node before installation and clean its probe', asy
   await assert.rejects(check, /node-2.*F1:.*\n.*F2:/u);
   assert.equal(calls.filter(isDelete).length, 2);
 });
+
+test('package refusal shows F1 and F2 fixes without exposing unrelated errors',
+  async function visibleHostRefusal() {
+    const { command } = fixture([unsafe, safe]);
+    let refusal: unknown;
+    try {
+      await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
+    } catch (error) {
+      refusal = error;
+    }
+    const message = packageCommandMessage(refusal);
+    assert.match(message, /node-1: F1: disable swap/u);
+    assert.match(message, /node-1: F2: disable host crash reporters/u);
+    assert.equal(packageCommandMessage(new Error('F1: private dependency output')),
+      'Package command refused; check pins, named secrets and slot ownership');
+    assert.equal(packageCommandMessage(new Error('Required secret is absent: runtime')),
+      'Required secret is absent: runtime');
+  });
 test('a dev override cannot waive checks for a remote node', async function remoteOverride() {
   const { command } = fixture([unsafe, unsafe]);
   async function check() {
