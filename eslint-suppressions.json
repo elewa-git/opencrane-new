@@ -557,7 +557,7 @@
   },
   "libs/models/src/approvals.ts": {
     "max-params": {
-      "count": 6
+      "count": 5
     }
   },
   "libs/models/src/authority.ts": {
