@@ -1,45 +1,36 @@
 # Fresh CORE journey
 
-Journey on a fresh dev stack: PARTIAL
+Journey on a fresh dev stack: FAIL at startup. CORE: NOT RUN. Supplemental live checks: NOT RUN.
 
-Current product source: `e151c407abc9a24b8d504b1886fd1b6b0efee14b`.
-Source checks: PASS. Fresh CORE and the supplemental signed-out WebSocket check
-on this corrected source: NOT RUN.
+Source: `12443a0e2`. No product code changed during this qualification attempt.
 
-## Startup attempts
+## Third attempt
 
-Two fresh attempts stopped before CORE. Both claimed secondary slot 1 only after
-free-slot checks and a five-minute load window. Both were torn down successfully:
+Both secondary slots reported free, no `package-*` stack was running, and every
+30-second sample across the five-minute admission window had a 1-minute load below
+6. Claimed secondary slot 1.
 
-- [First attempt](attempt-1/receipt.md): the launcher had an absent credential path.
-  Its path reference was corrected before the second attempt. The original
-  diagnostic text was filtered out; its metadata and startup console remain.
-- [Second attempt](attempt-2/receipt.md): PostgreSQL closed its initial connection.
-  The sanitised failure diagnostic was copied before teardown. The secondary
-  readiness probe now requires TCP. Its isolated regression test passed twice,
-  including refusal during temporary initialisation and success after the final
-  server opened TCP. No retry or timeout was increased.
+Ran `infra/dev-stack/up.sh --fresh` as requested. It exited 1 before starting a
+stack because it defaulted to the owner stack while `OPENCRANE_FLEET_TASK` was set.
+The sanitised startup diagnostic was: `Owner commands require --owner-run, interactive
+stdin and no fleet task`. This failed invocation was not retried. No provider,
+services or browser journey started.
 
-After this correction, another task occupied a secondary slot. Load also exceeded
-6. The [admission samples](qualification-wait.jsonl) record both conditions. The
-remaining task budget could not fit the required five-minute admission window,
-full CORE journey, evidence capture and teardown within the owner's 2.5-hour stop
-limit. This task claimed no further stack.
+Copied the sanitised startup log before teardown. No service logs or screenshots
+were produced because stack preparation and CORE did not start. `down.sh --id 1`
+exited 0; afterwards both secondary slots reported `free`, and no package stack was
+running. [Attempt receipt](attempt-3/receipt.md) records the exact result.
 
 ## Outstanding live checks
 
-- NOT RUN: fresh CORE on the corrected source at 1280 × 900 and 390 × 844 px.
-- NOT RUN: signed-out POST and WebSocket checks against the fresh journey's actual
-  conversations at both widths, with HTTP 403 and an unchanged event-store head.
-- NOT RUN: new screenshots and service logs from a completed CORE run.
+- FAIL: fresh startup invocation, as recorded above.
+- NOT RUN: CORE at 1280 × 900 and 390 × 844 px.
+- NOT RUN: cookie-free and ticket-free POST and WebSocket refusals, direct HTTP
+  upgrade, event-head checks and Origin audit counts against real conversations.
+- NOT RUN: fresh screenshots and service logs from a completed CORE run.
 
-The prepared supplemental check uses fresh Playwright contexts with no application
-cookies and no WebSocket ticket. It checks browser refusal and a direct HTTP
-upgrade response, as well as the real NATS global head. Its execution is pending;
-this receipt claims no result from it.
+The earlier journey and startup attempts belong to earlier source heads; they do not
+qualify `12443a0e2`. PR #1172 remains a draft and cannot land with this qualification
+outstanding.
 
-[Rework proof and source gates](rework.md) record the four review findings,
-failing-first commits, independent mutations and successful source checks.
-The [earlier journey](initial-journey.md) belongs to the previous product source;
-it does not qualify the current changes. The PR remains a draft and cannot land
-with this qualification outstanding.
+CI required checks at `12443a0e2`: PASS when checked at 2026-11-20. See the PR checks.

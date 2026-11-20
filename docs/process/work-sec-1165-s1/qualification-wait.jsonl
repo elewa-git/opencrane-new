@@ -28,3 +28,11 @@
 {"time": "2026-11-20T04:32:18Z", "slotsFree": [false, true], "packageUp": false, "load1": 8.64111328125, "loadBelow6Seconds": 0}
 {"time": "2026-11-20T04:32:44Z", "slotsFree": [false, true], "packageUp": false, "load1": 7.02734375, "loadBelow6Seconds": 0}
 {"time": "2026-11-20T04:33:14Z", "slotsFree": [false, true], "packageUp": false, "load1": 6.51318359375, "loadBelow6Seconds": 0}
+{"time":"2026-11-20T05:57:46Z","slotsFree":[true,true],"packageUp":false,"load1":4.91,"loadBelow6Seconds":0}
+{"time":"2026-11-20T05:58:31Z","slotsFree":[true,true],"packageUp":false,"load1":4.73,"loadBelow6Seconds":45}
+{"time":"2026-11-20T05:59:19Z","slotsFree":[true,true],"packageUp":false,"load1":4.62,"loadBelow6Seconds":93}
+{"time":"2026-11-20T06:00:04Z","slotsFree":[true,true],"packageUp":false,"load1":4.16,"loadBelow6Seconds":138}
+{"time":"2026-11-20T06:00:49Z","slotsFree":[true,true],"packageUp":false,"load1":5.38,"loadBelow6Seconds":183}
+{"time":"2026-11-20T06:01:32Z","slotsFree":[true,true],"packageUp":false,"load1":5.11,"loadBelow6Seconds":226}
+{"time":"2026-11-20T06:02:14Z","slotsFree":[true,true],"packageUp":false,"load1":4.76,"loadBelow6Seconds":268}
+{"time":"2026-11-20T06:02:58Z","slotsFree":[true,true],"packageUp":false,"load1":4.59,"loadBelow6Seconds":312}
