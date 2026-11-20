@@ -34,6 +34,14 @@ def read_checked_blob(archive, digest):
 
 
 class SourceReviewTests(unittest.TestCase):
+    def test_provider_runtime_paths_are_permitted(self):
+        checker = ImageLayerTests("test_development_files_stay_within_the_narrow_allowlist")
+        checker.paths = {
+            "app/infra/package/web-page.mjs", "app/infra/package/provider-secrets.mjs",
+            "app/infra/package/model-settings.ts", "app/infra/dev-stack/journey-guard.ts",
+        }
+        checker.test_development_files_stay_within_the_narrow_allowlist()
+
     def test_reviewed_helper_hashes_match_repository_source(self):
         review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
         for path, expected in review["files"].items():
@@ -210,6 +218,14 @@ class ImageLayerTests(unittest.TestCase):
             if path.startswith("app/infra/dev-stack/"):
                 self.assertIn(path.removeprefix("app/infra/dev-stack/"), allowed)
             self.assertFalse(path.startswith(("app/.keys/", "app/.tools/", "app/.git/")))
+
+    def test_provider_startup_is_present_with_exact_source_bytes(self):
+        required = ("infra/package/provider-secrets.mjs", "infra/package/model-settings.ts",
+                    "infra/dev-stack/journey-guard.ts")
+        for path in required:
+            with self.subTest(module=path):
+                self.assertIn("app/" + path, self.paths)
+                self.assertEqual(self.sources[path], Path(path).read_text())
 
     def test_scanner_imports_and_storage_readiness_entry_point_are_packaged(self):
         required = ("app/infra/clamav/database.mjs", "app/infra/package/object-lease-ready.mjs")
