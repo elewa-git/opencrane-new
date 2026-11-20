@@ -11,3 +11,5 @@ Provider journey failures name the step and expected condition without copying
 credentials or private paths into the public result.
 Fresh owner bootstrap finishes applying ownership permissions before opening the
 installation for checked owner commands.
+Dispatch reuses its reserved database connection when reactions fill the pool,
+including the queue-setting reads needed to save new jobs.

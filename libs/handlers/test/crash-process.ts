@@ -20,39 +20,52 @@ async function barrier() {
     /* Parent kills this process. */
   });
 }
-const db: Db = {
-  query: (sql, values) => base.query(sql, values),
-  async transaction(work) {
-    let target = false;
-    const result = await base.transaction(async (tx) => {
-      const result = await work({
-        query: async (sql, values) => {
-          if (mode === "dispatcher-after-ack" && sql.startsWith("UPDATE handler_dispatcher") && values?.[0] === 2) {
-            await barrier();
-          }
-          if (
-            sql.startsWith(
-              mode.startsWith("dispatcher")
-                ? "UPDATE handler_dispatcher"
-                : mode.startsWith("projection") ? "UPDATE projection_checkpoints" : "INSERT INTO handler_receipts",
-            )
-          ) {
-            target = true;
-          }
-          return tx.query(sql, values);
-        },
+function crashDb(database: Db): Db {
+  const db: Db = {
+    query: (sql, values) => database.query(sql, values),
+    async transaction(work) {
+      let target = false;
+      const result = await database.transaction(async (tx) => {
+        const result = await work({
+          query: async (sql, values) => {
+            if (mode === "dispatcher-after-ack" && sql.startsWith("UPDATE handler_dispatcher") && values?.[0] === 2) {
+              await barrier();
+            }
+            if (
+              sql.startsWith(
+                mode.startsWith("dispatcher")
+                  ? "UPDATE handler_dispatcher"
+                  : mode.startsWith("projection") ? "UPDATE projection_checkpoints" : "INSERT INTO handler_receipts",
+              )
+            ) {
+              target = true;
+            }
+            return tx.query(sql, values);
+          },
+        });
+        if (target && mode.endsWith("before-commit")) {
+          await barrier();
+        }
+        return result;
       });
-      if (target && mode.endsWith("before-commit")) {
+      if (target && mode.endsWith("after-commit")) {
         await barrier();
       }
       return result;
-    });
-    if (target && mode.endsWith("after-commit")) {
-      await barrier();
+    },
+  };
+  if (mode.startsWith('dispatcher')) {
+    async function lock<T>(name: string, work: (locked: Db) => Promise<T>): Promise<T> {
+      async function run(locked: Db) {
+        // Keep the same crash boundaries when dispatch uses its held connection.
+        return work(crashDb(locked));
+      }
+      return database.lock!(name, run);
     }
-    return result;
-  },
-};
+    db.lock = lock;
+  }
+  return db;
+}
 function upgradeCrashDb(database: Db): Db {
   async function lock<T>(name: string, work: (locked: Db) => Promise<T>): Promise<T> {
     async function run(locked: Db) {
@@ -97,9 +110,7 @@ function upgradeCrashDb(database: Db): Db {
   return { ...database, transaction, lock };
 }
 
-if (mode.startsWith("dispatcher")) {
-  db.lock = base.lock!.bind(base);
-}
+const db = crashDb(base);
 if (mode.startsWith("upgrade")) {
   const { store } = await connectEventStore();
   const subscribe = store.subscribe.bind(store);

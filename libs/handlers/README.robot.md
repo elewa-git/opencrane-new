@@ -46,6 +46,10 @@ It does not retry provisioning. See the event-store package's
 The durable `handler-dispatcher` consumer reads `ev.>` from the beginning,
 with explicit acknowledgements and one unacknowledged message. All subscribed
 jobs and a global SQL checkpoint commit together before acknowledgement.
+Dispatch uses the connection reserved by its lifetime advisory lock, so busy
+reaction workers cannot make dispatch wait for another pool slot. Queue-setting
+reads made by pg-boss during enqueue also use that transaction. Workers and
+maintenance continue to use the ordinary pool outside enqueue.
 The checkpoint row serialises overlapping dispatchers and rejects gaps,
 silo mismatches and subscription changes. Registration takes a catalogue
 name and handle function; subscriptions come from `libs/events`, checked
