@@ -42,6 +42,7 @@ No full root test suite ran locally.
 | Exact-source application and scanner approval consumers | PASS | Both real consumers accepted [application](https://github.com/elewa-git/opencrane-new/actions/runs/44763328752) and [scanner](https://github.com/elewa-git/opencrane-new/actions/runs/44763332412) artifacts |
 | First full fresh packaged journey on fixed source | FAIL | Owner chat passed at both widths; admin opened before OpenFGA applied its permission; [receipt](journey.md) |
 | Fresh qualification after fixture correction | NOT RUN | Post-claim admission refused another occupied slot; own claim released; [receipt](journey.md#fresh-requalification-admission) |
+| Round 3 fresh packaged journey | NOT RUN | Two-hour admission wait ended while another journey process remained active; no five-minute capacity window qualified; [receipt](journey.md#round-3-admission-wait) |
 
 The earlier results below are tied to their stated source and do not stand in
 for these new checks.
