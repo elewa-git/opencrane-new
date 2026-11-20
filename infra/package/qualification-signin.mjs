@@ -40,12 +40,14 @@ let browser;
 let currentPage;
 let stage = 'browser launch';
 let failureCaptured = false;
+let chatRequests = [];
 
 async function retainFailure(error) {
   if (failureCaptured) return;
   failureCaptured = true;
   const failure = await captureJourneyFailure(currentPage, error, { step: stage,
     path: join(output, `failed-${input.phase}.png`) });
+  failure.chatRequests = chatRequests;
   outcomes.push(failure);
   console.log(`FAIL ${failure.step}; code=${failure.code}; screenshot=${failure.screenshot}`);
 }
@@ -227,6 +229,17 @@ async function invite(ownerPage, role, user) {
 
 async function chat(page, role, width) {
   currentPage = page;
+  chatRequests = [];
+  function recordChatResponse(response) {
+    if (response.request().method() !== 'POST') return;
+    const path = new URL(response.url()).pathname;
+    if (path === '/api/conversations') {
+      chatRequests.push({ operation: 'create conversation', status: response.status() });
+    } else if (/^\/api\/conversations\/[^/]+\/messages$/u.test(path)) {
+      chatRequests.push({ operation: 'send message', status: response.status() });
+    }
+  }
+  page.on('response', recordChatResponse);
   stage = `${role} ${width}px workspace`;
   const liveAssignments = [];
   function frameReceived(event) {

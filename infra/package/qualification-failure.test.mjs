@@ -14,6 +14,13 @@ async function capturesBeforeClosing() {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.setContent('<input type="password" value="planted-private-value">');
+    const screenshot = page.screenshot.bind(page);
+    async function checkMask(options) {
+      assert.equal(options.mask.length, 1);
+      assert.equal(await options.mask[0].count(), 1);
+      return screenshot(options);
+    }
+    page.screenshot = checkMask;
     const options = { step: 'member 1280px draft', path: join(directory, 'failure.png') };
     let failure;
     async function run() {
