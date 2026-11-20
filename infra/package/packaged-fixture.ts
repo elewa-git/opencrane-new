@@ -12,6 +12,7 @@ const files = [
   'infra/package/prepare-nats-routes.ts',
   'infra/package/check-nats-inputs.ts',
   'infra/package/public-settings.mjs',
+  'infra/package/model-settings.ts',
   'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/command-limits.ts',
   'infra/dev-stack/cnpg.ts',
