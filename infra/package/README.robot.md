@@ -154,6 +154,15 @@ through `capture.mjs`. The four PNG files for each run are saved with
 `fresh-1-` or `fresh-2-` in `docs/process/p5-1-live/`. Browser failures keep the step and a short timeout or network error. Other
 error text is withheld so cookies, tokens, Secret contents and page bodies cannot
 enter the runner log. No extra browser retries are added.
+`qualification-signin.mjs` runs the packaged sign-in and token journey using private
+JSON input on stdin. It requires a claimed secondary slot and stand-in provider
+settings. Its receipt directory comes from `JOURNEY_RECEIPT_DIR`. The coordinator
+prepares joined membership access before the first protected workspace read.
+`qualification-failure.mjs` keeps only a fixed step name and an allowlisted error
+code. Each role and width captures its failure before closing its browser context.
+Screenshots mask form inputs, including sign-in and token fields. Screenshot failure
+is recorded separately and never replaces the original journey failure.
+
 A failed run still calls
 owned `package-down`; inspect the claim before trying again. The operator
 records the bridge probe, other-resource comparison and mobile screen review

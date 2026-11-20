@@ -87,6 +87,7 @@ spare stack, prepare private values, start Helm, forward the website and clean u
 That guide also explains image approval, production sign-in checks and the one-time
 owner claim. Public-address mode currently creates no public listener.
 A fresh install replaces the selected install's data.
+Sign-in checks save a safe failure code and step, and a screenshot with form values hidden.
 
 Each host must have swap off, or plain encrypted swap with a fresh random key at
 each boot. Host crash dumps must be off or never persisted: this preflight accepts
