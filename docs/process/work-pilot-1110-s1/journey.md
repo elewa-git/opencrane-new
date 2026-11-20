@@ -14,6 +14,18 @@ Test-first `ad5387c80` reproduces bootstrap reporting success with no ownership 
 using real NATS and OpenFGA. Bootstrap now seeds ownership and uses its existing
 readiness wait to require all current owner permission receipts. The initial owner
 permission check stays in place. No invitation is resent and no timeout is raised.
+Application approval `44723392714` failed its existing synthetic bootstrap check:
+the fixture retained no events and still expected only two owner writes. The real
+container test failed with that fixture, then passed twice after retaining the three
+events and requiring the ownership receipt read. Its original image assertion stays
+unchanged. This is a fixture check with the current owner entry point mounted; it
+is not approval of the next saved image.
+
+Test-first `90cd1f4d5` also reproduces the private probe calling the native Fetch
+response's numeric `status` property as a function. It now reads the property and
+keeps the same 401 and disclosure assertions. This is a deterministic runner fix;
+it does not attribute that cause to the earlier Settings failure without live proof.
+
 The corrected fresh packaged journey remains **NOT RUN** pending approved images
 and another complete clear slot/load window. Paid calls and paid cents remain zero.
 

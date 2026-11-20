@@ -266,6 +266,8 @@ creation and key-save path in Chromium at 1280 and 390 px. The live journey save
 both new-key form screenshots before typing, checks the browser refusal, and
 confirms HTTP 401 for that same synthetic wrong credential from the server Pod.
 The private probe passes the credential through stdin and records only its status.
+It reads the native Fetch response's numeric status; the browser request API has
+a different status method. `journey-provider-probe.test.ts` pins the native 401 response.
 Before navigating, the driver waits for current network activity and pending API
 body inspections to finish. An inspection failure still fails the journey and is
 recorded in its receipt; it cannot become an unhandled rejection during navigation.
@@ -450,8 +452,9 @@ made-up database, event-log, access and Kubernetes replies. Only the identity fi
 and service-account reads receive made-up data. The generated environment files
 stay in the container's temporary filesystem. The container keeps the image's
 user and entry point, has no network and mounts no host settings. Its success
-requires the final owner-ready update; a settings refusal cannot pass. Failures
-withhold dependency output and fixture values.
+requires the final owner-ready update and a checked ownership permission receipt.
+The event-log fixture retains the invitation, join and ownership seed in order.
+A settings refusal cannot pass. Failures withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
 The `packageImage` record and role pins in `reviewed-images.json` are the historical
