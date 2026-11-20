@@ -4,11 +4,56 @@ Date: 20 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
-Rebased source tested: `2b0528bf9`. CORE: PASS at both widths.
-The focused journey failed during seed setup. Finding 4 remains blocking; the PR stays draft.
-No independent review result is claimed.
+Round four tested source `2b54bfa1a` on fresh secondary slot 1. CORE failed at 390 px
+while waiting for an agent reply to finish during live computer viewing. The 1280 px
+CORE and focused long-chat journey were NOT RUN. No further attempt or code fix was
+started. The PR stays draft. No independent review result is claimed.
 
-## Actual fresh attempts
+The owner's 20 November option A changes the live seed to 500 earlier messages,
+each with its completion event. The unchanged source regression still requires
+3,000 messages and their 3,000 completions. The live count remains far above the
+unchanged 64-position read cap. Every assertion, deadline and resource limit is unchanged.
+
+## Round-four fresh attempt
+
+Receipt `live-20261120T080649Z` followed a 300-second qualifying interval. Both slots
+were free, no package stack was running and load stayed below six. The
+[availability samples](availability-round4.csv) retain the earlier resets and the
+completed interval. Startup began at 08:07 UTC with `claim.sh` and `up.sh --fresh`.
+
+The 390 px [chat capture](round4-chat-390.png) shows the completed reply and the
+stopped partial reply restored after reload. Chat and upload assertions completed.
+The [failure capture](round4-core-failure-390.png) shows the computer still Viewing.
+The saved error is:
+
+```text
+locator.waitFor: Timeout 30000ms exceeded.
+Call log:
+  - waiting for getByRole('article', { name: 'Agent reply', exact: true }).nth(3).getByText('Done', { exact: true }) to be visible
+```
+
+The caller is `browserLiveViewJourney` at `infra/dev-stack/browser-live-view.ts:158:64`.
+The run also reported `net::ERR_FAILED` and three `net::ERR_ABORTED` browser transport
+failures. The cause is not established. Host load rose after admission; that observation
+does not establish why this wait failed. No retry, longer timeout or new fix was attempted.
+
+| Condition | 390 px | 1280 px |
+| --- | --- | --- |
+| CORE chat, reload, Stop and uploads | PASS | NOT RUN |
+| Agent reply completes while viewing the computer | FAIL | NOT RUN |
+| CORE live-view revocation | NOT RUN | NOT RUN |
+| Complete 500 earlier messages and their completion events | NOT RUN | NOT RUN |
+| Native tool approval and returned result in the long chat | NOT RUN | NOT RUN |
+| Exact forwarded bytes, one use, denial and reload | NOT RUN | NOT RUN |
+| Same approved bytes return 403 after Stop, without another effect | NOT RUN | NOT RUN |
+
+Startup, service, container and pod logs and current screenshots were copied to the
+private fleet receipt before teardown. Slot 1 then reported free at 08:15 UTC.
+The guarded TLS launcher and focused seed were never started. Paid calls: zero.
+The [round-four receipt](rework4.md) records source checks. Earlier failures below
+remain failures.
+
+## Previous fresh attempts
 
 Every startup used `claim.sh` and `up.sh --fresh` on secondary slot 1, after both
 slots were free, no package stack was running and load had remained below six
@@ -32,7 +77,7 @@ Execution was capped at 02:30 UTC to preserve teardown and the four-hour task bo
 The [earlier desktop failure](core-upload-failure-1280.png) remains recorded separately.
 The earlier attempt in [round two](rework2.md) also remains a failure.
 
-## Final focused result
+## Round-three focused result
 
 History setup was shared and failed before either focused viewport sequence began.
 
@@ -71,7 +116,7 @@ readback files were retained in the private fleet receipts before every teardown
 All four used stacks were stopped with `down.sh` and ultimately reported free.
 Only free stand-in providers were used.
 
-## Current source
+## Round-three source
 
 Main moved during qualification. The rebase onto
 `c791103b365ced8fd56195ded9d0dcfabf202597` finished. Synthetic prose and the live seed
@@ -113,7 +158,7 @@ Always retain logs before cleanup, including after a failed step. Always run `do
 The launcher requires the current secondary claim and uses the existing TLS fixture
 for `https://mcp.example.test/`. Product network guards remain enabled.
 
-The focused driver seeds 3,000 messages and matching completion events. It registers
+The focused driver seeds 500 messages and matching completion events. It registers
 the real demo definition through discovery, reviews `change_delivery_slot` as Ask,
 blocks other tools, publishes with the current reviewed revision and waits for the
 matching gateway acknowledgement. It scripts the approval-request turn as the existing
