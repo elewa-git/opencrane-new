@@ -41,17 +41,22 @@ export class ChatComposer {
   protected change(event: Event): void {
     if (event.target instanceof HTMLTextAreaElement) this.draftChange.emit(event.target.value);
   }
-  protected keydown(event: KeyboardEvent): void {
+  protected keydown(event: KeyboardEvent, text: string): void {
     if (event.key === 'Escape') {
       if (this.attachOpen()) this.closeAttach();
       else if (this.working()) this.stopped.emit();
     }
     if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
-    event.preventDefault(); this.submit();
+    event.preventDefault();
+    this.submit(text);
   }
-  protected submit(): void {
-    if (!this.working() && !this.busy() && !this.reason() && !this.waitingForFiles()
-      && (this.draft().trim() || this.hasReadyFile())) this.submitted.emit(this.draft());
+  // Use the current field value even before the parent draft has rendered.
+  protected submit(text: string): void {
+    const hasContent = Boolean(text.trim() || this.hasReadyFile());
+    if (this.working() || this.busy() || this.reason() || this.waitingForFiles() || !hasContent) {
+      return;
+    }
+    this.submitted.emit(text);
   }
   protected hasReadyFile(): boolean {
     return this.attachments().some(isReadyChip);
