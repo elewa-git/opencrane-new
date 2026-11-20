@@ -78,11 +78,12 @@ async function screenshots(page, name) {
   await page.setViewportSize({ width: 1280, height: 900 });
 }
 
-async function invite(ownerPage, role, memberId, membershipRole, assistant) {
+async function invite(ownerPage, role, membershipRole) {
+  const memberId = randomUUID();
   const userName = setup.users[role].login.split('@')[0];
   const email = `${userName}@example.test`;
   const data = { commandId: randomUUID(), memberId, email, role: membershipRole,
-    personalAssistant: assistant, expectedSequence: 0 };
+    personalAssistant: 'provision', expectedSequence: 0 };
   const response = await ownerPage.request.post(`${origin}/api/invitations`,
     { headers: { origin }, data });
   assert.equal(response.status(), 200, 'The owner can invite a separate journey identity');
@@ -317,9 +318,9 @@ try {
   stage = 'owner sign-in';
   const ownerPage = await login('owner');
   stage = 'admin invitation and sign-in';
-  const admin = await invite(ownerPage, 'without-assistant', 'package-admin', 'admin', 'provision');
+  const admin = await invite(ownerPage, 'without-assistant', 'admin');
   stage = 'member invitation and sign-in';
-  const member = await invite(ownerPage, 'member', 'package-member', 'member', 'provision');
+  const member = await invite(ownerPage, 'member', 'member');
   stage = 'Settings setup';
   await connect(admin);
   stage = 'provider Pod recreation';
