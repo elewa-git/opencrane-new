@@ -92,7 +92,7 @@ try {
     return row?.status === 'joined' && row.role === 'owner';
   });
   await waitFor(async () => (await authz.check(memberId, 'owner')).allowed);
-  // Finish ownership setup before startup admits the owner's first checked command.
+  // Apply ownership permissions before startup lets the owner send commands.
   await seedOwnership(events.store, settings['SILO_ID']!);
   await waitFor(ownershipApplied);
   const row = await member();
