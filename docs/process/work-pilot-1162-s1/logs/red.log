@@ -12,7 +12,7 @@ not ok 1 - shellcheck accepts bootstrap and the shared runtime helper
     Command failed: shellcheck infra/vm/bootstrap.sh infra/devbox/runtime.sh
     infra/vm/bootstrap.sh: infra/vm/bootstrap.sh: openBinaryFile: does not exist (No such file or directory)
     infra/devbox/runtime.sh: infra/devbox/runtime.sh: openBinaryFile: does not exist (No such file or directory)
-    
+
   code: 'ERR_TEST_FAILURE'
   stack: |-
     genericNodeError (node:internal/errors:983:15)
@@ -34,10 +34,10 @@ not ok 2 - dry run prints node protection, downloads, runtime and storage withou
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 0
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 0
@@ -62,10 +62,10 @@ not ok 3 - refuses Docker binary before mutation, including in dry run
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
@@ -89,10 +89,10 @@ not ok 4 - refuses Docker socket before mutation, including in dry run
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
@@ -116,10 +116,10 @@ not ok 5 - refuses foreign Kubernetes before mutation, including in dry run
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
@@ -143,10 +143,10 @@ not ok 6 - refuses unowned k3s before mutation, including in dry run
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
@@ -170,10 +170,10 @@ not ok 7 - refuses foreign containerd before mutation, including in dry run
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
@@ -197,10 +197,10 @@ not ok 8 - refuses microk8s before mutation, including in dry run
   failureType: 'testCodeFailure'
   error: |-
     bash: /source/infra/vm/bootstrap.sh: No such file or directory
-    
-    
+
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
@@ -224,9 +224,9 @@ not ok 9 - refuses unsupported OS and unknown options
   failureType: 'testCodeFailure'
   error: |-
     Expected values to be strictly equal:
-    
+
     127 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1

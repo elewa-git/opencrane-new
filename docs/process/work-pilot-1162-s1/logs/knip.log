@@ -1,5 +1,5 @@
 npm notice run npx
 npm notice run 'knip'
 Configuration hints (2)
-**/.tools/**                 knip.json  Remove from ignore        
+**/.tools/**                 knip.json  Remove from ignore
 setpriv       apps/computer  knip.json  Remove from ignoreBinaries

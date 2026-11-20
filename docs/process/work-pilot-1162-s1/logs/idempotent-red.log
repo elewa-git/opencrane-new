@@ -8,10 +8,10 @@ not ok 1 - rerun keeps the same configuration on its own simulated host
   failureType: 'testCodeFailure'
   error: |-
     Refusing existing Docker or Kubernetes/containerd: /var/lib/kubelet
-    
-    
+
+
     1 !== 0
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 0
