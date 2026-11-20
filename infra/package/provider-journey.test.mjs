@@ -11,6 +11,7 @@ import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
+import { wrongKeyStatusScript } from './provider-probe.ts';
 import { createProviderConnection, providerSetup, saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
@@ -54,16 +55,7 @@ async function privateScript(script, input) {
 }
 
 async function wrongKeyStatus() {
-  const script = `
-let input = '';
-for await (const chunk of process.stdin) input += chunk.toString();
-const key = JSON.parse(input);
-const headers = { authorization: 'Bearer ' + key };
-const response = await fetch('http://model-qualification:43003/v1/models', { headers });
-const body = await response.text();
-if (body.includes(key)) throw new Error('Credential disclosed by upstream');
-console.log(JSON.stringify({ status: response.status() }));`;
-  const result = await privateScript(script, wrongCredential);
+  const result = await privateScript(wrongKeyStatusScript, wrongCredential);
   assert.equal(result.status, 401, 'The same wrong credential receives HTTP 401 upstream');
   outcomes.push({ check: 'wrong credential receives HTTP 401 from the separate stand-in',
     result: 'PASS', status: result.status });
