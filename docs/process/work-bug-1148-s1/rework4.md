@@ -30,8 +30,9 @@ pushes the receipt and observes CI within that boundary.
 | Changelog | PASS; the existing branch release note remains in place |
 | Markdown | PASS, repeated for this receipt before push |
 | Public privacy and secret scans | PASS before push |
-| Fresh CORE | FAIL at 390 px; 1280 px NOT RUN |
+| Fresh CORE at source `2b54bfa1a` | FAIL at 390 px during live-view reply; 1280 px NOT RUN |
 | Focused long-chat approval and Stop proof | NOT RUN: CORE failed first |
+| Follow-up journey at source `85e52f13c` | FAIL at 390 px before live viewing; see the [follow-up receipt](journey.md#follow-up-fresh-attempt) |
 | Hosted CI for this round | NOT RUN at receipt commit; see the PR check rollup for the pushed head |
 | Local full root suite and paid-provider qualification | NOT RUN |
 
@@ -74,5 +75,6 @@ one use, reload and post-Stop 403 were never reached.
 The [journey receipt](journey.md) distinguishes this failure from earlier attempts.
 Startup, service, container and pod logs, the failure and current screenshots were
 retained in the private fleet receipt before `down.sh`. Slot 1 reported free at
-08:15 UTC. No further fresh attempt or code fix was started. No assertion or deadline
-was changed. Only the free stand-in provider was used. Paid calls: zero.
+08:15 UTC. A later run failed in the basic mobile chat before reaching live viewing;
+the follow-up receipt records it. No source code or assertion changed. The free
+stand-in provider was used. Paid calls: zero.
