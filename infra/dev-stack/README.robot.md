@@ -477,6 +477,11 @@ own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespa
 Run at most three stacks per host: the stable owner and secondary ids `1` and `2`.
 Operations use a separate `flock` per id; different stacks run concurrently.
 Service readiness waits allow two minutes on secondary stacks and one minute on the owner.
+Secondary PostgreSQL readiness uses `pg_isready -h 127.0.0.1 -U postgres`.
+The temporary server used to initialise new data accepts Unix-socket connections
+before the final server opens TCP. Wait for TCP before creating roles and databases.
+The [PostgreSQL readiness test](../../scripts/dev-stack-postgres-health.test.mjs)
+holds that temporary server and checks both early refusal and final readiness.
 Website readiness has its own five-minute deadline, measured with a monotonic clock.
 It still requires a successful HTTP response from `/org/integrations`. Secondary stacks
 run Angular's development server through `web-server.mjs --development`. Its HTML
