@@ -65,9 +65,15 @@ Not built yet:
 1. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,
    desktop viewing and organisation settings. The core journey finishes its browser
+<<<<<<< HEAD
    checks and closes the browser before rebuilding the read tables.
 
 1. **An unsafe command is requested.** The launcher refuses automated coding jobs
+=======
+   checks and closes the browser before rebuilding the read tables. The static
+   website closes a failed desktop connection without interrupting other requests.
+4. **An unsafe command is requested.** The launcher refuses automated coding jobs
+>>>>>>> 326f126b9 (🔧 Close failed WebSocket connections without stopping the website)
    that try to run owner commands or use real providers. Fresh journeys use a claimed
    spare stack and the free stand-in model.
 

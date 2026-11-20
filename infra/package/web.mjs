@@ -1,8 +1,8 @@
 import { createServer, request } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { connect } from 'node:net';
 import { extname, join, resolve } from 'node:path';
 import { organisationPage } from './web-page.mjs';
+import { forwardUpgrade } from './web-upgrade.mjs';
 
 const webRoot = '/app/apps/web/dist/web/browser';
 const indexPath = join(webRoot, 'index.html');
@@ -102,22 +102,10 @@ function handleUpgrade(incoming, socket, head) {
     socket.destroy();
     return;
   }
-  const upstream = connect(8080, 'server');
-  function onConnect() {
-    const headers = [];
-    for (const [name, value] of Object.entries(incoming.headers)) {
-      headers.push(`${name}: ${value}`);
-    }
-    upstream.write(`${incoming.method} ${incoming.url} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`);
-    if (head.length) upstream.write(head);
-    socket.pipe(upstream);
-    upstream.pipe(socket);
-  }
-  function onError() {
-    socket.destroy();
-  }
-  upstream.on('connect', onConnect);
-  upstream.on('error', onError);
+  const target = new URL('http://server:8080');
+  target.pathname = url.pathname;
+  target.search = url.search;
+  forwardUpgrade(incoming, socket, head, target);
 }
 
 const server = createServer(handleRequest);

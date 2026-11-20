@@ -45,6 +45,7 @@ infra/nats
 infra/package/*
 !infra/package/web.mjs
 !infra/package/web-page.mjs
+!infra/package/web-upgrade.mjs
 !infra/package/bootstrap.ts
 !infra/package/worker.mjs
 !infra/package/kubeconfig.mjs

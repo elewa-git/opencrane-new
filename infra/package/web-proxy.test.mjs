@@ -56,7 +56,7 @@ function healthy(port) {
   }
 }
 
-async function viewerWriteFailure() {
+async function viewerWriteFailure(context) {
   const sockets = new Set();
   let upgradedSocket;
   function respond(_request, response) {
@@ -70,6 +70,9 @@ async function viewerWriteFailure() {
   }
   function accept(_request, socket) {
     upgradedSocket = socket;
+    function finish() { socket.end(); }
+    socket.once('end', finish);
+    socket.resume();
     socket.write('HTTP/1.1 101 Switching Protocols\r\n'
       + 'Connection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
   }
@@ -87,6 +90,13 @@ async function viewerWriteFailure() {
   function errorOutput(bytes) { diagnostics += bytes.toString(); }
   child.stderr.on('data', errorOutput);
   let viewer;
+  function stopResources() {
+    viewer?.socket.destroy();
+    child.kill();
+    for (const socket of sockets) socket.destroy();
+    backend.close();
+  }
+  context.after(stopResources);
   try {
     const ready = await childMessage(child);
     assert.equal(ready.kind, 'ready');
@@ -101,12 +111,12 @@ async function viewerWriteFailure() {
     await backendClosed;
     assert.equal(await healthy(ready.port), 204, 'Other requests remain available');
   } finally {
-    viewer?.socket.destroy();
-    child.kill();
-    if (child.exitCode === null) await once(child, 'exit');
-    for (const socket of sockets) socket.destroy();
-    backend.close();
-    await once(backend, 'close');
+    const stopped = child.exitCode === null && child.signalCode === null
+      ? once(child, 'exit') : undefined;
+    const closed = backend.listening ? once(backend, 'close') : undefined;
+    stopResources();
+    if (stopped) await stopped;
+    if (closed) await closed;
     assert.doesNotMatch(diagnostics, /Unhandled 'error' event/u,
       'A viewer EPIPE must not terminate the packaged web process');
   }

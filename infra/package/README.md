@@ -61,7 +61,8 @@ Not built yet:
    ownership with a one-time token. Workers start an assistant's computer when needed.
    The worker that sends saved events to reactions can use a full CPU when work arrives together.
 3. **A developer opens the website.** A local port forward connects their browser
-   to the private website. A missing or changed cluster target stops forwarding.
+   to the private website. A closed desktop connection leaves other requests available.
+   A missing or changed cluster target stops forwarding.
 4. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
 5. **A backup runs.** The job stops writes, drains read tables and saves matching
