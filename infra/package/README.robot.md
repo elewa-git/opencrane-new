@@ -162,6 +162,9 @@ prepares joined membership access before the first protected workspace read.
 code. Failed chat checks also record the operation and numeric HTTP status,
 without request addresses or response text. Each role and width captures its failure
 before closing its browser context.
+Its tracked `tls-cleanup.mjs` and `join-handoff.mjs` helpers close tunnels and
+prepare joined access. The executable-import test reaches the slot refusal before
+configuration, so missing local imports fail without starting a stack.
 Screenshots mask form inputs, including sign-in and token fields. Screenshot failure
 is recorded separately and never replaces the original journey failure.
 

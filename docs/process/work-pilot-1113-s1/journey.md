@@ -2,7 +2,25 @@
 
 Journey on a fresh dev stack: FAIL
 
-## Latest packaged run
+## Latest correction attempt
+
+20 November 2026, 22:15 UTC. Source `48a44288f` had green CI and both real
+image approval consumers before the claim. The fresh package installed and all
+nine pre-Helm refusals passed. The browser then failed to import `tls-cleanup.mjs`;
+`join-handoff.mjs` was also absent beside the newly tracked runner. Browser
+sign-in, owner claim, role chats, cookies and member token reuse are NOT RUN.
+No browser page existed, so no failure screenshot could be captured. The full
+journey is FAIL. All 28 startup/service logs were saved before package-down,
+slot release and temporary-app deletion; all three cleanups passed.
+See the [failed-run outcomes](round-3-runner-failure/outcomes.json) and
+[safe import error](round-3-runner-failure/browser-wrong-org.log).
+
+The executable-import, tunnel-cleanup and joined-access tests failed first with
+missing helpers. They passed twice after the existing helpers were tracked beside
+the runner. The corrected source still needs its own approved fresh install.
+This failure does not pass any skipped browser condition.
+
+## Previous packaged run
 
 20 November 2026. The fresh packaged install tested product commit
 `b53d05e69496734966c4a10be02b691c5a595527`. Package preparation passed with the
