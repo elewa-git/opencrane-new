@@ -9,6 +9,25 @@ A new fresh qualification was refused at admission, before installation, because
 the other secondary slot was no longer free. The earlier full qualification also remains FAIL.
 No independent-review verdict is claimed.
 
+## Round 4 packaged journey attempt
+
+At product source `b53d05e69496734966c4a10be02b691c5a595527` (worktree head
+`75ffe9be9da3c3695a31cb913a4b475bb022bd7e`, documentation only), CI and both
+image approvals had already passed. Admission qualified after 11 checks over more
+than five minutes: both secondary slots and locks stayed free, no package namespace
+was present, and one-minute load ranged from 0.91 to 1.59. The samples are in
+[admission observations](round-4-run/admission-observations.log).
+
+The guarded package preparation step failed with the exact message:
+`Package command refused; check pins, named secrets and slot ownership`. It created
+an owned namespace record but no pods, PVCs, services or jobs. The resource
+list and package owner record are retained in [the run evidence](round-4-run/).
+Package-down and slot release passed.
+The install refusals, sign-in, owner claim, token refusal and reuse, all role and
+width journeys, cookies, and screenshots are NOT RUN. The overall fresh packaged
+journey remains FAIL. See [outcomes](round-4-run/outcomes.json) and the
+[sanitised command output](round-4-run/package-prepare-error.log).
+
 ## Round 3 admission wait
 
 At head `b53d05e69496734966c4a10be02b691c5a595527`, all CI checks and both image
