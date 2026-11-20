@@ -1,6 +1,8 @@
 # Host preflight checks
 
-Final source: `4e637fef0e1024dbbf42e411cb79b22cbe10e0be`.
+Initial source: `4e637fef0e1024dbbf42e411cb79b22cbe10e0be`.
+Packaged journey source after round-one fixes:
+`09ce627f5078a657fa96dcd2b86faca14e9c2cac`.
 
 ## Own checks
 
@@ -98,3 +100,43 @@ Independent review is not run by the builder. The orchestrator owns it.
 
 Shipped code: 301 added and deleted lines. Counting the two test-support files
 conservatively as shipped code gives 312 lines. Tests, docs and receipts are excluded.
+
+## Round-one fixes and own checks
+
+| Check | Result |
+| --- | --- |
+| Application approval fixtures | PASS twice; 28 tests per run |
+| Scanner approval fixtures | PASS twice; 28 tests per run |
+| Host refusal message fixtures | PASS twice; 10 tests per run |
+| CI test selector and host fixtures | PASS twice after adding the new file to CI |
+| Full typecheck | PASS |
+| Event catalogue | PASS; 174 event types |
+| Knip and changelog lint | PASS |
+| Changed-file ESLint and supplementary production helper lint | PASS |
+| Markdown and README lint | PASS |
+| Public privacy and secret scans before source pushes | PASS |
+| CI on the packaged journey source | PASS; all jobs |
+| Application and scanner image workflows on that exact source | PASS |
+| Fresh packaged F1/F2, override install and two browser widths | PASS |
+| Separate fresh core stack and built-in browser journey | PASS |
+
+Commit `22cc9f289` makes the approval fixture fail when GitHub omits a
+successful exact-source run from its status-filtered listing. Commit
+`914827669` removes only the listing filter; the existing success, source,
+workflow and artifact checks still apply. An isolated removal of the success
+check failed its existing refusal test.
+
+The CI selector test failed because the new host installation test was absent
+from CI. Commit `127d3e45c` adds that file to the selected command. The live
+refusal then exposed a generic launcher message despite the installer having
+the F1 and F2 advice. Commit `9ae739c9f` records the failing operator-output
+test; commit `09ce627f5` prints only typed host advice and keeps unrelated
+errors generic. A forged dependency error with F1-looking text stays generic.
+
+The packaged journey on the fixed source passed after green CI and both image
+workflows. Its private fleet receipt `run-20261120-0428` holds the command
+logs, install record and four browser screenshots copied before teardown.
+The separate fresh core stack passed its built-in journey at both browser widths.
+Private fleet receipt `core-20261120-0441` holds the startup log, 16 service
+logs and screenshots copied before teardown. Both claimed slots were released.
+The [journey receipt](journey.md) gives the individual outcomes and limits.
