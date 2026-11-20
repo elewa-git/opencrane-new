@@ -3,7 +3,7 @@
 Date: 20 November 2026 UTC. Branch: `work/bug-1148-s1`.
 Builder's own checks only. The PR remains a draft.
 
-Live qualification: FAIL. Rebased-source live qualification: NOT RUN.
+Live qualification: FAIL at rebased source `2b0528bf9`. CORE passed at both widths.
 Finding 4 remains blocking. No independent review result is claimed.
 
 ## Scope and retained findings
@@ -50,7 +50,7 @@ its twenty-minute limit. No retry, extra sleep, catch or longer deadline was add
 
 ## Fresh attempts and remaining proof
 
-The [journey receipt](journey.md) records all three actual startups and the
+The [journey receipt](journey.md) records all four actual startups and the
 [availability observations](availability-round3.csv). Every startup used a fresh
 secondary claim after both slots were free, no package stack was running, and load
 had stayed below six for five minutes. Earlier final preflight refusals did not
@@ -62,7 +62,7 @@ appeared but never reached Done within the existing 120-second assertion.
 The [failure capture](core-upload-failure-1280.png) shows the failed partial reply.
 Its cause remains unproved. No assertion or deadline was changed.
 
-The final fresh attempt at the same source passed CORE at 390 and 1280 pixels,
+The final pre-rebase fresh attempt at the same source passed CORE at 390 and 1280 pixels,
 then progressed through the smaller seed batches. The launcher stopped after about
 twenty minutes during setup. The output-file interval was 00:49:22.448–01:09:32.518;
 its saved error contains only the failed child command. The elapsed time is
@@ -83,8 +83,9 @@ in 308. These measurements establish a resource constraint during this seed.
 Resource limits were not changed. They do not establish the cause of the separate
 many-models 503, which remains unexplained.
 
-No further stack attempt or source optimisation was started after this failure.
-The original availability deadline was 00:44:57 UTC; the final claim preceded it.
+No source optimisation was started after this failure. The mandatory rebase below
+changed the event contract, so a final current-head attempt was made after a new
+qualifying interval, within the remaining four-hour task bound.
 
 ## Rebase compatibility
 
@@ -100,8 +101,42 @@ the obsolete fixture key and missing `utterance`. Updated the synthetic payloads
 and live seed to main's existing schema. No access, money, memory, count or response
 assertion was loosened. The first corrected group passed all 26 cases.
 
-Qualification of the rebased source remains NOT RUN. The earlier CORE and seed
-observations above name the source actually tested.
+The post-rebase burst-sensitivity check also fails at received 100 versus 20 when
+the old burst is restored. Restoring the normal code then passes both fixture cases
+twice. The old burst was never committed or pushed in that verification.
+
+## Rebased-source fresh attempt
+
+Receipt `live-20261120T014756Z` tested pushed source `2b0528bf9` on a fresh claimed
+secondary. Both slots were free, no package stack was running and load had stayed
+below six for 305 seconds. The [additional samples](availability-rebased-round3.csv)
+record that window. Startup began at 01:48 UTC. The controller capped execution at
+02:30 UTC to preserve logs, teardown and the 02:44 task reporting boundary.
+
+CORE passed at 390 and 1280 pixels. The guarded TLS launcher became ready. The
+focused launcher again failed after about twenty minutes during seed setup. Its
+error contains only the failed child command; no individual checkpoint assertion
+was reported. The [current-head trace](seed-checkpoints-rebased-round3.csv) shows
+continued projection progress, then both checkpoints settling at 4,880.
+
+The retained conversation-worker log reports 2,211 unique completed message handlers
+and 2,210 completion handlers for the seed conversation. Creation completed at
+02:03:59.525 UTC; the last record completed at 02:23:12.206. The independent SQL
+probe connected after teardown had stopped PostgreSQL and failed with connection
+refused. The final counts above therefore come from worker records, not a table query.
+The incomplete history never reached discovery, approval, tool execution or Stop.
+Those conditions remain NOT RUN at both widths. Demo effects and paid calls: zero.
+
+In this run PostgreSQL used 72,410,172 microseconds across 1,450 scheduling periods
+and was throttled in 1,444. Its quota remained 50,000 microseconds per 100,000.
+This confirms that the half-core allocation constrained the current-head seed too.
+The separate many-models 503 remains unexplained. No assertion, deadline or resource
+limit was changed. All logs were retained before teardown; the final slot status
+was free. No further fix or fresh attempt was started.
+
+Hosted CI passed at the tested source, including all four shards, both fixture jobs
+and aggregate coverage: [run 44654869357](https://github.com/elewa-git/opencrane-new/actions/runs/44654869357).
+The later receipt commit changes only documents and captured evidence.
 
 ## Own gates
 
@@ -117,7 +152,10 @@ observations above name the source actually tested.
 | TLS launcher, claim guard and recorder tests | PASS, eight cases; recorder passed twice again after its declaration cleanup |
 | Markdown | PASS; repeated after the final receipt edit |
 | Public privacy and secret scan | PASS on the staged receipt; repeated against the committed branch before pushing |
-| Rebased-source live journey, local full root suite, paid qualification and independent review pass two | NOT RUN |
+| Fresh rebased-source CORE | PASS at both widths |
+| Complete rebased-source long-chat journey | FAIL during seed setup; approval, execution and Stop NOT RUN |
+| Hosted CI at tested source `2b0528bf9` | PASS, all jobs and aggregate coverage |
+| Local full root suite, paid qualification and independent review pass two | NOT RUN |
 
 An extra typed-lint run over normally ignored infrastructure reported 33 errors:
 32 pre-existing errors in untouched parts of `journey.ts` and `stack.ts`, plus one
