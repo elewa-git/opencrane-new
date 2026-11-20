@@ -6,12 +6,13 @@ import type { Page } from 'playwright';
 import { z } from 'zod';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { grantStream, type memberAuthorisation } from '@opencrane/authz';
-import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
-import { approvalUsedDataSchema, decisionRecordedDataSchema } from '@opencrane/events';
-import { envelope, history, providerTurnAdmission } from '@opencrane/models';
-import { conversationKeys, connectProjectionDb, type Query } from '@opencrane/projections';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { approvalUsedDataSchema, decisionRecordedDataSchema, type MessagePostedData }
+  from '@opencrane/events';
+import { history, providerTurnAdmission } from '@opencrane/models';
+import { conversationKeys, connectProjectionDb } from '@opencrane/projections';
 import { directory, readEnv } from './config.ts';
-import { approvalToolBody, completedApprovalMessage, issueApprovalComputer, prepareApprovalTool,
+import { approvalToolBody, issueApprovalComputer, prepareApprovalTool,
   type ApprovalJourneyIdentity } from './approval-tool.ts';
 import { createStageBCollector } from './stage-b-collector.ts';
 import { readStageBQuote } from './stage-b-readback.ts';
@@ -19,6 +20,7 @@ import { stopApprovalTurn } from './approval-stop.ts';
 import { nativeApprovalTurn } from './approval-native.ts';
 import { approvalTerminal, captureApprovalState, decideJourneyApproval }
   from './approval-cards.ts';
+import { seedApprovalHistory } from './approval-history.ts';
 
 type Append = (type: string, subject: string, data: Record<string, unknown>, source?: string) => Promise<void>;
 
@@ -202,52 +204,17 @@ async function seedApprovalChat(store: EventStore, silo: string,
   const keys = conversationKeys(`${directory}/conversation-keys`,
     server['CONVERSATION_WRAP_KEY_FILE']);
   const encrypted = keys.encrypt(silo, conversationId, 'An earlier message in this long chat.');
-  const subject = `conversation-${conversationId}`;
-  let position = await store.head(subject);
+  const data: MessagePostedData = { conversationId, authorId: assistantId, authorKind: 'agent',
+    contentType: 'text', ...encrypted };
   const db = connectProjectionDb(server['DATABASE_URL']!, failDatabase);
   try {
-    // Keep setup traffic behind projection progress instead of creating an unbounded backlog.
-    for (let batchIndex = 0; batchIndex < 60; batchIndex++) {
-      for (let messageIndex = 0; messageIndex < 50; messageIndex++) {
-        const data = { conversationId, authorId: assistantId, authorKind: 'agent',
-          contentType: 'text', ...encrypted };
-        const event = envelope(silo, subject, 'message.posted', data);
-        position = await appendApprovalMessage(store, event, position);
-      }
-      await waitForApprovalHistory(db.db, position);
-      console.log(`PASS long-chat seed batch ${batchIndex + 1}/60 at position ${position}`);
-    }
+    await seedApprovalHistory(store, db.db, { silo, data });
   } finally {
     await db.close();
   }
-}
-
-async function appendApprovalMessage(store: EventStore, message: ReturnType<typeof envelope>,
-  position: number) {
-  const records = completedApprovalMessage(message);
-  for (const event of records) {
-    const command: AppendCommand = { event, expectedSequence: position, historyChecked: true };
-    const result = await store.append(command);
-    assert.equal(result.status, 'appended', 'Seed each earlier chat record once');
-    if (result.status !== 'appended') throw new Error('Chat seeding refused');
-    position = result.sequence;
-  }
-  return position;
 }
 
 function failDatabase(error: Error) {
   throw error;
 }
 
-async function waitForApprovalHistory(db: Query, position: number) {
-  const deadline = performance.now() + 30_000;
-  while (true) {
-    const saved = await db.query<{ sequence: string }>(
-      "SELECT sequence FROM projection_checkpoints WHERE name='conversations'");
-    const checkpoint = Number(saved.rows[0]?.sequence);
-    if (checkpoint >= position) break;
-    assert(performance.now() < deadline,
-      `The long chat reaches the conversation projection: expected ${position}, saved ${checkpoint}`);
-    await delay(100);
-  }
-}
