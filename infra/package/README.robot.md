@@ -222,6 +222,15 @@ The synthetic credential still goes through Settings and ordinary provider custo
 The fleet marker remains set; `DEV_REAL_PROVIDER` is never set for this route.
 Paid qualification remains a separate, explicitly authorised journey.
 
+`provider-journey.test.mjs` follows the visible Settings setup. It scopes key entry
+and actions to the open, named dialog, waits for the named step and uses Check
+status while the original change is applying. Closed replacement dialogs are not
+key-entry targets. `journey-provider-settings.test.ts` reproduces that pending
+creation and key-save path in Chromium at 1280 and 390 px. The live journey saves
+both new-key form screenshots before typing, checks the browser refusal, and
+confirms HTTP 401 for that same synthetic wrong credential from the server Pod.
+The private probe passes the credential through stdin and records only its status.
+
 The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
 packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2
 (Apache-2.0 with the package's Debian main notices). Their package notices and versions

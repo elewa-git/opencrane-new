@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chromium } from 'playwright';
-import { createProviderConnection, enterProviderKey } from './provider-settings.ts';
+import { createProviderConnection, enterProviderKey, saveProviderKey } from './provider-settings.ts';
 
 const fixture = `
 <div class="page-actions"><button onclick="setup.showModal()">Connect a provider</button></div>
@@ -23,7 +23,16 @@ function recordName() {
 function showKey() {
   document.querySelector('#setup').innerHTML =
     '<h3>Step 2 of 6 · Key</h3>' +
-    '<label>API key Required<input id="provider-key" type="password"></label>';
+    '<label>API key Required<input id="provider-key" type="password"></label>' +
+    '<footer><button onclick="recordKey()">Save key</button></footer>';
+}
+function recordKey() {
+  document.querySelector('#setup footer').innerHTML =
+    '<p>Key saved. Its provider record is still applying. Check status again.</p>' +
+    '<button onclick="verify()">Check status</button>';
+}
+function verify() {
+  document.querySelector('#setup').innerHTML = '<h3>Step 3 of 6 · Verify</h3>';
 }
 </script>`;
 
@@ -42,6 +51,8 @@ async function followsVisibleSetup(): Promise<void> {
       assert.equal(await field.isVisible(), true);
       assert.equal(await field.inputValue(), 'synthetic-fixture-key');
       assert.equal(await page.locator('#replace-provider-key').inputValue(), '');
+      await saveProviderKey(page, 'synthetic-fixture-key');
+      await dialog.getByRole('heading', { name: 'Step 3 of 6 · Verify', exact: true }).waitFor();
       await page.close();
     }
   } finally {
