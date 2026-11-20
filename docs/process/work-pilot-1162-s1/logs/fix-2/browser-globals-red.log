@@ -6,4 +6,3 @@ npm notice run 'eslint' scripts/check-live-view-production.mjs
   89:18  error  'document' is not defined  no-undef
 
 ✖ 2 problems (2 errors, 0 warnings)
-

@@ -1,0 +1,120 @@
+{
+  "date": "2026-11-20T15:38:25.909Z",
+  "width": 390,
+  "origin": "http://127.0.0.1:25106",
+  "stackId": "1",
+  "namespace": "opencrane-dev-1",
+  "conversationId": "817ec488-f078-49d2-8459-7604e1883400",
+  "computer": {
+    "assistant_id": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+    "computer_id": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+    "generation": 1
+  },
+  "member": "zitadel-member",
+  "generation": 1,
+  "framebuffer": {
+    "width": 800,
+    "height": 600,
+    "sha256": "0cffb2141fcb40cef0931e8f3d23b1cebe60d35e5e236288344602cceb01f1b6"
+  },
+  "revokedAtTime": "2026-11-20T15:38:25.691Z",
+  "sessions": [
+    {
+      "label": "first view",
+      "sessionId": "b0b06501-0221-436d-8d2a-4451aecc4df8",
+      "count": 0,
+      "durationMs": []
+    },
+    {
+      "label": "during turn",
+      "sessionId": "297416b1-5707-4de5-8b62-60ba1ee4a0e7",
+      "count": 0,
+      "durationMs": [],
+      "revokeToClearMs": 74
+    }
+  ],
+  "sessionId": "297416b1-5707-4de5-8b62-60ba1ee4a0e7",
+  "audit": [
+    {
+      "id": "fd67df38-e6a4-4c6e-8ad2-cf409653c114",
+      "type": "computer.view_started",
+      "principal": {
+        "id": "zitadel-member",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "297416b1-5707-4de5-8b62-60ba1ee4a0e7",
+        "conversationId": "817ec488-f078-49d2-8459-7604e1883400",
+        "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "memberId": "zitadel-member",
+        "generation": 1,
+        "expiresAt": "2026-11-20T15:40:22.506Z"
+      }
+    },
+    {
+      "id": "00b1d986-76bb-4b11-8dcd-8579c4c99654",
+      "type": "computer.view_stopped",
+      "principal": {
+        "id": "zitadel-member",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "297416b1-5707-4de5-8b62-60ba1ee4a0e7",
+        "conversationId": "817ec488-f078-49d2-8459-7604e1883400",
+        "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "memberId": "zitadel-member",
+        "generation": 1,
+        "expiresAt": "2026-11-20T15:40:22.506Z",
+        "reason": "access_changed"
+      }
+    }
+  ],
+  "revokedMs": 74,
+  "transitions": [
+    {
+      "state": "Connecting",
+      "at": 53471.099999427795
+    },
+    {
+      "state": "Unavailable",
+      "at": 53745.29999923706
+    },
+    {
+      "state": "Disconnected",
+      "at": 53888.89999961853
+    },
+    {
+      "state": "Connecting",
+      "at": 54883.5
+    },
+    {
+      "state": "Viewing",
+      "at": 57021.599999427795
+    },
+    {
+      "state": "Disconnected",
+      "at": 57810.699999809265
+    },
+    {
+      "state": "Connecting",
+      "at": 63127.39999961853
+    },
+    {
+      "state": "Viewing",
+      "at": 66148.5
+    },
+    {
+      "state": "Access changed",
+      "at": 66681.5
+    }
+  ],
+  "pauses": 0,
+  "pauseMs": [],
+  "noGrant": "PASS",
+  "keyboard": "PASS",
+  "targets44px": "PASS",
+  "assistantStubTurn": "PASS",
+  "status": "PASS"
+}

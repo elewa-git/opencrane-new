@@ -1,0 +1,1 @@
+{"controllerExit":143,"browserVerdict":"FAIL","reportedJourneyExit":0,"journeyExitReliable":false,"cause":"Controller received SIGTERM; cleanup overlapped the browser"}

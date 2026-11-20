@@ -1,99 +1,95 @@
 # Own checks for pilot VM bootstrap and sizing fixes
 
 Date: 20 November 2026. Branch: `work/pilot-1162-s1`.
-Runtime exercised in the PARTIAL journey: `9ff04e9da075f687472a6754359fb19ace7b9a41`.
+Candidate runtime source: `e0c4a9b063f5cfcdd189134eaa145592727110fb`.
 
-## Rebase and failing tests
+## Rebase and test-first fixes
 
-Fetched `origin/main` and finished a clean rebase onto
-`ed3662d8530338cde94d557713264f1ebf1057ae`. Fetched again before the final
-qualification; main had not moved. The original bootstrap test-first history is
-retained as `e0d6dcfdd` and `a2617292c`, followed by implementation `5cc6a276b`.
-The original [missing-script](logs/red.log) and
-[managed-kubelet rerun](logs/idempotent-red.log) failures remain available.
+PASS: fetched main at the start and before the source push. It remained
+`ed3662d8530338cde94d557713264f1ebf1057ae`, already contained in this branch.
+No rebase was needed or left in progress.
 
-The second fresh packaged attempt exposed an unhandled viewer `write EPIPE`
-that stopped the website. Test commit `5c332d5d7` exercises the actual packaged
-entrypoint, injects that error at its real client socket and fails when the
-process exits. The [failure](logs/fix-1/web-proxy-red.log) precedes the fix.
-The regression requires both peers to close, the process to survive and a
-subsequent HTTP request to succeed. Error/close handlers now attach before writes;
-package and development servers share the implementation in `web.mjs`.
-The original error is retained through the structured logger.
+The production build exposed the CommonJS noVNC import as an object whose
+`default` is the constructor. The old re-export passed the object to `new Rfb`.
+A browser debugger captured the constructor TypeError; its caller closed the
+WebSocket before a desktop frame. This reproduces without ingress or a computer.
+The unchanged viewer passed both widths in a fresh CORE stack, including a turn
+while viewing and clearing pixels after a grant was revoked. Both the automatic
+CORE run and its explicit repeat passed, and teardown released the slot.
 
-The first image build correctly rejected an extra helper outside its strict
-runtime file allowlist. Commit `f44f132c1` retains the
-[existing check's failure](logs/fix-1/runtime-files-red.log). Commit `8e1e76a38`
-removes that file and exports the shared function from the approved entrypoint.
-The runtime allowlist and assertion are unchanged.
+Test-first `de6cc73ef` fails through the production build, Chromium and the real
+website WebSocket proxy: Disconnected instead of Viewing. `1bd7ff9d5` corrects
+only the fixture's requested pixel format and still fails against the old product
+code. The exact red-pixel assertion is unchanged. Fix `dfd8aa424` describes both
+import shapes and selects the constructor in the existing viewer module.
 
-CI then reported four native image fixture deadlines. All 19 affected native
-configuration/supervisor tests passed locally with two workers. Test commit
-`ddf74b5e5` [fails for the missing worker bound](logs/fix-1/ci-workers-red.log).
-Commit `828b9c865` applies two workers to image fixtures, matching the existing
-ordinary-shard budget; browser fixtures retain one worker. The image CI job on
-`9ff04e9da` passed 59 tests, with one existing opt-in test skipped, in 115.71 seconds.
-No deadline, assertion, access check, money check or memory limit changed.
+CI correctly rejected two unqualified browser `document` references in the new
+test driver. `5e21fdc0f` records the existing ESLint command failing for both
+`no-undef` errors before fix `e0c4a9b06` uses `globalThis.document`. It also expands
+the protocol and cleanup statements. No lint rule or globals exception changed.
+The earlier scoped-lint progress statement was premature: that process had not
+finished. Only the confirmed final process exit is reported as PASS below.
 
-The final fixture cleanup names HTTP request and control-message values and
-splits chained calls. Both focused repeats still pass 24/24, and supplementary
-lint passes. This changes neither runtime code nor journey assertions or deadlines.
+## Own source gates
 
-## Safe bootstrap scope
-
-PASS: the host dry run refused its existing Docker socket before writes.
-[Host refusal](logs/fix-1/rebased-host-dry-run.log).
-The [complete dry run](logs/fix-1/container-dry-run.log) uses an unprivileged,
-network-isolated container with a synthetic Ubuntu distribution record.
-The 11 bootstrap tests include ShellCheck, existing-runtime refusals, identical
-configuration on rerun and replacement-binary refusal. Their system operations
-are stubs. No fixture starts another Kubernetes or container daemon.
-
-No swap, sysctl, iptables, bridge, route, Docker-daemon or host-package setting
-was changed. The first real Ubuntu VM bootstrap and reboot remain NOT RUN.
-
-## Gate results
-
-All tests, builds, lint and typecheck commands ran under `nice -n 10`.
-No full local root test suite or fleet batch ran.
+All tests, builds, typecheck and lint commands ran under `nice -n 10`. Vitest had
+at most two workers; the selected Angular checks also had two build workers.
+No full local root suite or fleet batch ran.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Changed focused tests, first run | PASS | [24/24, no skips](logs/fix-1/clarified-tests-1.log) |
-| Changed focused tests, repeat | PASS | [24/24, no skips](logs/fix-1/clarified-tests-2.log) |
-| Development static server | PASS | [3/3, including browser/build checks](logs/fix-1/final-dev-web-tests.log) |
-| Native configuration/supervisor reproduction | PASS | [19/19 with two workers](logs/fix-1/native-fixtures-reproduction.log) |
-| Workspace, package and dev-stack typecheck | PASS | [Output](logs/fix-1/worker-typecheck.log) |
-| Event catalogue | PASS | [174 event types](logs/fix-1/worker-events.log) |
-| Knip | PASS | [Two existing configuration hints](logs/fix-1/worker-knip.log) |
-| Changelog lint | PASS | [Output](logs/fix-1/worker-changelog.log) |
-| Markdown lint | PASS | [Output](logs/fix-1/worker-markdown.log) |
-| Scoped repository ESLint | PARTIAL | [CI scripts checked; infrastructure excluded by repository rules](logs/fix-1/qualified-eslint.log) |
-| Supplementary infrastructure ESLint | PASS | [Recommended JS rules and repository complexity/size limits](logs/fix-1/qualified-eslint-extra.log) |
-| README, process privacy and ledger checks | PASS | Run after the final receipt update |
+| Focused branch tests | PASS | 24/24 twice, no skips |
+| Full browser file | PASS | 5/5, including production desktop pixels at both widths |
+| Final production viewer repeats | PASS | One selected case twice; four unchanged cases deselected each time |
+| Real noVNC and viewer unit checks | PASS | 20/20 in three files, twice |
+| Clean install | PASS | npm ci; same installed MIT-licensed ws 8.22.0 now declared for root test tooling |
+| Workspace, package and dev-stack typecheck | PASS | Process exited 0 |
+| Event catalogue | PASS | 174 event types |
+| Knip | PASS | Two existing configuration hints |
+| Scoped repository ESLint | PASS | App, test-driver and CI files; process exited 0 |
+| Supplementary infrastructure ESLint | PASS | Existing infrastructure scope, recommended JS rules and standard size limits |
+| Changelog and Markdown | PASS | No changelog issue; zero Markdown issues |
+| README, process and ledger checks | PASS | Own checks |
+| Public privacy and secret scans | PASS | Run before each push, including the complete branch range |
 
-## Make it right
+The regression requires Viewing and a decoded red pixel in an 800 by 600 canvas
+at 1280 and 390 pixels. The fixture now honours the browser's requested pixel
+format. The first corrected product attempt reached Viewing but exposed the
+fixture's BGR/RGB mistake; that observation and both red runs are retained.
+No assertion, access, lease, money, memory or timeout rule was weakened.
 
-Reuse the verified runtime setup in `infra/devbox/runtime.sh` and remove the old
-copies. Keep host validation, protection, installation and command output in named
-functions. Share WebSocket connection handling between both website entrypoints.
-Name request options and logging fields; expand connection cleanup steps. Keep
-one worker-budget decision in the CI launcher. Add no dependency, event type,
-business rule, runtime retry or readiness extension. Raise no lint limit or baseline.
+## Live collector corrections
 
-Production changes total 464 added/deleted lines, including two workflow lines.
-Tests, documents, release notes and receipts are excluded. Public privacy and
-staged/full-range secret scans run before each push. Full CI and exact-source
-image results are recorded in the [journey receipt](journey.md).
-Receipt copies replace private paths and normalise line endings without changing
-the observations. No independent-review result is claimed.
+The first packaged attempt in this round is FAIL, regardless of its incorrect
+journey=0 cleanup field. Its browser outcomes include a failed mobile PDF answer
+and an unreliable sign-in timeout after the controlling shell received SIGTERM.
+The next private collector uses the existing project.pdf fixture filename, retains
+the already signed-in owner when adding members, and completes browser shutdown
+before collecting logs and tearing down. An additional result-file check rejects
+FAIL/NOT RUN and requires both one-person desktop widths and three held viewers.
+No product rule, assertion or service deadline changed.
 
-## Short work log
+## Additional routine-sender investigation
 
-1. Rebased, ran source gates and obtained exact-source CI/image approvals.
-2. Claimed and tore down two fresh packaged attempts, retaining their failed
-   conditions, startup logs, service logs and measurements before teardown.
-3. Committed the viewer-crash and missing-worker-bound failures before fixes;
-   retained the strict runtime-image rejection and removed the extra helper.
-4. Repeated source gates, waited for approved source and the exclusive resource
-   window, then recorded the fresh qualification outcome and released its slot.
+FAIL: prior-head CI failed the saved-Denied routine case, returning unknown where
+its setup expected sent. That case passed in isolation and in the broader local
+run. The broader run was FAIL, 113/114: a different authority-race test timed out
+before reaching its intended append. That case then passed in isolation.
+The cause remains unproved. No routine product code, test, deadline or assertion
+was changed; neither failure is claimed fixed. These extra observations are
+separate from the required changed-test gates and latest-head CI result.
+
+## Make it right and host scope
+
+Keep module conversion in one small viewer wrapper and describe the two data
+shapes in its shared declaration. Test the production build and the real noVNC
+class, and keep the exact pixel assertion. Give protocol messages, canvas steps
+and cleanup operations their own names and statements. Add no speculative layer,
+new runtime component, event type, connection retry or reconnect loop. Exclude
+the test driver from runtime images and keep the strict runtime file allowlist.
+
+PASS: the actual host bootstrap ran only with --dry-run and refused its existing
+Docker socket before writes. No host setting or owner stack was changed. Actual
+Ubuntu VM bootstrap, reboot and VM storage/runtime qualification remain NOT RUN.
+Fresh live results, measured demand and qualification limits belong in the
+[journey receipt](journey.md). No independent-review result is claimed.

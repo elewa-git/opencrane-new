@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' scripts/check-live-view-production.mjs

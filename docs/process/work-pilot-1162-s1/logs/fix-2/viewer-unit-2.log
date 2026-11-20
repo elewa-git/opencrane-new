@@ -1,0 +1,40 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false --include=src/app/live-view/*.spec.ts
+❯ Building...
+✔ Building...
+Initial chunk files                 | Names                            |  Raw size
+spec-app-live-view-live-view.js     | spec-app-live-view-live-view     |  98.73 kB |
+styles.css                          | styles                           |  16.42 kB |
+spec-app-live-view-novnc-pause.js   | spec-app-live-view-novnc-pause   |   5.10 kB |
+chunk-HBVANCZL.js                   | -                                |   4.75 kB |
+spec-app-live-view-lease-channel.js | spec-app-live-view-lease-channel |   4.62 kB |
+chunk-CGZBV6BD.js                   | -                                |   4.07 kB |
+init-testbed.js                     | init-testbed                     |   1.21 kB |
+vitest-mock-patch.js                | vitest-mock-patch                | 974 bytes |
+chunk-ZNQDICE4.js                   | -                                | 272 bytes |
+
+                                    | Initial total                    | 136.16 kB
+
+Lazy chunk files                    | Names                            |  Raw size
+mermaid-library.js                  | mermaid-library                  |   7.89 MB |
+chunk-VTQB4UYO.js                   | viewer                           | 169 bytes |
+
+Application bundle generation complete. [46.680 seconds] - 2026-11-20T16:19:37.113Z
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+
+ RUN  v4.1.11 [checkout]/apps/web
+
+
+ Test Files  3 passed (3)
+      Tests  20 passed (20)
+   Start at  16:19:37
+   Duration  3.36s (transform 623ms, setup 1.20s, import 596ms, tests 1.23s, environment 3.20s)

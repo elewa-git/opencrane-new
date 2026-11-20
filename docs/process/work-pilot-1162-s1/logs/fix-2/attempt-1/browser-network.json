@@ -1,0 +1,336 @@
+[
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: the server responded with a status of 404 ()"
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 447
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 420
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 209
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 412
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 505
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 509
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 508
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 528
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-1280",
+    "bytes": 414
+  },
+  {
+    "kind": "console_error",
+    "phase": "one-person-upload-desktop-1280",
+    "text": "Failed to load resource: the server responded with a status of 425 (Too Early)"
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 601
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 580
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 513
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 209
+  },
+  {
+    "kind": "socket_closed",
+    "phase": "one-person-upload-desktop-1280"
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 412
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 529
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 533
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 414
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 482,
+      "until": 1750
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 670,
+      "until": 2000
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 891,
+      "until": 2251
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 1059,
+      "until": 2501
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 1309,
+      "until": 2751
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 1624,
+      "until": 3001
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 1890,
+      "until": 3260
+    }
+  },
+  {
+    "kind": "lease",
+    "phase": "one-person-upload-desktop-1280",
+    "notice": {
+      "lease": "valid",
+      "at": 2092,
+      "until": 3510
+    }
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 12
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 2
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 4
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 27
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-1280",
+    "bytes": 1920136
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 209
+  },
+  {
+    "kind": "socket_closed",
+    "phase": "one-person-chat-390"
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 447
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 420
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 209
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 412
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 505
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 509
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 508
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 528
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-chat-390",
+    "bytes": 414
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 601
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 580
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 209
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 513
+  },
+  {
+    "kind": "socket_closed",
+    "phase": "one-person-upload-desktop-390"
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 412
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 518
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 522
+  },
+  {
+    "kind": "frame",
+    "phase": "one-person-upload-desktop-390",
+    "bytes": 414
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  },
+  {
+    "kind": "console_error",
+    "phase": "sign-in-owner-1280",
+    "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  }
+]

@@ -107,20 +107,18 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ### Pilot VM sizing
 
-On 20 November 2026, a fresh package on exact-source CI-approved images passed
-one-person sign-in, chat, PDF answers, anonymous-history refusal and budget checks
-at 1280 and 390 pixels. Desktop disconnected at both widths. A non-UUID collector
-member id correctly received 409, so three-person qualification remains NOT RUN.
-The corrected collector could not obtain another exclusive resource window before
-the task's work limit. The [receipt](work-pilot-1162-s1/journey.md) records PARTIAL.
+On 20 November 2026, the production noVNC constructor cause was fixed test-first.
+A fresh CORE journey passed both widths and a fresh package decoded a desktop at
+1280 pixels. The packaged mobile PDF step failed because the collector used a
+filename outside the scripted provider's fallback fixture contract. Its controller
+then received SIGTERM and cleanup overlapped the browser. The complete requested
+matrix remains PARTIAL; three-person qualification and minimum size remain NOT RUN.
+The [receipt](work-pilot-1162-s1/journey.md) retains failed outcomes and resource waits.
 
-Observed package peaks were 3.592 CPU cores and 3.08 GiB working set; whole-node
-peaks were 3.870 cores and 5.23 GiB including swap. Bound-PVC use peaked at
-77.63 MiB. These partial observations do not qualify a minimum machine or spare
-capacity recommendation. The website stayed available after viewer disconnects.
-The [VM guide](../../infra/vm/README.md) describes its guarded bootstrap. The host
-dry run refused existing Docker before writes; real VM bootstrap/reboot remain
-NOT RUN. No host setting was changed.
+The latest incomplete whole-node peaks were 3.654 CPU cores and 5.12 GiB including swap.
+These partial observations do not qualify a minimum machine or spare-capacity
+recommendation. Bootstrap ran only as a dry run and refused existing Docker before
+writes. Real Ubuntu bootstrap/reboot remain NOT RUN. No host setting changed.
 
 ### Lint size debt
 
