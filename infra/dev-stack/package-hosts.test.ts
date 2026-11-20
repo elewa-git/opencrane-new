@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkPackageHosts } from './package-hosts.ts';
+import type { HostState } from '../package/host-preflight.mjs';
 import { packageCommandMessage } from './package-error.ts';
 
 const safe = { swaps: 'Filename Type Size Used Priority\n', corePattern: '\n',
   coreUsesPid: '0\n', crypttab: '', mappings: [] };
 const unsafe = { ...safe, swaps: safe.swaps + '/swapfile file 10 0 -2\n',
   corePattern: '|apport\n' };
-function fixture(states = [safe, safe]) {
+function fixture(states: Record<string, HostState> = { 'node-1': safe, 'node-2': safe }) {
   const calls: string[][] = [];
-  let index = 0;
+  const podNodes = new Map<string, string>();
   async function command(args: string[]) {
     calls.push(args);
     if (args.includes('nodes')) {
@@ -18,7 +19,19 @@ function fixture(states = [safe, safe]) {
         { metadata: { name: 'node-2', uid: 'uid-2' } },
       ] });
     }
-    if (args.includes('logs')) return JSON.stringify(states[index++]);
+    if (args.includes('run')) {
+      const pod = JSON.parse(args[args.indexOf('--overrides') + 1]!);
+      const name = args[args.indexOf('run') + 1]!;
+      podNodes.set(name, pod.spec.nodeName);
+    }
+    if (args.includes('logs')) {
+      const name = args[args.indexOf('logs') + 1]!;
+      const node = podNodes.get(name);
+      assert.ok(node, 'Read observations only for a submitted probe Pod');
+      const state = states[node];
+      assert.ok(state, `No observations for submitted node ${node}`);
+      return JSON.stringify(state);
+    }
     return '';
   }
   return { command, calls };
@@ -39,23 +52,24 @@ function isDelete(args: string[]) {
 }
 
 test('refuse a failing second node before installation and clean its probe', async function refusal() {
-  const { command, calls } = fixture([safe, unsafe]);
+  const { command, calls } = fixture({ 'node-1': safe, 'node-2': unsafe });
   async function check() {
     await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
   }
-  await assert.rejects(check, /node-2.*F1:.*\n.*F2:/u);
+  await assert.rejects(check, { reason: 'unsafe_settings', message: /node-2.*F1:.*\n.*F2:/u });
   assert.equal(calls.filter(isDelete).length, 2);
 });
 
 test('package refusal shows F1 and F2 fixes without exposing unrelated errors',
   async function visibleHostRefusal() {
-    const { command } = fixture([unsafe, safe]);
+    const { command } = fixture({ 'node-1': unsafe, 'node-2': safe });
     let refusal: unknown;
     try {
       await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
     } catch (error) {
       refusal = error;
     }
+    assert.equal((refusal as { reason: string }).reason, 'unsafe_settings');
     const message = packageCommandMessage(refusal);
     assert.match(message, /node-1: F1: disable swap/u);
     assert.match(message, /node-1: F2: disable host crash reporters/u);
@@ -65,38 +79,55 @@ test('package refusal shows F1 and F2 fixes without exposing unrelated errors',
       'Required secret is absent: runtime');
   });
 test('a dev override cannot waive checks for a remote node', async function remoteOverride() {
-  const { command } = fixture([unsafe, unsafe]);
+  const { command } = fixture({ 'node-1': unsafe, 'node-2': unsafe });
   async function check() {
     await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc',
       override: 'accepted-dev-box-366' });
   }
-  await assert.rejects(check, /override requires verified local k3d nodes/u);
+  await assert.rejects(check, { reason: 'unverifiable_host',
+    message: /override requires verified local k3d nodes/u });
 });
 test('unknown override values fail closed', async function invalidOverride() {
   const { command } = fixture();
   async function check() {
     await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc', override: '1' });
   }
-  await assert.rejects(check, /Unknown host-risk override/u);
+  await assert.rejects(check, { reason: 'unknown_override', message: /Unknown host-risk override/u });
 });
 
-function localFixture(uid = 'local-node') {
-  const { command: probe, calls } = fixture([unsafe]);
+type LocalFixtureOptions = {
+  uid?: string;
+  name?: string;
+  endpoint?: string;
+  count?: number;
+  containerName?: string;
+  running?: boolean;
+  cluster?: string;
+};
+function localFixture(options: LocalFixtureOptions = {}) {
+  const name = options.name ?? 'k3d-ocn-server-0';
+  const states = { [name]: unsafe };
+  const { command: probe, calls } = fixture(states);
   async function command(args: string[]) {
     if (args.includes('nodes')) return JSON.stringify({ items: [
-      { metadata: { name: 'k3d-ocn-server-0', uid: 'local-node' } },
+      { metadata: { name, uid: 'local-node' } },
     ] });
     return probe(args);
   }
   async function localCommand(program: string, args: string[]) {
     if (program === 'node') return JSON.stringify(unsafe);
     if (args.includes('exec')) {
-      assert.deepEqual(args.slice(2, 6), ['kubectl', 'get', 'node', 'k3d-ocn-server-0']);
-      return uid;
+      assert.deepEqual(args.slice(2, 6), ['kubectl', 'get', 'node', name]);
+      return options.uid ?? 'local-node';
     }
-    if (args.includes('context')) return JSON.stringify('unix:///var/run/docker.sock');
-    return JSON.stringify([{ Name: '/k3d-ocn-server-0', State: { Running: true },
-      Config: { Labels: { 'k3d.cluster': 'ocn' } } }]);
+    if (args.includes('context')) {
+      return JSON.stringify(options.endpoint ?? 'unix:///var/run/docker.sock');
+    }
+    const container = { Name: options.containerName ?? `/${name}`,
+      State: { Running: options.running ?? true },
+      Config: { Labels: { 'k3d.cluster': options.cluster ?? 'ocn' } } };
+    const containers = Array(options.count ?? 1).fill(container);
+    return JSON.stringify(containers);
   }
   return { command, localCommand, calls };
 }
@@ -146,7 +177,7 @@ test('target changes during probes refuse installation', async function nodeDrif
   async function check() {
     await checkPackageHosts({ command, namespace: 'test', image: 'image@sha256:abc' });
   }
-  await assert.rejects(check, /Installation nodes changed/u);
+  await assert.rejects(check, { reason: 'unverifiable_host', message: /Installation nodes changed/u });
 });
 
 test('probe Pods have only read-only host mounts and no service token', async function readOnly() {
@@ -172,10 +203,50 @@ test('probe Pods have only read-only host mounts and no service token', async fu
 
 
 test('a matching local container name cannot waive another cluster node', async function falseLocalNode() {
-  const { command, localCommand } = localFixture('foreign-node');
+  const { command, localCommand } = localFixture({ uid: 'foreign-node' });
   async function check() {
     await checkPackageHosts({ command, localCommand, namespace: 'test',
       image: 'image@sha256:abc', override: 'accepted-dev-box-366' });
   }
-  await assert.rejects(check, /Local k3d node identity differs from the installation target/u);
+  await assert.rejects(check, { reason: 'unverifiable_host',
+    message: /Local k3d node identity differs from the installation target/u });
+});
+
+
+const authorityRefusals: Array<{ name: string; options: LocalFixtureOptions; message: RegExp }> = [
+  { name: 'Docker-context Unix endpoint', options: { endpoint: 'tcp://remote:2375' },
+    message: /remote Docker endpoint/u },
+  { name: 'permitted k3d name', options: { name: 'k3d-foreign-server-0', cluster: 'foreign' },
+    message: /requires verified local k3d nodes/u },
+  { name: 'container count', options: { count: 2 }, message: /Cannot verify/u },
+  { name: 'exact container name', options: { containerName: '/another-container' },
+    message: /Cannot verify/u },
+  { name: 'Running container', options: { running: false }, message: /Cannot verify/u },
+  { name: 'cluster label', options: { cluster: 'another-cluster' }, message: /Cannot verify/u },
+];
+for (const refusal of authorityRefusals) {
+  test(`override authority requires ${refusal.name}`, async function authorityGuard() {
+    const { command, localCommand } = localFixture(refusal.options);
+    async function check() {
+      await checkPackageHosts({ command, localCommand, namespace: 'test',
+        image: 'image@sha256:abc', override: 'accepted-dev-box-366' });
+    }
+    await assert.rejects(check, { reason: 'unverifiable_host', message: refusal.message });
+  });
+}
+
+test('override authority requires DOCKER_HOST Unix endpoint', async function dockerHost(context) {
+  const original = process.env['DOCKER_HOST'];
+  function restoreHost() {
+    if (original === undefined) delete process.env['DOCKER_HOST'];
+    else process.env['DOCKER_HOST'] = original;
+  }
+  context.after(restoreHost);
+  process.env['DOCKER_HOST'] = 'tcp://remote:2375';
+  const { command, localCommand } = localFixture();
+  async function check() {
+    await checkPackageHosts({ command, localCommand, namespace: 'test',
+      image: 'image@sha256:abc', override: 'accepted-dev-box-366' });
+  }
+  await assert.rejects(check, { reason: 'unverifiable_host', message: /remote Docker endpoint/u });
 });
