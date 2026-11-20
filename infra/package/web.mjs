@@ -2,7 +2,10 @@ import { createServer, request } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { organisationPage } from './web-page.mjs';
-import { forwardUpgrade } from './web-upgrade.mjs';
+import { pathToFileURL } from 'node:url';
+import { createLogger } from '@opencrane/observability';
+
+const logger = createLogger('web-upgrade');
 
 const webRoot = '/app/apps/web/dist/web/browser';
 const indexPath = join(webRoot, 'index.html');
@@ -90,6 +93,47 @@ async function handleRequest(incoming, response) {
   await serveFile(response, indexPath);
 }
 
+export function forwardUpgrade(incoming, socket, head, target) {
+  const upstream = request(target, { method: incoming.method, headers: incoming.headers });
+  let upstreamSocket;
+
+  function close() {
+    upstream.destroy();
+    upstreamSocket?.destroy();
+    socket.destroy();
+  }
+
+  function failed(error) {
+    logger.warn({ err: error }, 'WebSocket proxy connection failed');
+    close();
+  }
+
+  function connected(response, remote, remoteHead) {
+    upstreamSocket = remote;
+    // Handle disconnects before writing headers or starting either direction of the stream.
+    remote.on('error', failed);
+    remote.on('close', close);
+    const status = `HTTP/${response.httpVersion} ${response.statusCode} `
+      + `${response.statusMessage}\r\n`;
+    socket.write(status);
+    for (const [name, value] of Object.entries(response.headers)) {
+      if (value !== undefined) socket.write(`${name}: ${value}\r\n`);
+    }
+    socket.write('\r\n');
+    if (remoteHead.length) socket.write(remoteHead);
+    if (head.length) remote.write(head);
+    remote.pipe(socket);
+    socket.pipe(remote);
+  }
+
+  socket.on('error', failed);
+  socket.on('close', close);
+  upstream.on('upgrade', connected);
+  upstream.on('response', close);
+  upstream.on('error', failed);
+  upstream.end();
+}
+
 function handleUpgrade(incoming, socket, head) {
   let url;
   try {
@@ -108,6 +152,9 @@ function handleUpgrade(incoming, socket, head) {
   forwardUpgrade(incoming, socket, head, target);
 }
 
-const server = createServer(handleRequest);
-server.on('upgrade', handleUpgrade);
-server.listen(8080, '0.0.0.0');
+const entrypoint = process.argv[1];
+if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
+  const server = createServer(handleRequest);
+  server.on('upgrade', handleUpgrade);
+  server.listen(8080, '0.0.0.0');
+}
