@@ -80,22 +80,34 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   }
   async function refusal(
     reason: 'admission' | 'upgrade' | 'capacity' | 'unavailable',
-    conversationId?: string, memberId?: string,
+    conversationId?: string, memberId?: string, authenticated = true,
   ) {
     const attemptId = randomUUID();
+    if (!authenticated) {
+      app.log.info({ operation: 'view.refused', attemptId, reason }, 'Anonymous view refusal');
+      return attemptId;
+    }
     try {
       if (!options) throw new Error('Audit unavailable');
       const event = envelope(options.silo, `view-${attemptId}`, 'computer.view_refused',
         { attemptId, reason, ...(conversationId ? { conversationId } : {}) });
-      event.source = 'opencrane-server'; event.principal = memberId ? { kind: 'human', id: memberId } : { kind: 'system', id: 'anonymous-view' };
-      if ((await options.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Audit unavailable');
-    } catch { app.log.error({ operation: 'view.refused', attemptId, reason }, 'View refusal audit unavailable'); }
+      event.source = 'opencrane-server';
+      event.principal = memberId
+        ? { kind: 'human', id: memberId }
+        : { kind: 'system', id: 'anonymous-view' };
+      const result = await options.store.append({ event, expectedSequence: 0 });
+      if (result.status !== 'appended') throw new Error('Audit unavailable');
+    } catch (error) {
+      app.log.error({ operation: 'view.refused', attemptId, reason, err: error },
+        'View refusal audit unavailable');
+    }
     return attemptId;
   }
   app.post('/api/conversations/:conversationId/view', { bodyLimit: 1024 }, async (request, reply) => {
     reply.header('cache-control', 'no-store');
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     let memberId: string | undefined;
+    let authenticated = false;
     const conversationId = admissionPath.exec(request.url)?.[1];
     const sessionId = randomUUID();
     const timing = viewTiming(app.log, sessionId);
@@ -103,6 +115,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     timing('ticket_issue', 'started');
     try {
       const { session, cookie } = authenticate(request.headers);
+      // Audit a refusal only after the session is valid for this organisation.
+      authenticated = true;
       if (!conversationId || request.headers['x-opencrane-view'] !== '1') throw new Error('CSRF check failed');
       memberId = (await deadline(options.feed.memberId(options.silo, config.issuerUrl, session.sub))) ?? undefined;
       if (!memberId) throw new Error('Member required');
@@ -119,11 +133,11 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     } catch (error) {
       if (isUnconfirmed(error)) {
         timing('ticket_issue', 'unavailable', performance.now() - admissionAt);
-        const attemptId = await refusal('unavailable', conversationId, memberId);
+        const attemptId = await refusal('unavailable', conversationId, memberId, authenticated);
         return reply.code(503).send({ status: 'unavailable', attemptId });
       }
       timing('ticket_issue', 'denied', performance.now() - admissionAt);
-      const attemptId = await refusal('admission', conversationId, memberId);
+      const attemptId = await refusal('admission', conversationId, memberId, authenticated);
       return reply.code(403).send({ status: 'refused', attemptId });
     }
   });

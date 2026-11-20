@@ -1,16 +1,21 @@
 import { encodeSession } from '@opencrane/auth';
 import { history } from '@opencrane/models';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import { viewFixture } from './support/view-fixture.ts';
 
 const viewUrl = '/api/conversations/chat/view';
 
-function openDesktop() {
-  throw new Error('A refused request must not open a desktop');
+function openDesktop(): Promise<never> {
+  return Promise.reject(new Error('A refused request must not open a desktop'));
+}
+
+function isRefusalLog(line: string) {
+  return line.includes('view.refused');
 }
 
 it('refuses missing, invalid and wrong-organisation sessions without adding an event', async () => {
+  vi.stubEnv('LOG_LEVEL', 'info');
   const logLines: string[] = [];
   function writeLog(line: string) {
     logLines.push(line);
@@ -34,21 +39,27 @@ it('refuses missing, invalid and wrong-organisation sessions without adding an e
         ...(testCase.cookie ? { cookie: testCase.cookie } : {}),
       };
       const before = await nats.store.head();
-      const response = await app.inject({ method: 'POST', url: viewUrl, headers });
+      const response = await app.inject({
+        method: 'POST', url: viewUrl, headers, payload: { privateMarker: 'body-secret-value' },
+      });
       const body = response.json<{ status: string; attemptId: string }>();
 
       expect(response.statusCode, testCase.name).toBe(403);
-      expect(body, testCase.name).toEqual({ status: 'refused', attemptId: expect.any(String) });
+      expect(body.status, testCase.name).toBe('refused');
+      expect(typeof body.attemptId, testCase.name).toBe('string');
+      expect(Object.keys(body).sort(), testCase.name).toEqual(['attemptId', 'status']);
       expect(await nats.store.head(), testCase.name).toBe(before);
-      expect(logLines.some(line => line.includes(body.attemptId)), testCase.name).toBe(true);
+      expect(logLines.join('\n'), testCase.name).toContain(body.attemptId);
     }
 
-    const refusalLogs = logLines.filter(line => line.includes('view.refused'));
+    const refusalLogs = logLines.filter(isRefusalLog);
     expect(refusalLogs).toHaveLength(cases.length);
     expect(refusalLogs.join('\n')).not.toContain('invalid-cookie-value');
     expect(refusalLogs.join('\n')).not.toContain(wrongOrganisation);
+    expect(refusalLogs.join('\n')).not.toContain('body-secret-value');
   } finally {
     await fixture.close();
+    vi.unstubAllEnvs();
   }
 }, 120_000);
 
@@ -70,7 +81,9 @@ it('saves a refusal for a signed-in person who is not a member', async () => {
     const body = response.json<{ status: string; attemptId: string }>();
 
     expect(response.statusCode).toBe(403);
-    expect(body).toEqual({ status: 'refused', attemptId: expect.any(String) });
+    expect(body.status).toBe('refused');
+    expect(typeof body.attemptId).toBe('string');
+    expect(Object.keys(body).sort()).toEqual(['attemptId', 'status']);
     expect(await nats.store.head()).toBe(before + 1);
     const records = await history(nats.store, `view-${body.attemptId}`, 'test');
     expect(records).toHaveLength(1);
