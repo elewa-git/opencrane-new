@@ -94,7 +94,8 @@ minutes, sampled every 30 seconds. Wait at most two hours.
 
 After install, record exact source and image digests, pod names and limits. Sample
 idle for one person and then run sign-in, chat, upload, desktop viewing and budget
-checks at 1280 and 390 pixels. Repeat with three separate people working concurrently,
+checks at 1280 and 390 pixels. Repeat at 1280 pixels with three separate people
+working concurrently,
 with one assistant computer each. Record the number of simultaneous active computers.
 Use the existing browser helpers rather than changing product admission.
 
@@ -107,7 +108,8 @@ traffic counters, not occupied disk space. Capture filesystem/PVC use and cached
 image bytes separately. Do not count unrelated owner workloads as pilot use.
 
 The recorded local attempt is partial: one-person chat and resource observations
-are available, but desktop viewing and three-person qualification are incomplete.
+are available, and the desktop decoded at 1280 pixels. The mobile PDF step and
+three-person qualification remain incomplete.
 Keep the observations in the Measurements ledger without a minimum machine size.
 Derive a VM recommendation only after both journeys pass. State CPU/RAM spare
 capacity and disk reserve for the OS, images, retained events/files and backups;

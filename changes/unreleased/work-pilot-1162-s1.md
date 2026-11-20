@@ -7,4 +7,6 @@ Keep the packaged website available when a desktop connection fails. Share the W
 connection handling with the development static server and close both peers.
 
 Open the read-only desktop in the packaged website at desktop and phone widths.
-Load the noVNC constructor consistently in development and production builds.
+Load the noVNC constructor consistently in development and production builds. A fresh
+local package decoded a desktop at 1280 pixels; mobile and three-person sizing
+qualification remain incomplete.

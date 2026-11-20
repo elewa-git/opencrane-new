@@ -1,0 +1,48 @@
+npm notice run npx
+npm notice run 'vitest' run apps/web/test/chat-browser.test.ts -t constructs the production desktop viewer --maxWorkers=2
+
+ RUN  v5.0.3 [checkout]
+
+ ❯ apps/web/test/chat-browser.test.ts (5 tests | 1 failed | 4 skipped) 33037ms
+   × constructs the production desktop viewer and decodes pixels through the website proxy 33034ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/web/test/chat-browser.test.ts > constructs the production desktop viewer and decodes pixels through the website proxy
+Error: Command failed: /usr/bin/node scripts/check-live-view-production.mjs
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: The production viewer must construct noVNC and finish its RFB handshake
++ actual - expected
+
++ 'Disconnected'
+- 'Viewing'
+
+    at checkViewer (file://[checkout]/scripts/check-live-view-production.mjs:103:12)
+    at runNextTicks (node:internal/process/task_queues:64:5)
+    at process.processImmediate (node:internal/timers:452:9)
+    at process.callbackTrampoline (node:internal/async_hooks:130:17)
+    at async main (file://[checkout]/scripts/check-live-view-production.mjs:136:7)
+    at async file://[checkout]/scripts/check-live-view-production.mjs:151:1 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'Disconnected',
+  expected: 'Viewing',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.3
+
+ ❯ checkViewer scripts/check-live-view-production.mjs:103:12
+ ❯ main scripts/check-live-view-production.mjs:136:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  15:59:13
+   Duration  33.38s (tests 100%)

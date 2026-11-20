@@ -37,9 +37,10 @@ flowchart LR
    installed k3s checksum. It reapplies the same configuration and restarts k3s;
    running workloads may pause.
 3. **An operator chooses a machine size.** One-person idle and peak
-   observations are recorded for a fresh local package. Desktop viewing and the
-   complete three-person journey remain unqualified. No measured minimum vCPU,
-   RAM or disk size, or spare capacity, can be recommended yet.
+   observations are recorded for a fresh local package. It decoded a desktop at
+   1280 pixels. The phone PDF step and complete three-person journey still need
+   testing. These observations do not support a minimum machine size or a measured
+   spare-capacity recommendation yet.
 
 ## How to run or test it
 
