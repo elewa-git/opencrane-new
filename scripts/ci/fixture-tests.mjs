@@ -72,20 +72,21 @@ export function testArguments(group) {
   const argumentsList = [];
   if (Object.hasOwn(fixtureGroups, group)) {
     argumentsList.push(...fixtureGroups[group]);
-    // Keep concurrent Angular servers from missing their existing startup deadlines.
-    if (group === 'fixtures-browser') {
-      argumentsList.push('--maxWorkers=1');
-    }
   } else if (['1', '2', '3', '4'].includes(group)) {
     argumentsList.push(`--shard=${group}/4`);
-    // Leave CPU time for the NATS, database and OpenFGA fixture processes.
-    argumentsList.push('--maxWorkers=2');
     for (const file of fixtureFiles) {
       argumentsList.push(`--exclude=${file}`);
     }
   } else {
     throw new Error('Unknown test group');
   }
+  // Leave CPU time for native agents and the database, NATS and OpenFGA fixtures.
+  let maximumWorkers = 2;
+  if (group === 'fixtures-browser') {
+    // Keep concurrent Angular servers within their existing startup deadlines.
+    maximumWorkers = 1;
+  }
+  argumentsList.push(`--maxWorkers=${maximumWorkers}`);
   argumentsList.push('--reporter=default', '--reporter=json');
   argumentsList.push('--outputFile.json=.tools/ci/report.json');
   return argumentsList;
