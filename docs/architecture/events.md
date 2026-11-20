@@ -297,6 +297,16 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 ### Conversations and agent activity
 
+The conversations projection records one reference for every global event position,
+including private memory records and reply deltas. Conversation and participation
+closing records retain their conversation id; other streams cannot enter selected
+conversation facts. Decisions first prove that the covered range has no gaps, then
+check selected references against saved events. Individual and batched replay use
+the same inclusion rule. Gateway decisions and approval reads load the facts they
+need and read at most 64 later unprojected global positions. A longer gap requires
+an already complete summary or returns a visible catch-up refusal. Access and
+refusal rules remain in the typed models code.
+
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant and may carry the internal `routinePreparation` claim/worker binding described below; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; `group` records 2–97 distinct people including the creator on new writes (older 100-person records remain readable) and optional paired group snapshot fields, with no assistant or payer; group creation commands are deferred; missing mode in older assistant events reads as `agent_session`; strict `contextKind: shared_child` binds a fixed payer, origin and 1–97 original parent joins including creator; internal creation checks the saved parent request) | OpenFGA explicit participants and group or shared-child creator; creation and participant jobs share the conversation id |

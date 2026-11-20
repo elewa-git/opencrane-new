@@ -8,7 +8,7 @@ import { assistantCreatedDataSchema, computerTurnStartedDataSchema, sessionConfi
   type MemoryIdentity } from '@opencrane/events';
 import { type AuthorityPermissions, type authorityFence, authorityHistoryReader, decisionAuthorityFence,
   currentAuthority, AuthorityRefused } from './authority.ts';
-import { confirmDecisionAccess, decisionActivity } from './decision-activity.ts';
+import { confirmDecisionAccess, decisionActivity, type ActivityReadOptions } from './decision-activity.ts';
 import { mcpPolicy, parseMcpCall, parseMemoryRequest, toolDecision } from './mcp.ts';
 import { closesDecisionTurn } from './approvals.ts';
 import { data } from './state.ts';
@@ -280,7 +280,7 @@ async function memoryToolPolicy(store: EventStore, silo: string,
 type ThreadIdentity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'computer' |
   'generation' | 'conversation' | 'turn' | 'thread'>;
 export async function prepareMemoryActivity(store: EventStore, binding: Binding, claims: ThreadIdentity,
-  parsed: ReturnType<typeof parseMemoryRequest>, deadline: number) {
+  parsed: ReturnType<typeof parseMemoryRequest>, deadline: number | ActivityReadOptions) {
   if (claims.silo !== binding.silo || claims.thread !== parsed.request.params._meta.threadId) {
     throw new Error('Memory thread refused');
   }

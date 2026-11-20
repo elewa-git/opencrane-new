@@ -362,13 +362,18 @@ async function creationAccess(options: ChatOptions, conversationId: string, dead
   }
   // Supply only the immutable creation record to access helpers. Load mutable
   // chat facts before checking access and confirm later activity separately.
-  async function* readStream(name: string, from = 1, deadline = Infinity, closes = false) {
+  async function* readStream(name: string, from = 1, deadline = Infinity, closes = false,
+    through?: number) {
     if (name === subject) {
-      if (from !== 1 || closes) throw new ControlUnavailable('Unexpected history read');
+      const creationPosition = creation?.sequence;
+      if ((from !== 1 && from !== creationPosition) || closes ||
+          (through !== undefined && through !== creationPosition)) {
+        throw new ControlUnavailable('Unexpected history read');
+      }
       if (creation) yield creation;
       return;
     }
-    yield* options.store.readStream(name, from, deadline, closes);
+    yield* options.store.readStream(name, from, deadline, closes, through);
   }
   function get(target: EventStore, key: string | symbol): unknown {
     if (key === 'readStream') return readStream;

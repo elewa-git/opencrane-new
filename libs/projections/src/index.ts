@@ -73,3 +73,5 @@ export { childRequests } from './child-requests.ts';
 export { routines, routineCandidatePage } from './routines.ts';
 export { connectionProfiles } from './connection-profiles.ts';
 export { rebuildRoutineProjection } from './routine-rebuild.ts';
+export { decisionConversationPositions, type DecisionConversationLookup }
+  from './decision-conversation-index.ts';

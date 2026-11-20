@@ -166,8 +166,10 @@ Takeover remains disabled. Fresh-install qualification is NOT RUN.
 
 ## Tool history and the shared request deadline
 
-Ordinary MCP decisions read conversation history before taking the access snapshot.
-History and access keep the same two-second request deadline. The gateway keeps its
+Ordinary MCP decisions locate their conversation records through the conversation
+projection, then read those saved events and later unprojected activity before taking
+the access snapshot. Earlier messages are represented by the latest message needed
+for approval cancellation. History and access keep the same two-second request deadline. The gateway keeps its
 original two-second authorisation timeout. Managed-model and memory preparation keep
 their existing separate deadlines, including memory's fifteen-second gateway wait.
 
@@ -175,7 +177,7 @@ their existing separate deadlines, including memory's fifteen-second gateway wai
 on history, and 1,900 ms on history followed by 200 ms on access. It advances the
 monotonic clock while real service timers keep running. The ordinary call must send
 once. Both over-budget calls must return 503 with one saved refusal, no remote
-connection and no reservation. All require full history to precede access reads.
+connection and no reservation. All require the bounded conversation read to precede access reads.
 
 [The investigation](../../docs/process/evidence/ci-flakes-8.md) records the
 main-branch comparison and own checks.
@@ -3370,7 +3372,9 @@ serverTime, reason, scope, eligibleActions and a session/chat-bound csrf value.
 Statuses include none, requested, pausing, paused, failed and unverified.
 Only the requester receives commandId and their own affectedTurnIds in this chat.
 Direct and group chats return not_applicable. Reads save nothing and touch no computer.
-Access helpers reuse the loaded creation event; later write checks read only new activity.
+Access helpers reuse the loaded creation event, including repeat reads at its exact saved
+position. Other conversation positions and close-inclusive reads are refused by this
+creation-only reader. Later write checks read only new activity.
 
 POST takes exactly commandId, requesterEventId and generation. Session, silo, Origin
 and CSRF checks precede body validation and the request switch. Registration defaults
@@ -5145,7 +5149,8 @@ HTTP approval decisions load history with `deferInvalidation: true`. The read pr
 an invalidation without saving it. The route checks the request's conversation,
 requester and participation position, loads turn activity, then starts the short
 write check. `currentAuthority` and the final access confirmation precede the save.
-Foreign ids and removal during history loading leave the approval stream unchanged.
+Foreign ids are refused before their conversation history is loaded or cancellation is prepared.
+Removal during history loading leaves the approval stream unchanged.
 The save uses the original approval position and the write check's deadline.
 
 ## Exact member admission history progress

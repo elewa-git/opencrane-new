@@ -1,3 +1,6 @@
+import { createEventStore, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import type { DecisionConversationRead } from '../src/decision-conversation.ts';
+import { decisionConversationReader } from '../src/decision-conversation.ts';
 import { freePort } from '@opencrane/event-store/testing';
 import type { McpDispatchOptions } from '../src/mcp-dispatch.ts';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
@@ -19,7 +22,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
-import { pgDb, ProjectionRunner } from '@opencrane/projections';
+import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { reviewToolPolicy, readToolPolicy, modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage, models, settlementHandler, startDecision, startGateway } from '../src/index.ts';
 
@@ -77,6 +80,13 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
+  const projectionStore = await createEventStore(nats.connection, nats.store.clock);
+  const projectionDb = pgDb(dbs.queue);
+  const decisionRunner = new ProjectionRunner(projectionDb, projectionStore, logger);
+  await decisionRunner.initialise(conversations);
+  // Keep gateway reads separate from backend query probes, as in the real processes.
+  const decisionDb = pgDb(dbs.queue);
+  const conversationHistory = decisionConversationReader(nats.store, decisionDb, 'test');
   const append = async (subject: string, type: string, payload: unknown) => {
     let data = payload;
     if (type === 'mcp.server_discovered') {
@@ -89,6 +99,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     // Seed saved history, including old participant subjects that commands now refuse.
     const savedHistory = [event];
     await nats.seed(savedHistory);
+    await decisionRunner.run(conversations);
     if (['assistant.created', 'conversation.created', 'team.created', 'team.member_added'].includes(type)) await auth.handler.handle(event, db);
     return event;
   };
@@ -220,7 +231,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
     revisionHeader: 'x-opencrane-mcp-revision' as const }];
   const dispatchOptions: McpDispatchOptions = { routes: mcpRoutes, requireLeader: async function requireLeader() {},
     requireCatalogue: function requireCatalogue(_serverId: string) {} };
-  let decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
+  let decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens, conversationHistory },
     binding, 0, undefined, dispatchOptions);
   let gatewayChild: ChildProcess | undefined;
   function rememberGatewayChild(child: ChildProcess,
@@ -313,7 +324,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
   return { databaseUrl: dbs.queue.options.connectionString,
     gatewayChild: () => gatewayChild,
     dispatchOptions, mcpPrecondition, tokens, stopDispatch, refuseMcpConnection,
-    upstreamBody: () => upstreamBody, get actor() { return actor; }, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+    upstreamBody: () => upstreamBody, get actor() { return actor; }, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer, conversationHistory },
     gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     providerAuthHashes, decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
@@ -402,7 +413,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false,
       await decision.close();
       actor = new BudgetActor(nats.store, 'test', actor.now);
       await actor.start();
-      decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens },
+      decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer, memory: tokens, conversationHistory },
         binding, decisionPort, undefined, dispatchOptions);
       options = { ...options, decisionUrl: decision.url };
       gateway = await startGateway(options);
@@ -451,4 +462,18 @@ export async function reviewCatalogue(setup: Awaited<ReturnType<typeof fixture>>
   const result = await reviewToolPolicy(setup.nats.store, setup.auth.binding, 'alice',
     serverId, command);
   expect(result.status).toBe('appended');
+}
+
+// Use saved rows as the read table in small fixtures without a conversation projection.
+export function conversationHistoryFixture(store: EventStore, silo: string) {
+  async function read(request: DecisionConversationRead) {
+    const rows = await history(store, `conversation-${request.conversationId}`, silo,
+      request.deadline);
+    function captured(row: StoredEvent) {
+      return row.sequence <= request.head;
+    }
+    const conversation = rows.filter(captured);
+    return { conversation, sequence: conversation.at(-1)?.sequence ?? 0 };
+  }
+  return read;
 }

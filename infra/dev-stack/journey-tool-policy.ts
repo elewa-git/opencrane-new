@@ -1,15 +1,25 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
 import type { Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import type { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { catalogueDigest, toolReviewDigest } from '@opencrane/events/mcp-catalogue';
 import { readToolPolicy } from '@opencrane/models';
+import { toolPolicySchema } from '@opencrane/protocol';
 
 type Catalogue = ReturnType<typeof mcpServerDiscoveredDataSchema.parse>;
 type Tool = NonNullable<Catalogue['tools']>[number];
 type Append = (type: string, subject: string, data: Record<string, unknown>) => Promise<void>;
+const policyToolSchema = toolPolicySchema.shape.tools.element;
+const reviewedModeSchema = policyToolSchema.pick({ name: true, mode: true });
+const reviewReplySchema = z.object({ status: z.string(), sequence: z.number().optional(),
+  policy: z.object({ tools: z.array(reviewedModeSchema).optional() }).optional() });
+
+function selectedToolMode(tool: { name?: unknown; mode?: unknown }) {
+  return { name: tool.name, mode: tool.mode };
+}
 
 export function journeyTool(name: string, readOnly: boolean, review?: Tool['review']): Tool {
   const annotations = { readOnlyHint: readOnly, destructiveHint: !readOnly };
@@ -49,11 +59,31 @@ export async function reviewJourneyTools(ownerPage: Page, store: EventStore, sil
     catalogue.serverInfo = serverInfo;
   }
   await append('mcp.server_discovered', `mcp-${serverId}`, catalogue);
+  const saved = await readToolPolicy(store, silo, serverId);
+  assert.equal(saved.catalogue?.schemaDigest, catalogue.schemaDigest);
+  assert.equal(saved.tools.length, tools.length);
 
-  // Read the saved events so a slow projection cannot supply an older review revision.
+  const input = { ownerPage, store, silo, origin, serverId };
+  await reviewSavedJourneyTools(input, modes);
+}
+
+export type JourneyToolReview = {
+  ownerPage: Page;
+  store: EventStore;
+  silo: string;
+  origin: string;
+  serverId: string;
+};
+
+export async function reviewSavedJourneyTools(input: JourneyToolReview,
+  modes: ('allow' | 'ask' | 'block')[]) {
+  const { ownerPage, store, silo, origin, serverId } = input;
+  // Read saved definitions so a slow projection cannot supply an older review revision.
   const url = `${origin}/api/org/integrations/${serverId}`;
   const policy = await readToolPolicy(store, silo, serverId);
-  assert.equal(policy.catalogue?.schemaDigest, catalogue.schemaDigest);
+  const catalogue = policy.catalogue;
+  assert(catalogue?.tools, 'Discovery supplies the exact definitions for review');
+  const tools = catalogue.tools;
   assert.equal(policy.tools.length, tools.length);
   for (const tool of policy.tools) {
     assert.equal(tool.reviewed, false, 'Discovery cannot authorise a tool');
@@ -71,18 +101,21 @@ export async function reviewJourneyTools(ownerPage: Page, store: EventStore, sil
   const request = { headers: { origin }, data: command };
   const saved = await ownerPage.request.post(`${url}/review`, request);
   assert.equal(saved.status(), 200, 'Owner saves the exact tool review');
-  const savedReply = await saved.json() as {
-    status?: unknown;
-    sequence?: unknown;
-    policy?: { tools?: Array<{ name?: unknown; mode?: unknown }> };
-  };
+  const savedReply = reviewReplySchema.parse(await saved.json());
   assert.equal(savedReply.status, 'appended');
   assert(Number.isInteger(savedReply.sequence) && Number(savedReply.sequence) > 0,
     'The saved review has a positive sequence');
   if (savedReply.policy) {
-    assert.deepEqual(savedReply.policy.tools?.map((tool) => ({ name: tool.name, mode: tool.mode })),
-      choices.map((choice) => ({ name: choice.name, mode: choice.mode })));
+    const savedModes = savedReply.policy.tools?.map(selectedToolMode);
+    const expectedModes = choices.map(selectedToolMode);
+    assert.deepEqual(savedModes, expectedModes);
   }
-  const publication = { serverId, publishedBy: 'zitadel-owner' };
-  await append('mcp.server_published', `mcp-${serverId}`, publication);
+  const reviewed = await readToolPolicy(store, silo, serverId);
+  const publication = { commandId: randomUUID(), expectedSequence: reviewed.sequence,
+    reviewRevision: reviewed.reviewRevision };
+  const publishRequest = { headers: { origin }, data: publication };
+  const published = await ownerPage.request.post(`${url}/publication`, publishRequest);
+  assert.equal(published.status(), 200, 'Owner publishes the exact saved review');
+  const publicationReply = reviewReplySchema.parse(await published.json());
+  assert.equal(publicationReply.status, 'appended');
 }

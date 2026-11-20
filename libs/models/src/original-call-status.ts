@@ -6,7 +6,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { OriginalCallStatus } from '@opencrane/protocol';
 import { history } from './event-history.ts';
 import { invalidatesApproval, readApproval } from './approvals.ts';
-import { approvalActivity } from './decision-activity.ts';
+import { approvalActivity, activityReadOptions, type ActivityReadOptions } from './decision-activity.ts';
 import { utcInstant } from './approval-record.ts';
 
 export interface RetainedCall {
@@ -154,9 +154,11 @@ function retryResult(current: Awaited<ReturnType<typeof readApproval>>,
 
 export async function readOriginalCallStatus(store: EventStore, silo: string,
   logicalRequestId: string, retained: RetainedCall | undefined,
-  deadline = performance.now() + 10_000, now?: Date) {
+  value: number | ActivityReadOptions = performance.now() + 10_000, now?: Date) {
+  const options = activityReadOptions(value);
+  const deadline = options.deadline;
   // Read saved work before the caller's final access check. This read never writes.
-  const readOptions = { deadline, ...(now ? { now } : {}), deferInvalidation: true };
+  const readOptions = { ...options, ...(now ? { now } : {}), deferInvalidation: true };
   const current = await readApproval(store, silo, logicalRequestId,
     readOptions);
   const request = current.request;
@@ -170,7 +172,7 @@ export async function readOriginalCallStatus(store: EventStore, silo: string,
     lastCallId = saved.callId;
   }
   const activity = await approvalActivity(store, silo, request.assistantId,
-    request.conversationId, request.turnId, deadline);
+    request.conversationId, request.turnId, options);
   const firstStart = computerTurnStartedDataSchema.safeParse(
     activity.computer.firstStart?.event.data);
   const retainedComputerId = firstStart.success ? firstStart.data.computerId : undefined;

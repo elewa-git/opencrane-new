@@ -626,9 +626,10 @@ async function keepsApprovalHistoryOutsideShortCheck() {
     const approvalId = cards[0]!.approvalId;
     const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
     async function* refuseFullHistoryDuringShortCheck(
-      subject: string, fromSequence = 1, deadline = Infinity,
+      ...parameters: Parameters<typeof originalRead>
     ) {
-      for await (const row of originalRead(subject, fromSequence, deadline)) {
+      const [subject, fromSequence = 1, deadline = Infinity] = parameters;
+      for await (const row of originalRead(...parameters)) {
         if (subject === 'conversation-conversation' && fromSequence === 1 &&
             row.event.type !== 'conversation.created' &&
             deadline - performance.now() < 2100) {
@@ -1015,9 +1016,9 @@ async function refusesAnotherCallsObservation() {
     const foreignObservation = { ...observation };
     const foreign = envelope('foreign', `decision-${permitId}`,
       'tool.dispatch_recorded', foreignObservation);
-    async function* readWithForeignObservation(subject: string, fromSequence = 1,
-      deadline = Infinity, includeConversationCloses = false) {
-      yield* originalRead(subject, fromSequence, deadline, includeConversationCloses);
+    async function* readWithForeignObservation(...parameters: Parameters<typeof originalRead>) {
+      const [subject] = parameters;
+      yield* originalRead(...parameters);
       if (subject === `decision-${permitId}`) {
         yield { sequence: Number.MAX_SAFE_INTEGER, event: foreign };
       }
@@ -1396,19 +1397,29 @@ async function refusesForeignTakeoverCancellation() {
     const current = await readApproval(setup.nats.store, 'test', cards[0]!.approvalId);
     const approvalId = 'c'.repeat(64);
     const subject = `approval-${approvalId}`;
-    const request = { ...current.request, approvalId, conversationId: 'other-conversation',
-      requesterId: 'bob' };
+    const request = { ...current.request, approvalId, conversationId: 'other-conversation' };
     await setup.append(subject, 'tool.approval_requested', request);
     await saveTakeover(setup);
     const before = await history(setup.nats.store, subject, 'test');
+    const readStream = setup.nats.store.readStream.bind(setup.nats.store);
+    const foreignConversationReads: string[] = [];
+    async function* recordForeignConversation(...args: Parameters<typeof readStream>) {
+      if (args[0] === 'conversation-other-conversation') {
+        foreignConversationReads.push(args[0]);
+      }
+      yield* readStream(...args);
+    }
+    vi.spyOn(setup.nats.store, 'readStream').mockImplementation(recordForeignConversation);
     const response = await setup.app.inject({ method: 'POST',
       url: '/api/conversations/conversation/approvals',
       headers: { ...session, 'x-csrf-token': csrf },
       payload: { approvalId, decision: 'rejected' } });
+    expect(foreignConversationReads).toEqual([]);
     expect(response.statusCode, response.body).toBe(403);
     expect(response.json()).toEqual({ status: 'refused' });
     expect(await history(setup.nats.store, subject, 'test')).toEqual(before);
   } finally {
+    vi.restoreAllMocks();
     await setup.close();
   }
 }

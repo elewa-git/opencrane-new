@@ -15,6 +15,7 @@ const fixtureGroups = {
     'scripts/stage-b-read.test.mjs',
   ],
   'fixtures-browser': [
+    'apps/server/test/approval-history-fixture.test.ts',
     'apps/server/test/approvals.test.ts',
     'apps/server/test/audit-browser.test.ts',
     'apps/server/test/bootstrap-browser.test.ts',

@@ -1,3 +1,4 @@
+import type { DecisionConversationReader } from './decision-conversation.ts';
 import { memberAuthorisation, grantStream, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { parseMemoryRequest } from './mcp.ts';
@@ -9,9 +10,11 @@ type Identity = Pick<MemoryContext, 'silo' | 'requester' | 'assistant' | 'comput
   'generation' | 'conversation' | 'turn' | 'thread'>;
 
 export async function prepareMemoryReads(store: EventStore, binding: Binding,
-  claims: Identity, parsed: ReturnType<typeof parseMemoryRequest>) {
+  claims: Identity, parsed: ReturnType<typeof parseMemoryRequest>,
+  conversationHistory?: DecisionConversationReader) {
   const deadline = performance.now() + 10_000;
-  const activity = await prepareMemoryActivity(store, binding, claims, parsed, deadline);
+  const activityOptions = { deadline, conversationHistory };
+  const activity = await prepareMemoryActivity(store, binding, claims, parsed, activityOptions);
   const readScopes: string[] = [];
   const writeScopes: string[] = [];
   if (parsed.input) {

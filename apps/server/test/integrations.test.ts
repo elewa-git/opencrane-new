@@ -1,3 +1,5 @@
+import { integrationSessionHeaders } from './support/integration-session.ts';
+import { conversationHistoryFixture } from '@opencrane/models/testing';
 /* eslint max-lines: ["error", { max: 2189, skipBlankLines: true, skipComments: true }] */
 import type { AppendCommand } from '@opencrane/event-store';
 import { Writable } from 'node:stream';
@@ -87,11 +89,7 @@ async function mcp(serverId: string, type: string, data: Record<string, unknown>
   await append(fixture(type, `mcp-${serverId}`, { serverId, ...data }, silo));
 }
 
-function headers(sub: string, orgId = 'org-acme') {
-  const now = Math.floor(Date.now() / 1000);
-  return { cookie: `${config.cookieName}=${encodeSession(config,
-    { sub, orgId, roles: ['owner'], authTime: now, exp: now + 60 })}` };
-}
+const headers = integrationSessionHeaders(config);
 
 beforeEach(async () => {
   dbs = await databases();
@@ -155,7 +153,9 @@ beforeEach(async () => {
   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
   await writeFile(`${keyDirectory}/key.pem`, key.privateKey, { mode: 0o600 });
   tokens = await tokenIssuer({ privateKeyPath: `${keyDirectory}/key.pem`, issuer: 'https://lifecycle.test/' });
-  decision = await startDecision(actor, { jwks: tokens.jwks, issuer: 'https://lifecycle.test/' }, authorisation.binding);
+  const conversationHistory = conversationHistoryFixture(nats.store, 'test');
+  decision = await startDecision(actor, { jwks: tokens.jwks,
+    issuer: 'https://lifecycle.test/', conversationHistory }, authorisation.binding);
   app = buildServer(config, { audit: { silo: 'test', store: nats.store, db: pgDb(dbs.queue), feed, binding: authorisation.binding }, integrations: { silo: 'test', store: nats.store, feed, catalogue, budget: { decisionUrl: decision.url, tokens }, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
     now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', store: nats.store, feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });

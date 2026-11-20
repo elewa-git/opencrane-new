@@ -5,22 +5,25 @@ import { toolApprovalRequestedDataSchema, toolDispatchRecordedDataSchema,
 import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
-import { approvalGrantRevoked, approvalPolicyChange, approvalTakenOver }
-  from './approval-cancellation.ts';
+import { approvalInvalidation, invalidatesApproval, type ApprovalConversationSnapshot,
+  type ApprovalInvalidationRead } from './approval-invalidation.ts';
+import { approvalPolicyChange } from './approval-cancellation.ts';
+export { invalidatesApproval, closesDecisionTurn } from './approval-invalidation.ts';
 import { approvalRecord } from './approval-record.ts';
 import type { JsonValue } from '@opencrane/events/lossless-json';
 import type { mcpPolicy } from './mcp.ts';
+import type { DecisionConversationReader } from './decision-conversation.ts';
 
 
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
 type Policy = Awaited<ReturnType<typeof mcpPolicy>> & { dispatchBinding?: string };
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
-interface ApprovalReadOptions {
+interface ApprovalReadOptions extends ApprovalConversationSnapshot {
   deferInvalidation?: boolean;
   now?: Date;
   deadline?: number;
-  conversationRows?: StoredEvent[] | undefined;
+  conversationHistory?: DecisionConversationReader | undefined;
 }
 
 interface ApprovalCardsOptions extends ApprovalReadOptions {
@@ -149,8 +152,10 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   let canRetry = dispatch.canRetry;
   const needsCurrentChecks = canRetry || ['requested', 'approved'].includes(state);
   if (needsCurrentChecks) {
-    const checked = await invalidated(store, silo, request, rows[0]!.sequence,
-      deadline, options.conversationRows);
+    const conversation = await approvalConversationSnapshot(store, silo, request, options);
+    const invalidationRead: ApprovalInvalidationRead = { request, requestPosition: rows[0]!.sequence,
+      deadline, snapshot: conversation };
+    const checked = await approvalInvalidation(store, silo, invalidationRead);
     conversationPosition = checked.conversationPosition;
     let terminal = approvalTerminalState(checked.closed, request.expiresAt, now);
     if (checked.cancelReason === 'takeover' && permitId) {
@@ -170,12 +175,32 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
       }
       const result = await store.append({ event, expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
-      const readOptions = { now, deadline, conversationRows: options.conversationRows };
+      const readOptions = { now, deadline, conversationRows: conversation.conversationRows,
+        conversationPosition, conversationHistory: options.conversationHistory };
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
   return { ...record, request, state, sequence, requestPosition: rows[0]!.sequence,
     conversationPosition, canRetry, toolReplied, retryRequested };
+}
+
+async function approvalConversationSnapshot(store: EventStore, silo: string, request: Request,
+  options: ApprovalReadOptions): Promise<ApprovalConversationSnapshot> {
+  const deadline = options.deadline ?? Infinity;
+  if (options.conversationRows) {
+    return { conversationRows: options.conversationRows,
+      conversationPosition: options.conversationPosition };
+  }
+  if (!options.conversationHistory) {
+    const conversationRows = await history(
+      store, `conversation-${request.conversationId}`, silo, deadline);
+    return { conversationRows, conversationPosition: options.conversationPosition };
+  }
+  const head = await store.head(undefined, deadline);
+  const lookup = { conversationId: request.conversationId, turnId: request.turnId,
+    deadline, head };
+  const result = await options.conversationHistory(lookup);
+  return { conversationRows: result.conversation, conversationPosition: result.sequence };
 }
 
 async function verifiedDispatch(store: EventStore, silo: string, approvalId: string,
@@ -207,59 +232,6 @@ function approvalTerminalState(closed: boolean, expiresAt: string, now: Date) {
     return 'expired' as const;
   }
   return undefined;
-}
-
-export function invalidatesApproval(event: EventEnvelope, turnId: string) {
-  if (['conversation.closed', 'message.posted', 'agent.turn_started'].includes(event.type)) {
-    return true;
-  }
-  return closesDecisionTurn(event, turnId);
-}
-
-export function closesDecisionTurn(event: EventEnvelope, turnId: string) {
-  const closesTurn = [
-    'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',
-  ].includes(event.type);
-  return closesTurn && z.object({ turnId: z.string() }).parse(event.data).turnId === turnId;
-}
-
-async function invalidated(store: EventStore, silo: string, request: Request,
-  requestPosition: number, deadline: number,
-  conversationRows?: StoredEvent[]) {
-  if (await approvalTakenOver(store, silo, request, requestPosition, deadline)) {
-    return { closed: true, conversationPosition: 0, cancelReason: 'takeover' as const };
-  }
-  const rows = conversationRows ?? await history(
-    store, `conversation-${request.conversationId}`, silo, deadline);
-  function startsBoundTurn(row: StoredEvent) {
-    return row.event.type === 'agent.turn_started' &&
-      z.object({ turnId: z.string() }).parse(row.event.data).turnId === request.turnId;
-  }
-  function invalidatesBoundApproval(row: StoredEvent) {
-    return invalidatesApproval(row.event, request.turnId);
-  }
-  const start = rows.findIndex(startsBoundTurn);
-  const later = rows.slice(start + 1);
-  const conversationPosition = rows.at(-1)?.sequence ?? 0;
-  if (start < 0) return { closed: true, conversationPosition };
-  const invalidating = later.find(invalidatesBoundApproval);
-  if (invalidating) {
-    const cancelReason = turnCancellationReason(invalidating.event.type);
-    return { closed: true, conversationPosition, cancelReason };
-  }
-  if (await approvalGrantRevoked(store, silo, request, requestPosition, deadline)) {
-    return { closed: true, conversationPosition, cancelReason: 'grant_revoked' as const };
-  }
-  const policy = await approvalPolicyChange(store, silo, request, deadline);
-  return { ...policy, conversationPosition };
-}
-
-function turnCancellationReason(type: string): ApprovalCard['cancelReason'] {
-  if (type === 'conversation.closed') return 'conversation_closed';
-  if (type === 'message.posted') return 'new_message';
-  if (type === 'agent.turn_started') return 'new_turn';
-  if (type === 'agent.turn_stop_requested') return 'turn_stopped';
-  return 'turn_ended';
 }
 
 async function approvalChangedSinceRead(store: EventStore, silo: string,
@@ -361,7 +333,8 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   memberId: string, options: ApprovalCardsOptions): Promise<ApprovalCard[]> {
   const now = options.now ?? new Date();
   const deadline = options.deadline ?? Infinity;
-  const readOptions = { now, deadline, deferInvalidation: options.readOnly === true };
+  const readOptions = { now, deadline, conversationHistory: options.conversationHistory,
+    deferInvalidation: options.readOnly === true };
   const ids: string[] = [];
   for (const { event } of options.approvalRows) {
     if (event.silo !== silo || event.type !== 'tool.approval_requested') continue;

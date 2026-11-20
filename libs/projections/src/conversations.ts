@@ -8,6 +8,8 @@ import type { Logger } from '@opencrane/observability';
 import type { Db, Query } from './db.ts';
 import { createConversationListState, applyConversationPreference }
   from './conversation-list-state.ts';
+import { createDecisionConversationIndex, indexDecisionConversationEvent }
+  from './decision-conversation-index.ts';
 
 export const conversations: Projection = {
   name: 'conversations',
@@ -15,31 +17,52 @@ export const conversations: Projection = {
   async create(db) {
     await requireLegacyReplay(db);
     await requireActivityReplay(db);
+    await requireDecisionIndexReplay(db);
     await createConversationTables(db);
     await refuseMissingParticipation(db);
   },
   async drop(db) {
     const tables = 'conversation_participants, conversations, conversation_feed, ' +
-      'conversation_legacy_participation, conversation_list_state';
+      'conversation_legacy_participation, conversation_list_state, ' +
+      'decision_conversation_events, decision_conversation_coverage';
     await db.query(`DROP TABLE IF EXISTS ${tables}`);
   },
   async apply(db, event, position) {
-    if (await applyConversationPreference(db, event, position)) return;
-    const entry = conversationFeedEntry(event);
-    if (!entry) return;
-    const { conversationId, data } = entry;
-    await validateMode(db, event, conversationId);
-    await foldConversation(db, event, conversationId, position);
-    if (event.subject === `conversation-${conversationId}` &&
-        event.type.startsWith('participant.')) {
-      await db.query('INSERT INTO conversation_legacy_participation VALUES ($1,$2,$3,$4)',
-        [event.silo, conversationId, position, event.id]);
-    }
-    await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
-    await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
+    // Keep validation errors ahead of reference conflicts. The runner commits both together.
+    await applyConversationEvent(db, event, position);
+    await indexDecisionConversationEvent(db, event, position);
   },
 };
+
+async function applyConversationEvent(db: Query, event: EventEnvelope, position: number) {
+  if (await applyConversationPreference(db, event, position)) return;
+  const entry = conversationFeedEntry(event);
+  if (!entry) return;
+  const { conversationId, data } = entry;
+  await validateMode(db, event, conversationId);
+  await foldConversation(db, event, conversationId, position);
+  if (event.subject === `conversation-${conversationId}` &&
+      event.type.startsWith('participant.')) {
+    await db.query('INSERT INTO conversation_legacy_participation VALUES ($1,$2,$3,$4)',
+      [event.silo, conversationId, position, event.id]);
+  }
+  await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
+  await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
+}
+
+async function requireDecisionIndexReplay(db: Query) {
+  const result = await db.query<{ present: string | null; coverage: string | null; feed: string | null; sequence: string }>(`
+    SELECT to_regclass('decision_conversation_events')::text AS present,
+      to_regclass('decision_conversation_coverage')::text AS coverage,
+      to_regclass('conversation_feed')::text AS feed, sequence
+      FROM projection_checkpoints WHERE name='conversations'`);
+  const saved = result.rows[0];
+  if (saved?.feed && (!saved.present || !saved.coverage) && Number(saved.sequence) > 0) {
+    throw new Error('Conversation tables need rebuilding. Stop conversation readers and workers, '
+      + 'then run npm run replay -- conversations --confirm-conversations-stopped');
+  }
+}
 
 async function requireActivityReplay(db: Query): Promise<void> {
   const result = await db.query<{ name: string | null }>(
@@ -74,6 +97,7 @@ async function requireLegacyReplay(db: Query) {
 }
 
 async function createConversationTables(db: Query): Promise<void> {
+  await createDecisionConversationIndex(db);
   await db.query(`CREATE TABLE IF NOT EXISTS conversation_feed (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
     event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
@@ -465,6 +489,7 @@ async function applyReplies(db: Query, events: StoredEvent[]): Promise<void> {
   const placeholders: string[] = [];
   for (const stored of events) {
     const event = stored.event;
+    await indexDecisionConversationEvent(db, event, stored.sequence);
     if (event.type !== 'agent.message_delta') {
       throw new Error('Expected a reply delta');
     }

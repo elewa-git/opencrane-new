@@ -6,6 +6,10 @@ This package starts a full local copy of OpenCrane for development and testing.
 It brings the apps and services together and checks product journeys.
 The checks use a browser to sign in, chat and reload saved replies.
 Developers can also check files, spending and organisation settings.
+The focused tool approval driver asks the free model to use a reviewed demo tool
+in a long chat, through the guarded local TLS transport. It seeds earlier messages
+in small batches and checks projection progress between them. It checks browser approval,
+one use and Stop refusing an already approved request.
 
 ## Where it fits
 
@@ -19,8 +23,9 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps and browser checks| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
+  stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -->|checks and launches| package["infra/package<br/>Helm install"]
 ```
 

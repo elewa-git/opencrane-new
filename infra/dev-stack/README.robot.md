@@ -628,7 +628,17 @@ infra/dev-stack/journey.sh
 infra/dev-stack/down.sh
 ```
 
-`up` includes the core journey. Every command also accepts `--id 1` or `--id 2`,
+`up` includes CORE by default. After a fresh secondary CORE run, start the guarded
+TLS launcher and set `APPROVAL_JOURNEY_ONLY=1` for `journey.sh` to check tool approval
+and denial after 500 saved messages in one chat at both browser widths. Seed ten
+messages and their completion events per batch and wait for the conversation
+projection between batches. Set up the timed tool review after history preparation.
+This mode runs the common sign-in and membership checks, then the approval driver
+and shared cleanup. The source regression retains 3,000 messages and completions.
+The driver checks browser approval, exact forwarded bytes, single use, reload,
+denial and an already approved request refused after Stop, using the free model.
+
+Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
 
 Secondary Zitadel setup verifies the fixed OpenCrane 2 Dev organisation and project
@@ -1975,7 +1985,8 @@ use temporary namespaces on a claimed spare stack. Startup does not install them
 - Allow an explicit owner real-provider start from an interactive terminal, while refusing fleet tasks.
   Check readiness without sending chat prompts. Restore the saved mode and stop newly
   launched services if the start fails or is interrupted.
-- Run browser checks against real local services. The approval journey is currently skipped.
+- Run browser checks against real local services. The focused approval journey uses
+  the guarded local TLS launcher, current publication commands and gateway acknowledgement.
 - Declare review details for read-only test tools before the Owner selects Allow.
   Discovery leaves every tool blocked until the exact review is saved.
 - Check integration list rows with a hosted display fixture. The fixture makes no
@@ -2026,8 +2037,16 @@ report readiness. The [demo guide](../../docs/process/demo/README.md)
 keeps the remaining live checks explicit.
 
 The models process gets a separate control port for checking loaded configuration.
-The stack never forwards it. The approval journey is skipped while publication
-and call checks are being connected.
+The stack never forwards it. After a fresh CORE run, `stage-b-live.ts` starts the
+guarded demo transport. Run `journey.sh` with `APPROVAL_JOURNEY_ONLY=1` to seed
+500 completed messages and request a demo write with the free Stage B model stub.
+Seed ten messages and their completion events at a time, then require their conversation
+projection checkpoint before publishing more. Each wait keeps its 30-second limit.
+Check browser approval, the returned tool result, exact forwarded bytes, single use,
+denial and browser Stop, at 1280 and 390 pixels. Approve an exact request on the native turn
+before pressing Stop; sending those same bytes afterwards must refuse without an effect.
+The launcher records synthetic write bytes in `demo-calls.jsonl`; direct readback
+confirms the effect count independently. Keep the launcher running until checks finish.
 
 1. **A developer starts OpenCrane.** The scripts start the databases and services, then
    start the server, workers and website. Startup waits up to five minutes for the website

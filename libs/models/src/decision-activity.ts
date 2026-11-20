@@ -6,7 +6,19 @@ import { outputReportTypes, type decisionAuthorityFence } from './authority.ts';
 import { data } from './state.ts';
 import { managedProviderCallsEnabled } from './provider-turns.ts';
 import { decisionProvider } from './decision-provider.ts';
+import type { DecisionConversationReader } from './decision-conversation.ts';
 import { decisionChatSummary } from './decision-summary.ts';
+
+export type ActivityReadOptions = { deadline: number; conversationHistory?:
+  DecisionConversationReader | undefined };
+
+export type TurnActivityRequest = { assistantId: string; conversationId: string; turnId: string;
+  head: number; options: ActivityReadOptions };
+
+export function activityReadOptions(value: number | ActivityReadOptions): ActivityReadOptions {
+  if (typeof value === 'number') return { deadline: value };
+  return value;
+}
 
 const harmlessConversationTypes = [
   'file.uploaded', 'file.rejected', 'file.delivered', 'message.posted', 'agent.turn_started',
@@ -29,12 +41,14 @@ export async function confirmDecisionAccess(
 }
 
 export async function decisionActivity(store: EventStore, silo: string, assistantId: string,
-  conversationId: string, turnId: string, deadline: number,
+  conversationId: string, turnId: string, value: number | ActivityReadOptions,
   choice?: { providerId: string; model: string }) {
+  const options = activityReadOptions(value);
+  const deadline = options.deadline;
   const head = await store.head(undefined, deadline);
   const managedCallsEnabled = await managedProviderCallsEnabled(store, silo, deadline);
-  const activity = await readTurnActivity(store, silo, assistantId, conversationId,
-    turnId, deadline, head);
+  const request = { assistantId, conversationId, turnId, head, options };
+  const activity = await readTurnActivity(store, silo, request);
   const provider = choice === undefined ? undefined
     : await decisionProvider(store, silo, choice, deadline, head);
   async function confirm(deadline: number, needsApproval: boolean, refuseMemoryLoads = false) {
@@ -51,14 +65,18 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
 }
 
 export async function approvalActivity(store: EventStore, silo: string, assistantId: string,
-  conversationId: string, turnId: string, deadline: number) {
+  conversationId: string, turnId: string, value: number | ActivityReadOptions) {
+  const options = activityReadOptions(value);
+  const deadline = options.deadline;
   const head = await store.head(undefined, deadline);
   // Check turn and control changes without tying a human decision to unrelated spending history.
-  return readTurnActivity(store, silo, assistantId, conversationId, turnId, deadline, head);
+  const request = { assistantId, conversationId, turnId, head, options };
+  return readTurnActivity(store, silo, request);
 }
 
-async function readTurnActivity(store: EventStore, silo: string, assistantId: string,
-  conversationId: string, turnId: string, deadline: number, head: number) {
+async function readTurnActivity(store: EventStore, silo: string, request: TurnActivityRequest) {
+  const { assistantId, conversationId, turnId, head, options } = request;
+  const { deadline, conversationHistory } = options;
   const conversationSubject = `conversation-${conversationId}`;
   const computerSubject = `computer-${assistantId}`;
   function capturedBeforeCheck(row: StoredEvent) {
@@ -75,8 +93,11 @@ async function readTurnActivity(store: EventStore, silo: string, assistantId: st
       firstStart: turn?.firstStart,
       firstClose: firstClose === undefined ? undefined : { ...firstClose } };
   }
-  const conversationRead = readStreamSummary(store, silo, conversationSubject,
-    decisionChatSummary, deadline, takeConversation);
+  const conversationRequest = { conversationId, turnId, deadline, head };
+  const conversationRead = conversationHistory
+    ? conversationHistory(conversationRequest)
+    : readStreamSummary(store, silo, conversationSubject,
+      decisionChatSummary, deadline, takeConversation);
   const computerRead = readStreamSummary(store, silo, computerSubject,
     computerSummary, deadline, takeComputer);
   const [chat, computer] = await Promise.all([conversationRead, computerRead]);

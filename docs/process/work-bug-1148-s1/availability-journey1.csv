@@ -1,0 +1,11 @@
+time_utc,one_minute_load,slot_1,slot_2,package_stack,test_suite,phase
+2026-11-20T08:48:29Z,4.15,free,free,none,none,qualifying
+2026-11-20T08:49:05Z,2.63,free,free,none,none,qualifying
+2026-11-20T08:49:41Z,2.28,free,free,none,none,qualifying
+2026-11-20T08:50:16Z,1.99,free,free,none,none,qualifying
+2026-11-20T08:50:51Z,1.73,free,free,none,none,qualifying
+2026-11-20T08:51:26Z,2.92,free,free,none,none,qualifying
+2026-11-20T08:52:02Z,2.30,free,free,none,none,qualifying
+2026-11-20T08:52:37Z,1.88,free,free,none,none,qualifying
+2026-11-20T08:53:12Z,2.08,free,free,none,none,qualifying
+2026-11-20T08:53:47Z,1.75,free,free,none,none,qualifying

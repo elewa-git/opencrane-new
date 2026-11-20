@@ -1,5 +1,7 @@
 import { sha256Hex } from '@opencrane/events/digest';
-import { decisionContext, decisionIdentity, digestContext } from './decision-context.ts';
+import type { DecisionConversationReader } from './decision-conversation.ts';
+import { decisionContext, decisionIdentity, digestContext, type DecisionIdentity }
+  from './decision-context.ts';
 import { personalToolAccess, toolAccessWithinDeadline } from './tool-authority.ts';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { prepareRoutineDispatch, RoutineDispatchRefused } from './routine-dispatch.ts';
@@ -81,9 +83,21 @@ function linkApprovalAttempt(tool: { logicalRequestId: string }, approvalId: str
   if (approvalId) tool.logicalRequestId = approvalId;
 }
 
+export type DecisionServiceIdentity = {
+  jwks: JSONWebKeySet; issuer: string; conversationHistory: DecisionConversationReader;
+  memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'>;
+};
+
+function prepareDecisionActivity(actor: BudgetActor, call: DecisionIdentity,
+  conversationHistory: DecisionConversationReader, deadline: number,
+  choice: { providerId: string; model: string } | undefined) {
+  const options = { deadline, conversationHistory };
+  return decisionActivity(actor.store, actor.silo, call.computer.assistant,
+    call.turnToken.conversation, call.turnToken.turn, options, choice);
+}
+
 export async function startDecision(
-  actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string;
-    memory?: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'memoryContext'> },
+  actor: BudgetActor, identity: DecisionServiceIdentity,
   binding: Binding, port = 0, providers?: ProviderVerificationOptions,
   dispatchOptions?: McpDispatchOptions & { childStart?: ChildStartHandler;
     maintenancePrepare?: MaintenancePrepare },
@@ -162,8 +176,8 @@ export async function startDecision(
       const historyDeadline = decisionHistoryDeadline(
         managedRoute || memoryRoute, decisionDeadline, routineSession);
       stage = 'turn_history';
-      const activity = await decisionActivity(actor.store, actor.silo,
-        computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline, managedTurn);
+      const activity = await prepareDecisionActivity(actor, callIdentity,
+        identity.conversationHistory, historyDeadline, managedTurn);
       stage = 'active_turn';
       requireManagedTurnClaims(checked.turn, activity.managedCallsEnabled);
       const conversation = activity.conversation;
