@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
+import { createProviderConnection, providerSetup, saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -31,6 +32,35 @@ async function kube(args) {
   const result = await execute('kubectl', [...connection.args, '-n', owner.namespace, ...args],
     { env: connection.environment, timeout: 180_000, maxBuffer: 4 * 1024 * 1024 });
   return result.stdout;
+}
+
+async function privateScript(script, input) {
+  const args = [...connection.args, '-n', owner.namespace, 'exec', '-i', 'deployment/server',
+    '-c', 'server', '--', 'node', '--input-type=module', '-e', script];
+  const child = execFile('kubectl', args, { env: connection.environment, timeout: 30_000 });
+  const finished = once(child, 'exit');
+  child.stdin.end(JSON.stringify(input));
+  let result = '';
+  for await (const chunk of child.stdout) result += chunk.toString();
+  const [exit] = await finished;
+  assert.equal(exit, 0, 'Private inspection must finish without disclosing a key');
+  return JSON.parse(result);
+}
+
+async function wrongKeyStatus() {
+  const script = `
+let input = '';
+for await (const chunk of process.stdin) input += chunk.toString();
+const key = JSON.parse(input);
+const headers = { authorization: 'Bearer ' + key };
+const response = await fetch('http://model-qualification:43003/v1/models', { headers });
+const body = await response.text();
+if (body.includes(key)) throw new Error('Credential disclosed by upstream');
+console.log(JSON.stringify({ status: response.status() }));`;
+  const result = await privateScript(script, wrongCredential);
+  assert.equal(result.status, 401, 'The same wrong credential receives HTTP 401 upstream');
+  outcomes.push({ check: 'wrong credential receives HTTP 401 from the separate stand-in',
+    result: 'PASS', status: result.status });
 }
 
 async function login(role) {
@@ -149,22 +179,29 @@ async function connect(admin) {
   await admin.getByRole('link', { name: /Models/ }).click();
   await admin.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
   await screenshots(admin, 'admin-settings');
-  await admin.getByRole('button', { name: 'Connect a provider', exact: true }).first().click();
-  await admin.getByLabel('Connection name').fill('Package free provider');
-  await admin.getByRole('button', { name: 'Next', exact: true }).click();
-  await admin.getByLabel('API key', { exact: false }).fill(wrongCredential);
-  await admin.getByRole('button', { name: 'Save key', exact: true }).click();
+  await createProviderConnection(admin, 'Package free provider');
+  const setup = providerSetup(admin);
+  for (const width of [1280, 390]) {
+    await admin.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const key = setup.getByLabel('API key Required', { exact: true });
+    assert.equal(await key.count(), 1, 'Setup offers exactly one new-key field');
+    assert.equal(await key.isVisible(), true, 'A person can enter a new key');
+    await capture(admin, 'new-key-entry', width);
+  }
+  await admin.setViewportSize({ width: 1280, height: 900 });
+  await saveProviderKey(admin, wrongCredential);
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).waitFor();
   const inventory = await admin.request.get(`${origin}/api/org/providers`);
   const providerId = (await inventory.json()).rows[0].providerId;
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).click();
   await waitForFact(admin, providerId, 'reachable', 'fail');
-  await admin.getByText('The test failed. Nothing else changed.', { exact: true }).first().waitFor();
+  const facts = setup.getByRole('region', { name: 'Provider verification facts', exact: true });
+  await facts.getByText('The test failed. Nothing else changed.', { exact: true }).waitFor();
   await screenshots(admin, 'wrong-key-refused');
+  await wrongKeyStatus();
   outcomes.push({ check: 'wrong key refused without disclosure', result: 'PASS' });
-  await admin.getByRole('button', { name: 'Back', exact: true }).click();
-  await admin.getByLabel('API key', { exact: false }).fill(credential);
-  await admin.getByRole('button', { name: 'Save key', exact: true }).click();
+  await setup.locator('footer').getByRole('button', { name: 'Back', exact: true }).click();
+  await saveProviderKey(admin, credential);
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).click();
   await waitForFact(admin, providerId, 'reachable', 'pass');
   await admin.getByRole('button', { name: 'Read current price', exact: true }).click();
@@ -297,16 +334,7 @@ try {
 } finally {
   await events.close();
 }`;
-  const args = [...connection.args, '-n', owner.namespace, 'exec', '-i', 'deployment/server',
-    '-c', 'server', '--', 'node', '--input-type=module', '-e', script];
-  const child = execFile('kubectl', args, { env: connection.environment, timeout: 30_000 });
-  const finished = once(child, 'exit');
-  child.stdin.end(JSON.stringify(secrets));
-  let result = '';
-  for await (const chunk of child.stdout) result += chunk.toString();
-  const [exit] = await finished;
-  assert.equal(exit, 0, 'Event inspection must finish without disclosing a key');
-  const inspected = JSON.parse(result);
+  const inspected = await privateScript(script, secrets);
   assert(inspected.checkedEvents > 0);
   outcomes.push({ check: 'keys absent from values, manifests, environment values, logs and events',
     result: 'PASS', checkedEvents: inspected.checkedEvents });
