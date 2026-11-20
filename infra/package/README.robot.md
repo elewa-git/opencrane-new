@@ -271,6 +271,10 @@ recorded in its receipt; it cannot become an unhandled rejection during navigati
 body and verifies that a failed disclosure inspection still refuses navigation.
 Before recording PASS, the driver closes the browser and checks again for any
 inspection failure received during shutdown.
+The result records the current operation, a fixed expected condition and a bounded
+error category on failure. It never copies exception messages, names or page content
+into the public result. Detailed failures remain in the private slot for collection
+before teardown. `journey-provider-failure.test.ts` checks the safe result contract.
 
 The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
 packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2

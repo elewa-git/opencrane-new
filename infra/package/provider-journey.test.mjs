@@ -28,7 +28,11 @@ const secrets = [credential, wrongCredential];
 const responses = [];
 const outcomes = [];
 let browser;
-let stage = 'browser launch';
+let stage = { check: 'browser launch', detail: 'Chromium must launch for the packaged journey.' };
+
+function step(check, detail) {
+  stage = { check, detail };
+}
 
 async function kube(args) {
   const result = await execute('kubectl', [...connection.args, '-n', owner.namespace, ...args],
@@ -179,14 +183,17 @@ async function waitForModels(page, providerId) {
 }
 
 async function connect(admin) {
+  step('open Settings', 'The admin must reach Models & providers through Settings.');
   await navigateWithReplies(admin, `${origin}/workspace`, responses);
   await admin.getByRole('link', { name: 'Settings', exact: true }).click();
   await admin.getByRole('link', { name: /Models/ }).click();
   await admin.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
   await screenshots(admin, 'admin-settings');
+  step('create provider connection', 'The saved connection must advance to its Key step.');
   await createProviderConnection(admin, 'Package free provider');
   const setup = providerSetup(admin);
   for (const width of [1280, 390]) {
+    step(`new-key field at ${width}px`, 'Setup must offer one visible new-key field.');
     await admin.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const key = setup.getByLabel('API key Required', { exact: true });
     assert.equal(await key.count(), 1, 'Setup offers exactly one new-key field');
@@ -194,21 +201,27 @@ async function connect(admin) {
     await capture(admin, 'new-key-entry', width);
   }
   await admin.setViewportSize({ width: 1280, height: 900 });
+  step('save wrong synthetic key', 'Saving the key must advance to the Verify step.');
   await saveProviderKey(admin, wrongCredential);
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).waitFor();
   const inventory = await admin.request.get(`${origin}/api/org/providers`);
   const providerId = (await inventory.json()).rows[0].providerId;
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).click();
+  step('wrong-key reachability', 'Verification must report failed reachability for the wrong key.');
   await waitForFact(admin, providerId, 'reachable', 'fail');
   const facts = setup.getByRole('region', { name: 'Provider verification facts', exact: true });
   await facts.getByText('The test failed. Nothing else changed.', { exact: true }).waitFor();
   await screenshots(admin, 'wrong-key-refused');
+  step('wrong-key HTTP refusal', 'The private wrong-key probe must complete and return HTTP 401.');
   await wrongKeyStatus();
   outcomes.push({ check: 'wrong key refused without disclosure', result: 'PASS' });
   await setup.locator('footer').getByRole('button', { name: 'Back', exact: true }).click();
+  step('save right synthetic key', 'Saving the replacement must advance to the Verify step.');
   await saveProviderKey(admin, credential);
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).click();
+  step('right-key reachability', 'Verification must report successful provider reachability.');
   await waitForFact(admin, providerId, 'reachable', 'pass');
+  step('quoted model test', 'The agreed quoted test must produce a successful model answer.');
   await admin.getByRole('button', { name: 'Read current price', exact: true }).click();
   await admin.getByRole('checkbox', { name: /I agree to one priced test request/ }).check();
   await screenshots(admin, 'quoted-test');
@@ -216,6 +229,7 @@ async function connect(admin) {
   await waitForFact(admin, providerId, 'modelAnswer', 'pass');
   await screenshots(admin, 'model-test-passed');
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
+  step('model selection', 'The selected chat models must finish applying.');
   await admin.getByRole('checkbox', { name: /gpt-6\.1-sol/ }).check();
   await admin.getByRole('checkbox', { name: /gpt-6-luna/ }).check();
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
@@ -223,10 +237,12 @@ async function connect(admin) {
   await admin.getByRole('heading', { name: /Step 5 of 6/ }).waitFor();
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   await admin.getByRole('button', { name: 'Go to Models', exact: true }).click();
+  step('select chat default', 'Selecting the chat default must save its model binding.');
   const chat = admin.getByRole('region', { name: 'Member chat setup' });
   await chat.getByLabel('Chat model').selectOption('gpt-6.1-sol');
   await waitForDefault(admin, providerId);
   await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
+  step('switch on member chats', 'Drained provider admission must allow member chats to switch on.');
   await chat.getByRole('button', { name: 'Pause new calls', exact: true }).click();
   await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();
   await chat.getByText('Member chats switched on', { exact: true }).waitFor();
@@ -271,6 +287,7 @@ async function privateModes() {
 }
 
 async function recreateProviderPod() {
+  step('private modes before recreation', 'Custody must have one uid 1000 key with 0600 files and a 0700 folder.');
   const before = await privateModes();
   const pod = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
   const oldUid = pod.items[0].metadata.uid;
@@ -280,10 +297,12 @@ async function recreateProviderPod() {
   const logOptions = { mode: 0o600 };
   await writeFile(`${directory}/provider-before-recreation.log`, logs, logOptions);
   outcomes.push({ check: 'setup logs checked before Pod recreation', result: 'PASS' });
+  step('recreate provider Pod', 'The replacement server Pod must become ready.');
   await kube(['delete', 'pod', pod.items[0].metadata.name, '--wait=true']);
   await kube(['rollout', 'status', 'deployment/server', '--timeout=180s']);
   const replaced = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
   assert.notEqual(replaced.items[0].metadata.uid, oldUid);
+  step('private modes after recreation', 'Recreation must preserve private modes and credential bytes.');
   const after = await privateModes();
   assert.deepEqual(after, before, 'Private modes and synthetic credential bytes survive recreation');
   outcomes.push({ check: 'Pod recreation preserves synthetic credential bytes and modes', result: 'PASS',
@@ -293,6 +312,7 @@ async function recreateProviderPod() {
 
 async function memberChats(member) {
   for (const width of [1280, 390]) {
+    step(`member chat at ${width}px`, 'A member message must receive the expected free-provider reply.');
     await member.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await navigateWithReplies(member, `${origin}/workspace`, responses);
     const composer = member.getByRole('textbox', { name: 'Message your agent' });
@@ -351,20 +371,21 @@ try {
   const privateFileOptions = { mode: 0o600 };
   await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
   browser = await chromium.launch({ headless: true, channel: 'chromium' });
-  stage = 'owner sign-in';
+  step('owner sign-in', 'The owner must finish single sign-on into the fresh installation.');
   const ownerPage = await login('owner');
-  stage = 'admin invitation and sign-in';
+  step('admin invitation and sign-in', 'The separate admin must accept the owner invitation.');
   const admin = await invite(ownerPage, 'without-assistant', 'admin');
-  stage = 'member invitation and sign-in';
+  step('member invitation and sign-in', 'The separate member must accept the owner invitation.');
   const member = await invite(ownerPage, 'member', 'member');
-  stage = 'Settings setup';
+  step('Settings setup', 'The admin must complete provider setup.');
   await connect(admin);
-  stage = 'provider Pod recreation';
+  step('provider Pod recreation', 'Private custody must survive server Pod recreation.');
   await recreateProviderPod();
-  stage = 'member chat';
+  step('member chat', 'Member chats must receive replies at both viewport widths.');
   await memberChats(member);
-  stage = 'credential disclosure checks';
+  step('credential disclosure checks', 'No inspected artifact or event may disclose a credential.');
   await checkDisclosure();
+  step('finish API disclosure inspections', 'All response inspections must pass through browser shutdown.');
   await finishBrowserReplies(browser, responses);
   browser = undefined;
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
@@ -372,16 +393,17 @@ try {
     outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
   console.log('PASS packaged provider Settings, refusal, private restart and member chats at 1280/390');
 } catch (error) {
-  outcomes.push(providerFailure({ check: stage, detail: 'The current journey step must complete.' }, error));
-  await writeFile(`${output}/result.json`, JSON.stringify({ status: 'FAIL', outcomes,
-    errorType: error?.name ?? 'Error', paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
+  const failure = providerFailure(stage, error);
+  outcomes.push(failure);
+  const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
+  await writeFile(`${output}/result.json`, JSON.stringify({ status: 'FAIL', source: git.stdout.trim(), outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
   let diagnostic = String(error?.stack ?? error);
   for (const secret of secrets) diagnostic = diagnostic.replaceAll(secret, '[redacted]');
   diagnostic = diagnostic.replaceAll(root, '[worktree]').replaceAll(directory, '[slot]');
   diagnostic = diagnostic.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[address]');
   await writeFile(`${directory}/provider-journey-failure.txt`, diagnostic, { mode: 0o600 });
   // Keep page content, credentials and local paths out of diagnostics.
-  console.error(`FAIL packaged provider journey during ${stage}`);
+  console.error(`FAIL packaged provider journey during ${failure.check}: ${failure.detail}`);
   process.exitCode = 1;
 } finally {
   await browser?.close();
