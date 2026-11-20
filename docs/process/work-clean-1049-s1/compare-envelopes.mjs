@@ -7,7 +7,7 @@ import ts from 'typescript';
 import { envelope as modelsEnvelope } from '@opencrane/models';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
-const base = 'f316313f0265e5678c49fc1dcf2c03cbcc3d17d2';
+const base = 'ed3662d8530338cde94d557713264f1ebf1057ae';
 const fixedId = 'fixed-event-id';
 const fixedTime = '2026-11-19T16:00:00.000Z';
 const samples = [

@@ -1,0 +1,60 @@
+Error: Command failed: /usr/bin/node --experimental-strip-types infra/dev-stack/journey.ts
+node:internal/errors:983
+  const err = new Error(message);
+              ^
+
+Error: Command failed: npm run replay -- members --verify
+npm notice run replay
+npm notice run npm run start -w apps/ops -- members --verify
+npm notice run @opencrane/ops@0.1.0 start
+npm notice run node --experimental-strip-types src/replay.ts members --verify
+
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at ChildProcess.exithandler (node:child_process:417:12)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1101:16)
+    at ChildProcess._handle.onexit (node:internal/child_process:304:5)
+    at Process.callbackTrampoline (node:internal/async_hooks:130:17) {
+  code: null,
+  killed: true,
+  signal: 'SIGTERM',
+  cmd: 'npm run replay -- members --verify',
+  stdout: '{"level":30,"time":1795199413451,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"c274f92b-7af9-4b9b-b2c4-c911ed577f62","event_type":"budget.ceiling_set","stream":"budget-dev","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199413778,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"c274f92b-7af9-4b9b-b2c4-c911ed577f62","event_type":"budget.ceiling_set","stream":"budget-dev","attempt":1,"duration_ms":327,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199413786,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"9dfe5cb1-814b-45bc-9ca4-33682604b559","event_type":"budget.ceiling_set","stream":"budget-dev","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199413969,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"9dfe5cb1-814b-45bc-9ca4-33682604b559","event_type":"budget.ceiling_set","stream":"budget-dev","attempt":1,"duration_ms":182,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199413995,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"b2b510f5-ebec-4044-97d8-f2b623d914e5","event_type":"budget.period_started","stream":"budget-dev","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199414063,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"b2b510f5-ebec-4044-97d8-f2b623d914e5","event_type":"budget.period_started","stream":"budget-dev","attempt":1,"duration_ms":67,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199414107,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"1b8dc4a4-949b-4f23-80dd-701773c4fde5","event_type":"member.invited","stream":"member-jente-rosseel","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199414578,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"1b8dc4a4-949b-4f23-80dd-701773c4fde5","event_type":"member.invited","stream":"member-jente-rosseel","attempt":1,"duration_ms":472,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199414595,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"f0aad68f-f687-49de-82e3-e5ca4087c5e4","event_type":"member.joined","stream":"member-jente-rosseel","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199414864,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"f0aad68f-f687-49de-82e3-e5ca4087c5e4","event_type":"member.joined","stream":"member-jente-rosseel","attempt":1,"duration_ms":268,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199414880,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"db1eb107-8e99-4bed-915d-926ded88067d","event_type":"assistant.created","stream":"assistant-personal-f0ac5d35853f86e28f6fad1090da3787","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199415070,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"db1eb107-8e99-4bed-915d-926ded88067d","event_type":"assistant.created","stream":"assistant-personal-f0ac5d35853f86e28f6fad1090da3787","attempt":1,"duration_ms":190,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199415075,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-a903d4a3d02507f8f1cb6716aa548e82101391574d8fe3d51dc5b79bc9a3cf30","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LWFzdHJhIl0","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199415381,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-a903d4a3d02507f8f1cb6716aa548e82101391574d8fe3d51dc5b79bc9a3cf30","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LWFzdHJhIl0","attempt":1,"duration_ms":305,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199415383,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-61d655a4a990de88a0c9161a451f26241ea071260db17af9a8b02e10d640b8a1","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LjEtc29sIl0","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199415764,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-61d655a4a990de88a0c9161a451f26241ea071260db17af9a8b02e10d640b8a1","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LjEtc29sIl0","attempt":1,"duration_ms":381,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199415767,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-28d364648d2ecb449ef5969c2f1e4b1026b05babacb36d8f1a4181276529c9e4","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LWx1bmEiXQ","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199416163,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-28d364648d2ecb449ef5969c2f1e4b1026b05babacb36d8f1a4181276529c9e4","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LWx1bmEiXQ","attempt":1,"duration_ms":396,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199416165,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-f4b7fd9e688df2614e73ef275d609370f22024f7892e56654c132713d83618ea","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LXNvbCJd","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199416465,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-f4b7fd9e688df2614e73ef275d609370f22024f7892e56654c132713d83618ea","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC02LXNvbCJd","attempt":1,"duration_ms":300,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199416469,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-78c3a05152ae89c3642c76915a8f9dea429647364d86ee78c44e08e58a1b1cca","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjYtc29sIl0","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199416676,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-78c3a05152ae89c3642c76915a8f9dea429647364d86ee78c44e08e58a1b1cca","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjYtc29sIl0","attempt":1,"duration_ms":206,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199416677,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-95533dff1611d5b6c931b732b8503e046a3c36f231e9f4f1306a9be6423e9fd6","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjYtdGVycmEiXQ","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199416873,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-95533dff1611d5b6c931b732b8503e046a3c36f231e9f4f1306a9be6423e9fd6","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjYtdGVycmEiXQ","attempt":1,"duration_ms":196,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199416875,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-3a948387091658a9027642ee321f6c9ca1cb570aa64d3ec11082fef71a792cf3","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjYtbHVuYSJd","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199417169,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-3a948387091658a9027642ee321f6c9ca1cb570aa64d3ec11082fef71a792cf3","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjYtbHVuYSJd","attempt":1,"duration_ms":294,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199417170,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-0bf0dd3b860dbad7b15793ce27fdb181cd4ebf312a4ce0ff653a68b28bc155c6","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjUiXQ","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199417272,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-0bf0dd3b860dbad7b15793ce27fdb181cd4ebf312a4ce0ff653a68b28bc155c6","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjUiXQ","attempt":1,"duration_ms":102,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199417273,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-32a2f375f0ef35ab6f108711935082385b0ce47167d14eecb30633ae2106f676","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjUtcHJvIl0","attempt":1,"msg":"handler.started"}\n' +
+    '{"level":30,"time":1795199417464,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-replay","event_id":"initial-model-grant-32a2f375f0ef35ab6f108711935082385b0ce47167d14eecb30633ae2106f676","event_type":"grant.given","stream":"grant-WyJtb2RlbCIsImdwdC01LjUtcHJvIl0","attempt":1,"duration_ms":191,"msg":"handler.completed"}\n' +
+    '{"level":30,"time":1795199417465,"pid":2343793,"hostname":"opencrane-dev-server","name":"replay-members","handler":"members-repla'... 242623 more characters,
+  stderr: 'npm notice run replay\n' +
+    'npm notice run npm run start -w apps/ops -- members --verify\n' +
+    'npm notice run @opencrane/ops@0.1.0 start\n' +
+    'npm notice run node --experimental-strip-types src/replay.ts members --verify\n'
+}
+
+Node.js v22.23.3

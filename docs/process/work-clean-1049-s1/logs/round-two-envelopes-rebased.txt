@@ -1,0 +1,7 @@
+PASS apps/server/src/integrations/registration.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/server/src/egress/changes.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS libs/models/src/providers.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/ops/src/routine-due.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/ops/src/routine-skip.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/ops/src/routine-missed.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/server/src/chat/child-activation.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z

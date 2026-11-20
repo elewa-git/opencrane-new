@@ -4,7 +4,100 @@
 
 Slice 1 of #1049, part of the clean-code map #1031. Replace the 76 server event
 wrappers with `serverEvent`; keep append-result checks for slice 2.
-Base: `c791103b365ced8fd56195ded9d0dcfabf202597`.
+Base: `ed3662d8530338cde94d557713264f1ebf1057ae`.
+
+## Second rework on 20 November 2026
+
+Rebase: PASS. Fetched `origin` and rebased onto
+`ed3662d8530338cde94d557713264f1ebf1057ae`. Git reported completion with no
+conflicts. That main revision is an ancestor of tested source head
+`e2ef2851051d2edf7bf3a4f7c1a81b1e301c68a3`; no rebase is in progress.
+No product or test files were edited in this fix round. The comparison base and
+receipts were updated.
+
+### Isolated slow-history comparison
+
+Ran the unchanged gateway case, "admits a tool continuation when independent
+history reads are slow", in separate Vitest invocations under `nice -n 10`,
+with one worker and the shared disposable PostgreSQL fixture. Waited for other
+suites before each run and monitored runner processes throughout.
+
+| Revision | Isolated passes | Isolated failures |
+| --- | --- | --- |
+| Rebased branch | 5 | 0 |
+| Current `origin/main` | 5 | 0 |
+
+One additional main invocation passed but is excluded from those counts:
+another task started tests during it. The [run records](logs/round-two-gateway-summary.json)
+identify the excluded invocation; the [Vitest logs](logs/round-two-gateway-runs.txt)
+retain all eleven results. The original failure is NOT REPRODUCED. Its cause
+remains unproved; these counts do not establish an existing flake. No assertion,
+deadline, access rule or product source changed. The earlier complete models
+attempt remains FAIL.
+
+### Changed tests and source gates
+
+The [first run](logs/round-two-changed-1.txt) failed one native-budget recovery
+case: 102 passed, one failed, 210.44 seconds. "Recovers one native hold and its
+original ids after a lost append reply and writer restart" refused the second
+reservation with `Model call retry refused` instead of returning the original
+hold id. This case is unchanged by the slice.
+
+The [second run](logs/round-two-changed-2.txt) passed all 103 tests in 173.36
+seconds. The unchanged [exact main case](logs/round-two-native-recovery-main.txt)
+also passed, in 13.80 seconds. These passes do not prove the original cause or
+establish a main flake. The twice-run changed-test gate is FAIL because the
+first run failed. Constructor and registration tests passed in both runs.
+No recovery, memory, money or access check was weakened.
+
+Own source gates: PASS for full workspace, package and dev-stack typecheck;
+174 event types; Knip with the same two hints; changelog; scoped ESLint with
+zero warnings and the 8 GiB heap; Markdownlint without file arguments; and all
+seven fixed-id/time comparisons. All commands ran under `nice -n 10`.
+
+### Full server package
+
+The [first chat-access file](logs/round-two-server-chat-access-1.txt) passed all
+69 tests in 342.98 seconds, with one worker. The remaining server files ran with
+two workers. That [bulk attempt](logs/round-two-server-bulk-1.txt) was interrupted
+at 18:10 UTC, after 5,699 seconds, to retain time for the requested fresh journey
+inside the three-hour task limit. It exited 130 and produced no final file or
+test totals. It does not count as a complete package pass.
+
+Nine WebSocket listener-count warnings were retained. No failing file had been
+reported before cancellation. No listener limit, assertion or test deadline was
+changed. The cancelled runner's remaining gateway and NATS fixtures were stopped.
+No protected container was removed.
+
+The [second chat-access file](logs/round-two-server-chat-access-2.txt) passed all
+69 tests as well. The [second bulk attempt](logs/round-two-server-bulk-2.txt)
+started afterwards, then was interrupted to correct the journey's scope.
+Neither bulk attempt produced complete package results. The complete twice-run
+server gate is PARTIAL; no complete server package pass is claimed.
+
+The first fresh run included optional Phase 4 checks because the runner set
+`P4_JOURNEY_ATTEMPT` to name captures. That was outside the requested default
+CORE scope. Its saved [browser receipt](logs/round-two-extended-browser-receipt.json)
+records 39 PASS rows, one paid-provider NOT RUN and one NOT PROVEN for separate
+member disks and browser profiles. The run then failed members replay verification:
+the [child-process error](logs/round-two-extended-last-error.txt) records
+`code: null`, `killed: true`, `signal: SIGTERM`. The command uses the existing
+60-second replay deadline. Why it could not finish within that deadline remains
+unproved; no replay limit or assertion was changed.
+
+All logs and 86 screenshots were preserved before successful teardown. The runner
+was corrected to keep artifact names separate from product settings. A new fresh
+attempt uses the requested default CORE scope, after the slot and load guard
+passed again. The corrected default CORE run passed, including both viewports, both replay
+verification commands, token privacy, sign-out, reauthentication and loopback
+listeners. The explicitly requested repeat was interrupted at the task cutoff
+and is PARTIAL. Teardown passed. The [journey receipt](journey.md) records both
+attempts and the completed default CORE run.
+
+The final source checks, Markdownlint, process-evidence privacy, public privacy
+and secret scans are recorded with the final receipt commit. The changed-test
+gate remains FAIL and the twice-run complete server gate remains PARTIAL.
+The draft must not merge on the strength of the completed CORE run alone.
 
 ## Rework checks on 20 November 2026
 

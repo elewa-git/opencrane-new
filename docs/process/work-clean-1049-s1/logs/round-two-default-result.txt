@@ -1,0 +1,4 @@
+stack_id=1
+startup=PASS
+explicit_journey=FAIL
+teardown=PASS

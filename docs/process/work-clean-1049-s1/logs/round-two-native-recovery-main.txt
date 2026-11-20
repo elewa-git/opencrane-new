@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/native-budget.test.ts -t recovers one native hold and its original ids after a lost append reply and writer restart --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 45 skipped (46)
+   Start at  16:28:21
+   Duration  13.80s (tests 46%, transform 40%, import 14%)
+
+  Transform  transforming modules took 5.39s · 40% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
