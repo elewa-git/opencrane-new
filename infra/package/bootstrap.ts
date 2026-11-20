@@ -352,7 +352,11 @@ async function main() {
   stage = 'owner readiness update';
   await patchRuntime({ OWNER_BOOTSTRAP_READY: 'ready' });
   await restartDeployment('server');
-  console.log('PASS package databases, event stream, OpenFGA and owner claim readiness');
+  if (process.env['DEV_OWNER_BOOTSTRAP'] === '0') {
+    console.log('PASS package databases, event stream, OpenFGA and owner claim readiness');
+  } else {
+    console.log('PASS package databases, event stream, OpenFGA and separate owner');
+  }
 }
 
 await main().catch(() => {

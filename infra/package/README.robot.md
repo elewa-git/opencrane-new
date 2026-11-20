@@ -324,7 +324,9 @@ context exception and refuses test folder imports.
 A separate real-image import check keeps the scanner module needed by every
 projection worker in the image.
 
-The container check runs the real bootstrap entry point and its owner subprocess.
+The container checks run the real bootstrap entry point in both owner modes.
+The development run completes its owner subprocess and keeps its existing completion
+message. The token run reports claim readiness and creates no development owner.
 A read-only test loader first imports the real service packages, then supplies
 made-up database, event-log, access and Kubernetes replies. Only the identity file
 and service-account reads receive made-up data. The generated environment files
