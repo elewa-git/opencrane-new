@@ -107,15 +107,20 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ### Pilot VM sizing
 
-On 20 November 2026, the existing exact-source application approval consumer
-refused at metadata lookup before a slot was claimed. The
-[receipt](work-pilot-1162-s1/journey.md) retains the refusal and resource-window
-observations. No package, one-person journey or three-person concurrent journey
-ran. Per-pod and total idle/peak CPU, RAM and occupied disk remain NOT RUN.
-There is no measured minimum vCPU, RAM or disk recommendation, and no measured
-headroom. Do not use an unmeasured estimate to choose a paid VM.
-The [VM guide](../../infra/vm/README.md) describes the bootstrap; its first real
-run still waits for the pilot VM. Container configuration tests are not VM proof.
+On 20 November 2026, a fresh package on exact-source CI-approved images passed
+one-person sign-in, chat, PDF answers, anonymous-history refusal and budget checks
+at 1280 and 390 pixels. Desktop disconnected at both widths. A non-UUID collector
+member id correctly received 409, so three-person qualification remains NOT RUN.
+The corrected collector could not obtain another exclusive resource window before
+the task's work limit. The [receipt](work-pilot-1162-s1/journey.md) records PARTIAL.
+
+Observed package peaks were 3.592 CPU cores and 3.08 GiB working set; whole-node
+peaks were 3.870 cores and 5.23 GiB including swap. Bound-PVC use peaked at
+77.63 MiB. These partial observations do not qualify a minimum machine or spare
+capacity recommendation. The website stayed available after viewer disconnects.
+The [VM guide](../../infra/vm/README.md) describes its guarded bootstrap. The host
+dry run refused existing Docker before writes; real VM bootstrap/reboot remain
+NOT RUN. No host setting was changed.
 
 ### Lint size debt
 

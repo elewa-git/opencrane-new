@@ -14,7 +14,7 @@ releases with the developer-box setup, but never uses that setup to change a VM.
 
 ```mermaid
 flowchart LR
-  operator["Operator<br/>prepares the machine"] -->|runs bootstrap| vm["infra/vm<br/>prepares package host"]
+  operator["Operator<br/>checks sizing and prepares the machine"] -->|runs bootstrap| vm["infra/vm<br/>prepares package host"]
   vm -->|configures services| host["Ubuntu VM<br/>runs single node"]
   vm -.->|uses verified releases| tools["infra/devbox<br/>shares runtime tools"]
   package["infra/package<br/>installs the application"] -->|uses prepared host| host
@@ -36,10 +36,10 @@ flowchart LR
 2. **An operator repeats preparation.** The script checks its ownership record and
    installed k3s checksum. It reapplies the same configuration and restarts k3s;
    running workloads may pause.
-3. **An operator chooses a machine size.** One-person and three-person idle and peak
-   measurements are still unavailable. No measured minimum vCPU, RAM or disk size,
-   or measured headroom, can be recommended yet. Complete that measurement before
-   choosing a paid machine.
+3. **An operator chooses a machine size.** One-person idle and peak
+   observations are recorded for a fresh local package. Desktop viewing and the
+   complete three-person journey remain unqualified. No measured minimum vCPU,
+   RAM or disk size, or spare capacity, can be recommended yet.
 
 ## How to run or test it
 

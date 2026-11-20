@@ -20,6 +20,7 @@ flowchart LR
   stack["infra/dev-stack<br/>stack ownership"] -->|checks and launches| package["infra/package<br/>local Helm install"]
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
+  browser["Browser<br/>chat and desktop"] -->|connects through website proxy| apps
   package -->|checks settings and installs apps| apps["Server, website, workers and computer<br/>first owner token claim"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
