@@ -1,113 +1,149 @@
 # Packaged connected-provider journey
 
-Journey on a fresh dev stack: NOT RUN
+Journey on a fresh secondary install: PARTIAL — startup passed; the complete
+provider journey remains unqualified.
 
-Date: 19 November 2026 UTC. Runtime source: `7e50c97a9`.
-Reviewed helper record: `7c2745ba0`. Later receipt edits change no runtime source.
-Environment: Linux, Node 22.23.3; source checks use disposable NATS, PostgreSQL,
-OpenFGA and the pinned gateway. These fixtures are not a fresh packaged install.
+Date: 20 November 2026 UTC. The installed runtime source was `2eb0b9b4e`; its
+product code is identical to `eacd06709`. Later changes affect the browser test
+fixture and documentation. Application approval
+[44672116271](https://github.com/elewa-git/opencrane-new/actions/runs/44672116271)
+and scanner approval
+[44672120365](https://github.com/elewa-git/opencrane-new/actions/runs/44672120365)
+passed for that installed source. The branch was rebased on `origin/main` at
+`c791103b3`; the rebase finished.
+Receipt edits change no application code.
+The paid-provider check is separate and NOT RUN. Paid calls: **0**; actual external
+charges: **0 cents**. Only synthetic provider credentials were prepared. No
+provider credential was entered before the invitation fixture failed.
 
-The task carries `OPENCRANE_FLEET_TASK`. The existing
-[`requireFleetStandInProvider` guard](../../../infra/dev-stack/journey-guard.ts)
-refuses real-provider journeys with that marker. Invoking the unchanged guard with
-a secondary stack id and real-provider mode returned exit 1:
-`Fleet tasks require the stand-in model`. [Guard output](guard.txt).
-The task explicitly forbids unsetting the marker or bypassing this guard.
-No slot was claimed, no package was installed and no startup was attempted.
-There are no live startup logs or screenshots to copy, and no slot to tear down.
+## Live verdicts
 
-## Required live steps
+| Condition | Result |
+| --- | --- |
+| Fresh packaged namespace, approved images and service startup | PASS |
+| Owner sign-in through the shipped browser | PASS |
+| Admin invitation in the first test fixture | FAIL: new member id was not a UUID |
+| Corrected invitation fixture | NOT RUN after correction |
+| Settings wrong-key refusal, right key, quoted test, selection and switch-on | NOT RUN |
+| Member replies and screenshots at 1280 and 390 px | NOT RUN |
+| Synthetic credential modes before and after Pod recreation | NOT RUN |
+| Live credential disclosure checks | NOT RUN |
+| Logs saved before teardown; all claims released | PASS |
 
-All steps below remain NOT RUN:
+The queue stopped at its two-hour waiting limit. Another secondary journey and
+then host load above six prevented a new complete five-minute observation window.
+The fleet marker, access checks, assertions and test timeouts stayed intact. The
+source fixes are present, but the first two findings still need their live proof.
+The failing browser result is retained in [live/result.json](live/result.json).
+No screenshots were produced because the first failure preceded provider setup.
 
-1. Wait for the one-journey load and free-slot conditions, then claim a spare slot.
-2. Prepare fresh provider-mode package values with CI-approved images for the source.
-3. Run `package-prepare`, private secret preparation, `package-up` and `package-check`.
-4. Sign in as the owner, open Settings and connect OpenAI through the product routes.
-   Save the key from a private file, pass reachability and the quoted test, choose the
-   chat model and default, drain and switch on.
-5. Sign in as a member and receive a real chat answer at 1280 px and 390 px.
-6. Show the product's refusal with a wrong key, without revealing it.
-7. Check that the key is absent from values, manifests, events, logs and receipts.
-8. Copy safe logs and screenshots before `package-down` and `down.sh`.
+## Fresh install and browser steps
 
-Use the existing [provider setup](../../../infra/dev-stack/provider-setup.ts) and
-[real reply journey](../../../infra/dev-stack/real-model-journey.ts). Builders cannot
-approve images. A local candidate image check does not satisfy these live steps.
+The task's fleet marker stayed present throughout. The installed package and
+browser driver never set `DEV_REAL_PROVIDER`. The installed package ran provider mode with qualification enabled. The route
+keeps ordinary Settings, custody, access, price consent, default selection and
+switch-on admission; those browser steps remain NOT RUN here. Its configured upstream was
+`model-qualification:43003`, a separate Deployment running `model-stub.ts`.
+All other model upstreams and fallback key settings were refused by admission tests.
+Unit checks verified HTTP 401 for an incorrect bearer credential; the live
+wrong-key browser step remains NOT RUN.
 
-Paid calls: **0**. Total charged by this task: **0 cents**. No provider key was loaded for setup or a call.
-Monthly-budget qualification, key-volume restart qualification and backup remain
-outside this slice's claimed live evidence. No independent review was run.
+Before the installation claim, both slots reported free, no package stack was up and
+the one-minute load stayed below six for at least five minutes. Checks ran every
+30 seconds. The owner stack was not used. An early unused claim followed an
+unsuccessful 299-second check because the shell wrapper did not stop after the
+assertion failed. That claim was released before services started. The wrapper
+then used `set -euo pipefail`, and the installation claim followed a complete
+361-second observation window. A later claim cross-check found the other
+slot occupied; it refused to start services and released its unused claim. A new
+complete window was required after that as well.
+
+The packaged fresh-install path uses a new owned namespace and new PVCs, rather
+than the Compose `up.sh --fresh` path. `package-prepare` refuses a live Compose
+stack in the claimed slot. Commands, in order:
+
+```sh
+infra/dev-stack/claim.sh
+# Export the returned secondary id as DEV_STACK_ID.
+infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"
+# Set models.mode=provider and models.qualification=true in private package values.
+PACKAGE_SKIP_PROVIDER_SETUP=1 node --experimental-strip-types infra/package/prepare.ts
+infra/dev-stack/run.sh package-up --id "$DEV_STACK_ID" --values "$PACKAGE_VALUES_FILE"
+infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID"
+infra/package/forward.sh
+node --experimental-strip-types infra/package/provider-journey.test.mjs
+infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
+infra/dev-stack/down.sh --id "$DEV_STACK_ID"
+```
+
+Preparation fetched successful exact-source application and scanner approvals
+from GitHub. Builders did not approve images. Test, preparation and startup
+commands ran under `nice -n 10`. The runner opened real Chromium and signed in as
+the owner through the shipped browser route. Its planned member steps use a
+separate identity and personal, memory-free sessions. Neither those steps nor
+private memory delivery are qualified here.
+
+The first install started successfully but its browser test failed before provider
+setup: the fixture supplied a label as a new member identifier. The invitation API
+correctly refused it with HTTP 409 because a new invitation requires a UUID.
+`c5bb3e8f7` records the failing journey; `eacd06709` supplies fresh UUIDs. Startup
+and service logs were copied, with secrets and private addresses removed, before
+teardown. This changed no membership or access rule.
 
 ## Source checks
 
-No fixture result is claimed as live qualification. Tests, lint, typecheck and the
-local image build ran under `nice -n 10`. Vitest used at most two workers and the
-shared disposable PostgreSQL service. Node's package tests used concurrency two.
-No full root suite ran.
+PASS means the builder's own check passed. These fixtures do not replace the live
+journey. No full root suite ran locally. Vitest used two workers and the shared
+disposable test database; all tests and typechecks ran under `nice -n 10`.
 
-- PASS: changed runtime tests twice: 36 tests, then 48 tests including the unchanged
-  models-startup suite. These use real disposable NATS, PostgreSQL, OpenFGA and the
-  pinned gateway. Before switch-on, a managed request is refused. Afterwards the
-  same process uses stored custody. A missing saved key returns 403 before any
-  provider request or reservation.
-- PASS: workspace, package and dev-stack typecheck; event catalogue (174 types);
-  Knip (two existing configuration hints); changelog; scoped ESLint; Markdown; README, whole-stream-read, lint-debt and
-  offline-link checks. Infrastructure files remain excluded by the repository's
-  ESLint configuration; their TypeScript is checked by the package/dev-stack gates.
-- PASS: all 82 existing licence tests, plus the package licence check with the three
-  added Debian main packages. No third-party binary or licence-review hash changed.
-- PASS: local Docker build, including web compilation. The local candidate is
-  `sha256:e616c55f03f47b2363a5aaa82534126bdc4437c8a3c3581afa5f3f5d2fd818b6`,
-  labelled with runtime source `7e50c97a9`. It grants no installation approval.
-- PASS: saved-image checks twice, 17 tests each (329.37 s and 326.00 s). They check
-  certificate parsing, runtime imports, native helper bytes, private/test file
-  exclusions, file permissions and synthetic bootstrap inside the image.
-- PASS: affected Node suites repeated by file. The final combined run passed all
-  615 cases in 1,129.20 s. The corrected preflight suite also passed all 51 cases
-  separately in 66.87 s, giving that suite two successful runs after its fix.
-  The other four affected Node suites passed in both combined runs.
-- NOT RUN: separate web tests; no web source changed. Independent review and hosted
-  CI are left to the orchestrator.
+- PASS: affected package render, preflight and installer suites twice, 359 and
+  360 cases. Focused custody, destination, stub and launcher checks passed in a
+  complete 276-case run. The final four isolation checks passed twice.
+- PASS: affected server/managed-model runtime tests twice, 38 cases each, with
+  disposable NATS, PostgreSQL, OpenFGA and the pinned gateway.
+- PASS: models browser unit tests, 128 then 130 cases; the three new chat setup
+  tests passed twice again after cleanup. The six changed Node checks also passed
+  twice after cleanup.
+- PASS: runtime build-context, copied fixture imports and narrow saved-image
+  source admission checks twice. The context check used a normal Docker build.
+  Exact-source CI application approval passed all 20 saved-image checks.
+- PASS: complete default rendered bytes match the immutable main baseline under
+  the same Helm binary. Both Helm 3 and Helm 4 passed twice. Changing a default
+  workload annotation made the comparison fail.
+- PASS: workspace typecheck, event catalogue (174 types), Knip, changelog, scoped
+  ESLint, Markdown, README and lint-debt checks. Knip reported its two existing
+  configuration hints. Infrastructure files remain excluded by the repository's
+  ESLint configuration and are checked by their TypeScript projects.
 
-## Failing-first evidence
+One extra focused repeat hit the unchanged launcher deadline while the host load
+was 28. Assertions and deadlines stayed unchanged; its isolated three-case repeat
+passed. Earlier CI runs found missing runtime imports, omitted source paths in the
+saved-image allowlist and a renderer-version-dependent hash. Each cause gained a
+failing check before correction; approval and image checks were not relaxed.
 
-`3f7a71af0` records the render, preparation, preflight, installer and launcher
-regressions. Provider mode was absent, preparation still wrote a stand-in key,
-preflight refused the new setting and the launcher tried to forward an absent
-stand-in port. The default render digest was captured from the unchanged base.
+Hosted CI for `eacd06709`: PASS, including all four test shards, source checks,
+browser fixtures and image fixtures. Application and scanner approvals also passed.
 
-`c2a5e839c` records the next complete-path failures: the gateway exited before
-switch-on without a static key; the model-selection projection was absent; backup
-neither waited for nor paused it. The runtime and chart checks passed after fixing
-those causes.
+## Findings, failing checks and cleanup
 
-The first combined Node run passed 614 of 615 cases. The preflight wrapper had
-started its licence tests before the initial inventory ordering was corrected:
-new OS entries had been placed before the application entries, invalidating an
-existing fixture's first-application assumption. Restoring the original inventory
-grouping kept the licence assertions unchanged. All 82 licence tests then passed;
-the preflight suite and complete package repeat run against that corrected source.
+1. Private key remount: `3557f4d11` records the failing mode checks and
+   `d29236da6` adds `OnRootMismatch` plus a startup check that repairs private modes
+   before either application container starts. It refuses links and unexpected
+   file types. Removing the mode repair made the test fail.
+2. Packaged merge journey: `11891a853` records the missing restricted route and
+   wrong-key rejection; `f43c3a4dc` records missing Settings switch-on controls.
+   `8ec37ebc6` adds the separate free stand-in and uses the existing command APIs
+   from Settings. Bypassing destination admission made its refusal test fail.
+3. Backup isolation: `76847bdd9` records the skipped CronJob regression.
+   `7fa01e9a9` walks all rendered Pod specifications, including CronJobs, and
+   resolves container/init mounts to PVC claims. `a1671b1be` adds a same-name
+   workload relocation regression; `2eb0b9b4e` checks the workload as well as the
+   container. Adding an aliased provider PVC mount only to the real backup
+   CronJob's init container made the rendered isolation check fail.
 
-The saved-image check then found the old Codex configuration-helper hash. The image
-contained the current repository file, changed by the merged session-default
-refactor. `c1474e820` adds a fast source check that failed on that exact mismatch;
-`7c2745ba0` refreshes only that AGPL repository helper's hash. Codex executable,
-launcher, dependency reviews and image approval checks stay exact.
-
-## Test strength and cleanup
-
-A temporary Node loader removed the switch-on refusal in the spawned test process:
-the new assertion failed (503 instead of 403). Bypassing credential reading made the
-missing-key test fail (200 instead of 403). The loader changed no repository file.
-Both tests passed again without it. No real provider was involved.
-
-Moved gateway route selection into one 17-line function. Shared package runtime
-settings and model-secret admission in one module. Split private file preparation
-from settings and replaced the touched inline mapping with a clear loop. Removed
-the old nested route and in-place settings builder. Changed preparation functions
-are at most 66 physical lines and four parameters; new helpers have at most three
-parameters. No limit was raised and no new error catch discards a cause.
-
-Shipped code: **279 lines changed**, 214 added and 65 deleted, excluding tests,
-documents and receipts.
+Cleaned the changed functions against the engineering table: kept one owner for
+runtime settings and admission, used named command values, split decoding steps,
+removed replaced logic, kept functions small and added no dependency or limit
+exception. The provider key PVC remains excluded from backup and restore;
+recovery policy is deferred to #15. No backup or monthly-budget live qualification
+is claimed here.
