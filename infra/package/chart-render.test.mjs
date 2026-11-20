@@ -873,6 +873,7 @@ test('provider storage avoids recursive remount changes and checks modes before 
 function assertPrivateProviderMounts(resources) {
   const mounts = [];
   for (const resource of resources.values()) {
+    const workload = `${resource.kind}/${resource.metadata.name}`;
     const pod = resource.kind === 'Pod' ? resource.spec :
       resource.spec?.jobTemplate?.spec?.template?.spec ?? resource.spec?.template?.spec;
     const claims = new Map();
@@ -884,16 +885,19 @@ function assertPrivateProviderMounts(resources) {
     for (const container of containers) {
       for (const mount of container.volumeMounts ?? []) {
         if (claims.get(mount.name) === 'provider-secrets') {
-          mounts.push({ container: container.name, ...mount });
+          const entry = { workload, container: container.name, ...mount };
+          mounts.push(entry);
         }
       }
     }
   }
   assert.deepEqual(mounts, [
-    { container: 'private-provider-keys', name: 'provider-secrets',
+    { workload: 'Deployment/server', container: 'private-provider-keys',
+      name: 'provider-secrets',
       mountPath: '/var/lib/opencrane/provider-secrets' },
-    { container: 'server', name: 'provider-secrets', mountPath: '/var/lib/opencrane/provider-secrets' },
-    { container: 'models', name: 'provider-secrets',
+    { workload: 'Deployment/server', container: 'server', name: 'provider-secrets',
+      mountPath: '/var/lib/opencrane/provider-secrets' },
+    { workload: 'Deployment/server', container: 'models', name: 'provider-secrets',
       mountPath: '/var/lib/opencrane/provider-secrets', readOnly: true },
   ]);
 }
@@ -978,7 +982,8 @@ function detectsBackupKeyMount() {
   backup.volumes.push({ name: 'innocent-alias',
     persistentVolumeClaim: { claimName: 'provider-secrets' } });
   backup.initContainers[0].volumeMounts.push({ name: 'innocent-alias', mountPath: '/leaked-keys' });
-  assert.throws(() => assertPrivateProviderMounts(resources),
+  const inspectMounts = assertPrivateProviderMounts.bind(undefined, resources);
+  assert.throws(inspectMounts,
     { code: 'ERR_ASSERTION' }, 'A backup init container must never read provider keys');
 }
 test('provider isolation detects a key PVC mounted by an aliased backup init container',
@@ -1007,8 +1012,11 @@ function takeProviderMount(container) {
   const retained = [];
   const transferred = [];
   for (const mount of container.volumeMounts) {
-    if (mount.name === 'provider-secrets') transferred.push(mount);
-    else retained.push(mount);
+    if (mount.name === 'provider-secrets') {
+      transferred.push(mount);
+    } else {
+      retained.push(mount);
+    }
   }
   container.volumeMounts = retained;
   return { name: container.name, volumeMounts: transferred };
@@ -1024,10 +1032,12 @@ function detectsRelocatedProviderContainers() {
     persistentVolumeClaim: { claimName: 'provider-secrets' } });
   for (const container of server.containers) {
     if (container.name === 'server' || container.name === 'models') {
-      backup.initContainers.push(takeProviderMount(container));
+      const moved = takeProviderMount(container);
+      backup.initContainers.push(moved);
     }
   }
-  assert.throws(() => assertPrivateProviderMounts(resources),
+  const inspectMounts = assertPrivateProviderMounts.bind(undefined, resources);
+  assert.throws(inspectMounts,
     { code: 'ERR_ASSERTION' }, 'Matching container names in another workload must not grant custody');
 }
 test('provider isolation refuses the same container names and mounts moved into the backup',
