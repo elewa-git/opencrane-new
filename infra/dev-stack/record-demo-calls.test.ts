@@ -26,5 +26,5 @@ async function recordsExactRequestBytes() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-test('the demo recorder keeps exact write bytes and ignores readback calls',
+void test('the demo recorder keeps exact write bytes and ignores readback calls',
   recordsExactRequestBytes);
