@@ -38,12 +38,13 @@
       }
     ]
   },
-  "failure": "The enabled Check status button disappeared during the action; its locator kept waiting after automatic advancement.",
+  "failure": "The click waited for an enabled Check status locator until its unchanged deadline. The saved live DOM state is unavailable.",
   "load1Maximum": 7.51,
   "dispatcherRestarts": 0,
   "queuePoolTimeouts": 211,
   "waitSnapshot": "Ten handler connections were idle, with no blocking transactions, at collection time. This is not a measurement of earlier checked-out pool slots.",
   "firstContainerLogStream": "SAVED before teardown",
   "paidCalls": 0,
-  "paidCents": 0
+  "paidCents": 0,
+  "reproducedRace": "A separate Chromium fixture reproduces a disappearing-button timeout. This does not establish the exact live DOM sequence."
 }

@@ -96,8 +96,10 @@ was changed or qualified for production.
 
 Owner/admin/member setup and Settings at 1280/390 px passed. Provider creation was
 processed, including its permission reaction. The driver then waited for an enabled
-Check status button that had disappeared during automatic advancement. Its original
-30-second click deadline expired. No restart occurred. The current dispatcher log
+Check status locator until its original 30-second click deadline expired. The
+saved live DOM state does not establish whether that button disappeared, became
+disabled or whether Key was already visible. The separate fixture reproduces a
+matching disappearing-button timeout; it does not prove that live sequence. No restart occurred. The current dispatcher log
 and continuous first-container stream were saved before teardown. The final wait
 snapshot had ten idle handler connections and no blocking transactions. Queue
 workers still reported pool-acquisition timeouts; no claim that every pool failure
@@ -224,8 +226,8 @@ and all three SIGKILL recovery cases. All 44 upgrade checks passed.
   twice. Live synthetic before/after Pod-recreation proof remains NOT RUN.
 - **BLOCKING — full packaged journey: PARTIAL.** The first run passed setup and
   wrong-key HTTP 401, then failed at the chat default. With the pool fix installed,
-  the dispatcher stayed running, but a reproduced disappearing-button race blocked
-  setup. The subsequent run also failed at Key; see the latest run above.
+  the dispatcher stayed running, but the driver timed out on its status control.
+  A matching disappearing-button race was reproduced independently. The subsequent run also failed at Key; see the latest run above.
 - **FIX — backup CronJob isolation: PASS (source).** Retained failing-first
   `76847bdd9` and claim-based checks across workloads and init containers, including
   aliased and same-name mounts. Focused checks passed twice. No new live backup
