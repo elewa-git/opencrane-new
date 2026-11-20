@@ -95,3 +95,21 @@ reported `free`; no package stack remained. No product source changed.
 Required PR checks at this source head were green: `checks`, `ci-ok`,
 `fixtures-browser`, `fixtures-image`, `select`, and test shards 1–4. The
 supplemental live checks remain the merge blocker.
+
+## CI result for the receipt commit
+
+Workflow `44717013684` on receipt head `028298306` finished with `test (3)` and
+`ci-ok` failed. Shards 1, 2 and 4, `checks`, `fixtures-browser`, `fixtures-image`
+and `select` passed.
+
+Shard 3 ran 161 files: 160 passed and one failed. Of 3,994 tests, 3,988 passed,
+four were skipped and two failed in `apps/server/test/routine-sender.test.ts`:
+
+- `refuses saved modern budget exhaustion with reasons` timed out in its
+  `beforeEach(setup)` hook after 30 seconds.
+- `refuses saved modern budget exhaustion with work` failed in the projection
+  fixture: `Routine computer unavailable`; the underlying assertion expected
+  one projected record and received zero.
+
+No product source changed in the receipt commit. Required CI is FAIL on that
+head; this journey report does not claim green CI.
