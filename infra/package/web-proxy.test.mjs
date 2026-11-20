@@ -65,12 +65,16 @@ async function viewerWriteFailure(context) {
   const backend = createServer(respond);
   function track(socket) {
     sockets.add(socket);
-    function removed() { sockets.delete(socket); }
+    function removed() {
+      sockets.delete(socket);
+    }
     socket.once('close', removed);
   }
   function accept(_request, socket) {
     upgradedSocket = socket;
-    function finish() { socket.end(); }
+    function finish() {
+      socket.end();
+    }
     socket.once('end', finish);
     socket.resume();
     socket.write('HTTP/1.1 101 Switching Protocols\r\n'
@@ -87,7 +91,9 @@ async function viewerWriteFailure(context) {
   };
   const child = fork(resolve('infra/package/web.mjs'), [], options);
   let diagnostics = '';
-  function errorOutput(bytes) { diagnostics += bytes.toString(); }
+  function errorOutput(bytes) {
+    diagnostics += bytes.toString();
+  }
   child.stderr.on('data', errorOutput);
   let viewer;
   function stopResources() {

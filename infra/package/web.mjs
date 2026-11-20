@@ -94,7 +94,8 @@ async function handleRequest(incoming, response) {
 }
 
 export function forwardUpgrade(incoming, socket, head, target) {
-  const upstream = request(target, { method: incoming.method, headers: incoming.headers });
+  const requestOptions = { method: incoming.method, headers: incoming.headers };
+  const upstream = request(target, requestOptions);
   let upstreamSocket;
 
   function close() {
@@ -104,7 +105,8 @@ export function forwardUpgrade(incoming, socket, head, target) {
   }
 
   function failed(error) {
-    logger.warn({ err: error }, 'WebSocket proxy connection failed');
+    const details = { err: error };
+    logger.warn(details, 'WebSocket proxy connection failed');
     close();
   }
 
@@ -117,11 +119,17 @@ export function forwardUpgrade(incoming, socket, head, target) {
       + `${response.statusMessage}\r\n`;
     socket.write(status);
     for (const [name, value] of Object.entries(response.headers)) {
-      if (value !== undefined) socket.write(`${name}: ${value}\r\n`);
+      if (value !== undefined) {
+        socket.write(`${name}: ${value}\r\n`);
+      }
     }
     socket.write('\r\n');
-    if (remoteHead.length) socket.write(remoteHead);
-    if (head.length) remote.write(head);
+    if (remoteHead.length) {
+      socket.write(remoteHead);
+    }
+    if (head.length) {
+      remote.write(head);
+    }
     remote.pipe(socket);
     socket.pipe(remote);
   }
