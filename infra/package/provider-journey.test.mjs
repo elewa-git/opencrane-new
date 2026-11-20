@@ -2,6 +2,7 @@ import '../dev-stack/journey-entry.ts';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -110,6 +111,35 @@ async function waitForFact(page, providerId, fact, outcome) {
   throw new Error('Provider verification did not reach the expected terminal outcome');
 }
 
+async function waitForDefault(page, providerId) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const response = await page.request.get(`${origin}/api/org/providers/${providerId}/bindings`);
+    assert.equal(response.status(), 200);
+    const result = await response.json();
+    function isDefault(row) { return row.kind === 'silo_default'; }
+    if (result.rows.some(isDefault)) return;
+    await delay(100);
+  }
+  throw new Error('The selected model default did not finish applying');
+}
+
+async function waitForModels(page, providerId) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const response = await page.request.get(`${origin}/api/org/providers/${providerId}`);
+    assert.equal(response.status(), 200);
+    const result = await response.json();
+    if (result.rows[0]?.enabledModels.includes('gpt-6.1-sol')) {
+      const check = page.getByRole('button', { name: 'Check status', exact: true });
+      if (await check.isVisible()) await check.click();
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error('The selected models did not finish applying');
+}
+
 async function connect(admin) {
   await admin.goto(`${origin}/workspace`);
   await admin.getByRole('link', { name: 'Settings', exact: true }).click();
@@ -144,11 +174,13 @@ async function connect(admin) {
   await admin.getByRole('checkbox', { name: /gpt-6\.1-sol/ }).check();
   await admin.getByRole('checkbox', { name: /gpt-6-luna/ }).check();
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
+  await waitForModels(admin, providerId);
   await admin.getByRole('heading', { name: /Step 5 of 6/ }).waitFor();
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   await admin.getByRole('button', { name: 'Go to Models', exact: true }).click();
   const chat = admin.getByRole('region', { name: 'Member chat setup' });
   await chat.getByLabel('Chat model').selectOption('gpt-6.1-sol');
+  await waitForDefault(admin, providerId);
   await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
   await chat.getByRole('button', { name: 'Pause new calls', exact: true }).click();
   await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();
@@ -178,7 +210,7 @@ async function privateModes() {
   const state = JSON.parse(output);
   assert.equal(state.directoryMode, 0o700);
   assert.equal(state.uid, 1000);
-  assert(state.keys.length >= 2, 'Both synthetic key revisions must be in custody');
+  assert.equal(state.keys.length, 1, 'Only the current synthetic credential remains in custody');
   for (const key of state.keys) {
     assert.equal(key.mode, 0o600);
     assert.equal(key.uid, 1000);
@@ -221,6 +253,45 @@ async function memberChats(member) {
   }
 }
 
+async function checkDisclosure() {
+  const values = await readFile(`${directory}/package-values.json`, 'utf8');
+  const manifests = await kube(['get', 'deployment,statefulset,cronjob,job,configmap', '-o', 'json']);
+  const logs = await kube(['logs', '-l', 'app=server', '--all-containers=true',
+    '--prefix=true', '--tail=-1']);
+  for (const content of [values, manifests, logs]) {
+    for (const secret of secrets) assert(!content.includes(secret), 'A public artifact disclosed a key');
+  }
+  const script = `
+import {connectEventStore,readEvents} from '@opencrane/event-store';
+let input='';
+for await(const chunk of process.stdin) input+=chunk.toString();
+const secrets=JSON.parse(input);
+const events=await connectEventStore();
+let count=0;
+try {
+ const until=await events.store.head();
+ if(until) for await(const row of readEvents(events.store,1,until)) {
+  const text=JSON.stringify(row.event);
+  for(const secret of secrets) if(text.includes(secret)) throw new Error('Credential in event');
+  count++;
+ }
+ console.log(JSON.stringify({checkedEvents:count}));
+} finally { await events.close(); }`;
+  const args = [...connection.args, '-n', owner.namespace, 'exec', '-i', 'deployment/server',
+    '-c', 'server', '--', 'node', '--input-type=module', '-e', script];
+  const child = execFile('kubectl', args, { env: connection.environment, timeout: 30_000 });
+  const finished = once(child, 'exit');
+  child.stdin.end(JSON.stringify(secrets));
+  let result = '';
+  for await (const chunk of child.stdout) result += chunk.toString();
+  const [exit] = await finished;
+  assert.equal(exit, 0, 'Event inspection must finish without disclosing a key');
+  const inspected = JSON.parse(result);
+  assert(inspected.checkedEvents > 0);
+  outcomes.push({ check: 'keys absent from values, manifests, environment values, logs and events',
+    result: 'PASS', checkedEvents: inspected.checkedEvents });
+}
+
 try {
   await mkdir(output, { recursive: true });
   browser = await chromium.launch({ headless: true, channel: 'chromium' });
@@ -236,6 +307,8 @@ try {
   await recreateProviderPod();
   stage = 'member chat';
   await memberChats(member);
+  stage = 'credential disclosure checks';
+  await checkDisclosure();
   await Promise.all(responses);
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'PASS', source: git.stdout.trim(),

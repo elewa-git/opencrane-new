@@ -22,7 +22,9 @@ keep each screen's fallback. This setting grants no access and adds no API route
 that the value reaches the web container.
 
 The root `.dockerignore` excludes repository test folders and test files from the
-package build. It includes `web.mjs` and its shared `web-page.mjs` renderer.
+package build. Its allow-list includes provider startup, model settings and the fleet
+guard. `runtime-context.test.mjs` checks their actual Docker build context before
+the application image is built. It includes `web.mjs` and its shared `web-page.mjs` renderer.
 The development static server imports the upgrade handler from `web.mjs`;
 importing it does not start a package listener. The upgrade handler
 uses Node's HTTP upgrade response, preserves both initial byte buffers and closes

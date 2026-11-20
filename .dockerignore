@@ -25,6 +25,7 @@ infra/dev-stack/*
 !infra/dev-stack/model-stub.ts
 !infra/dev-stack/stage-b-model.ts
 !infra/dev-stack/secondary-models.ts
+!infra/dev-stack/journey-guard.ts
 !infra/dev-stack/zitadel.json
 infra/odoo
 infra/clamav
@@ -47,6 +48,8 @@ infra/package/*
 !infra/package/web-page.mjs
 !infra/package/bootstrap.ts
 !infra/package/worker.mjs
+!infra/package/model-settings.ts
+!infra/package/provider-secrets.mjs
 !infra/package/kubeconfig.mjs
 !infra/package/scanner.mjs
 !infra/package/object-credentials.mjs
