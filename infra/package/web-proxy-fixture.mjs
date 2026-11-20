@@ -10,7 +10,8 @@ let viewerSocket;
 function redirectedConnection(...args) {
   const options = args[0];
   if (options === 8080 && args[1] === 'server') {
-    return connect(Number(process.env.WEB_PROXY_TEST_PORT), '127.0.0.1');
+    const port = Number(process.env.WEB_PROXY_TEST_PORT);
+    return connect(port, '127.0.0.1');
   }
   if (options && typeof options === 'object' && options.host === 'server') {
     const target = { ...options, host: '127.0.0.1',
@@ -31,7 +32,9 @@ function instrumentedServer(...args) {
 }
 
 function ready() {
-  process.send({ kind: 'ready', port: this.address().port });
+  const address = this.address();
+  const message = { kind: 'ready', port: address.port };
+  process.send(message);
 }
 
 function isolatedListener(...args) {
@@ -50,7 +53,8 @@ function control(message) {
     error.code = 'EPIPE';
     viewerSocket.destroy(error);
   } else if (message.kind === 'ping') {
-    process.send({ kind: 'alive' });
+    const response = { kind: 'alive' };
+    process.send(response);
   }
 }
 
