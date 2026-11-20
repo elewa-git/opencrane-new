@@ -4,10 +4,45 @@ Date: 20 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
-Round four tested source `2b54bfa1a` on fresh secondary slot 1. CORE failed at 390 px
-while waiting for an agent reply to finish during live computer viewing. The 1280 px
-CORE and focused long-chat journey were NOT RUN. No further attempt or code fix was
-started. The PR stays draft. No independent review result is claimed.
+The follow-up run tested source `85e52f13c` on fresh secondary slot 1. CORE failed
+at 390 px during the basic chat before live computer viewing. The 1280 px CORE and
+focused long-chat journey were NOT RUN. The previous round-four live-view failure
+and this earlier chat failure are separate results. No code was changed. The PR
+stays draft. No independent review result is claimed.
+
+## Follow-up fresh attempt
+
+The [availability samples](availability-journey1.csv) record the full qualifying
+five-minute interval from 08:48:29 to 08:53:47 UTC. Both slots were free, no package
+stack or test suite was running, and every one-minute load sample was below six.
+Slot 1 was claimed at 08:56 UTC and started with `up.sh --fresh --id 1`.
+
+CORE failed at 390 px while `browserChatJourney` waited 30 seconds for `.caret` at
+`infra/dev-stack/browser-chat.ts:33:32`. The [failure capture](core-attempt5-failure-390.png)
+shows the incomplete basic chat reply. Browser transport failures were none. The
+failure is different from round four's wait for the fourth live-view reply to show
+Done; that step was not reached, so the origin/main comparison was not run.
+
+Host load was already high during startup: one-minute samples reached 10.08 at
+08:58:50, 19.63 at 09:00:50 and 16.24 at 09:01:20 UTC near the failure. The private
+receipt `bug-1148-s1-journey1` retains the complete load trace, sanitised startup,
+service, container and pod logs, and the failure screenshot. The provider check used
+`provider-dev-stub`; paid calls were zero. The stack was stopped and slot 1 reported
+free at 09:03 UTC.
+
+| Condition | 390 px | 1280 px |
+| --- | --- | --- |
+| CORE chat, reload, Stop and uploads | FAIL: `.caret` did not appear | NOT RUN |
+| Agent reply completes while viewing the computer | NOT RUN | NOT RUN |
+| CORE live-view revocation | NOT RUN | NOT RUN |
+| Complete 500 earlier messages and their completion events | NOT RUN | NOT RUN |
+| Native tool approval and returned result in the long chat | NOT RUN | NOT RUN |
+| Exact forwarded bytes, one use, denial and reload | NOT RUN | NOT RUN |
+| Same approved bytes return 403 after Stop, without another effect | NOT RUN | NOT RUN |
+
+No retry was made. The previous round-four failure remains the only observed failure
+of the fourth live-view reply; this attempt did not reach that step. The focused
+journey, approval, exact-byte checks and post-Stop denial remain unproved.
 
 The owner's 20 November option A changes the live seed to 500 earlier messages,
 each with its completion event. The unchanged source regression still requires
