@@ -283,7 +283,8 @@ async function privateModes() {
 }
 
 async function recreateProviderPod() {
-  step('private modes before recreation', 'Custody must have one uid 1000 key with 0600 files and a 0700 folder.');
+  step('private modes before recreation',
+    'Custody must have one uid 1000 key with 0600 files and a 0700 folder.');
   const before = await privateModes();
   const pod = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
   const oldUid = pod.items[0].metadata.uid;
@@ -381,7 +382,8 @@ try {
   await memberChats(member);
   step('credential disclosure checks', 'No inspected artifact or event may disclose a credential.');
   await checkDisclosure();
-  step('finish API disclosure inspections', 'All response inspections must pass through browser shutdown.');
+  step('finish API disclosure inspections',
+    'All response inspections must pass through browser shutdown.');
   await finishBrowserReplies(browser, responses);
   browser = undefined;
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
@@ -392,7 +394,9 @@ try {
   const failure = providerFailure(stage, error);
   outcomes.push(failure);
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
-  await writeFile(`${output}/result.json`, JSON.stringify({ status: 'FAIL', source: git.stdout.trim(), outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
+  const result = { status: 'FAIL', source: git.stdout.trim(), outcomes, paidCalls: 0, paidCents: 0 };
+  const serialisedResult = JSON.stringify(result, null, 2) + '\n';
+  await writeFile(`${output}/result.json`, serialisedResult);
   let diagnostic = String(error?.stack ?? error);
   for (const secret of secrets) diagnostic = diagnostic.replaceAll(secret, '[redacted]');
   diagnostic = diagnostic.replaceAll(root, '[worktree]').replaceAll(directory, '[slot]');
