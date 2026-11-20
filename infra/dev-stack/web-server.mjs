@@ -6,6 +6,7 @@ import { basename, extname, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { createGzip } from 'node:zlib';
 import { organisationPage } from '../package/web-page.mjs';
+import { forwardUpgrade } from '../package/web-upgrade.mjs';
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -174,44 +175,6 @@ function forwardRequest(request, response, target) {
   request.pipe(upstream);
 }
 
-function forwardUpgrade(request, socket, head, target) {
-  const upstream = httpRequest(upstreamUrl(request, target), {
-    method: request.method,
-    headers: request.headers,
-  });
-  function connected(upstreamResponse, upstreamSocket, upstreamHead) {
-    const status = `HTTP/${upstreamResponse.httpVersion} ${upstreamResponse.statusCode} `
-      + `${upstreamResponse.statusMessage}\r\n`;
-    socket.write(status);
-    for (const [name, value] of Object.entries(upstreamResponse.headers)) {
-      if (value !== undefined) socket.write(`${name}: ${value}\r\n`);
-    }
-    socket.write('\r\n');
-    if (upstreamHead.length) socket.write(upstreamHead);
-    if (head.length) upstreamSocket.write(head);
-    upstreamSocket.pipe(socket);
-    socket.pipe(upstreamSocket);
-    function closeClient() {
-      socket.destroy();
-    }
-    function closeUpstream() {
-      upstreamSocket.destroy();
-    }
-    upstreamSocket.on('error', closeClient);
-    upstreamSocket.on('close', closeClient);
-    socket.on('error', closeUpstream);
-    socket.on('close', closeUpstream);
-  }
-  function fail() {
-    upstream.destroy();
-    socket.destroy();
-  }
-  upstream.on('upgrade', connected);
-  upstream.on('response', fail);
-  upstream.on('error', fail);
-  upstream.end();
-}
-
 export async function startWebServer(buildDirectory, port, ownerHost, proxyFile) {
   const configuration = JSON.parse(await readFile(proxyFile, 'utf8'));
   const directory = resolve(buildDirectory);
@@ -247,7 +210,7 @@ export async function startWebServer(buildDirectory, port, ownerHost, proxyFile)
       socket.destroy();
       return;
     }
-    forwardUpgrade(request, socket, head, target);
+    forwardUpgrade(request, socket, head, upstreamUrl(request, target));
   }
   server.on('upgrade', handleUpgrade);
   await new Promise((resolveListen) => server.listen(port, '127.0.0.1', resolveListen));

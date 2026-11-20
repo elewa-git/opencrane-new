@@ -22,7 +22,15 @@ keep each screen's fallback. This setting grants no access and adds no API route
 that the value reaches the web container.
 
 The root `.dockerignore` excludes repository test folders and test files from the
-package build. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
+package build. It includes `web.mjs`, its shared `web-page.mjs` renderer and
+`web-upgrade.mjs`, shared with the development static server. The upgrade handler
+uses Node's HTTP upgrade response, preserves both initial byte buffers and closes
+both connections on either peer's error or closure. It logs connection errors
+through the structured logger before closing. A failed viewer write cannot stop
+the website process or leave its upstream connection open. `web-proxy.test.mjs`
+runs the actual package entrypoint against a local backend and injects the observed
+EPIPE at the client transport boundary; it requires both peers to close and a later
+HTTP request to succeed.
 The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
 It keeps the image scanner files used by the server's image evidence import,
