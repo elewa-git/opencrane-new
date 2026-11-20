@@ -38,7 +38,10 @@ No full root test suite ran locally.
 | Markdown | PASS | [Complete configured scope](source-gates/markdown-final.log), without file arguments |
 | README structure | PASS | [Existing baseline retained](source-gates/readmes-final.log) |
 | Whole-stream reads | PASS | [No new reads](source-gates/reads-final.log); 310 known and five rebuild reads |
-| Complete fresh packaged journey on fixed source | NOT RUN | Awaiting CI and both image approvals |
+| Exact-source CI | PASS | [All jobs](https://github.com/elewa-git/opencrane-new/actions/runs/44763305277) succeeded on `ccea595758` |
+| Exact-source application and scanner approval consumers | PASS | Both real consumers accepted [application](https://github.com/elewa-git/opencrane-new/actions/runs/44763328752) and [scanner](https://github.com/elewa-git/opencrane-new/actions/runs/44763332412) artifacts |
+| First full fresh packaged journey on fixed source | FAIL | Owner chat passed at both widths; admin opened before OpenFGA applied its permission; [receipt](journey.md) |
+| Fresh qualification after fixture correction | NOT RUN | Post-claim admission refused another occupied slot; own claim released; [receipt](journey.md#fresh-requalification-admission) |
 
 The earlier results below are tied to their stated source and do not stand in
 for these new checks.

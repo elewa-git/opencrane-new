@@ -1,10 +1,12 @@
 # Install hardening journey
 
-Journey on a fresh dev stack: NOT RUN
+Journey on a fresh dev stack: FAIL
 
 Round 2, 20 November 2026. Product fix: `f4ce844c1`; test-first commit: `c9a572b19`.
-The local source gates pass. The complete packaged journey on the fixed source
-is pending CI and both image approvals. The earlier full qualification below remains FAIL.
+The local source gates, exact-source CI and both image approval consumers pass.
+The first full fixed-source run failed at the admin access handoff described below.
+A new fresh qualification was refused at admission, before installation, because
+the other secondary slot was no longer free. The earlier full qualification also remains FAIL.
 No independent-review verdict is claimed.
 
 ## Reproduced workspace failure
@@ -44,6 +46,71 @@ This short run does not qualify sustained load.
 
 [Safe logs and outcomes](diagnostic/outcomes.json) were kept before teardown.
 The package, its slot claim and its temporary sign-in app were removed.
+
+## First full fixed-source run
+
+The first full run used source `ccea595758cb5ab60b01bf23891b71eb485273b4`, after
+[CI](https://github.com/elewa-git/opencrane-new/actions/runs/44763305277),
+[application packaging](https://github.com/elewa-git/opencrane-new/actions/runs/44763328752)
+and [scanner packaging](https://github.com/elewa-git/opencrane-new/actions/runs/44763332412)
+passed. Both real approval consumers accepted the artifacts.
+
+All nine install refusals and both wrong-organisation checks passed again.
+Owner sign-in, chat, Secure and HttpOnly cookies passed at both widths
+([1280 px](round-2-attempt-1/owner-chat-1280.png),
+[390 px](round-2-attempt-1/owner-chat-390.png)). Admin
+sign-in and cookie checks passed at 1280 px, but its first workspace context read
+returned 403. Admin chat and all member checks were NOT RUN after that refusal.
+The [outcomes](round-2-attempt-1/outcomes.json) retain this run as FAIL.
+
+The [timing record](round-2-attempt-1/join-access-timing.log) identifies a fixture
+preparation error. The join returned 200 at 16:24:26.984 UTC. The members projection
+completed at 16:24:27.158. The workspace read began at 16:24:27.777 and returned
+403 at 16:24:27.791. OpenFGA completed the join projection at 16:24:28.361.
+The refusal protected the workspace while permission was still being applied.
+
+The [join contract](../../../apps/server/README.robot.md) says the receipt confirms
+the saved join and lets a caller wait for projection delivery. The existing native
+dev journey waits for the member's OpenFGA permission before chat. This fixture
+had omitted that preparation step. Product access checks remain unchanged.
+A focused fixture test reproduced opening the workspace too early, then passed
+twice after waiting for the actual membership permission. It also asserts that
+the protected workspace request happens exactly once:
+[red](round-2-attempt-1/join-handoff-red.txt),
+[first green](round-2-attempt-1/join-handoff-green-1.txt),
+[second green](round-2-attempt-1/join-handoff-green-2.txt),
+[test](round-2-attempt-1/join-handoff.test.mjs.txt) and
+[corrected helper](round-2-attempt-1/join-handoff.mjs.txt).
+The failed request was not retried and this install was not turned into a PASS.
+
+Sampled one-minute load ranged from 4.01 to 12.92. The dispatcher recorded one
+connection-pool timeout for the `dream-memory` queue at 16:24:31.145 UTC; see the
+[load samples](round-2-attempt-1/load-during-run.log) and
+[dispatcher log](round-2-attempt-1/worker-dispatcher-7c6bd7d6c7-d4jdq.log).
+No pool or timeout setting was changed. Six screenshots and service logs were
+kept before teardown. The failure screenshot could not be captured, so that
+part of the evidence is PARTIAL. The owned package, slot claim and temporary
+sign-in app were removed.
+
+## Fresh requalification admission
+
+The corrected fixture waited from 16:32 UTC for both secondary slots, no package
+stack and five minutes below load 6. The 30-second samples finally qualified at
+17:25:52 UTC. The wrapper rechecked capacity and claimed a secondary slot. Its
+post-claim check then found that the other slot was no longer free. The run stopped
+before package preparation, with no namespace, volumes or temporary sign-in app
+created. Its own package-down and down checks passed. See the
+[admission outcomes](round-2-admission/outcomes.json),
+[capacity samples](round-2-admission/capacity.log) and
+[runner output](round-2-admission/run.log).
+
+This is an admission FAIL, not a product journey. Requalification after the fixture
+correction is NOT RUN. The three-hour work limit leaves insufficient time for a new
+five-minute capacity window, a full install and journey, preserved logs and teardown.
+The full fixed-source journey above remains FAIL. No skipped role or width passes.
+The source fix and all its local gates, CI and both image approvals remain PASS on
+`ccea595758cb5ab60b01bf23891b71eb485273b4`. The final update changes evidence only;
+its new CI and image workflows must be checked separately before landing.
 
 ## Earlier full qualification
 
