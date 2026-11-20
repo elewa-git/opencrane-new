@@ -66,3 +66,40 @@ test('refuses unsupported OS and unknown options', function invalidInput() {
   assert.match(result.stderr, /Ubuntu/);
   assert.equal(container('', ['--unknown']).status, 2);
 });
+
+const fakeHost = `
+mkdir -p /fixture-bin
+export PATH=/fixture-bin:$PATH
+for program in apt-get swapoff sysctl systemctl tar; do
+  printf '#!/bin/sh\\nexit 0\\n' > /fixture-bin/$program
+  chmod +x /fixture-bin/$program
+done
+printf '#!/bin/sh\\ncat >/dev/null\\nexit 0\\n' > /fixture-bin/sha256sum
+cat > /fixture-bin/curl <<'CURL'
+#!/bin/bash
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --output ]; then destination=$2; shift; fi
+  shift
+done
+printf '#!/bin/sh\\ncat >/dev/null\\nexit 0\\n' > "$destination"
+printf 'image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.4\\n' >> "$destination"
+CURL
+chmod +x /fixture-bin/*
+`;
+
+test('rerun keeps the same configuration on its own simulated host', function idempotent() {
+  const commands = fakeHost + `
+    bash ${script} >/dev/null
+    mkdir -p /var/lib/kubelet
+    find /etc/rancher /etc/systemd/system /etc/sysctl.d /var/lib/opencrane-vm \\
+      -type f -exec /usr/bin/sha256sum {} + | sort > /tmp/before
+    bash ${script} >/dev/null
+    find /etc/rancher /etc/systemd/system /etc/sysctl.d /var/lib/opencrane-vm \\
+      -type f -exec /usr/bin/sha256sum {} + | sort > /tmp/after
+    cmp /tmp/before /tmp/after
+    grep -q 'LimitCORE=0' /etc/systemd/system/k3s.service
+    grep -q 'io.containerd.runsc.v1' \\
+      /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
+  `;
+  successful(container(commands, ['--dry-run']));
+});
