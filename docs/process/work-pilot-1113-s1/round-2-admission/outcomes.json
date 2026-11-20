@@ -1,0 +1,1 @@
+{"startedAt":"2026-11-20T17:26:09.754Z","revision":"ccea595758cb5ab60b01bf23891b71eb485273b4","fresh":false,"outcomes":[{"step":"secondary slot availability","result":"FAIL"},{"step":"startup and service logs","result":"NOT RUN","reason":"No package namespace was created"},{"step":"package-down cleanup","result":"PASS"},{"step":"down cleanup","result":"PASS"}]}

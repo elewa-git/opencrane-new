@@ -1,0 +1,7 @@
+
+HOST RISK OVERRIDE: accepted-dev-box-366; dev-box exception of 12 October 2026
+k3d-ocn-server-0: F1: disable swap, or use plain dm-crypt swap with a fresh random key at each boot (/etc/crypttab: NAME DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256); activate only that mapped swap device and reboot to verify the boot configuration.
+k3d-ocn-server-0: F2: disable host crash reporters (including apport and systemd-coredump); persist kernel.core_pattern= and kernel.core_uses_pid=0 in /etc/sysctl.d/99-no-core.conf, apply those settings and verify they remain after reboot.
+underlying-k3d-host: F1: disable swap, or use plain dm-crypt swap with a fresh random key at each boot (/etc/crypttab: NAME DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256); activate only that mapped swap device and reboot to verify the boot configuration.
+underlying-k3d-host: F2: disable host crash reporters (including apport and systemd-coredump); persist kernel.core_pattern= and kernel.core_uses_pid=0 in /etc/sysctl.d/99-no-core.conf, apply those settings and verify they remain after reboot.
+Package command refused; check pins, named secrets and slot ownership

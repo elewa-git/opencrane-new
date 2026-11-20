@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { collectHost, hostFailures } from './host-preflight.mjs';
+import { readPublicSettings } from './public-settings.mjs';
 import { fetchApplicationApproval } from './application-approval.mjs';
 import { fetchScannerApproval } from '../clamav/approval.mjs';
 
@@ -166,16 +167,7 @@ async function check(values, review) {
   checkPostgres(values, review);
   checkNatsCluster(values, review);
   await checkScanner(values, review);
-  const exposure = values.exposure;
-  if (!exposure || exposure.ingress !== false || exposure.loadBalancer !== false ||
-      exposure.funnel !== false) {
-    throw new Error('Public ingress, LoadBalancer and Funnel are refused');
-  }
-  for (const name of Object.keys(exposure)) {
-    if (!['ingress', 'loadBalancer', 'funnel'].includes(name)) {
-      throw new Error('Unsupported exposure setting');
-    }
-  }
+  readPublicSettings(values);
   if (review.chartVersion && values.chartVersion !== review.chartVersion) {
     throw new Error('Chart version differs from the reviewed version');
   }

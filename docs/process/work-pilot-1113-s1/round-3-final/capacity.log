@@ -1,0 +1,226 @@
+{"time": "2026-11-20T21:19:30.386584+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.27099609375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:20:00.355381+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.509765625, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T21:20:31.766040+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 7.3525390625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:21:00.983868+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 7.701171875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:21:30.656183+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.19287109375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:22:00.596176+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.12548828125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:22:29.702700+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.8359375, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T21:23:00.326775+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.0703125, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T21:23:30.454076+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.86328125, "qualifiedSeconds": 89, "qualified": false}
+{"time": "2026-11-20T21:24:00.440690+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.4619140625, "qualifiedSeconds": 119, "qualified": false}
+{"time": "2026-11-20T21:24:30.523029+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.06591796875, "qualifiedSeconds": 149, "qualified": false}
+{"time": "2026-11-20T21:25:00.236253+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.615234375, "qualifiedSeconds": 179, "qualified": false}
+{"time": "2026-11-20T21:25:30.726496+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.31005859375, "qualifiedSeconds": 210, "qualified": false}
+{"time": "2026-11-20T21:26:00.312999+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.51220703125, "qualifiedSeconds": 239, "qualified": false}
+{"time": "2026-11-20T21:26:30.035451+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.08642578125, "qualifiedSeconds": 269, "qualified": false}
+{"time": "2026-11-20T21:27:00.767578+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.30615234375, "qualifiedSeconds": 300, "qualified": true}
+{"time": "2026-11-20T21:27:31.264264+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.2060546875, "qualifiedSeconds": 330, "qualified": true}
+{"time": "2026-11-20T21:28:01.259140+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.38525390625, "qualifiedSeconds": 360, "qualified": true}
+{"time": "2026-11-20T21:28:31.257110+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.3701171875, "qualifiedSeconds": 390, "qualified": true}
+{"time": "2026-11-20T21:29:00.237482+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.93701171875, "qualifiedSeconds": 419, "qualified": true}
+{"time": "2026-11-20T21:29:30.650583+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.4853515625, "qualifiedSeconds": 450, "qualified": true}
+{"time": "2026-11-20T21:30:00.369107+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.64990234375, "qualifiedSeconds": 479, "qualified": true}
+{"time": "2026-11-20T21:30:30.762732+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.5791015625, "qualifiedSeconds": 510, "qualified": true}
+{"time": "2026-11-20T21:31:00.512203+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.02783203125, "qualifiedSeconds": 539, "qualified": true}
+{"time": "2026-11-20T21:31:31.293075+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.76416015625, "qualifiedSeconds": 570, "qualified": true}
+{"time": "2026-11-20T21:32:00.756975+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.32666015625, "qualifiedSeconds": 600, "qualified": true}
+{"time": "2026-11-20T21:32:30.304909+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.88037109375, "qualifiedSeconds": 629, "qualified": true}
+{"time": "2026-11-20T21:33:00.345820+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.5654296875, "qualifiedSeconds": 659, "qualified": true}
+{"time": "2026-11-20T21:33:30.395330+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.947265625, "qualifiedSeconds": 689, "qualified": true}
+{"time": "2026-11-20T21:34:00.789965+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.13134765625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:34:30.470422+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.76123046875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:35:01.049259+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.79736328125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:35:31.433370+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.61767578125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:36:01.381885+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.8896484375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:36:31.300362+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 7.26416015625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:37:00.454101+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 6.3837890625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:37:30.539909+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.943359375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:38:00.612624+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.041015625, "qualifiedSeconds": 30, "qualified": false}
+{"time": "2026-11-20T21:38:30.710859+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.91650390625, "qualifiedSeconds": 60, "qualified": false}
+{"time": "2026-11-20T21:38:59.795857+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.81884765625, "qualifiedSeconds": 89, "qualified": false}
+{"time": "2026-11-20T21:39:30.258578+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.17626953125, "qualifiedSeconds": 119, "qualified": false}
+{"time": "2026-11-20T21:39:59.719539+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.62841796875, "qualifiedSeconds": 149, "qualified": false}
+{"time": "2026-11-20T21:40:30.337096+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.185546875, "qualifiedSeconds": 179, "qualified": false}
+{"time": "2026-11-20T21:41:00.240967+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.484375, "qualifiedSeconds": 209, "qualified": false}
+{"time": "2026-11-20T21:41:30.225561+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.35498046875, "qualifiedSeconds": 239, "qualified": false}
+{"time": "2026-11-20T21:42:00.467664+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.236328125, "qualifiedSeconds": 269, "qualified": false}
+{"time": "2026-11-20T21:42:30.244230+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.95361328125, "qualifiedSeconds": 299, "qualified": false}
+{"time": "2026-11-20T21:42:59.617276+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.1650390625, "qualifiedSeconds": 329, "qualified": true}
+{"time": "2026-11-20T21:43:31.267154+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.2548828125, "qualifiedSeconds": 360, "qualified": true}
+{"time": "2026-11-20T21:43:59.870376+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.03662109375, "qualifiedSeconds": 389, "qualified": true}
+{"time": "2026-11-20T21:44:30.224538+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.44384765625, "qualifiedSeconds": 419, "qualified": true}
+{"time": "2026-11-20T21:45:00.248350+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.3251953125, "qualifiedSeconds": 449, "qualified": true}
+{"time": "2026-11-20T21:45:30.695692+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.4306640625, "qualifiedSeconds": 480, "qualified": true}
+{"time": "2026-11-20T21:46:00.645045+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.19140625, "qualifiedSeconds": 510, "qualified": true}
+{"time": "2026-11-20T21:46:31.232622+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.24853515625, "qualifiedSeconds": 540, "qualified": true}
+{"time": "2026-11-20T21:47:00.271400+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.2646484375, "qualifiedSeconds": 569, "qualified": true}
+{"time": "2026-11-20T21:49:15.840236+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T21:49:24.763091+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 29.4111328125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:49:51.536333+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 20.29345703125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:50:21.841085+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 13.1162109375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:50:51.059799+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 8.6796875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:51:21.246756+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 5.3388671875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T21:51:50.846423+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.17919921875, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T21:52:20.600382+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.02197265625, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T21:52:50.697289+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.7099609375, "qualifiedSeconds": 89, "qualified": false}
+{"time": "2026-11-20T21:53:21.199045+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.01708984375, "qualifiedSeconds": 119, "qualified": false}
+{"time": "2026-11-20T21:53:50.983197+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.78515625, "qualifiedSeconds": 149, "qualified": false}
+{"time": "2026-11-20T21:54:20.903178+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.78369140625, "qualifiedSeconds": 179, "qualified": false}
+{"time": "2026-11-20T21:54:51.393149+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.50048828125, "qualifiedSeconds": 210, "qualified": false}
+{"time": "2026-11-20T21:55:21.254833+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.6630859375, "qualifiedSeconds": 240, "qualified": false}
+{"time": "2026-11-20T21:55:51.221778+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.5615234375, "qualifiedSeconds": 269, "qualified": false}
+{"time": "2026-11-20T21:56:21.230803+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.42626953125, "qualifiedSeconds": 299, "qualified": false}
+{"time": "2026-11-20T21:56:51.202315+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.92138671875, "qualifiedSeconds": 329, "qualified": true}
+{"time": "2026-11-20T21:57:21.211991+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.107421875, "qualifiedSeconds": 359, "qualified": true}
+{"time": "2026-11-20T21:57:51.236865+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.88037109375, "qualifiedSeconds": 389, "qualified": true}
+{"time": "2026-11-20T21:58:21.211649+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.48779296875, "qualifiedSeconds": 419, "qualified": true}
+{"time": "2026-11-20T21:58:51.232849+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.74560546875, "qualifiedSeconds": 449, "qualified": true}
+{"time": "2026-11-20T21:59:21.212665+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.58740234375, "qualifiedSeconds": 479, "qualified": true}
+{"time": "2026-11-20T21:59:51.238174+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.533203125, "qualifiedSeconds": 509, "qualified": true}
+{"time": "2026-11-20T22:00:21.734987+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.505859375, "qualifiedSeconds": 540, "qualified": true}
+{"time": "2026-11-20T22:00:51.758048+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.41455078125, "qualifiedSeconds": 570, "qualified": true}
+{"time": "2026-11-20T22:01:22.195593+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.89599609375, "qualifiedSeconds": 600, "qualified": true}
+{"time": "2026-11-20T22:01:51.977234+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.8828125, "qualifiedSeconds": 630, "qualified": true}
+{"time": "2026-11-20T22:02:21.544961+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.72314453125, "qualifiedSeconds": 660, "qualified": true}
+{"time": "2026-11-20T22:02:51.952694+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.5810546875, "qualifiedSeconds": 690, "qualified": true}
+{"time": "2026-11-20T22:03:21.381897+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.4638671875, "qualifiedSeconds": 720, "qualified": true}
+{"time": "2026-11-20T22:03:50.877993+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.20751953125, "qualifiedSeconds": 749, "qualified": true}
+{"time": "2026-11-20T22:04:21.306000+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.29443359375, "qualifiedSeconds": 780, "qualified": true}
+{"time": "2026-11-20T22:04:51.599547+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.00146484375, "qualifiedSeconds": 810, "qualified": true}
+{"time": "2026-11-20T22:05:22.193195+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.7724609375, "qualifiedSeconds": 840, "qualified": true}
+{"time": "2026-11-20T22:05:51.445175+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.9443359375, "qualifiedSeconds": 870, "qualified": true}
+{"time": "2026-11-20T22:06:21.570685+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.7216796875, "qualifiedSeconds": 900, "qualified": true}
+{"time": "2026-11-20T22:06:51.199561+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.759765625, "qualifiedSeconds": 929, "qualified": true}
+{"time": "2026-11-20T22:07:21.206751+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.42578125, "qualifiedSeconds": 959, "qualified": true}
+{"time": "2026-11-20T22:07:51.198691+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.15283203125, "qualifiedSeconds": 989, "qualified": true}
+{"time": "2026-11-20T22:08:21.211950+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.4345703125, "qualifiedSeconds": 1019, "qualified": true}
+{"time": "2026-11-20T22:08:51.205216+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.10888671875, "qualifiedSeconds": 1049, "qualified": true}
+{"time": "2026-11-20T22:09:21.256351+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.4892578125, "qualifiedSeconds": 1080, "qualified": true}
+{"time": "2026-11-20T22:09:51.536068+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.41064453125, "qualifiedSeconds": 1110, "qualified": true}
+{"time": "2026-11-20T22:10:22.023753+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.0478515625, "qualifiedSeconds": 1140, "qualified": true}
+{"time": "2026-11-20T22:10:52.094314+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.67626953125, "qualifiedSeconds": 1170, "qualified": true}
+{"time": "2026-11-20T22:11:21.220946+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.0634765625, "qualifiedSeconds": 1199, "qualified": true}
+{"time": "2026-11-20T22:11:52.079053+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.67578125, "qualifiedSeconds": 1230, "qualified": true}
+{"time": "2026-11-20T22:12:22.019099+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.68701171875, "qualifiedSeconds": 1260, "qualified": true}
+{"time": "2026-11-20T22:12:51.085814+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.85400390625, "qualifiedSeconds": 1289, "qualified": true}
+{"time": "2026-11-20T22:13:21.349113+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.09130859375, "qualifiedSeconds": 1320, "qualified": true}
+{"time": "2026-11-20T22:13:50.668401+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.9853515625, "qualifiedSeconds": 1349, "qualified": true}
+{"time": "2026-11-20T22:14:21.577762+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.57275390625, "qualifiedSeconds": 1380, "qualified": true}
+{"time": "2026-11-20T22:14:51.266179+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.26318359375, "qualifiedSeconds": 1410, "qualified": true}
+{"time": "2026-11-20T22:15:21.740641+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.060546875, "qualifiedSeconds": 1440, "qualified": true}
+{"time": "2026-11-20T22:15:50.167102+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:16:41.560190+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:16:51.194153+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:17:41.494491+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:17:54.450711+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:18:23.163544+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:19:11.577525+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:19:41.556702+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:19:57.663022+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:20:19.237260+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:21:11.533474+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:21:38.613003+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T22:21:51.020040+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 4.18212890625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T22:22:20.732083+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 3.033203125, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T22:22:50.744179+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.32421875, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T22:23:21.124198+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.74609375, "qualifiedSeconds": 90, "qualified": false}
+{"time": "2026-11-20T22:23:50.900452+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.44384765625, "qualifiedSeconds": 119, "qualified": false}
+{"time": "2026-11-20T22:24:20.740223+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.1240234375, "qualifiedSeconds": 149, "qualified": false}
+{"time": "2026-11-20T22:24:51.208143+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.73583984375, "qualifiedSeconds": 180, "qualified": false}
+{"time": "2026-11-20T22:25:21.374235+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.43359375, "qualifiedSeconds": 210, "qualified": false}
+{"time": "2026-11-20T22:25:51.438893+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.45654296875, "qualifiedSeconds": 240, "qualified": false}
+{"time": "2026-11-20T22:26:21.232241+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.56591796875, "qualifiedSeconds": 270, "qualified": false}
+{"time": "2026-11-20T22:26:51.064664+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.333984375, "qualifiedSeconds": 300, "qualified": true}
+{"time": "2026-11-20T22:27:21.192716+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.02294921875, "qualifiedSeconds": 330, "qualified": true}
+{"time": "2026-11-20T22:27:50.740882+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.05810546875, "qualifiedSeconds": 359, "qualified": true}
+{"time": "2026-11-20T22:28:21.207160+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.91552734375, "qualifiedSeconds": 390, "qualified": true}
+{"time": "2026-11-20T22:28:51.206691+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.1279296875, "qualifiedSeconds": 420, "qualified": true}
+{"time": "2026-11-20T22:29:21.013821+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.89453125, "qualifiedSeconds": 449, "qualified": true}
+{"time": "2026-11-20T22:29:51.223688+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.05517578125, "qualifiedSeconds": 480, "qualified": true}
+{"time": "2026-11-20T22:30:22.113419+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.28125, "qualifiedSeconds": 511, "qualified": true}
+{"time": "2026-11-20T22:30:51.240310+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.2509765625, "qualifiedSeconds": 540, "qualified": true}
+{"time": "2026-11-20T22:31:22.089396+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.22021484375, "qualifiedSeconds": 571, "qualified": true}
+{"time": "2026-11-20T22:31:51.201278+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.93359375, "qualifiedSeconds": 600, "qualified": true}
+{"time": "2026-11-20T22:32:21.245202+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.85693359375, "qualifiedSeconds": 630, "qualified": true}
+{"time": "2026-11-20T22:32:51.213715+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.6728515625, "qualifiedSeconds": 660, "qualified": true}
+{"time": "2026-11-20T22:33:21.379902+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.841796875, "qualifiedSeconds": 690, "qualified": true}
+{"time": "2026-11-20T22:33:51.219715+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.669921875, "qualifiedSeconds": 720, "qualified": true}
+{"time": "2026-11-20T22:34:21.210007+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.67431640625, "qualifiedSeconds": 750, "qualified": true}
+{"time": "2026-11-20T22:34:50.654806+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.64208984375, "qualifiedSeconds": 779, "qualified": true}
+{"time": "2026-11-20T22:35:21.550774+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.8310546875, "qualifiedSeconds": 810, "qualified": true}
+{"time": "2026-11-20T22:35:51.279089+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.95947265625, "qualifiedSeconds": 840, "qualified": true}
+{"time": "2026-11-20T22:36:21.053891+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.861328125, "qualifiedSeconds": 870, "qualified": true}
+{"time": "2026-11-20T22:36:51.232879+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.12890625, "qualifiedSeconds": 900, "qualified": true}
+{"time": "2026-11-20T22:37:21.435252+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.64892578125, "qualifiedSeconds": 930, "qualified": true}
+{"time": "2026-11-20T22:37:51.233846+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.078125, "qualifiedSeconds": 960, "qualified": true}
+{"time": "2026-11-20T22:38:21.243360+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.80712890625, "qualifiedSeconds": 990, "qualified": true}
+{"time": "2026-11-20T22:38:50.832955+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.841796875, "qualifiedSeconds": 1019, "qualified": true}
+{"time": "2026-11-20T22:39:20.962976+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.8408203125, "qualifiedSeconds": 1049, "qualified": true}
+{"time": "2026-11-20T22:39:51.225420+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.26611328125, "qualifiedSeconds": 1080, "qualified": true}
+{"time": "2026-11-20T22:40:21.882606+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.00732421875, "qualifiedSeconds": 1110, "qualified": true}
+{"time": "2026-11-20T22:40:51.214965+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.91748046875, "qualifiedSeconds": 1140, "qualified": true}
+{"time": "2026-11-20T22:41:21.203455+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.18310546875, "qualifiedSeconds": 1170, "qualified": true}
+{"time": "2026-11-20T22:41:51.390393+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.34765625, "qualifiedSeconds": 1200, "qualified": true}
+{"time": "2026-11-20T22:42:21.227561+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.5458984375, "qualifiedSeconds": 1230, "qualified": true}
+{"time": "2026-11-20T22:42:51.223165+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.22119140625, "qualifiedSeconds": 1260, "qualified": true}
+{"time": "2026-11-20T22:43:21.192111+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.8193359375, "qualifiedSeconds": 1290, "qualified": true}
+{"time": "2026-11-20T22:43:50.826047+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.88427734375, "qualifiedSeconds": 1319, "qualified": true}
+{"time": "2026-11-20T22:44:21.040345+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.49560546875, "qualifiedSeconds": 1350, "qualified": true}
+{"time": "2026-11-20T22:44:51.203972+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.15771484375, "qualifiedSeconds": 1380, "qualified": true}
+{"time": "2026-11-20T22:45:21.965699+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.39453125, "qualifiedSeconds": 1410, "qualified": true}
+{"time": "2026-11-20T22:45:51.286531+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.2705078125, "qualifiedSeconds": 1440, "qualified": true}
+{"time": "2026-11-20T22:46:21.780696+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.16064453125, "qualifiedSeconds": 1470, "qualified": true}
+{"time": "2026-11-20T22:46:51.358209+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.892578125, "qualifiedSeconds": 1500, "qualified": true}
+{"time": "2026-11-20T22:47:21.768808+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.3916015625, "qualifiedSeconds": 1530, "qualified": true}
+{"time": "2026-11-20T22:47:51.498359+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.3330078125, "qualifiedSeconds": 1560, "qualified": true}
+{"time": "2026-11-20T22:48:21.438809+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.39306640625, "qualifiedSeconds": 1590, "qualified": true}
+{"time": "2026-11-20T22:48:50.840202+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.2294921875, "qualifiedSeconds": 1619, "qualified": true}
+{"time": "2026-11-20T22:49:20.964533+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.26513671875, "qualifiedSeconds": 1649, "qualified": true}
+{"time": "2026-11-20T22:49:51.024387+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.98876953125, "qualifiedSeconds": 1680, "qualified": true}
+{"time": "2026-11-20T22:50:21.677560+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.08154296875, "qualifiedSeconds": 1710, "qualified": true}
+{"time": "2026-11-20T22:50:52.194659+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.39501953125, "qualifiedSeconds": 1741, "qualified": true}
+{"time": "2026-11-20T22:51:21.191061+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.15966796875, "qualifiedSeconds": 1770, "qualified": true}
+{"time": "2026-11-20T22:51:51.206087+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.97509765625, "qualifiedSeconds": 1800, "qualified": true}
+{"time": "2026-11-20T22:52:20.905561+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.861328125, "qualifiedSeconds": 1829, "qualified": true}
+{"time": "2026-11-20T22:52:51.278582+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.67529296875, "qualifiedSeconds": 1860, "qualified": true}
+{"time": "2026-11-20T22:53:21.190467+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.73046875, "qualifiedSeconds": 1890, "qualified": true}
+{"time": "2026-11-20T22:53:51.255699+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.8662109375, "qualifiedSeconds": 1920, "qualified": true}
+{"time": "2026-11-20T22:54:21.196152+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.9453125, "qualifiedSeconds": 1950, "qualified": true}
+{"time": "2026-11-20T22:54:51.222568+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 0.794921875, "qualifiedSeconds": 1980, "qualified": true}
+{"time": "2026-11-20T22:55:21.832404+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.33203125, "qualifiedSeconds": 2010, "qualified": true}
+{"time": "2026-11-20T22:55:51.372382+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.29296875, "qualifiedSeconds": 2040, "qualified": true}
+{"time": "2026-11-20T22:56:21.208143+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.34814453125, "qualifiedSeconds": 2070, "qualified": true}
+{"time": "2026-11-20T22:56:51.194723+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.36865234375, "qualifiedSeconds": 2100, "qualified": true}
+{"time": "2026-11-20T22:57:21.210850+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.03369140625, "qualifiedSeconds": 2130, "qualified": true}
+{"time": "2026-11-20T22:57:51.224935+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.189453125, "qualifiedSeconds": 2160, "qualified": true}
+{"time": "2026-11-20T22:58:21.214552+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.0, "qualifiedSeconds": 2190, "qualified": true}
+{"time": "2026-11-20T22:58:51.217487+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.11181640625, "qualifiedSeconds": 2220, "qualified": true}
+{"time": "2026-11-20T22:59:18.551820+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:00:11.620024+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:00:19.025312+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:01:11.614384+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:01:19.482857+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:01:49.832318+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:02:41.601040+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:03:11.627745+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:03:20.991827+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:03:48.676211+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:04:18.862456+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:04:48.744021+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:05:19.269208+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:05:49.114805+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:06:18.966631+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:06:49.301622+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:07:41.545244+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:08:00.417905+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T23:08:21.013607+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.46875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T23:08:51.101995+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.38134765625, "qualifiedSeconds": 30, "qualified": false}
+{"time": "2026-11-20T23:09:21.490513+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.33154296875, "qualifiedSeconds": 60, "qualified": false}
+{"time": "2026-11-20T23:09:51.205845+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.87451171875, "qualifiedSeconds": 90, "qualified": false}
+{"time": "2026-11-20T23:10:22.244072+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 2.20458984375, "qualifiedSeconds": 121, "qualified": false}
+{"time": "2026-11-20T23:10:51.305739+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.62060546875, "qualifiedSeconds": 150, "qualified": false}
+{"time": "2026-11-20T23:11:22.251612+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.25634765625, "qualifiedSeconds": 181, "qualified": false}
+{"time": "2026-11-20T23:11:51.222206+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.06298828125, "qualifiedSeconds": 210, "qualified": false}
+{"time": "2026-11-20T23:12:21.229037+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.10595703125, "qualifiedSeconds": 240, "qualified": false}
+{"time": "2026-11-20T23:12:51.202090+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.04150390625, "qualifiedSeconds": 270, "qualified": false}
+{"time": "2026-11-20T23:13:21.209177+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "otherJourneys": 0, "load": 1.17919921875, "qualifiedSeconds": 300, "qualified": true}

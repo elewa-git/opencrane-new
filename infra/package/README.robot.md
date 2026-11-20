@@ -67,9 +67,10 @@ then runs `prepare.ts` with the private values file. That command creates eight
 named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
-The owner bootstrap links the separate development sign-in account to the
-privately configured owner member in this install. It does not edit the existing
-Zitadel user with that email.
+The default owner bootstrap links the separate development sign-in account to the
+privately configured owner member in this install. Public-address mode skips that
+bootstrap and uses the first-owner token claim described below. Neither path edits
+the existing Zitadel user with that email.
 
 The `runtime` secret supplies text settings to the server and workers.
 The dispatcher maps `DATABASE_URL` to `HANDLER_DATABASE_URL` for its queue, manifest,
@@ -89,7 +90,8 @@ fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use
 names in the chart.
 
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
-eight secret names and all three exposure flags set to `false`:
+eight secret names and all three legacy exposure flags set to `false`. The optional
+`exposure.public` settings are described below.
 
 Preflight and Helm run from the values file's directory and receive only its
 filename. The private directory remains in the child process's working directory,
@@ -152,6 +154,22 @@ through `capture.mjs`. The four PNG files for each run are saved with
 `fresh-1-` or `fresh-2-` in `docs/process/p5-1-live/`. Browser failures keep the step and a short timeout or network error. Other
 error text is withheld so cookies, tokens, Secret contents and page bodies cannot
 enter the runner log. No extra browser retries are added.
+`qualification-signin.mjs` runs the packaged sign-in and token journey using private
+JSON input on stdin. It requires a claimed secondary slot and stand-in provider
+settings. Its receipt directory comes from `JOURNEY_RECEIPT_DIR`. The coordinator
+prepares joined membership access before the first protected workspace read.
+`qualification-failure.mjs` keeps only a fixed step name and an allowlisted error
+code. Failed chat checks also record the operation and numeric HTTP status,
+without request addresses or response text. Each role and width captures its failure
+before closing its browser context.
+Its tracked `tls-cleanup.mjs` and `join-handoff.mjs` helpers close tunnels and
+prepare joined access. The executable-import test reaches the slot refusal before
+configuration, so missing local imports fail without starting a stack.
+The original owner's reuse must return `token_used`. The member probe requires
+HTTP 409 with `owner_exists` and verifies that both identities keep their roles.
+Screenshots mask form inputs, including sign-in and token fields. Screenshot failure
+is recorded separately and never replaces the original journey failure.
+
 A failed run still calls
 owned `package-down`; inspect the claim before trying again. The operator
 records the bridge probe, other-resource comparison and mobile screen review
@@ -322,7 +340,9 @@ context exception and refuses test folder imports.
 A separate real-image import check keeps the scanner module needed by every
 projection worker in the image.
 
-The container check runs the real bootstrap entry point and its owner subprocess.
+The container checks run the real bootstrap entry point in both owner modes.
+The development run completes its owner subprocess and keeps its existing completion
+message. The token run reports claim readiness and creates no development owner.
 A read-only test loader first imports the real service packages, then supplies
 made-up database, event-log, access and Kubernetes replies. Only the identity file
 and service-account reads receive made-up data. The generated environment files
@@ -580,9 +600,65 @@ approval and promotion remain BLOCKED. The existing CI glob runs offline fixture
 through `scripts/p5-4-images12.test.mjs`.
 No promotion gate, approved inventory, runtime dependency or pin changes.
 
+## Public-address sign-in hardening
+
+`exposure.public` defaults to `{enabled: false, host: "", tlsSecret: ""}`. Choosing
+`enabled: true` requires a plain DNS hostname and a Kubernetes TLS Secret name.
+This mode prepares production sign-in and token ownership only. It creates no
+Ingress, Gateway, LoadBalancer, NodePort or public listener. Every Service remains
+ClusterIP. The real address and certificate installer is deferred. The legacy
+`ingress`, `loadBalancer` and `funnel` flags always refuse, including in this mode.
+Never use Tailscale Funnel.
+
+Set `PACKAGE_PUBLIC_SETTINGS_FILE` to the path of a private JSON object containing
+single-line environment settings. Keep the file outside the repository with mode
+0600. Preflight refuses unless these settings hold:
+
+| Setting | Required value |
+| --- | --- |
+| `OIDC_EXPECTED_ORG_ID` | Non-blank organisation id |
+| `NODE_ENV` | Exactly `production` |
+| `OIDC_COOKIE_SECURE` | Exactly `true` |
+| `OIDC_REDIRECT_URI` | Exactly `https://<host>/auth/callback` |
+| `OIDC_EXTRA_IDENTITIES` | Absent, including no empty value |
+| `DEV_OWNER_EMAIL` | Absent, including no empty value |
+
+Preparation reads the existing secondary development sign-in setup in read-only
+mode. It generates local credentials, removes the development identity exception
+and applies these checked settings. This is still a spare-slot development package;
+it is not a hosted identity provisioner. No sign-in organisation or instance setting
+is changed by this preparation mode. The installer checks the saved runtime Secret
+and the bootstrap Secret's overrides against the same rule before any Helm command.
+Changing the private file alone cannot conceal unsafe saved settings.
+
+Generate the first-owner token with the existing installation command from a private
+terminal, with capture disabled. Use silo `dev` for this local package and a private
+`BOOTSTRAP_TOKEN_FILE` outside the repository. Add that file's path as
+`BOOTSTRAP_TOKEN_FILE` in the private settings JSON. Never put the token in that
+JSON, Helm values, arguments, URLs or receipts. The
+[server's token instructions](../../apps/server/README.robot.md#first-owner-bootstrap-12)
+cover generation, expiry and claim refusals.
+
+Preparation copies only the token hash record into the runtime-files Secret.
+The server receives a private memory directory owned by its Unix account, with
+mode 0700 and a mode-0600 token file at
+`/var/lib/opencrane/bootstrap/token.json`. The setup job starts the projections and
+opens the server without creating a development owner. A person signs in at
+`/claim` and submits the token through the existing claim screen. One event creates
+the owner. A second submission refuses with `token_used`; membership history also
+prevents reopening the claim after a Pod restart. Losing the token file does not
+reset ownership.
+
+Use the same `PACKAGE_PUBLIC_SETTINGS_FILE` path for preparation, preflight and
+`run.sh package-up --id <slot>`. A fresh live qualification must use a tailnet-only
+test hostname and a self-signed certificate, real sign-in in the test organisation,
+chat at 1280 and 390 px, a wrong-organisation refusal and token reuse refusal.
+Source tests do not qualify this journey. Keep screenshots and safe logs before
+`package-down` and `down.sh` remove the slot.
+
 ## Private owner email
 
-The development owner email uses the [private host file](../dev-stack/README.robot.md#private-owner-email)
+Only the default private development mode reads the development owner email from the [private host file](../dev-stack/README.robot.md#private-owner-email)
 shared by development stacks. Preparation reads it before creating credentials,
 then copies its value into the private runtime Secret as `DEV_OWNER_EMAIL`.
 The packaged bootstrap receives that environment setting. The twice-fresh check

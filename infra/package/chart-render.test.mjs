@@ -820,3 +820,55 @@ function keepsJournalBelowGroupManagedRoot() {
 
 test('keeps the restore journal private when Kubernetes mounts its volume again',
   keepsJournalBelowGroupManagedRoot);
+
+function publicModeUsesTokenWithoutExposure() {
+  const values = chartValues();
+  values.exposure.public = { enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  const bootstrap = resources.get('Job/bootstrap').spec.template.spec;
+  const tokenSetting = { name: 'BOOTSTRAP_TOKEN_FILE',
+    value: '/var/lib/opencrane/bootstrap/token.json' };
+  assert.ok(server.containers[0].env.some(isTokenSetting));
+  function isTokenSetting(setting) {
+    return setting.name === tokenSetting.name && setting.value === tokenSetting.value;
+  }
+  const ownerSetting = bootstrap.containers[0].env.find(isOwnerBootstrapSetting);
+  function isOwnerBootstrapSetting(setting) {
+    return setting.name === 'DEV_OWNER_BOOTSTRAP';
+  }
+  assert.deepEqual(ownerSetting, { name: 'DEV_OWNER_BOOTSTRAP', value: '0' });
+  for (const resource of resources.values()) {
+    assert.notEqual(resource.kind, 'Ingress');
+    assert.notEqual(resource.kind, 'Gateway');
+    if (resource.kind === 'Service') assert.equal(resource.spec.type, 'ClusterIP');
+  }
+  const source = server.initContainers.find(isPrivateFileCopy);
+  function isPrivateFileCopy(container) {
+    return container.name === 'copy-private-files';
+  }
+  assert.match(source.args[0], /chmod 0600 .*token.json/u);
+  assert.match(source.args[0], /chmod 0700 .*bootstrap/u);
+  assert.ok(server.containers[0].volumeMounts.some(isTokenVolume));
+  function isTokenVolume(volume) {
+    return volume.name === 'bootstrap-token' && volume.readOnly === true;
+  }
+}
+test('public settings install uses the token path and keeps all network resources private',
+  publicModeUsesTokenWithoutExposure);
+
+for (const [name, field, value] of [
+  ['missing hostname', 'host', ''], ['hostname with a scheme', 'host', 'https://pilot.example.test'],
+  ['hostname with a port', 'host', 'pilot.example.test:443'], ['IP address', 'host', '127.0.0.1'],
+  ['missing TLS reference', 'tlsSecret', ''], ['implicit choice', 'enabled', 'true'],
+]) {
+  function refusesPublicAddress() {
+    const values = chartValues();
+    values.exposure.public = { enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls' };
+    values.exposure.public[field] = value;
+    const rendered = renderChart(values);
+    assert.equal(rendered.status, 1);
+    assert.match(rendered.stderr, /Public address/u);
+  }
+  test(`chart refuses public address with ${name}`, refusesPublicAddress);
+}

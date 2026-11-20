@@ -13,6 +13,7 @@ import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
 import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from './package-hosts.ts';
+import { checkPublicSettings, type PublicPackageValues } from '../package/public-settings.mjs';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 
 const execute = promisify(execFile);
@@ -77,7 +78,7 @@ type PackageOwner = {
   installId?: string;
   hostPreflight?: HostCheckRecord;
 };
-type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
+type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & PublicPackageValues & {
   images: Record<string, string>;
   natsCluster?: { enabled: boolean };
   pilotRestore?: { enabled: boolean; backupId: string };
@@ -258,8 +259,25 @@ async function readReviewedValues(valuesFile: string) {
   return { values, review };
 }
 
-function checkSecretFields(name: string, stored: SecretData) {
-  for (const key of secretKeys[name] ?? []) {
+function requiredSecretFields(name: string, tokenBootstrap: boolean) {
+  const fields = secretKeys[name] ?? [];
+  if (!tokenBootstrap) {
+    return fields;
+  }
+  const required: string[] = [];
+  for (const field of fields) {
+    if (!['DEV_OWNER_EMAIL', 'PACKAGE_OWNER_SUBJECT'].includes(field)) {
+      required.push(field);
+    }
+  }
+  if (name === 'runtimeFiles') {
+    required.push('bootstrap-token.json');
+  }
+  return required;
+}
+
+function checkSecretFields(name: string, stored: SecretData, tokenBootstrap = false) {
+  for (const key of requiredSecretFields(name, tokenBootstrap)) {
     if (!stored.data?.[key]) throw new Error(`Required secret field is absent: ${name}.${key}`);
   }
   if (name === 'runtime') {
@@ -360,10 +378,24 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
     if (!found) throw new Error(`Required secret is absent: ${name}`);
     const stored = JSON.parse(found) as SecretData;
     checkReplicaSettings(name, stored, values);
-    checkSecretFields(name, stored);
+    checkSecretFields(name, stored, values.exposure?.public?.enabled === true);
     secrets[name] = stored;
   }
+  if (values.exposure?.public?.enabled === true) {
+    const runtime = decodeSecret(secrets['runtime']!);
+    const bootstrap = decodeSecret(secrets['bootstrap']!);
+    checkPublicSettings(values, runtime);
+    checkPublicSettings(values, { ...runtime, ...bootstrap });
+  }
   return secrets;
+}
+
+function decodeSecret(secret: SecretData) {
+  const settings: Record<string, string> = {};
+  for (const [name, value] of Object.entries(secret.data ?? {})) {
+    settings[name] = Buffer.from(value, 'base64').toString('utf8');
+  }
+  return settings;
 }
 
 async function checkRenderedPackage(valuesFile: string, review: PackageReview) {

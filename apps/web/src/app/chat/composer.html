@@ -1,7 +1,7 @@
 <!-- Copied from OpenCrane 1; commit 10abd0ef6. -->
 <form class="composer" [class.disabled]="!!reason()"
   [class.file-drag]="fileDrag() && !reason() && !teamSession() && !directMode()"
-  (submit)="$event.preventDefault(); submit()">
+  (submit)="$event.preventDefault(); submit(messageField.value)">
   @if (!reason() && !teamSession() && !directMode()) {
     <span class="drop-label" role="status" aria-live="polite">
       @if (fileDrag()) { Drop files to add them }
@@ -12,11 +12,11 @@
     <div id="composer-reason" class="disabled-field"><oc-icon name="closed" /><span>{{ reason() }}</span></div>
   }
   <label class="sr-only" for="message">{{ directMode() ? 'Message' : 'Message your agent' }}</label>
-  <textarea id="message" rows="1" maxlength="32000" [placeholder]="placeholder()"
+  <textarea #messageField id="message" rows="1" maxlength="32000" [placeholder]="placeholder()"
     [value]="draft()" [disabled]="!!reason()"
     [readOnly]="queued() || (directMode() && busy())"
     [attr.aria-describedby]="reason() ? 'composer-reason' : null"
-    (input)="change($event)" (keydown)="keydown($event)"></textarea>
+    (input)="change($event)" (keydown)="keydown($event, messageField.value)"></textarea>
   @if (attachments().length) {
     <ul class="attachment-chips" aria-label="Attachments">
       @for (chip of attachments(); track chip.key) {

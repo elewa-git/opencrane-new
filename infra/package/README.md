@@ -20,7 +20,7 @@ flowchart LR
   stack["infra/dev-stack<br/>stack ownership"] -->|checks and launches| package["infra/package<br/>local Helm install"]
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
-  package -->|installs apps and prepares computer settings| apps["Server, website, workers and computer<br/>product services"]
+  package -->|checks settings and installs apps| apps["Server, website, workers and computer<br/>first owner token claim"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
   package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
@@ -31,9 +31,12 @@ flowchart LR
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
-- Keep private settings in named Secrets and refuse public network exposure. Chats need no key volume.
+- Keep private settings in named Secrets and check production sign-in before installation.
+  Chats need no key volume.
+- Keep network access private while the public-address installer is being built.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
-- Prepare databases, the event log, sign-in and a first owner for local testing.
+- Prepare databases, the event log and development sign-in.
+- Let the first person claim ownership with a one-time token in public-address mode.
 - Set the installation's public organisation name.
 - Give assistant computers the private gateway address and short-lived passes.
 - Save scheduled backups of events, databases and uploaded files together.
@@ -53,8 +56,9 @@ Not built yet:
    local services. Preparation records ownership and creates private settings for
    the package in the chosen cluster.
 2. **The package starts.** Host, image and settings checks run before Helm installs anything.
-   A setup job prepares the databases, event log and first owner; workers start an
-   assistant's computer when needed.
+   A setup job prepares the databases and event log. Private development installs
+   create the test owner; public-address mode waits for a signed-in person to claim
+   ownership with a one-time token. Workers start an assistant's computer when needed.
 3. **A developer opens the website.** A local port forward connects their browser
    to the private website. A missing or changed cluster target stops forwarding.
 4. **A person uploads a file.** The server scans it before saving and sending it
@@ -80,8 +84,10 @@ nice -n 10 node --test infra/package/chart-render.test.mjs
 
 For a running install, follow the [operator commands](README.robot.md) to claim a
 spare stack, prepare private values, start Helm, forward the website and clean up.
-That guide also explains image approval and the private development owner setting.
+That guide also explains image approval, production sign-in checks and the one-time
+owner claim. Public-address mode currently creates no public listener.
 A fresh install replaces the selected install's data.
+Sign-in checks save a safe failure code and step, and a screenshot with form values hidden.
 
 Each host must have swap off, or plain encrypted swap with a fresh random key at
 each boot. Host crash dumps must be off or never persisted: this preflight accepts

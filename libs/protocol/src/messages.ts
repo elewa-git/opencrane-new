@@ -3,6 +3,7 @@
 // Node-only code.
 import { chatSubscribeSchema, chatMessageSchema, privateReplySchema, privateOutputClearedSchema } from './chat.ts';
 import { z } from 'zod';
+import { chatContextSubscribeSchema, chatContextMessageSchema } from './chat-context.ts';
 import { subscribeSchema, realtimeMessageSchema } from './realtime.ts';
 
 export const helloMessageSchema = z
@@ -59,12 +60,18 @@ export const eventValidationResultSchema = z
 export type EventValidationResult = z.infer<typeof eventValidationResultSchema>;
 
 // Every message the server can send down the socket.
-export const serverMessageSchema = z.union([helloEchoSchema, errorMessageSchema, eventValidationResultSchema, realtimeMessageSchema, chatMessageSchema,
-  privateReplySchema, privateOutputClearedSchema]);
+export const serverMessageSchema = z.union([
+  helloEchoSchema, errorMessageSchema, eventValidationResultSchema,
+  realtimeMessageSchema, chatMessageSchema, privateReplySchema,
+  privateOutputClearedSchema, chatContextMessageSchema,
+]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 // Every message the browser can send up the socket.
-export const clientMessageSchema = z.union([helloMessageSchema, validateEventMessageSchema, subscribeSchema, chatSubscribeSchema]);
+export const clientMessageSchema = z.union([
+  helloMessageSchema, validateEventMessageSchema, subscribeSchema,
+  chatSubscribeSchema, chatContextSubscribeSchema,
+]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

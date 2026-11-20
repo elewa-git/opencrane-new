@@ -56,6 +56,12 @@ checks. Local packaging can progress while those journeys remain NOT RUN.
   Service endpoints stay private. Reject public ingress, LoadBalancer exposure and
   Tailscale Funnel. Inspect rendered and live resources/listeners, and require a
   probe from outside the tailnet to fail before accepting either install.
+  **Owner decision, 12 November 2026:** allow one explicitly chosen public HTTPS
+  address behind the customer's pinned sign-in organisation. Keep all other
+  endpoints private and keep the three legacy exposure refusals. Public-address
+  mode requires production sign-in, Secure cookies, the exact HTTPS callback,
+  no development identity exceptions and a one-time first-owner token. Install
+  hardening is proved privately first; opening the real address remains separate.
 - **Prove actual placement.** A three-process NATS setting is insufficient. Record
   three JetStream peers on distinct Kubernetes nodes, their volumes and stream
   replica count, plus TLS-authenticated routes. k3d nodes still share one physical

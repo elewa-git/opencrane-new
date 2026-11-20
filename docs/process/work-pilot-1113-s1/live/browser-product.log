@@ -1,0 +1,4 @@
+PASS wrong token refused without retaining the input
+PASS one-time token creates the first owner
+PASS used token refuses a second owner claim
+FAIL first owner workspace readiness and chat; code=withheld; details withheld

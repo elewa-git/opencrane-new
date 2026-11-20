@@ -128,3 +128,5 @@ export { personalProfileMetadataSchema, personalConnectionSettingsSchema,
 export { sessionDefaults } from './session-defaults.ts';
 
 export { recordIdPattern, recordIdSchema } from '@opencrane/events';
+
+export { chatContextSubscribeSchema } from './chat-context.ts';

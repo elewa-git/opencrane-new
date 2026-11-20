@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' apps/server/src/chat/context-live.ts apps/server/src/chat/context.ts apps/server/src/chat/realtime.ts apps/server/src/chat/routes.ts apps/server/src/chat/session-auth.ts apps/server/src/websocket.ts apps/server/test/chat-context-live.test.ts apps/web/src/app/chat/chat-session.ts apps/web/src/app/chat/personal-assignment.ts apps/web/src/app/chat/provisioning.spec.ts apps/web/src/app/chat/workspace.ts libs/protocol/src/chat-context.ts libs/protocol/src/index.ts libs/protocol/src/messages.ts

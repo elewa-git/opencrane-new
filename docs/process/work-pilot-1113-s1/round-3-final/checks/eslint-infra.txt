@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' --no-config-lookup --config <private-checks>/eslint-infra.config.mjs infra/package/qualification-failure.mjs infra/package/qualification-failure.test.mjs infra/package/qualification-import.test.mjs infra/package/qualification-join.test.mjs infra/package/qualification-signin.mjs infra/package/qualification-tls.test.mjs infra/package/tls-cleanup.mjs infra/package/join-handoff.mjs
