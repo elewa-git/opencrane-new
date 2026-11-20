@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { WebSocket } from 'ws';
@@ -133,11 +134,11 @@ async function appendTerminal(options: Options, conversationId: string, turnId: 
       ? { conversationId, turnId }
       : { conversationId, turnId, reason: 'conversation_closed' };
     const type = status === 'completed' ? 'agent.turn_completed' : 'agent.turn_failed';
-    const event = {
+    const event = serverEvent({
       id, commandId: id, type, subject, silo: options.silo,
-      source: 'opencrane-server', principal: { kind: 'system' as const, id: 'close-cleanup' },
-      time: new Date().toISOString(), correlation: {}, data,
-    };
+      principal: { kind: 'system' as const, id: 'close-cleanup' },
+      data,
+    });
     const result = await options.store.append({ expectedSequence: writer.sequence,
       historyChecked: true, event });
     if (result.status === 'appended') {

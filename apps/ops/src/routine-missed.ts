@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdPattern } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
@@ -234,9 +235,9 @@ function envelope(silo: string, input: Input, data: Missed, time: string): Event
   if (data.reason === 'dst') {
     type = 'routine.occurrence_skipped';
   }
-  return { id, commandId: id, silo, source: 'opencrane-server',
+  return serverEvent({ id, commandId: id, silo,
     type, subject: `routine-${data.routineId}`, time,
-    principal: { kind: 'system', id: 'opencrane-server' }, correlation: {}, data };
+    principal: { kind: 'system', id: 'opencrane-server' }, data });
 }
 function savedReceipt(row: StoredEvent, state: RoutineState | undefined,
   rows: StoredEvent[], input: Input) {

@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -68,9 +68,9 @@ export async function writeAccess(request: FastifyRequest, reply: FastifyReply,
   if ((rows.at(-1)?.sequence ?? 0) !== input.expectedSequence) throw new ProviderConflict();
   const checked = await checkAccessChange(options, memberId, input, modelId, model.retired, rows);
   if (checked.noEffect) return reply.send({ status: 'no_effect' });
-  const event = { id: randomUUID(), commandId: input.commandId, subject, silo: options.silo,
-    type, data, time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'human' as const, id: memberId } };
+  const event = serverEvent({ commandId: input.commandId, subject, silo: options.silo,
+    type, data,
+    principal: { kind: 'human' as const, id: memberId } });
   const saved = await appendGrant(options, event, input.expectedSequence,
     checked.fresh, checked.confirm);
   return reply.send(receipt(saved, modelId));

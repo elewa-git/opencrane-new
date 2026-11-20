@@ -1,5 +1,6 @@
 import { storageSafeTextSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
+import { serverEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { readEventAt,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -168,11 +169,11 @@ async function saveChatCommand(
   const type = commandType(input);
   const data = commandData(input, context);
   getEventDefinition(type)!.dataSchema.parse(data);
-  const event = {
+  const event = serverEvent({
     id: input.id, commandId: input.id, type, subject,
-    silo: context.silo, source: 'opencrane-server', time: new Date().toISOString(),
+    silo: context.silo,
     principal: { kind: 'human' as const, id: context.memberId }, data,
-  };
+  });
   const deadline = await fresh?.('append');
   const command = { expectedSequence: facts.sequence, historyChecked: true as const,
     event, ...(deadline === undefined ? {} : { deadline }) };

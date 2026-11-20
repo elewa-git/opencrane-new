@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordMemberRefusal, refusalDigest } from './refusals.ts';
 import { randomUUID } from 'node:crypto';
 import { readActiveIdentity } from './admission.ts';
@@ -160,12 +161,12 @@ export async function joinMember(
     const condition = joinCondition(events, confirmed);
     const command = {
       ...condition,
-      event: {
-        id, commandId: input.commandId, type: 'member.joined', source: 'opencrane-server',
+      event: serverEvent({
+        id, commandId: input.commandId, type: 'member.joined',
         time: now().toISOString(), subject, silo: context.silo,
         principal: { kind: 'human', id: context.sub },
         data: joinData(input, invitation, context),
-      },
+      }),
     };
     const result = await store.append(command);
     if (result.status === 'unavailable') return result;

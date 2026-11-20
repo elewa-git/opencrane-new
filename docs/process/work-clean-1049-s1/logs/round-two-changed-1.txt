@@ -1,0 +1,29 @@
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/server-event.test.ts apps/server/test/mcp-discovery.test.ts libs/models/test/native-budget.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+ ❯ libs/models/test/native-budget.test.ts (46 tests | 1 failed) 154885ms
+   × recovers one native hold and its original ids after a lost append reply and writer restart 6800ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/native-budget.test.ts > recovers one native hold and its original ids after a lost append reply and writer restart
+Error: Model call retry refused
+ ❯ grantModelCall libs/models/src/call-retry.ts:68:11
+     66|       throw error;
+     67|     }
+     68|     throw new CallRetryRefused();
+       |           ^
+     69|   }
+     70| }
+ ❯ reserve libs/models/test/native-budget.test.ts:85:5
+ ❯ recoversNativeHold libs/models/test/native-budget.test.ts:590:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 102 passed (103)
+   Start at  16:20:53
+   Duration  210.44s (tests 92%, transform 5%, import 3%)

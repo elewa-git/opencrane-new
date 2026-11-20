@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { departureCleanupCompletedSchema, memberRemovedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
@@ -79,9 +79,9 @@ export async function removalCommand(options: GroupOptions, actor: string,
   const authority = { requiredRole: 'admin' as const, fresh, membership };
   await activeMember(store, binding, actor, authority);
   const data = { memberId, removedBy: actor, reviewRevision: input.reviewRevision };
-  const event = { id: randomUUID(), commandId: input.commandId, subject, silo,
-    type: 'member.removed', source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: 'human' as const, id: actor }, data };
+  const event = serverEvent({ commandId: input.commandId, subject, silo,
+    type: 'member.removed',
+    principal: { kind: 'human' as const, id: actor }, data });
   await fresh();
   // Check only the reviewed inventory inputs. Chat messages do not change these positions.
   await requireCurrentInventory(inventory, fresh.deadline);

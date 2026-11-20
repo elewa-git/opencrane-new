@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { randomUUID } from 'node:crypto';
 import type { OnboardingOptions } from './options.ts';
@@ -165,10 +166,10 @@ function buildEvent(options: OnboardingOptions, memberId: string, input: Input,
     data = { ...identity, welcomeId: input.welcomeId, stepId: input.stepId,
       stepNumber: input.stepNumber, ...encryptedAnswer(options, memberId, input.answer) };
   }
-  const event: EventEnvelope = { id, commandId: input.commandId, type,
-    source: 'opencrane-server', time: new Date().toISOString(), silo: options.silo,
+  const event: EventEnvelope = serverEvent({ id, commandId: input.commandId, type,
+    silo: options.silo,
     subject: `personal-${memberId}`, principal: { kind: 'human', id: memberId },
-    correlation: {}, data };
+    data });
   if (!parseEventByType(event).success) throw new z.ZodError([]);
   return event;
 }

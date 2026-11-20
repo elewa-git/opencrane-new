@@ -1,0 +1,4 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test --exclude=apps/server/test/chat-access-regression.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <repo>

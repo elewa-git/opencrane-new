@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import {
   getEventDefinition,
@@ -133,7 +134,7 @@ export async function fileCommand(
     return { status: 'appended' as const, sequence: previous.sequence };
   }
   await fresh?.();
-  const event = {
+  const event = serverEvent({
     id: eventId,
     commandId: eventId,
     silo,
@@ -141,9 +142,7 @@ export async function fileCommand(
     type,
     data,
     principal: { kind: 'human' as const, id: memberId },
-    source: 'opencrane-server',
-    time: new Date().toISOString(),
-  };
+  });
   const append = { expectedSequence: rows.at(-1)?.sequence ?? 0, event };
   const result = await store.append(append);
   if (result.status === 'appended') {

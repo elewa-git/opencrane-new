@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { startupContractRejection } from './startup-credentials.ts';
 import { remoteEndpoint } from '@opencrane/models';
@@ -20,8 +21,8 @@ export async function registerRemote(store: EventStore, silo: string, memberId: 
   const rows = await history(store, `mcp-${serverId}`, silo);
   if (!rows.length) {
     // Different admins share the source reference, but not JetStream message-id deduplication.
-    const event = { ...envelope(silo, `mcp-${serverId}`, 'mcp.server_registered', data, changeRef), id: randomUUID(),
-      principal: { kind: 'human' as const, id: memberId }, source: 'opencrane-server' };
+    const event = serverEvent({ ...envelope(silo, `mcp-${serverId}`, 'mcp.server_registered', data, changeRef),
+      id: randomUUID(), principal: { kind: 'human' as const, id: memberId } });
     const result = await store.append({ event, expectedSequence: 0 });
     if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Registration unavailable');
   }

@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { routineActivationSchema } from '@opencrane/events';
 import { stopUnconfirmedRoutine } from './routine-delivery-stop.ts';
@@ -75,11 +76,11 @@ async function appendRoutineSendCheck(store: Arguments[0], worker: Arguments[1],
   const authorisationId = sha256HexOfJson([worker.silo, run.occurrenceId, checked.senderAttemptId]);
   const id = type === 'routine.run_send_authorised'
     ? authorisationId : `${authorisationId}-release`;
-  const event = { id, commandId: id, silo: worker.silo, subject,
+  const event = serverEvent({ id, commandId: id, silo: worker.silo, subject,
     data: { ...data, configurationDigest, custodyRecordVersion },
-    type, source: 'opencrane-server',
+    type,
     principal: { kind: 'system' as const, id: 'opencrane-server' },
-    time: new Date().toISOString(), correlation: {} };
+    });
   async function checkAccess() {
     await checked.fresh();
     await confirmCompany();

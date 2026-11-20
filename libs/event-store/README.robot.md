@@ -21,6 +21,14 @@ stream. Commands supply an authorised, validated decision; this package
 validates its event contract and performs one conditional append. It does
 not authorise people or write projection state.
 
+`serverEvent(fields)` builds an `EventEnvelope` with source `opencrane-server`.
+Its exported `ServerEventFields` requires `silo`, `subject`, `type` and `data`.
+Optional `id` and `time` default to a random UUID and the current ISO timestamp;
+`correlation` defaults to an empty object. It leaves absent `principal` and
+`commandId` out, and preserves supplied values, including fixed ids and times.
+It does not validate; the append contract still owns validation. Existing records
+spread into its input retain their other fields for saved-event comparisons.
+
 The public entrypoint is `src/index.ts`:
 
 ```ts

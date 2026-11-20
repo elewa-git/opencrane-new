@@ -1,8 +1,8 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { activeMember, MemberAccessRefused } from './member-authority.ts';
 import { parseEventByType, providerIdSchema, providerModelIdSchema,
   type EventEnvelope } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -139,9 +139,8 @@ export async function appendProvider(store: EventStore, silo: string, providerId
   memberId: string, commandId: string, type: string, payload: unknown,
   expectedSequence: number, fresh: () => Promise<void>) {
   const subject = `provider-${providerId}`;
-  const event: EventEnvelope = { id: randomUUID(), commandId, subject, silo, type, data: payload,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'human' as const, id: memberId } };
+  const event: EventEnvelope = serverEvent({ commandId, subject, silo, type, data: payload,
+    principal: { kind: 'human' as const, id: memberId } });
   await fresh();
   const result = await store.append({ expectedSequence, event });
   if (result.status === 'appended') {

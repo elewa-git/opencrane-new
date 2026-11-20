@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -106,10 +106,10 @@ export async function requestRoutineStop(store: EventStore, binding: Binding,
     }
     const position = saved.rows.at(-1)?.sequence ?? 0;
     const data = stopData(saved.state, input, position);
-    const event: EventEnvelope = { id: randomUUID(), commandId: input.changeId,
-      type: 'routine.run_stop_requested', source: 'opencrane-server', silo: binding.silo,
+    const event: EventEnvelope = serverEvent({ commandId: input.changeId,
+      type: 'routine.run_stop_requested', silo: binding.silo,
       subject: `routine-${input.routineId}`, principal: { kind: 'human', id: data.actorId },
-      time: new Date().toISOString(), correlation: {}, data };
+      data });
     // Finish history before watching only the small membership and ownership streams.
     const fresh = await ownershipWriteAccess(store, saved.positions);
     if (!(await saved.check('read_metadata')).allowed) {

@@ -1,6 +1,6 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
 import type { Binding } from '@opencrane/authz';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { mcpInstanceStartSchema, mcpInstanceStopSchema,
@@ -160,10 +160,9 @@ export async function mcpInstanceCommand(store: EventStore, binding: Binding,
     throw new McpInstanceRefused('conflict', 'Instance revision or run mismatch');
   }
   const subject = `mcp-instance-${current.state.start.instanceId}`;
-  const event = { id: randomUUID(), commandId: input.changeRef,
+  const event = serverEvent({ commandId: input.changeRef,
     silo: binding.silo, subject, type: 'mcp.instance_stop_requested', data,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'human' as const, id: memberId } };
+    principal: { kind: 'human' as const, id: memberId } });
   const command = { event, expectedSequence: current.state.sequence,
     historyChecked: true as const, deadline: fresh.deadline };
   await fresh();
@@ -246,10 +245,9 @@ export async function mcpAdminInstanceStop(store: EventStore, binding: Binding,
     expectedSequence: input.expectedSequence, requestedBy: adminId,
     reason: 'admin_stop' as const };
   const subject = `mcp-instance-${current.state.start.instanceId}`;
-  const event = { id: randomUUID(), commandId: input.changeRef,
+  const event = serverEvent({ commandId: input.changeRef,
     silo: binding.silo, subject, type: 'mcp.instance_stop_requested', data,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
-    principal: { kind: 'human' as const, id: adminId } };
+    principal: { kind: 'human' as const, id: adminId } });
   await fresh();
   const result = await store.append({ event, expectedSequence: current.state.sequence,
     historyChecked: true, deadline: fresh.deadline });

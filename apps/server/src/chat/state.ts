@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson as preferenceHash } from '@opencrane/events/digest';
 import { inheritedChildSubjects } from './child-access.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -77,9 +78,9 @@ function preferenceEvent(options: ChatOptions, memberId: string,
     data = { ...common, throughPosition: input.throughPosition,
       throughEventId: input.throughEventId };
   }
-  return { id, commandId: input.id, type, data, silo: options.silo,
-    subject: `chat-state-${memberId}`, source: 'opencrane-server', time: new Date().toISOString(),
-    principal: { kind: 'human', id: memberId }, correlation: { request } };
+  return serverEvent({ id, commandId: input.id, type, data, silo: options.silo,
+    subject: `chat-state-${memberId}`,
+    principal: { kind: 'human', id: memberId }, correlation: { request } });
 }
 
 function preferenceId(silo: string, memberId: string, commandId: string) {

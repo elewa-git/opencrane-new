@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { childStartFailedEventSchema, childRetryRequestedEventSchema, type ChildRequest }
   from '@opencrane/events';
@@ -65,11 +66,11 @@ export async function recordChildStartFailure(options: Pick<ChatOptions, 'store'
     if (row.event.subject === subject) sequence = row.sequence;
   }
   const id = `child-failure-${sha256HexOfJson([options.silo, intent.conversationId, intent.requestId, attempt])}`;
-  const event = { id, commandId: id, subject, type: 'conversation.child_start_failed',
-    silo: options.silo, source: 'opencrane-server', time: new Date().toISOString(),
+  const event = serverEvent({ id, commandId: id, subject, type: 'conversation.child_start_failed',
+    silo: options.silo,
     principal: { kind: 'system', id: 'opencrane-server' },
     data: { conversationId: intent.conversationId, requestId: intent.requestId,
-      childConversationId: intent.childConversationId, intentEventId, attempt, stage, reason } };
+      childConversationId: intent.childConversationId, intentEventId, attempt, stage, reason } });
   // Save the outcome even after close. This grants no permission to resume the child.
   const command = { event, expectedSequence: sequence, historyChecked: true as const,
     ...activationCheck };

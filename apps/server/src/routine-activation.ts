@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
@@ -116,10 +117,10 @@ async function admit(store: Arguments[0], worker: Arguments[1],
     senderAttemptId, admission: { eventId: allocation.event.id, position: allocation.sequence } });
   const id = `routine-activation-${run.occurrenceId}`;
   const subject = `routine-${run.routineId}`;
-  const event = { id, commandId: id, silo: worker.silo, subject, data,
-    type: 'routine.run_activation_admitted', source: 'opencrane-server',
+  const event = serverEvent({ id, commandId: id, silo: worker.silo, subject, data,
+    type: 'routine.run_activation_admitted',
     principal: { kind: 'system' as const, id: 'opencrane-server' },
-    time: new Date().toISOString(), correlation: {} };
+    });
   let saved: StoredEvent | undefined;
   let position = 0;
   function checkRoutine(row: StoredEvent) {

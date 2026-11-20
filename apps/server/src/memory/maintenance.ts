@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { createHmac } from 'node:crypto';
@@ -377,10 +378,10 @@ export async function bindMaintenance(options: MemoryOptions, requester: string,
     payingGroupId: input.payingGroupId, enabled: input.enabled,
     acceptedCapCents: input.acceptedCapCents, revision: state.revision + 1 };
   const eventId = sha256HexOfJson([options.silo, requester, scope.scopeId, input.commandId]);
-  const event = { id: eventId, type: 'memory.maintenance_bound',
-    source: 'opencrane-server', subject: `scope-${scope.scopeId}`, silo: options.silo,
-    time: new Date().toISOString(), commandId: input.commandId,
-    principal: { kind: 'human' as const, id: requester }, correlation: {}, data };
+  const event = serverEvent({ id: eventId, type: 'memory.maintenance_bound',
+    subject: `scope-${scope.scopeId}`, silo: options.silo,
+    commandId: input.commandId,
+    principal: { kind: 'human' as const, id: requester }, data });
   if (!parseEventByType(event).success) {
     throw new Error('Invalid binding event');
   }

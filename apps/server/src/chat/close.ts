@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { readEventAt } from '@opencrane/event-store';
@@ -71,10 +72,10 @@ export async function closeCommand(options: ChatOptions, memberId: string,
     if (!facts.created) throw new ChatRefused('Conversation refused');
     const data = { conversationId, closedBy: memberId };
     getEventDefinition('conversation.closed')!.dataSchema.parse(data);
-    const event = { id: input.id, commandId: input.id, type: 'conversation.closed',
-      subject, silo: options.silo, source: 'opencrane-server',
-      time: new Date().toISOString(), principal: { kind: 'human' as const, id: memberId },
-      data };
+    const event = serverEvent({ id: input.id, commandId: input.id, type: 'conversation.closed',
+      subject, silo: options.silo,
+      principal: { kind: 'human' as const, id: memberId },
+      data });
     const command = { expectedSequence: facts.sequence, historyChecked: true as const,
       deadline, event };
     const result = await options.store.append(command);

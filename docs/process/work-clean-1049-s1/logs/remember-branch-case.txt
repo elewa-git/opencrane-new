@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/remember-backend-delivery.test.ts --testNamePattern ^saves one own-person revision and returns the real Remember receipt on its native thread$ --maxWorkers=1
+
+ RUN  v5.0.3 [repository]
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 18 skipped (19)
+   Start at  07:30:36
+   Duration  35.78s (tests 58%, transform 32%, import 9%)
+
+  Transform  transforming modules took 11.48s · 32% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -220,10 +221,10 @@ function correctionEvent(options: MemoryOptions, input: Input,
   if (agent) {
     correlation = { conversation: agent.conversation, turn: agent.turn, request: agent.requestId };
   }
-  const proposed = { id: reference, commandId: input.commandId, silo: options.silo,
-    subject: `scope-${scopeId}`, type: 'memory.corrected', source: 'opencrane-server',
-    time: new Date().toISOString(), principal: { kind: entry.principalKind, id: requester },
-    correlation, data };
+  const proposed = serverEvent({ id: reference, commandId: input.commandId, silo: options.silo,
+    subject: `scope-${scopeId}`, type: 'memory.corrected',
+    principal: { kind: entry.principalKind, id: requester },
+    correlation, data });
   return memoryCorrectedEventSchema.parse(proposed);
 }
 async function appendCorrection(options: MemoryOptions, input: Input,

@@ -1,6 +1,6 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { foldRoutineHistory } from '@opencrane/authz';
@@ -70,9 +70,9 @@ export async function pauseRoutineAfterRemoval(store: EventStore, silo: string, 
     // Finish routine history before reading the small member stream and starting the write limit.
     const positions = await readRoutineRemoval(store, state, input.cause, claimPosition,
       performance.now() + 10_000);
-    const event: EventEnvelope = { id: randomUUID(), commandId, type: 'routine.paused',
-      source: 'opencrane-server', silo, subject, principal: { kind: 'system', id: 'opencrane-server' },
-      time: new Date().toISOString(), correlation: {}, data };
+    const event: EventEnvelope = serverEvent({ commandId, type: 'routine.paused',
+      silo, subject, principal: { kind: 'system', id: 'opencrane-server' },
+      data });
     if (previous) {
       return receipt(previous, event);
     }

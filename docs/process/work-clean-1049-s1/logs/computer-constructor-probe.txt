@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/server-event-reachability.test.ts --testNamePattern loads recall through the authenticated bridge before accepting input or a grant --maxWorkers=1
+
+ RUN  v5.0.3 [repository]
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 38 skipped (39)
+   Start at  05:36:18
+   Duration  9.33s (transform 71%, import 25%, tests 4%)
+
+  Transform  transforming modules took 6.47s · 71% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

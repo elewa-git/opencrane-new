@@ -1,9 +1,11 @@
+import { z } from 'zod';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { remoteFixture } from "@opencrane/models/testing/remote-mcp";
 import { afterEach, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { history } from '@opencrane/models';
 import { registerRemote, discoveryStatus } from '../src/integrations/registration.ts';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { discoverInventory } from '../src/integrations/inventory.ts';
@@ -12,6 +14,23 @@ import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 vi.setConfig({ testTimeout: 20_000 });
 const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.reverse()) await close(); cleanups.length = 0; });
+
+async function keepsRegistrationIdSeparateFromCommand() {
+  const nats = await natsFixture();
+  cleanups.push(nats.close);
+  const change = await registerRemote(nats.store, 'test', 'admin', {
+    locator: 'https://mcp.example.test/mcp',
+  });
+  const rows = await history(nats.store, `mcp-${change.serverId}`, 'test');
+  expect(rows).toHaveLength(1);
+  const event = rows[0]!.event;
+  expect(event.id).not.toBe(change.changeRef);
+  expect(z.uuid().safeParse(event.id).success).toBe(true);
+  expect(event.commandId).toBe(change.changeRef);
+  expect(event.source).toBe('opencrane-server');
+}
+it('keeps a fresh registration UUID separate from the shared command reference',
+  keepsRegistrationIdSeparateFromCommand);
 
 it('quarantines a private DNS target and refuses callers without the install identity', async () => {
   const nats = await natsFixture(); cleanups.push(() => nats.close());

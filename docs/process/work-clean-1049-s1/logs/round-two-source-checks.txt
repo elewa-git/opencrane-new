@@ -1,0 +1,65 @@
+## Typecheck: PASS
+
+npm notice run typecheck
+npm notice run npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack
+npm notice run typecheck
+npm notice run tsc --noEmit
+npm notice run @opencrane/demo-mcp@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run @opencrane/odoo-mcp@0.1.0 typecheck
+npm notice run @opencrane/ops@0.1.0 typecheck
+npm notice run @opencrane/server@0.1.0 typecheck
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck
+npm notice run typecheck:package
+npm notice run tsc --noEmit -p infra/package/tsconfig.json
+npm notice run typecheck:dev-stack
+npm notice run tsc --noEmit -p infra/dev-stack/tsconfig.json
+
+## Event catalogue: PASS
+
+npm notice run check:events
+npm notice run node --experimental-strip-types scripts/check-event-catalogue.mjs
+check:events — OK: 174 event types agree between the registry and the catalogue.
+
+## Knip: PASS
+
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+
+## Changelog: PASS
+
+npm notice run lint:changelog
+npm notice run node scripts/changelog-gather.mjs --check
+
+## Scoped ESLint: PASS
+
+npm notice run npx
+npm notice run 'eslint' --max-warnings 0 apps/ops/src/routine-due.ts apps/ops/src/routine-missed.ts apps/ops/src/routine-skip.ts apps/server/src/assistants/commands.ts apps/server/src/chat/budget-refusal.ts apps/server/src/chat/child-activation.ts apps/server/src/chat/child-failure.ts apps/server/src/chat/child-requests.ts apps/server/src/chat/close-cleanup.ts apps/server/src/chat/close.ts apps/server/src/chat/commands.ts apps/server/src/chat/publications.ts apps/server/src/chat/state.ts apps/server/src/chat/turns.ts apps/server/src/egress/changes.ts apps/server/src/files/commands.ts apps/server/src/integrations/access-changes.ts apps/server/src/integrations/registration.ts apps/server/src/members/bootstrap.ts apps/server/src/members/groups.ts apps/server/src/members/invitations.ts apps/server/src/members/join.ts apps/server/src/members/ownership.ts apps/server/src/members/refusals.ts apps/server/src/members/removal.ts apps/server/src/members/roles.ts apps/server/src/memory/commands.ts apps/server/src/memory/correct.ts apps/server/src/memory/forget.ts apps/server/src/memory/initial-delivery.ts apps/server/src/memory/invalidation.ts apps/server/src/memory/maintenance-preparation.ts apps/server/src/memory/maintenance.ts apps/server/src/memory/recall-delivery.ts apps/server/src/models/access-changes.ts apps/server/src/onboarding/archive.ts apps/server/src/onboarding/commands.ts apps/server/src/onboarding/welcome.ts apps/server/src/routine-access-pause.ts apps/server/src/routine-activation.ts apps/server/src/routine-admin-pause.ts apps/server/src/routine-approval-stop.ts apps/server/src/routine-assistant-pause.ts apps/server/src/routine-delivery-stop.ts apps/server/src/routine-finish.ts apps/server/src/routine-input.ts apps/server/src/routine-pause.ts apps/server/src/routine-reassign.ts apps/server/src/routine-retire.ts apps/server/src/routine-sender.ts apps/server/src/routine-stop.ts apps/server/test/mcp-discovery.test.ts docs/process/work-clean-1049-s1/compare-envelopes.mjs eslint.config.mjs libs/event-store/src/index.ts libs/event-store/src/server-event.ts libs/event-store/test/server-event.test.ts libs/models/src/approvals.ts libs/models/src/bearer-connections.ts libs/models/src/company-bearer.ts libs/models/src/company-opt-in.ts libs/models/src/connection-selection.ts libs/models/src/descendant-admission.ts libs/models/src/mcp-instance-observation.ts libs/models/src/mcp-instance.ts libs/models/src/oauth-callback.ts libs/models/src/oauth-confirmation.ts libs/models/src/oauth-refresh-save.ts libs/models/src/oauth-refresh.ts libs/models/src/oauth-revoke.ts libs/models/src/oauth-start.ts libs/models/src/provider-bindings.ts libs/models/src/provider-drain.ts libs/models/src/provider-switch-on.ts libs/models/src/providers.ts libs/models/src/reconciliation.ts libs/models/src/tool-policy.ts libs/models/test/native-budget.test.ts
+
+## Evidence-script ESLint: PASS
+
+npm notice run npx
+npm notice run 'eslint' docs/process/work-clean-1049-s1/compare-envelopes.mjs --max-warnings 0
+
+## Field comparisons against fetched main: PASS
+
+PASS apps/server/src/integrations/registration.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/server/src/egress/changes.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS libs/models/src/providers.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/ops/src/routine-due.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/ops/src/routine-skip.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/ops/src/routine-missed.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z
+PASS apps/server/src/chat/child-activation.ts: identical fields; id=fixed-event-id; time=2026-11-19T16:00:00.000Z

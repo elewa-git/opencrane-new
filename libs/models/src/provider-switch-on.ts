@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { serverEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import { budgetCallDispatchAdmittedDataSchema, computerTurnStartedDataSchema, computerTurnClosedDataSchema,
@@ -241,12 +241,11 @@ export async function providerSwitchOn(store: EventStore, binding: Binding,
   await providerPermission(binding, memberId, created ? [created] : []);
   const data = { providerId, revision: input.expectedRevision, changedBy: memberId,
     expectedProviderSequence: input.expectedProviderSequence };
-  const event: EventEnvelope = {
-    id: randomUUID(), commandId: input.commandId, subject: `budget-${binding.silo}`,
+  const event: EventEnvelope = serverEvent({
+    commandId: input.commandId, subject: `budget-${binding.silo}`,
     silo: binding.silo, type: 'provider.managed_calls_enabled', data,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human', id: memberId },
-  };
+  });
   async function unchanged() {
     const current = await switchStateUnchanged(store, binding.silo, globalSequence, fresh.deadline);
     await fresh();

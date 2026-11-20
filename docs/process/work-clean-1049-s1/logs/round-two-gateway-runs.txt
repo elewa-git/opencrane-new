@@ -1,0 +1,196 @@
+## branch invocation 1
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:14:48
+   Duration  17.71s (tests 60%, transform 30%, import 10%)
+
+  Transform  transforming modules took 5.24s · 30% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## branch invocation 2
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:15:08
+   Duration  18.56s (tests 56%, transform 33%, import 11%)
+
+  Transform  transforming modules took 5.97s · 33% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## branch invocation 3
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:15:31
+   Duration  17.77s (tests 57%, transform 31%, import 12%)
+
+  Transform  transforming modules took 5.37s · 31% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## branch invocation 4
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:15:51
+   Duration  20.89s (tests 59%, transform 31%, import 11%)
+
+  Transform  transforming modules took 6.33s · 31% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## branch invocation 5
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:16:16
+   Duration  22.64s (tests 55%, transform 34%, import 10%)
+
+  Transform  transforming modules took 7.68s · 34% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## main invocation 1
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:16:41
+   Duration  21.40s (tests 56%, transform 28%, import 16%)
+
+  Transform  transforming modules took 5.96s · 28% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## main invocation 2
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:17:05
+   Duration  15.04s (tests 57%, transform 31%, import 12%)
+
+  Transform  transforming modules took 4.58s · 31% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## main invocation 3
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:17:23
+   Duration  20.03s (tests 55%, transform 34%, import 11%)
+
+  Transform  transforming modules took 6.71s · 34% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## main invocation 4
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:19:45
+   Duration  15.44s (tests 55%, transform 34%, import 11%)
+
+  Transform  transforming modules took 5.11s · 34% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## main invocation 5
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:20:04
+   Duration  18.40s (tests 53%, transform 35%, import 12%)
+
+  Transform  transforming modules took 6.43s · 35% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+## main invocation 6
+
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts -t admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 <main-checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  16:20:26
+   Duration  17.32s (tests 59%, transform 30%, import 11%)
+
+  Transform  transforming modules took 5.13s · 30% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

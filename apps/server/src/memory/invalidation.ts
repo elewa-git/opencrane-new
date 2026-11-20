@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
@@ -224,11 +225,11 @@ function invalidationEvent(silo: string, saved: MemoryContextRecord, state: Memo
   }
   const data: MemoryContextRecord = { ...saved, action: 'invalidated',
     reason, scopePositions };
-  const input = { id, commandId: id,
+  const input = serverEvent({ id, commandId: id,
     silo, subject: `conversation-${saved.conversationId}`,
-    type: 'agent.memory_context_recorded', source: 'opencrane-server',
-    principal: { kind: 'system', id: 'server' }, time: new Date().toISOString(),
-    correlation: { conversation: saved.conversationId, turn: saved.turnId }, data };
+    type: 'agent.memory_context_recorded',
+    principal: { kind: 'system', id: 'server' },
+    correlation: { conversation: saved.conversationId, turn: saved.turnId }, data });
   return memoryContextRecordedEventSchema.parse(input);
 }
 

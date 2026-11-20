@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { rmSync } from 'node:fs';
@@ -220,10 +221,9 @@ async function appendPrepared(options: MemoryOptions, input: Input,
   if (agent) {
     correlation = { conversation: agent.conversation, turn: agent.turn, request: agent.requestId };
   }
-  const event = memoryWrittenEventSchema.parse({ id: reference, commandId: input.commandId,
+  const event = memoryWrittenEventSchema.parse(serverEvent({ id: reference, commandId: input.commandId,
       silo: options.silo, subject: `scope-${scope.scopeId}`, type: 'memory.written',
-      source: 'opencrane-server', time: new Date().toISOString(),
-      principal: { kind: principalKind, id: requester }, correlation, data });
+      principal: { kind: principalKind, id: requester }, correlation, data }));
   journal.save(entry);
   try {
     keys.provision(identity);

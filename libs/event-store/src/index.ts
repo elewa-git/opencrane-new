@@ -1,4 +1,5 @@
 export { systemClock, type Clock } from './clock.ts';
+export { serverEvent, type ServerEventFields } from './server-event.ts';
 export { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
 export { createEventStore, connectEventStore, EventStore, readBeforeDeadline } from "./jetstream.ts";
 export {

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { serverEvent } from '@opencrane/event-store';
 import { z } from 'zod';
 import { providerIdSchema, providerDrainSchema, parseEventByType,
   type EventEnvelope } from '@opencrane/events';
@@ -76,12 +76,11 @@ export async function providerDrainCommand(store: EventStore, binding: Binding,
     expectedProviderSequence: input.expectedProviderSequence,
     expectedDrainSequence: input.expectedDrainSequence, draining: input.action === 'start',
   };
-  const event: EventEnvelope = {
-    id: randomUUID(), commandId: input.commandId, subject: `provider-${providerId}`,
+  const event: EventEnvelope = serverEvent({
+    commandId: input.commandId, subject: `provider-${providerId}`,
     silo: binding.silo, type: 'provider.managed_calls_drain_set', data,
-    time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human', id: memberId },
-  };
+  });
   if (original) {
     reconcileProvider(original, event);
     await fresh();

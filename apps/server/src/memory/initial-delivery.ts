@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
@@ -39,10 +40,10 @@ function requestFor(identity: Identity, scopeId: string) {
 }
 function recordEvent(silo: string, data: MemoryContextRecord) {
   const id = randomUUID();
-  const input = { id, commandId: id, silo,
+  const input = serverEvent({ id, commandId: id, silo,
     subject: `conversation-${data.conversationId}`, type: 'agent.memory_context_recorded',
-    source: 'opencrane-server', principal: { kind: 'system', id: 'server' },
-    time: new Date().toISOString(), correlation: {}, data };
+    principal: { kind: 'system', id: 'server' },
+    data });
   return memoryContextRecordedEventSchema.parse(input);
 }
 

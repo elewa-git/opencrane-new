@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 [main checkout]
+
+
+ Test Files  1 passed (1)
+      Tests  82 passed | 1 skipped (83)
+   Start at  05:04:45
+   Duration  346.90s (tests 98%, transform 2%, import 1%)

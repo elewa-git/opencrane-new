@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { foldRoutineHistory, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -106,10 +106,10 @@ export async function pauseRoutine(store: EventStore, binding: Binding,
     }
     const position = saved.rows.at(-1)?.sequence ?? 0;
     requireRevisions(input, saved.state, position);
-    const event: EventEnvelope = { id: randomUUID(), commandId: input.changeId,
-      type: 'routine.paused', source: 'opencrane-server', silo: binding.silo,
+    const event: EventEnvelope = serverEvent({ commandId: input.changeId,
+      type: 'routine.paused', silo: binding.silo,
       subject: `routine-${input.routineId}`, principal: { kind: 'human', id: data.actorId },
-      time: new Date().toISOString(), correlation: {}, data };
+      data });
     // Finish history reads before starting the original two-second access limit.
     const fresh = await ownershipWriteAccess(store, saved.positions);
     if (!(await saved.check('manage')).allowed) {

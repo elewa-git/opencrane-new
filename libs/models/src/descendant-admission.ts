@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
@@ -124,10 +125,10 @@ export async function admitDescendant(store: EventStore, access: Binding,
     if (existing) {
       return saveDelegationStart(store, existing.start, start, fresh.deadline);
     }
-    const event = { id: binding.delegationId, commandId: binding.delegationId,
-      silo: access.silo, subject, type: 'computer.turn_started', source: 'opencrane-server',
-      principal: { kind: 'system' as const, id: 'opencrane-server' }, correlation: {},
-      time: new Date().toISOString(), data: binding };
+    const event = serverEvent({ id: binding.delegationId, commandId: binding.delegationId,
+      silo: access.silo, subject, type: 'computer.turn_started',
+      principal: { kind: 'system' as const, id: 'opencrane-server' },
+      data: binding });
     // Check the same computer position on every replica. A conflict repeats every check.
     const command = { event, expectedSequence: facts.sequence, historyChecked: true as const,
       deadline: fresh.deadline };

@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test/server-event.test.ts apps/server/test/mcp-discovery.test.ts libs/models/test/native-budget.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 <repo>
+
+
+ Test Files  3 passed (3)
+      Tests  103 passed (103)
+   Start at  16:24:26
+   Duration  173.36s (tests 90%, transform 6%, import 3%)

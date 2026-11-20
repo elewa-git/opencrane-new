@@ -7,6 +7,18 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+const recordIdRestriction = {
+  selector: 'Literal[regex.pattern="^[\\\\w-]{1,200}$"][regex.flags="u"], ' +
+    'Literal[regex.pattern="^[A-Za-z0-9_-]{1,200}$"][regex.flags="u"]',
+  message: 'Import recordIdSchema or recordIdPattern instead of copying the ID pattern.',
+};
+
+const serverSourceRestriction = {
+  selector: 'Property[key.name="source"][value.value="opencrane-server"], ' +
+    'Property[key.value="source"][value.value="opencrane-server"]',
+  message: 'Use serverEvent from @opencrane/event-store to build server events.',
+};
+
 export default tseslint.config(
   {
     // spikes and infra have separate qualification; they are not production workspaces.
@@ -71,14 +83,17 @@ export default tseslint.config(
   },
   {
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],
-    ignores: ['libs/events/src/ids.ts'],
     rules: {
-      'no-restricted-syntax': ['error', {
-        selector: 'Literal[regex.pattern="^[\\\\w-]{1,200}$"][regex.flags="u"], ' +
-          'Literal[regex.pattern="^[A-Za-z0-9_-]{1,200}$"][regex.flags="u"]',
-        message: 'Import recordIdSchema or recordIdPattern instead of copying the ID pattern.',
-      }],
+      'no-restricted-syntax': ['error', recordIdRestriction, serverSourceRestriction],
     },
+  },
+  {
+    files: ['libs/events/src/ids.ts'],
+    rules: { 'no-restricted-syntax': ['error', serverSourceRestriction] },
+  },
+  {
+    files: ['libs/event-store/src/server-event.ts'],
+    rules: { 'no-restricted-syntax': ['error', recordIdRestriction] },
   },
   {
     files: ['apps/*/src/**/*.ts', 'libs/*/src/**/*.ts'],

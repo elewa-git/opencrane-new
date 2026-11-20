@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
@@ -97,9 +97,9 @@ async function appendCreation(store: EventStore, binding: Binding, memberId: str
   const data = { assistantId: input.assistantId, ownerId: input.groupId,
     kind: 'team' as const, payingGroupId: input.payingGroupId, name: input.name, grants: input.grants };
   assistantCreatedDataSchema.parse(data);
-  const event = { id: randomUUID(), commandId: input.commandId, subject,
-    silo: binding.silo, type: 'assistant.created', source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: memberId }, time: new Date().toISOString(), data };
+  const event = serverEvent({ commandId: input.commandId, subject,
+    silo: binding.silo, type: 'assistant.created',
+    principal: { kind: 'human' as const, id: memberId }, data });
   await fresh();
   const result = await store.append({ event, expectedSequence: 0 });
   if (result.status === 'unavailable' || result.status === 'rejected') {

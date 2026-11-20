@@ -1,5 +1,5 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdSchema } from '@opencrane/events';
-import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
@@ -78,12 +78,11 @@ export async function groupCommand(
     return retried;
   }
   editable(rows, input);
-  const event = {
-    id: randomUUID(), commandId: input.commandId, subject, silo: binding.silo,
+  const event = serverEvent({
+    commandId: input.commandId, subject, silo: binding.silo,
     type: eventType(input), data: eventData(input, memberId),
-    time: new Date().toISOString(), source: 'opencrane-server',
     principal: { kind: 'human' as const, id: memberId },
-  };
+  });
   await fresh();
   const expectedSequence = rows.at(-1)?.sequence ?? 0;
   const result = await store.append({ expectedSequence, event });

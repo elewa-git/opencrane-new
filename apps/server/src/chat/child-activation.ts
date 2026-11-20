@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { childActivatedDataSchema } from '@opencrane/events';
 import { childStartState } from './child-failure.ts';
 import { checkedChildInput, ChildRequestChanged, ChildRequestClosed,
@@ -51,9 +52,9 @@ export async function checkedChildActivation(options: Options, memberId: string,
   }
   await confirmAccess();
   if (activated) {
-    const expected = { ...activated.event, id, commandId: id, silo: options.silo, subject,
-      source: 'opencrane-server', type: 'conversation.child_activated', data,
-      principal: { kind: 'human' as const, id: memberId } };
+    const expected = serverEvent({ ...activated.event, id, commandId: id, silo: options.silo, subject,
+      type: 'conversation.child_activated', data,
+      principal: { kind: 'human' as const, id: memberId } });
     verifySaved(activated, expected);
   }
   return { ...checked, activated, data, id, sequence, confirmAccess };

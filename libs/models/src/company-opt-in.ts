@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256HexOfJson as digest } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
@@ -96,9 +97,9 @@ async function saveCompanyOptIn(store: EventStore, binding: Binding,
   const subject = subjectFor(choice.serverId);
   const serverSubject = `mcp-${choice.serverId}`;
   const operationId = digest([binding.silo, subject, changeRef]);
-  const event = { ...envelope(binding.silo, subject, 'connection.company_opt_in_set',
-    choice, operationId), commandId: changeRef, source: 'opencrane-server',
-    principal: { kind: 'human' as const, id: memberId } };
+  const event = serverEvent({ ...envelope(binding.silo, subject, 'connection.company_opt_in_set',
+    choice, operationId), commandId: changeRef,
+    principal: { kind: 'human' as const, id: memberId } });
   function matches(row: StoredEvent) {
     return row.event.id === operationId || row.event.commandId === changeRef;
   }

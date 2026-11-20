@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { sha256Hex as digest } from '@opencrane/events/digest';
 import { randomUUID } from 'node:crypto';
 import { memoryContextRecordedEventSchema, type MemoryContextRecord } from '@opencrane/events';
@@ -52,11 +53,11 @@ async function appendRecord(options: MemoryOptions, context: MemoryContext,
   data: MemoryContextRecord, previous: MemoryContextState | undefined, sequence: number,
   checkedAt: number) {
   const id = randomUUID();
-  const input = { id, commandId: id,
+  const input = serverEvent({ id, commandId: id,
     silo: options.silo, subject: `conversation-${context.conversation}`,
-    type: 'agent.memory_context_recorded', source: 'opencrane-server',
+    type: 'agent.memory_context_recorded',
     principal: { kind: 'system', id: 'server' }, time: new Date(checkedAt).toISOString(),
-    correlation: { conversation: context.conversation, turn: context.turn }, data };
+    correlation: { conversation: context.conversation, turn: context.turn }, data });
   const event = memoryContextRecordedEventSchema.parse(input);
   const next = foldMemoryContext(previous, event);
   const remaining = context.exp * 1000 - Date.now();

@@ -1,3 +1,4 @@
+import { serverEvent } from '@opencrane/event-store';
 import { recordIdPattern } from '@opencrane/events';
 import { isDeepStrictEqual } from 'node:util';
 import { foldRoutineHistory, memberAuthorisation } from '@opencrane/authz';
@@ -177,9 +178,9 @@ function requireTime(checkAt: string, now: number, started: number) {
 }
 function envelope(silo: string, data: Skip, time: string): EventEnvelope {
   const id = `routine-skip-${data.occurrenceId}`;
-  return { id, commandId: id, silo, source: 'opencrane-server',
+  return serverEvent({ id, commandId: id, silo,
     type: 'routine.occurrence_skipped', subject: `routine-${data.routineId}`, time,
-    principal: { kind: 'system', id: 'opencrane-server' }, correlation: {}, data };
+    principal: { kind: 'system', id: 'opencrane-server' }, data });
 }
 function savedReceipt(row: StoredEvent, state: RoutineState | undefined, input: Input) {
   const expected = skipData(state, input);
