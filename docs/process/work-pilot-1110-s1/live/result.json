@@ -2,11 +2,11 @@
   "status": "FAIL",
   "outcomes": [
     {
-      "check": "admin invitation and sign-in",
+      "check": "Settings setup",
       "result": "FAIL"
     }
   ],
-  "errorType": "AssertionError",
+  "errorType": "TimeoutError",
   "paidCalls": 0,
   "paidCents": 0
 }

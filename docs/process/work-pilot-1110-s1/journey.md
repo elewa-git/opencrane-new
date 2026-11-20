@@ -1,7 +1,45 @@
 # Packaged connected-provider journey
 
-Journey on a fresh secondary install: PARTIAL — startup passed; the complete
-provider journey remains unqualified.
+Journey on a fresh packaged install: **FAIL** — startup and owner sign-in passed;
+Settings setup failed before the provider key field became visible. The remaining
+provider, custody and member-chat steps are **NOT RUN**.
+
+## Latest journey run
+
+Date: 20 November 2026 UTC. Branch head: `6640c9e701a89e3431b119999f6cae65eac324e1`.
+Package preparation fetched the CI-approved application and scanner images, and
+the fresh packaged namespace passed startup checks. Owner sign-in and both
+Settings screenshots passed. The browser then timed out while filling the
+wrong-key step: the `API key` locator resolved to a hidden
+`replace-provider-key` input. No wrong key was entered, so HTTP 401 refusal and
+disclosure checks were **NOT RUN**. Right-key connection, quoted test, model
+selection, switch-on, key mode checks before and after Pod recreation, and member
+replies at 1280 and 390 px were **NOT RUN**. No paid calls were made.
+
+| Condition | Result |
+| --- | --- |
+| Fresh packaged namespace, approved images and service startup | PASS |
+| Owner sign-in through the shipped browser | PASS |
+| Settings screenshots at 1280 and 390 px | PASS |
+| Wrong-key Settings field, 401 refusal and disclosure check | FAIL: key field resolved but was hidden; 30-second fill timeout |
+| Right key, quoted test, model selection and switch-on | NOT RUN |
+| Synthetic credential modes before and after Pod recreation | NOT RUN |
+| Member replies and screenshots at 1280 and 390 px | NOT RUN |
+| Startup and service logs saved before teardown | PASS; sanitised logs are in `live/logs/`; unsafe logs are marked withheld |
+| Stack teardown and slot release | PASS; slot 1 reports free |
+
+The browser failure and safe diagnostic are in [live/result.json](live/result.json)
+and [live/browser-failure.txt](live/browser-failure.txt). Captured Settings screenshots are
+in `live/admin-settings-1280.png` and `live/admin-settings-390.png`. No product
+code was changed. The package install used the restricted free qualification
+stand-in; the fleet marker stayed present and `DEV_REAL_PROVIDER` was not set or
+bypassed.
+
+## Previous journey attempt
+
+The earlier attempt below used product code identical to this branch head but
+stopped at an invalid invitation fixture. Its result remains useful history; the
+latest run above is the current live verdict.
 
 Date: 20 November 2026 UTC. The installed runtime source was `2eb0b9b4e`; its
 product code is identical to `eacd06709`. Later changes affect the browser test
