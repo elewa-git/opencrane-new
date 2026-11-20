@@ -159,7 +159,9 @@ JSON input on stdin. It requires a claimed secondary slot and stand-in provider
 settings. Its receipt directory comes from `JOURNEY_RECEIPT_DIR`. The coordinator
 prepares joined membership access before the first protected workspace read.
 `qualification-failure.mjs` keeps only a fixed step name and an allowlisted error
-code. Each role and width captures its failure before closing its browser context.
+code. Failed chat checks also record the operation and numeric HTTP status,
+without request addresses or response text. Each role and width captures its failure
+before closing its browser context.
 Screenshots mask form inputs, including sign-in and token fields. Screenshot failure
 is recorded separately and never replaces the original journey failure.
 

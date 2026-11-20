@@ -26,7 +26,7 @@
 [pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:46.267016494Z  2026-11-20 20:48:46,264 [INFO] websocket 6: got client connection from 127.0.0.1
 [pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:47.269188508Z  2026-11-20 20:48:47,265 [INFO] websocket 7: got client connection from 127.0.0.1
 [pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:48.278807344Z  2026-11-20 20:48:48,278 [INFO] websocket 8: got client connection from 127.0.0.1
-[pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:49.004722287Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "/home/tool/.codex", but that path does not exist
+[pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:49.004722287Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "<computer-home>/.codex", but that path does not exist
 [pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:49.269981283Z  2026-11-20 20:48:49,269 [INFO] websocket 9: got client connection from 127.0.0.1
 [pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:50.267207096Z  2026-11-20 20:48:50,266 [INFO] websocket 10: got client connection from 127.0.0.1
 [pod/computer-a39df7e19bb5235d72898e6cc6fbc911/computer] 2026-11-20T20:48:51.272792769Z  2026-11-20 20:48:51,271 [INFO] websocket 11: got client connection from 127.0.0.1
