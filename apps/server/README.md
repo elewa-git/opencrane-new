@@ -20,7 +20,7 @@ The server uses shared libraries to read events, check permissions and load read
 flowchart LR
   web["apps/web<br/>the website"] -->|requests| server["apps/server<br/>the back end"]
   server <-->|work and replies| computer["apps/computer<br/>assistant computers"]
-  server -->|reads and saves events| nats["NATS<br/>the event log"]
+  server -->|reads and saves permitted events| nats["NATS<br/>the event log"]
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
   server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
   server -->|checks permissions| openfga["OpenFGA<br/>permissions service"]

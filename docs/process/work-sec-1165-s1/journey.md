@@ -1,45 +1,45 @@
 # Fresh CORE journey
 
-Journey on a fresh dev stack: PASS
+Journey on a fresh dev stack: PARTIAL
 
-Tested source head: `168fd08ec3be6807a289a3106e6b5a667b804454`.
-The fresh secondary stack used slot 1. Its website origin was the slot's loopback
-address. Playwright ran against that origin at 1280 × 900 and 390 × 844 px.
+Current product source: `e151c407abc9a24b8d504b1886fd1b6b0efee14b`.
+Source checks: PASS. Fresh CORE and the supplemental signed-out WebSocket check
+on this corrected source: NOT RUN.
 
-## Steps observed
+## Startup attempts
 
-1. Checked both secondary slots and package activity every 30 seconds. Both slots
-   stayed free, no package stack ran, and one-minute load stayed below 6 for 317
-   seconds before claiming slot 1. The [load samples](load-wait.jsonl) record the
-   complete window.
-2. Ran `up.sh --fresh`. It exited 0 after the built-in CORE journey. Real browser
-   sign-in, chat, upload, file preview, desktop viewing and refusals ran at both
-   widths. The live viewer displayed decoded desktop pixels. A missing desktop
-   grant refused the viewer, and revoking access removed its pixels.
-3. Ran `status.sh` in the claimed slot; it exited 0. In separate fresh Playwright
-   browser contexts at both widths, sent a view admission request with no
-   application cookie. Each returned HTTP 403 with only `status: refused` and an
-   `attemptId`. The [browser result](anonymous-browser.json) records both widths.
-   The event-store global-head assertion for this refusal is covered by the
-   [source test](../../../apps/server/test/live-view-anonymous.test.ts).
-4. Copied all 37 journey screenshots and 16 filtered service logs before
-   teardown. The [capture manifest](capture.json) lists each screenshot and its
-   SHA-256 digest. [Startup checks](startup.log), [status result](status.log) and
-   the [service-log index](service-logs.json) are retained. Service log copies
-   contain only timestamps, levels, operation names and numeric status fields.
-   The committed logs retain the first 20 and last 200 safe records per service;
-   complete filtered copies were kept before teardown.
-5. Ran `down.sh`; it exited 0. Both secondary slots then reported free.
+Two fresh attempts stopped before CORE. Both claimed secondary slot 1 only after
+free-slot checks and a five-minute load window. Both were torn down successfully:
 
-## Screenshots
+- [First attempt](attempt-1/receipt.md): the launcher had an absent credential path.
+  Its path reference was corrected before the second attempt. The original
+  diagnostic text was filtered out; its metadata and startup console remain.
+- [Second attempt](attempt-2/receipt.md): PostgreSQL closed its initial connection.
+  The sanitised failure diagnostic was copied before teardown. The secondary
+  readiness probe now requires TCP. Its isolated regression test passed twice,
+  including refusal during temporary initialisation and success after the final
+  server opened TCP. No retry or timeout was increased.
 
-| Scene | 1280 px | 390 px |
-| --- | --- | --- |
-| Workspace | [View](screenshots/slot/workspace-1280.png) | [View](screenshots/slot/workspace-390.png) |
-| File preview | [View](screenshots/slot/preview-1280.png) | [View](screenshots/slot/preview-390.png) |
-| View entry | [View](screenshots/live-view/conversation-entry-1280.png) | [View](screenshots/live-view/conversation-entry-390.png) |
-| Visible desktop | [View](screenshots/live-view/conversation-viewer-1280.png) | [View](screenshots/live-view/conversation-viewer-390.png) |
-| Access revoked | [View](screenshots/live-view/conversation-revoked-1280.png) | [View](screenshots/live-view/conversation-revoked-390.png) |
+After this correction, another task occupied a secondary slot. Load also exceeded
+6. The [admission samples](qualification-wait.jsonl) record both conditions. The
+remaining task budget could not fit the required five-minute admission window,
+full CORE journey, evidence capture and teardown within the owner's 2.5-hour stop
+limit. This task claimed no further stack.
 
-The capture manifest also lists the upload, budget-refusal and history screenshots.
-The screenshot files were copied before the slot was removed.
+## Outstanding live checks
+
+- NOT RUN: fresh CORE on the corrected source at 1280 × 900 and 390 × 844 px.
+- NOT RUN: signed-out POST and WebSocket checks against the fresh journey's actual
+  conversations at both widths, with HTTP 403 and an unchanged event-store head.
+- NOT RUN: new screenshots and service logs from a completed CORE run.
+
+The prepared supplemental check uses fresh Playwright contexts with no application
+cookies and no WebSocket ticket. It checks browser refusal and a direct HTTP
+upgrade response, as well as the real NATS global head. Its execution is pending;
+this receipt claims no result from it.
+
+[Rework proof and source gates](rework.md) record the four review findings,
+failing-first commits, independent mutations and successful source checks.
+The [earlier journey](initial-journey.md) belongs to the previous product source;
+it does not qualify the current changes. The PR remains a draft and cannot land
+with this qualification outstanding.
