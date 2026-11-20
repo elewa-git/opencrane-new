@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' --no-warn-ignored infra/dev-stack/package-hosts.ts infra/dev-stack/package-hosts.test.ts infra/dev-stack/packaged.ts infra/package/host-preflight.mjs infra/package/host-preflight.d.mts infra/package/host-preflight.test.mjs infra/package/cnpg-install.test.mjs infra/package/cnpg-install-preload.mjs infra/package/native-runtime-source.test.mjs infra/package/preflight.mjs infra/package/packaged-fixture.ts

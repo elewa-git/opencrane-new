@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' --config .tools/pilot-366-eslint.config.mjs infra/dev-stack/package-hosts.ts infra/package/host-preflight.mjs

@@ -1,0 +1,1636 @@
+TAP version 13
+# Subtest: CNPG installer refuses missing API before Helm
+ok 1 - CNPG installer refuses missing API before Helm
+  ---
+  duration_ms: 3380.152742
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong API before Helm
+ok 2 - CNPG installer refuses wrong API before Helm
+  ---
+  duration_ms: 2196.502893
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses missing Cluster API before Helm
+ok 3 - CNPG installer refuses missing Cluster API before Helm
+  ---
+  duration_ms: 2120.05304
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses API dependency output before Helm
+ok 4 - CNPG installer refuses API dependency output before Helm
+  ---
+  duration_ms: 2315.593292
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses operator dependency output before Helm
+ok 5 - CNPG installer refuses operator dependency output before Helm
+  ---
+  duration_ms: 2484.623782
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses invalid base64 before Helm
+ok 6 - CNPG installer refuses invalid base64 before Helm
+  ---
+  duration_ms: 2658.743924
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses empty password before Helm
+ok 7 - CNPG installer refuses empty password before Helm
+  ---
+  duration_ms: 2432.368921
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses absent operator before Helm
+ok 8 - CNPG installer refuses absent operator before Helm
+  ---
+  duration_ms: 2309.953997
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong operator before Helm
+ok 9 - CNPG installer refuses wrong operator before Helm
+  ---
+  duration_ms: 2354.534652
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses absent object before Helm
+ok 10 - CNPG installer refuses absent object before Helm
+  ---
+  duration_ms: 2238.387852
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong admin password before Helm
+ok 11 - CNPG installer refuses wrong admin password before Helm
+  ---
+  duration_ms: 2013.651754
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong bootstrap password before Helm
+ok 12 - CNPG installer refuses wrong bootstrap password before Helm
+  ---
+  duration_ms: 2012.029746
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong runtime password before Helm
+ok 13 - CNPG installer refuses wrong runtime password before Helm
+  ---
+  duration_ms: 2341.071409
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong server password before Helm
+ok 14 - CNPG installer refuses wrong server password before Helm
+  ---
+  duration_ms: 1927.388893
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong runtime role before Helm
+ok 15 - CNPG installer refuses wrong runtime role before Helm
+  ---
+  duration_ms: 1975.256974
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong jobs password before Helm
+ok 16 - CNPG installer refuses wrong jobs password before Helm
+  ---
+  duration_ms: 1987.267767
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses wrong access password before Helm
+ok 17 - CNPG installer refuses wrong access password before Helm
+  ---
+  duration_ms: 1980.263217
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses malformed private JSON before Helm
+ok 18 - CNPG installer refuses malformed private JSON before Helm
+  ---
+  duration_ms: 2057.568017
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses dependency output before Helm
+ok 19 - CNPG installer refuses dependency output before Helm
+  ---
+  duration_ms: 1986.887013
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL protocol before Helm
+ok 20 - CNPG installer refuses POSTGRES_ADMIN_URL protocol before Helm
+  ---
+  duration_ms: 1949.934894
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL hostname before Helm
+ok 21 - CNPG installer refuses POSTGRES_ADMIN_URL hostname before Helm
+  ---
+  duration_ms: 2030.713365
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL port before Helm
+ok 22 - CNPG installer refuses POSTGRES_ADMIN_URL port before Helm
+  ---
+  duration_ms: 2481.28032
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL pathname before Helm
+ok 23 - CNPG installer refuses POSTGRES_ADMIN_URL pathname before Helm
+  ---
+  duration_ms: 1777.371181
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL username before Helm
+ok 24 - CNPG installer refuses POSTGRES_ADMIN_URL username before Helm
+  ---
+  duration_ms: 1770.263318
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL user override before Helm
+ok 25 - CNPG installer refuses POSTGRES_ADMIN_URL user override before Helm
+  ---
+  duration_ms: 2475.767536
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL password override before Helm
+ok 26 - CNPG installer refuses POSTGRES_ADMIN_URL password override before Helm
+  ---
+  duration_ms: 2550.004099
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL host override before Helm
+ok 27 - CNPG installer refuses POSTGRES_ADMIN_URL host override before Helm
+  ---
+  duration_ms: 2128.282662
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL port override before Helm
+ok 28 - CNPG installer refuses POSTGRES_ADMIN_URL port override before Helm
+  ---
+  duration_ms: 1918.989732
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL dbname override before Helm
+ok 29 - CNPG installer refuses POSTGRES_ADMIN_URL dbname override before Helm
+  ---
+  duration_ms: 2177.858426
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL missing before Helm
+ok 30 - CNPG installer refuses POSTGRES_ADMIN_URL missing before Helm
+  ---
+  duration_ms: 2035.799256
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL non-string before Helm
+ok 31 - CNPG installer refuses POSTGRES_ADMIN_URL non-string before Helm
+  ---
+  duration_ms: 2442.493775
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL empty before Helm
+ok 32 - CNPG installer refuses POSTGRES_ADMIN_URL empty before Helm
+  ---
+  duration_ms: 2104.713194
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses POSTGRES_ADMIN_URL non-canonical base64 before Helm
+ok 33 - CNPG installer refuses POSTGRES_ADMIN_URL non-canonical base64 before Helm
+  ---
+  duration_ms: 2092.308129
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL protocol before Helm
+ok 34 - CNPG installer refuses PROJECTION_DATABASE_URL protocol before Helm
+  ---
+  duration_ms: 2150.672198
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL hostname before Helm
+ok 35 - CNPG installer refuses PROJECTION_DATABASE_URL hostname before Helm
+  ---
+  duration_ms: 2073.161024
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL port before Helm
+ok 36 - CNPG installer refuses PROJECTION_DATABASE_URL port before Helm
+  ---
+  duration_ms: 2356.322916
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL pathname before Helm
+ok 37 - CNPG installer refuses PROJECTION_DATABASE_URL pathname before Helm
+  ---
+  duration_ms: 2218.050383
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL username before Helm
+ok 38 - CNPG installer refuses PROJECTION_DATABASE_URL username before Helm
+  ---
+  duration_ms: 2089.488534
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL user override before Helm
+ok 39 - CNPG installer refuses PROJECTION_DATABASE_URL user override before Helm
+  ---
+  duration_ms: 2182.971664
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL password override before Helm
+ok 40 - CNPG installer refuses PROJECTION_DATABASE_URL password override before Helm
+  ---
+  duration_ms: 2320.399401
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL host override before Helm
+ok 41 - CNPG installer refuses PROJECTION_DATABASE_URL host override before Helm
+  ---
+  duration_ms: 2036.654911
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL port override before Helm
+ok 42 - CNPG installer refuses PROJECTION_DATABASE_URL port override before Helm
+  ---
+  duration_ms: 2160.530895
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL dbname override before Helm
+ok 43 - CNPG installer refuses PROJECTION_DATABASE_URL dbname override before Helm
+  ---
+  duration_ms: 1978.469559
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL missing before Helm
+ok 44 - CNPG installer refuses PROJECTION_DATABASE_URL missing before Helm
+  ---
+  duration_ms: 1885.396323
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL non-string before Helm
+ok 45 - CNPG installer refuses PROJECTION_DATABASE_URL non-string before Helm
+  ---
+  duration_ms: 2096.154031
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL empty before Helm
+ok 46 - CNPG installer refuses PROJECTION_DATABASE_URL empty before Helm
+  ---
+  duration_ms: 2310.315101
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses PROJECTION_DATABASE_URL non-canonical base64 before Helm
+ok 47 - CNPG installer refuses PROJECTION_DATABASE_URL non-canonical base64 before Helm
+  ---
+  duration_ms: 2183.389988
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses bootstrap PROJECTION_DATABASE_URL conflicting password before Helm
+ok 48 - CNPG installer refuses bootstrap PROJECTION_DATABASE_URL conflicting password before Helm
+  ---
+  duration_ms: 1990.156381
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL protocol before Helm
+ok 49 - CNPG installer refuses DATABASE_URL protocol before Helm
+  ---
+  duration_ms: 1865.12031
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL hostname before Helm
+ok 50 - CNPG installer refuses DATABASE_URL hostname before Helm
+  ---
+  duration_ms: 1976.603009
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL port before Helm
+ok 51 - CNPG installer refuses DATABASE_URL port before Helm
+  ---
+  duration_ms: 1871.414854
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL pathname before Helm
+ok 52 - CNPG installer refuses DATABASE_URL pathname before Helm
+  ---
+  duration_ms: 1715.403125
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL username before Helm
+ok 53 - CNPG installer refuses DATABASE_URL username before Helm
+  ---
+  duration_ms: 2292.590754
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL user override before Helm
+ok 54 - CNPG installer refuses DATABASE_URL user override before Helm
+  ---
+  duration_ms: 2261.73389
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL password override before Helm
+ok 55 - CNPG installer refuses DATABASE_URL password override before Helm
+  ---
+  duration_ms: 2251.182818
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL host override before Helm
+ok 56 - CNPG installer refuses DATABASE_URL host override before Helm
+  ---
+  duration_ms: 2607.704033
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL port override before Helm
+ok 57 - CNPG installer refuses DATABASE_URL port override before Helm
+  ---
+  duration_ms: 2360.834009
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL dbname override before Helm
+ok 58 - CNPG installer refuses DATABASE_URL dbname override before Helm
+  ---
+  duration_ms: 2194.336205
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL missing before Helm
+ok 59 - CNPG installer refuses DATABASE_URL missing before Helm
+  ---
+  duration_ms: 2128.569176
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL non-string before Helm
+ok 60 - CNPG installer refuses DATABASE_URL non-string before Helm
+  ---
+  duration_ms: 2196.899475
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL empty before Helm
+ok 61 - CNPG installer refuses DATABASE_URL empty before Helm
+  ---
+  duration_ms: 2049.665355
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses DATABASE_URL non-canonical base64 before Helm
+ok 62 - CNPG installer refuses DATABASE_URL non-canonical base64 before Helm
+  ---
+  duration_ms: 2041.725174
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses bootstrap DATABASE_URL conflicting password before Helm
+ok 63 - CNPG installer refuses bootstrap DATABASE_URL conflicting password before Helm
+  ---
+  duration_ms: 1950.620867
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL protocol before Helm
+ok 64 - CNPG installer refuses HANDLER_DATABASE_URL protocol before Helm
+  ---
+  duration_ms: 2107.60477
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL hostname before Helm
+ok 65 - CNPG installer refuses HANDLER_DATABASE_URL hostname before Helm
+  ---
+  duration_ms: 1908.679623
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL port before Helm
+ok 66 - CNPG installer refuses HANDLER_DATABASE_URL port before Helm
+  ---
+  duration_ms: 1852.551116
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL pathname before Helm
+ok 67 - CNPG installer refuses HANDLER_DATABASE_URL pathname before Helm
+  ---
+  duration_ms: 2019.017855
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL username before Helm
+ok 68 - CNPG installer refuses HANDLER_DATABASE_URL username before Helm
+  ---
+  duration_ms: 2004.524108
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL user override before Helm
+ok 69 - CNPG installer refuses HANDLER_DATABASE_URL user override before Helm
+  ---
+  duration_ms: 2176.545645
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL password override before Helm
+ok 70 - CNPG installer refuses HANDLER_DATABASE_URL password override before Helm
+  ---
+  duration_ms: 2019.219369
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL host override before Helm
+ok 71 - CNPG installer refuses HANDLER_DATABASE_URL host override before Helm
+  ---
+  duration_ms: 1831.737732
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL port override before Helm
+ok 72 - CNPG installer refuses HANDLER_DATABASE_URL port override before Helm
+  ---
+  duration_ms: 1848.038524
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL dbname override before Helm
+ok 73 - CNPG installer refuses HANDLER_DATABASE_URL dbname override before Helm
+  ---
+  duration_ms: 1768.367532
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL missing before Helm
+ok 74 - CNPG installer refuses HANDLER_DATABASE_URL missing before Helm
+  ---
+  duration_ms: 2157.788029
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL non-string before Helm
+ok 75 - CNPG installer refuses HANDLER_DATABASE_URL non-string before Helm
+  ---
+  duration_ms: 2355.471749
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL empty before Helm
+ok 76 - CNPG installer refuses HANDLER_DATABASE_URL empty before Helm
+  ---
+  duration_ms: 2412.002428
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses HANDLER_DATABASE_URL non-canonical base64 before Helm
+ok 77 - CNPG installer refuses HANDLER_DATABASE_URL non-canonical base64 before Helm
+  ---
+  duration_ms: 2518.549211
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses bootstrap HANDLER_DATABASE_URL conflicting password before Helm
+ok 78 - CNPG installer refuses bootstrap HANDLER_DATABASE_URL conflicting password before Helm
+  ---
+  duration_ms: 2424.814441
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI protocol before Helm
+ok 79 - CNPG installer refuses OPENFGA_DATASTORE_URI protocol before Helm
+  ---
+  duration_ms: 2657.683679
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI hostname before Helm
+ok 80 - CNPG installer refuses OPENFGA_DATASTORE_URI hostname before Helm
+  ---
+  duration_ms: 3186.795331
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI port before Helm
+ok 81 - CNPG installer refuses OPENFGA_DATASTORE_URI port before Helm
+  ---
+  duration_ms: 2829.485083
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI pathname before Helm
+ok 82 - CNPG installer refuses OPENFGA_DATASTORE_URI pathname before Helm
+  ---
+  duration_ms: 2905.650349
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI username before Helm
+ok 83 - CNPG installer refuses OPENFGA_DATASTORE_URI username before Helm
+  ---
+  duration_ms: 3047.23162
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI user override before Helm
+ok 84 - CNPG installer refuses OPENFGA_DATASTORE_URI user override before Helm
+  ---
+  duration_ms: 2853.6905
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI password override before Helm
+ok 85 - CNPG installer refuses OPENFGA_DATASTORE_URI password override before Helm
+  ---
+  duration_ms: 2856.760332
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI host override before Helm
+ok 86 - CNPG installer refuses OPENFGA_DATASTORE_URI host override before Helm
+  ---
+  duration_ms: 3025.769364
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI port override before Helm
+ok 87 - CNPG installer refuses OPENFGA_DATASTORE_URI port override before Helm
+  ---
+  duration_ms: 3269.521368
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI dbname override before Helm
+ok 88 - CNPG installer refuses OPENFGA_DATASTORE_URI dbname override before Helm
+  ---
+  duration_ms: 2848.020314
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI missing before Helm
+ok 89 - CNPG installer refuses OPENFGA_DATASTORE_URI missing before Helm
+  ---
+  duration_ms: 2896.650221
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI non-string before Helm
+ok 90 - CNPG installer refuses OPENFGA_DATASTORE_URI non-string before Helm
+  ---
+  duration_ms: 2368.713876
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI empty before Helm
+ok 91 - CNPG installer refuses OPENFGA_DATASTORE_URI empty before Helm
+  ---
+  duration_ms: 2597.861283
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses OPENFGA_DATASTORE_URI non-canonical base64 before Helm
+ok 92 - CNPG installer refuses OPENFGA_DATASTORE_URI non-canonical base64 before Helm
+  ---
+  duration_ms: 2428.742819
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses superuser missing username before Helm
+ok 93 - CNPG installer refuses superuser missing username before Helm
+  ---
+  duration_ms: 2626.620564
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses superuser missing password before Helm
+ok 94 - CNPG installer refuses superuser missing password before Helm
+  ---
+  duration_ms: 2547.759113
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses superuser wrong type before Helm
+ok 95 - CNPG installer refuses superuser wrong type before Helm
+  ---
+  duration_ms: 2381.132481
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses superuser wrong username before Helm
+ok 96 - CNPG installer refuses superuser wrong username before Helm
+  ---
+  duration_ms: 2381.173381
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses application missing username before Helm
+ok 97 - CNPG installer refuses application missing username before Helm
+  ---
+  duration_ms: 2334.13983
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses application missing password before Helm
+ok 98 - CNPG installer refuses application missing password before Helm
+  ---
+  duration_ms: 2553.277303
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses application wrong type before Helm
+ok 99 - CNPG installer refuses application wrong type before Helm
+  ---
+  duration_ms: 2187.487338
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses application wrong username before Helm
+ok 100 - CNPG installer refuses application wrong username before Helm
+  ---
+  duration_ms: 2143.532594
+  type: 'test'
+  ...
+# Subtest: complete synthetic CNPG inputs reach the release check
+ok 101 - complete synthetic CNPG inputs reach the release check
+  ---
+  duration_ms: 2982.092062
+  type: 'test'
+  ...
+# Subtest: standalone still reaches the release check without an operator
+ok 102 - standalone still reaches the release check without an operator
+  ---
+  duration_ms: 3039.574303
+  type: 'test'
+  ...
+# Subtest: installer entry point keeps an absolute private values path out of every child argument
+ok 103 - installer entry point keeps an absolute private values path out of every child argument
+  ---
+  duration_ms: 3525.826208
+  type: 'test'
+  ...
+# Subtest: journey installer runs real preflight and Helm without private directories in arguments
+ok 104 - journey installer runs real preflight and Helm without private directories in arguments
+  ---
+  duration_ms: 2985.6522
+  type: 'test'
+  ...
+# Subtest: reused superuser reference refuses before Helm
+ok 105 - reused superuser reference refuses before Helm
+  ---
+  duration_ms: 1683.905882
+  type: 'test'
+  ...
+# Subtest: reused postgres reference refuses before Helm
+ok 106 - reused postgres reference refuses before Helm
+  ---
+  duration_ms: 1615.034127
+  type: 'test'
+  ...
+# Subtest: foreign namespaceUid refuses before Helm
+ok 107 - foreign namespaceUid refuses before Helm
+  ---
+  duration_ms: 882.133266
+  type: 'test'
+  ...
+# Subtest: foreign context refuses before Helm
+ok 108 - foreign context refuses before Helm
+  ---
+  duration_ms: 813.967652
+  type: 'test'
+  ...
+# Subtest: unreviewed imageName cannot hide behind reviewed container images
+ok 109 - unreviewed imageName cannot hide behind reviewed container images
+  ---
+  duration_ms: 3008.969997
+  type: 'test'
+  ...
+# Subtest: shipped image review still refuses CNPG before Helm
+ok 110 - shipped image review still refuses CNPG before Helm
+  ---
+  duration_ms: 1778.740384
+  type: 'test'
+  ...
+# Subtest: imageName must use the reviewed PostgreSQL image, not another reviewed role
+ok 111 - imageName must use the reviewed PostgreSQL image, not another reviewed role
+  ---
+  duration_ms: 3128.802634
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching PROJECTION_PASSWORD non-hex password before Helm
+ok 112 - CNPG installer refuses matching PROJECTION_PASSWORD non-hex password before Helm
+  ---
+  duration_ms: 2174.493855
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching PROJECTION_PASSWORD uppercase password before Helm
+ok 113 - CNPG installer refuses matching PROJECTION_PASSWORD uppercase password before Helm
+  ---
+  duration_ms: 2252.13632
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching PROJECTION_PASSWORD short password before Helm
+ok 114 - CNPG installer refuses matching PROJECTION_PASSWORD short password before Helm
+  ---
+  duration_ms: 2166.053504
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching PROJECTION_PASSWORD long password before Helm
+ok 115 - CNPG installer refuses matching PROJECTION_PASSWORD long password before Helm
+  ---
+  duration_ms: 2354.047484
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching SERVER_PASSWORD non-hex password before Helm
+ok 116 - CNPG installer refuses matching SERVER_PASSWORD non-hex password before Helm
+  ---
+  duration_ms: 2036.145485
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching SERVER_PASSWORD uppercase password before Helm
+ok 117 - CNPG installer refuses matching SERVER_PASSWORD uppercase password before Helm
+  ---
+  duration_ms: 2412.75519
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching SERVER_PASSWORD short password before Helm
+ok 118 - CNPG installer refuses matching SERVER_PASSWORD short password before Helm
+  ---
+  duration_ms: 2951.466693
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching SERVER_PASSWORD long password before Helm
+ok 119 - CNPG installer refuses matching SERVER_PASSWORD long password before Helm
+  ---
+  duration_ms: 2507.525463
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching DISPATCHER_PASSWORD non-hex password before Helm
+ok 120 - CNPG installer refuses matching DISPATCHER_PASSWORD non-hex password before Helm
+  ---
+  duration_ms: 2725.10392
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching DISPATCHER_PASSWORD uppercase password before Helm
+ok 121 - CNPG installer refuses matching DISPATCHER_PASSWORD uppercase password before Helm
+  ---
+  duration_ms: 2396.021322
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching DISPATCHER_PASSWORD short password before Helm
+ok 122 - CNPG installer refuses matching DISPATCHER_PASSWORD short password before Helm
+  ---
+  duration_ms: 2852.032378
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching DISPATCHER_PASSWORD long password before Helm
+ok 123 - CNPG installer refuses matching DISPATCHER_PASSWORD long password before Helm
+  ---
+  duration_ms: 3067.140963
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching OPENFGA_PASSWORD non-hex password before Helm
+ok 124 - CNPG installer refuses matching OPENFGA_PASSWORD non-hex password before Helm
+  ---
+  duration_ms: 2435.778648
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching OPENFGA_PASSWORD uppercase password before Helm
+ok 125 - CNPG installer refuses matching OPENFGA_PASSWORD uppercase password before Helm
+  ---
+  duration_ms: 2148.338975
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching OPENFGA_PASSWORD short password before Helm
+ok 126 - CNPG installer refuses matching OPENFGA_PASSWORD short password before Helm
+  ---
+  duration_ms: 2188.762036
+  type: 'test'
+  ...
+# Subtest: CNPG installer refuses matching OPENFGA_PASSWORD long password before Helm
+ok 127 - CNPG installer refuses matching OPENFGA_PASSWORD long password before Helm
+  ---
+  duration_ms: 2236.081298
+  type: 'test'
+  ...
+# Subtest: matching bootstrap connection fields reach the release check
+ok 128 - matching bootstrap connection fields reach the release check
+  ---
+  duration_ms: 4465.83934
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses unequal runtime settings before any Helm command
+ok 129 - packaged installer refuses unequal runtime settings before any Helm command
+  ---
+  duration_ms: 2965.552739
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses three copies on a one-peer chart before any Helm command
+ok 130 - packaged installer refuses three copies on a one-peer chart before any Helm command
+  ---
+  duration_ms: 2856.159292
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses missing runtime settings before any Helm command
+ok 131 - packaged installer refuses missing runtime settings before any Helm command
+  ---
+  duration_ms: 3320.21473
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses missing runtime count before any Helm command
+ok 132 - packaged installer refuses missing runtime count before any Helm command
+  ---
+  duration_ms: 2865.165158
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses missing command count before any Helm command
+ok 133 - packaged installer refuses missing command count before any Helm command
+  ---
+  duration_ms: 2657.64925
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses unsupported settings before any Helm command
+ok 134 - packaged installer refuses unsupported settings before any Helm command
+  ---
+  duration_ms: 2701.066022
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses non-strict settings before any Helm command
+ok 135 - packaged installer refuses non-strict settings before any Helm command
+  ---
+  duration_ms: 2324.016242
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses private settings before any Helm command
+ok 136 - packaged installer refuses private settings before any Helm command
+  ---
+  duration_ms: 2242.363561
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses bootstrap runtime override before any Helm command
+ok 137 - packaged installer refuses bootstrap runtime override before any Helm command
+  ---
+  duration_ms: 2108.894846
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses bootstrap command override before any Helm command
+ok 138 - packaged installer refuses bootstrap command override before any Helm command
+  ---
+  duration_ms: 1952.538303
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses matching bootstrap overrides on a one-peer chart before any Helm command
+ok 139 - packaged installer refuses matching bootstrap overrides on a one-peer chart before any Helm command
+  ---
+  duration_ms: 1922.922883
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses empty bootstrap override before any Helm command
+ok 140 - packaged installer refuses empty bootstrap override before any Helm command
+  ---
+  duration_ms: 2056.02536
+  type: 'test'
+  ...
+# Subtest: packaged installer refuses bootstrap cannot supply missing runtime settings before any Helm command
+ok 141 - packaged installer refuses bootstrap cannot supply missing runtime settings before any Helm command
+  ---
+  duration_ms: 1850.921936
+  type: 'test'
+  ...
+# Subtest: matching bootstrap replica overrides reach the release check
+ok 142 - matching bootstrap replica overrides reach the release check
+  ---
+  duration_ms: 2740.453569
+  type: 'test'
+  ...
+# Subtest: packaged installer still refuses R3 with renderOnly=false
+ok 143 - packaged installer still refuses R3 with renderOnly=false
+  ---
+  duration_ms: 1524.957966
+  type: 'test'
+  ...
+# Subtest: packaged installer still refuses R3 with renderOnly=true
+ok 144 - packaged installer still refuses R3 with renderOnly=true
+  ---
+  duration_ms: 1544.418359
+  type: 'test'
+  ...
+# Subtest: prepared R3 reaches real Helm rendering and exactly one install
+ok 145 - prepared R3 reaches real Helm rendering and exactly one install
+  ---
+  duration_ms: 5034.580095
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: missing
+ok 146 - R3 identity refuses before Helm: missing
+  ---
+  duration_ms: 5579.764938
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: replaced
+ok 147 - R3 identity refuses before Helm: replaced
+  ---
+  duration_ms: 4018.470997
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: foreign
+ok 148 - R3 identity refuses before Helm: foreign
+  ---
+  duration_ms: 3806.284707
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: mutable
+ok 149 - R3 identity refuses before Helm: mutable
+  ---
+  duration_ms: 5181.599096
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: binding
+ok 150 - R3 identity refuses before Helm: binding
+  ---
+  duration_ms: 4202.079533
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: DNS
+ok 151 - R3 identity refuses before Helm: DNS
+  ---
+  duration_ms: 3766.041514
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: issuer
+ok 152 - R3 identity refuses before Helm: issuer
+  ---
+  duration_ms: 4328.551544
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: duplicate
+ok 153 - R3 identity refuses before Helm: duplicate
+  ---
+  duration_ms: 5054.682647
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: usage
+ok 154 - R3 identity refuses before Helm: usage
+  ---
+  duration_ms: 5218.14261
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: expired
+ok 155 - R3 identity refuses before Helm: expired
+  ---
+  duration_ms: 4080.517722
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: lost target
+ok 156 - R3 identity refuses before Helm: lost target
+  ---
+  duration_ms: 3739.047363
+  type: 'test'
+  ...
+# Subtest: R3 identity refuses before Helm: client trust
+ok 157 - R3 identity refuses before Helm: client trust
+  ---
+  duration_ms: 3996.224277
+  type: 'test'
+  ...
+# Subtest: R3 nodes refuse before Helm: missing
+ok 158 - R3 nodes refuse before Helm: missing
+  ---
+  duration_ms: 1775.783725
+  type: 'test'
+  ...
+# Subtest: R3 nodes refuse before Helm: hostname
+ok 159 - R3 nodes refuse before Helm: hostname
+  ---
+  duration_ms: 3885.10173
+  type: 'test'
+  ...
+# Subtest: R3 nodes refuse before Helm: uid
+ok 160 - R3 nodes refuse before Helm: uid
+  ---
+  duration_ms: 2161.410349
+  type: 'test'
+  ...
+# Subtest: R3 nodes refuse before Helm: unready
+ok 161 - R3 nodes refuse before Helm: unready
+  ---
+  duration_ms: 4903.336078
+  type: 'test'
+  ...
+# Subtest: R3 nodes refuse before Helm: cordoned
+ok 162 - R3 nodes refuse before Helm: cordoned
+  ---
+  duration_ms: 3870.359397
+  type: 'test'
+  ...
+# Subtest: R3 nodes refuse before Helm: tainted
+ok 163 - R3 nodes refuse before Helm: tainted
+  ---
+  duration_ms: 3817.939677
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: review
+ok 164 - R3 inputs refuse before Helm: review
+  ---
+  duration_ms: 3337.127959
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: server
+ok 165 - R3 inputs refuse before Helm: server
+  ---
+  duration_ms: 2901.117094
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: web
+ok 166 - R3 inputs refuse before Helm: web
+  ---
+  duration_ms: 2388.161531
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: setting
+ok 167 - R3 inputs refuse before Helm: setting
+  ---
+  duration_ms: 2540.425305
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: preview
+ok 168 - R3 inputs refuse before Helm: preview
+  ---
+  duration_ms: 2378.933552
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: runtime
+ok 169 - R3 inputs refuse before Helm: runtime
+  ---
+  duration_ms: 4204.999809
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: bootstrap
+ok 170 - R3 inputs refuse before Helm: bootstrap
+  ---
+  duration_ms: 5531.483481
+  type: 'test'
+  ...
+# Subtest: R3 inputs refuse before Helm: lost target
+ok 171 - R3 inputs refuse before Helm: lost target
+  ---
+  duration_ms: 3308.121403
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses key before Helm
+ok 172 - mounted NATS server refuses key before Helm
+  ---
+  duration_ms: 4293.506566
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses expired before Helm
+ok 173 - mounted NATS server refuses expired before Helm
+  ---
+  duration_ms: 4213.724249
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses future before Helm
+ok 174 - mounted NATS server refuses future before Helm
+  ---
+  duration_ms: 4283.630085
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses name before Helm
+ok 175 - mounted NATS server refuses name before Helm
+  ---
+  duration_ms: 4140.31639
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses SAN before Helm
+ok 176 - mounted NATS server refuses SAN before Helm
+  ---
+  duration_ms: 4683.360501
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses usage before Helm
+ok 177 - mounted NATS server refuses usage before Helm
+  ---
+  duration_ms: 4462.335139
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses extra usage before Helm
+ok 178 - mounted NATS server refuses extra usage before Helm
+  ---
+  duration_ms: 4166.968759
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses issuer before Helm
+ok 179 - mounted NATS server refuses issuer before Helm
+  ---
+  duration_ms: 5360.219275
+  type: 'test'
+  ...
+# Subtest: mounted NATS server refuses CA identity before Helm
+ok 180 - mounted NATS server refuses CA identity before Helm
+  ---
+  duration_ms: 4108.714091
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses key before Helm
+ok 181 - mounted NATS command refuses key before Helm
+  ---
+  duration_ms: 3851.218257
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses expired before Helm
+ok 182 - mounted NATS command refuses expired before Helm
+  ---
+  duration_ms: 4834.466489
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses future before Helm
+ok 183 - mounted NATS command refuses future before Helm
+  ---
+  duration_ms: 5770.640072
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses name before Helm
+ok 184 - mounted NATS command refuses name before Helm
+  ---
+  duration_ms: 4607.483499
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses SAN before Helm
+ok 185 - mounted NATS command refuses SAN before Helm
+  ---
+  duration_ms: 4223.04678
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses usage before Helm
+ok 186 - mounted NATS command refuses usage before Helm
+  ---
+  duration_ms: 3701.385492
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses extra usage before Helm
+ok 187 - mounted NATS command refuses extra usage before Helm
+  ---
+  duration_ms: 4046.549668
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses issuer before Helm
+ok 188 - mounted NATS command refuses issuer before Helm
+  ---
+  duration_ms: 4906.636759
+  type: 'test'
+  ...
+# Subtest: mounted NATS command refuses CA identity before Helm
+ok 189 - mounted NATS command refuses CA identity before Helm
+  ---
+  duration_ms: 4569.805007
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses key before Helm
+ok 190 - mounted NATS projection refuses key before Helm
+  ---
+  duration_ms: 5546.502997
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses expired before Helm
+ok 191 - mounted NATS projection refuses expired before Helm
+  ---
+  duration_ms: 4870.052746
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses future before Helm
+ok 192 - mounted NATS projection refuses future before Helm
+  ---
+  duration_ms: 4311.760293
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses name before Helm
+ok 193 - mounted NATS projection refuses name before Helm
+  ---
+  duration_ms: 3887.496938
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses SAN before Helm
+ok 194 - mounted NATS projection refuses SAN before Helm
+  ---
+  duration_ms: 3727.695322
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses usage before Helm
+ok 195 - mounted NATS projection refuses usage before Helm
+  ---
+  duration_ms: 3934.659396
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses extra usage before Helm
+ok 196 - mounted NATS projection refuses extra usage before Helm
+  ---
+  duration_ms: 4182.681159
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses issuer before Helm
+ok 197 - mounted NATS projection refuses issuer before Helm
+  ---
+  duration_ms: 5702.74984
+  type: 'test'
+  ...
+# Subtest: mounted NATS projection refuses CA identity before Helm
+ok 198 - mounted NATS projection refuses CA identity before Helm
+  ---
+  duration_ms: 3736.708253
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses key before Helm
+ok 199 - mounted NATS dispatcher refuses key before Helm
+  ---
+  duration_ms: 3879.257556
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses expired before Helm
+ok 200 - mounted NATS dispatcher refuses expired before Helm
+  ---
+  duration_ms: 3777.789059
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses future before Helm
+ok 201 - mounted NATS dispatcher refuses future before Helm
+  ---
+  duration_ms: 3377.282844
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses name before Helm
+ok 202 - mounted NATS dispatcher refuses name before Helm
+  ---
+  duration_ms: 3184.160209
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses SAN before Helm
+ok 203 - mounted NATS dispatcher refuses SAN before Helm
+  ---
+  duration_ms: 3024.407221
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses usage before Helm
+ok 204 - mounted NATS dispatcher refuses usage before Helm
+  ---
+  duration_ms: 3456.13082
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses extra usage before Helm
+ok 205 - mounted NATS dispatcher refuses extra usage before Helm
+  ---
+  duration_ms: 4040.315564
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses issuer before Helm
+ok 206 - mounted NATS dispatcher refuses issuer before Helm
+  ---
+  duration_ms: 4000.454556
+  type: 'test'
+  ...
+# Subtest: mounted NATS dispatcher refuses CA identity before Helm
+ok 207 - mounted NATS dispatcher refuses CA identity before Helm
+  ---
+  duration_ms: 3166.866604
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed store directory before Helm
+ok 208 - NATS config refuses changed store directory before Helm
+  ---
+  duration_ms: 3596.398919
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed client verification before Helm
+ok 209 - NATS config refuses changed client verification before Helm
+  ---
+  duration_ms: 3519.442218
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed client TLS before Helm
+ok 210 - NATS config refuses changed client TLS before Helm
+  ---
+  duration_ms: 3093.500303
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed TLS handshake before Helm
+ok 211 - NATS config refuses changed TLS handshake before Helm
+  ---
+  duration_ms: 3146.457118
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed TLS version before Helm
+ok 212 - NATS config refuses changed TLS version before Helm
+  ---
+  duration_ms: 3083.780169
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed account before Helm
+ok 213 - NATS config refuses changed account before Helm
+  ---
+  duration_ms: 3641.246874
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed publish permissions before Helm
+ok 214 - NATS config refuses changed publish permissions before Helm
+  ---
+  duration_ms: 3179.931734
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed subscribe permissions before Helm
+ok 215 - NATS config refuses changed subscribe permissions before Helm
+  ---
+  duration_ms: 3020.979371
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed excluded permissions before Helm
+ok 216 - NATS config refuses changed excluded permissions before Helm
+  ---
+  duration_ms: 3031.8761
+  type: 'test'
+  ...
+# Subtest: NATS config refuses changed extra setting before Helm
+ok 217 - NATS config refuses changed extra setting before Helm
+  ---
+  duration_ms: 2907.340233
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses nats NATS_LISTEN before Helm
+ok 218 - NATS connection refuses nats NATS_LISTEN before Helm
+  ---
+  duration_ms: 3059.508891
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses nats NATS_STORE_DIR before Helm
+ok 219 - NATS connection refuses nats NATS_STORE_DIR before Helm
+  ---
+  duration_ms: 3028.102577
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses nats NATS_CA_FILE before Helm
+ok 220 - NATS connection refuses nats NATS_CA_FILE before Helm
+  ---
+  duration_ms: 3265.995973
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses nats NATS_CERT_FILE before Helm
+ok 221 - NATS connection refuses nats NATS_CERT_FILE before Helm
+  ---
+  duration_ms: 2966.447816
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses nats NATS_KEY_FILE before Helm
+ok 222 - NATS connection refuses nats NATS_KEY_FILE before Helm
+  ---
+  duration_ms: 3088.244256
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime NATS_URL before Helm
+ok 223 - NATS connection refuses runtime NATS_URL before Helm
+  ---
+  duration_ms: 3725.552663
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap NATS_URL before Helm
+ok 224 - NATS connection refuses bootstrap NATS_URL before Helm
+  ---
+  duration_ms: 3126.523847
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime NATS_CA_FILE before Helm
+ok 225 - NATS connection refuses runtime NATS_CA_FILE before Helm
+  ---
+  duration_ms: 3229.274857
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap NATS_CA_FILE before Helm
+ok 226 - NATS connection refuses bootstrap NATS_CA_FILE before Helm
+  ---
+  duration_ms: 2953.51285
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime NATS_CERT_FILE before Helm
+ok 227 - NATS connection refuses runtime NATS_CERT_FILE before Helm
+  ---
+  duration_ms: 4419.008455
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap NATS_CERT_FILE before Helm
+ok 228 - NATS connection refuses bootstrap NATS_CERT_FILE before Helm
+  ---
+  duration_ms: 3715.999262
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime NATS_KEY_FILE before Helm
+ok 229 - NATS connection refuses runtime NATS_KEY_FILE before Helm
+  ---
+  duration_ms: 3575.774711
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap NATS_KEY_FILE before Helm
+ok 230 - NATS connection refuses bootstrap NATS_KEY_FILE before Helm
+  ---
+  duration_ms: 4426.478663
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime NATS_NKEY_SEED_FILE before Helm
+ok 231 - NATS connection refuses runtime NATS_NKEY_SEED_FILE before Helm
+  ---
+  duration_ms: 4548.203241
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap NATS_NKEY_SEED_FILE before Helm
+ok 232 - NATS connection refuses bootstrap NATS_NKEY_SEED_FILE before Helm
+  ---
+  duration_ms: 4012.688772
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime NATS_INBOX_PREFIX before Helm
+ok 233 - NATS connection refuses runtime NATS_INBOX_PREFIX before Helm
+  ---
+  duration_ms: 3658.502053
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap NATS_INBOX_PREFIX before Helm
+ok 234 - NATS connection refuses bootstrap NATS_INBOX_PREFIX before Helm
+  ---
+  duration_ms: 3431.54894
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime COMMAND_NATS_URL before Helm
+ok 235 - NATS connection refuses runtime COMMAND_NATS_URL before Helm
+  ---
+  duration_ms: 3362.513122
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap COMMAND_NATS_URL before Helm
+ok 236 - NATS connection refuses bootstrap COMMAND_NATS_URL before Helm
+  ---
+  duration_ms: 3502.934355
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime COMMAND_NATS_CA_FILE before Helm
+ok 237 - NATS connection refuses runtime COMMAND_NATS_CA_FILE before Helm
+  ---
+  duration_ms: 3333.248737
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap COMMAND_NATS_CA_FILE before Helm
+ok 238 - NATS connection refuses bootstrap COMMAND_NATS_CA_FILE before Helm
+  ---
+  duration_ms: 3343.971013
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime COMMAND_NATS_CERT_FILE before Helm
+ok 239 - NATS connection refuses runtime COMMAND_NATS_CERT_FILE before Helm
+  ---
+  duration_ms: 3747.851018
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap COMMAND_NATS_CERT_FILE before Helm
+ok 240 - NATS connection refuses bootstrap COMMAND_NATS_CERT_FILE before Helm
+  ---
+  duration_ms: 4181.159201
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime COMMAND_NATS_KEY_FILE before Helm
+ok 241 - NATS connection refuses runtime COMMAND_NATS_KEY_FILE before Helm
+  ---
+  duration_ms: 3740.480756
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap COMMAND_NATS_KEY_FILE before Helm
+ok 242 - NATS connection refuses bootstrap COMMAND_NATS_KEY_FILE before Helm
+  ---
+  duration_ms: 3412.951285
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime COMMAND_NATS_NKEY_SEED_FILE before Helm
+ok 243 - NATS connection refuses runtime COMMAND_NATS_NKEY_SEED_FILE before Helm
+  ---
+  duration_ms: 3697.816091
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap COMMAND_NATS_NKEY_SEED_FILE before Helm
+ok 244 - NATS connection refuses bootstrap COMMAND_NATS_NKEY_SEED_FILE before Helm
+  ---
+  duration_ms: 3505.229621
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses runtime COMMAND_NATS_INBOX_PREFIX before Helm
+ok 245 - NATS connection refuses runtime COMMAND_NATS_INBOX_PREFIX before Helm
+  ---
+  duration_ms: 3375.143153
+  type: 'test'
+  ...
+# Subtest: NATS connection refuses bootstrap COMMAND_NATS_INBOX_PREFIX before Helm
+ok 246 - NATS connection refuses bootstrap COMMAND_NATS_INBOX_PREFIX before Helm
+  ---
+  duration_ms: 3504.25279
+  type: 'test'
+  ...
+# Subtest: NATS command refuses invalid role key before Helm
+ok 247 - NATS command refuses invalid role key before Helm
+  ---
+  duration_ms: 3878.315681
+  type: 'test'
+  ...
+# Subtest: NATS command refuses duplicate role key before Helm
+ok 248 - NATS command refuses duplicate role key before Helm
+  ---
+  duration_ms: 3932.108558
+  type: 'test'
+  ...
+# Subtest: NATS command refuses seed role key before Helm
+ok 249 - NATS command refuses seed role key before Helm
+  ---
+  duration_ms: 3873.346746
+  type: 'test'
+  ...
+# Subtest: NATS projection refuses invalid role key before Helm
+ok 250 - NATS projection refuses invalid role key before Helm
+  ---
+  duration_ms: 4113.411112
+  type: 'test'
+  ...
+# Subtest: NATS projection refuses duplicate role key before Helm
+ok 251 - NATS projection refuses duplicate role key before Helm
+  ---
+  duration_ms: 3248.843451
+  type: 'test'
+  ...
+# Subtest: NATS projection refuses seed role key before Helm
+ok 252 - NATS projection refuses seed role key before Helm
+  ---
+  duration_ms: 3306.194795
+  type: 'test'
+  ...
+# Subtest: NATS dispatcher refuses invalid role key before Helm
+ok 253 - NATS dispatcher refuses invalid role key before Helm
+  ---
+  duration_ms: 3016.549838
+  type: 'test'
+  ...
+# Subtest: NATS dispatcher refuses duplicate role key before Helm
+ok 254 - NATS dispatcher refuses duplicate role key before Helm
+  ---
+  duration_ms: 3036.234557
+  type: 'test'
+  ...
+# Subtest: NATS dispatcher refuses seed role key before Helm
+ok 255 - NATS dispatcher refuses seed role key before Helm
+  ---
+  duration_ms: 3069.309684
+  type: 'test'
+  ...
+# Subtest: NATS computer refuses invalid role key before Helm
+ok 256 - NATS computer refuses invalid role key before Helm
+  ---
+  duration_ms: 3778.11262
+  type: 'test'
+  ...
+# Subtest: NATS computer refuses duplicate role key before Helm
+ok 257 - NATS computer refuses duplicate role key before Helm
+  ---
+  duration_ms: 3454.046099
+  type: 'test'
+  ...
+# Subtest: NATS refuses different mounted runtime trust before Helm
+ok 258 - NATS refuses different mounted runtime trust before Helm
+  ---
+  duration_ms: 2969.120259
+  type: 'test'
+  ...
+# Subtest: R1 also refuses an expired mounted command certificate before Helm
+ok 259 - R1 also refuses an expired mounted command certificate before Helm
+  ---
+  duration_ms: 1795.092407
+  type: 'test'
+  ...
+# Subtest: backup refuses before Helm even with ordinary CNPG image approval
+ok 260 - backup refuses before Helm even with ordinary CNPG image approval
+  ---
+  duration_ms: 1021.476228
+  type: 'test'
+  ...
+# Subtest: recovery refuses before Helm even with ordinary CNPG image approval
+ok 261 - recovery refuses before Helm even with ordinary CNPG image approval
+  ---
+  duration_ms: 1022.989449
+  type: 'test'
+  ...
+# Subtest: backup property stays refused before Helm: null
+ok 262 - backup property stays refused before Helm: null
+  ---
+  duration_ms: 1271.872149
+  type: 'test'
+  ...
+# Subtest: backup property stays refused before Helm: false
+ok 263 - backup property stays refused before Helm: false
+  ---
+  duration_ms: 1397.399954
+  type: 'test'
+  ...
+# Subtest: backup property stays refused before Helm: {"enabled":false}
+ok 264 - backup property stays refused before Helm: {"enabled":false}
+  ---
+  duration_ms: 1480.843129
+  type: 'test'
+  ...
+# Subtest: backup property stays refused before Helm: {"renderOnly":true}
+ok 265 - backup property stays refused before Helm: {"renderOnly":true}
+  ---
+  duration_ms: 1381.837176
+  type: 'test'
+  ...
+# Subtest: recovery property stays refused before Helm: null
+ok 266 - recovery property stays refused before Helm: null
+  ---
+  duration_ms: 1317.245525
+  type: 'test'
+  ...
+# Subtest: recovery property stays refused before Helm: false
+ok 267 - recovery property stays refused before Helm: false
+  ---
+  duration_ms: 1180.473277
+  type: 'test'
+  ...
+# Subtest: recovery property stays refused before Helm: {"enabled":false}
+ok 268 - recovery property stays refused before Helm: {"enabled":false}
+  ---
+  duration_ms: 1158.442942
+  type: 'test'
+  ...
+# Subtest: recovery property stays refused before Helm: {"renderOnly":true}
+ok 269 - recovery property stays refused before Helm: {"renderOnly":true}
+  ---
+  duration_ms: 1095.210127
+  type: 'test'
+  ...
+# Subtest: an application approved by CI reaches rendering with historical baseline pins
+ok 270 - an application approved by CI reaches rendering with historical baseline pins
+  ---
+  duration_ms: 2048.715184
+  type: 'test'
+  ...
+# Subtest: matching builder-written application pins refuse before Helm rendering
+ok 271 - matching builder-written application pins refuse before Helm rendering
+  ---
+  duration_ms: 1706.87096
+  type: 'test'
+  ...
+1..271
+# tests 271
+# suites 0
+# pass 271
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 785508.294482
