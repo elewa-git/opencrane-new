@@ -1,105 +1,114 @@
 # Install hardening source checks
 
-Source implementation: `32dc94d96`. Live qualification is
-[NOT RUN](journey.md); source checks cannot qualify the capability.
+Date: 20 November 2026. Source: `77fc69f35a6b65cc94bf263ddefa121488ad75c1`,
+rebased onto `ed3662d85`. The rebase finished and the checkout was clean before
+the packaged qualification. See the [journey receipt](journey.md) for live results.
 
-## Test-first evidence
+## Bootstrap completion regression
 
-The observations below preceded the original implementation. The listed hashes
-are the rebased test commits. During the rebase, the first chart test was also
-seen failing for its missing token mount before the implementation was replayed.
+The first published application workflow failed its existing real-image bootstrap
+assertion. Development-owner setup completed, but its completion message had been
+replaced with the token-mode message. No image approval was produced by that run.
 
-- `292ecbbab`: the explicit public mode was unsupported, the chart did not mount
-  a token and the owner bootstrap still attempted its development command.
-  The targeted checks failed before the implementation.
-- `d43b902f2`: the new hostname and explicit-choice tests exposed acceptance of an
-  IP address and a string-valued chart switch. Both refused after the fix.
-- `2d357da93`: removing the token record still let the installer succeed. The
-  new refusal test failed with actual status 0 instead of 1 before the fix.
-- Removing each of the six public sign-in requirements in isolated child-process
-  module loads made its matching CLI refusal test fail with actual status 0.
-  Removing the stored runtime and bootstrap-override checks likewise made both
-  installer refusal tests fail. All eight probes detected the removed rule.
-  These temporary changes never altered the checkout or other test processes.
+Test-first commit `00799e209` is the rebased form of `786845dea`. It preserves the
+development-owner assertions and adds a real-container token-mode check. The
+[failing test run](https://github.com/elewa-git/opencrane-new/actions/runs/44725906712)
+ran 17 image checks: the development completion assertion failed and the new token
+check passed. The token fixture also requires no development-owner writes or
+completion file and still requires the final owner-ready update.
 
-The first broad package attempt exposed the existing VM fixture's inability to
-require an ESM module with top-level await. The fixture now supplies the real
-imported token reader; no product check, timeout or assertion was weakened.
-An initial installer assertion expected the new organisation message, but the
-existing required-field check refused first. The assertion now expects that
-existing refusal. The first typecheck found an inferred map too narrow for the
-development identity key; the preparation map now has its explicit text-record type.
+Fix `77fc69f35` selects the completion message by bootstrap mode. It keeps the
+existing development message and reports claim readiness only in token mode.
+No assertion, access check, retry, timeout, money rule or memory check was loosened.
+The finding and fix are recorded in the
+[PR comment](https://github.com/elewa-git/opencrane-new/pull/1170#issuecomment-7038226732).
 
-## Completed checks
+## Completed checks on the rebased source
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Workspace, package and dev-stack typecheck | PASS | Final complete root command exited 0 |
-| Complete rebased package scope, twice | PASS | 643/643 each; no skips; 770.56 s and 960.84 s |
-| Token and bootstrap integration suites, twice | PASS | 58/58 each; 168.07 s and 136.83 s |
-| Public-address focused CLI, chart and installer checks | PASS | 47/47 before the complete repeats |
-| Event catalogue | PASS | 174 registered event types match the catalogue |
+| Changed package suites, twice | PASS | 643/643 each; no skips; 1,002.50 s and 813.99 s |
+| Token/bootstrap integration suites, twice | PASS | 58/58 each; 204.52 s and 186.97 s |
+| Real image/layer/bootstrap checks, twice | PASS | 17/17 each; 90.76 s and 112.08 s |
+| Complete workspace, package and dev-stack typecheck | PASS | Root command exited 0 |
+| Event catalogue | PASS | 174 registered types match the catalogue |
 | Knip | PASS | Two existing configuration hints; no unused-code finding |
 | Changelog | PASS | Branch release note; no changelog edit |
-| Markdown | PASS | Complete configured Markdown scope, no file arguments |
-| Package READMEs | PASS | Fixed structure and size checks |
-| Whole-stream reads and lint debt | PASS | Existing reads unchanged; no raised limit |
-| Scoped ESLint invocation | PASS | Repository configuration ignores infrastructure files |
-| ESLint rules on infrastructure | NOT RUN | Infrastructure is excluded by the repository configuration |
-| Web tests and build | NOT RUN | No website source changed |
+| Markdown | PASS | Complete configured scope, without file arguments |
+| Package README structure | PASS | Eight diagram nodes; fixed headings and size checks |
+| Scoped ESLint command | PASS | Exit 0; 13 infrastructure files ignored by configuration |
+| ESLint rules on infrastructure | NOT RUN | The existing configuration excludes these files |
+| Exact-head CI | PASS | All jobs completed successfully |
+| Exact-source application and scanner approval consumers | PASS | Real GitHub lookups accepted both artifacts |
+| Separate local web tests/build | NOT RUN | Website source is unchanged; image workflows build the website |
 
-All tests, typechecks and lint commands ran under `nice -n 10`. The Vitest runs
-used the shared disposable database and at most two workers. No full root test
-suite ran. Existing real NATS and Docker fixtures remained within the allowed test
-scope. No secondary journey, owner stack, Docker daemon or host network was changed.
+[CI run](https://github.com/elewa-git/opencrane-new/actions/runs/44729079211),
+[first application run](https://github.com/elewa-git/opencrane-new/actions/runs/44729067948),
+[second application run](https://github.com/elewa-git/opencrane-new/actions/runs/44730045363),
+and [scanner run](https://github.com/elewa-git/opencrane-new/actions/runs/44729074136)
+all name the exact source commit above. The application workflows also completed
+the existing native-image, licence, layer scan and authenticated-index checks.
+No local candidate or builder-written record granted image approval.
 
-## Rebase
+Every local test, lint and typecheck ran under `nice -n 10`. Vitest used the shared
+disposable database and at most two workers. No full root test suite ran locally.
 
-Main advanced to `c791103b3` while the first checks ran. The branch was rebased
-onto it. Both sets of appended tests were retained; template and preparation
-conflicts keep main's backup restore and removal of conversation-key storage.
-The README diagram retains the restore process and stays within eight nodes.
-The updated lockfile was installed with `npm ci` before restarting the gates.
+## Rebase and earlier runs
 
-Before that rebase, the same four package files passed 639/639 twice, and the
-same four token/bootstrap files passed 58/58 twice. Those are historical results;
-the completed-check table records the rebased runs. All eight guard removals were
-repeated and detected on the rebased source too.
+Main advanced while the first checks ran. The rebase retained both the host checks
+from PR #1169 and this slice's production sign-in checks. The approval lookup fix
+from that merged PR is inherited unchanged; no second lookup fix was written.
 
-## Test commands
+I started the rebase before an earlier package repeat finished. That invalid run
+ended with 610 passes and 33 failures caused by conflict markers. It is not passing
+evidence. Both complete package repeats in the table ran after the rebase finished.
+
+Before the rebase, the package scope passed 643/643 once, the token/bootstrap
+suites passed 58/58 twice after the fix, and two image runs passed 17/17. Those
+historical results do not replace the rebased checks. The
+[original receipt](https://github.com/elewa-git/opencrane-new/blob/a61751de52c7526d7c8df9efd573670ffd61b2d8/docs/process/work-pilot-1113-s1/checks.md)
+retains the original failing-first and fixture-correction evidence.
+
+## Commands
+
+Run the package command twice:
 
 ```sh
 nice -n 10 node --experimental-strip-types --test --test-concurrency=2 \
   infra/package/preflight.test.mjs infra/package/chart.test.mjs \
   infra/package/chart-render.test.mjs infra/package/cnpg-install.test.mjs
-nice -n 10 node --experimental-strip-types --test --test-concurrency=2 \
-  infra/package/preflight.test.mjs infra/package/chart.test.mjs \
-  infra/package/chart-render.test.mjs infra/package/cnpg-install.test.mjs
+```
+
+Run the following twice with `PG_TEST_URL` set to the shared disposable database:
+
+```sh
 nice -n 10 npx vitest run infra/package/bootstrap.test.ts \
   apps/server/test/bootstrap-token.test.ts apps/server/test/bootstrap-claim.test.ts \
   apps/server/test/bootstrap-browser.test.ts --maxWorkers=2
-nice -n 10 npm run typecheck
 ```
 
-Run the Vitest command twice with `PG_TEST_URL` pointing at the shared disposable
-test database. These are source checks, not the live journey commands.
+Then run the remaining gates:
+
+```sh
+nice -n 10 npm run typecheck
+nice -n 10 npm run check:events
+nice -n 10 npm run lint:unused
+nice -n 10 npm run lint:changelog
+nice -n 10 npx markdownlint-cli2
+nice -n 10 npm run lint:readmes
+```
+
+ESLint was invoked only on changed code files. Its ignored-file warnings remain
+explicit in the table; no ignore or size limit was changed.
 
 ## Make it right
 
-One shared module owns exposure shape and production sign-in validation. Both
-preflight and the saved Kubernetes settings use it. Only the two consumed guard
-functions are exported, with an explicit TypeScript exposure shape.
+The fix adds only the branch that selects the correct completion message. Both
+container checks reuse one named Docker invocation helper. The existing owner
+assertions remain intact, and the token check requires owner setup to be absent.
+Production functions changed by the slice remain within the stated size and
+parameter limits. The merged README keeps both host checks and token ownership.
 
-Preparation reuses the server's token-record reader and claim route. It copies
-only the hash record, removes development owner settings in the chosen mode and
-keeps the server's existing event-only membership decision. No new event, product API,
-SQL business rule, licence or dependency was added.
-
-Named helpers separate sign-in preparation, required Secret fields and Secret
-decoding. The dispatcher settings now use a clear loop. The test fixture's file
-generator was split out. The replaced preflight exposure loop was removed.
-Changed production functions have at most 60 counted lines and three parameters.
-No size limit was changed and the new file-read error keeps its cause.
-
-Shipped code: 253 added plus 34 deleted lines, 287 total. Tests, test fixtures,
-documents, release notes and receipts are excluded.
+Shipped code: 257 added plus 34 deleted lines, 291 total. Tests, test fixtures,
+documents, release notes and receipts are excluded. No dependency, event type,
+public API field, SQL business rule, image pin or size limit was added or changed.
