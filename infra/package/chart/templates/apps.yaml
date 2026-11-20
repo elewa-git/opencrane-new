@@ -198,7 +198,10 @@ spec:
                   name: {{ .Values.secrets.runtime | quote }}
                   key: PROJECTION_DATABASE_URL
 {{- if eq (toString .Values.models.mode) "provider" }}
-            - { name: DEV_REAL_PROVIDER, value: "1" }
+            - { name: PACKAGE_PROVIDER_MODE, value: "1" }
+{{- if .Values.models.qualification }}
+            - { name: PACKAGE_PROVIDER_QUALIFICATION, value: "1" }
+{{- end }}
             - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
 {{- end }}
             - { name: NODE_OPTIONS, value: "--max-old-space-size=256" }

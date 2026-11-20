@@ -898,7 +898,7 @@ function defaultModelBytesStayTheSame() {
   const digest = createHash('sha256');
   digest.update(original.stdout);
   assert.equal(digest.digest('hex'),
-    'ef0b26c1c872f4d790e44e1bc445e7db0b55def7bd3c2dae4193cf432080f94e');
+    '61859ce94d23464054b842ceb238adbdfaa6f497a3bec5c74c337e81ed17b53f');
   values.models = { mode: 'stub' };
   assert.equal(renderChart(values).stdout, original.stdout);
 }
@@ -971,7 +971,10 @@ function rendersPrivateProviderStorage() {
     } else {
       assert.equal(environment.PROVIDER_SECRETS_DIR, undefined);
     }
-    if (container.name === 'models') assert.equal(environment.DEV_REAL_PROVIDER, '1');
+    if (container.name === 'models') {
+      assert.equal(environment.PACKAGE_PROVIDER_MODE, '1');
+      assert.equal(environment.DEV_REAL_PROVIDER, undefined);
+    }
     for (const name of Object.keys(environment)) {
       assert.doesNotMatch(name, /^MODEL_(UPSTREAM|KEY_FILE|STUB_)/u);
     }

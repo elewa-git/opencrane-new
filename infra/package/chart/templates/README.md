@@ -31,6 +31,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `files.yaml` | Runs MinIO, the scanner and the rule that permits only its HTTPS port. |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
+| `model-qualification.yaml` | Runs the separate free provider for restricted package checks. |
 | `provider-secrets.yaml` | Keeps provider keys on private persistent storage when selected. |
 | `data.yaml` | Describes the database, optional backup and recovery settings, event log and saved storage. |
 | `pilot-backup.yaml` | Runs the pilot backup, restricted restore Job and private catalogue. |

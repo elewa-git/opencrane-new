@@ -1,3 +1,4 @@
+import { ProviderChat } from './provider-chat';
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { IntegrationFacts } from '../integrations/integration-facts';
 import type { IntegrationFact } from '../integrations/integration-facts-map';
@@ -19,7 +20,7 @@ function commandId(): string {
 @Component({
   selector: 'oc-models',
   imports: [SharedState, ModalSheet, IntegrationFacts, ModelAccessEditor, ModelTable,
-    ProviderSetupAccess],
+    ProviderSetupAccess, ProviderChat],
   templateUrl: './model-registry.html',
   styleUrls: ['./model-registry.css', './provider-setup.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,

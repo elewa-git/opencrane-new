@@ -137,11 +137,18 @@ function checkPilotRestore(values) {
   }
 }
 
+function unknownModelSetting(key) {
+  return !['mode', 'qualification'].includes(key);
+}
+
 function checkModels(values) {
   const models = values.models;
   if (models === undefined) return;
   if (!models || typeof models !== 'object' || Array.isArray(models) ||
-      Object.keys(models).length !== 1 || !['stub', 'provider'].includes(models.mode)) {
+      !['stub', 'provider'].includes(models.mode) ||
+      Object.keys(models).some(unknownModelSetting) ||
+      (models.qualification !== undefined &&
+        (models.mode !== 'provider' || typeof models.qualification !== 'boolean'))) {
     throw new Error('Unsupported models setting');
   }
 }

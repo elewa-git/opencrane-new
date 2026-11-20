@@ -1,0 +1,67 @@
+{{- if and (eq (toString .Values.models.mode) "provider") .Values.models.qualification }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-qualification
+spec:
+  selector: { app: model-qualification }
+  ports: [{ name: http, port: 43003, targetPort: 43003 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-qualification
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: model-qualification }
+  template:
+    metadata:
+      labels: { app: model-qualification }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: stand-in
+          image: {{ .Values.images.server | quote }}
+          command: [node, --experimental-strip-types, infra/dev-stack/model-stub.ts]
+          env:
+            - { name: MODEL_STUB_HOST, value: "0.0.0.0" }
+            - { name: MODEL_STUB_PORT, value: "43003" }
+            - { name: MODEL_STUB_MCP_GENERATION, value: "package-qualification" }
+            - { name: MODEL_STUB_MCP_REVISION, value: "package-qualification" }
+            - { name: MODEL_STUB_REQUIRE_KEY, value: "1" }
+            - { name: MODEL_STUB_MANAGED_FILE, value: /run/qualification/credential }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: credential, mountPath: /run/qualification, readOnly: true }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { cpu: 100m, memory: 128Mi }
+      volumes:
+        - name: credential
+          secret:
+            secretName: model-qualification
+            defaultMode: 292
+            items:
+              - { key: credential, path: credential }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: model-qualification
+spec:
+  podSelector:
+    matchLabels: { app: model-qualification }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: server }
+      ports: [{ protocol: TCP, port: 43003 }]
+  egress: []
+{{- end }}

@@ -391,6 +391,15 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
     checkPublicSettings(values, runtime);
     checkPublicSettings(values, { ...runtime, ...bootstrap });
   }
+  if (values.models?.qualification) {
+    const found = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret',
+      'model-qualification', '--ignore-not-found', '-o', 'json']);
+    const stored = found ? JSON.parse(found) as SecretData : undefined;
+    const encoded = stored?.data?.['credential'];
+    if (!encoded || !/^[a-f0-9]{64}$/u.test(Buffer.from(encoded, 'base64').toString('utf8'))) {
+      throw new Error('Qualification credential is absent');
+    }
+  }
   return secrets;
 }
 

@@ -99,3 +99,7 @@
 {{- fail "Pilot restore needs a backup id" -}}
 {{- end -}}
 {{- end -}}
+
+{{- if and .Values.models.qualification (ne (toString .Values.models.mode) "provider") }}
+{{- fail "Provider qualification requires provider mode" }}
+{{- end }}

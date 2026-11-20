@@ -67,3 +67,21 @@ async function restrictsPackagedQualification() {
 }
 test('packaged provider qualification retains the fleet marker and refuses other destinations',
   restrictsPackagedQualification);
+
+async function refusesQualificationFallbacks() {
+  for (const override of [{ DEV_REAL_PROVIDER: '1' }, { MODEL_KEY_FILE: '/synthetic-fallback' },
+    { PACKAGE_PROVIDER_QUALIFICATION: '0' }]) {
+    const environment = { PATH: process.env['PATH'], MODEL_DECISION_PORT: '0',
+      MODEL_READINESS_PORT: '0', PACKAGE_PROVIDER_MODE: '1',
+      PACKAGE_PROVIDER_QUALIFICATION: '1', OPENCRANE_FLEET_TASK: 'qualification-test',
+      MODEL_UPSTREAM: 'model-qualification:43003', ...override };
+    const args = ['--experimental-strip-types', 'infra/dev-stack/secondary-models.ts'];
+    const result = spawnSync(process.execPath, args,
+      { env: environment, timeout: 15_000, encoding: 'utf8' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr,
+      /Package qualification requires its separate stand-in|Fleet tasks require the stand-in model/u);
+  }
+}
+test('fleet qualification refuses real mode, a fallback key and removal of its restriction',
+  refusesQualificationFallbacks);
