@@ -12,7 +12,8 @@ import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
 import { wrongKeyStatusScript } from './provider-probe.ts';
-import { createProviderConnection, providerSetup, saveProviderKey } from './provider-settings.ts';
+import { checkProviderStatus, createProviderConnection, providerSetup,
+  saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -141,8 +142,7 @@ async function waitForFact(page, providerId, fact, outcome) {
     assert.equal(response.status(), 200);
     const result = await response.json();
     if (result.rows[0]?.[fact]?.outcome === outcome) {
-      const check = page.getByRole('button', { name: 'Check status', exact: true });
-      if (await check.isVisible()) await check.click();
+      await checkProviderStatus(page);
       return;
     }
     await delay(100);
@@ -170,8 +170,7 @@ async function waitForModels(page, providerId) {
     assert.equal(response.status(), 200);
     const result = await response.json();
     if (result.rows[0]?.enabledModels.includes('gpt-6.1-sol')) {
-      const check = page.getByRole('button', { name: 'Check status', exact: true });
-      if (await check.isVisible()) await check.click();
+      await checkProviderStatus(page);
       return;
     }
     await delay(100);
