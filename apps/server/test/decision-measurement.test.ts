@@ -63,11 +63,10 @@ async function boundsApprovalAfterOutputReports() {
   const setup = await approvalFixture();
   try {
     const headers = await seedLongConversation(setup);
-    const encrypted = setup.keys.encrypt('test', 'conversation', 'Earlier output');
     const reports = [];
     for (let index = 0; index < 1000; index++) {
       const data = { conversationId: 'conversation', turnId: 'long-turn',
-        messageId: 'long-output', contentType: 'text', ...encrypted };
+        messageId: 'long-output', contentType: 'text', utterance: 'Earlier output' };
       reports.push(envelope('test', 'conversation-conversation', 'agent.message_delta', data));
     }
     await setup.nats.seed(reports);

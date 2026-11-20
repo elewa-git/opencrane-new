@@ -49,7 +49,7 @@ async function boundsUnprojectedTail() {
     const messages = [];
     for (let index = 0; index < 3000; index++) {
       const data = { conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
-        contentType: 'text', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' };
+        contentType: 'text', utterance: 'Earlier fixture message' };
       messages.push(envelope('test', 'conversation-conversation', 'message.posted', data));
     }
     await setup.nats.seed(messages);

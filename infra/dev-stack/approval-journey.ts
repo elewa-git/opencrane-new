@@ -10,7 +10,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { approvalUsedDataSchema, decisionRecordedDataSchema, type MessagePostedData }
   from '@opencrane/events';
 import { history, providerTurnAdmission } from '@opencrane/models';
-import { conversationKeys, connectProjectionDb } from '@opencrane/projections';
+import { connectProjectionDb } from '@opencrane/projections';
 import { directory, readEnv } from './config.ts';
 import { approvalToolBody, issueApprovalComputer, prepareApprovalTool,
   type ApprovalJourneyIdentity } from './approval-tool.ts';
@@ -201,11 +201,8 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
 async function seedApprovalChat(store: EventStore, silo: string,
   conversationId: string, assistantId: string) {
   const server = await readEnv('server');
-  const keys = conversationKeys(`${directory}/conversation-keys`,
-    server['CONVERSATION_WRAP_KEY_FILE']);
-  const encrypted = keys.encrypt(silo, conversationId, 'An earlier message in this long chat.');
   const data: MessagePostedData = { conversationId, authorId: assistantId, authorKind: 'agent',
-    contentType: 'text', ...encrypted };
+    contentType: 'text', utterance: 'An earlier message in this long chat.' };
   const db = connectProjectionDb(server['DATABASE_URL']!, failDatabase);
   try {
     await seedApprovalHistory(store, db.db, { silo, data });
