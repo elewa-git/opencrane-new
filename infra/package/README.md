@@ -73,6 +73,7 @@ Not built yet:
 8. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
+   Provider journey results name the failed step and its expected condition safely.
 
 ## How to run or test it
 

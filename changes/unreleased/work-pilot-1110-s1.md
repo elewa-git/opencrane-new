@@ -7,3 +7,5 @@ stand-in behaviour.
 Keep connected provider keys private after Pod recreation. Admins can select the
 chat default and switch on from Settings. A restricted, separate free provider
 supports packaged qualification with wrong-key refusal and ordinary key custody.
+Provider journey failures name the step and expected condition without copying
+credentials or private paths into the public result.

@@ -22,3 +22,18 @@ function recordsSafeFailure(): void {
 
 test('a journey failure records its exact step and safe reason without exception content',
   recordsSafeFailure);
+
+function refusesPrivateErrorNames(): void {
+  const error = new Error('private upstream body');
+  error.name = 'Bearer synthetic-private-token';
+  const step = { check: 'save wrong key', detail: 'Saving the key must reach Verify.' };
+  assert.equal(providerFailure(step, error).errorType, 'Error');
+  error.name = 'TimeoutError';
+  assert.equal(providerFailure(step, error).errorType, 'TimeoutError');
+  const assertion = new assert.AssertionError({ message: 'private page content' });
+  assert.equal(providerFailure(step, assertion).errorType, 'AssertionError');
+  assert.equal(providerFailure(step, 'private thrown text').errorType, 'Error');
+}
+
+test('failure categories allow only fixed names and never copy an upstream error name',
+  refusesPrivateErrorNames);
