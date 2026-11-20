@@ -15,7 +15,15 @@ const fixture = `
   <label>API key Required<input id="replace-provider-key" type="password"></label>
 </dialog>
 <script>
+function advanceAfterRendering() {
+  requestAnimationFrame(showKey);
+}
 function recordName() {
+  if (window.automaticAdvance) {
+    document.querySelector('#setup footer').innerHTML = '<button disabled>Check status</button>';
+    requestAnimationFrame(advanceAfterRendering);
+    return;
+  }
   document.querySelector('#setup footer').innerHTML =
     '<p>Provider name recorded. Its records are still applying. Check status.</p>' +
     '<button onclick="showKey()">Check status</button>';
@@ -62,3 +70,24 @@ async function followsVisibleSetup(): Promise<void> {
 
 test('new-key setup follows Check status and ignores the closed replacement field at both widths',
   followsVisibleSetup);
+
+async function followsAutomaticAdvance(): Promise<void> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const width of [1280, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      page.setDefaultTimeout(1000);
+      await page.setContent(fixture + '<script>window.automaticAdvance = true;</script>');
+      await createProviderConnection(page, 'Package free provider');
+      await enterProviderKey(page, 'synthetic-fixture-key');
+      const dialog = page.getByRole('dialog', { name: 'Connect a provider', exact: true });
+      assert.equal(await dialog.getByLabel('API key Required', { exact: true }).isVisible(), true);
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+test('new-key setup follows automatic advancement while Check status is disabled at both widths',
+  followsAutomaticAdvance);
