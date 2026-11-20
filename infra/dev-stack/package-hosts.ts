@@ -16,6 +16,13 @@ export type HostCheckRecord = {
 };
 type NodeList = { items: Array<{ metadata: { name: string; uid: string } }> };
 
+class HostSettingsRefused extends Error {}
+
+export function publicHostRefusal(error: unknown): string | undefined {
+  if (error instanceof HostSettingsRefused) return error.message;
+  return undefined;
+}
+
 async function collectorSource() {
   const file = new URL('../package/host-preflight.mjs', import.meta.url);
   return readFile(file, 'utf8');
@@ -141,7 +148,8 @@ function requireHostResults(record: HostCheckRecord, override: string | undefine
     console.warn('HOST RISK OVERRIDE: accepted-dev-box-366; dev-box exception of 12 October 2026');
     for (const message of messages) console.warn(message);
   } else if (messages.length > 0) {
-    throw new Error(messages.join('\n'));
+    // Only these hostFailures messages are safe to show to the operator.
+    throw new HostSettingsRefused(messages.join('\n'));
   }
 }
 

@@ -28,6 +28,7 @@ import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
   requireOwner, verifyPackageOwner } from './packaged.ts';
+import { packageCommandMessage } from './package-error.ts';
 import { createTarget, removeTarget, targetConnection, targetRecorded } from './target.ts';
 import { upgradeBeforeApps } from './handler-upgrade.ts';
 import { dispatcherReady } from './dispatcher-ready.ts';
@@ -1062,12 +1063,7 @@ try {
   const providerSetupFailure = error instanceof Error &&
     /^Provider setup [a-z-]+: [a-z0-9]+$/u.test(error.message);
   if (process.argv[2]?.startsWith('package-')) {
-    let message = 'Package command refused; check pins, named secrets and slot ownership';
-    if (error instanceof Error &&
-        /^Required secret (is absent|field is absent): [a-z0-9.-]+$/u.test(error.message)) {
-      message = error.message;
-    }
-    console.error(message);
+    console.error(packageCommandMessage(error));
   } else if (error instanceof Error &&
       (providerSetupFailure || error.message === ownerRunRefusal
         || error.message === fleetProviderRefusal)) {

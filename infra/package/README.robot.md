@@ -1924,8 +1924,10 @@ installation image, no service-account token, no added
 capabilities and read-only mounts of host `/proc`, `/etc`, `/sys` and `/dev`.
 It removes the probe Pod even on failure. Unreadable settings refuse installation.
 The probe never changes swap, sysctls, crash reporters or host files.
-The installer saves the check time, node names, UIDs and refusals under
-`hostPreflight` in the private `package-owner.json` installation record.
+After an accepted check, the installer saves its time, node names, UIDs and
+refusals under `hostPreflight` in the private `package-owner.json` installation
+record. Without an override, `package-up` prints each failing node's F1/F2 fix
+and stops before Helm.
 
 Local k3d nodes share their Docker host's kernel and swap. The installer also
 checks that underlying host after verifying local running node containers through
