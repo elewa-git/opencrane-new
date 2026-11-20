@@ -1031,3 +1031,22 @@ function detectsBackupKeyMount() {
 }
 test('provider isolation detects a key PVC mounted by an aliased backup init container',
   detectsBackupKeyMount);
+
+function rendersSeparateQualificationProvider() {
+  const values = chartValues();
+  values.models = { mode: 'provider', qualification: true };
+  const resources = renderedResources(values);
+  const stub = resources.get('Deployment/model-qualification');
+  assert.ok(stub, 'Run the free stand-in separately from provider custody');
+  const pod = resources.get('Deployment/server').spec.template.spec;
+  function modelsContainer(container) { return container.name === 'models'; }
+  const models = pod.containers.find(modelsContainer);
+  const settings = {};
+  for (const item of models.env) settings[item.name] = item.value;
+  assert.equal(settings.DEV_REAL_PROVIDER, undefined);
+  assert.equal(settings.PACKAGE_PROVIDER_MODE, '1');
+  assert.equal(settings.PACKAGE_PROVIDER_QUALIFICATION, '1');
+  assertPrivateProviderMounts(resources);
+}
+test('packaged provider qualification uses a separate free stand-in with private custody',
+  rendersSeparateQualificationProvider);
