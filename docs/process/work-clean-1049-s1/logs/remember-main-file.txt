@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/remember-backend-delivery.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 [main checkout]
+
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  07:56:56
+   Duration  245.87s (tests 95%, transform 4%, import 1%)

@@ -1,0 +1,10 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/gateway.test.ts libs/models/test/decision-cost.test.ts libs/models/test/mcp-dispatch.test.ts --testNamePattern admits a tool continuation when independent history reads are slow|keeps decision reads flat at 10, 100 and 500 turns and at 10 and 3,000 chat events|does not return an upstream error code that echoes a numeric credential --maxWorkers=1
+
+ RUN  v5.0.3 [main checkout]
+
+
+ Test Files  3 passed (3)
+      Tests  3 passed | 330 skipped (333)
+   Start at  05:02:59
+   Duration  70.38s (tests 78%, transform 13%, import 9%)

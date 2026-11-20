@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/private-recall-runner.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 [main checkout]
+
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  04:57:52
+   Duration  17.74s (transform 51%, tests 32%, import 17%)
+
+  Transform  transforming modules took 8.89s · 51% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

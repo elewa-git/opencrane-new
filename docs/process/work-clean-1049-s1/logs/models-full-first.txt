@@ -1,0 +1,39 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test --maxWorkers=2
+
+ RUN  v5.0.3 [repository]
+
+ ❯ libs/models/test/gateway.test.ts (83 tests | 1 failed | 1 skipped) 441322ms
+   × admits a tool continuation when independent history reads are slow 8540ms
+sha256sum: .tools/syft: No such file or directory
+sha256sum: .tools/osi.json: No such file or directory
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/gateway.test.ts > admits a tool continuation when independent history reads are slow
+AssertionError: expected 503 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 503
+
+ ❯ libs/models/test/gateway.test.ts:145:139
+    143|   });
+    144|   try {
+    145|     expect((await f.call({}, { input: [{ type: 'function_call_output',…
+       |                                                                                                                                           ^
+    146|     expect(f.received()).toBe(1);
+    147|   } finally { slow.mockRestore(); await f.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 101 passed (102)
+      Tests  1 failed | 2819 passed | 2 skipped (2822)
+   Start at  04:54:26
+   Duration  2592.81s (tests 96%, import 3%, transform 1%)
+
+    Isolate  102 workers spawned · ~239ms startup each (spawn + environment, per file)
+             at least ~11.95s faster with isolate: false — reuses workers across files instead of one per file

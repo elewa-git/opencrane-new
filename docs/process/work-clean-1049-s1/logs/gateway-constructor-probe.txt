@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/server-event-reachability.test.ts --testNamePattern admits a tool continuation when independent history reads are slow --maxWorkers=1
+
+ RUN  v5.0.3 [repository]
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 82 skipped (83)
+   Start at  05:34:46
+   Duration  21.23s (tests 57%, transform 32%, import 11%)
+
+  Transform  transforming modules took 6.79s · 32% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

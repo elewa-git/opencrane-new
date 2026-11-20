@@ -1,0 +1,10 @@
+[
+  {
+    "test": "saves one own-person revision and returns the real Remember receipt on its native thread",
+    "name": "AssertionError",
+    "message": "expected { jsonrpc: '2.0', id: 1, …(1) } to deeply equal { jsonrpc: '2.0', id: 1, …(1) }",
+    "actual": "{\n  \"id\": 1,\n  \"jsonrpc\": \"2.0\",\n  \"result\": {\n    \"content\": [\n      {\n        \"text\": \"The tool did not confirm a result. It may have received the request. OpenCrane will not send it again.\",\n        \"type\": \"text\",\n      },\n    ],\n    \"isError\": true,\n  },\n}",
+    "expected": "{\n  \"id\": 1,\n  \"jsonrpc\": \"2.0\",\n  \"result\": {\n    \"content\": [],\n    \"structuredContent\": {\n      \"audience\": {\n        \"kind\": \"person\",\n        \"ownerId\": \"alice\",\n      },\n      \"changeId\": \"ee25f963ff6cbecb46334e111c35a7199d4609dba8fb10d3d276536aa5d70e84\",\n      \"memoryId\": \"ee25f963ff6cbecb46334e111c35a7199d4609dba8fb10d3d276536aa5d70e84\",\n      \"outcome\": \"saved\",\n      \"revision\": 1,\n      \"savedAt\": \"2026-11-20T07:16:27.962Z\",\n      \"scopeId\": \"ca3b6d1eb866aa1997171bb3b7b62773416f9a1e48cb93c21001df93d26e85b0\",\n    },\n  },\n}",
+    "stack": "AssertionError: expected { jsonrpc: '2.0', id: 1, …(1) } to deeply equal { jsonrpc: '2.0', id: 1, …(1) }\n    at savesRememberReceipt ([repository]/apps/server/test/remember-backend-delivery.test.ts:66:20)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at file://[repository]/node_modules/vitest/dist/chunks/run.BTlFXlnv.js:2783:20"
+  }
+]

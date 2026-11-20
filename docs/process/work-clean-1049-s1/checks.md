@@ -4,7 +4,121 @@
 
 Slice 1 of #1049, part of the clean-code map #1031. Replace the 76 server event
 wrappers with `serverEvent`; keep append-result checks for slice 2.
-Base: `f316313f0265e5678c49fc1dcf2c03cbcc3d17d2`.
+Base: `c791103b365ced8fd56195ded9d0dcfabf202597`.
+
+## Rework checks on 20 November 2026
+
+Rebase: PASS. Fetched `origin` and rebased onto
+`c791103b365ced8fd56195ded9d0dcfabf202597`. Git reported the rebase complete;
+the main commit is an ancestor of tested head
+`b558e8c673fe63185d74287a7ad0cf042807fc38`.
+Three conflicts retained main's chat data, onboarding options and routine input
+preparation, then applied only the shared event constructor. The parsed audit
+against this main revision still passes all 76 replacements. The seven fixed-id
+and fixed-time comparisons also pass. Shipped code remains 572 changed lines.
+
+Own source gates: PASS for full workspace, package and dev-stack typecheck;
+174 event types; Knip with the same two hints; changelog; scoped ESLint with
+zero warnings and the 8 GiB heap; and Markdown without file arguments.
+The four constructor tests passed twice, in 2.07 and 3.06 seconds.
+The other changed test files, `mcp-discovery.test.ts` and `native-budget.test.ts`,
+passed together twice: 99 tests per run, in 181.87 and 162.40 seconds, with one
+worker. The [first](logs/changed-tests-first.txt) and
+[second](logs/changed-tests-second.txt) logs record these results.
+
+### Models comparison
+
+The [complete models run](logs/models-full-first.txt) finished under `nice -n 10`
+with two workers and the shared disposable PostgreSQL database: 101 files and
+2,819 tests passed; one test failed; two optional tests were skipped. Duration:
+2,592.81 seconds. This attempt is FAIL and does not count as a passing gate.
+Its first part overlapped another secondary journey, local typecheck and the
+independent checkout install. Elevated host load was observed; that does not
+prove why the request returned 503. Later package gates run serially, without
+those concurrent checks.
+Both originally reported cases passed in this complete run:
+
+- `decision-cost.test.ts`: keeps decision reads flat at 10, 100 and 500 turns
+  and at 10 and 3,000 chat events.
+- `mcp-dispatch.test.ts`: does not return an upstream error code that echoes
+  a numeric credential.
+
+The sole failure was `gateway.test.ts`: admits a tool continuation when
+independent history reads are slow. It returned 503 rather than 200.
+The [three selected main cases](logs/models-main-cases.txt) passed, as did
+[main's whole gateway file](logs/gateway-main-file.txt): 82 tests passed and
+one optional test was skipped, in 346.90 seconds.
+
+A [constructor probe](logs/gateway-constructor-probe.txt) ran that exact gateway
+case unchanged while a temporary `vi.mock` replaced only `serverEvent` with a
+function that throws. The case passed, proving it does not execute the migrated
+constructor. The probe was removed immediately. No product source, assertion,
+wait or deadline changed. The broad failure's exact cause remains NOT PROVED;
+it is not labelled a confirmed existing flake.
+
+An additional full-package comparison on main was stopped to limit diagnostic
+work and concurrent fixtures. Before stopping, it reported an existing main
+failure in `egress-admission.test.ts`: recovers retained outage evidence once and
+keeps renamed and foreign files refused. That case passed in the branch's
+complete run. The interrupted main comparison is PARTIAL, never a passing gate.
+No test was changed for that baseline failure.
+
+### Original computer CI failure
+
+Run `44632922719` failed while waiting for the first `recall_pending` frame in
+`private-recall-runner.test.ts`: loads recall through the authenticated bridge
+before accepting input or a grant. The [branch file](logs/computer-branch.txt)
+passed all 39 tests in 26.35 seconds. The independently installed
+[main file](logs/computer-main.txt) passed all 39 in 17.74 seconds.
+The [constructor probe](logs/computer-constructor-probe.txt) also passed this
+exact case unchanged with `serverEvent` replaced by a throwing function.
+This path does not execute the migrated constructor. The original CI failure
+was NOT REPRODUCED and is not labelled a confirmed existing flake.
+No computer test or product source was changed.
+
+### Server package and Remember comparison
+
+The [first full server attempt](logs/server-first-attempt.txt) used `nice -n 10`,
+two workers, and the shared disposable database. The chat-access timing file
+was scheduled separately with one worker, as recorded below. After about 139
+minutes the bulk run already had a failing Remember case and was stopped to
+reserve the bounded task time for the comparison and changed-test checks.
+The last diagnostic snapshot had 157 passing files, one failed file and two
+running files. This is an unfinished attempt, not a complete package result.
+The isolated chat-access file and second full run were NOT RUN. The complete
+twice-run server gate is PARTIAL with a known failed assertion.
+
+`remember-backend-delivery.test.ts` failed: saves one own-person revision and
+returns the real Remember receipt on its native thread. The
+[saved assertion](logs/remember-failure.json) shows that the expected event,
+revision and principal checks passed before the native reply assertion failed.
+The proxy returned an unconfirmed-result error rather than the saved receipt.
+Its existing error path covers a transport failure or an unconfirmed upstream
+status; the stored assertion alone does not distinguish those causes.
+
+The unchanged exact case passed on [main](logs/remember-main-case.txt), in
+31.67 seconds, and on the [branch](logs/remember-branch-case.txt), in 35.78
+seconds. No retry, response guard, timeout, assertion or memory rule was changed.
+The [complete main file](logs/remember-main-file.txt) also passed all 19 tests,
+in 245.87 seconds. The broad failure's cause remains NOT PROVED; these passes
+do not establish that it is an existing flake.
+
+### CI and fresh journey
+
+The rebased source head `b558e8c673fe63185d74287a7ad0cf042807fc38` passed every
+job in [CI run 44692502299](https://github.com/elewa-git/opencrane-new/actions/runs/44692502299).
+This includes all four test shards and the required `ci-ok` job.
+The final receipt commit changes documents and sanitised logs only; its CI
+result is reported on the pull request after that run finishes.
+
+Fresh CORE: NOT RUN. The complete twice-run package gate did not pass, so the
+journey's gate order was retained. A read-only eligibility monitor checked both
+secondary slots, package stacks and one-minute load every 30 seconds. Another
+secondary journey occupied slot 1 during part of the check, and the final
+observations did not have five continuous minutes below load 6. No slot was
+claimed, no fresh stack was started and no browser steps or screenshots exist.
+No stack required teardown. The four-hour task limit leaves these gates open;
+the draft must not merge on the strength of isolated passes or green CI alone.
 
 ## Test first
 
