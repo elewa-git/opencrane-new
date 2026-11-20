@@ -202,9 +202,10 @@ class ImageLayerTests(unittest.TestCase):
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
-                   "secondary-models.ts", "zitadel.json"}
+                   "secondary-models.ts", "journey-guard.ts", "zitadel.json"}
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
                          "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs",
+                         "model-settings.ts", "provider-secrets.mjs",
                          "scheduled-backup-run.ts", "scheduled-backup.ts",
                          "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts",
                          "event-restore.ts", "package-database.ts", "pilot-projections.ts",

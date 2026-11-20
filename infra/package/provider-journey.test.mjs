@@ -63,16 +63,18 @@ function inspectReply(response) {
   responses.push(inspect());
 }
 
+async function capture(page, name, width) {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  const body = await page.locator('body').innerText();
+  for (const secret of secrets) assert(!body.includes(secret), 'Visible text disclosed a key');
+  const fields = page.locator('input[type=password], input[type=email]');
+  const addresses = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
+  await page.screenshot({ path: `${output}/${name}-${width}.png`, fullPage: true,
+    mask: [fields, addresses] });
+}
+
 async function screenshots(page, name) {
-  for (const width of [1280, 390]) {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    const body = await page.locator('body').innerText();
-    for (const secret of secrets) assert(!body.includes(secret), 'Visible text disclosed a key');
-    const fields = page.locator('input[type=password], input[type=email]');
-    const addresses = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
-    await page.screenshot({ path: `${output}/${name}-${width}.png`, fullPage: true,
-      mask: [fields, addresses] });
-  }
+  for (const width of [1280, 390]) await capture(page, name, width);
   await page.setViewportSize({ width: 1280, height: 900 });
 }
 
@@ -190,19 +192,26 @@ async function connect(admin) {
 }
 
 const modeScript = `
-import {lstat, readdir, readFile} from 'node:fs/promises';
-import {createHash} from 'node:crypto';
-const directory='/var/lib/opencrane/provider-secrets/keys';
-const folder=await lstat(directory);
-const keys=[];
-for(const name of await readdir(directory)) {
- const file=directory+'/'+name;
- const details=await lstat(file);
- keys.push({mode:details.mode & 0o7777,uid:details.uid,
-  digest:createHash('sha256').update(await readFile(file)).digest('hex')});
+import { lstat, readdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+const directory = '/var/lib/opencrane/provider-secrets/keys';
+const folder = await lstat(directory);
+const keys = [];
+for (const name of await readdir(directory)) {
+  const file = directory + '/' + name;
+  const details = await lstat(file);
+  const bytes = await readFile(file);
+  const hash = createHash('sha256');
+  hash.update(bytes);
+  keys.push({ mode: details.mode & 0o7777, uid: details.uid, digest: hash.digest('hex') });
 }
-keys.sort((first,second)=>first.digest.localeCompare(second.digest));
-console.log(JSON.stringify({directoryMode:folder.mode & 0o7777,uid:folder.uid,keys}));`;
+function byDigest(first, second) {
+  return first.digest.localeCompare(second.digest);
+}
+keys.sort(byDigest);
+const state = { directoryMode: folder.mode & 0o7777, uid: folder.uid, keys };
+console.log(JSON.stringify(state));`;
+
 
 async function privateModes() {
   const output = await kube(['exec', 'deployment/server', '-c', 'server', '--', 'node',
@@ -246,9 +255,7 @@ async function memberChats(member) {
     const reply = member.getByRole('article', { name: 'Agent reply', exact: true });
     await reply.getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
     assert.equal(await reply.locator('.prose').innerText(), 'Hello from your computer.');
-    const privateFields = member.locator('input[type=password], input[type=email]');
-    await member.screenshot({ path: `${output}/member-chat-${width}.png`, fullPage: true,
-      mask: [privateFields] });
+    await capture(member, 'member-chat', width);
     outcomes.push({ check: `member chat at ${width}px`, result: 'PASS' });
   }
 }
@@ -262,21 +269,27 @@ async function checkDisclosure() {
     for (const secret of secrets) assert(!content.includes(secret), 'A public artifact disclosed a key');
   }
   const script = `
-import {connectEventStore,readEvents} from '@opencrane/event-store';
-let input='';
-for await(const chunk of process.stdin) input+=chunk.toString();
-const secrets=JSON.parse(input);
-const events=await connectEventStore();
-let count=0;
+import { connectEventStore, readEvents } from '@opencrane/event-store';
+let input = '';
+for await (const chunk of process.stdin) input += chunk.toString();
+const secrets = JSON.parse(input);
+const events = await connectEventStore();
+let count = 0;
 try {
- const until=await events.store.head();
- if(until) for await(const row of readEvents(events.store,1,until)) {
-  const text=JSON.stringify(row.event);
-  for(const secret of secrets) if(text.includes(secret)) throw new Error('Credential in event');
-  count++;
- }
- console.log(JSON.stringify({checkedEvents:count}));
-} finally { await events.close(); }`;
+  const until = await events.store.head();
+  if (until) {
+    for await (const row of readEvents(events.store, 1, until)) {
+      const text = JSON.stringify(row.event);
+      for (const secret of secrets) {
+        if (text.includes(secret)) throw new Error('Credential in event');
+      }
+      count++;
+    }
+  }
+  console.log(JSON.stringify({ checkedEvents: count }));
+} finally {
+  await events.close();
+}`;
   const args = [...connection.args, '-n', owner.namespace, 'exec', '-i', 'deployment/server',
     '-c', 'server', '--', 'node', '--input-type=module', '-e', script];
   const child = execFile('kubectl', args, { env: connection.environment, timeout: 30_000 });
