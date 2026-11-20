@@ -5,3 +5,5 @@ finishes, so the composer becomes available without a page reload.
 All network resources remain private; the real public address is deferred.
 Development-owner and token bootstrap keep their own completion messages so image
 verification checks both modes.
+Packaged sign-in checks retain a safe failure code and step, and capture a masked
+failure screenshot before closing the browser context.
