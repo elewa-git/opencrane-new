@@ -84,11 +84,6 @@ type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & {
   pilotRestore?: { enabled: boolean; backupId: string };
   models?: PackageModels;
 };
-type PackageReview = {
-  requiredSecrets: string[];
-  chartVersion: string;
-  images: Record<string, string>;
-};
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
