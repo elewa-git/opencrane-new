@@ -231,6 +231,12 @@ async function recreateProviderPod() {
   const before = await privateModes();
   const pod = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
   const oldUid = pod.items[0].metadata.uid;
+  const logs = await kube(['logs', pod.items[0].metadata.name, '--all-containers=true',
+    '--prefix=true', '--tail=-1']);
+  for (const secret of secrets) assert(!logs.includes(secret), 'Setup logs disclosed a key');
+  const logOptions = { mode: 0o600 };
+  await writeFile(`${directory}/provider-before-recreation.log`, logs, logOptions);
+  outcomes.push({ check: 'setup logs checked before Pod recreation', result: 'PASS' });
   await kube(['delete', 'pod', pod.items[0].metadata.name, '--wait=true']);
   await kube(['rollout', 'status', 'deployment/server', '--timeout=180s']);
   const replaced = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
@@ -311,7 +317,7 @@ try {
   stage = 'owner sign-in';
   const ownerPage = await login('owner');
   stage = 'admin invitation and sign-in';
-  const admin = await invite(ownerPage, 'without-assistant', 'package-admin', 'admin', 'none');
+  const admin = await invite(ownerPage, 'without-assistant', 'package-admin', 'admin', 'provision');
   stage = 'member invitation and sign-in';
   const member = await invite(ownerPage, 'member', 'package-member', 'member', 'provision');
   stage = 'Settings setup';
