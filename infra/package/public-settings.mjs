@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 
-export function checkExposure(values) {
+function checkExposure(values) {
   const exposure = values.exposure;
   if (!exposure || exposure.ingress !== false || exposure.loadBalancer !== false ||
       exposure.funnel !== false) {
