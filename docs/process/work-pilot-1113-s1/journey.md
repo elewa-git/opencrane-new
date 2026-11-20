@@ -9,6 +9,25 @@ A new fresh qualification was refused at admission, before installation, because
 the other secondary slot was no longer free. The earlier full qualification also remains FAIL.
 No independent-review verdict is claimed.
 
+## Round 3 admission wait
+
+At head `b53d05e69496734966c4a10be02b691c5a595527`, all CI checks and both image
+approval workflows passed: [CI](https://github.com/elewa-git/opencrane-new/actions/runs/44783553936),
+[application](https://github.com/elewa-git/opencrane-new/actions/runs/44783556179) and
+[scanner](https://github.com/elewa-git/opencrane-new/actions/runs/44783556418).
+
+The packaged journey was NOT RUN. The two-hour admission wait ended with another
+journey process still active. No five-minute capacity window qualified. An earlier
+window reached 299 seconds before capacity lookups failed; the final recorded window
+reached 179 seconds with both slots and package stacks free. See the
+[earlier samples](round-3-admission/capacity-early.log),
+[final samples](round-3-admission/capacity.log),
+[busy checks](round-3-admission/admission-observations.log) and
+[outcomes](round-3-admission/outcomes.json) record the admission result. No slot was
+claimed, package was installed, sign-in app was created or journey step started.
+There are no screenshots or startup/service logs for this attempt. The overall
+fresh packaged journey remains FAIL because the earlier full run stopped at admin.
+
 ## Reproduced workspace failure
 
 A separate fresh packaged diagnostic used the previously approved source

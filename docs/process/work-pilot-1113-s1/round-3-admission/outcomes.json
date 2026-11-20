@@ -1,0 +1,14 @@
+{
+  "head": "b53d05e69496734966c4a10be02b691c5a595527",
+  "ci": "PASS",
+  "applicationApproval": "PASS",
+  "scannerApproval": "PASS",
+  "admission": "NOT RUN",
+  "packagedJourney": "NOT RUN",
+  "reason": "One other journey process remained active at the two-hour admission limit.",
+  "slotClaimed": false,
+  "packageInstalled": false,
+  "temporarySignInAppCreated": false,
+  "screenshotsCreated": false,
+  "startupOrServiceLogsCreated": false
+}
