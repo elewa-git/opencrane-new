@@ -4,6 +4,13 @@ export function providerSetup(page: Page): Locator {
   return page.getByRole('dialog', { name: 'Connect a provider', exact: true });
 }
 
+export async function checkProviderStatus(page: Page): Promise<void> {
+  const check = page.getByRole('button', { name: 'Check status', exact: true });
+  if (await check.isVisible()) {
+    await check.click();
+  }
+}
+
 export async function createProviderConnection(page: Page, name: string): Promise<void> {
   const actions = page.locator('.page-actions');
   await actions.getByRole('button', { name: 'Connect a provider', exact: true }).click();

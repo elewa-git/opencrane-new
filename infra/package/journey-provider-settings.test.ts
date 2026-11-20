@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chromium } from 'playwright';
-import { createProviderConnection, enterProviderKey, saveProviderKey } from './provider-settings.ts';
+import { checkProviderStatus, createProviderConnection, enterProviderKey,
+  saveProviderKey } from './provider-settings.ts';
 
 const fixture = `
 <div class="page-actions"><button onclick="setup.showModal()">Connect a provider</button></div>
@@ -91,3 +92,40 @@ async function followsAutomaticAdvance(): Promise<void> {
 
 test('new-key setup follows automatic advancement while Check status is disabled at both widths',
   followsAutomaticAdvance);
+
+async function checksOnlyOpenSetup(): Promise<void> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const width of [1280, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      await page.setContent(`
+        <section aria-label="Model providers">
+          <button onclick="backgroundRead()">Check status</button>
+          <p id="background-count">0</p>
+        </section>
+        <section role="dialog" aria-label="Connect a provider">
+          <section aria-label="Provider verification facts">
+            <button onclick="verificationRead()">Check status</button>
+            <p id="verification-count">0</p>
+          </section>
+        </section>
+        <script>
+          function backgroundRead() {
+            document.querySelector('#background-count').textContent = '1';
+          }
+          function verificationRead() {
+            document.querySelector('#verification-count').textContent = '1';
+          }
+        </script>`);
+      await checkProviderStatus(page);
+      assert.equal(await page.locator('#verification-count').innerText(), '1');
+      assert.equal(await page.locator('#background-count').innerText(), '0');
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+test('verification checks the open setup when the background table also offers Check status',
+  checksOnlyOpenSetup);
