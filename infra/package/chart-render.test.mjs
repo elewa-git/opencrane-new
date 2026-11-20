@@ -834,6 +834,23 @@ function defaultModelBytesStayTheSame() {
 }
 test('default and explicit stub mode preserve the original chart bytes', defaultModelBytesStayTheSame);
 
+function protectsProviderRemounts() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const pod = resources.get('Deployment/server').spec.template.spec;
+  assert.equal(pod.securityContext.fsGroupChangePolicy, 'OnRootMismatch');
+  function preparesKeys(container) { return container.name === 'private-provider-keys'; }
+  const prepare = pod.initContainers.find(preparesKeys);
+  assert.ok(prepare, 'Check private custody before server and models start');
+  assert.deepEqual(prepare.command, ['node', 'infra/package/provider-secrets.mjs',
+    '/var/lib/opencrane/provider-secrets']);
+  assert.deepEqual(prepare.volumeMounts, [{ name: 'provider-secrets',
+    mountPath: '/var/lib/opencrane/provider-secrets' }]);
+}
+test('provider storage avoids recursive remount changes and checks modes before startup',
+  protectsProviderRemounts);
+
 function rendersPrivateProviderStorage() {
   const values = chartValues();
   values.models = { mode: 'provider' };
