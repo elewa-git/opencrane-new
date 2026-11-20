@@ -40,7 +40,7 @@ flowchart LR
 
 The longest files go to the shard with the least work assigned so far. Each shard
 runs two workers so its database, NATS and OpenFGA fixture processes also have CPU
-time. Image fixture files use Vitest's usual worker count, based on the runner's CPUs. Browser
+time. Image fixture files also use two workers, leaving CPU time for native agents. Browser
 files run one at a time because concurrent Angular servers miss their startup
 deadlines. A development build prepares Angular before tests start their own servers.
 
