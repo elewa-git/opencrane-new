@@ -16,6 +16,7 @@ if (!root) throw new Error('Provider custody root is required');
 const directory = join(root, 'keys');
 await mkdir(directory, { recursive: true, mode: 0o700 });
 // Keep the volume root group-managed. OnRootMismatch then preserves private children on remount.
+// Run before either process starts; no other workload mounts this custody volume.
 await makePrivate(directory, true);
 for (const entry of await readdir(directory)) {
   await makePrivate(join(directory, entry), false);

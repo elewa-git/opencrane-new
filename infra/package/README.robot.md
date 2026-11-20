@@ -172,33 +172,44 @@ storage is content, and the upload command remains the only business write.
 
 `models.mode` accepts `stub` (default) or `provider`. Preflight and Helm refuse other
 values. The default chart output stays byte-for-byte unchanged. Provider preparation
-writes neither a `model-stub-key` file nor `MODEL_UPSTREAM`, `MODEL_KEY_FILE` or any
-`MODEL_STUB_*` setting. Installation refuses inherited stand-in settings in this mode.
+writes no fallback key or local stub settings. The launcher starts managed routing
+before setup; recorded switch-on is still required for admission.
 
-Provider mode creates a 1 GiB `provider-secrets` PVC. Only the startup permission check, server and models
-containers mount it, respectively read-write and read-only. Both receive
-`PROVIDER_SECRETS_DIR=/var/lib/opencrane/provider-secrets/keys`. The existing secret
-store creates that subfolder with mode 0700 and key files with mode 0600. Workers,
-bootstrap, website, scanner and backup Jobs never mount the key volume. Key volume
-backup and restart qualification remain separate work.
+Provider mode creates a 1 GiB `provider-secrets` PVC. The startup permission check
+and server mount it read-write; models mounts it read-only. The server and models
+receive `PROVIDER_SECRETS_DIR=/var/lib/opencrane/provider-secrets/keys`. The Pod uses
+`fsGroupChangePolicy: OnRootMismatch`. Keep the volume root group-managed so a
+remount preserves private children. Before either process starts, the init check
+repairs the keys directory to 0700 and each regular key file to 0600, owned by uid
+1000. It refuses symlinks, hard links and unexpected file types. Workers, bootstrap,
+website, scanner and backup Jobs never mount this volume. Key backup and recovery
+remain outside this slice; restoring events alone does not restore credentials.
 
-The models container receives `DEV_REAL_PROVIDER=1`, skips the stand-in and starts
-the managed gateway without a static key, before any provider exists. Calls remain
-refused until the owner records switch-on. Provider mode also runs the existing
-routines projection, which default-model selection needs. Scheduled backups wait
-for its checkpoint and pause and resume it with the other read tables.
+The models container receives `PACKAGE_PROVIDER_MODE=1` and skips its local stand-in.
+Provider mode also runs the routines projection, which default-model selection
+needs. Scheduled backups wait for its checkpoint and pause and resume it with the
+other read tables.
 
-Sign in as the owner and open Settings, then Models. Create an OpenAI connection,
-save the private key, check reachability and accept the quoted test. Enable the chat
-model, select the default, drain existing calls and switch on. A member can then
-open chat and ask a short question. A missing key cannot send a model call or reserve
-money. An invalid key fails the product's verification. Keys are never read back.
-Never put the key in values, environment settings, command arguments or receipts.
-For automated qualification, reuse
-[provider setup](../dev-stack/provider-setup.ts) and the
-[real reply journey](../dev-stack/real-model-journey.ts), following the
-[real-provider setup contract](../dev-stack/README.robot.md#opt-in-real-replies).
-The existing fleet guard refuses real-provider journeys; do not bypass it.
+Sign in as an admin or owner and open Settings, then Models. Create an OpenAI
+connection, save its private key, check reachability and accept the quoted test.
+Enable the chat model, select the chat default, pause new calls and switch on member
+chats. The server still checks current access, saved verification, explicit default
+selection and drained calls. A missing key cannot send a call or reserve money.
+Keys are never read back. Keep them out of values, environment settings, arguments
+and receipts.
+
+For free packaged qualification, set `models: { mode: provider, qualification: true }`
+before private preparation. This starts a separate `model-qualification` Deployment
+and ClusterIP service running `model-stub.ts`. The only upstream is
+`model-qualification:43003`; the launcher refuses any other destination or fallback
+key. Preparation writes a random synthetic credential to the private
+`model-qualification-key` file and a separate `model-qualification` Secret. Only the
+stand-in mounts that Secret; runtime file Secrets contain no copy. The stand-in
+requires its credential and returns 401 for every wrong or missing key. Its network
+policy permits requests only from the server Pod and denies outbound traffic.
+The synthetic credential still goes through Settings and ordinary provider custody.
+The fleet marker remains set; `DEV_REAL_PROVIDER` is never set for this route.
+Paid qualification remains a separate, explicitly authorised journey.
 
 The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
 packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2

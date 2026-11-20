@@ -979,3 +979,20 @@ async function preparesDefaultStandIn() {
   assert.equal(secrets.get('runtime-files')['model-stub-key'].toString(), 'dev-stack-stub-only');
 }
 test('default preparation retains the stand-in key and settings', preparesDefaultStandIn);
+
+async function preparesQualificationCredentialPrivately() {
+  const packageValues = { models: { mode: 'provider', qualification: true } };
+  const { settings, secrets, files } =
+    await preparedSecretsFixture(true, false, false, packageValues);
+  const runtime = settings.get('package-runtime');
+  assert.equal(runtime.MODEL_UPSTREAM, 'model-qualification:43003');
+  assert.equal(runtime.MODEL_KEY_FILE, undefined);
+  assert.equal(files.includes('model-stub-key'), false);
+  assert.equal(files.includes('model-qualification-key'), true);
+  assert.equal(secrets.get('runtime-files')['model-qualification-key'], undefined);
+  const credential = secrets.get('model-qualification')['credential'].toString();
+  assert.match(credential, /^[a-f0-9]{64}$/u);
+  assert.equal(JSON.stringify(runtime).includes(credential), false);
+}
+test('qualification prepares a private synthetic credential and only the fixed upstream',
+  preparesQualificationCredentialPrivately);

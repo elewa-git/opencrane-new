@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -77,6 +78,10 @@ async function prepareModelFiles(models: PackageModels | undefined) {
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`,
     issuer: `${localOrigin}/` });
   await writeFile(`${directory}/model-jwks.json`, JSON.stringify(issuer.jwks), { mode: 0o600 });
+  if (models?.qualification) {
+    await writeFile(`${directory}/model-qualification-key`, randomBytes(32).toString('hex'),
+      { mode: 0o600 });
+  }
   if (models?.mode !== 'provider') {
     await writeFile(`${directory}/model-stub-key`, 'dev-stack-stub-only', { mode: 0o600 });
   }
@@ -128,6 +133,8 @@ async function prepareSettings(values: {
     TOKEN_ISSUER: `${localOrigin}/`,
     PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
     ...modelRuntimeSettings(values.models),
+    ...(process.env['OPENCRANE_FLEET_TASK'] !== undefined ?
+      { OPENCRANE_FLEET_TASK: 'package-qualification' } : {}),
     MINIO_URL: 'http://objects:9000',
     MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
     SCANNER_URL: 'https://scanner:8443/scan/upload',
@@ -174,6 +181,10 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
     'model-jwks.json': `${directory}/model-jwks.json`,
     'scanner-ca.crt': `${directory}/scanner-ca.crt`,
   };
+  if (models?.qualification) {
+    const qualificationFiles = { credential: `${directory}/model-qualification-key` };
+    await createSecret(owner, 'model-qualification', undefined, qualificationFiles);
+  }
   if (models?.mode !== 'provider') {
     files['model-stub-key'] = `${directory}/model-stub-key`;
   }
