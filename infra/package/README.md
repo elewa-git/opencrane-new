@@ -82,7 +82,7 @@ Not built yet:
 
 ## How to run or test it
 
-Run the chart checks from the repository root. The render check needs Helm:
+Run the chart checks from the repository root. The render check needs Helm, tar and the original chart in Git history:
 
 ```sh
 nice -n 10 node --experimental-strip-types --test infra/package/chart.test.mjs

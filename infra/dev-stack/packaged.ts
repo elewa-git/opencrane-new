@@ -391,7 +391,9 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
       'model-qualification', '--ignore-not-found', '-o', 'json']);
     const stored = found ? JSON.parse(found) as SecretData : undefined;
     const encoded = stored?.data?.['credential'];
-    if (!encoded || !/^[a-f0-9]{64}$/u.test(Buffer.from(encoded, 'base64').toString('utf8'))) {
+    const credentialBytes = encoded ? Buffer.from(encoded, 'base64') : undefined;
+    const credential = credentialBytes?.toString('utf8');
+    if (!credential || !/^[a-f0-9]{64}$/u.test(credential)) {
       throw new Error('Qualification credential is absent');
     }
   }

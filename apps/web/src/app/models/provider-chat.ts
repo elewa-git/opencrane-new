@@ -77,8 +77,9 @@ export class ProviderChat {
   private async send(path: string, body: Record<string, unknown>): Promise<void> {
     const commandId = crypto.randomUUID();
     this.pending.set(commandId);
+    const command = { ...body, commandId };
     const result = await sendProviderCommand(`${this.route()}/${path}`,
-      { ...body, commandId }, this.controller.signal);
+      command, this.controller.signal);
     if (result.kind === 'ok') {
       this.pending.set(undefined);
       this.message.set('Change recorded. Check chat setup to read its current status.');
@@ -103,11 +104,12 @@ export class ProviderChat {
         this.message.set('The default is still applying or unavailable. Check chat setup.');
         return;
       }
-      await this.send('bindings', { action: 'select', kind: 'silo_default',
+      const command = { action: 'select', kind: 'silo_default',
         dependantId: previous.dependantId, task: 'chat_turn', model: this.model(),
         expectedRevision: this.provider().revision,
         expectedProviderSequence: result.value.expectedProviderSequence,
-        expectedBindingSequence: previous.position });
+        expectedBindingSequence: previous.position };
+      await this.send('bindings', command);
     } finally {
       this.busy.set(false);
     }
@@ -118,7 +120,8 @@ export class ProviderChat {
     try {
       const status = await this.readStatus();
       if (status && !status.enabled && !status.draining) {
-        await this.send('drain', { ...this.positions(status), action: 'start' });
+        const command = { ...this.positions(status), action: 'start' };
+        await this.send('drain', command);
       }
     } finally {
       this.busy.set(false);
@@ -130,7 +133,8 @@ export class ProviderChat {
     try {
       const status = await this.readStatus();
       if (status?.draining && !status.enabled) {
-        await this.send('switch-on', this.positions(status));
+        const command = this.positions(status);
+        await this.send('switch-on', command);
       }
     } finally {
       this.busy.set(false);
