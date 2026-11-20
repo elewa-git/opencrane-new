@@ -1,0 +1,2 @@
+npm notice run lint:changelog
+npm notice run node scripts/changelog-gather.mjs --check

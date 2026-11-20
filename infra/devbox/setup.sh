@@ -3,12 +3,12 @@
 set -eu
 set -o pipefail
 
+# shellcheck source=infra/devbox/runtime.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runtime.sh"
+
 K3D_VERSION="v5.9.0"
 KUBECTL_VERSION="v1.37.1"
 HELM_VERSION="v3.19.1"
-K3S_VERSION="v1.37.0-k3s1"
-GVISOR_VERSION="release-20260928.0"
-AGENT_SANDBOX_VERSION="v1.0.4"
 REGISTRY_VERSION="2.8.3"
 BUSYBOX_VERSION="1.37.0"
 MINIO_VERSION="RELEASE.2025-10-15T17-29-55Z"
@@ -16,11 +16,8 @@ MINIO_VERSION="RELEASE.2025-10-15T17-29-55Z"
 K3D_SHA256="06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0"
 KUBECTL_SHA256="65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8"
 HELM_SHA256="966bed9b1e0dda11268f59bd7268c3cd3e308b37b070546e1d78a02526ff63f2"
-GVISOR_SHA256="f3ed9131bc252259df150e270154180188f9df56b73a2312940325e1f522a2d6"
-AGENT_SANDBOX_SHA256="8cbe7f4c252463667e2286993bd735cb33bb2e47d7f304b92aa2ca97f57052c0"
 
 K3S_IMAGE_DIGEST="sha256:d33b1973401a60410681d66c007f5c3a51d565a7c03608904764aef3321fee4d"
-AGENT_SANDBOX_IMAGE_DIGEST="sha256:c241245d7ff0068784ec0423f35efeb77c70ab08592533ca5b0cd7c36f8b2020"
 REGISTRY_IMAGE_DIGEST="sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
 BUSYBOX_IMAGE_DIGEST="sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e"
 MINIO_IMAGE_DIGEST="sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4"
@@ -40,23 +37,6 @@ fail() {
 
 need_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
-}
-
-download() {
-  url="$1"
-  destination="$2"
-  expected_sha256="$3"
-
-  if [ -f "$destination" ] &&
-    printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum --check --status; then
-    return
-  fi
-
-  partial="${destination}.part"
-  curl --fail --location --retry 3 --output "$partial" "$url"
-  printf '%s  %s\n' "$expected_sha256" "$partial" | sha256sum --check --status ||
-    fail "checksum did not match for $url"
-  mv "$partial" "$destination"
 }
 
 install_plain_binary() {
@@ -236,16 +216,6 @@ ensure_cluster() {
   kubectl wait --for=condition=Ready node --all --timeout=120s
 }
 
-install_runtime_class() {
-  kubectl apply -f - <<'EOF'
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-  name: gvisor
-handler: runsc
-EOF
-}
-
 prove_registry() {
   printf 'Proving a pushed image can be pulled by a Pod...\n'
   source_image="docker.io/library/busybox:${BUSYBOX_VERSION}@${BUSYBOX_IMAGE_DIGEST}"
@@ -316,30 +286,6 @@ EOF
     fail "the test Pod kernel output did not identify gVisor"
   printf 'gVisor proof: %s\n' "$(printf '%s\n' "$gvisor_output" | grep -i -m 1 'gvisor')"
   kubectl delete pod gvisor-test --wait=true >/dev/null
-}
-
-install_agent_sandbox() {
-  printf 'Installing Agent Sandbox %s...\n' "$AGENT_SANDBOX_VERSION"
-  manifest="${CACHE_DIR}/agent-sandbox-with-extensions-${AGENT_SANDBOX_VERSION}.yaml"
-  download \
-    "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" \
-    "$manifest" \
-    "$AGENT_SANDBOX_SHA256"
-  controller_image="registry.k8s.io/agent-sandbox/agent-sandbox-controller:${AGENT_SANDBOX_VERSION}"
-  [ "$(grep -Fc "image: ${controller_image}" "$manifest")" -eq 1 ] ||
-    fail "the verified Agent Sandbox manifest has an unexpected controller image"
-  pinned_manifest="${TEMP_DIR}/agent-sandbox-with-extensions.yaml"
-  sed "s|image: ${controller_image}|image: ${controller_image}@${AGENT_SANDBOX_IMAGE_DIGEST}|" \
-    "$manifest" >"$pinned_manifest"
-  kubectl apply --server-side --field-manager=opencrane-devbox -f "$pinned_manifest" >/dev/null
-  kubectl wait --for=condition=Established --timeout=120s \
-    crd/sandboxes.agents.x-k8s.io \
-    crd/sandboxclaims.extensions.agents.x-k8s.io \
-    crd/sandboxtemplates.extensions.agents.x-k8s.io \
-    crd/sandboxwarmpools.extensions.agents.x-k8s.io
-  kubectl rollout status deployment/agent-sandbox-controller \
-    --namespace agent-sandbox-system \
-    --timeout=180s
 }
 
 install_minio() {

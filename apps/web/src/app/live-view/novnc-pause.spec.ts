@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- Browser shims need test-only types. */
 import { expect, it, vi } from 'vitest';
-import RFB from '@novnc/novnc/lib/rfb.js';
+import RFB from './viewer';
 import { LeaseChannel } from './lease-channel';
 
 function fakeContext() {

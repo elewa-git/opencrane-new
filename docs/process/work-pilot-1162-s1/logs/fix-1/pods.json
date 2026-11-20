@@ -1,0 +1,4763 @@
+[
+  {
+    "name": "backup-catalogue-587b7fd5d4-vhvx6",
+    "uid": "6e855452-b43f-4935-817c-d2f625d207be",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "10m",
+        "memory": "32Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:02Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:00Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:03Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:03Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:00Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://4f63f30cd7053ff640eb06b392ea3f2ca31de19d6ec79b3d45525541743b83f9",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "catalogue",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "100m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:03Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/backups",
+              "name": "backups",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.11",
+      "podIPs": [
+        {
+          "ip": "10.42.0.11"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "100m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "memory": "32Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:00Z"
+    },
+    "containers": [
+      {
+        "name": "catalogue",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "100m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "bootstrap-4q5wh",
+    "uid": "13aa556a-b99b-453c-9599-28054a2ac3e4",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "128Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:49Z",
+          "message": "pod sandbox is not ready",
+          "observedGeneration": 1,
+          "reason": "PodSandboxNotReady",
+          "status": "False",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:55Z",
+          "observedGeneration": 1,
+          "reason": "PodCompleted",
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:47Z",
+          "observedGeneration": 1,
+          "reason": "PodCompleted",
+          "status": "False",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:47Z",
+          "observedGeneration": 1,
+          "reason": "PodCompleted",
+          "status": "False",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:52Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          },
+          "containerID": "containerd://c03c399a6d8a5ddd4f2236e0c8c61f2c3da5a5d167e9b0bb34abdb8589f0075c",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "bootstrap",
+          "ready": false,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "128Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://c03c399a6d8a5ddd4f2236e0c8c61f2c3da5a5d167e9b0bb34abdb8589f0075c",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:47Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:34:55Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-lc8pd",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://ef3d351bb2f6522f37737723c2ea9f37defae9c4f46ac74e88be47356a379082",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://ef3d351bb2f6522f37737723c2ea9f37defae9c4f46ac74e88be47356a379082",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:34:54Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:34:54Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-lc8pd",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Succeeded",
+      "podIP": "10.42.0.252",
+      "podIPs": [
+        {
+          "ip": "10.42.0.252"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "28m",
+          "memory": "128Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:52Z"
+    },
+    "containers": [
+      {
+        "name": "bootstrap",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "computer-8758be48bf6edde9f441c77886319c13",
+    "uid": "7334fe1b-0274-4126-b8d5-30e3e59336fc",
+    "created": "2026-11-20T14:35:53Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "100m",
+        "memory": "256Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:59Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:58Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:36:05Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:36:05Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:58Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "100m",
+            "memory": "256Mi"
+          },
+          "containerID": "containerd://117006468d2004a4682986f8bad70e4fb2cc4d625829dc88e38915edc3f7420f",
+          "image": "sha256:b96a5a6bd23585a97582416506f7bb84ec1595641ddbcbb946a8962ad1f0203f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+          "lastState": {},
+          "name": "computer",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "100m",
+              "memory": "256Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:59Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "[private path]",
+              "name": "home"
+            },
+            {
+              "mountPath": "[private path]",
+              "name": "codex"
+            },
+            {
+              "mountPath": "/run/codex",
+              "name": "control"
+            },
+            {
+              "mountPath": "[private path]",
+              "name": "desktop"
+            },
+            {
+              "mountPath": "[private path]",
+              "name": "private"
+            },
+            {
+              "mountPath": "/tmp",
+              "name": "tmp"
+            },
+            {
+              "mountPath": "[private path]",
+              "name": "tool"
+            },
+            {
+              "mountPath": "/run/executor",
+              "name": "executor"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.22",
+      "podIPs": [
+        {
+          "ip": "10.42.0.22"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "79m",
+          "memory": "256Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:58Z"
+    },
+    "containers": [
+      {
+        "name": "computer",
+        "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+        "resources": {
+          "limits": {
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "100m",
+            "memory": "256Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "nats-0",
+    "uid": "7a7b6b5b-146e-4737-8ed0-5186f60b2a11",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:57Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:57Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:58Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:58Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:57Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://7fdb8386f7d1b19b5fa9f65f9c95dd4b225957087b7535f03135658d7f1ceb4d",
+          "image": "sha256:0454e3de257560ed3dd4bbd26bfffea6a2de0e057edab6f4ef400944f33e5f21",
+          "imageID": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+          "lastState": {},
+          "name": "nats",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "256Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:34:58Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/data",
+              "name": "data"
+            },
+            {
+              "mountPath": "/etc/nats",
+              "name": "settings",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/tls",
+              "name": "settings",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-hntx5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.8",
+      "podIPs": [
+        {
+          "ip": "10.42.0.8"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "28m",
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:57Z"
+    },
+    "containers": [
+      {
+        "name": "nats",
+        "image": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "256Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "objects-0",
+    "uid": "b9647980-42ba-48e8-877a-6dcb128e15ee",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "128Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:00Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:59Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:10Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:10Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:59Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          },
+          "containerID": "containerd://3ff36da398eed2647413c1db8826e65d05a11c4213538ebf13dbe916767d07ec",
+          "image": "sha256:599b64b4be5a9c1bdc277a7a716d6cec6cbb5b85f7b4d12a396f97a3d1fae926",
+          "imageID": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c",
+          "lastState": {},
+          "name": "objects",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "128Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:00Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/data",
+              "name": "data"
+            },
+            {
+              "mountPath": "/tmp",
+              "name": "temporary"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.10",
+      "podIPs": [
+        {
+          "ip": "10.42.0.10"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "28m",
+          "memory": "128Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:59Z"
+    },
+    "containers": [
+      {
+        "name": "objects",
+        "image": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "openfga-75c8b7c5b9-lpvlx",
+    "uid": "20280e9c-c902-43cd-b2bc-448236dd8445",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:53Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:15Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:16Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:16Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:52Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://1909798eab12b8bd457bd09d3cbfb5a57e50fe458e2c37643ef3d9c5895e3901",
+          "image": "sha256:d656952793e3a28514f23e1fcc3b2e7760417976f75f700083840a7dbc938069",
+          "imageID": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+          "lastState": {},
+          "name": "openfga",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "256Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:15Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-j6wz6",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://563b8ad71448e51b156f204416a00a8fb135de7a7d31f8e9db04a9af9f6b6b2e",
+          "image": "sha256:212aeeeb8faaef6c46498d86cbec6b9344d8d9492996b174664ff82c562ab685",
+          "imageID": "docker.io/library/postgres@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+          "lastState": {},
+          "name": "wait-for-postgres",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "100m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://563b8ad71448e51b156f204416a00a8fb135de7a7d31f8e9db04a9af9f6b6b2e",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:13Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:34:53Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-j6wz6",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://5b13dfc92dcb8ae3e3953830c4e0f4bf8a3b3d7e4e122e1da29b102f470aed4e",
+          "image": "sha256:d656952793e3a28514f23e1fcc3b2e7760417976f75f700083840a7dbc938069",
+          "imageID": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+          "lastState": {},
+          "name": "migrate",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "256Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://5b13dfc92dcb8ae3e3953830c4e0f4bf8a3b3d7e4e122e1da29b102f470aed4e",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:14Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:13Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-j6wz6",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.241",
+      "podIPs": [
+        {
+          "ip": "10.42.0.241"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "256Mi"
+        },
+        "requests": {
+          "cpu": "28m",
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:52Z"
+    },
+    "containers": [
+      {
+        "name": "openfga",
+        "image": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "256Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "postgres-0",
+    "uid": "9fc86ae2-7be3-418b-8d20-9e25d8c87b12",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:59Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:59Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:10Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:10Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:59Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://726de17da626d188be57c8efc3c11e065db1626d62de605aa14481a7089ec041",
+          "image": "sha256:212aeeeb8faaef6c46498d86cbec6b9344d8d9492996b174664ff82c562ab685",
+          "imageID": "docker.io/library/postgres@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+          "lastState": {},
+          "name": "postgres",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:00Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/lib/postgresql/data",
+              "name": "data"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-xhjc2",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.9",
+      "podIPs": [
+        {
+          "ip": "10.42.0.9"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "cpu": "28m",
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:59Z"
+    },
+    "containers": [
+      {
+        "name": "postgres",
+        "image": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "scanner-74569757f5-zl4vj",
+    "uid": "819b9334-7786-428d-a656-ce74bb0d0e6e",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "100m",
+        "memory": "1088Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:54Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:05Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:36Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:36Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:52Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "1Gi"
+          },
+          "containerID": "containerd://973d23fd4ff63be09be8fb3e9ed179d89f7eb6797cac43aabccb436351713ec6",
+          "image": "sha256:e8f56be83ea211e056efe6cbb907653e99bba033413a16ae7ee44ba5b87b6cf7",
+          "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:1526dc634d0bdbebad5eac044e9468992ea0305a14825886bc1874ecb98cd200",
+          "lastState": {},
+          "name": "engine",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "1",
+              "memory": "2Gi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "1Gi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:05Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/lib/clamav",
+              "name": "databases",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/etc/clamav/package.conf",
+              "name": "config",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/tmp",
+              "name": "temporary"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://743a4aff464a3f78b4bd32a1f3cffe0e2ba741fe7581b21249317328a1372068",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "https",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "256Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:05Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/lib/clamav",
+              "name": "databases",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/scanner",
+              "name": "evidence",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://4888bd4733d6ee0a1537fa4f4379ec32d17ce08751daf1989f2bb133f34448ca",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-evidence",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://4888bd4733d6ee0a1537fa4f4379ec32d17ce08751daf1989f2bb133f34448ca",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:34:54Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:34:54Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/scanner-source",
+              "name": "evidence-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/scanner",
+              "name": "evidence"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://de2af0d2cbfaa76eeca8ba62d00b066daa771c909fd145ce61f785a9d09e3344",
+          "image": "sha256:e8f56be83ea211e056efe6cbb907653e99bba033413a16ae7ee44ba5b87b6cf7",
+          "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:1526dc634d0bdbebad5eac044e9468992ea0305a14825886bc1874ecb98cd200",
+          "lastState": {},
+          "name": "copy-databases",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://de2af0d2cbfaa76eeca8ba62d00b066daa771c909fd145ce61f785a9d09e3344",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:04Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:03Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/databases",
+              "name": "databases"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.253",
+      "podIPs": [
+        {
+          "ip": "10.42.0.253"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "1500m",
+          "memory": "2304Mi"
+        },
+        "requests": {
+          "cpu": "79m",
+          "memory": "1088Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:52Z"
+    },
+    "containers": [
+      {
+        "name": "engine",
+        "image": "k3d-ocn-registry:5000/opencrane/scanner@sha256:1526dc634d0bdbebad5eac044e9468992ea0305a14825886bc1874ecb98cd200",
+        "resources": {
+          "limits": {
+            "cpu": "1",
+            "memory": "2Gi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "1Gi"
+          }
+        }
+      },
+      {
+        "name": "https",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "256Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "server-6d88fd6cb5-ltxw2",
+    "uid": "b915fb80-bdd9-43d5-ac19-d11102aa38fe",
+    "created": "2026-11-20T14:35:47Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "110m",
+        "memory": "320Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:48Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:53Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:36:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:36:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:47Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          },
+          "containerID": "containerd://4ba82a9eeed260436dfe5659ff89f8dfae20138b0679dfcd1005e42ede414e09",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "models",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "128Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:53Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/lib/opencrane/models",
+              "name": "model-state"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-vtvj5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          },
+          "containerID": "containerd://025724720c9e6a4fabc1dc41123f3360cc51797e82dac37d4736a398fd4d3454",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "server",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "128Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:53Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/storage",
+              "name": "storage-lease",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-vtvj5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://4aa9f747a1cc4fa7cae6fcc96e34e67d8db99123ec742d92227a517a48f6c1fb",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "storage-credentials",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "100m",
+              "memory": "128Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:53Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/storage",
+              "name": "storage-lease"
+            },
+            {
+              "mountPath": "/run/object-owner",
+              "name": "object-owner",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-vtvj5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://41fc9a5b7e866dafe1a2a653ef40bc18db1ad8aa100c9074c898ff880db2145e",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://41fc9a5b7e866dafe1a2a653ef40bc18db1ad8aa100c9074c898ff880db2145e",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:50Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:48Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-vtvj5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://7577f48527d2c56673b3d2dc5999317e330b8a8d32fd743dd59d2fc2ef399f11",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://7577f48527d2c56673b3d2dc5999317e330b8a8d32fd743dd59d2fc2ef399f11",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:51Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:51Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-vtvj5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://d542d83940ece2379dd77334c325f146e51673ee6ef21bfeef055379bf3c7092",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://d542d83940ece2379dd77334c325f146e51673ee6ef21bfeef055379bf3c7092",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:52Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:52Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-vtvj5",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.20",
+      "podIPs": [
+        {
+          "ip": "10.42.0.20"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "1100m",
+          "memory": "1152Mi"
+        },
+        "requests": {
+          "cpu": "104m",
+          "memory": "320Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:47Z"
+    },
+    "containers": [
+      {
+        "name": "server",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          }
+        }
+      },
+      {
+        "name": "storage-credentials",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "100m",
+            "memory": "128Mi"
+          },
+          "requests": {
+            "cpu": "10m",
+            "memory": "64Mi"
+          }
+        }
+      },
+      {
+        "name": "models",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "web-66499f4c94-xrggq",
+    "uid": "53014066-ad7d-4c0f-8228-028ece5025b7",
+    "created": "2026-11-20T14:34:52Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "50m",
+        "memory": "128Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:53Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:52Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:58Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:58Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:34:52Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          },
+          "containerID": "containerd://58e988a907bdfb5655380254a9ee708fb5597149b7e99e50e2cf41f03ed04272",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "web",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "500m",
+              "memory": "512Mi"
+            },
+            "requests": {
+              "cpu": "50m",
+              "memory": "128Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:34:53Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-k4xjj",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.242",
+      "podIPs": [
+        {
+          "ip": "10.42.0.242"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "500m",
+          "memory": "512Mi"
+        },
+        "requests": {
+          "cpu": "28m",
+          "memory": "128Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:34:52Z"
+    },
+    "containers": [
+      {
+        "name": "web",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "500m",
+            "memory": "512Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "128Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-audit-5888666cc6-ghnmv",
+    "uid": "42979a5d-a6d8-400d-9c04-905253ecf91d",
+    "created": "2026-11-20T14:35:19Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:20Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://dcb5096ba73e2ef1266735d97b9769c5ad32b6108b114c32ed56982dd3460c20",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-2f7qp",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://8813bf5eab7b0b8a0f75e55b9e7e3f4e280b035e913e3a478117e3841c649a29",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://8813bf5eab7b0b8a0f75e55b9e7e3f4e280b035e913e3a478117e3841c649a29",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:21Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-2f7qp",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://0010ee58fda920d08d9080a65f48edcd7707d46e9578d45eb6fa4b4db81f6890",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://0010ee58fda920d08d9080a65f48edcd7707d46e9578d45eb6fa4b4db81f6890",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:23Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-2f7qp",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://c1f5e3f0006b7314421a6f8d0f3c1fccadbe9ce611bdf1aacbcc162423a2adda",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://c1f5e3f0006b7314421a6f8d0f3c1fccadbe9ce611bdf1aacbcc162423a2adda",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-2f7qp",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.17",
+      "podIPs": [
+        {
+          "ip": "10.42.0.17"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:19Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-budgets-549cb7cb6b-jwjfq",
+    "uid": "f2236586-756a-4d0a-b474-b7a9fe260201",
+    "created": "2026-11-20T14:35:19Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:20Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://21fa1c0c90a7228d98d3c51f2f1ecc35ff95c4750173518868834340fb2c8058",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-xsvcb",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://c311252658f65e6e9d4825dcbe6c8ab47423173d493a4835cfc786f69aa3b8bc",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://c311252658f65e6e9d4825dcbe6c8ab47423173d493a4835cfc786f69aa3b8bc",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:21Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-xsvcb",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://bc7856beb1491d9dd3e6f888fca8deb7fccf2d947b6d6105426154255be13d60",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://bc7856beb1491d9dd3e6f888fca8deb7fccf2d947b6d6105426154255be13d60",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:23Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-xsvcb",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://e21473ef982cbb7aad0520fd3db875a1a27f3385355cb8729b87910252854649",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://e21473ef982cbb7aad0520fd3db875a1a27f3385355cb8729b87910252854649",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:23Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-xsvcb",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.16",
+      "podIPs": [
+        {
+          "ip": "10.42.0.16"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:19Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-computers-68ff66fd9-gcjrd",
+    "uid": "8e1f8d0c-3088-4edb-9faa-e70cb19e8d49",
+    "created": "2026-11-20T14:35:18Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:18Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://360bac96f76e79ed9a2837c2567f25c86faee72e2ab96c4d5ac001204c1e3bea",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:25Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-82j4z",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://9451dc4e26ceded940b4ce663035ae0d80179ed51c4308c9698efd01dbf27f0f",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://9451dc4e26ceded940b4ce663035ae0d80179ed51c4308c9698efd01dbf27f0f",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:21Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-82j4z",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://1b68db6ff7d42a3dbcd2f9439d30b4f8e8e0642509c2624c7b4415dda2ebba7a",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://1b68db6ff7d42a3dbcd2f9439d30b4f8e8e0642509c2624c7b4415dda2ebba7a",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:23Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-82j4z",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://622f5a94e363aba4e761e8068d9ec58f92570bbcd3eb1ab4f01d24a0ed9c9d4c",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://622f5a94e363aba4e761e8068d9ec58f92570bbcd3eb1ab4f01d24a0ed9c9d4c",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-82j4z",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.14",
+      "podIPs": [
+        {
+          "ip": "10.42.0.14"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:18Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-conversations-67f86449ff-rw527",
+    "uid": "24fd2041-f7da-4222-87a7-1d754f903730",
+    "created": "2026-11-20T14:35:18Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:20Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:18Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://da2c200d636abd17ba3edbac2ef5e95bd03908f10032b80b0d0909ab1705578c",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-6fvlx",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://fbfb1bd7f6c364e56abb937473759ccc21aa9ebef5ae8a05fe9c2b9a02b5c311",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://fbfb1bd7f6c364e56abb937473759ccc21aa9ebef5ae8a05fe9c2b9a02b5c311",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:22Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-6fvlx",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://67bbc3b6c93546f1feb68e4b2ccafdec5fc6776104cfb57da848362716f6195d",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://67bbc3b6c93546f1feb68e4b2ccafdec5fc6776104cfb57da848362716f6195d",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:22Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-6fvlx",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://7d2892da24f0c85861df7b743c3227fd9f488a16887fe33e1d4b341c3d98a5f7",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://7d2892da24f0c85861df7b743c3227fd9f488a16887fe33e1d4b341c3d98a5f7",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-6fvlx",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.18",
+      "podIPs": [
+        {
+          "ip": "10.42.0.18"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:19Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-dispatcher-c97d76bb4-r64t8",
+    "uid": "e1f66593-f9c4-4891-84e4-4da6ac938032",
+    "created": "2026-11-20T14:35:19Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:20Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://4a962fc7d6c821fdc26d621f5816f6f4c351b10b0f0a1ab3d3958469375007f7",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:25Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-4jmrr",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://8f4647e8181886f2f3c42aeba3d507572f96ac327fe7d4b3338ca27833d75a2f",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://8f4647e8181886f2f3c42aeba3d507572f96ac327fe7d4b3338ca27833d75a2f",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:22Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-4jmrr",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://03bd93821accc8c0a446e9f60f444df91696b6d3c14602bae04fd82c9173a524",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://03bd93821accc8c0a446e9f60f444df91696b6d3c14602bae04fd82c9173a524",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:23Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-4jmrr",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://fc8e40eba891503b19eee8fdfc5f08c493a1ea2db322da2f5c9d0ea5f76bb141",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://fc8e40eba891503b19eee8fdfc5f08c493a1ea2db322da2f5c9d0ea5f76bb141",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:23Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-4jmrr",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.19",
+      "podIPs": [
+        {
+          "ip": "10.42.0.19"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:19Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-files-9786c67f9-d8bpq",
+    "uid": "cf14a9e7-5a3b-4abf-9a1e-21dc24d700ab",
+    "created": "2026-11-20T14:35:18Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:20Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://d9ffac7842af760b4112f7fb2778313df836a30ba46e030b8d91886e05b58291",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-7jswm",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://09586247c4afeb89dcc58f4cb277b44b7bb668067bc37af70e618e1193e189ef",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://09586247c4afeb89dcc58f4cb277b44b7bb668067bc37af70e618e1193e189ef",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:21Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-7jswm",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://2a2bb281bc860d556bbc7334bb2fdcab903c931c741d1bd70df25d253668005d",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://2a2bb281bc860d556bbc7334bb2fdcab903c931c741d1bd70df25d253668005d",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:22Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-7jswm",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://53db8e3223eaed1524a3bb8613f2375f05ce12e5d6f8b8df88a04bd002b4b832",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://53db8e3223eaed1524a3bb8613f2375f05ce12e5d6f8b8df88a04bd002b4b832",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-7jswm",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.15",
+      "podIPs": [
+        {
+          "ip": "10.42.0.15"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:19Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-mcp-catalogue-56f455b4c9-ht2px",
+    "uid": "eb311909-24e4-492e-906a-607c8a83772c",
+    "created": "2026-11-20T14:35:18Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:25Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:18Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://1d113f04acdda13b1855a7ad56dae8a3bc77c1e879b03f3933777068f3d8ed7d",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:25Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-bcfm4",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://ccda9489eda8e919dba43c1b630f392bb220ca7a1d38ceb2b89569ed6a02ac24",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://ccda9489eda8e919dba43c1b630f392bb220ca7a1d38ceb2b89569ed6a02ac24",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:21Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:20Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-bcfm4",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://72b3d071fd8248d7ca4594bed81b79cb9caa39d15c394e28a22558d26e4570d3",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://72b3d071fd8248d7ca4594bed81b79cb9caa39d15c394e28a22558d26e4570d3",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:22Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-bcfm4",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://76274e0a7871238149bb894be19d15ad4273a67020c09522088bb1a6d69ef22f",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://76274e0a7871238149bb894be19d15ad4273a67020c09522088bb1a6d69ef22f",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:23Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-bcfm4",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.13",
+      "podIPs": [
+        {
+          "ip": "10.42.0.13"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:18Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "worker-members-68b8cc68f-hnq6b",
+    "uid": "2c503299-3e8c-4e3c-bcc2-d39d5392cda1",
+    "created": "2026-11-20T14:35:18Z",
+    "status": {
+      "allocatedResources": {
+        "cpu": "20m",
+        "memory": "64Mi"
+      },
+      "conditions": [
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:19Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodReadyToStartContainers"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Initialized"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "Ready"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:24Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "ContainersReady"
+        },
+        {
+          "lastProbeTime": null,
+          "lastTransitionTime": "2026-11-20T14:35:18Z",
+          "observedGeneration": 1,
+          "status": "True",
+          "type": "PodScheduled"
+        }
+      ],
+      "containerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          },
+          "containerID": "containerd://5853407852623727de600075c4234a0f69b1030b99372706615fbef46fc6a3e8",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "worker",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "300m",
+              "memory": "384Mi"
+            },
+            "requests": {
+              "cpu": "20m",
+              "memory": "64Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": true,
+          "state": {
+            "running": {
+              "startedAt": "2026-11-20T14:35:24Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-phgwl",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "hostIP": "172.18.0.3",
+      "hostIPs": [
+        {
+          "ip": "172.18.0.3"
+        }
+      ],
+      "initContainerStatuses": [
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://8ebbc80406ed73fe26eda32829a093a891affe0be7e42f59ede7c13709884575",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "kubeconfig",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://8ebbc80406ed73fe26eda32829a093a891affe0be7e42f59ede7c13709884575",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:21Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:19Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/kubeconfig",
+              "name": "kubeconfig"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-phgwl",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://64f80c340133797df840e6f21d6a8004bd2d019349458314eaa6e4f378055245",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "wait-for-binding",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://64f80c340133797df840e6f21d6a8004bd2d019349458314eaa6e4f378055245",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:23Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:22Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 1000,
+              "supplementalGroups": [
+                1000
+              ],
+              "uid": 1000
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane",
+              "name": "runtime",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-phgwl",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        },
+        {
+          "allocatedResources": {
+            "cpu": "10m",
+            "memory": "32Mi"
+          },
+          "containerID": "containerd://5f3da7cee26000f2eab7c366fe0f3da06aec508796ce3629015e1d501ea70b77",
+          "image": "sha256:1362b4a7ba54b618822ef09ee44395b6aa2cbfb82446646312e455b88bb9dc5f",
+          "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+          "lastState": {},
+          "name": "copy-private-files",
+          "ready": true,
+          "resources": {
+            "limits": {
+              "cpu": "50m",
+              "memory": "64Mi"
+            },
+            "requests": {
+              "cpu": "10m",
+              "memory": "32Mi"
+            }
+          },
+          "restartCount": 0,
+          "started": false,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://5f3da7cee26000f2eab7c366fe0f3da06aec508796ce3629015e1d501ea70b77",
+              "exitCode": 0,
+              "finishedAt": "2026-11-20T14:35:24Z",
+              "reason": "Completed",
+              "startedAt": "2026-11-20T14:35:23Z"
+            }
+          },
+          "user": {
+            "linux": {
+              "gid": 0,
+              "supplementalGroups": [
+                0,
+                1000
+              ],
+              "uid": 0
+            }
+          },
+          "volumeMounts": [
+            {
+              "mountPath": "/run/opencrane-source",
+              "name": "runtime-file-source",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            },
+            {
+              "mountPath": "/run/opencrane/files",
+              "name": "runtime-files"
+            },
+            {
+              "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+              "name": "kube-api-access-phgwl",
+              "readOnly": true,
+              "recursiveReadOnly": "Disabled"
+            }
+          ]
+        }
+      ],
+      "observedGeneration": 1,
+      "phase": "Running",
+      "podIP": "10.42.0.12",
+      "podIPs": [
+        {
+          "ip": "10.42.0.12"
+        }
+      ],
+      "qosClass": "Burstable",
+      "resources": {
+        "limits": {
+          "cpu": "300m",
+          "memory": "384Mi"
+        },
+        "requests": {
+          "memory": "64Mi"
+        }
+      },
+      "startTime": "2026-11-20T14:35:18Z"
+    },
+    "containers": [
+      {
+        "name": "worker",
+        "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1",
+        "resources": {
+          "limits": {
+            "cpu": "300m",
+            "memory": "384Mi"
+          },
+          "requests": {
+            "cpu": "20m",
+            "memory": "64Mi"
+          }
+        }
+      }
+    ]
+  }
+]

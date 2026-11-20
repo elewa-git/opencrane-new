@@ -30,3 +30,17 @@ async function checksMermaidIsolation() {
 
 it('blocks network access while the real Mermaid renderer draws replies',
   checksMermaidIsolation, 190_000);
+
+async function checksProductionDesktopViewer() {
+  const options = {
+    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
+    timeout: 360_000,
+  };
+  const execute = promisify(execFile);
+  const argumentsList = ['scripts/check-live-view-production.mjs'];
+  const result = await execute(process.execPath, argumentsList, options);
+  expect(result.stdout).toContain('PASS production live viewer decodes RFB pixels at 1280 and 390 px');
+}
+
+it('constructs the production desktop viewer and decodes pixels through the website proxy',
+  checksProductionDesktopViewer, 370_000);

@@ -1,0 +1,154 @@
+TAP version 13
+# Subtest: the public page escapes an installation name as HTML attribute text
+ok 1 - the public page escapes an installation name as HTML attribute text
+  ---
+  duration_ms: 2.051959
+  type: 'test'
+  ...
+# Subtest: the public page keeps the empty name when the setting is absent
+ok 2 - the public page keeps the empty name when the setting is absent
+  ---
+  duration_ms: 0.49927
+  type: 'test'
+  ...
+# Subtest: a failed viewer write closes both connections and keeps packaged HTTP available
+ok 3 - a failed viewer write closes both connections and keeps packaged HTTP available
+  ---
+  duration_ms: 894.507924
+  type: 'test'
+  ...
+# Subtest: shellcheck accepts bootstrap and the shared runtime helper
+ok 4 - shellcheck accepts bootstrap and the shared runtime helper
+  ---
+  duration_ms: 1077.652901
+  type: 'test'
+  ...
+# Subtest: dry run prints node protection, downloads, runtime and storage without writing
+ok 5 - dry run prints node protection, downloads, runtime and storage without writing
+  ---
+  duration_ms: 1369.126937
+  type: 'test'
+  ...
+# Subtest: refuses unsupported OS and unknown options
+ok 6 - refuses unsupported OS and unknown options
+  ---
+  duration_ms: 1417.859617
+  type: 'test'
+  ...
+# Subtest: rerun keeps the same configuration on its own simulated host
+ok 7 - rerun keeps the same configuration on its own simulated host
+  ---
+  duration_ms: 1845.094514
+  type: 'test'
+  ...
+# Subtest: an ownership marker cannot approve a replaced k3s binary
+ok 8 - an ownership marker cannot approve a replaced k3s binary
+  ---
+  duration_ms: 1508.651539
+  type: 'test'
+  ...
+# Subtest: refuses Docker binary before mutation, including in dry run
+ok 9 - refuses Docker binary before mutation, including in dry run
+  ---
+  duration_ms: 1864.272045
+  type: 'test'
+  ...
+# Subtest: refuses Docker socket before mutation, including in dry run
+ok 10 - refuses Docker socket before mutation, including in dry run
+  ---
+  duration_ms: 1412.534114
+  type: 'test'
+  ...
+# Subtest: refuses foreign Kubernetes before mutation, including in dry run
+ok 11 - refuses foreign Kubernetes before mutation, including in dry run
+  ---
+  duration_ms: 1397.309208
+  type: 'test'
+  ...
+# Subtest: refuses unowned k3s before mutation, including in dry run
+ok 12 - refuses unowned k3s before mutation, including in dry run
+  ---
+  duration_ms: 1618.24245
+  type: 'test'
+  ...
+# Subtest: refuses foreign containerd before mutation, including in dry run
+ok 13 - refuses foreign containerd before mutation, including in dry run
+  ---
+  duration_ms: 1377.936123
+  type: 'test'
+  ...
+# Subtest: refuses microk8s before mutation, including in dry run
+ok 14 - refuses microk8s before mutation, including in dry run
+  ---
+  duration_ms: 1278.725197
+  type: 'test'
+  ...
+# Subtest: keeps fixture files out of all four shards
+ok 15 - keeps fixture files out of all four shards
+  ---
+  duration_ms: 5.524808
+  type: 'test'
+  ...
+# Subtest: detects browser and image use without matching ordinary data
+ok 16 - detects browser and image use without matching ordinary data
+  ---
+  duration_ms: 0.932484
+  type: 'test'
+  ...
+# Subtest: refuses an unknown test group
+ok 17 - refuses an unknown test group
+  ---
+  duration_ms: 0.849292
+  type: 'test'
+  ...
+# Subtest: accepts every file exactly once
+ok 18 - accepts every file exactly once
+  ---
+  duration_ms: 0.26382
+  type: 'test'
+  ...
+# Subtest: refuses missing files
+ok 19 - refuses missing files
+  ---
+  duration_ms: 0.381007
+  type: 'test'
+  ...
+# Subtest: refuses duplicate files
+ok 20 - refuses duplicate files
+  ---
+  duration_ms: 0.350287
+  type: 'test'
+  ...
+# Subtest: refuses unexpected files
+ok 21 - refuses unexpected files
+  ---
+  duration_ms: 0.457338
+  type: 'test'
+  ...
+# Subtest: checks new fixture use whenever CI verifies file lists
+ok 22 - checks new fixture use whenever CI verifies file lists
+  ---
+  duration_ms: 887.552845
+  type: 'test'
+  ...
+# Subtest: detects Chromium through the real chat browser scripts
+ok 23 - detects Chromium through the real chat browser scripts
+  ---
+  duration_ms: 1.872583
+  type: 'test'
+  ...
+# Subtest: accepts the real chat browser suite in the fixture list
+ok 24 - accepts the real chat browser suite in the fixture list
+  ---
+  duration_ms: 111.119147
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 24
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 16395.193292

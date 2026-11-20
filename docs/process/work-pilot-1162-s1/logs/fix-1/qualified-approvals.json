@@ -1,0 +1,12 @@
+{
+  "revision": "9ff04e9da075f687472a6754359fb19ace7b9a41",
+  "application": {
+    "runId": 44748505866,
+    "image": "k3d-ocn-registry:5000/opencrane/package@sha256:d794e52bd6927527126e4fdf29a20c9cc1628814addc93f418117b0baddf22e1"
+  },
+  "scanner": {
+    "runId": 44748510712,
+    "image": "k3d-ocn-registry:5000/opencrane/scanner@sha256:1526dc634d0bdbebad5eac044e9468992ea0305a14825886bc1874ecb98cd200"
+  },
+  "verdict": "PASS"
+}

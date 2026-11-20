@@ -1,0 +1,130 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+
+const root = resolve(import.meta.dirname, '../..');
+const image = 'node:22.23.1-bookworm-slim';
+const script = '/source/infra/vm/bootstrap.sh';
+const prefix = `
+set -eu
+printf 'ID=ubuntu\\nVERSION_ID="24.04"\\n' > /etc/os-release
+`;
+
+function container(commands, args = []) {
+  const mount = `type=bind,src=${root},dst=/source,readonly`;
+  const command = prefix + commands + '\nbash ' + script + ' ' + args.join(' ');
+  const options = { encoding: 'utf8', timeout: 60_000 };
+  return spawnSync('docker', ['run', '--rm', '--network=none', '--cap-drop=ALL',
+    '--security-opt=no-new-privileges', '--mount', mount, image, 'bash', '-c', command], options);
+}
+
+function successful(result) {
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  return result.stdout;
+}
+
+function checkShell() {
+  const files = ['infra/vm/bootstrap.sh', 'infra/devbox/runtime.sh', 'infra/devbox/setup.sh'];
+  const checked = spawnSync('shellcheck', files, { cwd: root, encoding: 'utf8' });
+  successful(checked);
+}
+
+function dry() {
+  const result = container('', ['--dry-run']);
+  const output = successful(result);
+  for (const step of ['swapoff', 'core_pattern', 'kdump', 'sha256sum', 'runsc',
+    'k3s.service', 'gvisor', 'local-path', 'agent-sandbox', 'ready']) {
+    assert.ok(output.includes(step), `Missing dry-run step: ${step}`);
+  }
+  const checked = container(`bash ${script} --dry-run >/dev/null
+    test ! -e /etc/rancher/k3s
+    test ! -e /var/lib/opencrane-vm`, ['--dry-run']);
+  successful(checked);
+}
+
+const refusals = [
+  ['Docker binary', 'mkdir -p /usr/local/bin; touch /usr/local/bin/docker; chmod +x /usr/local/bin/docker'],
+  ['Docker socket', 'mkdir -p /run; touch /run/docker.sock'],
+  ['foreign Kubernetes', 'mkdir -p /etc/kubernetes'],
+  ['unowned k3s', 'mkdir -p /var/lib/rancher/k3s'],
+  ['foreign containerd', 'mkdir -p /run/containerd; touch /run/containerd/containerd.sock'],
+  ['microk8s', 'mkdir -p /var/snap/microk8s'],
+];
+
+function registerRefusal(name, setup) {
+  function refuse() {
+    for (const args of [[], ['--dry-run']]) {
+      const result = container(setup, args);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, /Refusing existing/);
+      assert.doesNotMatch(result.stdout, /apt-get|swapoff|Download/);
+    }
+  }
+  test(`refuses ${name} before mutation, including in dry run`, refuse);
+}
+
+function invalidInput() {
+  const result = container('printf "ID=debian\\nVERSION_ID=12\\n" > /etc/os-release');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Ubuntu/);
+  assert.equal(container('', ['--unknown']).status, 2);
+}
+
+const fakeHost = `
+mkdir -p /fixture-bin
+export PATH=/fixture-bin:$PATH
+for program in apt-get swapoff sysctl systemctl tar kexec; do
+  printf '#!/bin/sh\\nexit 0\\n' > /fixture-bin/$program
+  chmod +x /fixture-bin/$program
+done
+printf '#!/bin/sh\\ncat >/dev/null\\nexit 0\\n' > /fixture-bin/sha256sum
+cat > /fixture-bin/curl <<'CURL'
+#!/bin/bash
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --output ]; then destination=$2; shift; fi
+  shift
+done
+printf '#!/bin/sh\\ncat >/dev/null\\nexit 0\\n' > "$destination"
+printf 'image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.4\\n' >> "$destination"
+CURL
+chmod +x /fixture-bin/*
+`;
+
+function idempotent() {
+  const commands = fakeHost + `
+    bash ${script} >/dev/null
+    mkdir -p /var/lib/kubelet
+    find /etc/rancher /etc/systemd/system /etc/sysctl.d /var/lib/opencrane-vm \\
+      -type f -exec /usr/bin/sha256sum {} + | sort > /tmp/before
+    bash ${script} >/dev/null
+    find /etc/rancher /etc/systemd/system /etc/sysctl.d /var/lib/opencrane-vm \\
+      -type f -exec /usr/bin/sha256sum {} + | sort > /tmp/after
+    cmp /tmp/before /tmp/after
+    grep -q 'LimitCORE=0' /etc/systemd/system/k3s.service
+    grep -q 'io.containerd.runsc.v1' \\
+      /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl
+  `;
+  const result = container(commands, ['--dry-run']);
+  successful(result);
+}
+
+function replacedBinary() {
+  const commands = fakeHost + `
+    bash ${script} >/dev/null
+    rm /fixture-bin/sha256sum
+    printf 'foreign binary' > /usr/local/bin/k3s
+  `;
+  const result = container(commands);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing existing changed k3s binary/);
+}
+
+test('shellcheck accepts bootstrap and the shared runtime helper', checkShell);
+test('dry run prints node protection, downloads, runtime and storage without writing', dry);
+test('refuses unsupported OS and unknown options', invalidInput);
+test('rerun keeps the same configuration on its own simulated host', idempotent);
+test('an ownership marker cannot approve a replaced k3s binary', replacedBinary);
+for (const [name, setup] of refusals) {
+  registerRefusal(name, setup);
+}

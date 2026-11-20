@@ -15,7 +15,7 @@ Chat-browser launches three scripts that use Chromium. No test retries are added
 Ordinary shards pass `--maxWorkers=2`. Each test file may also start NATS,
 PostgreSQL and OpenFGA fixture processes. Leave CPU time for those services while
 keeping their existing read and authority deadlines. Browser fixtures keep one
-worker; image fixtures keep their usual CPU-based worker count.
+worker; image fixtures use two workers so native agents retain CPU time too.
 
 `run-tests.mjs` calls `npm test`, preserving its pretest tool downloads.
 Before fixture tests, it builds apps/web in development mode to warm Angular's
@@ -242,8 +242,8 @@ Angular still printed “Building…” at their existing 60-second deadlines. B
 files start `ng serve`; two workers could compile the same app at once.
 Serial execution still failed cold startup: a development build took 66.13 seconds.
 Both fixture jobs prepare that build before tests so their servers reuse the
-compiler cache. They keep two Angular build workers. Image files use Vitest's
-default: available CPUs minus one in run mode, so three workers on a 4-CPU runner.
+compiler cache. They keep two Angular build workers. Image files now use two
+Vitest workers because native agents also need CPU time during these tests.
 Browser files keep one worker: a local three-worker run with four available CPUs
 failed both chat browser scripts, audit-browser and integrations while Angular
 still printed “Building…”, despite the prepared build. Test deadlines stay unchanged.

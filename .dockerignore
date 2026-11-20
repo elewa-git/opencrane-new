@@ -75,3 +75,4 @@ scripts/private-memory-qualification/build-images.mjs
 **/*.jpg
 **/*.webp
 **/*.log
+scripts/check-live-view-production.mjs

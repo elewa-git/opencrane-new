@@ -105,6 +105,21 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ## Measurements
 
+### Pilot VM sizing
+
+On 20 November 2026, the production noVNC constructor cause was fixed test-first.
+A fresh CORE journey passed both widths and a fresh package decoded a desktop at
+1280 pixels. The packaged mobile PDF step failed because the collector used a
+filename outside the scripted provider's fallback fixture contract. Its controller
+then received SIGTERM and cleanup overlapped the browser. The complete requested
+matrix remains PARTIAL; three-person qualification and minimum size remain NOT RUN.
+The [receipt](work-pilot-1162-s1/journey.md) retains failed outcomes and resource waits.
+
+The latest incomplete whole-node peaks were 3.654 CPU cores and 5.12 GiB including swap.
+These partial observations do not qualify a minimum machine or spare-capacity
+recommendation. Bootstrap ran only as a dry run and refused existing Docker before
+writes. Real Ubuntu bootstrap/reboot remain NOT RUN. No host setting changed.
+
 ### Lint size debt
 
 On 13 November 2026, the [size-debt receipt](clean-120-s1.md#final-full-lint)

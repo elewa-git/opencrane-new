@@ -1,0 +1,51 @@
+[
+  {
+    "id": "sha256:212aeeeb8faaef6c46498d86cbec6b9344d8d9492996b174664ff82c562ab685",
+    "size": "161346986",
+    "repoDigests": [
+      "docker.io/library/postgres@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f"
+    ]
+  },
+  {
+    "id": "sha256:b96a5a6bd23585a97582416506f7bb84ec1595641ddbcbb946a8962ad1f0203f",
+    "size": "834982047",
+    "repoDigests": [
+      "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0"
+    ]
+  },
+  {
+    "id": "sha256:0454e3de257560ed3dd4bbd26bfffea6a2de0e057edab6f4ef400944f33e5f21",
+    "size": "7273671",
+    "repoDigests": [
+      "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3"
+    ]
+  },
+  {
+    "id": "sha256:599b64b4be5a9c1bdc277a7a716d6cec6cbb5b85f7b4d12a396f97a3d1fae926",
+    "size": "67738226",
+    "repoDigests": [
+      "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c"
+    ]
+  },
+  {
+    "id": "sha256:d656952793e3a28514f23e1fcc3b2e7760417976f75f700083840a7dbc938069",
+    "size": "21332240",
+    "repoDigests": [
+      "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796"
+    ]
+  },
+  {
+    "id": "sha256:89912f059772aecd60dae2d072ebd729fb7555411e6579331e6421acf13340a6",
+    "size": "322502826",
+    "repoDigests": [
+      "k3d-ocn-registry:5000/opencrane/package@sha256:fa9b61af2c6efcf196839ee5f2b7711bbf7fe30d5afccc85c14958c3319b5682"
+    ]
+  },
+  {
+    "id": "sha256:bc6ab3a19d8bc904a3feb8fe92f1d2b6c2801aa0bed1a8e579a82f899a7dede1",
+    "size": "177645903",
+    "repoDigests": [
+      "k3d-ocn-registry:5000/opencrane/scanner@sha256:31044b71a03f5a1512923177bed7a23984daf8b281f5f00521035901b3a6a545"
+    ]
+  }
+]

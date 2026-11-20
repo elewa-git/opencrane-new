@@ -1,0 +1,17 @@
+{
+  "qualifyingObservation": {
+    "utc": "2026-11-20T17:25:51Z",
+    "load1": 5.69,
+    "slot1": "free",
+    "slot2": "free",
+    "packageNamespaces": [],
+    "packageContainers": [],
+    "continuousSeconds": 302
+  },
+  "claimedSlot": "1",
+  "otherSlotStatusAfterClaim": "free",
+  "hostLoadOneMinuteObservedAfterClaim": 6.51,
+  "sourceHead": "e0c4a9b063f5cfcdd189134eaa145592727110fb",
+  "workingTreeBeforeInstall": "clean",
+  "packageNamespacesBeforeInstall": []
+}

@@ -21,6 +21,7 @@ flowchart LR
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
   stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
+  stack -.->|reuses website proxy handling| package
   stack -->|checks hosts and launches| package["infra/package<br/>Helm install"]
 ```
 
@@ -51,7 +52,8 @@ Not built yet:
    running the core browser journey.
 3. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,
-   desktop viewing and organisation settings.
+   desktop viewing and organisation settings. The static website closes a failed
+   desktop connection without interrupting other requests.
 4. **An unsafe command is requested.** The launcher refuses automated coding jobs
    that try to run owner commands or use real providers. Fresh journeys use a claimed
    spare stack and the free stand-in model.

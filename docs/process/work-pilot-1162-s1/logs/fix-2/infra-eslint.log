@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' --no-ignore --config [private-receipt]/eslint-infra.config.mjs infra/package/web.mjs infra/package/web-proxy.test.mjs infra/package/web-proxy-fixture.mjs infra/dev-stack/web-server.mjs infra/vm/bootstrap.test.mjs
