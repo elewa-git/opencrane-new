@@ -94,6 +94,10 @@ async function fixtureInputFiles(directory, fixture) {
   await scannerApprovalFixture(bin, fixture.review);
   fixture.values.scanner = { ...fixture.review.scanner };
   await writeFile(`${directory}/fixture.json`, JSON.stringify(fixture));
+  if (fixture.publicSettings) {
+    await writeFile(`${directory}/public-settings.json`, JSON.stringify(fixture.publicSettings),
+      { mode: 0o600 });
+  }
   const valuesFile = `${privateDirectory}/values.json`;
   await writeFile(valuesFile, JSON.stringify(fixture.values), { mode: 0o600 });
   await writeFile(`${directory}/infra/package/reviewed-images.json`, JSON.stringify(fixture.review));
@@ -238,7 +242,9 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       catch (error) { console.error(error); process.exitCode = 1; }`;
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
-    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1', PACKAGE_VALUES_FILE: undefined };
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1',
+      PACKAGE_VALUES_FILE: undefined, PACKAGE_PUBLIC_SETTINGS_FILE: undefined };
+    if (fixture.publicSettings) env.PACKAGE_PUBLIC_SETTINGS_FILE = `${directory}/public-settings.json`;
     if (environmentValues) {
       env.PACKAGE_VALUES_FILE = valuesFile;
     }
@@ -802,3 +808,49 @@ async function installsEmptyRestoreTargetWithoutBootstrap() {
 }
 test('restore package installation never waits for or runs owner bootstrap',
   installsEmptyRestoreTargetWithoutBootstrap);
+function publicInstallFixture() {
+  const fixture = validFixture();
+  fixture.install = true;
+  fixture.values.exposure.public = {
+    enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls',
+  };
+  fixture.publicSettings = {
+    NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
+    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
+  };
+  for (const [name, value] of Object.entries(fixture.publicSettings)) {
+    fixture.secrets.runtime.data[name] = encoded(value);
+  }
+  delete fixture.secrets.runtime.data.DEV_OWNER_EMAIL;
+  delete fixture.secrets.runtime.data.PACKAGE_OWNER_SUBJECT;
+  fixture.secrets.runtimefiles.data['bootstrap-token.json'] = encoded('private-token-hash-record');
+  return fixture;
+}
+
+async function installsTokenModePrivately() {
+  await runFixture(publicInstallFixture(), undefined, true);
+}
+test('public settings reach the real Helm path with no development owner or exposed service',
+  installsTokenModePrivately);
+
+const publicRuntimeRefusals = [
+  ['runtime', 'OIDC_EXPECTED_ORG_ID', '',
+    'Required secret field is absent: runtime.OIDC_EXPECTED_ORG_ID'],
+  ['runtime', 'NODE_ENV', 'development', 'Public address requires NODE_ENV=production'],
+  ['runtime', 'OIDC_COOKIE_SECURE', 'false', 'Public address requires OIDC_COOKIE_SECURE=true'],
+  ['runtime', 'OIDC_REDIRECT_URI', 'http://pilot.example.test/auth/callback',
+    'Public address requires the exact HTTPS OIDC_REDIRECT_URI'],
+  ['runtime', 'OIDC_EXTRA_IDENTITIES', canary, 'Public address refuses OIDC_EXTRA_IDENTITIES'],
+  ['runtime', 'DEV_OWNER_EMAIL', canary, 'Public address refuses DEV_OWNER_EMAIL'],
+  ['bootstrap', 'NODE_ENV', 'development', 'Public address requires NODE_ENV=production'],
+  ['bootstrap', 'DEV_OWNER_EMAIL', canary, 'Public address refuses DEV_OWNER_EMAIL'],
+  ['bootstrap', 'OIDC_EXTRA_IDENTITIES', canary, 'Public address refuses OIDC_EXTRA_IDENTITIES'],
+];
+for (const [role, name, value, expected] of publicRuntimeRefusals) {
+  async function refusesStoredSettings() {
+    const fixture = publicInstallFixture();
+    fixture.secrets[role].data[name] = encoded(value);
+    await runFixture(fixture, expected);
+  }
+  test(`public address rechecks stored ${role}.${name} before any Helm command`, refusesStoredSettings);
+}

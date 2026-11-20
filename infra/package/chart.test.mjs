@@ -11,6 +11,8 @@ import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
 import { parseAllDocuments } from 'yaml';
+import { checkPublicSettings } from './public-settings.mjs';
+import { readBootstrapToken } from '../../apps/server/src/bootstrap-token.ts';
 import { applicationApprovalFixture } from './application-approval-fixture.mjs';
 import { scannerApprovalFixture } from '../clamav/approval-fixture.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -173,6 +175,18 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const fixtureEnvironment = await scannerFixtureEnvironment(directory, mainValuesSource);
+  const tokenBootstrap = packageValues.exposure?.public?.enabled === true;
+  const tokenFile = join(directory, 'bootstrap-token.json');
+  const tokenRecord = JSON.stringify({ silo: 'dev', hash: 'a'.repeat(64),
+    expiresAt: '2099-01-01T00:00:00.000Z' });
+  if (tokenBootstrap) writeFileSync(tokenFile, tokenRecord, { mode: 0o600 });
+  function publicSettingsFixture(input) {
+    const settings = { NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
+      OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
+      BOOTSTRAP_TOKEN_FILE: tokenFile };
+    checkPublicSettings(input, settings);
+    return settings;
+  }
   const settings = new Map();
   const secrets = new Map();
   const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
@@ -210,6 +224,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     }
   }
   async function readOwnerFixture() {
+    assert.equal(tokenBootstrap, false, 'Token preparation must not read the development owner');
     if (withOwner) {
       return 'owner@example.test';
     }
@@ -259,12 +274,15 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     }
   }
   const replacements = {
+    '../../apps/server/src/bootstrap-token.ts': { readBootstrapToken },
+    './public-settings.mjs': { readPublicSettings: publicSettingsFixture },
     'node:child_process': { execFile: executeFixture },
     'node:crypto': { ...crypto, randomBytes: () => key },
     '../../libs/event-store/src/certificates.ts': { issueCertificate: async () => {} },
     '@opencrane/auth': { tokenIssuer: async () => ({ jwks: { keys: [] } }) },
     '../dev-stack/config.ts': {
-      authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET' }),
+      authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET',
+        OIDC_EXTRA_IDENTITIES: 'development-exception' }),
       directory, generate: generateFixture, readEnv: readFixture,
       readOwnerEmail: readOwnerFixture,
       root: process.cwd(), writeEnv: writeFixture,
@@ -305,8 +323,8 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
     await prepareSettings({ ...packageValues, scanner: values.scanner });
-    await provisionSecrets(values.secrets, owner);
-    return { key, settings, secrets };
+    await provisionSecrets(values.secrets, owner, tokenBootstrap);
+    return { key, settings, secrets, tokenRecord };
   } finally {
     const remainingFiles = readdirSync(directory);
     const cleanup = { recursive: true, force: true };
@@ -955,3 +973,22 @@ function changesScale(verb) { return ['patch', 'update', '*'].includes(verb); }
 function hasVerb(rule, verb) { return rule.verbs.includes(verb); }
 test('restore account scales only server and OpenFGA and retains required reads',
   restoreScalingIsRestricted);
+async function preparesPublicTokenWithoutDevOwner() {
+  const exposure = { ingress: false, loadBalancer: false, funnel: false,
+    public: { enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls' } };
+  const prepared = await preparedSecretsFixture(true, false, false, { exposure });
+  const runtime = prepared.settings.get('package-runtime');
+  assert.equal(runtime.NODE_ENV, 'production');
+  assert.equal(runtime.OIDC_COOKIE_SECURE, 'true');
+  assert.equal(runtime.OIDC_EXPECTED_ORG_ID, 'test-organisation');
+  assert.equal(runtime.OIDC_REDIRECT_URI, 'https://pilot.example.test/auth/callback');
+  assert.equal(runtime.BOOTSTRAP_TOKEN_FILE, '/var/lib/opencrane/bootstrap/token.json');
+  for (const name of ['DEV_OWNER_EMAIL', 'PACKAGE_OWNER_SUBJECT', 'OIDC_EXTRA_IDENTITIES']) {
+    assert.equal(Object.hasOwn(runtime, name), false);
+    assert.equal(Object.hasOwn(prepared.secrets.get('runtime'), name), false);
+  }
+  const files = prepared.secrets.get('runtime-files');
+  assert.equal(files['bootstrap-token.json'].toString('utf8'), prepared.tokenRecord);
+}
+test('public preparation stores the existing token hash and requires no development owner',
+  preparesPublicTokenWithoutDevOwner);
