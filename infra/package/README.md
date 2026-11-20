@@ -32,7 +32,7 @@ flowchart LR
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
-- Keep private settings in named Secrets and refuse public network exposure. Chats need no key volume.
+- Keep private settings in named Secrets and refuse public network exposure.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log, sign-in and a first owner for local testing.
 - Choose the stand-in model or private storage for a provider connected in Settings.
@@ -76,7 +76,7 @@ Not built yet:
 
 ## How to run or test it
 
-Run the chart checks from the repository root. The render check needs Helm:
+Run the chart checks from the repository root. The render check needs Helm, tar and the original chart in Git history:
 
 ```sh
 nice -n 10 node --experimental-strip-types --test infra/package/chart.test.mjs

@@ -36,9 +36,10 @@ export function checkModelSecrets(name: string, stored: SecretData,
   const data = stored.data ?? {};
   if (models?.mode === 'provider') {
     for (const key of Object.keys(data)) {
-      if (key === 'MODEL_UPSTREAM' && models.qualification &&
-          Buffer.from(data[key]!, 'base64').toString('utf8') === qualificationUpstream) {
-        continue;
+      if (key === 'MODEL_UPSTREAM' && models.qualification) {
+        const upstreamBytes = Buffer.from(data[key]!, 'base64');
+        const upstream = upstreamBytes.toString('utf8');
+        if (upstream === qualificationUpstream) continue;
       }
       if (key === 'MODEL_UPSTREAM' || key === 'MODEL_KEY_FILE' ||
           key.startsWith('MODEL_STUB_') || key === 'model-stub-key' ||

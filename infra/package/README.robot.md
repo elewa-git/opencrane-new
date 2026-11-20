@@ -170,6 +170,15 @@ private key directory and is not started by this package. Object storage and
 the scanner run inside this chart. The file worker still projects events; object
 storage is content, and the upload command remains the only business write.
 
+## Default render regression
+
+`chart-render.test.mjs` extracts the original chart from commit
+`c791103b365ced8fd56195ded9d0dcfabf202597` with `git archive` and tar. It renders
+that chart and the current default chart with the same Helm executable, namespace
+and values, then compares complete output bytes. The explicit stub render must
+also match. This keeps the default contract exact when Helm versions format YAML
+differently. Keep that commit available when running the package tests.
+
 ## Connected model provider
 
 `models.mode` accepts `stub` (default) or `provider`. Preflight and Helm refuse other
