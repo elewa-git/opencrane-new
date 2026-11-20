@@ -1,7 +1,10 @@
+import type { Duplex } from 'node:stream';
+import type { AppendCommand } from '@opencrane/event-store';
+import { parseEventByType } from '@opencrane/events';
+import { WebSocket } from 'ws';
+import { grantStream } from '@opencrane/authz';
 import { request as httpRequest } from 'node:http';
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
-import type { Duplex } from 'node:stream';
-import { ViewSessions } from '../src/computers/view-sessions.ts';
 
 import { encodeSession } from '@opencrane/auth';
 import { history } from '@opencrane/models';
@@ -128,46 +131,160 @@ function refusedUpgrade(address: string, headers: IncomingHttpHeaders): Promise<
   return new Promise(connect);
 }
 
-async function refuseAtCapacity(_start: () => Promise<void>, refuse: () => Promise<void>) {
-  await refuse();
+type BaseViewFixture = Awaited<ReturnType<typeof viewFixture>>;
+
+async function capacityTickets(fixture: BaseViewFixture) {
+  const { app, config } = fixture;
+  const grant = {
+    resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
+    granteeKind: 'member', grantedBy: 'owner',
+  };
+  await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
+  const sessionArguments = {
+    sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
+    exp: Math.floor(Date.now() / 1000) + 120,
+  };
+  const session = encodeSession(config, sessionArguments);
+  const headers = {
+    origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+    cookie: `${config.cookieName}=${session}`,
+  };
+  const requestArguments = { method: 'POST' as const, url: viewUrl, headers };
+  const tickets: string[] = [];
+  for (let index = 0; index < 16; index++) {
+    const admission = await app.inject(requestArguments);
+    expect(admission.statusCode).toBe(200);
+    const body = admission.json<{ ticket: string }>();
+    tickets.push(body.ticket);
+  }
+  return { headers, tickets };
 }
 
-async function refuseAnonymousUpgrade() {
+async function fillViewerCapacity(
+  fixture: BaseViewFixture, address: string, sockets: WebSocket[],
+) {
+  const { headers, tickets } = await capacityTickets(fixture);
+  const store = fixture.nats.store;
+  const persist = store.append.bind(store);
+  const release = Promise.withResolvers<void>();
+  const filled = Promise.withResolvers<void>();
+  let started = 0;
+  let closing = false;
+  // Save each start, then hold its reply to keep every upgrade in progress.
+  async function holdStartResponse(command: AppendCommand) {
+    const result = await persist(command);
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'computer.view_started') {
+      started++;
+      if (started === 16) filled.resolve();
+      await release.promise;
+    }
+    return result;
+  }
+  const audit = vi.spyOn(store, 'append');
+  audit.mockImplementation(holdStartResponse);
+  function upgradeFailed(error: Error) {
+    if (!closing) filled.reject(error);
+  }
+  function upgradeRefused(_request: unknown, response: IncomingMessage) {
+    filled.reject(new Error(`Opening viewer returned ${response.statusCode}`));
+  }
+  async function releaseCapacity() {
+    closing = true;
+    const before = await store.head();
+    for (const socket of sockets) socket.terminate();
+    release.resolve();
+    let stopped = 0;
+    for await (const record of store.subscribe(before + 1)) {
+      if (record.event.type === 'computer.view_stopped') stopped++;
+      if (stopped === 16) break;
+    }
+    audit.mockRestore();
+  }
+  try {
+    const upgradeUrl = `${address.replace('http:', 'ws:')}/ws/conversations/chat/view`;
+    const socketArguments = { headers };
+    for (const ticket of tickets) {
+      const protocols = ['binary', ticket];
+      const socket = new WebSocket(upgradeUrl, protocols, socketArguments);
+      socket.on('error', upgradeFailed);
+      socket.on('unexpected-response', upgradeRefused);
+      sockets.push(socket);
+    }
+    await filled.promise;
+    const before = await store.head();
+    expect(await refusedUpgrade(address, headers)).toBe(403);
+    expect(await store.head()).toBe(before + 1);
+    const expectedRefusal = { reason: 'capacity' };
+    for await (const record of store.subscribe(before + 1)) {
+      expect(record.event.type).toBe('computer.view_refused');
+      expect(record.event.data).toMatchObject(expectedRefusal);
+      break;
+    }
+    return releaseCapacity;
+  } catch (error) {
+    closing = true;
+    release.resolve();
+    audit.mockRestore();
+    throw error;
+  }
+}
+
+function noCapacityToRelease() {
+  return Promise.resolve();
+}
+
+async function upgradeFixture(atCapacity: boolean) {
   const fixture = await viewFixture(openDesktop);
+  let releaseCapacity = noCapacityToRelease;
+  const sockets: WebSocket[] = [];
+  async function close() {
+    await releaseCapacity();
+    for (const socket of sockets) socket.terminate();
+    await fixture.close();
+  }
   try {
     const listenArguments = { host: '127.0.0.1', port: 0 };
     const address = await fixture.app.listen(listenArguments);
+    if (atCapacity) {
+      releaseCapacity = await fillViewerCapacity(fixture, address, sockets);
+    }
+    return { ...fixture, address, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
+}
+
+async function checkAnonymousUpgrade(atCapacity: boolean) {
+  const fixture = await upgradeFixture(atCapacity);
+  try {
     const headers = { origin: new URL(fixture.config.redirectUri).origin };
     const before = await fixture.nats.store.head();
-    expect(await refusedUpgrade(address, headers)).toBe(403);
+    expect(await refusedUpgrade(fixture.address, headers)).toBe(403);
     expect(await fixture.nats.store.head()).toBe(before);
   } finally {
     await fixture.close();
   }
 }
 
-async function refuseAnonymousCapacityUpgrade() {
-  const capacity = vi.spyOn(ViewSessions.prototype, 'open');
-  capacity.mockImplementation(refuseAtCapacity);
-  try {
-    await refuseAnonymousUpgrade();
-    expect(capacity).toHaveBeenCalledOnce();
-  } finally {
-    capacity.mockRestore();
-  }
+async function refuseAnonymousUpgrade() {
+  await checkAnonymousUpgrade(false);
 }
 
-async function checkOriginDecisions(route: 'admission' | 'upgrade') {
-  const fixture = await viewFixture(openDesktop);
+async function refuseAnonymousCapacityUpgrade() {
+  await checkAnonymousUpgrade(true);
+}
+
+async function checkOriginDecisions(route: 'admission' | 'upgrade', atCapacity = false) {
+  const fixture = await upgradeFixture(atCapacity);
   try {
-    const { app, config, nats } = fixture;
+    const { app, config, nats, address } = fixture;
     const sessionArguments = {
       sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
       exp: Math.floor(Date.now() / 1000) + 120,
     };
     const session = encodeSession(config, sessionArguments);
-    const listenArguments = { host: '127.0.0.1', port: 0 };
-    const address = await app.listen(listenArguments);
     const origins = [undefined, 'https://hostile.example.test'];
     const sessions = [
       { name: 'valid session', value: session, auditCount: 1 },
@@ -210,14 +327,7 @@ async function auditUpgradeOriginDecisions() {
 }
 
 async function auditCapacityOriginDecisions() {
-  const capacity = vi.spyOn(ViewSessions.prototype, 'open');
-  capacity.mockImplementation(refuseAtCapacity);
-  try {
-    await checkOriginDecisions('upgrade');
-    expect(capacity).toHaveBeenCalledTimes(4);
-  } finally {
-    capacity.mockRestore();
-  }
+  await checkOriginDecisions('upgrade', true);
 }
 
 it('refuses missing, invalid and wrong-organisation sessions without adding an event',
