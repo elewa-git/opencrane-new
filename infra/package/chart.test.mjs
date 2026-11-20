@@ -171,22 +171,47 @@ async function scannerFixtureEnvironment(directory, mainValuesSource) {
   return fixtureEnvironment;
 }
 
+function generatePreparationFixture(directory) {
+  const passwords = {
+    server: 'server-test', projection: 'projection-test', dispatcher: 'dispatcher-test',
+    postgres: 'postgres-test', openfga: 'openfga-test',
+  };
+  writeFileSync(join(directory, 'passwords.json'), JSON.stringify(passwords));
+  writeFileSync(join(directory, 'zitadel.json'),
+    JSON.stringify({ users: { owner: { id: 'test-owner' } } }));
+  for (const name of ['ca.crt', 'server.crt', 'server.key',
+    'command.crt', 'command.key', 'command.seed',
+    'projection.crt', 'projection.key', 'projection.seed', 'dispatcher.crt',
+    'dispatcher.key', 'dispatcher.seed', 'token-signing-key.pem',
+    'zitadel-client-secret', 'scanner-ca.crt']) {
+    writeFileSync(join(directory, name), `test-${name}`);
+  }
+}
+
+function writeTokenFixture(directory, enabled) {
+  const record = JSON.stringify({ silo: 'dev', hash: 'a'.repeat(64),
+    expiresAt: '2099-01-01T00:00:00.000Z' });
+  if (enabled) {
+    writeFileSync(join(directory, 'bootstrap-token.json'), record, { mode: 0o600 });
+  }
+  return record;
+}
+
+function readPublicPreparationSettings(directory, values) {
+  const settings = { NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
+    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
+    BOOTSTRAP_TOKEN_FILE: join(directory, 'bootstrap-token.json') };
+  checkPublicSettings(values, settings);
+  return settings;
+}
+
 async function preparedSecretsFixture(withOwner = true, isolated = false, loseTarget = false,
   packageValues = {}, refusesBeforeGeneration = false, mainValuesSource = undefined) {
   const directory = mkdtempSync(join(tmpdir(), 'package-preparation-'));
   const fixtureEnvironment = await scannerFixtureEnvironment(directory, mainValuesSource);
   const tokenBootstrap = packageValues.exposure?.public?.enabled === true;
-  const tokenFile = join(directory, 'bootstrap-token.json');
-  const tokenRecord = JSON.stringify({ silo: 'dev', hash: 'a'.repeat(64),
-    expiresAt: '2099-01-01T00:00:00.000Z' });
-  if (tokenBootstrap) writeFileSync(tokenFile, tokenRecord, { mode: 0o600 });
-  function publicSettingsFixture(input) {
-    const settings = { NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
-      OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
-      BOOTSTRAP_TOKEN_FILE: tokenFile };
-    checkPublicSettings(input, settings);
-    return settings;
-  }
+  const tokenRecord = writeTokenFixture(directory, tokenBootstrap);
+  const publicSettingsFixture = readPublicPreparationSettings.bind(undefined, directory);
   const settings = new Map();
   const secrets = new Map();
   const context = isolated ? 'k3d-opencrane-target-1' : 'k3d-ocn';
@@ -207,22 +232,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   key[3] = 0;
   settings.set('postgres', { POSTGRES_PASSWORD: 'test-only' });
   settings.set('nats', { NATS_LISTEN: '4222' });
-  async function generateFixture() {
-    const passwords = {
-      server: 'server-test', projection: 'projection-test', dispatcher: 'dispatcher-test',
-      postgres: 'postgres-test', openfga: 'openfga-test',
-    };
-    writeFileSync(join(directory, 'passwords.json'), JSON.stringify(passwords));
-    writeFileSync(join(directory, 'zitadel.json'),
-      JSON.stringify({ users: { owner: { id: 'test-owner' } } }));
-    for (const name of ['ca.crt', 'server.crt', 'server.key',
-      'command.crt', 'command.key', 'command.seed',
-      'projection.crt', 'projection.key', 'projection.seed', 'dispatcher.crt',
-      'dispatcher.key', 'dispatcher.seed', 'token-signing-key.pem',
-      'zitadel-client-secret', 'scanner-ca.crt']) {
-      writeFileSync(join(directory, name), `test-${name}`);
-    }
-  }
+  const generateFixture = generatePreparationFixture.bind(undefined, directory);
   async function readOwnerFixture() {
     assert.equal(tokenBootstrap, false, 'Token preparation must not read the development owner');
     if (withOwner) {
