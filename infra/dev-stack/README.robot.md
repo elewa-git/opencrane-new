@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+Fresh owner bootstrap seeds ownership and waits for its permission receipts before
+reporting readiness. An existing owner permission alone is not enough: commands
+also require the saved ownership changes to have reached the permissions service.
+
 `model-stub.ts` accepts `MODEL_STUB_PROXY_HOLD=1` only in a disposable computer
 fixture. A synthetic `PROXY_PROOF` prompt makes the native agent call the offered
 recall tool. The stub leaves that tool response open until the fixture stops.

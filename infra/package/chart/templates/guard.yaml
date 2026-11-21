@@ -1,3 +1,6 @@
+{{- if not (has .Values.models.mode (list "stub" "provider")) -}}
+{{- fail "Unsupported models mode" -}}
+{{- end -}}
 {{- if or .Values.exposure.ingress .Values.exposure.loadBalancer .Values.exposure.funnel -}}
 {{- fail "Public ingress, LoadBalancer and Funnel are refused" -}}
 {{- end -}}
@@ -78,3 +81,7 @@
 {{- fail "Pilot restore needs a backup id" -}}
 {{- end -}}
 {{- end -}}
+
+{{- if and .Values.models.qualification (ne (toString .Values.models.mode) "provider") }}
+{{- fail "Provider qualification requires provider mode" }}
+{{- end }}

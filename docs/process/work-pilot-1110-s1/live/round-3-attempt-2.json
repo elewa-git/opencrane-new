@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "source": "c1c1e28cab57d2613465e4b00a36e63bfc3e2a11",
+  "outcomes": [
+    {
+      "check": "wrong-key reachability",
+      "result": "FAIL",
+      "errorType": "Error",
+      "detail": "Verification must report failed reachability for the wrong key."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

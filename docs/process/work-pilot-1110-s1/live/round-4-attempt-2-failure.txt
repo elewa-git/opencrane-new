@@ -1,0 +1,8 @@
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for getByRole('dialog', { name: 'Connect a provider', exact: true }).getByRole('button', { name: 'Check status', exact: true }).and(getByRole('dialog', { name: 'Connect a provider', exact: true }).locator('button:enabled'))
+
+    at waitForProviderStep ([worktree]/infra/package/provider-settings.ts:35:17)
+    at async createProviderConnection ([worktree]/infra/package/provider-settings.ts:21:3)
+    at async connect ([worktree]/infra/package/provider-journey.test.mjs:189:3)
+    at async file://[worktree]/infra/package/provider-journey.test.mjs:378:3

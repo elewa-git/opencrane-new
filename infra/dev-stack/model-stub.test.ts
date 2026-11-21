@@ -292,3 +292,42 @@ async function readsPdfWhenInlineTextIsUnavailable() {
 }
 test('the PDF stand-in reads the converted file when inline text is unavailable or empty',
   { timeout: 15_000 }, readsPdfWhenInlineTextIsUnavailable);
+
+async function refusesWrongQualificationKey() {
+  const folder = await mkdtemp('/tmp/restricted-stub-');
+  const file = `${folder}/credential`;
+  const value = randomUUID();
+  await writeFile(file, value, { mode: 0o600 });
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID(), MODEL_STUB_MCP_REVISION: 'qualification',
+    MODEL_STUB_MANAGED_FILE: file, MODEL_STUB_REQUIRE_KEY: '1' };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const [output] = await once(stub.stdout, 'data');
+    const port = /Stub ready (\d+)/u.exec(String(output))?.[1];
+    assert(port);
+    const origin = `http://127.0.0.1:${port}`;
+    for (const credential of ['', 'synthetic-wrong-key', value]) {
+      const headers = { authorization: `Bearer ${credential}` };
+      const expected = credential === value ? 200 : 401;
+      const listing = await fetch(`${origin}/v1/models`, { headers });
+      assert.equal(listing.status, expected);
+      const listed = await listing.text();
+      const options = { method: 'POST', headers, body: '{"stream":false}' };
+      const reply = await fetch(`${origin}/v1/responses`, options);
+      assert.equal(reply.status, expected);
+      const answer = await reply.text();
+      assert.equal(listed.includes(value), false);
+      assert.equal(answer.includes(value), false);
+      assert.equal(answer.includes(file), false);
+    }
+  } finally {
+    const stopped = once(stub, 'exit');
+    stub.kill('SIGTERM');
+    await stopped;
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+test('qualification stand-in deterministically refuses missing and wrong keys with 401',
+  { timeout: 15_000 }, refusesWrongQualificationKey);

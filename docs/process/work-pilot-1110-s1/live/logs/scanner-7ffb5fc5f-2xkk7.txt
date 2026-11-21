@@ -1,0 +1,33 @@
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: Global time limit set to 120000 milliseconds.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: Global size limit set to 83886080 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: File size limit set to 22020096 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: Recursion level limit set to 16.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: Files limit set to 2000.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxEmbeddedPE limit set to 41943040 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxHTMLNormalize limit set to 41943040 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxHTMLNoTags limit set to 8388608 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxScriptNormalize limit set to 20971520 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxZipTypeRcg limit set to 1048576 bytes.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxPartitions limit set to 50.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxIconsPE limit set to 100.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: MaxRecHWP3 limit set to 16.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: PCREMatchLimit limit set to 100000.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: PCRERecMatchLimit limit set to 2000.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Limits: PCREMaxFileSize limit set to 104857600.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Archive support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Image (graphics) scanning support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Detection using image fuzzy hash enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Alerting of encrypted archives _and_ documents enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Heuristic alerting enabled for scans that exceed set maximums.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Heuristic alerts enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Portable Executable support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] ELF support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Mail files support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] OLE2 support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] PDF support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] SWF support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] HTML support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] XMLDOCS support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] HWP3 support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] OneNote support enabled.
+[pod/scanner-7ffb5fc5f-2xkk7/engine] Self checking disabled.

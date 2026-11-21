@@ -1,3 +1,4 @@
+import { modelGatewayRoute } from './models-route.ts';
 import { routineLifecycle } from './routine-lifecycle.ts';
 import { bindRoutineBudgetOwner } from './routine-delivery-owner.ts';
 import type { ChildProcess } from 'node:child_process';
@@ -9,7 +10,6 @@ import { readDeploymentQualification } from '../../../scripts/private-memory-qua
 // append events to NATS.
 import { readFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { providerSecrets, BudgetActor, startDecision, startGateway, startEgress,
@@ -82,26 +82,13 @@ try {
     }
     const managedCalls = await readManagedMode(10_000);
     const providerSecretDirectory = process.env['PROVIDER_SECRETS_DIR'];
-    function modelGatewayRoute(): { managedCalls: true } | { keyFile: string } {
-      if (managedCalls) {
-        if (process.env['MODEL_KEY_FILE'] !== undefined) {
-          throw new Error('A fallback key file is still configured after switch-on');
-        }
-        if (!providerSecretDirectory) {
-          throw new Error('Provider custody is required after switch-on');
-        }
-        return { managedCalls: true };
-      }
-      const keyFile = process.env['MODEL_KEY_FILE'] ??
-        resolve(import.meta.dirname, '../../../.keys/.openai-key');
-      return { keyFile };
-    }
+    const modelRoute = modelGatewayRoute(managedCalls, providerSecretDirectory,
+      process.env['MODEL_KEY_FILE']);
     async function requireCurrentMode() {
-      if (!managedCalls && await readManagedMode(2000)) {
+      if ('keyFile' in modelRoute && !managedCalls && await readManagedMode(2000)) {
         throw new Error('Managed provider calls were switched on; restart required');
       }
     }
-    const modelRoute = modelGatewayRoute();
     let verification: Parameters<typeof startDecision>[4];
     if (providerSecretDirectory) {
       verification = {
@@ -148,7 +135,8 @@ try {
       const options = { silo, store: events.store, db: db.db, binding,
         feed: { memberId: unavailableMemberId } };
       return prepareNightlyMaintenance(options, scopeId, nightId,
-        undefined, { actor, secrets: verification?.secrets, managedCalls,
+        undefined, { actor, secrets: verification?.secrets,
+          managedCalls: await readManagedMode(2000),
           qualification: readDeploymentQualification });
     }
     const credentialOptions = await personalDispatchOptions(db.db);

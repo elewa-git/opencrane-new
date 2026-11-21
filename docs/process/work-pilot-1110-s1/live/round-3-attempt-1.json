@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "source": "0e216de4ff012e5b658ac75aab56f7e34c0082f3",
+  "outcomes": [
+    {
+      "check": "admin invitation and sign-in",
+      "result": "FAIL",
+      "errorType": "AssertionError",
+      "detail": "The separate admin must accept the owner invitation."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

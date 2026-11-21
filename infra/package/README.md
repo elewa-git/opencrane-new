@@ -22,6 +22,7 @@ flowchart LR
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
   package -->|installs apps and prepares computer settings| apps["Server, website, workers and computer<br/>product services"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
+  apps -->|uses the stand-in or a connected provider| models["Model gateway"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
   package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
 ```
@@ -31,9 +32,10 @@ flowchart LR
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
-- Keep private settings in named Secrets and refuse public network exposure. Chats need no key volume.
+- Keep private settings in named Secrets and refuse public network exposure.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log, sign-in and a first owner for local testing.
+- Choose the stand-in model or private storage for a provider connected in Settings.
 - Set the installation's public organisation name.
 - Give assistant computers the private gateway address and short-lived passes.
 - Save scheduled backups of events, databases and uploaded files together.
@@ -55,23 +57,27 @@ Not built yet:
 2. **The package starts.** Host, image and settings checks run before Helm installs anything.
    A setup job prepares the databases, event log and first owner; workers start an
    assistant's computer when needed.
-3. **A developer opens the website.** A local port forward connects their browser
+3. **An owner connects a model provider.** With `models.mode: provider`, they save
+   its key in Settings, run the quoted test, select the chat model and switch on.
+   Members can then get real replies. The default install keeps the stand-in.
+4. **A developer opens the website.** A local port forward connects their browser
    to the private website. A missing or changed cluster target stops forwarding.
-4. **A person uploads a file.** The server scans it before saving and sending it
+5. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
-5. **A backup runs.** The job stops writes, drains read tables and saves matching
+6. **A backup runs.** The job stops writes, drains read tables and saves matching
    events, databases and files. It publishes a complete backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-6. **A developer restores a pilot.** A separate empty installation checks the matching
+7. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-7. **A developer checks or removes an install.** Fresh-install checks use new storage
+8. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
+   Provider journey results name the failed step and its expected condition safely.
 
 ## How to run or test it
 
-Run the chart checks from the repository root. The render check needs Helm:
+Run the chart checks from the repository root. The render check needs Helm, tar and the original chart in Git history:
 
 ```sh
 nice -n 10 node --experimental-strip-types --test infra/package/chart.test.mjs

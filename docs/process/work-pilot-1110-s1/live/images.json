@@ -1,0 +1,24 @@
+{
+  "application": {
+    "runId": 44693318189,
+    "revision": "b2879c0d57e4450838c44282a3a7d60a6de2b2dc",
+    "imageDigest": "sha256:d97be71b9515e8d0b0da0ebd0e7512964050bd386b60f66a4426e99db58b0a83"
+  },
+  "scanner": {
+    "runId": 44693322108,
+    "revision": "b2879c0d57e4450838c44282a3a7d60a6de2b2dc",
+    "imageDigest": "sha256:a8a8a4fd9c0bcb8513c6a542fd9bc8d81d242e215a9a02ca270c843046d33db0"
+  },
+  "images": {
+    "server": "k3d-ocn-registry:5000/opencrane/package@sha256:d97be71b9515e8d0b0da0ebd0e7512964050bd386b60f66a4426e99db58b0a83",
+    "web": "k3d-ocn-registry:5000/opencrane/package@sha256:d97be71b9515e8d0b0da0ebd0e7512964050bd386b60f66a4426e99db58b0a83",
+    "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+    "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+    "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+    "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+    "scanner": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a8a8a4fd9c0bcb8513c6a542fd9bc8d81d242e215a9a02ca270c843046d33db0",
+    "objects": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c"
+  },
+  "namespace": "opencrane-package-1",
+  "namespaceUid": "7559dcdf-84eb-4f2e-b0a6-c2cf88c64a40"
+}

@@ -1,0 +1,57 @@
+{
+  "source": "ba03d8519435dff14bf42d6339975d9dc874e912",
+  "dispatcher": {
+    "pod": "worker-dispatcher-bc6cb9d95-dh9gg",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 1,
+        "state": [
+          "running"
+        ],
+        "lastTermination": {
+          "reason": "Error",
+          "exitCode": 1,
+          "finishedAt": "2026-11-20T13:45:26Z"
+        }
+      }
+    ]
+  },
+  "previousLog": "UNAVAILABLE: the Kubernetes previous-container endpoint returned unable to retrieve container logs before teardown.",
+  "currentFatal": {
+    "utc": "2026-11-20T13:46:02.229Z",
+    "reason": "pool_acquisition_timeout",
+    "location": "libs/projections/src/pg.ts:46",
+    "caller": "dispatchLocked"
+  },
+  "load1Maximum": 11.42,
+  "databaseWaitSnapshot": "Captured after the dispatcher began shutdown. No handler connections remained; this does not establish the earlier pool state.",
+  "paidCalls": 0,
+  "paidCents": 0
+}

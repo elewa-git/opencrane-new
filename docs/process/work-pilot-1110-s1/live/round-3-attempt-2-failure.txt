@@ -1,0 +1,10 @@
+locator.isVisible: Error: strict mode violation: getByRole('button', { name: 'Check status', exact: true }) resolved to 2 elements:
+    1) <button type="button" class="button secondary" _ngcontent-ng-c3166604310=""> Check status </button> aka getByRole('region', { name: 'Model providers' }).getByRole('button', { name: 'Check status' })
+    2) <button type="button" class="button secondary" _ngcontent-ng-c3166604310="">Check status</button> aka getByRole('region', { name: 'Provider verification facts' }).getByRole('button', { name: 'Check status' })
+
+Call log:
+    - checking visibility of getByRole('button', { name: 'Check status', exact: true })
+
+    at waitForFact ([worktree]/infra/package/provider-journey.test.mjs:145:23)
+    at async connect ([worktree]/infra/package/provider-journey.test.mjs:208:3)
+    at async file://[worktree]/infra/package/provider-journey.test.mjs:378:3

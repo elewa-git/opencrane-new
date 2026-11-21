@@ -35,6 +35,7 @@ export type BackupSource = {
 };
 export type ScheduledBackupOptions = {
   directory: string; id: string; silo: string; images: Record<string, string>;
+  providerMode?: boolean;
 };
 
 export async function privateDirectory(directory: string) {

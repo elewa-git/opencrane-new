@@ -17,7 +17,7 @@ The browser uses the website's own address for server connections.
 ```mermaid
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
-  web -->|sends requests and messages| server["apps/server<br/>back end"]
+  web -->|sends settings changes and chat messages| server["apps/server<br/>back end"]
   server -->|returns saved and live results| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
@@ -36,6 +36,7 @@ flowchart LR
 - Show permitted memory facts and support personal saving, correction and forgetting.
 - Let members choose personal tool keys and which assistants may use them.
 - Let admins manage people, groups, assistants, model providers and tool servers.
+- Connect, test and switch on a provider for member chats through Settings.
 - Show spending, budgets, held money and permitted organisation history.
 - Keep unknown save results tied to their original reference while checking status.
 - Support phones, keyboard navigation and clear messages when access changes.

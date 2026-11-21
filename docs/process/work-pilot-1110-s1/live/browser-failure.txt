@@ -1,0 +1,15 @@
+FAIL: API response-body inspection during navigation.
+
+node:internal/process/promises:394
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+response.text: Protocol error (Network.getResponseBody): No resource with given identifier found
+Response body is not available for a response that was navigated away from. Read response.body() before triggering any navigation.
+    at inspect ([worktree]/infra/package/provider-journey.test.mjs:90:33)
+    at _Page.inspectReply ([worktree]/infra/package/provider-journey.test.mjs:93:18) {
+  log: [],
+  name: 'Error'
+}
+
+Node.js v22.23.3

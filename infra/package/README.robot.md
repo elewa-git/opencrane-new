@@ -22,7 +22,9 @@ keep each screen's fallback. This setting grants no access and adds no API route
 that the value reaches the web container.
 
 The root `.dockerignore` excludes repository test folders and test files from the
-package build. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
+package build. Its allow-list includes provider startup, model settings and the fleet
+guard. `runtime-context.test.mjs` checks their actual Docker build context before
+the application image is built. It includes both `web.mjs` and its shared `web-page.mjs` renderer.
 The runtime cleanup also removes the nested `fast-uri/test` and
 `json-schema-traverse/spec` folders installed with server dependencies.
 It keeps the image scanner files used by the server's image evidence import,
@@ -67,6 +69,8 @@ then runs `prepare.ts` with the private values file. That command creates eight
 named Kubernetes secrets from files under the claimed slot. It also prepares the
 development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
 values in Helm values, command arguments or receipts.
+Owner bootstrap seeds ownership and checks its permission receipts before opening
+the server, so the first owner command does not race an unapplied ownership change.
 The owner bootstrap links the separate development sign-in account to the
 privately configured owner member in this install. It does not edit the existing
 Zitadel user with that email.
@@ -81,7 +85,8 @@ references; this does not qualify live gateway delivery in a packaged install. T
 An init container copies those files into memory, gives them to the `node` user
 and sets mode 0400. The server, model process, workers and bootstrap Job mount
 the copy read-only. Conversations need no key volume or wrapping Secret.
-The model can call only the local stub. The `postgres` secret holds PostgreSQL startup
+The default `models.mode: stub` keeps the local stand-in. Set `models.mode: provider`
+before preparation to use a connected provider. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
 database setup credentials. The installer checks all eight names and required
@@ -166,6 +171,96 @@ port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and
 the scanner run inside this chart. The file worker still projects events; object
 storage is content, and the upload command remains the only business write.
+
+## Default render regression
+
+`chart-render.test.mjs` extracts the original chart from commit
+`c791103b365ced8fd56195ded9d0dcfabf202597` with `git archive` and tar. It renders
+that chart and the current default chart with the same Helm executable, namespace
+and values, then compares complete output bytes. The explicit stub render must
+also match. This keeps the default contract exact when Helm versions format YAML
+differently. Keep that commit available when running the package tests.
+
+## Connected model provider
+
+`models.mode` accepts `stub` (default) or `provider`. Preflight and Helm refuse other
+values. The default chart output stays byte-for-byte unchanged. Provider preparation
+writes no fallback key or local stub settings. The launcher starts managed routing
+before setup; recorded switch-on is still required for admission.
+
+Provider mode creates a 1 GiB `provider-secrets` PVC. The startup permission check
+and server mount it read-write; models mounts it read-only. The server and models
+receive `PROVIDER_SECRETS_DIR=/var/lib/opencrane/provider-secrets/keys`. The Pod uses
+`fsGroupChangePolicy: OnRootMismatch`. Keep the volume root group-managed so a
+remount preserves private children. Before either process starts, the init check
+repairs the keys directory to 0700 and each regular key file to 0600, owned by uid
+1000. It refuses symlinks, hard links and unexpected file types. Workers, bootstrap,
+website, scanner and backup Jobs never mount this volume. Key backup and recovery
+remain outside this slice; restoring events alone does not restore credentials.
+
+The models container receives `PACKAGE_PROVIDER_MODE=1` and skips its local stand-in.
+Provider mode also runs the routines projection, which default-model selection
+needs. Scheduled backups wait for its checkpoint and pause and resume it with the
+other read tables.
+
+Sign in as an admin or owner and open Settings, then Models. Create an OpenAI
+connection, save its private key, check reachability and accept the quoted test.
+Enable the chat model, select the chat default, pause new calls and switch on member
+chats. The server still checks current access, saved verification, explicit default
+selection and drained calls. A missing key cannot send a call or reserve money.
+Keys are never read back. Keep them out of values, environment settings, arguments
+and receipts.
+
+For free packaged qualification, set `models: { mode: provider, qualification: true }`
+before private preparation. This starts a separate `model-qualification` Deployment
+and ClusterIP service running `model-stub.ts`. The only upstream is
+`model-qualification:43003`; the launcher refuses any other destination or fallback
+key. Preparation writes a random synthetic credential to the private
+`model-qualification-key` file and a separate `model-qualification` Secret. Only the
+stand-in mounts that Secret; runtime file Secrets contain no copy. The stand-in
+requires its credential and returns 401 for every wrong or missing key. Its network
+policy permits requests only from the server Pod and denies outbound traffic.
+The synthetic credential still goes through Settings and ordinary provider custody.
+The fleet marker remains set; `DEV_REAL_PROVIDER` is never set for this route.
+Paid qualification remains a separate, explicitly authorised journey.
+
+`provider-journey.test.mjs` follows the visible Settings setup. It scopes key entry
+and actions to the open, named dialog, waits for the named step and uses an enabled Check
+status control while the original change is applying. A disabled control does not
+stop the runner from following automatic advancement to the next step. Closed replacement dialogs are not
+key-entry targets. Verification and model-selection status reads use that same
+open dialog even when a background provider row also offers Check status.
+The setup driver keeps the expected next heading in its click target too. If
+automatic advancement removes Check status while the pointer moves, Playwright
+can finish on that heading instead of waiting for the old button. The next-step
+and visible-key assertions still apply at both widths.
+`journey-provider-settings.test.ts` reproduces that pending
+creation and key-save path in Chromium at 1280 and 390 px. The live journey saves
+both new-key form screenshots before typing, checks the browser refusal, and
+confirms HTTP 401 for that same synthetic wrong credential from the server Pod.
+The private probe passes the credential through stdin and records only its status.
+It reads the native Fetch response's numeric status; the browser request API has
+a different status method. `journey-provider-probe.test.ts` pins the native 401 response.
+Before navigating, the driver waits for current network activity and pending API
+body inspections to finish. An inspection failure still fails the journey and is
+recorded in its receipt; it cannot become an unhandled rejection during navigation.
+`journey-provider-navigation.test.ts` reproduces Chromium discarding an old response
+body and verifies that a failed disclosure inspection still refuses navigation.
+Before recording PASS, the driver closes the browser and checks again for any
+inspection failure received during shutdown.
+The result records the current operation, a fixed expected condition and a bounded
+error category on failure. It never copies exception messages, names or page content
+into the public result. Detailed failures remain in the private slot for collection
+before teardown. `journey-provider-failure.test.ts` checks the safe result contract.
+
+The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
+packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2
+(Apache-2.0 with the package's Debian main notices). Their package notices and versions
+were read in the pinned Node base against the signed bookworm snapshot of 13 July
+2026. The inventory and authenticated main-index list include all three. The gateway
+uses `/etc/ssl/certs/ca-certificates.crt` from the image; no host trust mount is needed.
+The saved-image test requires a non-empty, parseable certificate bundle. These source
+changes grant no image approval; use only exact-source CI-approved images to install.
 
 ## Packaged upload services
 
@@ -268,12 +363,12 @@ their integrity-checked lockfile, the exact executable and launcher hashes, and
 four OpenCrane AGPL helpers. The package source is the existing pinned spike
 lockfile. The Dockerfile checks the executable hash, launcher hash and CLI version
 before copying only those files. It does not copy the computer filesystem or
-download anything when the native check runs. The current 580-component inventory
+download anything when the native check runs. The current 583-component inventory
 includes those packages. The image layer check verifies their exact executable,
-launcher and helper hashes against the existing native inventory.
-`native-runtime-source.test.mjs` also compares the four repository helpers with
-that inventory before an image build, so merged helper changes cannot leave a
-stale source record unnoticed.
+launcher and helper hashes against the native inventory. `SourceReviewTests` in
+`image-layers.test.py` and `native-runtime-source.test.mjs` compare the four
+repository helpers with their reviewed hashes before a build. Their AGPL source
+review follows the current repository code.
 
 ## Package image promotion
 
@@ -312,8 +407,8 @@ checkout. It follows runtime imports after removing TypeScript types, starting a
 both bootstrap programs, `scheduled-backup-run.ts` and `infra/dev-stack/secondary-models.ts`,
 the chart’s model entry point. The backup runner, collector, source adapter and event
 collector have explicit Docker context exceptions and image-file allowlist entries.
-The package deliberately uses the secondary stack’s fake model
-for local install checks. Its bridge and tool-rehearsal helper ship through the same
+The package uses the secondary stack’s stand-in by default. Provider mode skips
+that process and its relay port. Its bridge and tool-rehearsal helper ship through the same
 explicit `.dockerignore` exceptions as the launcher and stub. Removing a required
 imported file refuses even when the entry point remains. It also checks every
 shipped TypeScript module for runtime imports from test folders. The existing bootstrap source suite checks that every
@@ -328,8 +423,9 @@ made-up database, event-log, access and Kubernetes replies. Only the identity fi
 and service-account reads receive made-up data. The generated environment files
 stay in the container's temporary filesystem. The container keeps the image's
 user and entry point, has no network and mounts no host settings. Its success
-requires the final owner-ready update; a settings refusal cannot pass. Failures
-withhold dependency output and fixture values.
+requires the final owner-ready update and a checked ownership permission receipt.
+The event-log fixture retains the invitation, join and ownership seed in order.
+A settings refusal cannot pass. Failures withhold dependency output and fixture values.
 These checks do not replace the complete Syft scan, licence review or fresh install.
 
 The `packageImage` record and role pins in `reviewed-images.json` are the historical
@@ -370,7 +466,7 @@ substitute. Package preparation downloads both exact-source approvals and images
 the shared scanner fetch path, pinned to github.com, and publishes their exact digests
 only to the existing development registry. No public image is published.
 
-The current image has a source-bound all-layer scan. Its 88 Debian package versions
+The runtime requires a source-bound all-layer scan. Its 91 Debian package versions
 were checked again against authenticated main indexes; `package-debian-main.json`
 records their signed index hashes. Publication uses the existing local registry;
 fresh-install qualification remains separate. R3 approval is separate. Unknown licences or open

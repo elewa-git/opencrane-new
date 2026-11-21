@@ -316,6 +316,8 @@ async function copiesProductionImports() {
     await copyPackagedFixture(directory);
     const copied = await readFile(join(directory, 'infra/dev-stack/package-review.ts'), 'utf8');
     assert.match(copied, /export type PackageReview/u);
+    const modelSettings = await readFile(join(directory, 'infra/package/model-settings.ts'), 'utf8');
+    assert.equal(modelSettings, await readFile('infra/package/model-settings.ts', 'utf8'));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

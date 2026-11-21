@@ -1,0 +1,5 @@
+Error: Provider setup did not reach the next step
+    at waitForProviderStep (file://[worktree]/infra/package/provider-settings.ts:37:9)
+    at async createProviderConnection (file://[worktree]/infra/package/provider-settings.ts:21:3)
+    at async connect (file://[worktree]/infra/package/provider-journey.test.mjs:189:3)
+    at async file://[worktree]/infra/package/provider-journey.test.mjs:377:3

@@ -47,7 +47,7 @@ Not built yet:
 1. **A developer claims a stack.** A claim reserves one of two spare copies.
    Each copy has its own ports, data and private keys. Cleanup removes only that copy.
 2. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
-   provider, then starts the apps. It waits for the website and dispatcher before
+   provider, then starts the apps. It checks owner permissions, the website and dispatcher before
    running the core browser journey.
 3. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,

@@ -24,6 +24,15 @@ RUN nice -n 10 npm ci && nice -n 10 npm run build -w apps/web && nice -n 10 npm 
 
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS runtime
 WORKDIR /app
+# Keep the gateway's HTTPS roots in the image, from the authenticated Debian main snapshot.
+RUN printf '%s\n' \
+      'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260713T000000Z bookworm main' \
+      > /tmp/https-main.list && \
+    apt-get -o Dir::Etc::sourcelist=/tmp/https-main.list -o Dir::Etc::sourceparts=- update && \
+    apt-get -o Dir::Etc::sourcelist=/tmp/https-main.list -o Dir::Etc::sourceparts=- \
+      install -y --no-install-recommends ca-certificates=20230311+deb12u1 \
+      openssl=3.0.20-1~deb12u2 libssl3=3.0.20-1~deb12u2 && \
+    rm -rf /var/lib/apt/lists/* /tmp/https-main.list
 COPY --from=build /app /app
 COPY --from=runner-protection /app/scripts/private-memory-qualification/runner-protection.node \
   /app/scripts/private-memory-qualification/runner-protection.node

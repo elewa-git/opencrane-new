@@ -1,0 +1,79 @@
+[pod/postgres-0/postgres] The files belonging to this database system will be owned by user "postgres".
+[pod/postgres-0/postgres] This user must also own the server process.
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] The database cluster will be initialized with locale "en_US.utf8".
+[pod/postgres-0/postgres] The default database encoding has accordingly been set to "UTF8".
+[pod/postgres-0/postgres] The default text search configuration will be set to "english".
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] Data page checksums are disabled.
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] fixing permissions on existing directory /var/lib/postgresql/data ... ok
+[pod/postgres-0/postgres] creating subdirectories ... ok
+[pod/postgres-0/postgres] selecting dynamic shared memory implementation ... posix
+[pod/postgres-0/postgres] selecting default "max_connections" ... 100
+[pod/postgres-0/postgres] selecting default "shared_buffers" ... 128MB
+[pod/postgres-0/postgres] selecting default time zone ... Etc/UTC
+[pod/postgres-0/postgres] creating configuration files ... ok
+[pod/postgres-0/postgres] running bootstrap script ... ok
+[pod/postgres-0/postgres] performing post-bootstrap initialization ... ok
+[pod/postgres-0/postgres] syncing data to disk ... ok
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] Success. You can now start the database server using:
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres]     pg_ctl -D /var/lib/postgresql/data -l logfile start
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] initdb: warning: enabling "trust" authentication for local connections
+[pod/postgres-0/postgres] initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+[pod/postgres-0/postgres] waiting for server to start....2026-11-20 06:19:34.737 UTC [60] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+[pod/postgres-0/postgres] 2026-11-20 06:19:34.741 UTC [60] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+[pod/postgres-0/postgres] 2026-11-20 06:19:34.751 UTC [63] LOG:  database system was shut down at 2026-11-20 06:19:34 UTC
+[pod/postgres-0/postgres] 2026-11-20 06:19:34.770 UTC [60] LOG:  database system is ready to accept connections
+[pod/postgres-0/postgres]  done
+[pod/postgres-0/postgres] server started
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] waiting for server to shut down...2026-11-20 06:19:34.991 UTC [60] LOG:  received fast shutdown request
+[pod/postgres-0/postgres] .2026-11-20 06:19:34.994 UTC [60] LOG:  aborting any active transactions
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.003 UTC [60] LOG:  background worker "logical replication launcher" (PID 66) exited with exit code 1
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.003 UTC [61] LOG:  shutting down
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.006 UTC [61] LOG:  checkpoint starting: shutdown immediate
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.033 UTC [61] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.013 s, sync=0.003 s, total=0.030 s; sync files=2, longest=0.002 s, average=0.002 s; distance=0 kB, estimate=0 kB; lsn=0/14EF800, redo lsn=0/14EF800
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.064 UTC [60] LOG:  database system is shut down
+[pod/postgres-0/postgres]  done
+[pod/postgres-0/postgres] server stopped
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] PostgreSQL init process complete; ready for start up.
+[pod/postgres-0/postgres]
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.146 UTC [1] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.157 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.157 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.163 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.172 UTC [74] LOG:  database system was shut down at 2026-11-20 06:19:35 UTC
+[pod/postgres-0/postgres] 2026-11-20 06:19:35.183 UTC [1] LOG:  database system is ready to accept connections
+[pod/postgres-0/postgres] 2026-11-20 06:19:40.974 UTC [86] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:40.974 UTC [86] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:41.248 UTC [87] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:41.248 UTC [87] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:41.861 UTC [88] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:41.861 UTC [88] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:42.958 UTC [96] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:42.958 UTC [96] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:44.640 UTC [97] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:44.640 UTC [97] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:47.138 UTC [104] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:47.138 UTC [104] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:51.771 UTC [106] FATAL:  password authentication failed for user "openfga"
+[pod/postgres-0/postgres] 2026-11-20 06:19:51.771 UTC [106] DETAIL:  Role "openfga" does not exist.
+[pod/postgres-0/postgres] 	Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+[pod/postgres-0/postgres] 2026-11-20 06:19:56.461 UTC [116] FATAL:  database "openfga" does not exist
+[pod/postgres-0/postgres] 2026-11-20 06:20:01.585 UTC [125] ERROR:  relation "goose_db_version" does not exist at character 36
+[pod/postgres-0/postgres] 2026-11-20 06:20:01.585 UTC [125] STATEMENT:  SELECT version_id, is_applied from goose_db_version ORDER BY id DESC
+[pod/postgres-0/postgres] 2026-11-20 06:24:35.272 UTC [72] LOG:  checkpoint starting: time

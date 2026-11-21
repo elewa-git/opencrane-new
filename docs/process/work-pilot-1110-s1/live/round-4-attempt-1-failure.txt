@@ -1,0 +1,4 @@
+Error: The selected model default did not finish applying
+    at waitForDefault (file://[worktree]/infra/package/provider-journey.test.mjs:163:9)
+    at async connect (file://[worktree]/infra/package/provider-journey.test.mjs:239:3)
+    at async file://[worktree]/infra/package/provider-journey.test.mjs:378:3

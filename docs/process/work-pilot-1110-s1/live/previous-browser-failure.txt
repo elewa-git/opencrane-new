@@ -1,0 +1,2 @@
+FAIL: Settings setup, wrong-key step.
+Playwright locator.fill timed out after 30 seconds on getByLabel('API key'). The locator resolved to the password input with id 'replace-provider-key', but that input was not visible. The wrong key was not entered. No 401 result was observed.

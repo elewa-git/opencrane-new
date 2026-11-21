@@ -1217,7 +1217,7 @@ flowchart LR
   web["apps/web<br/>sign-in, chat, dated approvals cleared on closure, native refusals, saved read and archive choices, access clearing, welcome survey and admin pages"] -->|requests, spending corrections, status reads, one subscription per connection, upload list checks, catch-up after reconnects and access closures| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows saved Stop outcomes and real failures for replies and screenshots| capture["Reply and screenshot status<br/>workspace and viewer"]
-  web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, setup access and receipts"]
+  web -->|saves keys and grants; reads model use and facts| providers["Provider pages<br/>keys, checks, model choices, chat switch-on, access and receipts"]
   web -->|chooses audiences, checks person and assistant pairs, reviews tools and keeps results| integrations["Integrations pages<br/>register, add, package admission, changes, tools and access explanations"]
   web -->|checks role and removal outcomes; clears on lost access| people["People pages<br/>member directory, group changes, owners and invitations"]
   web -->|reads, stores, corrects and forgets| memory["Memory panel<br/>scopes, personal facts, sources and checked changes"]
@@ -1640,3 +1640,12 @@ widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.
 | [welcome](src/app/welcome/README.md) | Saved welcome-survey answers and progress. |
 | [public](public/README.md) | Files the browser loads directly. |
 | [public/chat](public/chat/README.md) | The paper background texture. |
+
+## Switching on a chat provider
+
+Models & providers shows member-chat setup for connections with enabled models.
+`provider-chat.ts` selects a model through the existing bindings route, pauses calls
+through the drain route and requests switch-on. Each action reads current positions
+first. An unknown command keeps its original reference and blocks another write
+until Check chat setup finds the receipt. No control grants model access or bypasses
+the server's verification, drain or default-selection checks.
