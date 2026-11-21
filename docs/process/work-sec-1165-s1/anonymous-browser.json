@@ -1,0 +1,22 @@
+[
+  {
+    "width": 1280,
+    "status": 403,
+    "bodyKeys": [
+      "attemptId",
+      "status"
+    ],
+    "attemptIdPresent": true,
+    "applicationCookies": 0
+  },
+  {
+    "width": 390,
+    "status": 403,
+    "bodyKeys": [
+      "attemptId",
+      "status"
+    ],
+    "attemptIdPresent": true,
+    "applicationCookies": 0
+  }
+]

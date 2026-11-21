@@ -17,7 +17,7 @@ The launcher starts the apps with their service connections and private settings
 ```mermaid
 flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
-  stack -->|starts services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
+  stack -->|starts and checks services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
   stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
@@ -28,7 +28,8 @@ flowchart LR
 
 - Start and stop local services and apps with private credentials.
 - Keep two spare test stacks separate from each other and the owner's stack.
-- Check listener addresses, upload scanning and worker readiness before browser checks.
+- Check listener addresses, PostgreSQL TCP readiness, upload scanning and worker
+  readiness before browser checks.
 - Prepare test sign-in and a free stand-in AI provider.
 - Preserve private survey and memory keys across restarts; chats need no key storage.
 - Apply safe background subscription changes while services are stopped.
