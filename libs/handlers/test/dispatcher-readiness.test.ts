@@ -26,6 +26,9 @@ it('withdraws readiness while a failed dispatch waits for database unlock', asyn
         unlockStarted.resolve();
         await releaseUnlock.promise;
       }
+      if (sql.startsWith('SELECT silo, manifest, sequence')) {
+        return { rows: [state] };
+      }
       return { rows: [] };
     },
   };

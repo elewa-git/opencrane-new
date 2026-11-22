@@ -20,39 +20,59 @@ async function barrier() {
     /* Parent kills this process. */
   });
 }
-const db: Db = {
-  query: (sql, values) => base.query(sql, values),
-  async transaction(work) {
+function crashStatement(): string {
+  if (mode.startsWith('dispatcher')) {
+    return 'UPDATE handler_dispatcher';
+  }
+  if (mode.startsWith('projection')) {
+    return 'UPDATE projection_checkpoints';
+  }
+  return 'INSERT INTO handler_receipts';
+}
+
+function crashDb(database: Db): Db {
+  function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+    return database.query<Row>(sql, values);
+  }
+  async function transaction<T>(work: (tx: Query) => Promise<T>): Promise<T> {
     let target = false;
-    const result = await base.transaction(async (tx) => {
-      const result = await work({
-        query: async (sql, values) => {
-          if (mode === "dispatcher-after-ack" && sql.startsWith("UPDATE handler_dispatcher") && values?.[0] === 2) {
-            await barrier();
-          }
-          if (
-            sql.startsWith(
-              mode.startsWith("dispatcher")
-                ? "UPDATE handler_dispatcher"
-                : mode.startsWith("projection") ? "UPDATE projection_checkpoints" : "INSERT INTO handler_receipts",
-            )
-          ) {
-            target = true;
-          }
-          return tx.query(sql, values);
-        },
-      });
-      if (target && mode.endsWith("before-commit")) {
+    async function run(tx: Query) {
+      async function query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+        const awaitingSecondCheckpoint = mode === 'dispatcher-after-ack' &&
+          sql.startsWith('UPDATE handler_dispatcher') && values?.[0] === 2;
+        if (awaitingSecondCheckpoint) {
+          await barrier();
+        }
+        if (sql.startsWith(crashStatement())) {
+          target = true;
+        }
+        return tx.query<Row>(sql, values);
+      }
+      const result = await work({ query });
+      if (target && mode.endsWith('before-commit')) {
         await barrier();
       }
       return result;
-    });
-    if (target && mode.endsWith("after-commit")) {
+    }
+    const result = await database.transaction(run);
+    if (target && mode.endsWith('after-commit')) {
       await barrier();
     }
     return result;
-  },
-};
+  }
+  const db: Db = { query, transaction };
+  if (mode.startsWith('dispatcher')) {
+    async function lock<T>(name: string, work: (locked: Db) => Promise<T>): Promise<T> {
+      async function run(locked: Db) {
+        // Keep the same crash boundaries when dispatch uses its held connection.
+        return work(crashDb(locked));
+      }
+      return database.lock!(name, run);
+    }
+    db.lock = lock;
+  }
+  return db;
+}
 function upgradeCrashDb(database: Db): Db {
   async function lock<T>(name: string, work: (locked: Db) => Promise<T>): Promise<T> {
     async function run(locked: Db) {
@@ -97,9 +117,7 @@ function upgradeCrashDb(database: Db): Db {
   return { ...database, transaction, lock };
 }
 
-if (mode.startsWith("dispatcher")) {
-  db.lock = base.lock!.bind(base);
-}
+const db = crashDb(base);
 if (mode.startsWith("upgrade")) {
   const { store } = await connectEventStore();
   const subscribe = store.subscribe.bind(store);

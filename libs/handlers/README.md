@@ -27,7 +27,7 @@ flowchart LR
   handlers -->|runs reactions and sends saved nightly identifiers| reactions["libs/models and libs/authz<br/>AI rules and permissions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
   handlers -.-> events["libs/events<br/>reaction subscriptions"]
-  handlers -->|stores jobs and completion notes| pg["PostgreSQL<br/>database"]
+  handlers -->|stores jobs through its held connection; saves completion notes| pg["PostgreSQL<br/>database"]
 ```
 
 ## What it is responsible for
@@ -36,6 +36,7 @@ flowchart LR
 - Run related jobs in order, such as changes for one member. Let unrelated jobs
   run alongside them.
 - Keep queued jobs safe across restarts, so none are lost.
+- Keep dispatch working when reactions use the other database connections.
 - Keep a welcome completion's member identifier out of worker attempt logs.
 - Give a hosted image check time to scan bounded files and run its separate tools.
 - Retry failed work. Keep a job that exhausts its retries on the list and put a

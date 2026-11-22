@@ -5,8 +5,8 @@ import { pgDb } from '@opencrane/projections';
 import { dispatch, HandlerRuntime, registerHandler } from '../src/index.ts';
 import { fixture, logger } from './helpers.ts';
 
-async function unusedReaction() {
-  throw new Error('This test dispatches jobs without starting reaction workers');
+function unusedReaction(): Promise<void> {
+  return Promise.reject(new Error('This test dispatches jobs without starting reaction workers'));
 }
 
 async function dispatchWithoutSpareConnection() {
