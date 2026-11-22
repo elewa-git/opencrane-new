@@ -1,11 +1,13 @@
 # Pilot VM sizing and bootstrap receipt
 
-Date: 20 November 2026. Branch: `work/pilot-1162-s1`. Source installed:
+Date: 22 November 2026. Branch: `work/pilot-1162-s1`. Source installed:
 `e0c4a9b063f5cfcdd189134eaa145592727110fb`.
 
 Journey on a fresh dev stack: PARTIAL
 
-The constructor cause is fixed, but the complete sizing matrix is not qualified.
+The constructor cause is fixed. The one-person package sizing observations are recorded below.
+They are measured demand, not a qualified minimum machine size. Three-person sizing was dropped
+from this ticket by the owner because the pilot runs on this box.
 
 ## Source, ownership and fresh installation
 
@@ -93,28 +95,21 @@ must contain Willow-47. The scripted provider can use inline text or read the ex
 fixture when the text is unavailable. Anonymous history reads are refused. Budget results use the
 shared schema.
 
-The collector is prepared to invite and join two additional people through public commands with UUID
-member ids and provision one assistant computer each. This three-person qualification remains NOT
-RUN. The grant fixture records normal grant.given events and waits for their access projection, as
-the existing screen journey does. It changes no access guard. A known xmessage window makes a
-decoded 800 by 600 desktop frame distinguishable from an empty canvas. The three-person procedure
-requires concurrent chat turns, PDF answers and viewers. After the existing 30-second measurement
-window, all three viewers must still show Viewing and a decoded frame.
+The package journey uses one person. A known xmessage window makes a decoded 800 by 600 desktop
+frame distinguishable from an empty canvas.
 
 | People | Width | Result |
 | --- | --- | --- |
 | 1 | 1280 | PASS sign-in, chat, history refusal, PDF answer, decoded desktop and budget |
 | 1 | 390 | PASS sign-in, chat, history refusal and budget; FAIL PDF answer; desktop NOT RUN |
-| 3 | 1280 | NOT RUN: first attempt interrupted; corrected fresh attempt not qualified |
 
-The requested matrix is one person at both widths, then three people at 1280. Three people at 390 is
-NOT RUN. The [qualification status](logs/fix-2/qualification.json),
+The [qualification status](logs/fix-2/qualification.json),
 [assertions](logs/fix-2/browser-result.json) and masked screenshots record each condition. The pod
 snapshot retains restart counts. No restart or incomplete browser result is excused as a pass.
 
-PASS: sanitised startup and service logs were retained before package-down/down. Both owned teardown
-commands exited zero and both slots were released. The first controller exited 143; its journey=0
-field is invalid and its browser FAIL is retained.
+PASS for the earlier run: sanitised startup and service logs were retained before package-down/down.
+Both owned teardown commands exited zero and both slots were released. The first controller exited
+143; its journey=0 field is invalid and its browser FAIL is retained.
 
 ## Earlier attempt in this round
 
@@ -129,14 +124,13 @@ The controlling shell then exited with signal 15. Its cleanup overlapped the bro
 later owner sign-in timeout unreliable. Its final-status file incorrectly reports journey=0, so
 browser-result.json is authoritative and that attempt is not a pass. The collector now stops its
 browser before collecting logs and tearing down on a signal, and separately checks the required
-browser outcomes. The corrected collector retains the signed-in owner when adding the two other
-people. The root measurements describe that first attempt. The [failed browser
+browser outcomes. The root measurements describe that first attempt. The [failed browser
 outcomes](logs/fix-2/attempt-1/browser-result.json), [controller
 status](logs/fix-2/attempt-1/control-status.json), measurements and [masked failure
 screenshot](screenshots/fix-2/failed-extra-1-0-390.png) remain available. No product retry or
 deadline changed.
 
-## Measured demand and minimum planning size
+## Measured one-person demand
 
 Measured on the existing eight-logical-CPU, nominal 16 GiB development box through its single shared
 k3d node. Browsers run outside the measured node, as remote clients would. Added no second container
@@ -156,25 +150,35 @@ Occupied disk uses read-only du -sk on bound PVC paths after matching namespace,
 Image-cache sizes are separate CRI counters. They are neither occupied PVC bytes nor block-I/O
 traffic. OS, image unpacking, retained data and backups also need disk reserve.
 
-The latest incomplete measurement retained 289 observations from 2026-11-20T17:27:05Z to
+The latest one-person measurement retained 289 observations from 2026-11-20T17:27:05Z to
 2026-11-20T17:36:41Z, with 0 error samples. Whole-node peaks were **3.654 CPU cores and 5.12 GiB
 including swap**. Package peaks were 2.640 cores and 2.97 GiB working set; bound-PVC use peaked at
-84.13 MiB. These observations do not cover the required three-person workload.
+84.13 MiB. The run passed the requested 1280-pixel steps, but the 390-pixel PDF answer failed and
+desktop viewing did not run. These numbers describe that measured one-person run only.
 
-NOT RUN: a minimum machine size and measured spare-capacity recommendation cannot be qualified from
-this incomplete matrix. Do not substitute the one-person or synthetic production-browser result for
-the missing live conditions.
+NOT QUALIFIED: these observations do not establish a minimum machine size or spare-capacity
+recommendation.
 
 The existing node and image cache were already running. A smaller physical VM, cold VM
 bootstrap/reboot, long-running workloads and long-term storage growth remain NOT RUN. The bootstrap
 on this host ran only with --dry-run and safely refused its existing Docker socket before writes.
 Local container fixtures use stubbed system operations and cannot qualify a real Ubuntu VM.
 
+## 22 November packaged journey attempt
+
+PARTIAL: after waiting for both secondary slots to be free and the one-minute load to stay below
+six for five minutes, claimed secondary slot 2. `package-prepare --id 2` printed that all listed
+services were stopped, then failed with the exact message:
+`Package command refused; check pins, named secrets and slot ownership`. No browser journey or new
+measurement ran. `package-down --id 2` and `down.sh --id 2` completed; status reported `free`.
+The [captured package preparation output](logs/fix-2/attempt-3/package-prepare.log) records the
+failure. No service logs existed because no package services started.
+
 ## Retained earlier results and own gates
 
 Fix round 1 remains PARTIAL: one-person sign-in/chat/PDF/history refusal/budget passed at both
-widths, desktop failed after upgrade, and three-person qualification was NOT RUN. It measured 3.870
-whole-node cores and 5.23 GiB including swap. Those observations did not establish a minimum. The
+widths and desktop failed after upgrade. It measured 3.870 whole-node cores and 5.23 GiB including
+swap. Those observations did not establish a minimum. The
 [previous
 receipt](https://github.com/elewa-git/opencrane-new/blob/7485b5b531a431208534c0f01a80cf1ec15633b1/docs/process/work-pilot-1162-s1/journey.md)
 and logs/fix-1 retain the failed conditions, earlier website crash and teardown.
