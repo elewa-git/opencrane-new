@@ -1,0 +1,68 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/workspace-native-output.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <checkout>
+
+ ❯ apps/computer/test/workspace-native-output.test.ts (2 tests | 2 failed) 10365ms
+   × keeps native executor output that arrives after an empty poll 4777ms
+   × keeps native output when the reader waits for another native poll 5585ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/computer/test/workspace-native-output.test.ts > keeps native executor output that arrives after an empty poll
+AssertionError: expected { exitCode: +0, text: '' } to deeply equal { exitCode: +0, text: 'Willow-47\n' }
+
+- Expected
++ Received
+
+  {
+    "exitCode": 0,
+-   "text": "Willow-47
+- ",
++   "text": "",
+  }
+
+ ❯ keepsNativeOutput apps/computer/test/workspace-native-output.test.ts:10:32
+      8|     const output = await computer.exec('node', '--experimental-strip-t…
+      9|       '--input-type=module', '-e', nativeOutputProbe, mode);
+     10|     expect(JSON.parse(output)).toEqual({ exitCode: 0, text: 'Willow-47…
+       |                                ^
+     11|   } finally {
+     12|     await computer.close();
+ ❯ keepsOutputAfterEmptyRead apps/computer/test/workspace-native-output.test.ts:17:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/computer/test/workspace-native-output.test.ts > keeps native output when the reader waits for another native poll
+AssertionError: expected { exitCode: +0, text: '' } to deeply equal { exitCode: +0, text: 'Willow-47\n' }
+
+- Expected
++ Received
+
+  {
+    "exitCode": 0,
+-   "text": "Willow-47
+- ",
++   "text": "",
+  }
+
+ ❯ keepsNativeOutput apps/computer/test/workspace-native-output.test.ts:10:32
+      8|     const output = await computer.exec('node', '--experimental-strip-t…
+      9|       '--input-type=module', '-e', nativeOutputProbe, mode);
+     10|     expect(JSON.parse(output)).toEqual({ exitCode: 0, text: 'Willow-47…
+       |                                ^
+     11|   } finally {
+     12|     await computer.close();
+ ❯ keepsOutputWithDelayedReader apps/computer/test/workspace-native-output.test.ts:21:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  21:03:07
+   Duration  16.93s (tests 62%, transform 26%, import 11%)
+
+  Transform  transforming modules took 4.41s · 26% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

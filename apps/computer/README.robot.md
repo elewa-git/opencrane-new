@@ -2009,8 +2009,12 @@ Each following read therefore uses `nextSeq - 1`, including after an empty read.
 Passing `nextSeq` skips one record and can discard the entire snapshot or a later
 attachment or publication chunk. `test/workspace-output.test.ts` checks empty reads,
 consecutive stdout chunks, intervening stderr and separate exit/close records through
-the existing Unix socket protocol. Only stdout enters the returned bytes; both streams
-still count towards the existing 64 KiB output limit.
+the existing Unix socket protocol. Its socket fixture lives in `test/support`.
+`test/workspace-native-output.test.ts` holds Python on stdin and releases its output
+only after observing an empty response from the real executor. A second case holds
+the reader until another native poll has finished. Both keep the final byte assertion.
+Only stdout enters the returned bytes; both streams still count towards the existing
+64 KiB output limit.
 
 ## Checked private launches — P4-15 PR 4l
 

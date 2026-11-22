@@ -46,10 +46,14 @@ using `nextSeq - 1` kept it. The
 [computer reports](logs/main-bridge-reports.json) show the successful first turn and
 the next turn's failure before its start report.
 
-The previous receipts do not retain the underlying computer exceptions, so their
-exact causes cannot be proved retrospectively. The earlier server bridge
-`TimeoutError` in the retained logs came from a NATS stream-info read. That poll
-warning alone does not prove that a model request or desktop connection failed.
+The 17–20 November failures and #1174's failure are not individually proven to be
+this bug. Their receipts do not retain the underlying computer exceptions, so their
+exact causes remain unknown. Even the reproduced main turn recorded only
+`model_error`, without its underlying exception: it is consistent with this defect,
+not conclusively tied to it. The earlier server bridge `TimeoutError` came from a
+NATS stream-info request failure. It is not evidence of lost executor stdout.
+The card's historical-explanation condition remains PARTIAL pending more evidence
+or an owner decision.
 
 ## Fix and source checks
 
@@ -90,6 +94,48 @@ its obsolete direct private-socket driver was deleted. It still requires a compl
 private reply, one model request and no tools. Both native fixtures passed twice.
 Changed functions remain below 80 counted lines and five parameters. No size limit
 was raised and no error catch was added to hide lost output.
+
+## Review fixes and current checks
+
+Date: 22 November 2026. Test-only commit: `9153c393c`; fixture cleanup: `8ea0204af`.
+Fetched `origin` and completed the rebase onto `24aa865d3` without conflicts.
+The computer source and CORE journey remain identical to reviewed head `a6dc02708`.
+No product behaviour changed in this fix round, so the ten recorded fresh runs are
+retained; none were repeated and no secondary stack was claimed.
+
+- **PASS:** replaced the Python sleep with a stdin release after an observed empty
+  real native read. The delayed-reader case first holds the reader until a separate
+  native poll finishes, then requires another empty read before releasing stdout.
+  With the old cursor temporarily restored, both cases returned exit code 0 and
+  empty bytes, failing the unchanged `Willow-47\n` assertion.
+  [Old-reader failures](logs/fix1-native-old-reader-red.txt).
+  Restored the corrected reader immediately after this check; no product change
+  was committed in this round.
+- **PASS:** ran the two existing socket outcome tests before moving their fixture
+  ([before](logs/fix1-unit-before.txt)). Moved protocol and cleanup into the named
+  `test/support/workspace-output-executor.ts` helper. Split spy creation from mock
+  installation, and captured, trimmed and split private requests in separate steps.
+  The finding alleged no behavioural failure; the outcome assertions remain unchanged.
+- **PASS:** 31 tests in five files twice, including both real native cases, both
+  socket cases, artifact reads, publication and attachment input.
+  [First](logs/fix1-green-final-1.txt) and [second](logs/fix1-green-final-2.txt).
+  Commands used `nice -n 10 npx vitest run` with `--maxWorkers=2`.
+- **PASS:** private-capability completion, reply text, single request and empty tool
+  list with unchanged assertions, twice.
+  [First](logs/fix1-private-capabilities-1.txt) and
+  [second](logs/fix1-private-capabilities-2.txt).
+- **PASS:** [typecheck](logs/fix1-typecheck.txt),
+  [event catalogue](logs/fix1-events.txt), [Knip](logs/fix1-knip.txt),
+  [changelog lint](logs/fix1-changelog.txt),
+  [changed-file ESLint](logs/fix1-eslint-final.txt) and
+  [Markdown](logs/fix1-markdown.txt), all under `nice -n 10`.
+  Knip printed two existing configuration hints; it found no unused code.
+
+Checked the changed code against the standard's clean-code table: reused the real
+executor and existing computer fixture, kept named functions small, moved shared
+fixture ownership into test support, and removed the sleep. Added no dependency,
+retry, timeout extension, catch that hides errors or weakened assertion. Access, money
+and memory checks are unchanged. Current CI results are recorded in the PR Evidence.
 
 ## Computer image
 
@@ -210,7 +256,7 @@ runtime dependency was added. No production timeout, retry, refusal assertion
 or size limit was relaxed.
 
 CORE retains its existing approval-journey skip. Full root tests, paid-provider
-checks and private-memory isolation qualification are NOT RUN. CI is awaited after
-the updated receipt is pushed. The worktree is retained.
+checks and private-memory isolation qualification are NOT RUN. CI for the updated
+head is recorded in the PR Evidence. The worktree is retained.
 
 Independent review is left to the orchestrator. No independent review pass is claimed.

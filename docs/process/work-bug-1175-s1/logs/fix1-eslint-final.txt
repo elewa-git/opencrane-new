@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' apps/computer/test/workspace-native-output.test.ts apps/computer/test/workspace-output.test.ts apps/computer/test/support/native-output-probe.ts apps/computer/test/support/workspace-output-executor.ts apps/computer/test/private-capabilities.mjs
