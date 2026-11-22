@@ -20,7 +20,7 @@ The server uses shared libraries to read events, check permissions and load read
 flowchart LR
   web["apps/web<br/>the website"] -->|requests| server["apps/server<br/>the back end"]
   server <-->|work and replies| computer["apps/computer<br/>assistant computers"]
-  server -->|reads and saves events| nats["NATS<br/>the event log"]
+  server -->|reads and saves permitted events| nats["NATS<br/>the event log"]
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
   server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
   server -->|checks permissions| openfga["OpenFGA<br/>permissions service"]
@@ -35,7 +35,8 @@ flowchart LR
 - Serve verified pilot restores with writes and assistant work held.
 - Carry chat messages, assistant work, live replies, stops and tool approvals.
 - Check and scan files before storing them or passing them to a computer.
-- Serve desktop views and screenshots to people with access.
+- Serve desktop views and screenshots to people with access. Refuse signed-out view
+  requests without adding events, and audit signed-in refusals.
 - Manage members, groups, ownership, providers, tool servers and spending settings.
 - Return permitted history, saved results, memory facts and routine details.
 - Check AI calls and record their costs through the separate models process.

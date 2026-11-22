@@ -1,0 +1,14 @@
+[
+  {
+    "file": "service-logs/failure.log",
+    "sourceLines": 1,
+    "safeLines": 0,
+    "publicLines": 0
+  },
+  {
+    "file": "service-logs/last-error.log",
+    "sourceLines": 2,
+    "safeLines": 0,
+    "publicLines": 0
+  }
+]

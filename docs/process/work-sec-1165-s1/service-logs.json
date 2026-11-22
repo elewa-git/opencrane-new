@@ -1,0 +1,98 @@
+[
+  {
+    "file": "service-logs/audit.log",
+    "sourceLines": 902,
+    "safeLines": 902,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/budgets.log",
+    "sourceLines": 902,
+    "safeLines": 902,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/computers.log",
+    "sourceLines": 908,
+    "safeLines": 908,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/connection-custody.log",
+    "sourceLines": 0,
+    "safeLines": 0,
+    "publicLines": 0
+  },
+  {
+    "file": "service-logs/conversations.log",
+    "sourceLines": 1792,
+    "safeLines": 1792,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/dispatcher.log",
+    "sourceLines": 316,
+    "safeLines": 316,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/files.log",
+    "sourceLines": 910,
+    "safeLines": 910,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/mcp-catalogue.log",
+    "sourceLines": 1802,
+    "safeLines": 1802,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/members.log",
+    "sourceLines": 5282,
+    "safeLines": 5282,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/memory.log",
+    "sourceLines": 896,
+    "safeLines": 896,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/minio-tokens.log",
+    "sourceLines": 0,
+    "safeLines": 0,
+    "publicLines": 0
+  },
+  {
+    "file": "service-logs/replay-mcp-catalogue.log",
+    "sourceLines": 871,
+    "safeLines": 870,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/replay-members.log",
+    "sourceLines": 871,
+    "safeLines": 870,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/routines.log",
+    "sourceLines": 910,
+    "safeLines": 910,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/server.log",
+    "sourceLines": 1796,
+    "safeLines": 1794,
+    "publicLines": 221
+  },
+  {
+    "file": "service-logs/web.log",
+    "sourceLines": 704,
+    "safeLines": 0,
+    "publicLines": 0
+  }
+]

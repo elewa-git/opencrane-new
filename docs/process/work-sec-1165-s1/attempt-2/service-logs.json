@@ -1,0 +1,8 @@
+[
+  {
+    "file": "service-logs/failure.log",
+    "sourceLines": 1,
+    "safeLines": 1,
+    "publicLines": 1
+  }
+]

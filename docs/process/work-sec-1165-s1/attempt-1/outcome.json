@@ -1,0 +1,9 @@
+{
+  "startup": "FAIL",
+  "startupExit": 1,
+  "core": "NOT RUN",
+  "teardown": "PASS",
+  "teardownExit": 0,
+  "screenshots": 0,
+  "cause": "The selected credential file path was absent."
+}
