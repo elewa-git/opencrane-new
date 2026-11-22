@@ -83,7 +83,7 @@ run .state/syft scan docker:ocn-computer-runtime -o syft-json=.state/sbom.syft.j
 run docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json
 run docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime -c "$(cat test/notice-completeness.py)" < .state/licence-evidence.json
 run python3 check-licences.py .state/sbom.syft.json .state/osi.json .state/licences.json .state/licence-evidence.json
-run node test/private-capabilities.mjs
+run node --experimental-strip-types test/private-capabilities.mjs
 # Qualify the tracked manifest before moving the release tag.
 docker tag ocn-computer-runtime "$push_registry"/opencrane/computer:qualification
 run docker push "$push_registry"/opencrane/computer:qualification

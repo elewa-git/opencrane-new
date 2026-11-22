@@ -332,7 +332,7 @@ function startClient() {
       }
       const conversationId = wireConversations.get(params.threadId) ?? `chat-${nextRpc}`;
       const turnId = stopRunner ? 'stop-turn' : conversationId;
-      const input = { id: turnId, tools, conversationId };
+      const input = { id: turnId, tools, conversationId, executionMode: 'memory_free' };
       const startParams = { ...params, approvalPolicy: 'never' };
       delete startParams.config;
       return loads.load(input, params.threadId, startParams);
