@@ -5,9 +5,8 @@ Date: 22 November 2026. Branch: `work/pilot-1162-s1`. Source installed:
 
 Journey on a fresh dev stack: PARTIAL
 
-The constructor cause is fixed. The one-person package sizing observations are recorded below.
-They are measured demand, not a qualified minimum machine size. Three-person sizing was dropped
-from this ticket by the owner because the pilot runs on this box.
+The constructor cause is fixed. The package observations below describe one person only. They are
+measured demand, not a qualified minimum machine size.
 
 ## Source, ownership and fresh installation
 
@@ -164,15 +163,25 @@ bootstrap/reboot, long-running workloads and long-term storage growth remain NOT
 on this host ran only with --dry-run and safely refused its existing Docker socket before writes.
 Local container fixtures use stubbed system operations and cannot qualify a real Ubuntu VM.
 
-## 22 November packaged journey attempt
+## 22 November packaged journey attempts
 
-PARTIAL: after waiting for both secondary slots to be free and the one-minute load to stay below
-six for five minutes, claimed secondary slot 2. `package-prepare --id 2` printed that all listed
-services were stopped, then failed with the exact message:
-`Package command refused; check pins, named secrets and slot ownership`. No browser journey or new
-measurement ran. `package-down --id 2` and `down.sh --id 2` completed; status reported `free`.
-The [captured package preparation output](logs/fix-2/attempt-3/package-prepare.log) records the
-failure. No service logs existed because no package services started.
+PARTIAL: on source `abe90b2e9a574af2be43c03ae16fd14b0c09b7b2`, the first new attempt claimed slot 1
+after both slots were free, no package stack was running and load stayed below six for 324 seconds.
+`package-prepare --id 1` failed with the exact message:
+`Package command refused; check pins, named secrets and slot ownership`. The slot's `failure.log`
+was not created, and no package services started. The scanner approval directory remained empty.
+Read-only GitHub checks found that the successful scanner run `44788706844` and application run
+`44788700765` had no downloadable artifacts. Both workflows retain artifacts for one day, and
+these runs were older than one day. This identifies the failed check as the scanner approval
+artifact download; it does not come from a `failure.log`.
+
+The owned package namespace was removed and slot 1 reported free. Both successful approval runs
+were rerun on the same source SHA; each completed successfully and their checked approval and image
+artifacts became available. A second package preparation did not run: another task took slot 1,
+load rose above six, and the five-minute clear window did not return before the 1.5-hour task limit.
+The [safe preparation record](logs/attempt-4-package-prepare.json) and [approval refresh record]
+(logs/attempt-4-approval-refresh.json) document this attempt. The browser journey and new
+measurements are NOT RUN. No product code or package guard changed.
 
 ## Retained earlier results and own gates
 

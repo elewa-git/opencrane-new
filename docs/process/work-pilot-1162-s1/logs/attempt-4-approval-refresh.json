@@ -1,0 +1,17 @@
+{
+  "sourceSha": "abe90b2e9a574af2be43c03ae16fd14b0c09b7b2",
+  "scannerApprovalRun": {
+    "id": "44788706844",
+    "conclusion": "success",
+    "artifacts": ["scanner-approval", "scanner-image"],
+    "expired": false
+  },
+  "applicationApprovalRun": {
+    "id": "44788700765",
+    "conclusion": "success",
+    "artifacts": ["application-approval", "application-image"],
+    "expired": false
+  },
+  "packagePrepareRetried": false,
+  "browserJourney": "NOT RUN"
+}

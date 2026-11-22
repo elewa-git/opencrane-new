@@ -1,0 +1,16 @@
+{
+  "attempt": 4,
+  "sourceSha": "abe90b2e9a574af2be43c03ae16fd14b0c09b7b2",
+  "slot": 1,
+  "packagePrepare": "FAIL",
+  "observed": "Package command refused; check pins, named secrets and slot ownership",
+  "failureLog": "NOT CREATED",
+  "diagnosis": "Scanner approval artifact download failed: the exact successful workflow run exists, but its artifact endpoint returned zero artifacts. The workflow retains artifacts for one day; this run was older than one day.",
+  "scannerApprovalRun": "44788706844",
+  "scannerApprovalArtifacts": 0,
+  "applicationApprovalRun": "44788700765",
+  "applicationApprovalArtifacts": 0,
+  "browserJourney": "NOT RUN",
+  "newMeasurements": "NOT RUN",
+  "servicesStarted": false
+}
