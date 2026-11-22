@@ -1,0 +1,43 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/workspace-native-output.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <checkout>
+
+ ❯ apps/computer/test/workspace-native-output.test.ts (1 test | 1 failed) 6105ms
+   × keeps native executor output that arrives after an empty poll 6102ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/computer/test/workspace-native-output.test.ts > keeps native executor output that arrives after an empty poll
+AssertionError: expected { exitCode: +0, text: '' } to deeply equal { exitCode: +0, text: 'Willow-47\n' }
+
+- Expected
++ Received
+
+  {
+    "exitCode": 0,
+-   "text": "Willow-47
+- ",
++   "text": "",
+  }
+
+ ❯ keepsDelayedNativeOutput apps/computer/test/workspace-native-output.test.ts:19:32
+     17|     const output = await computer.exec('node', '--experimental-strip-t…
+     18|       '--input-type=module', '-e', script);
+     19|     expect(JSON.parse(output)).toEqual({ exitCode: 0, text: 'Willow-47…
+       |                                ^
+     20|   } finally {
+     21|     await computer.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  15:49:33
+   Duration  13.99s (tests 44%, transform 40%, import 16%)
+
+  Transform  transforming modules took 5.49s · 40% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

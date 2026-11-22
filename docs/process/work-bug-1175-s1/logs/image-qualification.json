@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-22T15:53:57.252Z",
+  "source": "895f0af9c1816a665764c8a7d7291c740e2a5541",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc",
+  "receipts": [
+    {
+      "name": "Pod ready",
+      "result": "PASS",
+      "detail": "18045 ms from claim apply, fresh Pod; local registry/layers may be cached"
+    },
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "CRI confirms gVisor, 512 MiB limit"
+    },
+    {
+      "name": "health",
+      "result": "PASS",
+      "detail": "ready endpoint and ready report after Codex initialisation"
+    },
+    {
+      "name": "storage",
+      "result": "PASS",
+      "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
+    },
+    {
+      "name": "run",
+      "result": "FAIL",
+      "detail": "The probe grant must be accepted\n+ actual - expected\n\n  {\n+   error: 'control'\n-   ok: true\n  }\n"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "p21-computer deleted"
+    }
+  ]
+}

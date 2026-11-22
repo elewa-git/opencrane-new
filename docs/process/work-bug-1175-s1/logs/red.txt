@@ -1,0 +1,52 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/workspace-output.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <checkout>
+
+ ❯ apps/computer/test/workspace-output.test.ts (2 tests | 2 failed) 123ms
+   × keeps workspace output that arrives after an empty process read 79ms
+   × keeps every stdout chunk across workspace reads and excludes stderr 36ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/computer/test/workspace-output.test.ts > keeps workspace output that arrives after an empty process read
+AssertionError: expected '' to be '{}\n' // Object.is equality
+
+- Expected
++ Received
+
+- {}
+-
+
+ ❯ keepsOutputAfterEmptyRead apps/computer/test/workspace-output.test.ts:88:38
+     86|     const result = await workspaceProcess(['snapshot'], Buffer.alloc(0…
+     87|     expect(result.exitCode).toBe(0);
+     88|     expect(result.output.toString()).toBe('{}\n');
+       |                                      ^
+     89|   } finally {
+     90|     await fixture.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/computer/test/workspace-output.test.ts > keeps every stdout chunk across workspace reads and excludes stderr
+AssertionError: expected 'Willow-' to be 'Willow-47' // Object.is equality
+
+Expected: "Willow-47"
+Received: "Willow-"
+
+ ❯ keepsConsecutiveChunks apps/computer/test/workspace-output.test.ts:110:38
+    108|     const result = await workspaceProcess(['read-attachment'], Buffer.…
+    109|     expect(result.exitCode).toBe(0);
+    110|     expect(result.output.toString()).toBe('Willow-47');
+       |                                      ^
+    111|   } finally {
+    112|     await fixture.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:34:38
+   Duration  1.50s (transform 50%, import 29%, tests 11%, worker 10%)
+

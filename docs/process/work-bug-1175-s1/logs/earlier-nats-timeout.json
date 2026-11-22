@@ -1,0 +1,10 @@
+{
+  "time": 1794925608792,
+  "name": "bridge",
+  "message": "Bridge poll failed; retrying next poll",
+  "error": {
+    "type": "TimeoutError",
+    "message": "timeout",
+    "stack": "TimeoutError: timeout\n    at timeout (<checkout>/node_modules/@nats-io/nats-core/lib/util.js:53:31)\n    at new RequestOne (<checkout>/node_modules/@nats-io/nats-core/lib/request.js:100:41)\n    at NatsConnectionImpl.request (<checkout>/node_modules/@nats-io/nats-core/lib/nats.js:356:23)\n    at StreamAPIImpl._request (<checkout>/node_modules/@nats-io/jetstream/lib/jsbaseclient_api.js:102:41)\n    at StreamAPIImpl.info (<checkout>/node_modules/@nats-io/jetstream/lib/jsmstream_api.js:389:30)\n    at readStreamInfo (file://<checkout>/libs/event-store/src/jetstream.ts:445:30)\n    at readBeforeDeadline (file://<checkout>/libs/event-store/src/jetstream.ts:173:25)\n    at retryRead (file://<checkout>/libs/event-store/src/jetstream.ts:134:20)\n    at EventStore.readInfo (file://<checkout>/libs/event-store/src/jetstream.ts:447:12)\n    at EventStore.readHead (file://<checkout>/libs/event-store/src/jetstream.ts:451:29)"
+  }
+}
