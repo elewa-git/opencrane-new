@@ -12,7 +12,8 @@ let delayed = false;
 function connectObservedExecutor(...args) {
   const socket = nativeConnect(...args);
   const nativeWrite = socket.write.bind(socket);
-  const lines = createInterface({ input: socket });
+  const lineOptions = { input: socket };
+  const lines = createInterface(lineOptions);
   let heldRead;
   let readId;
 
@@ -22,9 +23,11 @@ function connectObservedExecutor(...args) {
   }
 
   function releaseOutput() {
-    const params = { processId: 'upload', writeId: 'release',
-      chunk: Buffer.from('!').toString('base64') };
-    send({ id: -2, method: 'process/write', params });
+    const input = Buffer.from('!');
+    const chunk = input.toString('base64');
+    const params = { processId: 'upload', writeId: 'release', chunk };
+    const request = { id: -2, method: 'process/write', params };
+    send(request);
   }
 
   function observeResponse(line) {
@@ -44,13 +47,15 @@ function connectObservedExecutor(...args) {
   }
 
   function writeObservedRequest(line) {
-    const request = JSON.parse(line.toString());
+    const encodedRequest = line.toString();
+    const request = JSON.parse(encodedRequest);
     if (request.method === 'process/read' && emptyReads === 0) {
       readId = request.id;
       if (delayReader) {
         // Hold the reader until a separate real native poll has finished.
         heldRead = request;
-        send({ ...request, id: -1 });
+        const probe = { ...request, id: -1 };
+        send(probe);
         return true;
       }
     }
@@ -70,9 +75,12 @@ process.setgid(1000);
 process.setuid(1000);
 // Keep stdout unavailable until the observer releases stdin after an empty native read.
 const program = 'import sys; sys.stdin.buffer.read(1); print("Willow-47")';
-const result = await workspaceProcess(['/opt/python/bin/python', '-c', program], Buffer.alloc(0));
+const argv = ['/opt/python/bin/python', '-c', program];
+const input = Buffer.alloc(0);
+const result = await workspaceProcess(argv, input);
 assert.equal(emptyReads, delayReader ? 2 : 1);
 assert.equal(delayed, delayReader);
 const text = result.output.toString();
-process.stdout.write(JSON.stringify({ exitCode: result.exitCode, text }));
+const report = { exitCode: result.exitCode, text };
+process.stdout.write(JSON.stringify(report));
 `;
