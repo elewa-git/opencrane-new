@@ -1,2 +1,2 @@
 npm notice run npx
-npm notice run 'eslint' apps/computer/src/files.ts apps/computer/test/workspace-output.test.ts apps/computer/test/workspace-native-output.test.ts apps/computer/test/codex-mcp-resume.mjs apps/computer/test/private-capabilities.mjs
+npm notice run 'eslint' apps/computer/src/files.ts apps/computer/test/codex-mcp-resume.mjs apps/computer/test/private-capabilities.mjs apps/computer/test/workspace-native-output.test.ts apps/computer/test/workspace-output.test.ts scripts/ci/fixture-tests.mjs scripts/ci/fixture-tests.test.mjs

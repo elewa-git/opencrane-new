@@ -1,0 +1,10 @@
+{
+  "captureCompletedAt": "2026-11-22T19:00:32Z",
+  "captureBeforeDown": true,
+  "downExitCode": 0,
+  "secondarySlot": "1",
+  "finalStatus": "free",
+  "remainingCapturedBrowserProcesses": 0,
+  "lastAttemptExitCode": 124,
+  "lastAttemptReason": "Stopped for the four-hour reporting limit"
+}

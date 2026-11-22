@@ -1,0 +1,2 @@
+npm notice run typecheck:dev-stack
+npm notice run tsc --noEmit -p infra/dev-stack/tsconfig.json

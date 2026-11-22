@@ -1,0 +1,114 @@
+{
+  "before": [
+    {
+      "ruleId": "preserve-caught-error",
+      "line": 112,
+      "column": 7,
+      "message": "There is no `cause` attached to the symptom error being thrown."
+    },
+    {
+      "ruleId": "@typescript-eslint/only-throw-error",
+      "line": 117,
+      "column": 29,
+      "message": "Expected an error object to be thrown."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 124,
+      "column": 17,
+      "message": "Unsafe assertion from `any` detected: consider using type guards or a safer assertion."
+    },
+    {
+      "ruleId": "preserve-caught-error",
+      "line": 258,
+      "column": 13,
+      "message": "There is no `cause` attached to the symptom error being thrown."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 315,
+      "column": 17,
+      "message": "Unsafe type assertion: type '{ code?: string; } | undefined' is more narrow than the original type."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 449,
+      "column": 18,
+      "message": "Unsafe type assertion: type 'Record<string, unknown>' is more narrow than the original type."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 538,
+      "column": 22,
+      "message": "Unsafe assertion from `any` detected: consider using type guards or a safer assertion."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 586,
+      "column": 53,
+      "message": "Unsafe type assertion: type 'Record<string, unknown>' is more narrow than the original type."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 648,
+      "column": 134,
+      "message": "Unsafe type assertion: type '{ setBy: string; }' is more narrow than the original type."
+    }
+  ],
+  "after": [
+    {
+      "ruleId": "preserve-caught-error",
+      "line": 112,
+      "column": 7,
+      "message": "There is no `cause` attached to the symptom error being thrown."
+    },
+    {
+      "ruleId": "@typescript-eslint/only-throw-error",
+      "line": 117,
+      "column": 29,
+      "message": "Expected an error object to be thrown."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 124,
+      "column": 17,
+      "message": "Unsafe assertion from `any` detected: consider using type guards or a safer assertion."
+    },
+    {
+      "ruleId": "preserve-caught-error",
+      "line": 258,
+      "column": 13,
+      "message": "There is no `cause` attached to the symptom error being thrown."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 315,
+      "column": 17,
+      "message": "Unsafe type assertion: type '{ code?: string; } | undefined' is more narrow than the original type."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 449,
+      "column": 18,
+      "message": "Unsafe type assertion: type 'Record<string, unknown>' is more narrow than the original type."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 538,
+      "column": 22,
+      "message": "Unsafe assertion from `any` detected: consider using type guards or a safer assertion."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 586,
+      "column": 53,
+      "message": "Unsafe type assertion: type 'Record<string, unknown>' is more narrow than the original type."
+    },
+    {
+      "ruleId": "@typescript-eslint/no-unsafe-type-assertion",
+      "line": 648,
+      "column": 134,
+      "message": "Unsafe type assertion: type '{ setBy: string; }' is more narrow than the original type."
+    }
+  ]
+}

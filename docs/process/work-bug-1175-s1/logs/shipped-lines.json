@@ -1,0 +1,36 @@
+{
+  "requestedSourcePaths": 9,
+  "includingImageAndBuildSettings": 13,
+  "files": [
+    {
+      "path": "apps/computer/build.sh",
+      "added": 1,
+      "deleted": 1,
+      "withinRequestedSourcePaths": false
+    },
+    {
+      "path": "apps/computer/sandbox-template.json",
+      "added": 1,
+      "deleted": 1,
+      "withinRequestedSourcePaths": false
+    },
+    {
+      "path": "apps/computer/src/files.ts",
+      "added": 3,
+      "deleted": 1,
+      "withinRequestedSourcePaths": true
+    },
+    {
+      "path": "infra/dev-stack/journey.ts",
+      "added": 4,
+      "deleted": 0,
+      "withinRequestedSourcePaths": true
+    },
+    {
+      "path": "scripts/ci/fixture-tests.mjs",
+      "added": 1,
+      "deleted": 0,
+      "withinRequestedSourcePaths": true
+    }
+  ]
+}

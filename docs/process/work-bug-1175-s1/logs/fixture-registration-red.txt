@@ -1,0 +1,122 @@
+TAP version 13
+# Subtest: keeps fixture files out of all four shards
+not ok 1 - keeps fixture files out of all four shards
+  ---
+  duration_ms: 5.368264
+  type: 'test'
+  location: '<checkout>/scripts/ci/fixture-tests.test.mjs:169:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+
+      [
+        'apps/computer/test/codex-config.test.ts',
+        'apps/computer/test/display-attacks.test.ts',
+        'apps/computer/test/private-recall-call.test.ts',
+        'apps/computer/test/private-write-call.test.ts',
+        'apps/computer/test/supervisor-identity.test.ts',
+        'apps/computer/test/supervisor-stop.test.ts',
+    -   'apps/computer/test/workspace-native-output.test.ts',
+        'apps/server/test/bridge-credentials.test.ts',
+        'apps/server/test/screenshot-browser.test.ts',
+        'apps/server/test/upload.test.ts',
+        'scripts/stage-b-read.test.mjs'
+      ]
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 'apps/computer/test/codex-config.test.ts'
+    1: 'apps/computer/test/display-attacks.test.ts'
+    2: 'apps/computer/test/private-recall-call.test.ts'
+    3: 'apps/computer/test/private-write-call.test.ts'
+    4: 'apps/computer/test/supervisor-identity.test.ts'
+    5: 'apps/computer/test/supervisor-stop.test.ts'
+    6: 'apps/computer/test/workspace-native-output.test.ts'
+    7: 'apps/server/test/bridge-credentials.test.ts'
+    8: 'apps/server/test/screenshot-browser.test.ts'
+    9: 'apps/server/test/upload.test.ts'
+    10: 'scripts/stage-b-read.test.mjs'
+  actual:
+    0: 'apps/computer/test/codex-config.test.ts'
+    1: 'apps/computer/test/display-attacks.test.ts'
+    2: 'apps/computer/test/private-recall-call.test.ts'
+    3: 'apps/computer/test/private-write-call.test.ts'
+    4: 'apps/computer/test/supervisor-identity.test.ts'
+    5: 'apps/computer/test/supervisor-stop.test.ts'
+    6: 'apps/server/test/bridge-credentials.test.ts'
+    7: 'apps/server/test/screenshot-browser.test.ts'
+    8: 'apps/server/test/upload.test.ts'
+    9: 'scripts/stage-b-read.test.mjs'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.partitionsTests (file://<checkout>/scripts/ci/fixture-tests.test.mjs:15:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: detects browser and image use without matching ordinary data
+ok 2 - detects browser and image use without matching ordinary data
+  ---
+  duration_ms: 1.013699
+  type: 'test'
+  ...
+# Subtest: refuses an unknown test group
+ok 3 - refuses an unknown test group
+  ---
+  duration_ms: 1.078851
+  type: 'test'
+  ...
+# Subtest: accepts every file exactly once
+ok 4 - accepts every file exactly once
+  ---
+  duration_ms: 0.533272
+  type: 'test'
+  ...
+# Subtest: refuses missing files
+ok 5 - refuses missing files
+  ---
+  duration_ms: 0.531797
+  type: 'test'
+  ...
+# Subtest: refuses duplicate files
+ok 6 - refuses duplicate files
+  ---
+  duration_ms: 0.537229
+  type: 'test'
+  ...
+# Subtest: refuses unexpected files
+ok 7 - refuses unexpected files
+  ---
+  duration_ms: 0.430373
+  type: 'test'
+  ...
+# Subtest: checks new fixture use whenever CI verifies file lists
+ok 8 - checks new fixture use whenever CI verifies file lists
+  ---
+  duration_ms: 872.020839
+  type: 'test'
+  ...
+# Subtest: detects Chromium through the real chat browser scripts
+ok 9 - detects Chromium through the real chat browser scripts
+  ---
+  duration_ms: 3.234521
+  type: 'test'
+  ...
+# Subtest: accepts the real chat browser suite in the fixture list
+ok 10 - accepts the real chat browser suite in the fixture list
+  ---
+  duration_ms: 132.61275
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 9
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1210.511616

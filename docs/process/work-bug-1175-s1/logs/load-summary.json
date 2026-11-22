@@ -1,0 +1,7 @@
+{
+  "samples": 812,
+  "oneMinuteLoadMin": 2.14,
+  "oneMinuteLoadMax": 27.67,
+  "oneMinuteLoadMedian": 10.95,
+  "quietPreflightSeconds": 323
+}

@@ -1,0 +1,3 @@
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS provider setup: switched on managed calls
+PASS website readiness: 45341ms
