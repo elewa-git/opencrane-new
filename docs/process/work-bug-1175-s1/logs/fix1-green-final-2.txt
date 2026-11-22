@@ -6,9 +6,9 @@ npm notice run 'vitest' run apps/computer/test/workspace-output.test.ts apps/com
 
  Test Files  5 passed (5)
       Tests  31 passed (31)
-   Start at  21:05:20
-   Duration  23.70s (tests 44%, transform 37%, import 19%)
+   Start at  21:36:06
+   Duration  18.64s (tests 47%, transform 33%, import 19%)
 
-  Transform  transforming modules took 12.17s · 37% of tracked time, re-done on every run
+  Transform  transforming modules took 8.40s · 33% of tracked time, re-done on every run
              persist transforms across runs with fsModuleCache: true
              learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

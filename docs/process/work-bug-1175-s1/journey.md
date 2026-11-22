@@ -98,6 +98,7 @@ was raised and no error catch was added to hide lost output.
 ## Review fixes and current checks
 
 Date: 22 November 2026. Test-only commit: `9153c393c`; fixture cleanup: `8ea0204af`.
+Final native probe clarity: `d97ccde07`.
 Fetched `origin` and completed the rebase onto `24aa865d3` without conflicts.
 The computer source and CORE journey remain identical to reviewed head `a6dc02708`.
 No product behaviour changed in this fix round, so the ten recorded fresh runs are
@@ -133,7 +134,8 @@ retained; none were repeated and no secondary stack was claimed.
 
 Checked the changed code against the standard's clean-code table: reused the real
 executor and existing computer fixture, kept named functions small, moved shared
-fixture ownership into test support, and removed the sleep. Added no dependency,
+fixture ownership into test support, and removed the sleep. Gave each native probe
+request and input-encoding step its own named value. Added no dependency,
 retry, timeout extension, catch that hides errors or weakened assertion. Access, money
 and memory checks are unchanged. Current CI results are recorded in the PR Evidence.
 
