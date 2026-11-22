@@ -6,6 +6,8 @@ The image group includes screenshot-browser, which also needs Chromium, and the
 offline demo read test, which uses packaged Codex and local services.
 It also runs `codex-config.test.ts` with pinned native Codex, the generated private
 configuration and the real MCP proxy inside a disposable container.
+`workspace-native-output.test.ts` checks stdout arriving after an empty native
+executor poll, using the same disposable computer image.
 `private-recall-call.test.ts` uses the same image with networking disabled.
 It checks one native recall reply and refusal cases using a local scripted model.
 Its preparation evidence is test-only; it does not qualify backend or gateway access.

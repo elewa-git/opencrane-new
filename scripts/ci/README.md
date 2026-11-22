@@ -46,7 +46,8 @@ deadlines. A development build prepares Angular before tests start their own ser
 
 The image job runs the offline demo read through a real computer and local services.
 It also checks native private tool discovery and recall calls with the generated
-configuration. The recall check uses local scripted replies and no external model.
+configuration. It checks delayed workspace output with the real native executor.
+The recall check uses local scripted replies and no external model.
 It installs Chromium because the screenshot test needs both.
 The computer test image uses a public package image from GitHub's registry when its
 digest is recorded and that image's label matches the current build inputs.

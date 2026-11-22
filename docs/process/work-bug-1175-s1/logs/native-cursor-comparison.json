@@ -1,0 +1,242 @@
+{
+  "executorVersion": "0.159.2",
+  "process": "Python waits 1.5 seconds, then prints an empty JSON object",
+  "reads": [
+    {
+      "attempt": 1,
+      "cursorRule": "nextSeq",
+      "response": {
+        "id": 3,
+        "result": {
+          "chunks": [],
+          "nextSeq": 1,
+          "exited": false,
+          "exitCode": null,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "cursorRule": "nextSeq",
+      "response": {
+        "id": 4,
+        "result": {
+          "chunks": [],
+          "nextSeq": 3,
+          "exited": true,
+          "exitCode": 0,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 1,
+      "cursorRule": "nextSeq",
+      "response": {
+        "id": 5,
+        "result": {
+          "chunks": [],
+          "nextSeq": 4,
+          "exited": true,
+          "exitCode": 0,
+          "closed": true,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 2,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 3,
+        "result": {
+          "chunks": [],
+          "nextSeq": 1,
+          "exited": false,
+          "exitCode": null,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 2,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 4,
+        "result": {
+          "chunks": [
+            {
+              "seq": 1,
+              "stream": "stdout",
+              "chunk": "e30K"
+            }
+          ],
+          "nextSeq": 2,
+          "exited": false,
+          "exitCode": null,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 2,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 5,
+        "result": {
+          "chunks": [],
+          "nextSeq": 3,
+          "exited": true,
+          "exitCode": 0,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 2,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 6,
+        "result": {
+          "chunks": [],
+          "nextSeq": 4,
+          "exited": true,
+          "exitCode": 0,
+          "closed": true,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 3,
+      "cursorRule": "nextSeq",
+      "response": {
+        "id": 3,
+        "result": {
+          "chunks": [],
+          "nextSeq": 1,
+          "exited": false,
+          "exitCode": null,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 3,
+      "cursorRule": "nextSeq",
+      "response": {
+        "id": 4,
+        "result": {
+          "chunks": [],
+          "nextSeq": 3,
+          "exited": true,
+          "exitCode": 0,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 3,
+      "cursorRule": "nextSeq",
+      "response": {
+        "id": 5,
+        "result": {
+          "chunks": [],
+          "nextSeq": 4,
+          "exited": true,
+          "exitCode": 0,
+          "closed": true,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 4,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 3,
+        "result": {
+          "chunks": [],
+          "nextSeq": 1,
+          "exited": false,
+          "exitCode": null,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 4,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 4,
+        "result": {
+          "chunks": [
+            {
+              "seq": 1,
+              "stream": "stdout",
+              "chunk": "e30K"
+            }
+          ],
+          "nextSeq": 2,
+          "exited": false,
+          "exitCode": null,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 4,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 5,
+        "result": {
+          "chunks": [],
+          "nextSeq": 3,
+          "exited": true,
+          "exitCode": 0,
+          "closed": false,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    },
+    {
+      "attempt": 4,
+      "cursorRule": "nextSeq - 1",
+      "response": {
+        "id": 6,
+        "result": {
+          "chunks": [],
+          "nextSeq": 4,
+          "exited": true,
+          "exitCode": 0,
+          "closed": true,
+          "failure": null,
+          "sandboxDenied": false
+        }
+      }
+    }
+  ]
+}

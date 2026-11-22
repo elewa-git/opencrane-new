@@ -968,9 +968,11 @@ Full before/after guest and node file inventories are saved as compressed JSON.
 The readable JSON record links that archive and records its SHA-256 checksum.
 Any new or changed core or dump fails the check, even without a canary. This does
 not execute Codex’s own signal handler; that limit is recorded beside the results.
-The local `test/private-capabilities.mjs` runs a private turn through `private.sock`
-with the template's exact capabilities and a stub provider. It uses Docker's runc
-runtime and does not qualify gVisor isolation.
+The local `test/private-capabilities.mjs` reuses `uploadComputer` to run a private turn
+through the authenticated bridge with the template's exact capabilities and a stub
+provider. The bridge performs the authenticated private launch. The check requires
+a completed reply, one model request and no tools. It uses Docker's runc runtime
+and does not qualify gVisor isolation.
 [Check record](../../docs/process/p4-14-private-turns-evidence.md).
 The owner accepts host swap and apport crash dumps on this developer box for the
 MVP. The remaining host risks are tracked in
@@ -2000,6 +2002,19 @@ The bridge sends the before-turn snapshot as one JSON line to the file reader.
 The reader accepts at most 65,536 characters and stops at the newline. It does not
 wait for stdin to close: the workspace executor keeps that input open after a write.
 This also lets ordinary turns finish when there are no publication files.
+
+`workspaceProcess` reads native executor output through `process/read`. Its `afterSeq`
+excludes the supplied record, while the returned `nextSeq` names the next unread record.
+Each following read therefore uses `nextSeq - 1`, including after an empty read.
+Passing `nextSeq` skips one record and can discard the entire snapshot or a later
+attachment or publication chunk. `test/workspace-output.test.ts` checks empty reads,
+consecutive stdout chunks, intervening stderr and separate exit/close records through
+the existing Unix socket protocol. Its socket fixture lives in `test/support`.
+`test/workspace-native-output.test.ts` holds Python on stdin and releases its output
+only after observing an empty response from the real executor. A second case holds
+the reader until another native poll has finished. Both keep the final byte assertion.
+Only stdout enters the returned bytes; both streams still count towards the existing
+64 KiB output limit.
 
 ## Checked private launches — P4-15 PR 4l
 

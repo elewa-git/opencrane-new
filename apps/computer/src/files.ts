@@ -217,7 +217,9 @@ async function readOutput(rpc: ReturnType<typeof createRpc>, processId: string) 
         output.push(decodedChunk);
       }
     }
-    afterSeq = result['nextSeq'];
+    // Resume after the last consumed record, including when this read returned no output.
+    // The executor's nextSeq names the next unread record; afterSeq excludes its record.
+    afterSeq = result['nextSeq'] - 1;
     if (result['exited'] && result['closed']) {
       return { exitCode: result['exitCode'], output: Buffer.concat(output) };
     }

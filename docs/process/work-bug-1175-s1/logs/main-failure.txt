@@ -1,0 +1,17 @@
+Error: Command failed: /usr/bin/node --experimental-strip-types infra/dev-stack/journey.ts
+Browser transport failures: none
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+locator.waitFor: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('.caret') to be visible
+
+    at browserChatJourney (<checkout>/infra/dev-stack/browser-chat.ts:46:32)
+    at async file://<checkout>/infra/dev-stack/journey.ts:557:36 {
+  log: [ "  - waiting for locator('.caret') to be visible" ],
+  name: 'TimeoutError'
+}
+
+Node.js v22.23.3

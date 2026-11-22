@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/computer/test/workspace-output.test.ts apps/computer/test/workspace-native-output.test.ts apps/computer/test/artifacts.test.ts apps/computer/test/turn-runner-artifacts.test.ts apps/server/test/turn-input.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <checkout>
+
+
+ Test Files  5 passed (5)
+      Tests  31 passed (31)
+   Start at  21:36:06
+   Duration  18.64s (tests 47%, transform 33%, import 19%)
+
+  Transform  transforming modules took 8.40s · 33% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

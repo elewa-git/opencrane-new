@@ -1,0 +1,17 @@
+{
+  "source": "c359bb697",
+  "core": "FAIL",
+  "completedReplies": 13,
+  "expectedStopFailures": 2,
+  "expectedBudgetRefusals": 4,
+  "unexpectedTurnFailures": [],
+  "failure": {
+    "command": "npm run replay -- mcp-catalogue --verify",
+    "timeoutMs": 60000,
+    "signal": "SIGTERM"
+  },
+  "browserViewerWidths": [
+    390,
+    1280
+  ]
+}

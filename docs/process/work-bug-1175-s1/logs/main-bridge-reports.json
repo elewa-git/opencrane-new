@@ -1,0 +1,39 @@
+[
+  {
+    "sequence": 1,
+    "type": "agent.turn_started",
+    "turnId": "cefbaf73-f552-4e5a-aa5b-d0de538dd966"
+  },
+  {
+    "sequence": 2,
+    "type": "agent.message_delta",
+    "turnId": "cefbaf73-f552-4e5a-aa5b-d0de538dd966"
+  },
+  {
+    "sequence": 3,
+    "type": "agent.message_delta",
+    "turnId": "cefbaf73-f552-4e5a-aa5b-d0de538dd966"
+  },
+  {
+    "sequence": 4,
+    "type": "agent.message_delta",
+    "turnId": "cefbaf73-f552-4e5a-aa5b-d0de538dd966"
+  },
+  {
+    "sequence": 5,
+    "type": "agent.message_completed",
+    "turnId": "cefbaf73-f552-4e5a-aa5b-d0de538dd966"
+  },
+  {
+    "sequence": 6,
+    "type": "agent.turn_completed",
+    "turnId": "cefbaf73-f552-4e5a-aa5b-d0de538dd966",
+    "nativeTermination": "turn_completed"
+  },
+  {
+    "sequence": 7,
+    "type": "agent.turn_failed",
+    "turnId": "cd222a54-184d-490b-adac-6267b27138b8",
+    "reason": "model_error"
+  }
+]

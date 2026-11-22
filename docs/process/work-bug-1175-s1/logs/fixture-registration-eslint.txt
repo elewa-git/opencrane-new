@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' scripts/ci/fixture-tests.mjs scripts/ci/fixture-tests.test.mjs
