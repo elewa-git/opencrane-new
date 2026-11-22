@@ -1,17 +1,21 @@
 # Workspace output and chat completion
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: PASS
 
 Date: 22 November 2026. Main reproduction: `d6c4299aa822ae4078cf2b3b4b29d7d6f4aa1b3f`.
 Fixed computer source: `c359bb697`; final browser cleanup: `017fabb47`.
 Both use the stand-in provider and real browser sign-in.
 
-Ten-run proof: **PARTIAL, 7/10 complete consecutive CORE passes**, at both
-widths. The complete runs contain 91 completed replies and zero unexpected
-turn failures. Stopped for the requested four-hour reporting limit.
-The headline FAIL applies to the incomplete required qualification, not to
-the individual CORE passes. The full legacy image-release check also remains
-FAIL, as described below.
+Ten-run proof: **PASS, 10/10 consecutive complete CORE passes**, at 390 px and
+1280 px on fresh secondary stacks. The ten complete runs contain 130 completed
+replies and zero unexpected turn failures. They contain 60 expected
+`agent.turn_failed` events: 20 `stop_interrupted` events matched to requested Stops,
+and 40 `model_error` events matched to saved `budget_exhausted` decisions.
+
+The earlier timed-out attempt is outside the ten-pass sequence: it completed eight
+replies and recorded two requested Stops, with no unexpected turn failures. It does
+not count as a pass. The full legacy image-release check also remains FAIL, as
+described below.
 
 ## Cause and reproduction
 
@@ -134,7 +138,7 @@ the [measured range](logs/load-summary.json) is retained with the quiet prefligh
 
 [Per-run results](logs/series-summary.json) include completed replies, expected Stop
 and budget refusals, unexpected failures and the dated viewer receipts at each width.
-The [latest completed run ledger](logs/latest-complete-turns.jsonl) retains the
+The [latest completed run ledger](logs/core-run-10-turns.jsonl) retains the
 matching Stop requests and budget decisions.
 The completed runs contain no `TimeoutError` entries in the saved server, dispatcher
 or model logs. Their pod receipts all name the corrected computer image.
@@ -150,38 +154,53 @@ At both 390 px and 1280 px, the browser does the following:
 6. Finish lifecycle, audit and budget checks, sign out, sign in again, then verify
    both projection replays and the stack listeners.
 
-Latest complete run screenshots:
-[390 px viewing](screenshots/latest-complete-viewer-390.png),
-[390 px refused after revocation](screenshots/latest-complete-revoked-390.png),
-[1280 px viewing](screenshots/latest-complete-viewer-1280.png) and
-[1280 px refused after revocation](screenshots/latest-complete-revoked-1280.png).
+Run 10 screenshots:
+[390 px viewing](screenshots/core-run-10-viewer-390.png),
+[390 px refused after revocation](screenshots/core-run-10-revoked-390.png),
+[1280 px viewing](screenshots/core-run-10-viewer-1280.png) and
+[1280 px refused after revocation](screenshots/core-run-10-revoked-1280.png).
 
-| Run | Started UTC | Finished UTC | Full CORE | Replies completed | Unexpected failures |
-| --- | --- | --- | --- | ---: | ---: |
-| [1](logs/core-run-01.txt) | 16:40:25 | 16:59:49 | PASS | 13 | 0 |
-| [2](logs/core-run-02.txt) | 16:59:53 | 17:19:46 | PASS | 13 | 0 |
-| [3](logs/core-run-03.txt) | 17:19:49 | 17:37:42 | PASS | 13 | 0 |
-| [4](logs/core-run-04.txt) | 17:37:46 | 17:58:15 | PASS | 13 | 0 |
-| [5](logs/core-run-05.txt) | 17:58:19 | 18:16:48 | PASS | 13 | 0 |
-| [6](logs/core-run-06.txt) | 18:16:54 | 18:33:40 | PASS | 13 | 0 |
-| [7](logs/core-run-07.txt) | 18:33:44 | 18:50:58 | PASS | 13 | 0 |
-| [8](logs/core-run-08.txt) | 18:51:02 | 19:00:18 | PARTIAL: task deadline | 8 | 0 |
+| Run | Started UTC | Finished UTC | Full CORE | Replies completed | Turn failures |
+| --- | --- | --- | --- | ---: | --- |
+| [1](logs/core-run-01.txt) | 16:40:25 | 16:59:49 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [2](logs/core-run-02.txt) | 16:59:53 | 17:19:46 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [3](logs/core-run-03.txt) | 17:19:49 | 17:37:42 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [4](logs/core-run-04.txt) | 17:37:46 | 17:58:15 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [5](logs/core-run-05.txt) | 17:58:19 | 18:16:48 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [6](logs/core-run-06.txt) | 18:16:54 | 18:33:40 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [7](logs/core-run-07.txt) | 18:33:44 | 18:50:58 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [8](logs/core-run-08.txt) | 19:16:19 | 19:31:21 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [9](logs/core-run-09.txt) | 19:35:48 | 19:50:38 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
+| [10](logs/core-run-10.txt) | 19:52:14 | 20:07:29 | PASS | 13 | 2 `stop_interrupted`, 4 budget refusals (`model_error`) |
 
-Each complete run also contains two intentional Stops and four budget refusals.
+Each `stop_interrupted` has its matching Stop request. Each budget refusal has its matching
+saved `decision.recorded` event with reason `budget_exhausted`. The per-run ledgers list every
+started turn, completed reply, requested Stop, recorded decision and failed turn. For the
+three new runs, these ledgers are [run 8](logs/core-run-08-turns.jsonl),
+[run 9](logs/core-run-09-turns.jsonl) and [run 10](logs/core-run-10-turns.jsonl).
+
+The three fresh-run receipts include [run 8 viewer captures](screenshots/core-run-08-viewer-390.png),
+[run 9 viewer captures](screenshots/core-run-09-viewer-390.png) and
+[run 10 viewer captures](screenshots/core-run-10-viewer-390.png), with matching 1280 px and
+revoked-access captures beside each. Bridge, models/gateway, startup/service logs and all
+screenshots are retained in the task's private receipt. Computer worker pod logs are captured
+for runs 9 and 10. The restricted lifecycle kubeconfig denied pod-log reads on run 8; that run
+had no unexpected failures, and its computer-service logs and full turn ledger are retained.
 A Stop counts as expected only with its matching request and `stop_interrupted`
 reason. A budget refusal needs its matching saved `budget_exhausted` decision.
 Viewer results count only when their receipt dates fall inside that run.
 
-Runs 1 and 2 started at `017fabb47`; later runs started at `d94fa75f1`.
+Runs 1 and 2 started at `017fabb47`; runs 3–7 started at `d94fa75f1`;
+runs 8–10 started at `a6dc02708`.
 The computer reader and browser cleanup are identical throughout this series;
 the intervening change registered the native test in its CI image job.
 
-Required ten-run proof: **PARTIAL**. No incomplete attempt counts as PASS.
+Required ten-run proof: **PASS**. Ten consecutive complete runs passed; the earlier incomplete attempt is excluded.
 Copied all startup and service logs and all generated screenshots before every
-fresh reset and before final teardown. Full worker, bridge, computer, models and
-gateway logs remain in the task’s private receipt directory. The public receipt
-contains the selected sanitised evidence. Final teardown and slot status are
-recorded in [the cleanup receipt](logs/final-cleanup.json).
+fresh reset and before final teardown. Worker pod logs from runs 9–10, plus bridge,
+computer service, models and gateway logs, remain in the task's private receipt.
+The public receipt contains the selected sanitised evidence. Final teardown and slot
+status are recorded in [the cleanup receipt](logs/final-cleanup.json).
 
 The [shipped-code count](logs/shipped-lines.json) is nine added/deleted lines under
 the requested source paths, or thirteen including the image/build settings.
@@ -191,7 +210,7 @@ runtime dependency was added. No production timeout, retry, refusal assertion
 or size limit was relaxed.
 
 CORE retains its existing approval-journey skip. Full root tests, paid-provider
-checks and private-memory isolation qualification are NOT RUN. CI is not awaited,
-following the task’s final draft-PR instruction. The worktree is retained.
+checks and private-memory isolation qualification are NOT RUN. CI is awaited after
+the updated receipt is pushed. The worktree is retained.
 
 Independent review is left to the orchestrator. No independent review pass is claimed.

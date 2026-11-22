@@ -1,10 +1,18 @@
 {
-  "captureCompletedAt": "2026-11-22T19:00:32Z",
+  "captureCompletedAt": "2026-11-22T20:07:56Z",
   "captureBeforeDown": true,
+  "downAt": "2026-11-22T20:13:12Z",
   "downExitCode": 0,
   "secondarySlot": "1",
+  "slot1FinalStatus": "free",
+  "slot2FinalStatus": "free",
+  "packageStackUp": false,
   "finalStatus": "free",
-  "remainingCapturedBrowserProcesses": 0,
-  "lastAttemptExitCode": 124,
-  "lastAttemptReason": "Stopped for the four-hour reporting limit"
+  "requiredSeriesStatus": "PASS",
+  "earlierExcludedAttempt": {
+    "exitCode": 124,
+    "completedReplies": 8,
+    "turnFailures": { "stop_interrupted": 2 },
+    "unexpectedFailures": 0
+  }
 }

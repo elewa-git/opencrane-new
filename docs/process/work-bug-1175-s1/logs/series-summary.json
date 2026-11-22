@@ -1,341 +1,446 @@
-[
-  {
-    "run": 1,
-    "started": "2026-11-22T16:40:25Z",
-    "finished": "2026-11-22T16:59:49Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T16:48:30.619Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 536
+{
+  "requiredConsecutiveRuns": 10,
+  "completeRuns": 10,
+  "status": "PASS",
+  "completedReplies": 130,
+  "unexpectedTurnFailures": 0,
+  "expectedTurnFailures": {
+    "stop_interrupted": 20,
+    "model_errorWithBudgetExhaustedDecision": 40
+  },
+  "runs": [
+    {
+      "run": 1,
+      "started": "2026-11-22T16:40:25Z",
+      "finished": "2026-11-22T16:59:49Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T16:48:30.619Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 536
+        },
+        "1280": {
+          "date": "2026-11-22T16:51:33.476Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 609
+        }
       },
-      "1280": {
-        "date": "2026-11-22T16:51:33.476Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 609
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
-  },
-  {
-    "run": 2,
-    "started": "2026-11-22T16:59:53Z",
-    "finished": "2026-11-22T17:19:46Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T17:08:36.798Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 235
+    {
+      "run": 2,
+      "started": "2026-11-22T16:59:53Z",
+      "finished": "2026-11-22T17:19:46Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T17:08:36.798Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 235
+        },
+        "1280": {
+          "date": "2026-11-22T17:11:58.384Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 602
+        }
       },
-      "1280": {
-        "date": "2026-11-22T17:11:58.384Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 602
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
-  },
-  {
-    "run": 3,
-    "started": "2026-11-22T17:19:49Z",
-    "finished": "2026-11-22T17:37:42Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T17:27:39.410Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 292
+    {
+      "run": 3,
+      "started": "2026-11-22T17:19:49Z",
+      "finished": "2026-11-22T17:37:42Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T17:27:39.410Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 292
+        },
+        "1280": {
+          "date": "2026-11-22T17:29:56.095Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 435
+        }
       },
-      "1280": {
-        "date": "2026-11-22T17:29:56.095Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 435
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
-  },
-  {
-    "run": 4,
-    "started": "2026-11-22T17:37:46Z",
-    "finished": "2026-11-22T17:58:15Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T17:45:55.624Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 534
+    {
+      "run": 4,
+      "started": "2026-11-22T17:37:46Z",
+      "finished": "2026-11-22T17:58:15Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T17:45:55.624Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 534
+        },
+        "1280": {
+          "date": "2026-11-22T17:49:17.249Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 506
+        }
       },
-      "1280": {
-        "date": "2026-11-22T17:49:17.249Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 506
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
-  },
-  {
-    "run": 5,
-    "started": "2026-11-22T17:58:19Z",
-    "finished": "2026-11-22T18:16:48Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T18:07:23.995Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 314
+    {
+      "run": 5,
+      "started": "2026-11-22T17:58:19Z",
+      "finished": "2026-11-22T18:16:48Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T18:07:23.995Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 314
+        },
+        "1280": {
+          "date": "2026-11-22T18:10:08.032Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 110
+        }
       },
-      "1280": {
-        "date": "2026-11-22T18:10:08.032Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 110
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
-  },
-  {
-    "run": 6,
-    "started": "2026-11-22T18:16:54Z",
-    "finished": "2026-11-22T18:33:40Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T18:24:11.320Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 290
+    {
+      "run": 6,
+      "started": "2026-11-22T18:16:54Z",
+      "finished": "2026-11-22T18:33:40Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T18:24:11.320Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 290
+        },
+        "1280": {
+          "date": "2026-11-22T18:26:48.753Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 181
+        }
       },
-      "1280": {
-        "date": "2026-11-22T18:26:48.753Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 181
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
-  },
-  {
-    "run": 7,
-    "started": "2026-11-22T18:33:44Z",
-    "finished": "2026-11-22T18:50:58Z",
-    "exitCode": 0,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
-    "completedReplies": 13,
-    "expectedFailures": 6,
-    "intentionalStops": 2,
-    "budgetRefusals": 4,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T18:41:59.826Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 123
+    {
+      "run": 7,
+      "started": "2026-11-22T18:33:44Z",
+      "finished": "2026-11-22T18:50:58Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T18:41:59.826Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 123
+        },
+        "1280": {
+          "date": "2026-11-22T18:44:20.164Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "noGrant": "PASS",
+          "status": "PASS",
+          "revokedMs": 231
+        }
       },
-      "1280": {
-        "date": "2026-11-22T18:44:20.164Z",
-        "width": 1280,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 231
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "savedLogTimeoutMentions": {
+        "services/server.log": 0,
+        "services/dispatcher.log": 0,
+        "opencrane-dev-1-models-1.log": 0
       }
     },
-    "fullCorePass": true,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
+    {
+      "run": 8,
+      "sourceSha": "a6dc02708",
+      "started": "2026-11-22T19:16:19Z",
+      "finished": "2026-11-22T19:31:21Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T19:23:00.052Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "status": "PASS",
+          "revokedMs": 173
+        },
+        "1280": {
+          "date": "2026-11-22T19:25:18.255Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "status": "PASS",
+          "revokedMs": 206
+        }
+      },
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "computerWorkerLogs": "NOT CAPTURED: restricted lifecycle kubeconfig denied pods/log; no unexpected failures"
+    },
+    {
+      "run": 9,
+      "sourceSha": "a6dc02708",
+      "started": "2026-11-22T19:35:48Z",
+      "finished": "2026-11-22T19:50:38Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T19:42:45.676Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "status": "PASS",
+          "revokedMs": 317
+        },
+        "1280": {
+          "date": "2026-11-22T19:44:40.453Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "status": "PASS",
+          "revokedMs": 86
+        }
+      },
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "computerWorkerLogs": "CAPTURED"
+    },
+    {
+      "run": 10,
+      "sourceSha": "a6dc02708",
+      "started": "2026-11-22T19:52:14Z",
+      "finished": "2026-11-22T20:07:29Z",
+      "exitCode": 0,
+      "captureExitCode": 0,
+      "ledgerExitCode": 0,
+      "completedReplies": 13,
+      "expectedFailures": 6,
+      "intentionalStops": 2,
+      "budgetRefusals": 4,
+      "unexpectedFailures": [],
+      "viewers": {
+        "390": {
+          "date": "2026-11-22T19:59:13.933Z",
+          "width": 390,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "status": "PASS",
+          "revokedMs": 255
+        },
+        "1280": {
+          "date": "2026-11-22T20:01:39.023Z",
+          "width": 1280,
+          "stackId": "1",
+          "assistantStubTurn": "PASS",
+          "status": "PASS",
+          "revokedMs": 391
+        }
+      },
+      "fullCorePass": true,
+      "computerImages": [
+        "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
+      ],
+      "computerImageReceipt": "CAPTURED",
+      "computerWorkerLogs": "CAPTURED"
     }
-  },
-  {
-    "run": 8,
-    "started": "2026-11-22T18:51:02Z",
-    "finished": "2026-11-22T19:00:18Z",
-    "exitCode": 124,
-    "captureExitCode": 0,
-    "ledgerExitCode": 0,
+  ],
+  "excludedIncompleteAttempt": {
+    "runAttempt": 8,
     "completedReplies": 8,
-    "expectedFailures": 2,
-    "intentionalStops": 2,
-    "budgetRefusals": 0,
-    "unexpectedFailures": [],
-    "viewers": {
-      "390": {
-        "date": "2026-11-22T18:58:27.257Z",
-        "width": 390,
-        "stackId": "1",
-        "assistantStubTurn": "PASS",
-        "noGrant": "PASS",
-        "status": "PASS",
-        "revokedMs": 268
-      },
-      "1280": {
-        "status": "NOT RUN",
-        "reason": "No viewer receipt inside this run"
-      }
+    "turnFailures": {
+      "stop_interrupted": 2
     },
-    "fullCorePass": false,
-    "computerImages": [
-      "k3d-ocn-registry:5000/opencrane/computer@sha256:efb2bce053bdd9645fdddd6a6ec47af602eb15599f24de22d1346eb6bd5250bc"
-    ],
-    "computerImageReceipt": "CAPTURED",
-    "savedLogTimeoutMentions": {
-      "services/server.log": 0,
-      "services/dispatcher.log": 0,
-      "opencrane-dev-1-models-1.log": 0
-    }
+    "unexpectedFailures": [],
+    "reason": "reporting time limit",
+    "countedAsCompleteRun": false
+  },
+  "observedAcrossRequiredSeriesAndExcludedAttempt": {
+    "completedReplies": 138,
+    "expectedTurnFailures": {
+      "stop_interrupted": 22,
+      "model_errorWithBudgetExhaustedDecision": 40
+    },
+    "unexpectedTurnFailures": 0
   }
-]
+}
