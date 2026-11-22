@@ -1,71 +1,66 @@
 # Dispatcher database connection
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: PASS
 
-Date: 22 November 2026. Product source:
-`5a06018ef278dc78632b50d600196411de363a1d`, based on `origin/main` at
-`d6c4299aa822ae4078cf2b3b4b29d7d6f4aa1b3f`.
+Date: 22 November 2026. Rebased on `origin/main` at `5740ea84e`.
+The product changes are in `576cc9b89` and `cb2816eaa`.
 
-## Expected and observed results
+## Fresh CORE results
 
-The expected result was a complete CORE browser journey at 390 and 1280 px on a
-fresh secondary stack, with the dispatcher continuing to process events.
+The fresh CORE journey passed at 390 px and 1280 px. At each width, the viewer
+refused access before a desktop grant, displayed the real desktop after the grant,
+and stayed open while the stub reply completed. Revoking the grant cleared the
+pixels and recorded the stop audit. The viewer closed in 345 ms at 390 px and
+108 ms at 1280 px on the fresh start.
 
-The fresh CORE journey failed during the 390 px computer-viewer step. The viewer
-displayed the real desktop, but the next agent reply did not reach **Done** within
-the existing 30-second wait. The computer worker processed `agent.turn_failed`.
-The cause of that turn failure is unproved. No timeout or retry was changed.
+The requested explicit `journey.sh --id 1` run also exited successfully. It
+repeated the same viewer checks at both widths; the viewer closed in 184 ms at
+390 px and 243 ms at 1280 px. Both runs completed the chat reply while the viewer
+was open.
 
-The dispatcher process identity and start fingerprint sampled during CORE were
-unchanged immediately before teardown, and the process was alive. The retained
-dispatcher log has no connection-pool timeout. This observation does not turn the
-failed CORE journey into a pass. The regression test separately forces the pool
-to have no spare connection and proves that the job and checkpoint still commit.
+The approval journey printed **SKIP** because rows 4, 5 and 14 of its separate
+ticket are not ready. That condition is **NOT RUN** and is not counted as a pass.
+It is outside this dispatcher slice's CORE acceptance checks.
 
 ## Stack and browser steps
 
-1. Waited for both secondary slots to report free, no package stack to remain,
-   and the one-minute load to stay below 6 for more than five minutes. Another
-   task briefly occupied slot 2; waited until it released the slot.
-2. Claimed slot 1 through `infra/dev-stack/claim.sh`, then ran
-   `infra/dev-stack/up.sh --fresh --id 1` under `nice -n 10`. Used the shared
-   sign-in credential by path and the stand-in model. No paid provider was used.
-   Website readiness passed in 47,769 ms. Startup automatically ran CORE.
-3. The repository's Playwright runner used the slot's origin,
-   `http://127.0.0.1:25106`, with separate real sign-in sessions. At 390 px, a
-   complete chat reply appeared. Stop kept a partial reply after reload. A PDF
-   upload reached Ready, and the upload and preview steps completed before the
-   computer-viewer step began.
-4. The viewer initially refused access without a desktop grant. After the grant,
-   the viewer displayed the real desktop and its controls were exercised. The
-   next chat turn failed while the viewer was open. CORE stopped at its existing
-   reply-completion assertion: **FAIL**.
-5. The 1280 px chat and remaining CORE steps were **NOT RUN** after that failure.
-   The separate `status.sh` and repeat `journey.sh` commands planned after startup
-   were **NOT RUN** because `up.sh` returned a failure.
-6. Copied sanitised startup and service logs and all slot screenshots into the
-   task's private fleet receipt before running `down.sh --id 1`. The runner exited
-   with status 143 during the first teardown attempt, after services stopped. Ran
-   `down.sh --id 1` again successfully; `status.sh --id 1` then reported `free`.
-   Copied the selected public artefacts below and restored the shared viewer
-   screenshot that CORE had overwritten outside this receipt folder.
+1. Waited until both secondary slots were free, no package stack was up, and the
+   one-minute load stayed under 6 for more than five minutes.
+2. Claimed slot 1 with `infra/dev-stack/claim.sh`. Ran
+   `infra/dev-stack/up.sh --fresh --id 1`; website readiness passed in 41,012 ms.
+   Startup ran CORE automatically. No paid provider was used.
+3. Ran `infra/dev-stack/status.sh --id 1`; every service was running and healthy.
+   Then ran `infra/dev-stack/journey.sh --id 1`; it exited 0 and repeated the CORE
+   checks.
+4. After both journeys, `status.sh --id 1` still reported the dispatcher running.
+   The retained dispatcher log had no pool-timeout matches. No dispatcher restart
+   occurred during either journey.
+5. Copied startup output, journey output, service logs and screenshots to the
+   private task receipt before `infra/dev-stack/down.sh --id 1`. The down command
+   exited 0 and `status.sh --id 1` then reported `free`.
 
 ## Artefacts
 
-- [390 px chat and retained partial reply](screenshots/chat-390.png)
-- [390 px PDF ready](screenshots/upload-ready-390.png)
-- [390 px real desktop viewer](screenshots/viewer-390.png)
-- [390 px failure capture](screenshots/live-view-failure-390.png)
-- [Startup output](logs/startup.txt) and [failed assertion](logs/failure.txt)
-- [Turn failure processed by the computer worker](logs/turn-failure.json)
-- [Dispatcher process comparison](logs/dispatcher-process.json) and
-  [retained service-log summary](logs/service-summary.json)
-- [Released slot](logs/final-status.txt)
+- [390 px viewer after access was granted](screenshots/viewer-390-pass.png)
+- [1280 px viewer after access was granted](screenshots/viewer-1280-pass.png)
+- [390 px viewer entry](screenshots/viewer-entry-390-pass.png)
+- [1280 px viewer entry](screenshots/viewer-entry-1280-pass.png)
+- [Safe live-view check summary](logs/live-view-checks.json)
+- The full startup output, explicit journey output, service logs and all stack
+  screenshots are in the private task receipt. They were copied before teardown.
 
-The public images were visually checked. They contain fixture content, with no
-credentials or email addresses. Private paths and sign-in identifiers were
-removed from the public text. The private fleet receipt retains the other
-screenshots and sanitised service logs copied before teardown.
+## Earlier run before the main fix
+
+The earlier attempt failed at the 390 px viewer step: the viewer opened, but the
+next reply did not reach **Done** within the existing 30-second wait. The computer
+worker processed `agent.turn_failed`; its cause was not proved. The 1280 px steps
+were **NOT RUN** after that failure. Those artefacts remain in the first-run
+receipt and in the earlier commit history. This fresh run was performed after
+the live-viewer reply fix had reached `origin/main`.
+
+The public images were checked. They contain fixture content and no credentials
+or email addresses. Private paths and sign-in identifiers are kept out of this
+receipt.
 
 ## Source checks
 
@@ -89,7 +84,10 @@ the changed crash fixture's query callbacks and removed its nested ternary. Adde
 no dependency or size exception. Shipped code: 33 added and 12 deleted lines,
 45 total, in the two handlers source files.
 
-Packaged journeys for the sign-in and provider tickets, paid-provider behaviour,
-and the skipped approval journey are **NOT RUN** in this bug-fix PR. Fresh CORE
-remains **FAIL** and must pass before merge. CI is not awaited, following the
-task's final PR instruction. Independent review is left to the orchestrator.
+The rebased PR CI run passed. Packaged journeys for the sign-in and provider
+tickets and paid-provider behaviour are **NOT RUN** in this bug-fix PR. The
+approval journey is also **NOT RUN**, as recorded above. Independent review is
+left to the orchestrator.
+
+After the receipt update, local typecheck, check:events, Knip, changelog lint,
+markdownlint, public privacy and secret scans all passed.

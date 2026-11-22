@@ -1,0 +1,34 @@
+{
+  "freshStart": [
+    {
+      "width": 390,
+      "status": "PASS",
+      "noDesktopGrant": "PASS",
+      "viewerReply": "PASS",
+      "revocationMs": 345
+    },
+    {
+      "width": 1280,
+      "status": "PASS",
+      "noDesktopGrant": "PASS",
+      "viewerReply": "PASS",
+      "revocationMs": 108
+    }
+  ],
+  "journeyCommand": [
+    {
+      "width": 390,
+      "status": "PASS",
+      "noDesktopGrant": "PASS",
+      "viewerReply": "PASS",
+      "revocationMs": 184
+    },
+    {
+      "width": 1280,
+      "status": "PASS",
+      "noDesktopGrant": "PASS",
+      "viewerReply": "PASS",
+      "revocationMs": 243
+    }
+  ]
+}
