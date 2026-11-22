@@ -661,6 +661,10 @@ try {
   }
   const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;
   if (secondary && browser && phase4Requested) await runPhase4Journey();
+  // Finish browser assertions and stop background polling before rebuilding the read tables.
+  const completedBrowser = browser;
+  browser = undefined;
+  await completedBrowser?.close();
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });
