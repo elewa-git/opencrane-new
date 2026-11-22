@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-22",
+  "approvedSourceSha": "abe90b2e9a574af2be43c03ae16fd14b0c09b7b2",
+  "applicationApprovalRun": {
+    "id": 44788700765,
+    "conclusion": "success",
+    "artifactNames": ["application-approval", "application-image"],
+    "artifactsExpired": false,
+    "expiresAt": "2026-11-23T16:39:12Z"
+  },
+  "scannerApprovalRun": {
+    "id": 44788706844,
+    "conclusion": "success",
+    "artifactNames": ["scanner-approval", "scanner-image"],
+    "artifactsExpired": false,
+    "expiresAt": "2026-11-23T16:35:35Z"
+  },
+  "backupBranch": "backup/pilot-1162-s1-tip-72686aec7",
+  "approvedCommitPackagePreparation": "PASS",
+  "packageOwnerCheck": "PASS",
+  "privateSecretPreparation": {
+    "result": "FAIL",
+    "command": "nice -n 10 node --experimental-strip-types infra/package/prepare.ts",
+    "observed": "Package secret preparation failed during preflight",
+    "cause": "The command received no private values-file argument and PACKAGE_VALUES_FILE was unset.",
+    "slotFailureLog": "NOT CREATED"
+  },
+  "browserJourney": "NOT RUN",
+  "newCpuPeak": "NOT RUN",
+  "newMemoryPeak": "NOT RUN",
+  "previousOnePersonPeaks": {
+    "wholeNodeCpuCores": 3.654,
+    "wholeNodeMemoryGiBIncludingSwap": 5.12,
+    "source": "2026-11-20 one-person run; not measured again"
+  },
+  "quietWindow": {
+    "start": "2026-11-22T21:03:46Z",
+    "end": "2026-11-22T21:09:02Z",
+    "slot1": "free at every check",
+    "slot2": "free at every check",
+    "packageStacks": "none at every check",
+    "oneMinuteLoadMaximum": 5.10,
+    "checks": 9
+  },
+  "cleanup": {
+    "packageDown": "PASS",
+    "down": "PASS",
+    "slot1": "free"
+  },
+  "journey": "PARTIAL"
+}

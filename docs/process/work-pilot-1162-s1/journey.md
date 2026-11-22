@@ -206,3 +206,23 @@ lint and document checks. It separately retains the unsuccessful broader routine
 investigation; no routine code, deadline or assertion changed and no timing failure is claimed
 fixed. No full local root suite ran. These are own checks; no independent-review result is claimed.
 The PR remains draft.
+
+## Packaged rerun after the receipt commit
+
+On 22 November, both approval runs for approved source `abe90b2e9` succeeded and their application,
+scanner and image artifacts were present and unexpired. The
+[attempt record](logs/attempt-6-package-prepare.json) contains the run ids and expiry times. A
+backup branch preserved the draft PR tip while this worktree was reset to the approved source and
+restored afterwards.
+
+PASS: both secondary slots stayed free, no package stack was running, and one-minute load remained
+below six for 316 seconds. The nine recorded checks ran from 21:03:46 to 21:09:02 UTC. Package
+preparation created its owned namespace and approval files, and the package owner check passed.
+
+FAIL: private secret preparation stopped during preflight with the exact message
+`Package secret preparation failed during preflight`. The command was run without its private
+values-file argument and `PACKAGE_VALUES_FILE` was unset, so the argument check stopped before the
+browser journey. The slot's `failure.log` was not created. Package teardown and slot release passed.
+The one-person browser journey is NOT RUN for this attempt, and no new CPU or memory peak was
+measured. The previous one-person observation remains 3.654 whole-node CPU cores and 5.12 GiB
+including swap; it is not a measurement from this attempt. Journey status remains PARTIAL.
