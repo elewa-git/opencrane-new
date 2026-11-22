@@ -183,6 +183,14 @@ The [safe preparation record](logs/attempt-4-package-prepare.json) and [approval
 (logs/attempt-4-approval-refresh.json) document this attempt. The browser journey and new
 measurements are NOT RUN. No product code or package guard changed.
 
+After the receipt commit, I checked the packaged-run prerequisites again. The approval and image
+artifacts were still present and unexpired. Slot 2 reported free, while slot 1's
+`opencrane-dev-1-*` services were running. The one-minute load was 6.14 at 18:00 UTC, then 12.35
+at 18:01 UTC and 14.81 at 18:02 UTC. The required five-minute window below six did not begin, so I
+did not claim a slot or start a package. The new packaged browser journey and CPU/memory peaks are
+NOT RUN. This is a resource-window stop, not a package preparation failure. The
+[resource check record](logs/attempt-5-resource-window.jsonl) records the observed checks.
+
 ## Retained earlier results and own gates
 
 Fix round 1 remains PARTIAL: one-person sign-in/chat/PDF/history refusal/budget passed at both
