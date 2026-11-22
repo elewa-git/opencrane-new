@@ -44,7 +44,9 @@ try {
   await until(finished, 20_000);
   assert.equal(reports.find(terminal).type, 'agent.turn_completed');
   assert.equal(reports.find(completedMessage).text, 'Hello from your computer.');
-  const requests = (await computer.requests()).trim().split('\n');
+  const capturedRequests = await computer.requests();
+  const trimmedRequests = capturedRequests.trim();
+  const requests = trimmedRequests.split('\n');
   assert.equal(requests.length, 1);
   const request = JSON.parse(requests[0]);
   assert.deepEqual(request.tools ?? [], []);
