@@ -7,10 +7,11 @@ It brings the apps and services together and checks product journeys.
 The checks use a browser to sign in, chat and reload saved replies.
 Developers can also check files, spending and organisation settings.
 The focused tool approval driver asks the free model to use a reviewed demo tool
-in a long chat, through the guarded local TLS transport. It seeds earlier messages
-in small batches and checks projection progress between them. It checks browser approval,
-one use and Stop refusing an already approved request. The demo records the received
-request body. The saved approval use identifies the gateway's decision.
+in a long chat, through the published connection and guarded local TLS transport.
+It seeds earlier messages in small batches and checks projection progress between them.
+It checks browser approval, one use and Stop refusing an already approved request.
+The demo records the received request body. The saved approval use identifies the
+gateway's decision.
 
 ## Where it fits
 

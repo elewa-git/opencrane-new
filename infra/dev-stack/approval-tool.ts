@@ -93,6 +93,7 @@ export async function prepareApprovalTool(input: ApprovalToolSetup) {
   await waitForApprovalSetup(publicationReady);
   const ready = await readToolPolicy(store, silo, serverId);
   assert(ready.published, 'Gateway acknowledges the current reviewed publication');
+  assert(ready.connectionId, 'The published tool has a connection');
   console.log('PASS guarded TLS discovery, exact review and acknowledged publication');
-  return { serverId, revision: ready.catalogue!.schemaDigest };
+  return { serverId, connectionId: ready.connectionId, revision: ready.catalogue!.schemaDigest };
 }

@@ -82,7 +82,6 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
     budget.findLast(row => row.event.type === 'budget.ceiling_set' &&
       z.object({ defaultPayingGroupId: z.string() }).safeParse(row.event.data).success)?.event.data);
   const tokens = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${input.origin}/` });
-  const connectionId = 'installed';
   const until = async (check: () => Promise<boolean>) => {
     const deadline = Date.now() + 90_000;
     while (!await check()) { assert(Date.now() < deadline, 'Approval journey timeout'); await delay(100); }
@@ -102,7 +101,9 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
   const provider = { providerId: admission.choice.providerId,
     bindingSequence: admission.choice.bindingSequence, model: admission.choice.model };
   const toolInput = { ownerPage, store, silo: input.silo, origin: input.origin };
-  const { serverId, revision } = await prepareApprovalTool(toolInput);
+  const { serverId, connectionId, revision } = await prepareApprovalTool(toolInput);
+  const gateway = `http://127.0.0.1:${settings['MODEL_GATEWAY_PORT']}`;
+  const toolUrl = `${gateway}/mcp/${serverId}/${connectionId}`;
   const collector = createStageBCollector(`${directory}/approval-readback`);
   for (const [granteeId, granteeKind] of [[input.requesterId, 'member'], [input.assistantId, 'assistant']]) {
     await append('grant.given', grantStream('mcp_server', serverId), { resourceType: 'mcp_server', resourceId: serverId, granteeId, granteeKind, grantedBy: 'zitadel-owner' });
@@ -136,7 +137,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       }
       const call = async (slot: 'morning' | 'afternoon') => {
         const turn = await computerCredentials(store, tokens, input.silo).turn({ ...input, conversationId, turnId, threadId: conversationId, task: 'chat_turn', ...provider });
-        const result = await fetch(`http://127.0.0.1:${settings['MODEL_GATEWAY_PORT']}/mcp/${serverId}/${connectionId}`, { method: 'POST',
+        const result = await fetch(toolUrl, { method: 'POST',
           headers: { authorization: `Bearer ${computer.value}`, 'x-turn-token': turn.value, 'session-id': conversationId,
             'content-type': 'application/json', 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'change_delivery_slot' }, body: body(slot) });
         await result.arrayBuffer(); return result.status;
@@ -198,7 +199,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       await page.goto(input.origin); // Stop this viewport's polling before the next journey.
     }
     const beforeStop = (await recordedApprovalCalls()).length;
-    await stopApprovalTurn(page, store, tokens, { ...input, serverId, conversationId });
+    await stopApprovalTurn(page, store, tokens, { ...input, toolUrl, conversationId });
     assert.equal((await recordedApprovalCalls()).length, beforeStop,
       'Stop and the refused call have zero upstream effects');
     const stoppedQuote = await readStageBQuote(collector, `${directory}/stage-b-demo.sock`,
