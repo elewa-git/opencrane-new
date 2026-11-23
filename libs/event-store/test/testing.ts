@@ -241,6 +241,10 @@ export async function natsFixture({ provision = true, freshCertificates = false,
     dispatcherConnection,
     env,
     client,
+    async dispatcherInfo() {
+      const manager = await jetstreamManager(connection);
+      return manager.consumers.info("EVENTS", "handler-dispatcher");
+    },
     /** Publish known-valid fixture events without command retry lookups. */
     async seed(events: EventEnvelope[]) {
       const js = jetstream(connection);
