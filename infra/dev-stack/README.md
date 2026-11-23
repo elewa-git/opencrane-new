@@ -54,23 +54,24 @@ Not built yet:
 
 1. **A developer claims a stack.** A claim reserves one of two spare copies.
    Each copy has its own ports, data and private keys. Cleanup removes only that copy.
-2. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
+
+1. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
    provider, then starts the apps. It waits for the website and dispatcher before
-<<<<<<< HEAD
-   running the core browser journey. The status command shows recovery attempts
-   for event delivery, acknowledgements and computer watcher reads.
-=======
    running the core browser journey by default. A focused approval run can start
-   the services first and run its browser checks after the demo is ready.
->>>>>>> 18eb13f70 (🧪 Defer focused browser checks until the guarded demo is ready)
-3. **A developer checks a change.** The browser signs in, sends a message and checks
+   the services first and run its browser checks after the demo is ready. The status
+   command shows recovery attempts for event delivery, acknowledgements and computer
+   watcher reads.
+
+1. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,
    desktop viewing and organisation settings. The core journey finishes its browser
    checks and closes the browser before rebuilding the read tables.
-4. **An unsafe command is requested.** The launcher refuses automated coding jobs
+
+1. **An unsafe command is requested.** The launcher refuses automated coding jobs
    that try to run owner commands or use real providers. Fresh journeys use a claimed
    spare stack and the free stand-in model.
-5. **The daily check runs.** A timer starts a fresh spare stack from a separate main
+
+1. **The daily check runs.** A timer starts a fresh spare stack from a separate main
    checkout, runs browser checks and saves results. It removes its stack afterwards;
    if both slots are busy, it records that the run was skipped.
 
