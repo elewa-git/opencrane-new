@@ -1,8 +1,21 @@
 # Install hardening journey
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: PASS for the latest packaged pilot run. Production
+F1/F2 host qualification remains PARTIAL.
 
-## Latest packaged attempt
+## Latest packaged journey
+
+23 November 2026. The latest approved product `2a5176965` passed the full fresh
+packaged journey: nine install refusals; real wrong-organisation sign-in at 1280
+and 390 px with no new member or event; first-owner claim, wrong-token and reuse
+refusals; and owner, admin and member chats and Secure/HttpOnly cookies at both
+widths. The corrected member token-reuse and unchanged-role checks passed.
+Package removal, slot release and temporary test-app deletion passed. The
+documented host-risk override was logged for this dev box; production F1/F2
+checks are PARTIAL. See the [round 4 receipt](round-4-fix/receipt.md) and
+[safe results](round-4-fix/packaged-results.json).
+
+## Earlier packaged attempt
 
 23 November 2026. Approved product head `59573055e269f54225a25b6cce0014bc203f4778`
 has green CI, and its application and scanner approval artifacts were present and
@@ -25,7 +38,7 @@ result is retained in the task receipt outside the repository. Cleanup passed:
 `package-down --id 1` and `down.sh --id 1`; both secondary slots are free. No retry
 was made. See the [attempt receipt](round-6-rebased/receipt.md).
 
-## Latest rebase attempt
+## Earlier rebase attempt
 
 23 November 2026. Rebased product head `59573055e269f54225a25b6cce0014bc203f4778`
 has green CI and fresh application and scanner package approvals. The five-minute
@@ -63,7 +76,7 @@ was 1.15–4.56. See the [final round receipt](round-3-final/receipt.md).
 
 The rapid-Enter regression is fixed test-first, but the original member failure
 also accepted creation before its list catch-up stalled. It is not claimed fixed.
-The overall journey remains FAIL; this draft must not merge.
+That round's journey remains FAIL and did not qualify the draft for merge.
 
 ## Latest correction attempt
 
@@ -428,8 +441,8 @@ Fresh volume identities from the latest install:
 - `home-computer-a39df7e19bb5235d72898e6cc6fbc911`: `f2634ab6-74a8-48af-8691-4344cffd00db`, created `2026-11-20T13:58:39Z`.
 - `pilot-restore`: `fd64ccda-db96-443e-ba4c-967b1856a8a5`, created `2026-11-20T13:55:48Z`.
 
-The latest install, its slot claim and its temporary sign-in app were removed.
+That install, its slot claim and its temporary sign-in app were removed.
 The checkout and worktree remain for review. No independent-review verdict is claimed.
-This draft cannot merge until the complete fresh packaged journey passes.
+The complete fresh packaged journey is recorded at the top of this file.
 Real public access, DNS, certificate issuance and hosted tenant setup remain outside
 this slice in #1163.

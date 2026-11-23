@@ -1,0 +1,5 @@
+FAIL: all three executable preparation cases before the fix.
+Cases: duplicate values sources, missing filename, extra filename arguments.
+Expected: Package secret preparation failed during values arguments (invalid_values_arguments)
+Actual: Package secret preparation failed during preflight
+No private filename appeared in the diagnostic.

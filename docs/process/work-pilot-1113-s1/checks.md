@@ -1,5 +1,17 @@
 # Install hardening source checks
 
+## Round 4 diagnosis and fresh packaged journey
+
+The duplicate values-file input refused before preflight. Test-first
+`7f7caa44a` and fix `2a5176965` give that refusal the safe
+`invalid_values_arguments` code. The changed package scope passed twice,
+104/104 each. Typecheck, events, Knip, changelog, Markdown, scoped ESLint,
+privacy and secret checks passed. Exact-source CI and both image approvals
+passed. The [fresh packaged journey](round-4-fix/receipt.md) passed all nine
+install refusals, wrong-organisation sign-in, owner claim and token refusals,
+and owner, admin and member chat and cookies at both widths. Production F1/F2
+host qualification remains PARTIAL under the logged local exception.
+
 ## Round 3 source checks and live result
 
 Own checks only. No independent-review verdict is claimed. Product TypeScript
@@ -22,14 +34,14 @@ No full root suite ran locally.
 | Changelog, Markdown, README structure and whole-stream reads | PASS | [Check receipts](round-3-final/checks/) |
 | Privacy and secret scans | PASS | Run before each push; retained evidence paths use placeholders |
 | Exact-product CI and both real image approval consumers | PASS | `bf0a059d8`; installed digests in the final receipt |
-| Latest fresh packaged journey | FAIL | [Member 390 px reply stalled](round-3-final/receipt.md) |
+| Round 3 fresh packaged journey | FAIL | [Member 390 px reply stalled](round-3-final/receipt.md) |
 | Corrected member token reuse and unchanged-role checks live | NOT RUN | Stopped at the failed chat; strict fixture tests pass |
 
 The safe failure reason and masked screenshot were captured in both later failed
 runs. The exact executable-import test also prevents the missing-helper startup
-fault seen in the first attempt. The latest dispatcher restart cause and a full
-fresh PASS remain outstanding. The earlier checks below retain their own source
-bindings and do not replace this FAIL.
+fault seen in the first attempt. At this checkpoint, the dispatcher restart cause
+and a full fresh PASS remained outstanding. The earlier checks below retain their
+own source bindings and do not replace this round's FAIL.
 
 ## Personal assignment updates
 
