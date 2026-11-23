@@ -193,3 +193,33 @@ No timeout or refusal assertion changed. These were the builder's own checks.
 Made right: shared the two existing catalogue test builders, split capture persistence
 from watch orchestration, and reused one comparison for catalogue schema and revision
 promises. The dispatcher and queue source remain unchanged. No dependency was added.
+
+## Approval-safety regression checks
+
+Date: 23 November 2026 UTC. This round changes tests and documentation only.
+Product source is identical to `221e55f21` and the qualified `f8a38ee69` source above.
+Fresh CORE and browser publication were NOT RUN again; the existing PASS at both
+widths applies to the unchanged product source. No secondary stack was claimed.
+
+- PASS: saved-freshness regression in test commit `b3bd5da1f`. Both controlled
+  publication races capture dates 60 seconds later than the saved dates. They check
+  that the saved dates remain unchanged, then advance only Date to one millisecond
+  after saved expiry and require the watch to refuse while the capture is still fresh.
+  Temporarily using capture dates for local freshness makes both cases FAIL at that
+  refusal assertion.
+- PASS: identity and revision-declaration regressions in test commit `07e142216`.
+  While the capture append waits, another discovery changes the connection, account
+  mode, or withdraws or changes the expected-revision declaration. Tools and schema
+  digest remain identical. Each case requires the watch to stay closed, the capture
+  check to reject and gateway preparation to refuse the obsolete publication.
+- PASS: temporarily removing the latest-policy identity recheck makes both identity
+  cases FAIL because the watch opens. Both declaration cases still pass.
+- PASS: separately replacing only the latest catalogue comparison with a schema-only
+  comparison makes both declaration cases FAIL because the watch opens. Both identity
+  cases still pass. Every temporary mutation was restored before the final checks.
+- PASS: the complete changed test file twice, ten cases each, with two workers under
+  `nice -n 10`. No full root suite was run and no assertion or timeout was weakened.
+
+Made right: reused the existing NATS fixture, controlled append barrier, catalogue
+builders and public watch and gateway interfaces. Kept each new function below the
+repository limits, with named steps and no new dependency or production abstraction.

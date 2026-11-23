@@ -4452,8 +4452,10 @@ then reports Ready for the new process, before and after catalogue replay.
 `mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.
 `mcp-catalogue-publication.test.ts` uses real NATS and controlled capture and append
-barriers to check concurrent publication, one append attempt, expiry, changed or replaced
-tools and failed writes.
+barriers to check concurrent publication, one append attempt, saved expiry despite a
+later-dated capture, changed or replaced tools and failed writes. Discoveries with
+identical tools but a changed connection, account mode or revision declaration keep
+the watch closed and make gateway preparation refuse the obsolete publication.
 
 ## Current effect accounting (P4-26 PR 8f; Part of #108)
 
