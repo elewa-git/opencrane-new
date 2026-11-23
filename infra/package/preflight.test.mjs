@@ -457,3 +457,36 @@ function refusesMissingPrivateSettings() {
 }
 test('public address refuses absent private settings without exposing dependency output',
   refusesMissingPrivateSettings);
+
+function refusesInvalidValuesArguments(argumentsList, environmentValue) {
+  const environment = { ...process.env, DEV_STACK_ID: '1' };
+  delete environment.PACKAGE_VALUES_FILE;
+  if (environmentValue !== undefined) {
+    environment.PACKAGE_VALUES_FILE = environmentValue;
+  }
+  const result = spawnSync(process.execPath, ['--experimental-strip-types',
+    'infra/package/prepare.ts', ...argumentsList], { env: environment, encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr,
+    'Package secret preparation failed during values arguments (invalid_values_arguments)\n');
+}
+
+function refusesDuplicateValuesSources() {
+  refusesInvalidValuesArguments(['/private/values.json'], '/private/values.json');
+}
+
+test('preparation names duplicate values arguments without printing the private path',
+  refusesDuplicateValuesSources);
+
+function refusesMissingValuesPath() {
+  refusesInvalidValuesArguments([], undefined);
+}
+
+test('preparation names a missing values argument before preflight', refusesMissingValuesPath);
+
+function refusesExtraValuesArguments() {
+  refusesInvalidValuesArguments(['/private/values.json', '/private/extra.json'], undefined);
+}
+
+test('preparation names extra values arguments before preflight', refusesExtraValuesArguments);
