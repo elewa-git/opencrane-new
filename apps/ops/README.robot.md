@@ -360,11 +360,12 @@ there after opening its event consumer. It writes nothing while a changed subscr
 list leaves it waiting for maintenance. The worker removes the marker when dispatch
 fails, before waiting for the PostgreSQL unlock. It also removes the marker on
 shutdown before waiting for a slow cleanup task.
-The running worker retries a missed pull heartbeat on the existing durable
-consumer and a temporary watcher read error from the watcher's last applied
-position. The [handlers contract](../../libs/handlers/README.robot.md) defines
-the retry budget. If it runs out, the worker logs the cause, removes readiness
-and exits with code 1. The structured logs record each retry and its outcome.
+The running worker retries interrupted pulls and uncertain acknowledgements on
+the existing durable consumer. The computer watcher resumes a timed-out read
+from its last applied position. An observed gap stops the worker. The
+[handlers contract](../../libs/handlers/README.robot.md) defines the retry budget.
+If it runs out, the worker logs the cause, removes readiness and exits with code 1.
+The structured logs record each retry and its outcome.
 When the local stack sets `DEV_JETSTREAM_RECOVERY_FILE`, it also records the last
 retry, recovery or exhaustion for each affected operation for `status.sh`.
 

@@ -13,7 +13,8 @@ This is one of the packages that build everything from the
 [event log](../../GLOSSARY.md#event-log-event-store).
 [apps/ops](../../apps/ops/README.md), the background workers, starts the
 [dispatcher](../../GLOSSARY.md#dispatcher), which reads new events and puts jobs
-on the list. Most reactions live in other packages: `libs/authz` updates permissions,
+on the list. It resumes after a brief interruption while receiving an event or
+confirming its acknowledgement. Most reactions live in other packages: `libs/authz` updates permissions,
 `libs/models` handles AI access and spending, and `apps/ops` manages assistants and computers.
 This package also sends saved nightly memory identifiers to the decision process.
 The list is stored in PostgreSQL using pg-boss, a job queue library.
@@ -24,6 +25,7 @@ flowchart LR
   ops["apps/ops and dev startup<br/>background workers, including welcome completion"] -->|checks changes; runs queued jobs| handlers
   handlers -->|reports dispatch failure before lock cleanup| ops
   nats["NATS JetStream<br/>event log"] -->|new events and redelivery| handlers
+  handlers -->|confirms saved work| nats
   handlers -->|runs reactions and sends saved nightly identifiers| reactions["libs/models and libs/authz<br/>AI rules and permissions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
   handlers -.-> events["libs/events<br/>reaction subscriptions"]

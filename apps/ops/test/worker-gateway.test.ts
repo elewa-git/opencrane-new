@@ -1,4 +1,4 @@
-import { fork, type ForkOptions } from 'node:child_process';
+import { fork, type ChildProcess, type ForkOptions } from 'node:child_process';
 import { once } from 'node:events';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -15,6 +15,10 @@ import { gatewayFixture } from '../../../libs/models/test/gateway-delivery-fixtu
 import { gatewayConfigurationSchema } from '@opencrane/events';
 
 type PausedConnection = 'pull' | 'watcher';
+
+function workerExited(child: ChildProcess) {
+  return child.exitCode !== null || child.signalCode !== null;
+}
 
 async function fixture(contentSetting?: string, pausePreparation = false,
   pausedConnection?: PausedConnection) {
@@ -88,7 +92,7 @@ async function fixture(contentSetting?: string, pausePreparation = false,
   child.stdout?.on('data', collect);
   child.stderr?.on('data', collect);
   async function close() {
-    if (child.exitCode === null && child.signalCode === null) {
+    if (!workerExited(child)) {
       child.kill('SIGTERM');
       await exited;
     }
@@ -100,8 +104,13 @@ async function fixture(contentSetting?: string, pausePreparation = false,
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(close);
+  function requireRunning() {
+    if (!workerExited(child)) return;
+    const status = child.signalCode ? `signal ${child.signalCode}` : `code ${child.exitCode}`;
+    throw new Error(`Dispatcher exited with ${status}\n${output}`);
+  }
   async function ready() {
-    if (child.exitCode !== null) throw new Error(output);
+    requireRunning();
     const result = await storage.queue.query<{ name: string | null }>(
       "SELECT to_regclass('handler_dispatcher') AS name");
     return result.rows[0]?.['name'] !== null;
@@ -158,7 +167,7 @@ async function fixture(contentSetting?: string, pausePreparation = false,
   }
   return { storage, content, readerUrl, nats, child, exited, ready, publish, preparePublication,
     waitingLocks, latest, logs, preparing: preparing.promise, pauseResponses, readinessFile,
-    recoveryFile, proxy, pullInboxes };
+    recoveryFile, proxy, pullInboxes, requireRunning };
 }
 
 async function sharedLock(preparationFirst: boolean) {
@@ -238,12 +247,7 @@ it.each([false, true])('shares the production content lock; preparation first: %
 
 async function refusesConfiguration(value: string) {
   const setup = await fixture(value);
-  function stopped() {
-    return setup.child.exitCode !== null;
-  }
-  await until(stopped, 5000);
-  await setup.exited;
-  expect(setup.child.exitCode).toBe(1);
+  await waitForFailedExit(setup);
   expect(setup.logs()).toContain('CONTENT_DATABASE_URL');
   expect(setup.logs()).not.toContain('private-canary');
   expect((await setup.storage.queue.query<{ name: string | null }>(
@@ -260,12 +264,7 @@ async function lostContent() {
   const killed = await setup.content.db.query(`SELECT pg_terminate_backend(pid)
     FROM pg_stat_activity WHERE usename = $1`, [setup.readerUrl.username]);
   expect(killed.rows.length).toBeGreaterThan(0);
-  function stopped() {
-    return setup.child.exitCode !== null;
-  }
-  await until(stopped, 5000);
-  await setup.exited;
-  expect(setup.child.exitCode).toBe(1);
+  await waitForFailedExit(setup);
   await setup.publish('alpha');
   expect(await setup.latest()).toBeNull();
   expect(await history(setup.nats.store, 'gateway-config-test', 'test')).toEqual([]);
@@ -316,9 +315,19 @@ it('keeps a queued publication unfinished when its content lock connection is lo
 
 type WorkerFixture = Awaited<ReturnType<typeof fixture>>;
 
+async function waitForFailedExit(setup: WorkerFixture, timeout = 5000) {
+  function stopped() {
+    return workerExited(setup.child);
+  }
+  await until(stopped, timeout);
+  await setup.exited;
+  expect(setup.child.signalCode).toBeNull();
+  expect(setup.child.exitCode).toBe(1);
+}
+
 async function waitForWorker(setup: WorkerFixture) {
   async function markedReady() {
-    if (setup.child.exitCode !== null) throw new Error(setup.logs());
+    setup.requireRunning();
     try {
       return (await readFile(setup.readinessFile, 'utf8')) === String(setup.child.pid);
     } catch (error) {
@@ -331,7 +340,7 @@ async function waitForWorker(setup: WorkerFixture) {
 
 async function waitForLog(setup: WorkerFixture, message: string) {
   function logged() {
-    if (setup.child.exitCode !== null) throw new Error(setup.logs());
+    setup.requireRunning();
     return setup.logs().includes(message);
   }
   await until(logged);
@@ -339,7 +348,7 @@ async function waitForLog(setup: WorkerFixture, message: string) {
 
 async function waitForGeneration(setup: WorkerFixture, generation: number) {
   async function saved() {
-    if (setup.child.exitCode !== null) throw new Error(setup.logs());
+    setup.requireRunning();
     return (await setup.latest())?.generation === generation;
   }
   await until(saved);
@@ -355,15 +364,7 @@ async function checkpoint(setup: WorkerFixture) {
 async function recoversPull() {
   const setup = await fixture(undefined, false, 'pull');
   await waitForWorker(setup);
-  async function waitingForPublication() {
-    const info = await setup.nats.dispatcherInfo();
-    return info.ack_floor.stream_seq === 6 && info.num_waiting === 1;
-  }
-  const first = await setup.publish('alpha');
-  await waitForGeneration(setup, 1);
-  const second = await setup.preparePublication('bravo');
-  await until(waitingForPublication);
-  expect(await checkpoint(setup)).toBe(6);
+  const { first, second } = await pendingPublication(setup);
 
   setup.pauseResponses(true);
   await setup.nats.seed([second]);
@@ -377,28 +378,10 @@ async function recoversPull() {
   expect(interrupted.num_ack_pending).toBe(1);
   setup.pauseResponses(false);
 
-  await waitForGeneration(setup, 2);
-  async function caughtUp() {
-    const info = await setup.nats.dispatcherInfo();
-    return info.ack_floor.stream_seq === 8 && info.num_ack_pending === 0;
-  }
-  await until(caughtUp);
+  await expectBothPublications(setup, [first.id, second.id]);
   const acknowledged = await setup.nats.dispatcherInfo();
   // The consumer counted the interrupted delivery as well as each acknowledged event.
   expect(acknowledged.ack_floor.consumer_seq).toBeGreaterThan(8);
-  expect(await setup.nats.store.head()).toBe(8);
-  expect(await checkpoint(setup)).toBe(8);
-  const effects = await history(setup.nats.store, 'gateway-config-test', 'test');
-  expect(effects).toHaveLength(2);
-  expect(effects.map(({ sequence }) => sequence)).toEqual([4, 8]);
-  const receipts = await setup.storage.queue.query<{ event_id: string }>(
-    `SELECT event_id FROM handler_receipts WHERE handler = 'prepare-gateway-configuration'`,
-  );
-  expect(receipts.rows).toHaveLength(2);
-  expect(receipts.rows).toEqual(expect.arrayContaining([
-    { event_id: first.id }, { event_id: second.id },
-  ]));
-  expect(await readFile(setup.readinessFile, 'utf8')).toBe(String(setup.child.pid));
   expect(await readFile(setup.recoveryFile, 'utf8')).toContain('dispatcher pull: recovered');
 }
 it('resumes the same durable pull after missed heartbeats and applies each event once',
@@ -423,12 +406,7 @@ async function stopsAfterPersistentFailure() {
   const setup = await fixture(undefined, false, 'pull');
   await waitForWorker(setup);
   setup.pauseResponses(true);
-  function stopped() {
-    return setup.child.exitCode !== null;
-  }
-  await until(stopped, 15_000);
-  await setup.exited;
-  expect(setup.child.exitCode).toBe(1);
+  await waitForFailedExit(setup, 15_000);
   expect(setup.logs()).toContain('Dispatcher pull recovery exhausted');
   expect(setup.logs()).toContain('heartbeats missed');
   const attempts = setup.logs().match(/Retrying dispatcher pull after JetStream failure/g);
@@ -444,31 +422,30 @@ async function stopsAfterServerLoss() {
   const setup = await fixture();
   await waitForWorker(setup);
   await setup.nats.stop();
-  function stopped() {
-    return setup.child.exitCode !== null;
-  }
-  await until(stopped, 15_000);
-  await setup.exited;
-  expect(setup.child.exitCode).toBe(1);
+  await waitForFailedExit(setup, 15_000);
   expect(setup.logs()).toMatch(/(Dispatcher pull|Computer watcher read) recovery exhausted/);
   await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
 }
 it('stops when the NATS server disappears and does not come back', stopsAfterServerLoss);
 
+async function waitForPullAt(setup: WorkerFixture, sequence: number) {
+  async function waiting() {
+    const info = await setup.nats.dispatcherInfo();
+    return info.ack_floor.stream_seq === sequence && info.num_waiting === 1;
+  }
+  await until(waiting);
+  expect(await checkpoint(setup)).toBe(sequence);
+}
+
 async function pendingPublication(setup: WorkerFixture) {
   const first = await setup.publish('alpha');
   await waitForGeneration(setup, 1);
   const second = await setup.preparePublication('bravo');
-  async function waiting() {
-    const info = await setup.nats.dispatcherInfo();
-    return info.ack_floor.stream_seq === 6 && info.num_waiting === 1;
-  }
-  await until(waiting);
-  expect(await checkpoint(setup)).toBe(6);
+  await waitForPullAt(setup, 6);
   return { first, second };
 }
 
-async function expectBothPublications(setup: WorkerFixture, eventIds: string[]) {
+async function expectBothPublications(setup: WorkerFixture, eventIds: readonly string[]) {
   await waitForGeneration(setup, 2);
   async function caughtUp() {
     const info = await setup.nats.dispatcherInfo();
@@ -478,10 +455,10 @@ async function expectBothPublications(setup: WorkerFixture, eventIds: string[]) 
   expect(await checkpoint(setup)).toBe(8);
   expect(await setup.nats.store.head()).toBe(8);
   const effects = await history(setup.nats.store, 'gateway-config-test', 'test');
-  function position(effect: { sequence: number }) {
+  function effectPosition(effect: { sequence: number }) {
     return effect.sequence;
   }
-  expect(effects.map(position)).toEqual([4, 8]);
+  expect(effects.map(effectPosition)).toEqual([4, 8]);
   const receipts = await setup.storage.queue.query<{ event_id: string }>(
     `SELECT event_id FROM handler_receipts WHERE handler = 'prepare-gateway-configuration'`,
   );
@@ -489,7 +466,7 @@ async function expectBothPublications(setup: WorkerFixture, eventIds: string[]) 
     return receipt.event_id;
   }
   const receivedIds = receipts.rows.map(eventId);
-  expect(receivedIds.sort()).toEqual(eventIds.sort());
+  expect(receivedIds.toSorted()).toEqual(eventIds.toSorted());
   expect(await readFile(setup.readinessFile, 'utf8')).toBe(String(setup.child.pid));
 }
 
@@ -525,9 +502,10 @@ async function exhaustsSocketDrops() {
     await until(pulled);
     setup.proxy!.dropConnections();
   }
-  await expect.poll(() => setup.child.exitCode, { timeout: 3000 }).toBe(1);
+  await waitForFailedExit(setup, 3000);
   expect(new Set(setup.pullInboxes).size).toBe(5);
   expect(setup.logs()).toContain('Dispatcher pull recovery exhausted');
+  expect(setup.logs()).not.toContain('Dispatcher pull recovered');
   expect(setup.logs().match(/Retrying dispatcher pull after JetStream failure/g)).toHaveLength(4);
   await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
   expect(await readFile(setup.recoveryFile, 'utf8')).toContain('dispatcher pull: exhausted');
@@ -539,12 +517,13 @@ it('charges repeated socket drops to the pull budget and withdraws readiness', e
 async function resumesAfterUncertainAck(delivered: boolean) {
   const setup = await fixture(undefined, false, 'pull');
   await waitForWorker(setup);
-  const { first, second } = await pendingPublication(setup);
+  const first = await setup.preparePublication('alpha');
+  await waitForPullAt(setup, 2);
   const lock = await setup.storage.queue.connect();
   try {
     await lock.query('BEGIN');
     await lock.query('SELECT id FROM handler_dispatcher FOR UPDATE');
-    await setup.nats.seed([second]);
+    await setup.nats.seed([first]);
     async function dispatchIsWaitingForCommit() {
       const waiting = await setup.storage.queue.query(`SELECT pid FROM pg_stat_activity
         WHERE datname = current_database() AND wait_event_type = 'Lock'
@@ -559,23 +538,32 @@ async function resumesAfterUncertainAck(delivered: boolean) {
     lock.release();
   }
   async function committed() {
-    return (await checkpoint(setup)) === 7;
+    return (await checkpoint(setup)) === 3;
   }
   await until(committed);
   if (delivered) {
     async function acknowledged() {
-      return (await setup.nats.dispatcherInfo()).ack_floor.stream_seq === 7;
+      return (await setup.nats.dispatcherInfo()).ack_floor.stream_seq === 3;
     }
     await until(acknowledged);
   }
   const interrupted = await setup.nats.dispatcherInfo();
-  expect(interrupted.ack_floor.stream_seq).toBe(delivered ? 7 : 6);
+  expect(interrupted.ack_floor.stream_seq).toBe(delivered ? 3 : 2);
+  await waitForGeneration(setup, 1);
+  const second = await setup.publish('bravo');
+  expect(await setup.nats.store.head()).toBe(7);
+  expect(await checkpoint(setup)).toBe(3);
   await waitForLog(setup, 'Retrying dispatcher acknowledgement after JetStream failure');
   // Discard the withheld bytes. A fresh connection cannot receive the original reply.
   setup.proxy!.dropConnections();
   setup.pauseResponses(false);
   await expectBothPublications(setup, [first.id, second.id]);
-  expect(setup.logs()).toContain('Dispatcher acknowledgement recovered');
+  expect(await readFile(setup.recoveryFile, 'utf8'))
+    .toContain('dispatcher acknowledgement: recovered');
+  if (!delivered) {
+    const acknowledged = await setup.nats.dispatcherInfo();
+    expect(acknowledged.ack_floor.consumer_seq).toBeGreaterThan(8);
+  }
 }
 it.each([true, false])('resumes after a lost acknowledgement reply, broker acknowledged: %s',
   resumesAfterUncertainAck);
@@ -598,7 +586,7 @@ async function refusesChangedCheckpoint(
   const { second } = await pendingPublication(setup);
   await setup.storage.queue.query(mutation);
   await setup.nats.seed([second]);
-  await expect.poll(() => setup.child.exitCode, { timeout: 3000 }).toBe(1);
+  await waitForFailedExit(setup, 3000);
   expect(setup.logs()).toContain(reason);
   const rows = await setup.storage.queue.query('SELECT sequence FROM handler_dispatcher');
   expect(rows.rows).toEqual(expectedRows);

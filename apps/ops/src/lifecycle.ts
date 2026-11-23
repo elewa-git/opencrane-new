@@ -6,7 +6,7 @@ import { isEventStoreUnavailable, readBeforeDeadline,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { conversationCreatedDataSchema, memberJoinedDataSchema,
   type EventEnvelope } from '@opencrane/events';
-import { readEvents } from '@opencrane/projections';
+import { EventReadTimeoutError, readEvents } from '@opencrane/projections';
 import { recoverJetStreamOperation, registerHandler,
   type JetStreamRecoveryReporter } from '@opencrane/handlers';
 import { createLogger, type Logger } from '@opencrane/observability';
@@ -179,9 +179,9 @@ function recordActivity(snapshot: ComputerWatchState, event: EventEnvelope) {
 }
 
 async function updateComputers(store: EventStore, kube: SandboxClient,
-  silo: string, snapshot: ComputerWatchState) {
+  silo: string, snapshot: ComputerWatchState, signal: AbortSignal) {
   const head = await store.head();
-  for await (const row of readEvents(store, snapshot.position + 1, head)) {
+  for await (const row of readEvents(store, snapshot.position + 1, head, signal)) {
     const { event, sequence } = row;
     if (event.silo === silo) {
       recordActivity(snapshot, event);
@@ -426,14 +426,18 @@ export type ComputerWatchOptions = {
   reportRecovery?: JetStreamRecoveryReporter;
 };
 
+function isWatcherReadUnavailable(error: unknown) {
+  return error instanceof EventReadTimeoutError || isEventStoreUnavailable(error);
+}
+
 function computerEventUpdates(store: EventStore, kube: SandboxClient,
   snapshot: ComputerWatchState, options: ComputerWatchOptions, logger: Logger) {
   const { silo, signal, reportRecovery } = options;
   const recovery = { operation: 'Computer watcher read' as const, signal, logger,
-    isUnavailable: isEventStoreUnavailable, report: reportRecovery };
+    isUnavailable: isWatcherReadUnavailable, report: reportRecovery };
   let refresh: Promise<void> | undefined;
   function readNewEvents() {
-    return updateComputers(store, kube, silo, snapshot);
+    return updateComputers(store, kube, silo, snapshot, signal);
   }
   return async function refreshComputers() {
     if (!refresh) refresh = recoverJetStreamOperation(readNewEvents, recovery);

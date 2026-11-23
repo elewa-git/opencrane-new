@@ -19,8 +19,14 @@ async function watchesPartialRead(gap: boolean) {
   const next = lostComputer(gap ? 3 : 2, 'next');
   const blocked = Promise.withResolvers<AbortController>();
   const recovered = Promise.withResolvers<void>();
+  const appliedNext = Promise.withResolvers<void>();
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
-  const applied = vi.spyOn(kube, 'forgetMode');
+  const forgetMode = kube.forgetMode.bind(kube);
+  function apply(computerId: string) {
+    forgetMode(computerId);
+    if (computerId === 'next') appliedNext.resolve();
+  }
+  const applied = vi.spyOn(kube, 'forgetMode').mockImplementation(apply);
   const sink = vi.fn();
   let deadline = new AbortController();
   let interrupted = false;
@@ -30,7 +36,7 @@ async function watchesPartialRead(gap: boolean) {
   }
   const clock = vi.spyOn(AbortSignal, 'timeout').mockImplementation(readDeadline);
   vi.spyOn(nats.store, 'head').mockResolvedValue(next.sequence);
-  async function* subscribe(fromSequence: number, signal?: AbortSignal) {
+  async function* subscribe(fromSequence = 1, signal?: AbortSignal) {
     if (fromSequence === 1) {
       yield first;
       if (!gap && !interrupted) {
@@ -60,7 +66,8 @@ async function watchesPartialRead(gap: boolean) {
   const outcome = work.catch(captureFailure);
   try {
     if (gap) {
-      await expect(work).rejects.toThrow('EVENTS stream is incomplete');
+      await expect(Promise.race([work, appliedNext.promise]))
+        .rejects.toThrow('EVENTS stream is incomplete');
       expect(applied.mock.calls).toEqual([['first']]);
       expect(reportRecovery).not.toHaveBeenCalled();
       return;

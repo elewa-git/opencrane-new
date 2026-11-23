@@ -17,7 +17,7 @@ Assistant computers run in [Kubernetes](../../GLOSSARY.md#kubernetes).
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>background workers"] -->|resumes reads and saves results| nats["NATS<br/>event log"]
+  ops["apps/ops<br/>background workers"] -->|resumes interrupted reads and saves results| nats["NATS<br/>event log"]
   ops -->|keeps jobs and read tables| pg["PostgreSQL<br/>jobs and content"]
   ops -->|checks and updates permissions| fga["OpenFGA<br/>access checks"]
   ops -->|starts and pauses| computer["apps/computer<br/>assistant computers"]
@@ -74,7 +74,8 @@ Run these commands from the repository root with the service settings in
 [README.robot.md](README.robot.md#live-workers).
 The `members` worker writes read tables in PostgreSQL.
 The `dispatcher` worker updates permissions and saves events while running background
-jobs. It resumes work after a brief event-log interruption and logs each recovery.
+jobs. It resumes work after a brief interruption in event delivery, acknowledgement
+or computer watcher reads and logs each recovery.
 On the local stack, the status command shows the latest recovery for each affected operation.
 Only the replay command with `--dry-run` is read-only: it inspects saved event history.
 

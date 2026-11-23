@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { readEvents, type EventSource, type Query } from '@opencrane/projections';
+import { EventReadTimeoutError, readEvents, type EventSource, type Query } from '@opencrane/projections';
 import type { EventEnvelope } from '@opencrane/events';
 import type { HandlerRuntime } from './queue.ts';
 export interface SubscriptionChange {
@@ -50,6 +50,12 @@ export interface UpgradeProgress extends Record<string, unknown> {
 }
 const chunkSize = 256;
 
+function canRetryHistoryRead(error: unknown) {
+  return error instanceof Error && (error instanceof EventReadTimeoutError ||
+    error.name === 'TimeoutError' ||
+    ['EVENTS stream is incomplete', 'timeout', 'TIMEOUT'].includes(error.message));
+}
+
 async function readChunk(source: EventSource, from: number, to: number,
   runtime: HandlerRuntime) {
   for (let attempt = 0; ; attempt++) {
@@ -63,14 +69,11 @@ async function readChunk(source: EventSource, from: number, to: number,
       }
       return rows;
     } catch (error) {
-      if (!(error instanceof Error) ||
-          (error.name !== 'TimeoutError' &&
-            !['EVENTS stream is incomplete', 'timeout', 'TIMEOUT'].includes(error.message)) ||
-          attempt >= 5) {
+      if (!canRetryHistoryRead(error) || attempt >= 5) {
         throw error;
       }
       const retryInMs = Math.min(250 * 2 ** attempt, 4000);
-      const fields = { fromSequence: from, retryInMs };
+      const fields = { err: error, fromSequence: from, retryInMs };
       runtime.options.logger.warn(fields, 'History read timed out; retrying the same chunk');
       await delay(retryInMs);
     }

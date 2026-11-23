@@ -18,7 +18,7 @@ Callers check access before returning private data.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>background workers"] -.-> projections["libs/projections<br/>read tables"]
+  ops["apps/ops<br/>background workers"] -.->|reads ordered events and updates tables| projections["libs/projections<br/>read tables"]
   server["apps/server<br/>back end"] -.-> projections
   models["libs/models<br/>AI access rules"] -.-> projections
   projections -.-> store["libs/event-store<br/>saved event log"]
@@ -46,7 +46,8 @@ Not built yet:
 
 1. **A change is saved.** A worker reads the event and updates the matching tables.
    The table changes and worker position commit together, so a failed update leaves
-   the event available to try again.
+   the event available to try again. A read that times out is reported separately
+   from a missing position in the event log.
 2. **A person opens a chat.** The server reads the newest visible messages and can
    request older pages. The tables preserve participation and closing records;
    the server checks current access before returning them.

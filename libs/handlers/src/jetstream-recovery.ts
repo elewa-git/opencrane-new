@@ -1,17 +1,17 @@
-import { setTimeout as delay } from 'node:timers/promises';
+import timers from 'node:timers/promises';
 import type { Logger } from '@opencrane/observability';
 
 const retryDelaysMs = [100, 200, 400, 800];
 
 export type JetStreamRecoveryStatus = {
-  operation: 'Dispatcher pull' | 'Computer watcher read';
+  operation: 'Dispatcher pull' | 'Dispatcher acknowledgement' | 'Computer watcher read';
   phase: 'retrying' | 'recovered' | 'exhausted';
   attempts: number;
 };
 
 export type JetStreamRecoveryReporter = (status: JetStreamRecoveryStatus) => void;
 
-type RecoveryOptions = {
+export type JetStreamRecoveryOptions = {
   operation: JetStreamRecoveryStatus['operation'];
   signal: AbortSignal;
   logger: Logger;
@@ -19,9 +19,9 @@ type RecoveryOptions = {
   report?: JetStreamRecoveryReporter | undefined;
 };
 
-/** Retry reads or pulls that can resume from their last saved position. */
+/** Retry JetStream work that can resume from its last saved position. */
 export async function recoverJetStreamOperation<Value>(
-  read: () => Promise<Value>, options: RecoveryOptions,
+  read: () => Promise<Value>, options: JetStreamRecoveryOptions,
 ): Promise<Value> {
   const { operation, signal, logger, isUnavailable, report } = options;
   let attempts = 0;
@@ -43,7 +43,7 @@ export async function recoverJetStreamOperation<Value>(
       report?.({ operation, phase: 'retrying', attempts });
       const label = operation.toLowerCase();
       logger.warn(fields, `Retrying ${label} after JetStream failure`);
-      await delay(retryInMs, undefined, { signal });
+      await timers.setTimeout(retryInMs, undefined, { signal });
       continue;
     }
     if (attempts > 0 && !signal.aborted) {

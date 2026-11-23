@@ -473,8 +473,8 @@ exposure checks, then closes the browser before its final members and MCP catalo
 replay checks. Completed pages therefore stop polling during replay. The replay
 commands retain their 60-second limits and verification assertions.
 The stack status includes the latest JetStream retry, recovery or exhaustion for
-the dispatcher's pull and the computer watcher's read, when recorded. Starting the
-dispatcher clears its previous report.
+dispatcher pulls, dispatcher acknowledgements and computer watcher reads.
+Starting the dispatcher clears its previous report.
 `--fresh` first stops this stack, deletes its
 three Compose volumes, computer namespace and generated service credentials, then provisions
 from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.

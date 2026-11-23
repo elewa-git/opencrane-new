@@ -95,9 +95,11 @@ calls. Each event's handler writes, processed-event id and checkpoint commit
 together. Errors propagate and stop the drain; callers may retry with
 `run(projection, { attempt: 2 })`. There is no automatic poison-event skip.
 `run` drains to the head captured on entry, from the stored global checkpoint.
-The source must provide every event in global order; filtering is a handler
-concern in this slice. Poll or call again for later events. An abort stops
-between transactions; an already running transaction may finish.
+The source must provide every event in global order. A finite `readEvents` call
+raises `EventReadTimeoutError` after one second waiting for a position. An early
+end or nonconsecutive position fails as incomplete history. Poll or call again
+for later events. An abort stops between transactions; an already running
+transaction may finish.
 
 Adjacent `agent.message_delta` events share one transaction, up to 64 events or
 512 KiB of encoded events. A single larger event is processed alone. The runner
