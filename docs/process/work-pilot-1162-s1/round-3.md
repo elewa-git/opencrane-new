@@ -1,7 +1,7 @@
 # Final bootstrap and operator evidence fixes
 
 Date: 23 November 2026. Branch: `work/pilot-1162-s1`.
-Implementation: `3e81aa979`, following failing-first commits `cda659ef3` and `dde244dce`.
+Implementation: `a834c3bab`, following failing-first commits `f013943e7` and `a27c48fda`.
 
 ## Findings and failing-first evidence
 
@@ -77,22 +77,29 @@ also checks the maintained statements and portable images.
 
 ## Journey and remaining work
 
-PASS: retain the [23 November one-person packaged journey](journey.md#23-november-packaged-one-person-journey)
-on approved source `abe90b2e9`. Runtime, product tests and build files remain
-identical to that source. This round changes only `infra/vm`, documentation and
-the release note. No journey was repeated and no dev-stack slot was claimed.
-Host protection remains PARTIAL under the recorded accepted development-host switch. Real Ubuntu bootstrap and reboot
-remain NOT RUN. Installation peaks and a minimum VM remain unqualified.
+PASS: the [23 November one-person packaged journey](journey.md#23-november-packaged-one-person-journey)
+on approved source `abe90b2e9` remains the last complete packaged result. Its
+measurements and final screenshots remain historical evidence for that source.
 
-Fetched main at `5576ecd1d`, moved from `ed3662d85`. Rebase encountered a developer-stack
-documentation conflict and was cleanly aborted. Main also introduces runtime,
-test and build changes, so completing that rebase conflicts with retaining the
-approved product source and reusing its journey. The owner decision is pending.
-No rebase is in progress; rebase completion is NOT RUN.
+Fetched main at `5576ecd1d` and completed the rebase after resolving one
+developer-stack README conflict. The rebased source `8a53932e7` includes main's
+runtime, test and build changes, so a new journey was required. A fresh CORE
+stack passed its 390 and 1280 pixel checks and was released. Both exact-source
+package approvals passed. The [new packaged journey](journey.md#23-november-rebased-source-qualification)
+is PARTIAL: sign-in, chat, history refusal and spending passed at both widths;
+PDF upload and desktop viewing did not pass. No timeout was raised and no
+product code was changed to hide the failure. The package and slot were released.
+
+The rebased CI run is FAIL in its production desktop browser fixture. The same
+five-test browser file passed locally, and main's CI was green. The final-head
+CI result remains a required gate. Host protection remains PARTIAL under the
+recorded accepted development-host switch. Real Ubuntu bootstrap and reboot
+remain NOT RUN. Installation peaks and a minimum VM remain unqualified.
 
 ## Short work log
 
 1. Read the review, delivery rules and affected contracts; fetched main.
 2. Committed failing contract and bootstrap regressions before their fixes.
 3. Corrected the default, usage and current statements; published checked captures.
-4. Kept approved product source, ran scoped gates and left the draft and worktree for review.
+4. Rebased onto main, ran a fresh CORE journey and recorded the partial packaged rerun.
+5. Retained the historical PASS, ran scoped gates and left the draft for review.

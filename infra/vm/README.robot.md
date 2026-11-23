@@ -114,13 +114,17 @@ node totals, including system pods and runtime overhead. Block I/O bytes are
 traffic counters, not occupied disk space. Capture filesystem/PVC use and cached
 image bytes separately. Do not count unrelated owner workloads as pilot use.
 
-The 23 November one-person packaged journey passed every step at both widths.
+The 23 November one-person packaged journey passed on approved source
+`abe90b2e9` at both widths.
 Whole-node peaks were 2.695 CPU cores and 5.21 GiB including swap. The owned package
 peaked at 2.075 CPU cores and 2.97 GiB working set, with 33.79 MiB swap. The 85
 samples covered 168 seconds after package readiness; installation was not sampled.
 Bound PVC use peaked at 76.68 MiB. The [receipt](../../docs/process/work-pilot-1162-s1/journey.md#23-november-packaged-one-person-journey)
 retains the final results, screenshots and historical failed attempts. The accepted
 scope is one person; the owner dropped concurrent three-person sizing.
+The rebased source's repeat packaged journey is partial: PDF upload and desktop
+viewing did not pass at either width. Its result does not replace the passing
+source's measurements.
 
 These observations do not qualify a minimum machine size or spare-capacity
 recommendation. A shared k3d result estimates VM demand, not a proven smallest VM.

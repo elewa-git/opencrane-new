@@ -1,14 +1,16 @@
 # Pilot VM sizing and bootstrap receipt
 
-Date: 23 November 2026. Branch: `work/pilot-1162-s1`. Final installed product source:
-`abe90b2e9`.
+Date: 23 November 2026. Branch: `work/pilot-1162-s1`. Last passing packaged
+product source: `abe90b2e9`. Rebased qualification source: `8a53932e7`.
 
-Journey on a fresh packaged install: PASS for one person at 1280 and 390 pixels.
+Journey on the rebased fresh package: PARTIAL for one person at 1280 and 390 pixels.
+The earlier approved-source journey remains PASS for that source.
 Current own checks and source status: [final fixes](round-3.md).
 
-The [final journey](#23-november-packaged-one-person-journey) records the accepted scope. Earlier
-attempts below retain their original outcomes as history. The observations describe one person
-only and do not qualify a minimum machine size.
+The [passing journey](#23-november-packaged-one-person-journey) records the accepted scope.
+The [rebased run](#23-november-rebased-source-qualification) records its incomplete checks.
+Earlier attempts retain their original outcomes as history. The observations describe one
+person only and do not qualify a minimum machine size.
 
 ## Historical source, ownership and fresh installation
 
@@ -270,3 +272,52 @@ recommendation.
 
 PASS: sanitised service logs and package metadata were collected before teardown. Both package
 teardown and secondary-stack release passed; slots 1 and 2 now report free. No product code changed.
+
+## 23 November rebased source qualification
+
+PARTIAL: the branch was rebased onto main `5576ecd1d`. The rebase completed after one
+developer-stack README conflict. The new product source `8a53932e7` differs from
+approved source `abe90b2e9` in runtime, test and build files, so the earlier
+packaged PASS does not qualify this head.
+
+The fresh CORE stack passed sign-in, chat, PDF upload, decoded desktop viewing,
+spending and the remaining browser checks at 390 and 1280 pixels. Its startup,
+sanitised service logs and ten browser captures were saved in the private
+`attempt-8` receipt before `down.sh --id 1` released the slot. The production
+browser test file passed locally, 5/5. The rebased CI run
+[45129666341](https://github.com/elewa-git/opencrane-new/actions/runs/45129666341)
+failed its production desktop fixture with `Disconnected`; its other jobs passed.
+
+After another five-minute quiet window with both slots free, the one-minute load
+below six and no package stack, `claim.sh` assigned slot 2. Exact-source
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45129660862)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45129661043)
+had all four required artifacts present and unexpired. Package preparation, private
+values preparation with `PACKAGE_VALUES_FILE` supplied once, package-up and
+package-check passed. Package-up used the documented
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch; the production host
+check was not changed.
+
+The retained `attempt-8/browser.mjs` collector in the private receipt ran the
+one-person browser journey at both widths. Its [browser results]
+(logs/attempt-8/browser-result.json) show PASS for sign-in, chat, HTTP 401 history
+refusal and spending at both widths. The upload-and-desktop check timed out at
+both widths before it saved an upload or decoded desktop capture, so the packaged
+journey is PARTIAL. The worker log records `file.uploaded` followed by
+`file.delivered` about 37 seconds later on each attempt. This shows delivery
+after the browser's Ready wait expired; it does not establish why delivery took
+that long. No assertion, timeout, retry or product guard was changed.
+
+The 97 [measurements](logs/attempt-8/measurements.csv) from 08:14:11 to 08:17:22
+UTC had no sampling errors. The [summary](logs/attempt-8/summary.json) records
+partial-run whole-node peaks of 3.378 cores and 6.44 GiB including swap, and
+package peaks of 1.721 cores and 3.02 GiB working set. These do not replace the
+completed journey's 2.695 cores / 5.21 GiB whole-node and 2.075 cores /
+2.97 GiB package observations. Installation was not sampled in either run, and
+neither run qualifies a minimum machine size.
+
+The collector saved its browser network record, diagnostic screenshots,
+installation metadata and sanitised startup/service logs in the private receipt
+before package-down and `down.sh --id 2`. The final status was journey FAIL,
+collection PASS, sampling PASS, package-down PASS and slot release PASS. No
+owner stack, host setting or paid provider was changed.

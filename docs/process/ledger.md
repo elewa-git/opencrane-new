@@ -119,6 +119,9 @@ The owner dropped concurrent three-person sizing from this ticket. The
 [final receipt](work-pilot-1162-s1/journey.md#23-november-packaged-one-person-journey)
 links the browser results, measurements and sanitised screenshots. Earlier failed
 attempts remain historical evidence there; their 3.654-core observation is superseded.
+The [rebased source run](work-pilot-1162-s1/journey.md#23-november-rebased-source-qualification)
+is PARTIAL because PDF upload and desktop viewing did not pass at either width.
+It does not replace the completed one-person sizing observation above.
 
 Host protection remains PARTIAL under the recorded accepted development-box switch.
 Bootstrap ran on this box only as a dry run and refused existing Docker before writes.
