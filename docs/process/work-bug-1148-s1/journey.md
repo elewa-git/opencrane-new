@@ -7,7 +7,7 @@ Journey on a fresh dev stack: FAIL
 ## Controlled attempt after the rebase
 
 CI passed on source `98c87b066`. The five-minute preflight passed on secondary
-slots 1 and 2: 12 samples over 6 minutes 9 seconds showed both slots free, no
+slots 1 and 2: 13 samples over 6 minutes 9 seconds showed both slots free, no
 package stack and one-minute load between 0.68 and 1.41.
 
 Startup of the `origin/main` source `5576ecd1d` was refused before provisioning:
