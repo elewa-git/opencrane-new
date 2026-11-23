@@ -2,7 +2,88 @@
 
 Date: 23 November 2026 UTC. Builder's own qualification only.
 
-Journey on a fresh dev stack: PARTIAL for source `878655bd7` (CORE passed; approval proof not run)
+Journey on a fresh dev stack: PARTIAL. CORE passed at both widths. The focused
+proof stopped before the single-use replay and post-Stop check.
+
+## Focused run with the published connection (23 November, 18:23 UTC)
+
+Fresh slot 1 ran fixture source `e3898e3cb` on product code identical to
+`90b0af63b`. Both slots were free and one-minute load stayed below six across
+the 301-second admission window. CORE passed at 390 px and 1280 px. The guarded
+launcher reported ready in 14 seconds and exited 0 after the explicit stop.
+
+| Check | Result |
+| --- | --- |
+| Seed 500 messages and 500 matching completions | PASS |
+| Guarded discovery, review and gateway acknowledgement | PASS |
+| Native approval and returned tool result | PASS at 390 px, with one saved use and one effect confirmed by demo readback |
+| Scripted Ask returns 403, opens an approval, and restores the pending card after reload | PASS at 390 px |
+| Save the scripted approval and show it as unused | The POST returned 200, the decision event was saved and the card appeared. The fixture locator timed out on its case-sensitive match. |
+| Restore the unused approval after reload, retry once, and refuse a second use | NOT RUN |
+| Resend the same approved request after Stop and verify HTTP 403 and no further effect | NOT RUN |
+| Focused proof at 1280 px | NOT RUN |
+
+The browser capture shows the approved card with the accessible text
+`not used yet`. The fixture expected `Not used yet` and failed after 30 seconds.
+The driver now shares a case-insensitive matcher across approval, reload and the
+Stop setup, and reload checks the original approval id. The revised matcher was
+checked against the captured label in a browser fixture. The time left in this
+run did not accommodate another complete fresh-stack journey.
+
+Logs, event and effect readback, and screenshots were copied to private receipt
+`bug-1148-s1-journey27` before teardown. Slot 1 reported free. The recorder held
+one write from the native call. Paid calls were zero.
+
+## Published connection diagnosis (23 November, 17:54 UTC)
+
+Fresh slot 1 ran fixture source `b4fb0303b` against unchanged product code. CORE
+passed at both widths and the guarded launcher reported ready in 14 seconds.
+The event readback found 500 synthetic messages and 500 matching completions,
+followed by the reviewed publication and gateway acknowledgement. The 390 px
+native approval returned the tool result. The recorder and direct demo readback
+both counted one write.
+
+The first scripted Ask call returned HTTP 404 before reaching approval. The
+driver requested the fixed `installed` route. Remote discovery saves a connection
+per server and the gateway renders the reviewed connection into its exact route.
+The driver now takes the connection from the acknowledged publication and shares
+that endpoint with the Stop check. The existing Ask and post-Stop assertions
+still require HTTP 403.
+
+Scripted approval, single-use replay and reload, post-Stop refusal and the 1280 px
+focused sequence were NOT RUN. The private receipt `bug-1148-s1-journey26` retains
+startup and service logs, event and demo readback, the HTTP assertion and captures.
+The launcher exited 0 after the explicit stop, teardown released slot 1, and paid
+calls were zero.
+
+## Guarded launcher and recorder diagnosis (23 November, 17:24 UTC)
+
+Fresh slot 1 started from `90b0af63b` after the five-minute admission check.
+CORE passed at 390 px and 1280 px. The demo socket was absent and had no listener
+before launch. The launcher and focused command ran in the same shell with
+separate output files. Both guarded services reported ready after 12 seconds.
+The launcher stayed running through the focused command and exited 0 after
+the explicit stop.
+
+The earlier successful receipt also used slot 1 and web port 25106. The rebase
+changed the catalogue watcher but kept the launcher, port mapping, TLS fixture and
+OpenSSL image pin. The TLS fixture issues fresh certificates for the same hostname
+on an ephemeral loopback port. The previous early wrapper exit left an empty
+output file and no exit status, so its original cause remains unverified.
+
+The focused driver seeded the 500 earlier messages with their completion events.
+Discovery, review and gateway acknowledgement completed. At 390 px, the free
+model returned the approved native tool result and the recorder captured one demo
+write. The proof then failed because the recorder wrote `requestId: "undefined"`
+and the reader expected a UUID. The remote dispatch header allowlist omits the
+internal request ID. The fixture now records the exact body and checks the saved
+approval use and its linked decision for the same turn and call. The recorder
+regression failed on the old record and passed after the fixture change.
+
+The scripted single-use, reload and post-Stop checks were NOT RUN on this attempt.
+The 1280 px focused checks were NOT RUN. Paid calls were zero. Startup and service
+logs, the demo recording and captures were retained in private receipt
+`bug-1148-s1-journey25` before teardown. Slot 1 reported free.
 
 ## Fresh run after main fix #1178 (23 November, 16:00 UTC)
 
@@ -378,29 +459,40 @@ stop after two hours if that interval does not occur. Supply the approved Zitade
 credential file through `ZITADEL_KEY_FILE`; its contents must never enter commands,
 logs, screenshots or saved events.
 
-Run from this worktree in Bash after the eligibility interval:
+Claim the slot from the worktree in Bash after the eligibility interval.
 
 ```bash
 export DEV_STACK_CLAIM_PID=$$
-stack_id=$(infra/dev-stack/claim.sh)
-export DEV_STACK_ID="$stack_id"
+infra/dev-stack/claim.sh
+```
+
+Keep the same shell open through teardown. The example uses slot 1. If the claim
+returns 2, use 2 in both launcher variables and in every `--id` argument. Set
+`receipt` to a private evidence directory before proceeding.
+
+```bash
+export DEV_STACK_ID=1
 # Install cleanup that saves startup/service logs and screenshots before down.sh.
-nice -n 10 infra/dev-stack/up.sh --fresh
-STAGE_B_CLAIMED_ID="$stack_id" nice -n 10 node --experimental-strip-types \
-  infra/dev-stack/stage-b-live.ts &
+nice -n 10 infra/dev-stack/up.sh --fresh --id 1 >"$receipt/startup.log" 2>&1
+nice -n 10 infra/dev-stack/status.sh --id 1
+DEV_STACK_ID=1 STAGE_B_CLAIMED_ID=1 nice -n 10 node --experimental-strip-types \
+  infra/dev-stack/stage-b-live.ts >"$receipt/demo-launcher.log" 2>&1 &
 tls_pid=$!
-# Wait for the launcher's guarded server/models readiness message.
-APPROVAL_JOURNEY_ONLY=1 nice -n 10 infra/dev-stack/journey.sh --id "$stack_id"
+# Wait for the readiness message before running the focused proof.
+APPROVAL_JOURNEY_ONLY=1 nice -n 10 infra/dev-stack/journey.sh --id 1
 # Copy startup/service logs, demo-calls.jsonl, approval-readback and screenshots now.
 kill -TERM "$tls_pid"
 wait "$tls_pid"
-infra/dev-stack/down.sh --id "$stack_id"
-infra/dev-stack/status.sh --id "$stack_id"
+printf '%s\n' "$?" >"$receipt/launcher.exit"
+nice -n 10 infra/dev-stack/down.sh --id 1
+nice -n 10 infra/dev-stack/status.sh --id 1
 ```
 
-Always retain logs before cleanup, including after a failed step. Always run `down.sh`.
-The launcher requires the current secondary claim and uses the existing TLS fixture
-for `https://mcp.example.test/`. Product network guards remain enabled.
+The readiness line is `PASS complete server and models processes ready with guarded local transport`.
+If the launcher exits early, collect its exit status with `wait "$tls_pid"` and
+skip the focused command. Always retain logs before cleanup, including after a
+failed step, then run `down.sh`. The launcher requires the current secondary
+claim and uses the existing TLS fixture for `https://mcp.example.test/`.
 
 The focused driver seeds 500 messages and matching completion events. It registers
 the real demo definition through discovery, reviews `change_delivery_slot` as Ask,
