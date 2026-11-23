@@ -2,6 +2,29 @@
 
 Journey on a fresh dev stack: FAIL
 
+## Latest packaged attempt
+
+23 November 2026. Approved product head `59573055e269f54225a25b6cce0014bc203f4778`
+has green CI, and its application and scanner approval artifacts were present and
+unexpired immediately before package preparation. CI also passed on receipt tip
+`8926814b0`.
+
+The five-minute quiet window passed with both secondary slots and package
+namespaces free and one-minute load below 6. The final load sample immediately
+before preparation was 0.65. `package-prepare --id 1` created the approved package
+namespace and private values file. Secret preparation then failed before package
+installation with the exact output `Package secret preparation failed during
+preflight`. The slot had no `failure.log`; package-up did not run. No packaged
+dispatcher started or restarted. The dispatcher restart condition is **NOT RUN**.
+
+All install refusals, wrong-organisation sign-in, owner claim, wrong-token refusal,
+token reuse (`HTTP 409 owner_exists`), owner chat, admin sign-in/chat/cookies, and
+member sign-in/chat/cookies at 1280 and 390 px are **NOT RUN**. No screenshots or
+startup/service logs exist because installation did not begin. The exact command
+result is retained in the task receipt outside the repository. Cleanup passed:
+`package-down --id 1` and `down.sh --id 1`; both secondary slots are free. No retry
+was made. See the [attempt receipt](round-6-rebased/receipt.md).
+
 ## Latest rebase attempt
 
 23 November 2026. Rebased product head `59573055e269f54225a25b6cce0014bc203f4778`
