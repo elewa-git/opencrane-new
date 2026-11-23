@@ -255,7 +255,7 @@ export class ChatSession implements OnDestroy {
     ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
     this.stopState.reset();
     this.reconnectedAt.set('');
-    this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
+    this.clearUpload(); this.assignment.openDraft(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
     this.readMarker.clear();
     this.caughtUp.set(false);

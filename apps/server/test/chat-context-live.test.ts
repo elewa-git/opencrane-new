@@ -93,9 +93,10 @@ async function expiresWhileSubscribed(): Promise<void> {
   const { socket, messages, firstOutcome } = await fixture.connect();
   await firstOutcome;
   expect(messages).toHaveLength(1);
-  const closed = once(socket, 'close');
+  const nextOutcome = Promise.race([once(socket, 'close'), once(socket, 'message')]);
   vi.spyOn(Date, 'now').mockReturnValue(2000000000000);
-  expect((await closed)[0]).toBe(1008);
+  await fixture.assistant('expired-personal', 'alice');
+  expect((await nextOutcome)[0]).toBe(1008);
   expect(messages).toHaveLength(1);
 }
 it('refuses an expired session while already subscribed', expiresWhileSubscribed);
@@ -103,19 +104,23 @@ it('refuses an expired session while already subscribed', expiresWhileSubscribed
 async function refusesChangedOrganisation(): Promise<void> {
   const { socket, messages, firstOutcome } = await fixture.connect();
   await firstOutcome;
-  const closed = once(socket, 'close');
+  const nextOutcome = Promise.race([once(socket, 'close'), once(socket, 'message')]);
   fixture.config.expectedOrgId = 'another-organisation';
-  expect((await closed)[0]).toBe(1008);
+  await fixture.assistant('wrong-org-personal', 'alice');
+  expect((await nextOutcome)[0]).toBe(1008);
   expect(messages).toHaveLength(1);
 }
 it('rechecks the organisation pin while subscribed', refusesChangedOrganisation);
 
 async function refusesChangedSilo(): Promise<void> {
+  await fixture.foreignAssistant();
+  await fixture.permitAssistant('alice', 'mixed-personal', 'other');
   const { socket, messages, firstOutcome } = await fixture.connect();
   await firstOutcome;
-  const closed = once(socket, 'close');
-  fixture.chat.silo = 'other';
-  expect((await closed)[0]).toBe(1008);
+  const nextOutcome = Promise.race([once(socket, 'close'), once(socket, 'message')]);
+  fixture.chat.binding.silo = 'other';
+  await fixture.assistant('mixed-personal', 'alice');
+  expect((await nextOutcome)[0]).toBe(1008);
   expect(messages).toHaveLength(1);
 }
 it('refuses a silo that no longer matches its permission binding', refusesChangedSilo);

@@ -38,6 +38,11 @@ export class PersonalAssignment {
     this.socket.connect();
   }
 
+  openDraft(): void {
+    this.socket.disconnect();
+    this.watch();
+  }
+
   destroy(): void {
     this.watching.set(false);
     this.subscription.unsubscribe();

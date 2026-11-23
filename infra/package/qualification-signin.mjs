@@ -127,10 +127,11 @@ function tunnel(incoming, socket, head) {
 }
 
 async function listen(server, port) {
-  await new Promise(function listening(resolve, reject) {
+  function listening(resolve, reject) {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
-  });
+  }
+  await new Promise(listening);
 }
 
 const tls = httpsServer({ key: await readFile(input.key),
@@ -169,9 +170,10 @@ async function session(page, user) {
   assert.equal(body.authenticated, true, 'Real sign-in did not authenticate');
   assert.equal(body.user.sub, user.id, 'Another account signed in');
   const cookies = await page.context().cookies(input.origin);
-  const cookie = cookies.find(function sessionCookie(value) {
+  function sessionCookie(value) {
     return value.name === `oc_session_${slot}`;
-  });
+  }
+  const cookie = cookies.find(sessionCookie);
   assert(cookie, 'Session cookie is absent');
   assert.equal(cookie.secure, true, 'Session cookie lacks Secure');
   assert.equal(cookie.httpOnly, true, 'Session cookie lacks HttpOnly');
@@ -297,9 +299,10 @@ async function newContext(width) {
 }
 
 async function joinedAccess(memberId) {
-  const ready = new Promise(function waitForReady(resolve) {
+  function waitForReady(resolve) {
     process.once('message', resolve);
-  });
+  }
+  const ready = new Promise(waitForReady);
   process.send({ operation: 'joined-access', memberId });
   const result = await ready;
   assert.equal(result.operation, 'joined-access');
@@ -396,9 +399,10 @@ async function wrongOrganisation() {
       const response = await page.request.get(`${input.origin}/auth/me`);
       assert.equal((await response.json()).authenticated, false, 'Another organisation gained a session');
       const cookies = await context.cookies(input.origin);
-      const sessionCookie = cookies.find(function isSession(value) {
+      function isSession(value) {
         return value.name === `oc_session_${slot}`;
-      });
+      }
+      const sessionCookie = cookies.find(isSession);
       assert.equal(sessionCookie, undefined, 'A refused organisation received a session cookie');
       await page.screenshot({ path: join(output, `wrong-organisation-${width}.png`), fullPage: true });
       record(`real token from another organisation pin refused at ${width}px`);
