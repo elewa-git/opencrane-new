@@ -3,6 +3,7 @@ import type { Locator, Page, Response } from 'playwright';
 import { z } from 'zod';
 
 const postedFieldsSchema = z.record(z.string(), z.unknown());
+export const approvedAndUnused = /Approved by you.*not used yet/iu;
 
 export function postedRequestField(response: Response, field: string) {
   const data: unknown = response.request().postDataJSON();

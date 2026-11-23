@@ -18,7 +18,7 @@ import { createStageBCollector } from './stage-b-collector.ts';
 import { readStageBQuote } from './stage-b-readback.ts';
 import { stopApprovalTurn } from './approval-stop.ts';
 import { nativeApprovalTurn } from './approval-native.ts';
-import { approvalTerminal, captureApprovalState, decideJourneyApproval }
+import { approvalTerminal, approvedAndUnused, captureApprovalState, decideJourneyApproval }
   from './approval-cards.ts';
 import { seedApprovalHistory } from './approval-history.ts';
 
@@ -159,8 +159,8 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       assert(await requested.evaluate(element => element.scrollWidth <= element.clientWidth), 'Card fits viewport');
       await captureApprovalState(page, 'requested');
       const approveAttempts = await decideJourneyApproval(page, requested, 'Approve',
-        /Approved by you.*Not used yet/);
-      const approved = page.getByRole('button', { name: /Approved by you.*Not used yet/ });
+        approvedAndUnused);
+      const approved = approvalTerminal(page, approvalId, approvedAndUnused);
       await page.reload(); await approved.waitFor();
       await captureApprovalState(page, 'approved');
       assert.equal(await call('afternoon'), 200);

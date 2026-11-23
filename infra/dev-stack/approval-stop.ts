@@ -7,7 +7,7 @@ import { computerTurnStartedDataSchema } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import { approvalToolBody, issueApprovalComputer, waitForApprovalSetup,
   type ApprovalJourneyIdentity, type ApprovalToolRequest } from './approval-tool.ts';
-import { captureApprovalState, decideJourneyApproval, postedRequestField }
+import { approvedAndUnused, captureApprovalState, decideJourneyApproval, postedRequestField }
   from './approval-cards.ts';
 
 export type ApprovalStopInput = ApprovalJourneyIdentity & {
@@ -55,7 +55,7 @@ export async function stopApprovalTurn(page: Page, store: EventStore,
   assert.equal(asking.status, 403, 'The active native turn requests approval');
   const requested = page.getByRole('region', { name: 'Approval needed', exact: true });
   await requested.waitFor();
-  await decideJourneyApproval(page, requested, 'Approve', /Approved by you.*Not used yet/);
+  await decideJourneyApproval(page, requested, 'Approve', approvedAndUnused);
   await captureApprovalState(page, 'stop-approved');
   function isStopResponse(response: Response) {
     const request = response.request();
