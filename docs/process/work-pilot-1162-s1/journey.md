@@ -248,7 +248,6 @@ private details and copied unchanged from that run. Its SHA-256 is
 | Decoded desktop | [Desktop](screenshots/attempt-7/desktop-0-1280.png) | [Phone](screenshots/attempt-7/desktop-0-390.png) |
 | Spending | [Desktop](screenshots/attempt-7/budget-1280.png) | [Phone](screenshots/attempt-7/budget-390.png) |
 
-
 Both approval runs still had their application, scanner and image artifacts before package
 preparation. The recorded run ids and expiry times are in the [journey record]
 (logs/attempt-7-package-journey.json). The five-minute quiet window passed with both slots free,

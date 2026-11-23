@@ -103,7 +103,7 @@ const fakeHost = `
 mkdir -p /fixture-bin
 export PATH=/fixture-bin:$PATH
 for program in apt-get swapoff sysctl systemctl tar kexec; do
-  printf '#!/bin/sh\\nprintf \"called\\\\n\" >> /fixture-calls\\nexit 0\\n' > /fixture-bin/$program
+  printf '#!/bin/sh\\nprintf called >> /fixture-calls\\nexit 0\\n' > /fixture-bin/$program
   chmod +x /fixture-bin/$program
 done
 printf '#!/bin/sh\\ncat >/dev/null\\nexit 0\\n' > /fixture-bin/sha256sum
@@ -164,6 +164,7 @@ function replacedBinary() {
   const result = container(commands, ['--apply']);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Refusing existing changed k3s binary/);
+  assert.doesNotMatch(result.stdout, /Step:|Write /u);
 }
 
 test('shellcheck accepts bootstrap and the shared runtime helper', checkShell);

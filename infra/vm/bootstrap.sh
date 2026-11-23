@@ -9,25 +9,33 @@ source "$script_directory/../devbox/runtime.sh"
 K3S_SHA256=39eed8f53f277497dfc2542f66eab0ed68a94dfc598946dbebfb50366916c7a2
 state=/var/lib/opencrane-vm
 marker="$state/managed-k3s"
-dry_run=false
+dry_run=true
 
 fail() {
   printf '%s\n' "$*" >&2
   exit 1
 }
 
+usage() {
+  printf 'Usage: bootstrap.sh [--dry-run | --apply]\n' >&2
+  printf 'Defaults to dry run; only --apply permits host changes.\n' >&2
+  exit 2
+}
+
 parse_arguments() {
   case "${1:-}" in
     '')
-      [ "$#" -eq 0 ] || exit 2
+      [ "$#" -eq 0 ] || usage
       ;;
     --dry-run)
-      [ "$#" -eq 1 ] || exit 2
-      dry_run=true
+      [ "$#" -eq 1 ] || usage
+      ;;
+    --apply)
+      [ "$#" -eq 1 ] || usage
+      dry_run=false
       ;;
     *)
-      printf 'Usage: bootstrap.sh [--dry-run]\n' >&2
-      exit 2
+      usage
       ;;
   esac
 }
@@ -199,7 +207,11 @@ main() {
   install_payloads
   protect_node
   configure_k3s
-  printf 'Host configuration ready. Reboot, then run package preflight before installation.\n'
+  if [ "$dry_run" = true ]; then
+    printf 'Dry run complete. Use --apply on the pilot VM to change the host.\n'
+  else
+    printf 'Host configuration ready. Reboot, then run package preflight before installation.\n'
+  fi
 }
 
 main "$@"
