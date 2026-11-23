@@ -89,6 +89,12 @@ database setup credentials. The installer checks all eight names and required
 fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
+The chart requests 100 mCPU for the dispatcher and allows it to use one CPU.
+It runs the reaction workers and checks computers in the same process, so both
+need time when many events arrive together. Other workers request 20 mCPU and
+have a 300 mCPU limit. The dispatcher uses the worker's ordinary PostgreSQL
+pool, with one connection reserved for dispatch.
+
 Pass a JSON values file, which Helm accepts as YAML, with the reviewed images,
 eight secret names and all three legacy exposure flags set to `false`. The optional
 `exposure.public` settings are described below.

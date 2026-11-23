@@ -59,6 +59,7 @@ Not built yet:
    A setup job prepares the databases and event log. Private development installs
    create the test owner; public-address mode waits for a signed-in person to claim
    ownership with a one-time token. Workers start an assistant's computer when needed.
+   The worker that sends saved events to reactions can use a full CPU when work arrives together.
 3. **A developer opens the website.** A local port forward connects their browser
    to the private website. A missing or changed cluster target stops forwarding.
 4. **A person uploads a file.** The server scans it before saving and sending it

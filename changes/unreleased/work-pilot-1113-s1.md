@@ -12,3 +12,4 @@ Typing or pasting and pressing Enter immediately sends the current message,
 even before the next screen update. Clearing the field cannot send earlier text.
 Package preparation names invalid values arguments before preflight, without
 printing the private filename. Supply the environment setting or a positional path once.
+The packaged dispatcher can use a full CPU during bursts of reaction work.

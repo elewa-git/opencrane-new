@@ -1,5 +1,6 @@
 {{- $root := . -}}
 {{- range $mode := list "members" "mcp-catalogue" "computers" "conversations" "files" "budgets" "audit" "dispatcher" }}
+{{- $dispatcher := eq $mode "dispatcher" }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -61,18 +62,18 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ $root.Values.secrets.runtime | quote }}
-                  key: {{ if eq $mode "dispatcher" }}HANDLER_DATABASE_URL{{ else }}PROJECTION_DATABASE_URL{{ end }}
-            {{- if eq $mode "dispatcher" }}
+                  key: {{ if $dispatcher }}HANDLER_DATABASE_URL{{ else }}PROJECTION_DATABASE_URL{{ end }}
+            {{- if $dispatcher }}
             - name: CONTENT_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ $root.Values.secrets.runtime | quote }}
                   key: DATABASE_URL
             {{- end }}
-            - { name: NATS_CERT_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.crt" }
-            - { name: NATS_KEY_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.key" }
-            - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/files/{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}.seed" }
-            - { name: NATS_INBOX_PREFIX, value: "_INBOX.{{ if eq $mode "dispatcher" }}dispatcher{{ else }}projection{{ end }}" }
+            - { name: NATS_CERT_FILE, value: "/run/opencrane/files/{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}.crt" }
+            - { name: NATS_KEY_FILE, value: "/run/opencrane/files/{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}.key" }
+            - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/files/{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}.seed" }
+            - { name: NATS_INBOX_PREFIX, value: "_INBOX.{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}" }
             - { name: MODEL_DECISION_URL, value: "http://server:43001" }
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
             - name: KUBE_NAMESPACE
@@ -83,8 +84,9 @@ spec:
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
           resources:
-            requests: { cpu: 20m, memory: 64Mi }
-            limits: { cpu: 300m, memory: 384Mi }
+            # Keep time for computer checks while reaction queues are busy.
+            requests: { cpu: {{ ternary "100m" "20m" $dispatcher }}, memory: 64Mi }
+            limits: { cpu: {{ ternary "1000m" "300m" $dispatcher }}, memory: 384Mi }
       volumes:
         - name: runtime
           secret: { secretName: {{ $root.Values.secrets.runtime | quote }} }
