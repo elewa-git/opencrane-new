@@ -67,16 +67,14 @@ function registerRefusal(name, setup) {
   function refuse() {
     for (const args of [[], ['--dry-run'], ['--apply']]) {
       const commands = fakeHost + setup + `
-        find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
-          | sort > /tmp/before
+        snapshot_host /tmp/before
         status=0
         bash ${script} ${args.join(' ')} >/tmp/output 2>/tmp/error || status=$?
         test "$status" -eq 1
         grep -q 'Refusing existing' /tmp/error
         ! grep -Eq 'apt-get|swapoff|Download|Write ' /tmp/output
         test ! -e /fixture-calls
-        find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
-          | sort > /tmp/after
+        snapshot_host /tmp/after
         cmp /tmp/before /tmp/after
         exit 0`;
       successful(container(commands, args));
@@ -100,6 +98,11 @@ function invalidInput() {
 }
 
 const fakeHost = `
+snapshot_host() {
+  find /etc /var/lib /usr/local /run -printf '%y %m %u %g %p %l\\n' > "$1"
+  find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + >> "$1"
+  sort -o "$1" "$1"
+}
 mkdir -p /fixture-bin
 export PATH=/fixture-bin:$PATH
 for program in apt-get swapoff sysctl systemctl tar kexec; do
@@ -121,15 +124,13 @@ chmod +x /fixture-bin/*
 
 function defaultLeavesHostUnchanged() {
   const commands = fakeHost + `
-    find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
-      | sort > /tmp/before
+    snapshot_host /tmp/before
     bash ${script} >/tmp/output
     if [ -e /fixture-calls ]; then
       printf 'No-argument bootstrap invoked a mutating host command\\n' >&2
       exit 1
     fi
-    find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
-      | sort > /tmp/after
+    snapshot_host /tmp/after
     cmp /tmp/before /tmp/after
   `;
   successful(container(commands, ['--dry-run']));

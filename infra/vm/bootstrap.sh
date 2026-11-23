@@ -208,7 +208,7 @@ main() {
   protect_node
   configure_k3s
   if [ "$dry_run" = true ]; then
-    printf 'Dry run complete. Use --apply on the pilot VM to change the host.\n'
+    printf 'Dry-run plan ready. Use --apply on the pilot VM to change the host.\n'
   else
     printf 'Host configuration ready. Reboot, then run package preflight before installation.\n'
   fi
