@@ -47,7 +47,24 @@ async function observedConnection(...args: Parameters<typeof eventStore.connectE
   return { ...connected, close };
 }
 
-const storeExports = { ...eventStore, connectEventStore: observedConnection };
+async function observedPullConnection(...args: Parameters<typeof eventStore.connectNats>) {
+  const connection = await eventStore.connectNats(...args);
+  if (process.env['WORKER_TEST_FAULT'] !== 'pull') return connection;
+  const publish = connection.publish.bind(connection);
+  function observePull(...args: Parameters<typeof publish>) {
+    publish(...args);
+    const [subject, , options] = args;
+    if (subject === '$JS.API.CONSUMER.MSG.NEXT.EVENTS.handler-dispatcher') {
+      process.send?.({ pullInbox: options?.reply });
+    }
+  }
+  connection.publish = observePull;
+  return connection;
+}
+
+const storeExports = {
+  ...eventStore, connectEventStore: observedConnection, connectNats: observedPullConnection,
+};
 if (process.env['WORKER_TEST_FAULT'] !== 'preparation') {
   mock.module('@opencrane/event-store', { namedExports: storeExports });
 }

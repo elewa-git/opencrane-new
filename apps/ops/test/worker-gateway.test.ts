@@ -62,6 +62,7 @@ async function fixture(contentSetting?: string, pausePreparation = false,
     CONNECTION_CUSTODY_FILE: '', MEMORY_KEY_DIRECTORY: '', PERSONAL_KEY_DIRECTORY: '',
     MODEL_DECISION_URL: '', MCP_KUBE_NAMESPACE: '' };
   if (proxy && pausedConnection === 'pull') env.NATS_URL = `127.0.0.1:${proxy.port}`;
+  if (pausedConnection === 'pull') env.WORKER_TEST_FAULT = 'pull';
   const preload = new URL('./support/worker-faults.ts', import.meta.url);
   const execArgv = ['--experimental-strip-types', '--experimental-test-module-mocks',
     '--import', preload.href];
@@ -71,8 +72,13 @@ async function fixture(contentSetting?: string, pausePreparation = false,
   const child = fork(filename, ['dispatcher'], options);
   const exited = once(child, 'exit');
   const preparing = Promise.withResolvers<void>();
+  const pullInboxes: string[] = [];
   function message(value: unknown) {
     if (value === 'preparing') preparing.resolve();
+    if (typeof value === 'object' && value !== null && 'pullInbox' in value &&
+        typeof value.pullInbox === 'string') {
+      pullInboxes.push(value.pullInbox);
+    }
   }
   child.on('message', message);
   let output = '';
@@ -150,8 +156,9 @@ async function fixture(contentSetting?: string, pausePreparation = false,
     if (!proxy) throw new Error('This fixture has no isolated NATS connection');
     proxy.pauseResponses(paused);
   }
-  return { storage, content, readerUrl, nats, child, exited, ready, publish, preparePublication, waitingLocks,
-    latest, logs, preparing: preparing.promise, pauseResponses, readinessFile, recoveryFile };
+  return { storage, content, readerUrl, nats, child, exited, ready, publish, preparePublication,
+    waitingLocks, latest, logs, preparing: preparing.promise, pauseResponses, readinessFile,
+    recoveryFile, proxy, pullInboxes };
 }
 
 async function sharedLock(preparationFirst: boolean) {
@@ -447,3 +454,168 @@ async function stopsAfterServerLoss() {
   await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
 }
 it('stops when the NATS server disappears and does not come back', stopsAfterServerLoss);
+
+async function pendingPublication(setup: WorkerFixture) {
+  const first = await setup.publish('alpha');
+  await waitForGeneration(setup, 1);
+  const second = await setup.preparePublication('bravo');
+  async function waiting() {
+    const info = await setup.nats.dispatcherInfo();
+    return info.ack_floor.stream_seq === 6 && info.num_waiting === 1;
+  }
+  await until(waiting);
+  expect(await checkpoint(setup)).toBe(6);
+  return { first, second };
+}
+
+async function expectBothPublications(setup: WorkerFixture, eventIds: string[]) {
+  await waitForGeneration(setup, 2);
+  async function caughtUp() {
+    const info = await setup.nats.dispatcherInfo();
+    return info.ack_floor.stream_seq === 8 && info.num_ack_pending === 0;
+  }
+  await until(caughtUp);
+  expect(await checkpoint(setup)).toBe(8);
+  expect(await setup.nats.store.head()).toBe(8);
+  const effects = await history(setup.nats.store, 'gateway-config-test', 'test');
+  function position(effect: { sequence: number }) {
+    return effect.sequence;
+  }
+  expect(effects.map(position)).toEqual([4, 8]);
+  const receipts = await setup.storage.queue.query<{ event_id: string }>(
+    `SELECT event_id FROM handler_receipts WHERE handler = 'prepare-gateway-configuration'`,
+  );
+  function eventId(receipt: { event_id: string }) {
+    return receipt.event_id;
+  }
+  const receivedIds = receipts.rows.map(eventId);
+  expect(receivedIds.sort()).toEqual(eventIds.sort());
+  expect(await readFile(setup.readinessFile, 'utf8')).toBe(String(setup.child.pid));
+}
+
+async function resumesAfterSocketDrop() {
+  const setup = await fixture(undefined, false, 'pull');
+  await waitForWorker(setup);
+  const { first, second } = await pendingPublication(setup);
+  setup.pauseResponses(true);
+  await setup.nats.seed([second]);
+  async function delivered() {
+    return (await setup.nats.dispatcherInfo()).delivered.stream_seq === 7;
+  }
+  await until(delivered);
+  setup.proxy!.dropConnections();
+  setup.pauseResponses(false);
+  expect(await checkpoint(setup)).toBe(6);
+  await waitForLog(setup, 'Retrying dispatcher pull after JetStream failure');
+  await expectBothPublications(setup, [first.id, second.id]);
+  expect(setup.logs()).toContain('Dispatcher pull recovered');
+  const acknowledged = await setup.nats.dispatcherInfo();
+  expect(acknowledged.ack_floor.consumer_seq).toBeGreaterThan(8);
+}
+it('closes a pull interrupted by a dropped socket and resumes from the durable position',
+  resumesAfterSocketDrop);
+
+async function exhaustsSocketDrops() {
+  const setup = await fixture(undefined, false, 'pull');
+  await waitForWorker(setup);
+  for (let index = 0; index < 5; index++) {
+    function pulled() {
+      return setup.pullInboxes.length > index;
+    }
+    await until(pulled);
+    setup.proxy!.dropConnections();
+  }
+  await expect.poll(() => setup.child.exitCode, { timeout: 3000 }).toBe(1);
+  expect(new Set(setup.pullInboxes).size).toBe(5);
+  expect(setup.logs()).toContain('Dispatcher pull recovery exhausted');
+  expect(setup.logs().match(/Retrying dispatcher pull after JetStream failure/g)).toHaveLength(4);
+  await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
+  expect(await readFile(setup.recoveryFile, 'utf8')).toContain('dispatcher pull: exhausted');
+  expect(await checkpoint(setup)).toBe(0);
+  expect((await setup.nats.dispatcherInfo()).ack_floor.stream_seq).toBe(0);
+}
+it('charges repeated socket drops to the pull budget and withdraws readiness', exhaustsSocketDrops);
+
+async function resumesAfterUncertainAck(delivered: boolean) {
+  const setup = await fixture(undefined, false, 'pull');
+  await waitForWorker(setup);
+  const { first, second } = await pendingPublication(setup);
+  const lock = await setup.storage.queue.connect();
+  try {
+    await lock.query('BEGIN');
+    await lock.query('SELECT id FROM handler_dispatcher FOR UPDATE');
+    await setup.nats.seed([second]);
+    async function dispatchIsWaitingForCommit() {
+      const waiting = await setup.storage.queue.query(`SELECT pid FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock'
+          AND query LIKE 'SELECT silo, manifest, sequence%FOR UPDATE'`);
+      return waiting.rows.length === 1;
+    }
+    await until(dispatchIsWaitingForCommit);
+    if (delivered) setup.pauseResponses(true);
+    else setup.proxy!.pauseRequests();
+  } finally {
+    await lock.query('ROLLBACK');
+    lock.release();
+  }
+  async function committed() {
+    return (await checkpoint(setup)) === 7;
+  }
+  await until(committed);
+  if (delivered) {
+    async function acknowledged() {
+      return (await setup.nats.dispatcherInfo()).ack_floor.stream_seq === 7;
+    }
+    await until(acknowledged);
+  }
+  const interrupted = await setup.nats.dispatcherInfo();
+  expect(interrupted.ack_floor.stream_seq).toBe(delivered ? 7 : 6);
+  await waitForLog(setup, 'Retrying dispatcher acknowledgement after JetStream failure');
+  // Discard the withheld bytes. A fresh connection cannot receive the original reply.
+  setup.proxy!.dropConnections();
+  setup.pauseResponses(false);
+  await expectBothPublications(setup, [first.id, second.id]);
+  expect(setup.logs()).toContain('Dispatcher acknowledgement recovered');
+}
+it.each([true, false])('resumes after a lost acknowledgement reply, broker acknowledged: %s',
+  resumesAfterUncertainAck);
+
+const changedCheckpoints = [
+  ['silo', "UPDATE handler_dispatcher SET silo = 'another-silo'",
+    'Dispatcher state changed during dispatch', [{ sequence: '6' }]],
+  ['manifest', "UPDATE handler_dispatcher SET manifest = 'changed'",
+    'Dispatcher state changed during dispatch', [{ sequence: '6' }]],
+  ['row', 'DELETE FROM handler_dispatcher', 'Dispatcher state changed during dispatch', []],
+  ['sequence', 'UPDATE handler_dispatcher SET sequence = 5',
+    'Dispatcher event sequence gap', [{ sequence: '5' }]],
+] as const;
+
+async function refusesChangedCheckpoint(
+  _change: string, mutation: string, reason: string, expectedRows: readonly { sequence: string }[],
+) {
+  const setup = await fixture();
+  await waitForWorker(setup);
+  const { second } = await pendingPublication(setup);
+  await setup.storage.queue.query(mutation);
+  await setup.nats.seed([second]);
+  await expect.poll(() => setup.child.exitCode, { timeout: 3000 }).toBe(1);
+  expect(setup.logs()).toContain(reason);
+  const rows = await setup.storage.queue.query('SELECT sequence FROM handler_dispatcher');
+  expect(rows.rows).toEqual(expectedRows);
+  const info = await setup.nats.dispatcherInfo();
+  expect(info.delivered.stream_seq).toBe(7);
+  expect(info.ack_floor.stream_seq).toBe(6);
+  expect((await setup.latest())?.generation).toBe(1);
+  await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
+}
+it.each(changedCheckpoints)('refuses a changed checkpoint %s after readiness',
+  refusesChangedCheckpoint);
+
+async function diagnosesSignalledExit() {
+  const setup = await fixture();
+  await waitForWorker(setup);
+  setup.child.kill('SIGKILL');
+  await setup.exited;
+  await expect(waitForWorker(setup)).rejects.toThrow('Dispatcher exited with signal SIGKILL');
+}
+it('reports a signalled worker exit when polling readiness', diagnosesSignalledExit);

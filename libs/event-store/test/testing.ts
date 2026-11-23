@@ -46,10 +46,13 @@ function registerChildCleanup(child: ChildProcess) {
 /** Keep the public port bound while a child service stops and starts behind it. */
 export async function tcpProxy(target: () => { host: string; port: number }, host = "127.0.0.1") {
   const sockets = new Set<Socket>();
+  const requests = new Set<Socket>();
   const responses = new Set<Socket>();
   let paused = false;
   const server = createServer((socket) => {
     const upstream = connect(target());
+    requests.add(socket);
+    socket.on("close", () => requests.delete(socket));
     responses.add(upstream);
     upstream.on("close", () => responses.delete(upstream));
     for (const peer of [socket, upstream]) {
@@ -72,6 +75,12 @@ export async function tcpProxy(target: () => { host: string; port: number }, hos
       for (const response of responses) {
         if (value) response.pause(); else response.resume();
       }
+    },
+    pauseRequests(this: void) {
+      for (const request of requests) request.pause();
+    },
+    dropConnections(this: void) {
+      for (const socket of sockets) socket.destroy();
     },
     async close() {
       const closed = once(server, "close");
