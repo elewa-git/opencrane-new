@@ -226,3 +226,32 @@ browser journey. The slot's `failure.log` was not created. Package teardown and 
 The one-person browser journey is NOT RUN for this attempt, and no new CPU or memory peak was
 measured. The previous one-person observation remains 3.654 whole-node CPU cores and 5.12 GiB
 including swap; it is not a measurement from this attempt. Journey status remains PARTIAL.
+
+## 23 November packaged one-person journey
+
+PASS: on approved product source `abe90b2e9`, the fresh package passed the one-person journey at
+1280 and 390 pixels. Both widths passed sign-in, chat, history refusal, the PDF answer, a decoded
+live desktop frame and budget. The [browser outcomes](logs/attempt-7/browser-result.json) retain
+each assertion. The frame check read the 800 by 600 canvas pixels and required a decoded image.
+
+Both approval runs still had their application, scanner and image artifacts before package
+preparation. The recorded run ids and expiry times are in the [journey record]
+(logs/attempt-7-package-journey.json). The five-minute quiet window passed with both slots free,
+no package stack and a maximum one-minute load of 5.28. A backup branch kept the PR tip while
+the worktree was reset to the approved source, then the tip was restored.
+
+Package preparation, private secret preparation with the values file supplied once, package-up
+and the owner check all passed. Package-up used the documented
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch for this command. The install record
+retains the host swap and crash-reporter findings. No host setting changed.
+
+The 85 samples retained from 05:41:25 to 05:44:13 UTC had no errors. After package readiness,
+whole-node peaks were **2.695 CPU cores and 5.21 GiB including swap**. The owned package peaked
+at **2.075 CPU cores and 2.97 GiB working set**, with 33.79 MiB swap. Bound PVC use peaked at
+76.68 MiB. The [measurements](logs/attempt-7/measurements.csv) and [summary]
+(logs/attempt-7/summary.json) retain the observations. These are journey-period observations;
+package installation was not sampled. They do not qualify a minimum machine size or spare-capacity
+recommendation.
+
+PASS: sanitised service logs and package metadata were collected before teardown. Both package
+teardown and secondary-stack release passed; slots 1 and 2 now report free. No product code changed.

@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-23",
+  "approvedSourceSha": "abe90b2e9a574af2be43c03ae16fd14b0c09b7b2",
+  "backupBranch": "backup/pilot-1162-s1-tip-aaf8e51e4",
+  "applicationApprovalRun": {
+    "id": 44788700765,
+    "conclusion": "success",
+    "artifactNames": ["application-approval", "application-image"],
+    "artifactsExpired": false,
+    "expiresAt": "2026-11-23T16:39:12Z"
+  },
+  "scannerApprovalRun": {
+    "id": 44788706844,
+    "conclusion": "success",
+    "artifactNames": ["scanner-approval", "scanner-image"],
+    "artifactsExpired": false,
+    "expiresAt": "2026-11-23T16:35:35Z"
+  },
+  "quietWindow": {
+    "start": "2026-11-23T05:30:37Z",
+    "end": "2026-11-23T05:35:53Z",
+    "slot1": "free at every check",
+    "slot2": "free at every check",
+    "packageStacks": "none at every check",
+    "oneMinuteLoadMaximum": 5.28,
+    "checks": 9
+  },
+  "claimedSlot": 1,
+  "privateValuesFilePassedOnce": true,
+  "packagePreparation": "PASS",
+  "privateSecretPreparation": "PASS",
+  "hostRiskSwitch": "OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366 on package-up; recorded in install record",
+  "packageUp": "PASS",
+  "packageOwnerCheck": "PASS",
+  "onePersonJourney": {
+    "1280": {
+      "signIn": "PASS",
+      "chat": "PASS",
+      "historyRefusal": "PASS",
+      "pdfAnswer": "PASS",
+      "decodedDesktopFrame": "PASS",
+      "budget": "PASS"
+    },
+    "390": {
+      "signIn": "PASS",
+      "chat": "PASS",
+      "historyRefusal": "PASS",
+      "pdfAnswer": "PASS",
+      "decodedDesktopFrame": "PASS",
+      "budget": "PASS"
+    }
+  },
+  "sampling": {
+    "start": "2026-11-23T05:41:25Z",
+    "end": "2026-11-23T05:44:13Z",
+    "samples": 85,
+    "errors": 0,
+    "wholeNodePeakCpuCores": 2.695053,
+    "wholeNodePeakMemoryGiBIncludingSwap": 5.208924,
+    "packagePeakCpuCores": 2.075311,
+    "packagePeakWorkingSetGiB": 2.9701,
+    "packagePeakSwapMiB": 33.79,
+    "ownedVolumePeakMiB": 76.68,
+    "scope": "After package readiness, across the one-person journey and log collection; install peak not sampled."
+  },
+  "cleanup": {
+    "sanitisedServiceLogsCollectedBeforeTeardown": "PASS",
+    "packageDown": "PASS",
+    "down": "PASS",
+    "slot1": "free"
+  },
+  "journey": "PASS"
+}
