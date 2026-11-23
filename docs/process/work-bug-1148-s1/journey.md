@@ -2,7 +2,28 @@
 
 Date: 23 November 2026 UTC. Builder's own qualification only.
 
-Journey on a fresh dev stack: NOT RUN for rebased source `2e1bee69d`
+Journey on a fresh dev stack: PARTIAL for source `878655bd7` (CORE passed; approval proof not run)
+
+## Fresh run after main fix #1178 (23 November, 16:00 UTC)
+
+The five-minute admission check passed: both secondary slots stayed free, no
+package or other journey stack was running, and every sampled one-minute load
+stayed below six. Fresh secondary slot 1 started from this branch. CORE passed
+at 390 px and 1280 px, including the normal chat, upload, live-view, Stop and
+reload checks. The local model stub served the turns; paid calls: zero.
+
+The focused approval proof did not run. Starting the guarded Stage B demo
+launcher failed before its readiness message: the background wrapper exited
+before the readiness check, no `stage-b-live` process remained, and its captured
+output file was empty. No retry was made. The 500-message seed, approval with a
+returned tool result, single use, reload of the approval, and post-Stop 403 with
+no further upstream effect are NOT RUN. The CORE journey had reported one
+`net::ERR_FAILED` upload transport message on each width, while both upload
+assertion groups passed.
+
+Sanitised startup and service logs, the empty launcher output, and both CORE
+screenshots were copied to the private task receipt before teardown. Teardown
+completed and slot 1 reported `free`. No product code changed.
 
 ## Admission after main fix #1178 (23 November)
 
