@@ -14,9 +14,10 @@ did not qualify: slot 1 reported busy at 13:12:54 and 13:38:08 UTC; load reached
 from at least 13:59 to 14:06 UTC. At 14:31:57, the remaining work window was too
 short to start a fresh stack, finish CORE at both widths, run the focused proof,
 retain evidence, and tear down safely.
-No slot was claimed and no stack command was run. CORE, the demo launcher, the
-500-message proof, approval with tool result, single use, reload, and the post-Stop
-403 with no further upstream effect are NOT RUN. No paid calls or product changes.
+No slot was claimed, and neither `up --fresh` nor `journey.sh` was run. CORE, the
+demo launcher, the 500-message proof, approval with tool result, single use, reload,
+and the post-Stop 403 with no further upstream effect are NOT RUN. No paid calls or
+product changes.
 
 ## Paused rebase qualification (23 November)
 
