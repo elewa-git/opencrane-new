@@ -56,8 +56,13 @@ Not built yet:
    Each copy has its own ports, data and private keys. Cleanup removes only that copy.
 2. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
    provider, then starts the apps. It waits for the website and dispatcher before
+<<<<<<< HEAD
    running the core browser journey. The status command shows recovery attempts
    for event delivery, acknowledgements and computer watcher reads.
+=======
+   running the core browser journey by default. A focused approval run can start
+   the services first and run its browser checks after the demo is ready.
+>>>>>>> 18eb13f70 (🧪 Defer focused browser checks until the guarded demo is ready)
 3. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,
    desktop viewing and organisation settings. The core journey finishes its browser

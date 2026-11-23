@@ -646,10 +646,11 @@ infra/dev-stack/journey.sh
 infra/dev-stack/down.sh
 ```
 
-`up` includes CORE by default. After a fresh secondary CORE run, start the guarded
-TLS launcher and set `APPROVAL_JOURNEY_ONLY=1` for `journey.sh` to check tool approval
-and denial after 500 saved messages in one chat at both browser widths. Seed ten
-messages and their completion events per batch and wait for the conversation
+`up` includes CORE by default. When CORE has already passed on the same product
+code, set `APPROVAL_JOURNEY_ONLY=1` on fresh secondary startup to defer browser
+checks until the guarded TLS launcher is ready. Set `APPROVAL_JOURNEY_ONLY=1` on
+`journey.sh` to check approval and denial after 500 saved messages in one chat at both
+browser widths. Seed ten messages and their completion events per batch and wait for the conversation
 projection between batches. Set up the timed tool review after history preparation.
 This mode runs the common sign-in and membership checks, then the approval driver
 and shared cleanup. The source regression retains 3,000 messages and completions.
@@ -2055,8 +2056,9 @@ report readiness. The [demo guide](../../docs/process/demo/README.md)
 keeps the remaining live checks explicit.
 
 The models process gets a separate control port for checking loaded configuration.
-The stack never forwards it. After a fresh CORE run, `stage-b-live.ts` starts the
-guarded demo transport. Run `journey.sh` with `APPROVAL_JOURNEY_ONLY=1` to seed
+The stack never forwards it. On a ready secondary stack, `stage-b-live.ts` starts
+the guarded demo transport. After the launcher reports ready, run `journey.sh`
+with `APPROVAL_JOURNEY_ONLY=1` to seed
 500 completed messages and request a demo write with the free Stage B model stub.
 Seed ten messages and their completion events at a time, then require their conversation
 projection checkpoint before publishing more. Each wait keeps its 30-second limit.

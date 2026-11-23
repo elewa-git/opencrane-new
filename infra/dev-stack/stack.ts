@@ -1,6 +1,7 @@
 import { prepareConnectionCustody, prepareConnectionCustodyFile } from './connection-custody-setup.ts';
 import './stack-entry.ts';
-import { fleetProviderRefusal, requireAutomatedJourney, requireFleetStandInProvider } from './journey-guard.ts';
+import { fleetProviderRefusal, requireAutomatedJourney, requireFleetStandInProvider,
+  runsCoreAtStartup } from './journey-guard.ts';
 import { issueMinioLease } from './minio-tokens.ts';
 import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
@@ -817,8 +818,10 @@ async function up(fresh: boolean) {
   }
   await wait(() => healthy(`${origin}/org/integrations`), 'web origin');
   // Check owner readiness through health, process and listener checks below.
-  // Keep automated chat journeys on claimed secondary stacks only.
-  if (!tokenBootstrap && secondary) await journey();
+  // Start the guarded demo before running the focused browser checks separately.
+  if (runsCoreAtStartup(secondary, tokenBootstrap, process.env['APPROVAL_JOURNEY_ONLY'])) {
+    await journey();
+  }
   const after = await run('ss', ['-H', '-ltnp']);
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));
