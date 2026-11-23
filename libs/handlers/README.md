@@ -23,7 +23,7 @@ flowchart LR
   parent["libs/<br/>shared libraries"] --> handlers["libs/handlers<br/>background job queue"]
   ops["apps/ops and dev startup<br/>background workers, including welcome completion"] -->|checks changes; runs queued jobs| handlers
   handlers -->|reports dispatch failure before lock cleanup| ops
-  nats["NATS JetStream<br/>event log"] -->|new events| handlers
+  nats["NATS JetStream<br/>event log"] -->|new events and redelivery| handlers
   handlers -->|runs reactions and sends saved nightly identifiers| reactions["libs/models and libs/authz<br/>AI rules and permissions"]
   handlers -.-> store["libs/event-store<br/>connection and record checks"]
   handlers -.-> events["libs/events<br/>reaction subscriptions"]
@@ -46,8 +46,9 @@ flowchart LR
 - Let operators retry or deliberately cancel a failed job after checking its cause.
 - Add jobs for older events when a release introduces a new subscription.
 - Let workers restart with queued jobs when their subscriptions have not changed.
-- Report dispatch failures to the worker before the database unlock completes, so
-  the local stack stops saying the worker is ready.
+- Resume pulling from the same event consumer after brief interruptions. Report
+  lasting dispatch failures before releasing the database lock so the local stack
+  stops saying the worker is ready.
 - Send a saved nightly scope and date to the decision process for checked preparation.
 
 ## Processes it handles

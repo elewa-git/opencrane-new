@@ -20,7 +20,7 @@ await runtime.start();
 async function startWorkers() {
   await runtime.work(4);
 }
-await dispatch(connection, runtime, abortController.signal, startWorkers);
+await dispatch(connection, runtime, abortController.signal, { ready: startWorkers });
 await runtime.stop();
 ```
 
@@ -34,8 +34,8 @@ Welcome completion also omits this attempt log because its stream id identifies
 the member. A failed attempt stores a fixed error without its private cause.
 Its attempt errors may contain private custody details, so the runtime replaces them with
 a fixed error before pg-boss stores the failed attempt. It does not log the raw error.
-Queue errors
-are logged; dispatcher errors reject its promise and require host restart.
+Queue errors are logged. Dispatch fails on database errors, invalid event
+delivery or exhausted JetStream recovery.
 
 `provision.ts` uses the event-store package's five-second management request
 timeout for EVENTS lookup and creation. The real PostgreSQL/NATS test fixture
@@ -50,6 +50,14 @@ Dispatch uses the connection reserved by its lifetime advisory lock, so busy
 reaction workers cannot make dispatch wait for another pool slot. Queue-setting
 reads made by pg-boss during enqueue also use that transaction. Workers and
 maintenance continue to use the ordinary pool outside enqueue.
+Each pull keeps its one-second expiry. After missed heartbeats or a temporary
+JetStream failure, the dispatcher repulls on the same durable consumer. Recovery
+keeps the lock and the SQL checkpoint. An event redelivered after its commit is
+acknowledged without queuing its jobs again. Recovery makes up to four retries,
+after 100, 200, 400 and 800 ms. It logs the cause of each retry and logs when a
+pull succeeds again. Retry exhaustion rejects with the last cause. A closed NATS
+connection is terminal. The ops computer watcher uses the same recovery policy
+around incremental event reads, after the normal event-store read limit.
 The checkpoint row serialises overlapping dispatchers and rejects gaps,
 silo mismatches and subscription changes. Registration takes a catalogue
 name and handle function; subscriptions come from `libs/events`, checked

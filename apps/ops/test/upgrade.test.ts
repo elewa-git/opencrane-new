@@ -29,7 +29,8 @@ async function checksOnlyCurrentGeneration(latest: string, staleTurn: boolean) {
     await record('computer.suspended', {});
     await record('computer.resumed', { generation: 2, tokenId: 'token:resume' });
   }
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   function attempted() {
     return upgrade.mock.calls.length > 0 || mode.mock.calls.length > 0;
   }
@@ -74,7 +75,8 @@ async function resumesOtherComputerDuringSlowUpgrade() {
     assistantId: 'other-assistant', computerId: 'other-computer', generation: 1,
     tokenId: 'token:other' });
   await nats.store.append({ event, expectedSequence: 0 });
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   function otherResumed() {
     return sink.mock.calls.length > 0;
   }
@@ -110,7 +112,8 @@ async function newResumeSkipsBackoff() {
   const initialTime = Date.now();
   function clock() { return initialTime; }
   vi.spyOn(Date, 'now').mockImplementation(clock);
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   function failedOnce() { return log.mock.calls.length === 1; }
   function triedResume() { return mode.mock.calls.length >= 2; }
   try {
@@ -143,7 +146,8 @@ async function capsAndClearsRetryDelay() {
   let now = Date.now();
   function clock() { return now; }
   vi.spyOn(Date, 'now').mockImplementation(clock);
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   const expectedDelays = [1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000];
   try {
     for (let index = 0; index < expectedDelays.length; index++) {

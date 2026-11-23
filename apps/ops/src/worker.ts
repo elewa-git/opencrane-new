@@ -3,6 +3,7 @@ import { scanConnections, connectionCleanupHandler, connectionCustodyFromFile,
   providerDefaultHandler, initialiseBudgetProjection, budgetStopHandler,
   welcomeCompletionHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
+import { renameSync, writeFileSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore, type EventStore } from '@opencrane/event-store';
@@ -33,7 +34,7 @@ import { hostedImageCheckHandler, recoverHostedImageChecks }
 import { trustedHostedImageInputs } from './hosted-image-inputs.ts';
 import { runAndWriteHostedImageCheck } from '../../../infra/clamav/image-worker.mjs';
 import { runRoutineScheduler } from './routine-production.ts';
-import type { Handler } from '@opencrane/handlers';
+import type { Handler, JetStreamRecoveryStatus } from '@opencrane/handlers';
 import type { HandlerName } from '@opencrane/events';
 
 function required(name: string): string {
@@ -72,6 +73,23 @@ function workerProjection() {
 }
 const stop = new AbortController();
 const readinessFile = process.env['DEV_DISPATCHER_READY_FILE'];
+const recoveryFile = process.env['DEV_JETSTREAM_RECOVERY_FILE'];
+const jetStreamRecovery = new Map<JetStreamRecoveryStatus['operation'], string>();
+function reportRecovery(status: JetStreamRecoveryStatus) {
+  if (!recoveryFile) return;
+  const { operation, phase, attempts } = status;
+  const label = operation.toLowerCase();
+  jetStreamRecovery.set(operation, `${label}: ${phase} (retries: ${attempts})`);
+  const lines = [...jetStreamRecovery.values()];
+  const temporary = `${recoveryFile}.tmp`;
+  try {
+    // Replace the complete status in one step while the stack may be reading it.
+    writeFileSync(temporary, lines.join('\n') + '\n', { mode: 0o600 });
+    renameSync(temporary, recoveryFile);
+  } catch (error) {
+    logger.error({ err: error }, 'Worker JetStream recovery status could not be saved');
+  }
+}
 let readinessRemoval: Promise<void> | undefined;
 function withdrawReadiness() {
   if (readinessFile && !readinessRemoval) {
@@ -296,8 +314,8 @@ try {
       function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {
         return kube.credentials(id, token, tokens.jwks.keys[0]);
       }
-      watcher = watchComputers(commandStore, kube, tokens, deliverCredentials,
-        silo, idleMs, stop.signal);
+      const watchOptions = { silo, idleMs, signal: stop.signal, reportRecovery };
+      watcher = watchComputers(commandStore, kube, tokens, deliverCredentials, watchOptions);
       function watcherFailed(error: unknown) {
         logger.error({ err: error }, 'Computer watcher failed');
         process.exitCode = 1;
@@ -317,7 +335,8 @@ try {
     function dispatchFailed() {
       stop.abort();
     }
-    await dispatch(connection, runtime, stop.signal, startWorkers, dispatchFailed);
+    const hooks = { ready: startWorkers, failed: dispatchFailed, reportRecovery };
+    await dispatch(connection, runtime, stop.signal, hooks);
   } else {
     const projection = workerProjection();
     if (projection) {

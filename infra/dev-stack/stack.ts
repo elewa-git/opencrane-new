@@ -34,6 +34,7 @@ import { upgradeBeforeApps } from './handler-upgrade.ts';
 import { dispatcherReady } from './dispatcher-ready.ts';
 
 const exec = promisify(execFile);
+const dispatcherRecoveryFile = `${directory}/dispatcher-recovery`;
 // Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
 const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const memoryKeyDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
@@ -713,9 +714,11 @@ async function up(fresh: boolean) {
   }
   await startModels();
   await rm(`${directory}/dispatcher-ready`, { force: true });
+  await rm(dispatcherRecoveryFile, { force: true });
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
     { ...await readEnv('dispatcher'), ...ownerMemorySettings, ...binding, ...custody,
       DEV_DISPATCHER_READY_FILE: `${directory}/dispatcher-ready`,
+      DEV_JETSTREAM_RECOVERY_FILE: dispatcherRecoveryFile,
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       CONTENT_DATABASE_URL: (await readEnv('server'))['DATABASE_URL']!,
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
@@ -884,6 +887,14 @@ async function journey() {
   const output = await run(process.execPath, args, environment, 1_200_000);
   console.log(output.trim());
 }
+async function printDispatcherRecovery() {
+  try {
+    const recovery = await readFile(dispatcherRecoveryFile, 'utf8');
+    console.log(recovery.trim());
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
 async function status() {
   if (secondary && await slotIsFree()) {
     console.log('free');
@@ -903,6 +914,7 @@ async function status() {
     console.log(`${name}: ${pid ? `running (${pid})` : 'stopped'}`);
     if (!pid) ok = false;
   }
+  await printDispatcherRecovery();
   if (await exists(`${directory}/settings.env`)) {
     console.log(await compose('ps'));
     const settings = await readEnv('settings');

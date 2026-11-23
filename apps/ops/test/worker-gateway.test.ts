@@ -48,8 +48,10 @@ async function fixture(contentSetting?: string, pausePreparation = false,
     commandEnv['COMMAND_NATS_URL'] = `127.0.0.1:${proxy.port}`;
   }
   const readinessFile = `${directory}/dispatcher-ready`;
+  const recoveryFile = `${directory}/dispatcher-recovery`;
   const env = { ...process.env, ...nats.env('dispatcher'), ...commandEnv,
     DEV_DISPATCHER_READY_FILE: readinessFile,
+    DEV_JETSTREAM_RECOVERY_FILE: recoveryFile,
     DATABASE_URL: jobsUrl, CONTENT_DATABASE_URL: contentSetting ?? readerUrl.href,
     SILO_ID: 'test', OPENFGA_API_URL: 'http://unused',
     OPENFGA_STORE_ID: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
@@ -149,7 +151,7 @@ async function fixture(contentSetting?: string, pausePreparation = false,
     proxy.pauseResponses(paused);
   }
   return { storage, content, readerUrl, nats, child, exited, ready, publish, preparePublication, waitingLocks,
-    latest, logs, preparing: preparing.promise, pauseResponses, readinessFile };
+    latest, logs, preparing: preparing.promise, pauseResponses, readinessFile, recoveryFile };
 }
 
 async function sharedLock(preparationFirst: boolean) {
@@ -313,7 +315,7 @@ async function waitForWorker(setup: WorkerFixture) {
     try {
       return (await readFile(setup.readinessFile, 'utf8')) === String(setup.child.pid);
     } catch (error) {
-      if (Reflect.get(error as object, 'code') !== 'ENOENT') throw error;
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
       return false;
     }
   }
@@ -360,6 +362,7 @@ async function recoversPull() {
   await setup.nats.seed([second]);
   await waitForLog(setup, 'Retrying dispatcher pull after JetStream failure');
   expect(setup.logs()).toContain('heartbeats missed');
+  expect(await readFile(setup.recoveryFile, 'utf8')).toContain('dispatcher pull: retrying');
   expect(await checkpoint(setup)).toBe(6);
   const interrupted = await setup.nats.dispatcherInfo();
   expect(interrupted.ack_floor.stream_seq).toBe(6);
@@ -373,6 +376,9 @@ async function recoversPull() {
     return info.ack_floor.stream_seq === 8 && info.num_ack_pending === 0;
   }
   await until(caughtUp);
+  const acknowledged = await setup.nats.dispatcherInfo();
+  // The consumer counted the interrupted delivery as well as each acknowledged event.
+  expect(acknowledged.ack_floor.consumer_seq).toBeGreaterThan(8);
   expect(await setup.nats.store.head()).toBe(8);
   expect(await checkpoint(setup)).toBe(8);
   const effects = await history(setup.nats.store, 'gateway-config-test', 'test');
@@ -386,6 +392,7 @@ async function recoversPull() {
     { event_id: first.id }, { event_id: second.id },
   ]));
   expect(await readFile(setup.readinessFile, 'utf8')).toBe(String(setup.child.pid));
+  expect(await readFile(setup.recoveryFile, 'utf8')).toContain('dispatcher pull: recovered');
 }
 it('resumes the same durable pull after missed heartbeats and applies each event once',
   recoversPull);
@@ -397,6 +404,7 @@ async function recoversWatcher() {
   await waitForLog(setup, 'Retrying computer watcher read after JetStream failure');
   setup.pauseResponses(false);
   await waitForLog(setup, 'Computer watcher read recovered');
+  expect(await readFile(setup.recoveryFile, 'utf8')).toContain('computer watcher read: recovered');
   await setup.publish('alpha');
   await waitForGeneration(setup, 1);
   expect(await readFile(setup.readinessFile, 'utf8')).toBe(String(setup.child.pid));
@@ -408,6 +416,10 @@ async function stopsAfterPersistentFailure() {
   const setup = await fixture(undefined, false, 'pull');
   await waitForWorker(setup);
   setup.pauseResponses(true);
+  function stopped() {
+    return setup.child.exitCode !== null;
+  }
+  await until(stopped, 15_000);
   await setup.exited;
   expect(setup.child.exitCode).toBe(1);
   expect(setup.logs()).toContain('Dispatcher pull recovery exhausted');
@@ -415,7 +427,23 @@ async function stopsAfterPersistentFailure() {
   const attempts = setup.logs().match(/Retrying dispatcher pull after JetStream failure/g);
   expect(attempts).toHaveLength(4);
   await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
+  expect(await readFile(setup.recoveryFile, 'utf8')).toContain('dispatcher pull: exhausted');
   expect(await checkpoint(setup)).toBe(0);
 }
 it('stops with a failed exit and withdraws readiness after persistent pull failure',
   stopsAfterPersistentFailure);
+
+async function stopsAfterServerLoss() {
+  const setup = await fixture();
+  await waitForWorker(setup);
+  await setup.nats.stop();
+  function stopped() {
+    return setup.child.exitCode !== null;
+  }
+  await until(stopped, 15_000);
+  await setup.exited;
+  expect(setup.child.exitCode).toBe(1);
+  expect(setup.logs()).toMatch(/(Dispatcher pull|Computer watcher read) recovery exhausted/);
+  await expect(readFile(setup.readinessFile)).rejects.toThrow('ENOENT');
+}
+it('stops when the NATS server disappears and does not come back', stopsAfterServerLoss);

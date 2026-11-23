@@ -4,13 +4,17 @@ import {
   DeliverPolicy,
   jetstream,
   jetstreamManager,
+  JetStreamError,
+  type Consumer,
+  type JsMsg,
 } from "@nats-io/jetstream";
 import type { NatsConnection } from "@nats-io/transport-node";
-import { decodeEvent } from "@opencrane/event-store";
+import { decodeEvent, isEventStoreUnavailable } from "@opencrane/event-store";
 import { checkHandlers } from "./registration.ts";
 import { HandlerRuntime } from "./queue.ts";
 import { subscriptionChanges, type DispatcherState } from "./upgrade.ts";
-import type { Db } from "@opencrane/projections";
+import { recoverJetStreamOperation, type JetStreamRecoveryReporter } from './jetstream-recovery.ts';
+import type { Db, Query } from "@opencrane/projections";
 
 const configuration = {
   durable_name: "handler-dispatcher",
@@ -45,13 +49,18 @@ async function durableConsumer(connection: NatsConnection) {
   );
 }
 
+export type DispatchHooks = {
+  ready?: () => Promise<void>;
+  failed?: () => void;
+  reportRecovery?: JetStreamRecoveryReporter;
+};
+
 /** Keep one lasting dispatcher per silo; the SQL checkpoint blocks overlapping copies. */
 export async function dispatch(
   connection: NatsConnection,
   runtime: HandlerRuntime,
   signal: AbortSignal,
-  ready?: () => Promise<void>,
-  failed?: () => void,
+  hooks: DispatchHooks = {},
 ): Promise<void> {
   const db = runtime.options.db;
   if (!db.lock) {
@@ -60,10 +69,10 @@ export async function dispatch(
   async function run(locked: Db) {
     try {
       // Use the connection already reserved for dispatch, even while workers fill the pool.
-      await dispatchLocked(connection, runtime, locked, signal, ready);
+      await dispatchLocked(connection, runtime, locked, signal, hooks);
     } catch (error) {
       // Tell the worker before the database starts its lock cleanup.
-      failed?.();
+      hooks.failed?.();
       throw error;
     }
   }
@@ -114,10 +123,9 @@ async function dispatchLocked(
   runtime: HandlerRuntime,
   db: Db,
   signal: AbortSignal,
-  ready?: () => Promise<void>,
+  hooks: DispatchHooks,
 ): Promise<void> {
-  const { silo, handlers } = runtime.options;
-  const manifest = checkHandlers(handlers);
+  const manifest = checkHandlers(runtime.options.handlers);
   if (!await prepareDispatcher(runtime, db)) {
     if (!signal.aborted) {
       await once(signal, "abort");
@@ -125,49 +133,90 @@ async function dispatchLocked(
     return;
   }
   const consumer = await durableConsumer(connection);
-  await ready?.();
+  await hooks.ready?.();
+  const recovery = { operation: 'Dispatcher pull' as const, signal, logger: runtime.options.logger,
+    isUnavailable: isPullUnavailable, report: hooks.reportRecovery };
+  function pull() {
+    return nextMessage(connection, consumer, signal);
+  }
   while (!signal.aborted) {
-    const message = await consumer.next({ expires: 1000 });
+    const message = await recoverJetStreamOperation(pull, recovery);
     if (!message) {
       continue;
     }
     signal.throwIfAborted();
-    const event = decodeEvent(message.data, message.subject);
-    if (event.silo !== silo) {
-      throw new Error("Dispatcher silo mismatch");
-    }
-    await db.transaction(async (tx) => {
-      const state = await tx.query<{
-        silo: string;
-        manifest: string;
-        sequence: string;
-      }>(
-        "SELECT silo, manifest, sequence FROM handler_dispatcher WHERE id = 1 FOR UPDATE",
-      );
-      const row = state.rows[0];
-      if (!row || row.silo !== silo || row.manifest !== manifest) {
-        throw new Error(
-          "Dispatcher state changed during dispatch",
-        );
-      }
-      if (message.seq <= Number(row.sequence)) {
-        return;
-      }
-      if (message.seq !== Number(row.sequence) + 1) {
-        throw new Error("Dispatcher event sequence gap");
-      }
-      for (const handler of handlers) {
-        if (handler.eventTypes.includes(event.type)) {
-          await runtime.enqueue(handler, event, tx);
-        }
-      }
-      await tx.query(
-        "UPDATE handler_dispatcher SET sequence = $1 WHERE id = 1",
-        [message.seq],
-      );
-    });
-    // Save every subscriber job and the checkpoint in one database commit.
-    // Leave the message unacknowledged if the commit reply is lost or unclear.
+    await commitMessage(runtime, db, manifest, message);
+    // Leave the message unacknowledged if the database commit reply is lost or unclear.
     await message.ackAck();
   }
+}
+
+function isPullUnavailable(error: unknown) {
+  if (isEventStoreUnavailable(error)) return true;
+  if (!(error instanceof JetStreamError)) return false;
+  // The SDK closes the pull after two missed heartbeats.
+  if (error.message === 'heartbeats missed') return true;
+  if (!('code' in error)) return false;
+  // A server going away may be replaced before the retry budget runs out.
+  return error.code === 503 || (error.code === 409 && error.message === 'server shutdown');
+}
+
+async function requireConnection(connection: NatsConnection) {
+  if (connection.isClosed()) {
+    throw new Error('Dispatcher NATS connection closed', { cause: await connection.closed() });
+  }
+}
+
+async function nextMessage(connection: NatsConnection, consumer: Consumer, signal: AbortSignal) {
+  await requireConnection(connection);
+  // The durable already exists. Let JetStream redeliver from its saved acknowledgement position.
+  // Bind to it so the SDK re-pulls on reconnect without its own unbounded consumer info loop.
+  const messages = await consumer.fetch({ max_messages: 1, expires: 1000, bind: true });
+  function cancelPull() {
+    void messages.close();
+  }
+  signal.addEventListener('abort', cancelPull, { once: true });
+  try {
+    if (signal.aborted) cancelPull();
+    for await (const message of messages) return message;
+    if (!signal.aborted) await requireConnection(connection);
+    return null;
+  } finally {
+    signal.removeEventListener('abort', cancelPull);
+  }
+}
+
+async function commitMessage(runtime: HandlerRuntime, db: Db, manifest: string, message: JsMsg) {
+  const { silo, handlers } = runtime.options;
+  const event = decodeEvent(message.data, message.subject);
+  if (event.silo !== silo) {
+    throw new Error("Dispatcher silo mismatch");
+  }
+  async function enqueueAndSaveCheckpoint(tx: Query) {
+    const state = await tx.query<DispatcherState>(
+      "SELECT silo, manifest, sequence FROM handler_dispatcher WHERE id = 1 FOR UPDATE",
+    );
+    const row = state.rows[0];
+    if (!row || row.silo !== silo || row.manifest !== manifest) {
+      throw new Error("Dispatcher state changed during dispatch");
+    }
+    const checkpoint = Number(row.sequence);
+    if (message.seq <= checkpoint) {
+      return;
+    }
+    if (message.seq !== checkpoint + 1) {
+      throw new Error("Dispatcher event sequence gap");
+    }
+    for (const handler of handlers) {
+      if (handler.eventTypes.includes(event.type)) {
+        await runtime.enqueue(handler, event, tx);
+      }
+    }
+    await tx.query(
+      "UPDATE handler_dispatcher SET sequence = $1 WHERE id = 1",
+      [message.seq],
+    );
+  }
+  // Save every subscriber job and the checkpoint in one database commit.
+  await db.transaction(enqueueAndSaveCheckpoint);
 }

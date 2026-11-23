@@ -187,7 +187,11 @@ try {
   let proxyOutput = ''; proxy.stdout.on('data', (chunk: Buffer) => { proxyOutput += chunk.toString(); });
   await until(() => /127\.0\.0\.1:(\d+)/u.test(proxyOutput), 'private proxy');
   const proxyUrl = `http://127.0.0.1:${/127\.0\.0\.1:(\d+)/u.exec(proxyOutput)![1]}`;
-  lifecycle = watchComputers(store, kube, tokens, (id, token) => kube.credentials(id, token), 'test', 600_000, stop.signal);
+  const watchOptions = { silo: 'test', idleMs: 600_000, signal: stop.signal };
+  function deliver(id: string, token: Parameters<typeof kube.credentials>[1]) {
+    return kube.credentials(id, token);
+  }
+  lifecycle = watchComputers(store, kube, tokens, deliver, watchOptions);
   void lifecycle.catch(error => { console.error(error); stop.abort(); });
   await until(async () => (await history(store, subject)).at(-1)?.event.type === 'computer.ready', 'initial Ready');
   const conversationId = randomUUID(), context = { silo: 'test', memberId: 'alice' };

@@ -60,8 +60,8 @@ it('withdraws readiness while a failed dispatch waits for database unlock', asyn
     stop.abort();
   }
   await provisionDispatcher(nats.connection);
-  const task = dispatch(nats.dispatcherConnection, runtime, stop.signal,
-    markReady, dispatchFailed);
+  const hooks = { ready: markReady, failed: dispatchFailed };
+  const task = dispatch(nats.dispatcherConnection, runtime, stop.signal, hooks);
   void task.catch(() => undefined);
   try {
     await unlockStarted.promise;

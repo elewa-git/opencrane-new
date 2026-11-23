@@ -77,7 +77,8 @@ it.each(['state', 'mode'] as const)('keeps watching other computers when Kuberne
     expect(id).toBe('healthy');
     deliveries++;
     return Promise.resolve();
-  }, 'test', 600_000, stop.signal).then(() => undefined, (error: unknown) => error);
+  },
+    { silo: 'test', idleMs: 600_000, signal: stop.signal }).then(() => undefined, (error: unknown) => error);
   try {
     function retriedAndDelivered() {
       return attempts >= 2 && deliveries >= 1;
@@ -131,7 +132,8 @@ it('resumes a bound computer when the claim endpoint is unavailable, after the o
     expect(podUid).toBe('new-pod');
     await expect(tokens.verify(token.value, computerTokenAudience, rotated.id)).resolves.toBeDefined();
     delivered = true; stop.abort();
-  }, 'test', 600_000, stop.signal);
+  },
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   // Surface watcher failures without leaving a rejected background promise.
   const outcome = work.then(() => undefined, (error: unknown) => error);
   try {
@@ -175,7 +177,8 @@ it('keeps reconciling computers beside human conversations and view audits after
       utterance: 'A saved direct message',
     };
     await append('conversation-direct', 'message.posted', message);
-    outcome = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal).catch((error: unknown) => error);
+    outcome = watchComputers(nats.store, kube, tokens, sink,
+      { silo: 'test', idleMs: 600_000, signal: stop.signal }).catch((error: unknown) => error);
     await until(() => deliveries > 0, 3000);
     for (const type of ['computer.view_started', 'computer.view_stopped', 'computer.view_refused']) {
       await append(type === 'computer.view_refused' ? 'view-refusal' : 'view-view_1', type, getEventDefinition(type)!.example);
@@ -185,7 +188,8 @@ it('keeps reconciling computers beside human conversations and view audits after
     stop.abort(); expect(await outcome).toBeUndefined();
     // A new worker scans the same durable history, then performs the next lifecycle transition.
     stop = new AbortController();
-    outcome = watchComputers(nats.store, kube, tokens, sink, 'test', 0, stop.signal).catch((error: unknown) => error);
+    outcome = watchComputers(nats.store, kube, tokens, sink,
+      { silo: 'test', idleMs: 0, signal: stop.signal }).catch((error: unknown) => error);
     await until(async () => (await history(nats.store, subject)).at(-1)?.event.type === 'computer.suspended', 3000);
     stop.abort(); expect(await outcome).toBeUndefined();
     expect((await history(nats.store, subject)).map(row => row.event.type)).toEqual(['computer.claimed', 'computer.ready', 'computer.suspended']);

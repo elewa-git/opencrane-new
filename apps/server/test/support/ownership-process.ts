@@ -46,7 +46,7 @@ async function handle(message: { operation: string; input: unknown; actor?: stri
       await runtime.start();
       await provisionDispatcher(connection);
       async function work() { await runtime.work(); }
-      const running = dispatch(dispatcher, runtime, stop.signal, work);
+      const running = dispatch(dispatcher, runtime, stop.signal, { ready: work });
       async function applied() {
         const receipt = await db.query('SELECT event_id FROM handler_receipts WHERE event_id = $1',
           [eventId]);

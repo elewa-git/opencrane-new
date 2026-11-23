@@ -2,12 +2,14 @@ import { sha256Hex } from '@opencrane/events/digest';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
-import { readBeforeDeadline, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { isEventStoreUnavailable, readBeforeDeadline,
+  type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { conversationCreatedDataSchema, memberJoinedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { readEvents } from '@opencrane/projections';
-import { registerHandler } from '@opencrane/handlers';
-import { createLogger } from '@opencrane/observability';
+import { recoverJetStreamOperation, registerHandler,
+  type JetStreamRecoveryReporter } from '@opencrane/handlers';
+import { createLogger, type Logger } from '@opencrane/observability';
 import type { SandboxClient, SandboxState } from './kubernetes.ts';
 
 type Store = Pick<EventStore, 'readStream' | 'append'>;
@@ -417,8 +419,36 @@ function skipComputerCheck(state: ComputerState, stable: boolean, eventsMoved: b
     elapsedMs < IDLE_CHECK_INTERVAL_MS;
 }
 
+export type ComputerWatchOptions = {
+  silo: string;
+  idleMs: number;
+  signal: AbortSignal;
+  reportRecovery?: JetStreamRecoveryReporter;
+};
+
+function computerEventUpdates(store: EventStore, kube: SandboxClient,
+  snapshot: ComputerWatchState, options: ComputerWatchOptions, logger: Logger) {
+  const { silo, signal, reportRecovery } = options;
+  const recovery = { operation: 'Computer watcher read' as const, signal, logger,
+    isUnavailable: isEventStoreUnavailable, report: reportRecovery };
+  let refresh: Promise<void> | undefined;
+  function readNewEvents() {
+    return updateComputers(store, kube, silo, snapshot);
+  }
+  return async function refreshComputers() {
+    if (!refresh) refresh = recoverJetStreamOperation(readNewEvents, recovery);
+    const currentRefresh = refresh;
+    try {
+      await currentRefresh;
+    } finally {
+      if (refresh === currentRefresh) refresh = undefined;
+    }
+  };
+}
+
 export function watchComputers(store: EventStore, kube: SandboxClient,
-  tokens: Tokens, sink: CredentialSink, silo: string, idleMs: number, signal: AbortSignal) {
+  tokens: Tokens, sink: CredentialSink, options: ComputerWatchOptions) {
+  const { idleMs, signal } = options;
   const logger = createLogger('computer-lifecycle');
   const snapshot: ComputerWatchState = {
     position: 0, computers: new Map(), conversations: new Map(), activity: new Map(),
@@ -429,16 +459,7 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
   const podChecks = new Map<string, number>();
   const retries = new Map<string, { eventId: string; delayMs: number; nextAttemptAt: number }>();
   const inFlight = new Map<string, Promise<void>>();
-  let refresh: Promise<void> | undefined;
-  async function refreshComputers() {
-    if (!refresh) refresh = updateComputers(store, kube, silo, snapshot);
-    const currentRefresh = refresh;
-    try {
-      await currentRefresh;
-    } finally {
-      if (refresh === currentRefresh) refresh = undefined;
-    }
-  }
+  const refreshComputers = computerEventUpdates(store, kube, snapshot, options, logger);
   async function checkComputer(state: ComputerState, stable: boolean, checkedAt: number) {
     const retry = retries.get(state.computerId);
     async function checkIdleness() {
@@ -491,7 +512,11 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
           const work = checkComputer(state, stable, checkedAt);
           inFlight.set(state.computerId, work);
         }
-        await delay(250, undefined, { signal }).catch(ignoreStoppedPoll);
+        await delay(250, undefined, { signal });
+      }
+    } catch (error) {
+      if (!signal.aborted || !(error instanceof Error) || error.name !== 'AbortError') {
+        throw error;
       }
     } finally {
       await Promise.all(inFlight.values());
@@ -504,8 +529,4 @@ function computerRetry(eventId: string, previousDelayMs = 500) {
   const delayMs = Math.min(previousDelayMs * 2, 60_000);
   const nextAttemptAt = Date.now() + delayMs;
   return { eventId, delayMs, nextAttemptAt };
-}
-
-function ignoreStoppedPoll(error: unknown) {
-  if (!(error instanceof Error && error.name === 'AbortError')) throw error;
 }

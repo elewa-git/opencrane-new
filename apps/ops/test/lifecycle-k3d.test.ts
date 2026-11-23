@@ -162,7 +162,8 @@ it.skipIf(!live).each([
       await lifecycleHandlers(nats.store)[1].handle(assistant, storage.db);
       const computerId = field((await history(nats.store, subject)).at(-1)!.event.data, 'computerId');
       const start = () => {
-        work = watchComputers(nats.store, kube, tokens, (id, token) => kube.credentials(id, token), 'test', 600_000, stop.signal)
+        work = watchComputers(nats.store, kube, tokens, (id, token) => kube.credentials(id, token),
+          { silo: 'test', idleMs: 600_000, signal: stop.signal })
           .catch((error: unknown) => { watcherError = error; });
       };
       const latest = async () => (await history(nats.store, subject)).at(-1)!.event;
@@ -296,7 +297,8 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
     await until(async () => (await allEvents()).some(event => event.type === 'computer.claimed'), 'committed claim intent');
     expect(await k('get', 'sandboxclaims', '-o', 'jsonpath={.items}')).toBe('[]');
     // Restart after the claim append, before its first Kubernetes effect.
-    watchTask = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, watcher.signal);
+    watchTask = watchComputers(nats.store, kube, tokens, sink,
+      { silo: 'test', idleMs: 600_000, signal: watcher.signal });
     void watchTask.catch(() => undefined);
     const started = performance.now();
     await until(async () => (await allEvents()).some((event) => event.type === 'computer.ready'), 'join to Ready');
@@ -396,13 +398,15 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
     // Crash window: committed intent exists, but no reconciler ran. A fresh watcher recovers it.
     expect(await k('get', `sandbox/${computerId}`, '-o', 'jsonpath={.spec.operatingMode}')).toBe('Running');
     watcher = new AbortController();
-    watchTask = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, watcher.signal);
+    watchTask = watchComputers(nats.store, kube, tokens, sink,
+      { silo: 'test', idleMs: 600_000, signal: watcher.signal });
     await until(async () => (await kube.state(computerId))?.suspended === true, 'Sandbox suspended');
     watcher.abort();
     await watchTask;
     const initialToken = issued[0]!;
     watcher = new AbortController();
-    watchTask = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, watcher.signal);
+    watchTask = watchComputers(nats.store, kube, tokens, sink,
+      { silo: 'test', idleMs: 600_000, signal: watcher.signal });
     const resumeStarted = performance.now();
     const resumedTokens = await Promise.all([resumeComputer(nats.store, tokens, 'test', assistantId), resumeComputer(nats.store, tokens, 'test', assistantId)]);
     const resumedToken = resumedTokens[0];
@@ -609,7 +613,8 @@ async function resumesOnCheckedImage(suspendBeforeUpgrade: boolean) {
     function failed(error: unknown) {
       watcherError = error;
     }
-    work = watchComputers(nats.store, kube, tokens, deliver, 'test', 600_000, stop.signal);
+    work = watchComputers(nats.store, kube, tokens, deliver,
+      { silo: 'test', idleMs: 600_000, signal: stop.signal });
     void work.catch(failed);
     if (!suspendBeforeUpgrade) {
       function credentialsRenewed() {
