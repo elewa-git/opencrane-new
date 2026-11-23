@@ -14,8 +14,7 @@ export function recordDemoCalls(demo: FastifyInstance, file: string) {
       }
       function finished() {
         const body = Buffer.concat(chunks).toString();
-        const requestId = String(request.headers['x-request-id']);
-        const record = { body, requestId };
+        const record = { body };
         appendFileSync(file, `${JSON.stringify(record)}\n`, { mode: 0o600 });
       }
       request.raw.on('data', received);

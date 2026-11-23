@@ -12,7 +12,7 @@ async function recordsExactRequestBytes() {
   recordDemoCalls(demo, file);
   const body = '{ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {} }';
   const headers = { 'content-type': 'application/json',
-    'mcp-name': 'change_delivery_slot', 'x-request-id': 'recorded-request' };
+    'mcp-name': 'change_delivery_slot' };
   try {
     await demo.inject({ method: 'POST', url: '/', headers, payload: body });
     await demo.inject({ method: 'POST', url: '/',
@@ -20,11 +20,11 @@ async function recordsExactRequestBytes() {
     const text = await readFile(file, 'utf8');
     const rows = text.trim().split('\n');
     assert.equal(rows.length, 1);
-    assert.deepEqual(JSON.parse(rows[0]!), { body, requestId: 'recorded-request' });
+    assert.deepEqual(JSON.parse(rows[0]!), { body });
   } finally {
     await demo.close();
     await rm(directory, { recursive: true, force: true });
   }
 }
-void test('the demo recorder keeps exact write bytes and ignores readback calls',
+void test('the demo recorder keeps remote write bytes without an internal request header',
   recordsExactRequestBytes);

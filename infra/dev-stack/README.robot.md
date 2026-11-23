@@ -2063,8 +2063,11 @@ projection checkpoint before publishing more. Each wait keeps its 30-second limi
 Check browser approval, the returned tool result, exact forwarded bytes, single use,
 denial and browser Stop, at 1280 and 390 pixels. Approve an exact request on the native turn
 before pressing Stop; sending those same bytes afterwards must refuse without an effect.
-The launcher records synthetic write bytes in `demo-calls.jsonl`; direct readback
-confirms the effect count independently. Keep the launcher running until checks finish.
+The launcher records synthetic write bytes in `demo-calls.jsonl`. The remote tool
+receives only the headers on the remote dispatch allowlist. The driver finds the
+single saved approval use and checks its permit against the gateway's allowed
+decision for the same turn and call. Direct demo readback confirms the effect count
+independently. Keep the launcher running until checks finish.
 
 1. **A developer starts OpenCrane.** The scripts start the databases and services, then
    start the server, workers and website. Startup waits up to five minutes for the website

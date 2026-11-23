@@ -24,27 +24,40 @@ import { seedApprovalHistory } from './approval-history.ts';
 
 type Append = (type: string, subject: string, data: Record<string, unknown>, source?: string) => Promise<void>;
 
-function isAllowedDecision(row: StoredEvent) {
-  if (row.event.type !== 'decision.recorded') return false;
-  const decision = decisionRecordedDataSchema.parse(row.event.data);
-  return decision.outcome === 'allow';
+function isRecordedDecision(row: StoredEvent) {
+  return row.event.type === 'decision.recorded';
 }
 
-function countApprovalUses(rows: StoredEvent[], permitId: string) {
-  let uses = 0;
-  for (const row of rows) {
-    if (row.event.type !== 'approval.used') continue;
-    const used = approvalUsedDataSchema.parse(row.event.data);
-    if (used.permitId === permitId) uses++;
-  }
-  return uses;
+function isApprovalUse(row: StoredEvent) {
+  return row.event.type === 'approval.used';
+}
+
+async function requireSingleApprovalUse(store: EventStore, silo: string, approvalId: string,
+  turnId: string, callId: string) {
+  // Remote tools receive the call body. The saved use links to the internal permit.
+  const approvals = await history(store, `approval-${approvalId}`, silo);
+  const uses = approvals.filter(isApprovalUse);
+  assert.equal(uses.length, 1, 'The approval has exactly one saved use');
+  const use = approvalUsedDataSchema.parse(uses[0]!.event.data);
+  assert.equal(use.approvalId, approvalId);
+  const audit = await history(store, `decision-${use.permitId}`, silo);
+  const recorded = audit.find(isRecordedDecision);
+  assert(recorded, 'The used permit has a saved decision');
+  const decision = decisionRecordedDataSchema.parse(recorded.event.data);
+  assert.equal(decision.outcome, 'allow');
+  assert.equal(decision.reason, 'approval_used');
+  assert.equal(decision.requestId, use.permitId);
+  assert.equal(decision.permitId, use.permitId);
+  assert.equal(decision.turnId, turnId);
+  assert.equal(decision.callId, callId);
+  assert.equal(recorded.event.correlation.approval, approvalId);
 }
 
 async function recordedApprovalCalls() {
   const text = await readFile(`${directory}/demo-calls.jsonl`, 'utf8');
   const rows = text.trim() ? text.trim().split('\n') : [];
   function parseRow(row: string) {
-    return z.object({ body: z.string(), requestId: z.uuid() }).parse(JSON.parse(row));
+    return z.object({ body: z.string() }).parse(JSON.parse(row));
   }
   return rows.map(parseRow);
 }
@@ -117,8 +130,9 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
     await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', payingGroupId: defaultPayingGroupId, ...provider }, 'opencrane-server');
     try {
       const computer = await issueApprovalComputer(store, tokens, input);
+      const callId = `approval-${width}`;
       function body(slot: 'morning' | 'afternoon') {
-        return approvalToolBody({ threadId: conversationId, callId: `approval-${width}`, slot });
+        return approvalToolBody({ threadId: conversationId, callId, slot });
       }
       const call = async (slot: 'morning' | 'afternoon') => {
         const turn = await computerCredentials(store, tokens, input.silo).turn({ ...input, conversationId, turnId, threadId: conversationId, task: 'chat_turn', ...provider });
@@ -157,8 +171,6 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       assert.equal(afterQuote.value.slot, 'afternoon');
       assert.equal(recorded.length, before + 1, 'Exactly one upstream call');
       assert.equal(recorded.at(-1)!.body, body('afternoon'), 'Approved bytes forwarded unchanged');
-      const audit = await history(store, `decision-${recorded.at(-1)!.requestId}`, input.silo);
-      assert(audit.some(isAllowedDecision));
       await page.reload();
       await approvalTerminal(page, approvalId, /Approved by you.*used once/).waitFor();
       await captureApprovalState(page, 'used');
@@ -174,9 +186,7 @@ export async function approvalJourney(ownerPage: Page, pages: Page[], store: Eve
       await approvalTerminal(page, approvalId, /Approved by you.*used once/).waitFor();
       assert.equal(await page.getByRole('button', { name: /^Approve:/ }).count(), 0);
       await captureApprovalState(page, 'denied');
-      const approvals = await history(store, `approval-${approvalId}`, input.silo);
-      const uses = countApprovalUses(approvals, recorded.at(-1)!.requestId);
-      assert.equal(uses, 1);
+      await requireSingleApprovalUse(store, input.silo, approvalId, turnId, callId);
       console.log(`PASS approvals ${width}px after 500 saved messages: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
     } catch (error) {
       // Capture the card before cleanup closes the turn and leaves the conversation.
