@@ -2,6 +2,23 @@
 
 Journey on a fresh dev stack: FAIL
 
+## Latest rebase attempt
+
+23 November 2026. Rebased product head `59573055e269f54225a25b6cce0014bc203f4778`
+has green CI and fresh application and scanner package approvals. The five-minute
+admission window passed at 316 seconds, with both slots and package namespaces free
+and one-minute load below 6. The journey coordinator started 78 seconds after its
+last sample and refused with the exact error `The capacity check is stale`. It
+stopped before package preparation, installation or browser sign-in. The install
+refusals, wrong-organisation sign-in, owner claim, wrong-token refusal, token reuse,
+owner/admin/member chats and cookies at 1280 and 390 px are **NOT RUN**. There are
+no screenshots or startup/service logs because startup did not begin. The temporary
+package namespace was removed before this admission window. `package-down --id 1`
+and `down.sh --id 1` passed after the refusal. No retry was made. See the
+[rebase attempt receipt](round-5-rebased/receipt.md),
+[admission samples](round-5-rebased/admission.log) and
+[load records](round-5-rebased/load-during-run.log).
+
 ## Latest round 3 result
 
 20 November 2026. The fresh install from approved product `bf0a059d8` remains

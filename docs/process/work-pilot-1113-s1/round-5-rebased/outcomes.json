@@ -1,0 +1,15 @@
+{
+  "startedAt": "2026-11-23T00:58:17.014Z",
+  "revision": "59573055e269f54225a25b6cce0014bc203f4778",
+  "fresh": false,
+  "outcomes": [
+    { "step": "CI on rebased head", "result": "PASS" },
+    { "step": "application package approval and artifact", "result": "PASS" },
+    { "step": "scanner package approval and artifact", "result": "PASS" },
+    { "step": "five-minute admission window", "result": "PASS", "qualifiedSeconds": 316 },
+    { "step": "fresh capacity evidence at coordinator start", "result": "FAIL", "reason": "The capacity check is stale" },
+    { "step": "package installation and browser journey", "result": "NOT RUN", "reason": "Coordinator stopped before package preparation" },
+    { "step": "package-down --id 1", "result": "PASS" },
+    { "step": "down.sh --id 1", "result": "PASS" }
+  ]
+}
