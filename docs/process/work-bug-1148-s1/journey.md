@@ -1,8 +1,24 @@
 # Long-chat approval and Stop journey
 
-Date: 20 November 2026 UTC. Builder's own qualification only.
+Date: 23 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
+
+## Controlled attempt after the rebase
+
+CI passed on source `98c87b066`. The five-minute preflight passed on secondary
+slots 1 and 2: 12 samples over 6 minutes 9 seconds showed both slots free, no
+package stack and one-minute load between 0.68 and 1.41.
+
+Startup of the `origin/main` source `5576ecd1d` was refused before provisioning:
+`Stack id must be owner, 1 or 2` (exit 2). `DEV_STACK_ID` had been set in the
+claim shell, but was absent from the separate startup shell. No services or
+screenshots were produced. CORE on `origin/main`, CORE on this branch, and the
+focused 500-message approval and Stop journey are NOT RUN. Paid calls: zero.
+The startup and status evidence was saved before `down.sh --id 1`; slot 1 then
+reported free. No product code changed.
+
+## Earlier follow-up attempt
 
 The follow-up run tested source `85e52f13c` on fresh secondary slot 1. CORE failed
 at 390 px during the basic chat before live computer viewing. The 1280 px CORE and
