@@ -4,6 +4,31 @@ Date: 23 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
+## Owner option A controlled journey (23 November)
+
+The branch tip was `c576a3b73`. The required five-minute load samples stayed below six.
+At approximately 02:39:44 UTC, however, the slot 1 status output listed stopped services
+instead of reporting `free`. Later samples at 02:40:14 and 02:40:50 reported both slots
+free, and slot 1 was claimed at 02:41:09. Continuous free status for the full five minutes
+cannot be established, so the admission check is PARTIAL.
+
+Fresh startup on secondary slot 1 completed. CORE passed at 390 px and 1280 px, including
+streamed stub replies, reload, Stop, uploads, live view, and the remaining standard checks.
+Paid calls: zero. The automatic CORE journey skipped the focused approval check by design.
+
+The focused journey seeded 500 earlier messages and 500 matching completion events. It
+waited for the conversations projection after each of its 50 batches before continuing.
+It then failed during tool setup: `waitForApprovalSetup` in
+`infra/dev-stack/approval-tool.ts` asserted `Approval journey setup timeout` after its
+90-second wait for the registered tool catalogue. This occurred from
+`prepareApprovalTool`, before any approval request or upstream tool result.
+
+Approval use, the single-use replay, reload restoration, and the post-Stop request using
+the same approved bytes were NOT RUN. The 403 and no-further-effect condition remains
+unproved. Sanitised startup and service logs and the 390 px and 1280 px screenshots were
+copied to the private receipt before `down.sh --id 1`; teardown succeeded and slot 1
+reported free. No product code changed. No retry was made.
+
 ## Controlled comparison attempt
 
 The admission window passed from 01:33:20 to 01:38:37 UTC on 23 November:
