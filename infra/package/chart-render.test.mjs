@@ -98,6 +98,23 @@ function renderedResources(values) {
   }
   return resources;
 }
+
+function dispatcherCpuBudget() {
+  const resources = renderedResources(chartValues());
+  const dispatcher = resources.get('Deployment/worker-dispatcher');
+  const dispatcherWorker = dispatcher.spec.template.spec.containers[0];
+  assert.equal(dispatcherWorker.resources.limits.cpu, '1000m');
+  assert.equal(dispatcherWorker.resources.requests.cpu, '100m');
+
+  const conversations = resources.get('Deployment/worker-conversations');
+  const conversationWorker = conversations.spec.template.spec.containers[0];
+  assert.equal(conversationWorker.resources.limits.cpu, '300m');
+  assert.equal(conversationWorker.resources.requests.cpu, '20m');
+}
+
+test('the packaged dispatcher can use a full CPU while projection workers keep their budget',
+  dispatcherCpuBudget);
+
 function postgresStatefulSet(resource) {
   return resource.kind === 'StatefulSet' && resource.metadata.name === 'postgres';
 }
