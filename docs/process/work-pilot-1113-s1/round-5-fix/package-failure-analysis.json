@@ -1,0 +1,29 @@
+{
+  "source": "8fd998ea9949555d27c7aba70628a723fe8f9bb2",
+  "result": "FAIL",
+  "failedStep": "member 1280 px message send/reply",
+  "browserObservations": {
+    "conversationCreateStatus": 200,
+    "messageResponseObserved": false,
+    "notice": "Message recording status unknown"
+  },
+  "serverObservations": {
+    "memberConversationCreated": true,
+    "memberMessageRequestObserved": false,
+    "creationCatchupReads": 50,
+    "creationCatchupStatuses": [
+      200
+    ]
+  },
+  "dispatcherObservations": {
+    "restarts": 3,
+    "lastTerminationReason": "Error",
+    "lastExitCode": 1,
+    "postgreSQLConnectionTimeouts": true
+  },
+  "cause": "unresolved",
+  "member390": "NOT RUN",
+  "draftDuringProvisioning": "NOT RUN in full run",
+  "cleanup": "PASS; package, slot and temporary identity-provider app removed",
+  "clientPath": "ensureConversation waits for the new conversation in the list before posting a message; all 50 list requests completed, then no message request followed"
+}

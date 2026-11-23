@@ -1,0 +1,21 @@
+{
+  "source": "8fd998ea9949555d27c7aba70628a723fe8f9bb2",
+  "slot": 1,
+  "freshStartup": "FAIL",
+  "status": "NOT RUN",
+  "repeatJourney": "NOT RUN",
+  "teardown": "PASS",
+  "failure": "Spending budget editor did not load",
+  "diagnostic": {
+    "budgetReadStatuses": [],
+    "effectReadStatuses": [],
+    "editorState": {
+      "budgetScopeVisible": false,
+      "budgetServiceUnavailable": true,
+      "accessChanged": false,
+      "spendingLoaded": false
+    }
+  },
+  "teardownExitCode": 0,
+  "bothSlotsFreeAfterTeardown": true
+}
