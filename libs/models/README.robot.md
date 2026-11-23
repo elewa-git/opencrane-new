@@ -4435,6 +4435,12 @@ streams to the watched access streams. The same preparation also serves turn ren
 
 The watch waits for a real read before recording a startup result. If saved evidence
 has already expired, it records that failure after capture and before reopening calls.
+If a successful unchanged capture loses its conditional append to another command,
+the watch checks the latest saved catalogue identity, schema and revision declaration.
+It keeps the review only while the earlier saved evidence remains fresh. It uses the
+saved dates for local freshness and makes no second append attempt. Changed tools and
+expired evidence still end old approvals. Write errors still save a failed check and
+hold calls.
 Failed checks clear `expiresAt` and advance `policyRevision`. They keep publication,
 its acknowledgement and any existing drift hold. An unchanged check renews dates only.
 This restores availability for an unchanged acknowledged publication, while old approvals
@@ -4445,6 +4451,11 @@ then reports Ready for the new process, before and after catalogue replay.
 
 `mcp-dispatch.test.ts` checks watch replacement, failed capture recovery, refused changed
 tools and PostgreSQL replay with real NATS, PostgreSQL, OpenFGA and agentgateway fixtures.
+`mcp-catalogue-publication.test.ts` uses real NATS and controlled capture and append
+barriers to check concurrent publication, one append attempt, saved expiry despite a
+later-dated capture, changed or replaced tools and failed writes. Discoveries with
+identical tools but a changed connection, account mode or revision declaration keep
+the watch closed and make gateway preparation refuse the obsolete publication.
 
 ## Current effect accounting (P4-26 PR 8f; Part of #108)
 
