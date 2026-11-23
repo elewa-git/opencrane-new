@@ -4,6 +4,22 @@ Date: 23 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
+## Controlled comparison attempt
+
+The admission window passed from 01:33:20 to 01:38:37 UTC on 23 November:
+both secondary slots stayed free, no `package-*` stack was up, and every sampled
+one-minute load stayed below six. The detached `origin/main` worktree was at
+`5576ecd1d`.
+
+The main-branch run stopped before a slot was claimed or a stack was started.
+`claim.sh` failed twice with `Error [ERR_MODULE_NOT_FOUND]: Cannot find package
+'minio' imported from infra/dev-stack/stack.ts`, then reported:
+`Both secondary stack ids are claimed or have occupied ports; release a slot before retrying.`
+Both status checks then reported `free`. No startup or service logs, screenshots,
+or paid calls were produced. The failed step ended this controlled run: main CORE,
+branch CORE and the focused 500-message approval and Stop proof are NOT RUN.
+No product code changed.
+
 ## Controlled attempt after the rebase
 
 CI passed on source `98c87b066`. The five-minute preflight passed on secondary
