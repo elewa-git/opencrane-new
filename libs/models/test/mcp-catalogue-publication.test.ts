@@ -95,7 +95,10 @@ function pausedWatch(setup: Awaited<ReturnType<typeof publicationFixture>>,
 
 async function publishesDuringCapture(timing: 'capture' | 'append') {
   const setup = await publicationFixture();
-  const paused = pausedWatch(setup, timing);
+  const capturedCatalogue = { ...setup.catalogue,
+    checkedAt: new Date(Date.parse(setup.catalogue.checkedAt) + 60_000).toISOString(),
+    expiresAt: new Date(Date.parse(setup.catalogue.expiresAt) + 60_000).toISOString() };
+  const paused = pausedWatch(setup, timing, capturedCatalogue);
   const checking = Promise.allSettled([paused.watch.check('fixture')]);
   await paused.started;
   await setup.publish();
@@ -111,8 +114,16 @@ async function publishesDuringCapture(timing: 'capture' | 'append') {
     return catalogueOutcome(row.event) === 'failed';
   }
   expect(rows.filter(failedCheck)).toEqual([]);
+  const saved = await readToolPolicy(setup.nats.store, 'test', 'fixture');
+  expect(saved).toMatchObject({ checkedAt: setup.catalogue.checkedAt,
+    expiresAt: setup.catalogue.expiresAt });
   expect(paused.counts).toEqual({ captures: 1, appends: 1 });
   expect(paused.requireCurrent).not.toThrow();
+  const justAfterSavedExpiry = Date.parse(setup.catalogue.expiresAt) + 1;
+  expect(Date.parse(capturedCatalogue.expiresAt)).toBeGreaterThan(justAfterSavedExpiry);
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(justAfterSavedExpiry);
+  expect(paused.requireCurrent).toThrow('MCP catalogue watch unavailable');
 }
 
 it.each(['capture', 'append'] as const)(
