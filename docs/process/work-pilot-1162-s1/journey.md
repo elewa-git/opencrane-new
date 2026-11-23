@@ -4,6 +4,7 @@ Date: 23 November 2026. Branch: `work/pilot-1162-s1`. Final installed product so
 `abe90b2e9`.
 
 Journey on a fresh packaged install: PASS for one person at 1280 and 390 pixels.
+Current own checks and source status: [final fixes](round-3.md).
 
 The [final journey](#23-november-packaged-one-person-journey) records the accepted scope. Earlier
 attempts below retain their original outcomes as history. The observations describe one person
