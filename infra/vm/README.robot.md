@@ -3,7 +3,9 @@
 ## Scope and prerequisites
 
 Run `bootstrap.sh` as root on a fresh x86-64 Ubuntu 22.04 or 24.04 LTS machine
-with systemd and outbound HTTPS. It accepts only an optional `--dry-run`.
+with systemd and outbound HTTPS. No arguments default to a dry run; `--dry-run`
+explicitly selects the same mode. Only `--apply` permits changes. Accept exactly one
+flag; unknown, repeated or combined flags refuse with usage before host checks.
 Other versions and architectures refuse. The script does not provision a VM,
 configure an address, install Tailscale, open a public listener or enable Funnel.
 Pilot access is tailnet-only; address and sign-in setup remain separate work.
@@ -33,7 +35,8 @@ transport retries; service readiness deadlines are unchanged.
 
 ## Existing-machine refusals and reruns
 
-Checks run before downloads, package installation or file writes, even in dry run.
+Checks run before downloads, package installation or file writes, including with
+`--apply` and in dry run.
 Docker binaries, data/configuration or its socket refuse. Kubernetes configuration,
 microk8s, RKE2, kubelet data and standalone containerd configuration/data/socket or
 binaries refuse. Existing k3s files require the script's protected ownership record
@@ -82,7 +85,12 @@ not claim an Ubuntu execution test. Apt, downloads, archive extraction, swap,
 sysctl and systemd operations are stubbed for the configuration/rerun test.
 Real hashes compare the configuration before and after that rerun. A separate
 replacement-binary test restores real checksum verification and expects refusal.
-No fixture starts k3s, containerd or dockerd. CI includes the same Node test file.
+No fixture starts k3s, containerd or dockerd. CI includes the bootstrap Node test file.
+No-argument execution compares simulated host files before and after and checks that
+no mutating command ran. Explicit apply changes that fixture and permits an owned
+rerun. Every runtime path, binary and unknown ownership marker refuses before writes
+in all three modes; a replaced owned executable also refuses with `--apply`.
+`operator-contract.test.mjs` checks the maintained journey claims and final image links.
 
 ## Sizing procedure
 
@@ -94,9 +102,8 @@ minutes, sampled every 30 seconds. Wait at most two hours.
 
 After install, record exact source and image digests, pod names and limits. Sample
 idle for one person and then run sign-in, chat, upload, desktop viewing and budget
-checks at 1280 and 390 pixels. Repeat at 1280 pixels with three separate people
-working concurrently,
-with one assistant computer each. Record the number of simultaneous active computers.
+checks at 1280 and 390 pixels with one person and one assistant computer.
+Record the number of simultaneous active computers.
 Use the existing browser helpers rather than changing product admission.
 
 Use `kubectl top pods --containers` for CPU and memory and the kubelet summary for
@@ -107,12 +114,17 @@ node totals, including system pods and runtime overhead. Block I/O bytes are
 traffic counters, not occupied disk space. Capture filesystem/PVC use and cached
 image bytes separately. Do not count unrelated owner workloads as pilot use.
 
-The recorded local attempt is partial: one-person chat and resource observations
-are available, and the desktop decoded at 1280 pixels. The mobile PDF step and
-three-person qualification remain incomplete.
-Keep the observations in the Measurements ledger without a minimum machine size.
-Derive a VM recommendation only after both journeys pass. State CPU/RAM spare
-capacity and disk reserve for the OS, images, retained events/files and backups;
-include sample duration and workload limits. A shared k3d result estimates VM demand,
-not a proven smallest VM. Copy measurements, service/startup logs and masked
-screenshots to the receipt before package-down and down remove slot data.
+The 23 November one-person packaged journey passed every step at both widths.
+Whole-node peaks were 2.695 CPU cores and 5.21 GiB including swap. The owned package
+peaked at 2.075 CPU cores and 2.97 GiB working set, with 33.79 MiB swap. The 85
+samples covered 168 seconds after package readiness; installation was not sampled.
+Bound PVC use peaked at 76.68 MiB. The [receipt](../../docs/process/work-pilot-1162-s1/journey.md#23-november-packaged-one-person-journey)
+retains the final results, screenshots and historical failed attempts. The accepted
+scope is one person; the owner dropped concurrent three-person sizing.
+
+These observations do not qualify a minimum machine size or spare-capacity
+recommendation. A shared k3d result estimates VM demand, not a proven smallest VM.
+A VM recommendation still needs actual VM measurements, including installation,
+CPU/RAM spare capacity and disk reserve for the OS, images, retained events/files
+and backups. Copy measurements, service/startup logs and masked screenshots to the
+receipt before package-down and down remove slot data.

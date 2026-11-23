@@ -14,7 +14,7 @@ releases with the developer-box setup, but never uses that setup to change a VM.
 
 ```mermaid
 flowchart LR
-  operator["Operator<br/>checks sizing and prepares the machine"] -->|runs bootstrap| vm["infra/vm<br/>prepares package host"]
+  operator["Operator<br/>checks sizing and prepares the machine"] -->|runs bootstrap --apply| vm["infra/vm<br/>prepares package host"]
   vm -->|configures services| host["Ubuntu VM<br/>runs single node"]
   vm -.->|uses verified releases| tools["infra/devbox<br/>shares runtime tools"]
   package["infra/package<br/>installs the application"] -->|uses prepared host| host
@@ -25,7 +25,7 @@ flowchart LR
 - Refuse Docker, another Kubernetes installation or standalone containerd.
 - Install k3s, gVisor, the assistant controller and local persistent storage.
 - Disable swap and crash dumps before starting Kubernetes.
-- Explain the work without changing the machine when `--dry-run` is set.
+- Explain the work without changing the machine by default; require `--apply` to change it.
 - Keep reruns limited to the k3s installation owned by this script.
 
 ## Processes it handles
@@ -36,11 +36,11 @@ flowchart LR
 2. **An operator repeats preparation.** The script checks its ownership record and
    installed k3s checksum. It reapplies the same configuration and restarts k3s;
    running workloads may pause.
-3. **An operator chooses a machine size.** One-person idle and peak
-   observations are recorded for a fresh local package. It decoded a desktop at
-   1280 pixels. The phone PDF step and complete three-person journey still need
-   testing. These observations do not support a minimum machine size or a measured
-   spare-capacity recommendation yet.
+3. **An operator chooses a machine size.** The one-person packaged journey passed
+   sign-in, chat, PDF upload, desktop viewing and spending at desktop and phone widths.
+   Whole-node peaks were 2.695 cores / 5.21 GiB including swap; the package peaked at
+   2.075 cores / 2.97 GiB working set. Installation was not sampled. These observations
+   do not qualify a minimum machine size or spare-capacity recommendation.
 
 ## How to run or test it
 
@@ -48,9 +48,10 @@ On a fresh Ubuntu 22.04 or 24.04 LTS x86-64 VM, from a repository checkout:
 
 ```sh
 sudo infra/vm/bootstrap.sh --dry-run
-sudo infra/vm/bootstrap.sh
+sudo infra/vm/bootstrap.sh --apply
 ```
 
+No arguments also print a dry run. Only `--apply` permits host changes.
 Reboot after preparation, then run the existing package preflight. The dry run
 also refuses existing runtimes. Never run preparation on the developer box.
 

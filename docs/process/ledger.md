@@ -107,18 +107,22 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ### Pilot VM sizing
 
-On 20 November 2026, the production noVNC constructor cause was fixed test-first.
-A fresh CORE journey passed both widths and a fresh package decoded a desktop at
-1280 pixels. The packaged mobile PDF step failed because the collector used a
-filename outside the scripted provider's fallback fixture contract. Its controller
-then received SIGTERM and cleanup overlapped the browser. The complete requested
-matrix remains PARTIAL; three-person qualification and minimum size remain NOT RUN.
-The [receipt](work-pilot-1162-s1/journey.md) retains failed outcomes and resource waits.
+On 23 November 2026, the one-person packaged journey passed sign-in, chat, PDF upload,
+decoded desktop viewing, history refusal and spending at 1280 and 390 pixels on
+approved product source `abe90b2e9`. Whole-node peaks were **2.695 CPU cores and
+5.21 GiB including swap**; the package peaked at **2.075 CPU cores and 2.97 GiB
+working set**, with 33.79 MiB swap. The 85 samples covered 168 seconds after package
+readiness. Installation was not sampled; bound PVC use peaked at 76.68 MiB.
 
-The latest incomplete whole-node peaks were 3.654 CPU cores and 5.12 GiB including swap.
-These partial observations do not qualify a minimum machine or spare-capacity
-recommendation. Bootstrap ran only as a dry run and refused existing Docker before
-writes. Real Ubuntu bootstrap/reboot remain NOT RUN. No host setting changed.
+These observations do not qualify a minimum machine or spare-capacity recommendation.
+The owner dropped concurrent three-person sizing from this ticket. The
+[final receipt](work-pilot-1162-s1/journey.md#23-november-packaged-one-person-journey)
+links the browser results, measurements and sanitised screenshots. Earlier failed
+attempts remain historical evidence there; their 3.654-core observation is superseded.
+
+Host protection remains PARTIAL under the recorded accepted development-box switch.
+Bootstrap ran on this box only as a dry run and refused existing Docker before writes.
+Real Ubuntu bootstrap/reboot remain NOT RUN. No host setting changed.
 
 ### Lint size debt
 

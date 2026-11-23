@@ -1,14 +1,15 @@
 # Pilot VM sizing and bootstrap receipt
 
-Date: 22 November 2026. Branch: `work/pilot-1162-s1`. Source installed:
-`e0c4a9b063f5cfcdd189134eaa145592727110fb`.
+Date: 23 November 2026. Branch: `work/pilot-1162-s1`. Final installed product source:
+`abe90b2e9`.
 
-Journey on a fresh dev stack: PARTIAL
+Journey on a fresh packaged install: PASS for one person at 1280 and 390 pixels.
 
-The constructor cause is fixed. The package observations below describe one person only. They are
-measured demand, not a qualified minimum machine size.
+The [final journey](#23-november-packaged-one-person-journey) records the accepted scope. Earlier
+attempts below retain their original outcomes as history. The observations describe one person
+only and do not qualify a minimum machine size.
 
-## Source, ownership and fresh installation
+## Historical source, ownership and fresh installation
 
 PASS: fetched main at the start and before pushing. It remained
 `ed3662d8530338cde94d557713264f1ebf1057ae`, already contained in this branch. No rebase was needed
@@ -233,6 +234,20 @@ PASS: on approved product source `abe90b2e9`, the fresh package passed the one-p
 1280 and 390 pixels. Both widths passed sign-in, chat, history refusal, the PDF answer, a decoded
 live desktop frame and budget. The [browser outcomes](logs/attempt-7/browser-result.json) retain
 each assertion. The frame check read the 800 by 600 canvas pixels and required a decoded image.
+
+The retained collector is `attempt-7/browser.mjs` in the private receipt. It masked email and
+password inputs and email text before capture. The published copies were visually checked for
+private details and copied unchanged from that run. Its SHA-256 is
+`34b0a1a4913aced9711435fd9eb4b824dcf2dbd6983d50e2589736a79b9d177e`.
+
+| Final screenshot | 1280 pixels | 390 pixels |
+| --- | --- | --- |
+| Signed in | [Desktop](screenshots/attempt-7/owner-signed-in-1280.png) | [Phone](screenshots/attempt-7/owner-signed-in-390.png) |
+| Chat | [Desktop](screenshots/attempt-7/one-person-chat-1280.png) | [Phone](screenshots/attempt-7/one-person-chat-390.png) |
+| PDF answer | [Desktop](screenshots/attempt-7/upload-0-1280.png) | [Phone](screenshots/attempt-7/upload-0-390.png) |
+| Decoded desktop | [Desktop](screenshots/attempt-7/desktop-0-1280.png) | [Phone](screenshots/attempt-7/desktop-0-390.png) |
+| Spending | [Desktop](screenshots/attempt-7/budget-1280.png) | [Phone](screenshots/attempt-7/budget-390.png) |
+
 
 Both approval runs still had their application, scanner and image artifacts before package
 preparation. The recorded run ids and expiry times are in the [journey record]
