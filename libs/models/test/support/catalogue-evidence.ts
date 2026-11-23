@@ -18,4 +18,3 @@ export function toolEvidence(tool: Omit<CatalogueTool, 'revision' | 'definition'
 export function catalogueEvidence(tools: CatalogueTool[]) {
   return { tools, toolCount: tools.length, schemaDigest: catalogueDigest(tools) };
 }
-
