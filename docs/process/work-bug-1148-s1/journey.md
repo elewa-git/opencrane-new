@@ -2,8 +2,34 @@
 
 Date: 23 November 2026 UTC. Builder's own qualification only.
 
-Journey on a fresh dev stack: PARTIAL. CORE passed at both widths. The focused
-proof stopped before the single-use replay and post-Stop check.
+Journey on a fresh dev stack: PASS. CORE and the focused approval and Stop proof
+passed at 390 px and 1280 px on product-identical code.
+
+## Focused qualification (23 November, 20:01–20:15 UTC)
+
+CORE passed at both widths on `e3898e3cb` in the earlier fresh run below.
+The diff from that source to `18eb13f70` contains only journey fixtures and
+documentation. Fresh slot 1 ran the focused proof on `18eb13f70`. Both slots
+were free and one-minute load stayed below six for the 300-second admission
+window. The guarded launcher reported ready in 14 seconds, before browser
+checks began. The event readback confirmed 500 seeded messages and 500 matching
+completion events.
+
+| Check | 390 px | 1280 px |
+| --- | --- | --- |
+| Browser approval returns the native tool result in the long chat | PASS | PASS |
+| Approved card with the same approval ID is restored after reload | PASS | PASS |
+| First approved use forwards the exact bytes once and replay returns HTTP 403 | PASS | PASS |
+| After browser Stop, the same approved request returns HTTP 403 with no further effect | PASS | PASS |
+
+The recorder and independent demo readback agreed on four writes across both
+widths, one native and one scripted approval at each width. The readback stayed
+at two after Stop at 390 px and at four after Stop at 1280 px. The event readback
+found four saved approval uses. Only the free stub was used. Paid calls were zero.
+
+Startup and service logs, event and demo readbacks, and 16 browser screenshots
+were copied to private receipt `bug-1148-s1-focused-DlZR5y` before teardown.
+The focused command, launcher and teardown exited 0. Slot 1 reported free.
 
 ## Focused run with the published connection (23 November, 18:23 UTC)
 
@@ -468,12 +494,15 @@ infra/dev-stack/claim.sh
 
 Keep the same shell open through teardown. The example uses slot 1. If the claim
 returns 2, use 2 in both launcher variables and in every `--id` argument. Set
-`receipt` to a private evidence directory before proceeding.
+`receipt` to a private evidence directory before proceeding. When CORE has
+already passed on the same product code, use the focused setting on startup to
+defer browser checks until the demo is ready.
 
 ```bash
 export DEV_STACK_ID=1
 # Install cleanup that saves startup/service logs and screenshots before down.sh.
-nice -n 10 infra/dev-stack/up.sh --fresh --id 1 >"$receipt/startup.log" 2>&1
+APPROVAL_JOURNEY_ONLY=1 nice -n 10 infra/dev-stack/up.sh --fresh --id 1 \
+  >"$receipt/startup.log" 2>&1
 nice -n 10 infra/dev-stack/status.sh --id 1
 DEV_STACK_ID=1 STAGE_B_CLAIMED_ID=1 nice -n 10 node --experimental-strip-types \
   infra/dev-stack/stage-b-live.ts >"$receipt/demo-launcher.log" 2>&1 &
@@ -505,5 +534,4 @@ Capture its approved, unused state, press Stop, then resend those same bytes wit
 already issued pass. The call must be refused without another upstream effect; Ask
 alone cannot explain this refusal.
 
-Provider: existing free stand-in. Paid calls: zero. No real-provider attempt was needed
-before the setup failure. Whether this driver completes the whole slice remains unproved.
+Provider: existing free stand-in. Paid calls: zero.
