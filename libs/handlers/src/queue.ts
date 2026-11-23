@@ -1,4 +1,5 @@
 import { handlerJobKey } from './job-key.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { isDeepStrictEqual } from 'node:util';
 import { PgBoss, type Queue, type JobWithMetadata } from "pg-boss";
 import { parseEventByType, type EventEnvelope } from "@opencrane/events";
@@ -41,13 +42,21 @@ export interface RuntimeOptions {
 /** Use a dedicated pg-boss schema in the supplied silo database. */
 export class HandlerRuntime {
   private scheduler: PgBoss | undefined;
+  private readonly enqueueDatabase = new AsyncLocalStorage<Query>();
   readonly boss: PgBoss;
   readonly options: RuntimeOptions;
   constructor(options: RuntimeOptions) {
     checkHandlers(options.handlers);
     this.options = options;
+    const enqueueDatabase = this.enqueueDatabase;
+    function executeSql(sql: string, values?: unknown[]) {
+      // pg-boss also reads queue settings outside send's supplied database adapter.
+      // Keep those reads on the enqueue transaction instead of borrowing another connection.
+      const database = enqueueDatabase.getStore() ?? options.db;
+      return database.query(sql, values);
+    }
     this.boss = new PgBoss({
-      db: transactionAdapter(options.db),
+      db: { executeSql },
       schedule: false,
     });
     this.boss.on("error", (err) =>
@@ -92,10 +101,14 @@ export class HandlerRuntime {
 
   async enqueue(handler: Handler, event: EventEnvelope, tx: Query): Promise<void> {
     const singletonKey = handlerJobKey(handler.name, event);
-    const id = await this.boss.send(handler.name, event, {
-      singletonKey,
-      db: transactionAdapter(tx),
-    });
+    const boss = this.boss;
+    function send() {
+      return boss.send(handler.name, event, {
+        singletonKey,
+        db: transactionAdapter(tx),
+      });
+    }
+    const id = await this.enqueueDatabase.run(tx, send);
     if (!id) {
       throw new Error("Handler enqueue refused");
     }
@@ -114,7 +127,11 @@ export class HandlerRuntime {
     }
     const jobs = events.map(job);
     const options = { db: transactionAdapter(tx), returnId: true };
-    const ids = await this.boss.insert(handler.name, jobs, options);
+    const boss = this.boss;
+    function insert() {
+      return boss.insert(handler.name, jobs, options);
+    }
+    const ids = await this.enqueueDatabase.run(tx, insert);
     if (!ids || ids.length !== jobs.length) {
       throw new Error('Handler batch enqueue refused');
     }

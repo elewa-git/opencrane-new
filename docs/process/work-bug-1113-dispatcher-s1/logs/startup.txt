@@ -1,0 +1,4 @@
+PASS dev-only owner bootstrap: [development owner] owner; OpenFGA owner=true
+PASS provider setup: switched on managed calls
+PASS website readiness: 47769ms
+Dev stack failed; inspect the stack's private log folder

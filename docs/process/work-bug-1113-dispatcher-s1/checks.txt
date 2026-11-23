@@ -1,0 +1,97 @@
+Expected regression failure before the fix
+npm notice run npx
+npm notice run 'vitest' run libs/handlers/test/dispatcher-pool.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 [private path]
+
+ ❯ libs/handlers/test/dispatcher-pool.test.ts (1 test | 1 failed) 4020ms
+   × queues an event using the reserved dispatcher connection when the pool has no spare slot 4017ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/handlers/test/dispatcher-pool.test.ts > queues an event using the reserved dispatcher connection when the pool has no spare slot
+Error: timeout exceeded when trying to connect
+ ❯ node_modules/pg-pool/index.js:45:11
+ ❯ Object.transaction libs/projections/src/pg.ts:46:22
+     44|     },
+     45|     async transaction(work) {
+     46|       const client = await pool.connect();
+       |                      ^
+     47|       let released = false;
+     48|       try {
+ ❯ dispatchLocked libs/handlers/src/dispatcher.ts:135:5
+ ❯ run libs/handlers/src/dispatcher.ts:61:7
+ ❯ Object.lock libs/projections/src/pg.ts:85:24
+ ❯ dispatch libs/handlers/src/dispatcher.ts:68:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:42:45
+   Duration  8.49s (tests 49%, transform 36%, import 15%)
+
+  Transform  transforming modules took 2.93s · 36% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+
+Focused tests, first run
+npm notice run npx
+npm notice run 'vitest' run libs/handlers/test/dispatcher-pool.test.ts libs/handlers/test/dispatcher-readiness.test.ts libs/handlers/test/runtime.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 [private path]
+
+
+ Test Files  3 passed (3)
+      Tests  20 passed (20)
+   Start at  14:43:29
+   Duration  111.25s (tests 90%, transform 6%, import 4%)
+
+
+Focused tests, second run after fixture cleanup
+npm notice run npx
+npm notice run 'vitest' run libs/handlers/test/dispatcher-pool.test.ts libs/handlers/test/dispatcher-readiness.test.ts libs/handlers/test/runtime.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 [private path]
+
+
+ Test Files  3 passed (3)
+      Tests  20 passed (20)
+   Start at  14:46:20
+   Duration  126.53s (tests 91%, transform 6%, import 4%)
+
+
+Full handlers package
+npm notice run npx
+npm notice run 'vitest' run libs/handlers/test --maxWorkers=2
+
+ RUN  v5.0.3 [private path]
+
+
+ Test Files  8 passed (8)
+      Tests  78 passed (78)
+   Start at  14:46:49
+   Duration  296.79s (tests 96%, import 3%, transform 2%)
+
+
+Other required checks (exit codes)
+check:events=0
+knip=0
+lint:changelog=0
+markdownlint=0
+
+Additional repository checks (exit codes)
+lint:reads=0
+lint:readmes=0
+lint:debt=0
+
+ESLint on changed code files: PASS, zero warnings
+npm notice run npx
+npm notice run 'eslint' libs/handlers/src/dispatcher.ts libs/handlers/src/queue.ts libs/handlers/test/crash-process.ts libs/handlers/test/dispatcher-pool.test.ts libs/handlers/test/dispatcher-readiness.test.ts
+
+Full repository typecheck: PASS (exit 0).
+All tests and checks ran under nice -n 10.
+Real isolated PostgreSQL databases used the shared disposable test service.
+Runtime service fixtures used real NATS. No tests skipped.

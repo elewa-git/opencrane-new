@@ -10,6 +10,7 @@ import { decodeEvent } from "@opencrane/event-store";
 import { checkHandlers } from "./registration.ts";
 import { HandlerRuntime } from "./queue.ts";
 import { subscriptionChanges, type DispatcherState } from "./upgrade.ts";
+import type { Db } from "@opencrane/projections";
 
 const configuration = {
   durable_name: "handler-dispatcher",
@@ -56,9 +57,10 @@ export async function dispatch(
   if (!db.lock) {
     throw new Error("Dispatcher requires a database lock");
   }
-  async function run() {
+  async function run(locked: Db) {
     try {
-      await dispatchLocked(connection, runtime, signal, ready);
+      // Use the connection already reserved for dispatch, even while workers fill the pool.
+      await dispatchLocked(connection, runtime, locked, signal, ready);
     } catch (error) {
       // Tell the worker before the database starts its lock cleanup.
       failed?.();
@@ -71,8 +73,9 @@ export async function dispatch(
 /** Prepare fresh subscriptions or report the required upgrade without changing saved work.
  * Call while holding the handler-dispatcher database lock and before starting event writers.
  */
-export async function prepareDispatcher(runtime: HandlerRuntime): Promise<boolean> {
-  const { db, silo, handlers } = runtime.options;
+export async function prepareDispatcher(runtime: HandlerRuntime,
+  db: Db = runtime.options.db): Promise<boolean> {
+  const { silo, handlers } = runtime.options;
   const manifest = checkHandlers(handlers);
   await db.query(`CREATE TABLE IF NOT EXISTS handler_dispatcher (
     id INTEGER PRIMARY KEY CHECK (id = 1), silo TEXT NOT NULL,
@@ -109,12 +112,13 @@ export async function prepareDispatcher(runtime: HandlerRuntime): Promise<boolea
 async function dispatchLocked(
   connection: NatsConnection,
   runtime: HandlerRuntime,
+  db: Db,
   signal: AbortSignal,
   ready?: () => Promise<void>,
 ): Promise<void> {
-  const { db, silo, handlers } = runtime.options;
+  const { silo, handlers } = runtime.options;
   const manifest = checkHandlers(handlers);
-  if (!await prepareDispatcher(runtime)) {
+  if (!await prepareDispatcher(runtime, db)) {
     if (!signal.aborted) {
       await once(signal, "abort");
     }

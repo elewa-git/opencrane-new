@@ -1,0 +1,30 @@
+[
+  {
+    "time": 1795359816191,
+    "handler": "computers",
+    "event_type": "agent.turn_failed",
+    "attempt": 1,
+    "msg": "handler.started"
+  },
+  {
+    "time": 1795359816214,
+    "handler": "computers",
+    "event_type": "agent.turn_failed",
+    "attempt": 1,
+    "msg": "handler.completed"
+  },
+  {
+    "time": 1795359929484,
+    "handler": "computers",
+    "event_type": "agent.turn_failed",
+    "attempt": 1,
+    "msg": "handler.started"
+  },
+  {
+    "time": 1795359929553,
+    "handler": "computers",
+    "event_type": "agent.turn_failed",
+    "attempt": 1,
+    "msg": "handler.completed"
+  }
+]
