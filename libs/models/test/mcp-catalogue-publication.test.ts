@@ -16,8 +16,10 @@ async function publicationFixture() {
   const tool = toolEvidence({ name: 'read', reviewed: false, readOnly: true, costCents: 0 });
   const evidence = catalogueEvidence([tool]);
   const now = Date.now();
+  const discovery = { capabilities: { experimental: { 'io.opencrane/expectedRevision': {} } } };
   const catalogue = { ...evidence, serverId: 'fixture', connectionId: 'installed',
-    accountMode: 'none' as const, checkedAt: new Date(now).toISOString(),
+    accountMode: 'none' as const, discoverResult: JSON.stringify(discovery),
+    checkedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + 300_000).toISOString() };
   await nats.seed([envelope('test', 'mcp-fixture', 'mcp.server_discovered', catalogue)]);
   const policy = await readToolPolicy(nats.store, 'test', 'fixture');
@@ -171,4 +173,50 @@ async function refusesInterruptedCapture(
 
 it.each(['expired', 'changed', 'replaced', 'write error'] as const)(
   'keeps publication held after a catalogue capture is %s', refusesInterruptedCapture,
+);
+
+type Replacement = 'connection' | 'account' | 'withdrawn declaration' | 'changed declaration';
+
+function replacementCatalogue(catalogue: Awaited<ReturnType<typeof publicationFixture>>['catalogue'],
+  replacement: Replacement) {
+  if (replacement === 'connection') {
+    return { ...catalogue, connectionId: 'replacement' };
+  }
+  if (replacement === 'account') {
+    return { ...catalogue, accountMode: 'personal' as const };
+  }
+  let experimental = {};
+  if (replacement === 'changed declaration') {
+    experimental = { 'io.opencrane/expectedRevision': { version: 2 } };
+  }
+  const discovery = { capabilities: { experimental } };
+  return { ...catalogue, discoverResult: JSON.stringify(discovery) };
+}
+
+async function refusesReplacedIdentityOrDeclaration(replacement: Replacement) {
+  const setup = await publicationFixture();
+  const paused = pausedWatch(setup, 'append');
+  const checking = Promise.allSettled([paused.watch.check('fixture')]);
+  await paused.started;
+  await setup.publish();
+  const catalogue = replacementCatalogue(setup.catalogue, replacement);
+  expect(catalogue.tools).toEqual(setup.catalogue.tools);
+  expect(catalogue.schemaDigest).toBe(setup.catalogue.schemaDigest);
+  const discovered = envelope('test', 'mcp-fixture', 'mcp.server_discovered', catalogue);
+  await setup.nats.seed([discovered]);
+  expect(paused.requireCurrent).toThrow('MCP catalogue watch unavailable');
+  paused.release();
+  const captured = await checking;
+  expect(paused.requireCurrent).toThrow('MCP catalogue watch unavailable');
+  expect(captured[0]?.status).toBe('rejected');
+  const preparation = prepareGatewayConfiguration(
+    setup.nats.store, 'test', 'fixture', 'publish-fixture',
+  );
+  await expect(preparation).rejects.toBeInstanceOf(PublicationUnavailable);
+  expect(paused.counts).toEqual({ captures: 1, appends: 1 });
+}
+
+it.each(['connection', 'account', 'withdrawn declaration', 'changed declaration'] as const)(
+  'refuses an obsolete publication after another discovery changes its %s',
+  refusesReplacedIdentityOrDeclaration,
 );
