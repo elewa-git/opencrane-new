@@ -82,3 +82,19 @@ function closesOnDestroy(): void {
   expect(closed).toHaveBeenCalled();
 }
 it('closes the provisioning subscription when the page is destroyed', closesOnDestroy);
+
+function receivesAssignmentAfterNewDraft(): void {
+  socket.onopen?.(new Event('open'));
+  TestBed.tick();
+  chat.newSession();
+  TestBed.tick();
+  socket.onopen?.(new Event('open'));
+  TestBed.tick();
+  assignment();
+  expect(chat.selectedAssistantId()).toBe('personal');
+  expect(chat.selected()).toBe('');
+  expect(chat.denied()).toBe(false);
+  expect(requests.filter(isContextRead)).toHaveLength(1);
+}
+it('receives assignment without reload after opening an unassigned draft',
+  receivesAssignmentAfterNewDraft);
