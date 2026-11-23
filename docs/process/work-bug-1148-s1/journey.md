@@ -4,6 +4,20 @@ Date: 23 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: NOT RUN for rebased source `2e1bee69d`
 
+## Admission after main fix #1178 (23 November)
+
+The final admission trace ran from 14:26:40 to 14:31:57 UTC. Ten samples over
+317 seconds showed both secondary slots free, no `package-*` stack and no other
+Node journey. One-minute load stayed below six in every sample. Earlier attempts
+did not qualify: slot 1 reported busy at 13:12:54 and 13:38:08 UTC; load reached
+6.17 at 13:53:59 UTC; and another worktree held slot 1's lock for `up --fresh`
+from at least 13:59 to 14:06 UTC. At 14:31:57, the remaining work window was too
+short to start a fresh stack, finish CORE at both widths, run the focused proof,
+retain evidence, and tear down safely.
+No slot was claimed and no stack command was run. CORE, the demo launcher, the
+500-message proof, approval with tool result, single use, reload, and the post-Stop
+403 with no further upstream effect are NOT RUN. No paid calls or product changes.
+
 ## Paused rebase qualification (23 November)
 
 - **PASS** Replayed 62 commits onto `42a261e03`. The fixture keeps main's clock
