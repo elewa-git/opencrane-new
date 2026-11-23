@@ -4,6 +4,35 @@ Date: 23 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
+## Journey 6 (23 November)
+
+The earlier controlled receipt has no guarded-launcher readiness log or demo recorder
+file. Its worker log shows the registered demo server was rejected during discovery;
+there is no discovered catalogue, review or publication. The launcher was not proven
+ready or reachable in that run. The catalogue timeout happened before approval.
+
+The first fresh reproduction passed CORE at 390 px and 1280 px. A setup retry then
+hit `EADDRINUSE` for the demo Unix socket, before discovery. The stack was stopped and
+its logs and screenshots were copied before teardown. No approval step or upstream
+effect ran.
+
+On the next fresh slot 1 stack, the demo socket was absent and had no listener. The
+guarded TLS launcher reported both server and models ready before the focused journey
+started. The 500 earlier messages and their completion events passed setup. Discovery,
+review and publication were recorded for the demo server, and the dispatcher ran
+`prepare-gateway-configuration` for the publication. The saved worker logs contain no
+matching `gateway.configuration_requested` after that publication. The publication
+readiness check stayed non-ready for 90 seconds and `prepareApprovalTool` timed out at
+its publication wait. Discovery and review therefore ran; gateway acknowledgement did
+not complete.
+
+The focused run stopped before any approval request or tool execution. The demo
+recorder contained zero upstream effects. Single use, reload restoration and the
+post-Stop 403 using the same approved bytes are NOT RUN. Paid calls: zero. Sanitised
+service logs and screenshots were copied before teardown; slot 1 reported free after
+`down.sh --id 1`. No product code changed. The missing gateway preparation/acknowledgement
+is a product-path blocker; its cause is not established in this run.
+
 ## Owner option A controlled journey (23 November)
 
 The branch tip was `c576a3b73`. The required five-minute load samples stayed below six.
