@@ -38,9 +38,9 @@ async function setup(): Promise<void> {
 }
 beforeEach(setup);
 
-function assignment(): void {
+function assignment(memberId = 'me'): void {
   const message = { type: 'context', topic: 'chat-context',
-    data: { memberId: 'me', assistantId: 'personal', role: 'owner' } };
+    data: { memberId, assistantId: 'personal', role: 'owner' } };
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(message) }));
   TestBed.tick();
 }
@@ -98,3 +98,27 @@ function receivesAssignmentAfterNewDraft(): void {
 }
 it('receives assignment without reload after opening an unassigned draft',
   receivesAssignmentAfterNewDraft);
+
+function refusesAnotherMemberAssignment(): void {
+  socket.onopen?.(new Event('open'));
+  TestBed.tick();
+  assignment('another-member');
+  expect(chat.memberId()).toBe('me');
+  expect(chat.selectedAssistantId()).toBeNull();
+  expect(closed).not.toHaveBeenCalled();
+  assignment();
+  expect(chat.selectedAssistantId()).toBe('personal');
+}
+it('ignores another member assignment and keeps listening for its own',
+  refusesAnotherMemberAssignment);
+
+function receivesAssignmentWhileConnecting(): void {
+  chat.newSession();
+  TestBed.tick();
+  socket.onopen?.(new Event('open'));
+  TestBed.tick();
+  assignment();
+  expect(chat.selectedAssistantId()).toBe('personal');
+}
+it('receives assignment when a new draft opens before the socket connects',
+  receivesAssignmentWhileConnecting);

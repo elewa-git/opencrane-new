@@ -1,102 +1,26 @@
 import { once } from 'node:events';
-import { WebSocket } from 'ws';
-import { afterAll, beforeAll, expect, it } from 'vitest';
-import { sessionCookie } from '@opencrane/auth/testing';
-import { createStore, memberAuthorisation } from '@opencrane/authz';
-import { databases, openfga, until } from '@opencrane/authz/testing';
-import { appendEvent, natsFixture, type AppendEventOptions } from '@opencrane/event-store/testing';
-import { computers, members, pgDb, ProjectionRunner, connectMemberFeed } from '@opencrane/projections';
-import { createLogger } from '@opencrane/observability';
-import { buildServer } from '../src/server.ts';
-import { attachWebSocketServer } from '../src/websocket.ts';
-import { testAuthConfig } from './support/test-auth-config.ts';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { until } from '@opencrane/authz/testing';
+import { personalContext } from '../src/chat/context.ts';
+import { chatContextFixture } from './support/chat-context-fixture.ts';
 
-const config = testAuthConfig({ expectedOrgId: 'org-test' });
-let nats: Awaited<ReturnType<typeof natsFixture>>;
-let fga: Awaited<ReturnType<typeof openfga>>;
-let dbs: Awaited<ReturnType<typeof databases>>;
-let app: ReturnType<typeof buildServer>;
-let auth: ReturnType<typeof memberAuthorisation>;
-let runner: ProjectionRunner;
-let origin: string;
-let feed: Awaited<ReturnType<typeof connectMemberFeed>>;
-let sockets: ReturnType<typeof attachWebSocketServer>;
-const clients: WebSocket[] = [];
-
-async function append(options: Omit<AppendEventOptions, 'silo'>): Promise<void> {
-  const saved = await appendEvent(nats.store, { ...options, silo: 'test' });
-  if (auth.handler.eventTypes.includes(options.type)) {
-    await auth.handler.handle(saved.event, pgDb(dbs.queue));
-  }
-}
-function memberId(_silo: string, _issuer: string, sub: string): Promise<string> {
-  return Promise.resolve(sub);
-}
+let fixture: Awaited<ReturnType<typeof chatContextFixture>>;
 async function setup(): Promise<void> {
-  nats = await natsFixture();
-  fga = await openfga();
-  dbs = await databases();
-  const binding = await createStore(fga.apiUrl, 'test');
-  auth = memberAuthorisation(binding);
-  const db = pgDb(dbs.queue);
-  runner = new ProjectionRunner(db, nats.store, createLogger('context-test', { level: 'silent' }));
-  await runner.initialise(members);
-  await runner.initialise(computers);
-  await append({ subject: 'member-alice', type: 'member.joined', data: {
-    memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'member',
-  } });
-  await runner.run(members);
-  feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const chat = { silo: 'test', store: nats.store, db, binding, feed: { memberId } };
-  app = buildServer(config, { chat });
-  sockets = attachWebSocketServer(app.server, app.log, config, {
-    chat, binding, store: nats.store,
-    feed,
-  });
-  origin = await app.listen({ host: '127.0.0.1', port: 0 });
+  fixture = await chatContextFixture();
 }
-beforeAll(setup, 120_000);
+beforeEach(setup, 120_000);
 async function cleanup(): Promise<void> {
-  for (const client of clients) client.terminate();
-  for (const socket of sockets?.clients ?? []) socket.terminate();
-  sockets?.close();
-  await app?.close();
-  await feed?.close();
-  await nats?.close();
-  await dbs?.close();
-  await fga?.close();
+  vi.restoreAllMocks();
+  await fixture?.close();
 }
-afterAll(cleanup);
-
-async function connect(sub = 'alice', orgId = 'org-test') {
-  const cookie = sessionCookie(config, { sub, orgId, roles: [],
-    authTime: 1790856000, exp: 2000000000 }).cookie;
-  const headers = { cookie, origin: new URL(config.redirectUri).origin };
-  const socket = new WebSocket(origin.replace('http:', 'ws:') + '/ws', { headers });
-  clients.push(socket);
-  const messages: unknown[] = [];
-  function receive(data: Buffer): void {
-    messages.push(JSON.parse(data.toString()));
-  }
-  socket.on('message', receive);
-  await once(socket, 'open');
-  const firstOutcome = Promise.race([once(socket, 'close'), once(socket, 'message')]);
-  socket.send(JSON.stringify({ type: 'subscribe', topic: 'chat-context' }));
-  return { socket, messages, firstOutcome };
-}
+afterEach(cleanup);
 
 async function followsProvisioning(): Promise<void> {
-  const { socket, messages } = await connect();
-  function initialContextReceived(): boolean {
-    return messages.length > 0;
-  }
-  await until(initialContextReceived);
+  const { socket, messages, firstOutcome } = await fixture.connect();
+  await firstOutcome;
   expect(messages[0]).toMatchObject({ type: 'context', topic: 'chat-context',
     data: { memberId: 'alice', assistantId: null, role: 'member' } });
-  await append({ subject: 'assistant-personal', type: 'assistant.created', data: {
-    assistantId: 'personal', ownerId: 'alice', kind: 'personal',
-  } });
-  await runner.run(computers);
+  await fixture.assistant('personal', 'alice');
   function assignmentReceived(): boolean {
     return messages.length > 1;
   }
@@ -104,19 +28,119 @@ async function followsProvisioning(): Promise<void> {
   expect(messages.at(-1)).toMatchObject({ type: 'context', topic: 'chat-context',
     data: { memberId: 'alice', assistantId: 'personal' } });
   const closed = once(socket, 'close');
-  await append({ subject: 'member-alice', type: 'member.removed', data: {
-    memberId: 'alice', removedBy: 'owner',
-  } });
-  const result: unknown[] = await closed;
-  expect(result[0]).toBe(1008);
+  await fixture.remove('alice');
+  expect((await closed)[0]).toBe(1008);
 }
-it('delivers the personal assignment after projection without a conversation, then revokes access',
-  followsProvisioning, 30_000);
+it('delivers assignment through a real identity binding, then revokes access', followsProvisioning);
 
 async function refusesNonMember(): Promise<void> {
-  const { messages, firstOutcome } = await connect('outsider');
-  const result: unknown[] = await firstOutcome;
-  expect(result[0]).toBe(1008);
+  const { messages, firstOutcome } = await fixture.connect('outsider');
+  expect((await firstOutcome)[0]).toBe(1008);
   expect(messages).toEqual([]);
 }
-it('never delivers another member context to a signed-in non-member', refusesNonMember);
+it('refuses an identity with no member binding without delivering context', refusesNonMember);
+
+async function separatesActivePeople(): Promise<void> {
+  await fixture.assistant('bob-personal', 'bob');
+  const bob = await fixture.connect('identity-bob');
+  await bob.firstOutcome;
+  expect(bob.messages[0]).toMatchObject({ data: {
+    memberId: 'bob', assistantId: 'bob-personal',
+  } });
+  const alice = await fixture.connect();
+  await alice.firstOutcome;
+  expect(alice.messages[0]).toMatchObject({ data: { memberId: 'alice', assistantId: null } });
+  await fixture.assistant('alice-personal', 'alice');
+  function aliceAssigned(): boolean {
+    return alice.messages.length > 1;
+  }
+  await until(aliceAssigned);
+  expect(alice.messages.at(-1)).toMatchObject({ data: {
+    memberId: 'alice', assistantId: 'alice-personal',
+  } });
+  expect(bob.messages).toHaveLength(1);
+}
+it('delivers only each active person’s own assignment', separatesActivePeople);
+
+async function refusesDeniedAssistant(): Promise<void> {
+  await fixture.assistant('denied-personal', 'alice', false);
+  const { messages, firstOutcome } = await fixture.connect();
+  await firstOutcome;
+  expect(messages[0]).toMatchObject({ data: { memberId: 'alice', assistantId: null } });
+  expect(await personalContext(fixture.chat, 'alice')).toMatchObject({ assistantId: null });
+}
+it('withholds a projected assistant when acts_for permission is denied', refusesDeniedAssistant);
+
+async function filtersOwnership(): Promise<void> {
+  await fixture.assistant('bob-personal', 'bob');
+  await fixture.permitAssistant('alice', 'bob-personal');
+  expect(await personalContext(fixture.chat, 'alice')).toMatchObject({ assistantId: null });
+  expect(await personalContext(fixture.chat, 'bob')).toMatchObject({ assistantId: 'bob-personal' });
+}
+it('filters personal ownership even when another assistant permits acts_for', filtersOwnership);
+
+async function separatesSilos(): Promise<void> {
+  const other = await fixture.foreignAssistant();
+  for (const silo of ['test', 'other']) {
+    await fixture.permitAssistant('alice', 'foreign', silo);
+  }
+  expect(await personalContext(other, 'alice')).toMatchObject({ assistantId: 'foreign' });
+  expect(await personalContext(fixture.chat, 'alice')).toMatchObject({ assistantId: null });
+}
+it('selects context from the requested silo when member ids match', separatesSilos);
+
+async function expiresWhileSubscribed(): Promise<void> {
+  const { socket, messages, firstOutcome } = await fixture.connect();
+  await firstOutcome;
+  expect(messages).toHaveLength(1);
+  const closed = once(socket, 'close');
+  vi.spyOn(Date, 'now').mockReturnValue(2000000000000);
+  expect((await closed)[0]).toBe(1008);
+  expect(messages).toHaveLength(1);
+}
+it('refuses an expired session while already subscribed', expiresWhileSubscribed);
+
+async function refusesChangedOrganisation(): Promise<void> {
+  const { socket, messages, firstOutcome } = await fixture.connect();
+  await firstOutcome;
+  const closed = once(socket, 'close');
+  fixture.config.expectedOrgId = 'another-organisation';
+  expect((await closed)[0]).toBe(1008);
+  expect(messages).toHaveLength(1);
+}
+it('rechecks the organisation pin while subscribed', refusesChangedOrganisation);
+
+async function refusesChangedSilo(): Promise<void> {
+  const { socket, messages, firstOutcome } = await fixture.connect();
+  await firstOutcome;
+  const closed = once(socket, 'close');
+  fixture.chat.silo = 'other';
+  expect((await closed)[0]).toBe(1008);
+  expect(messages).toHaveLength(1);
+}
+it('refuses a silo that no longer matches its permission binding', refusesChangedSilo);
+
+async function checksBeforeContent(): Promise<void> {
+  const { socket, messages, firstOutcome } = await fixture.connect();
+  await firstOutcome;
+  const before = fixture.reads.count();
+  const closed = once(socket, 'close');
+  await fixture.remove('alice');
+  expect((await closed)[0]).toBe(1008);
+  expect(messages).toHaveLength(1);
+  expect(fixture.reads.count()).toBe(before);
+}
+it('checks active membership before reading personal content', checksBeforeContent);
+
+async function removesDuringRead(): Promise<void> {
+  await fixture.assistant('alice-personal', 'alice');
+  const entered = fixture.reads.hold();
+  const { socket, messages, firstOutcome } = await fixture.connect();
+  await entered;
+  await fixture.remove('alice');
+  fixture.reads.release();
+  expect((await firstOutcome)[0]).toBe(1008);
+  expect(messages).toEqual([]);
+  expect(socket.readyState).toBe(socket.CLOSED);
+}
+it('refuses delivery when membership is removed during a delayed context read', removesDuringRead);
