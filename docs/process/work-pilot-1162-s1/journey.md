@@ -7,6 +7,21 @@ Journey on the rebased fresh package: PARTIAL for one person at 1280 and 390 pix
 The earlier approved-source journey remains PASS for that source.
 Current own checks and source status: [final fixes](round-3.md).
 
+## 23 November post-rebase packaged rerun
+
+NOT RUN: rebased head `56077ff4e` was pushed after fetching main `42a261e03`; the rebase
+completed without conflicts. CI passed on that head. Fresh application and scanner approval
+artifacts were produced for product commit `cbbc96bbe` on temporary source ref
+`work/pilot-1162-s1-package-source` (runs [45161913648](https://github.com/elewa-git/opencrane-new/actions/runs/45161913648)
+and [45161919960](https://github.com/elewa-git/opencrane-new/actions/runs/45161919960)).
+The public privacy and secret scans passed before creating the ref. No product files changed.
+
+The required quiet window did not pass before the 1.25-hour work limit. At 11:12:34 UTC the
+one-minute load was 7.02. Earlier checks found slot 1 locked by another task's package install;
+slot 2 reported free. No slot was claimed and no packaged journey step ran. The fresh package
+journey and new CPU/memory measurements are NOT RUN. The previous PARTIAL result remains the
+latest journey evidence; this attempt does not change it.
+
 The [passing journey](#23-november-packaged-one-person-journey) records the accepted scope.
 The [rebased run](#23-november-rebased-source-qualification) records its incomplete checks.
 Earlier attempts retain their original outcomes as history. The observations describe one
