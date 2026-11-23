@@ -10,6 +10,7 @@
     { "step": "fresh capacity evidence at coordinator start", "result": "FAIL", "reason": "The capacity check is stale" },
     { "step": "package installation and browser journey", "result": "NOT RUN", "reason": "Coordinator stopped before package preparation" },
     { "step": "package-down --id 1", "result": "PASS" },
-    { "step": "down.sh --id 1", "result": "PASS" }
+    { "step": "down.sh --id 1", "result": "PASS" },
+    { "step": "CI Lint on receipt commit", "result": "FAIL", "runId": 45092232360, "reason": "lint:links could not find the ignored admission.log and load-during-run.log; exit code 2" }
   ]
 }

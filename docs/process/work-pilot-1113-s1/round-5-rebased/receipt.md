@@ -26,3 +26,13 @@ samples and load records are in this folder.
 
 Cleanup: `package-down --id 1` **PASS**; `down.sh --id 1` **PASS**. No retry was
 made after the stale capacity refusal.
+
+## Receipt commit CI
+
+CI run `45092232360` on receipt commit `2b7a77b5dc07eda7ab1108a1751236b898309139`
+failed its `Lint` step. `npm run lint` reached `lint:links`, where Lychee reported
+`Cannot find file: File not found. Check if file exists and path is correct` for
+`round-5-rebased/admission.log` and `round-5-rebased/load-during-run.log`. Those
+two log files were ignored and were not included in the pushed commit. The Lint
+step exited with code 2. The CI run was still in progress when this receipt was
+updated; no retry or code change was made.

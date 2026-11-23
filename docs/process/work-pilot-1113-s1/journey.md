@@ -18,6 +18,9 @@ and `down.sh --id 1` passed after the refusal. No retry was made. See the
 [rebase attempt receipt](round-5-rebased/receipt.md),
 [admission samples](round-5-rebased/admission.log) and
 [load records](round-5-rebased/load-during-run.log).
+CI for the receipt commit then failed `Lint` at `lint:links`: the two linked log
+files were ignored and absent from that commit. The exact error and exit status 2
+are recorded in the receipt. The run was still in progress; it was not retried.
 
 ## Latest round 3 result
 
