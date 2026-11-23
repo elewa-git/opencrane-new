@@ -2,7 +2,25 @@
 
 Date: 23 November 2026 UTC. Builder's own qualification only.
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: NOT RUN for rebased source `2e1bee69d`
+
+## Paused rebase qualification (23 November)
+
+- **PASS** Replayed 62 commits onto `42a261e03`. The fixture keeps main's clock
+  and shared catalogue builders and the branch's bounded conversation reader.
+- **PASS** Typecheck, event catalogue, Knip, whole-stream reads, changelog,
+  Markdown, scoped ESLint, public privacy and secret scan.
+- **PASS** First changed Vitest run: 725 passed. Both changed Node runs passed
+  all 12 tests. The opt-in approval browser fixture was NOT RUN.
+- **PARTIAL** The partitioned Vitest repeat had a routine fixture preparation
+  refusal and an Angular readiness timeout. Both cases passed in isolation.
+  All 725 enabled cases had two passing observations across those runs.
+- **PASS** [Hosted source CI](https://github.com/elewa-git/opencrane-new/actions/runs/45161081537)
+  passed checks, both fixture jobs, four test shards and `ci-ok` on `2e1bee69d`.
+- **NOT RUN** CORE at 1280 and 390 px, guarded demo launcher, 500-message seed,
+  tool result, single use, reload and post-Stop 403 with no upstream effect.
+  A packaged stack occupied a secondary slot when CI passed. The work window
+  had less than five minutes left, so no slot was claimed. Paid calls: zero.
 
 ## Main comparison (23 November, fix round 4)
 
