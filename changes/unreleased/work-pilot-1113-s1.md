@@ -9,3 +9,5 @@ Packaged sign-in checks retain a safe failure code and step, and capture a maske
 failure screenshot before closing the browser context.
 Typing or pasting and pressing Enter immediately sends the current message,
 even before the next screen update. Clearing the field cannot send earlier text.
+Package preparation names invalid values arguments before preflight, without
+printing the private filename. Supply the environment setting or a positional path once.

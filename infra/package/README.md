@@ -85,7 +85,8 @@ nice -n 10 node --test infra/package/chart-render.test.mjs
 For a running install, follow the [operator commands](README.robot.md) to claim a
 spare stack, prepare private values, start Helm, forward the website and clean up.
 That guide also explains image approval, production sign-in checks and the one-time
-owner claim. Public-address mode currently creates no public listener.
+owner claim. Preparation reports a safe reason code for a missing values filename or
+conflicting filename arguments. Public-address mode currently creates no public listener.
 A fresh install replaces the selected install's data.
 Sign-in checks save a safe failure code and step, and a screenshot with form values hidden.
 

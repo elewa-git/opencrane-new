@@ -1802,7 +1802,9 @@ not repeat. Screenshots and `package-journey.json` stay in the private claimed s
 The runner sends the private values filename to preparation and installation through
 `PACKAGE_VALUES_FILE` in each child environment. Preparation accepts either that
 setting with no positional arguments or one positional filename without the setting.
-Missing filenames and extra arguments refuse before preflight. Preparation and the
+Missing filenames, extra arguments and supplying both forms refuse before preflight
+with the safe reason code `invalid_values_arguments`. Use only one form; never pass
+a positional filename when `PACKAGE_VALUES_FILE` is set. Preparation and the
 installer run preflight from the values file's folder, passing only its basename.
 Helm template and install use the same folder and basename. Preparation and browser
 forwarding send the private kubeconfig filename to kubectl through `KUBECONFIG`.

@@ -17,7 +17,7 @@ import { readApprovedRelease } from '../clamav/release.mjs';
 
 const execute = promisify(execFile);
 type PackageOwner = Awaited<ReturnType<typeof verifyPackageOwner>>;
-let stage = 'preflight';
+let stage = 'slot ownership';
 
 async function command(program: string, args: string[], cwd = root) {
   const env = { ...process.env };
@@ -240,6 +240,7 @@ async function prepareFileServices(values: {
 
 async function main() {
   assert(secondary, 'Package secrets require a claimed secondary slot');
+  stage = 'values arguments (invalid_values_arguments)';
   const environmentValuesFile = process.env['PACKAGE_VALUES_FILE'];
   const valuesFile = environmentValuesFile ?? process.argv[2];
   const expectedArgumentCount = environmentValuesFile === undefined ? 3 : 2;
@@ -248,6 +249,7 @@ async function main() {
   const privateValuesFile = resolve(root, valuesFile);
   const valuesDirectory = dirname(privateValuesFile);
   const valuesName = basename(privateValuesFile);
+  stage = 'preflight';
   // Run inside the values directory so its private host path stays out of child arguments.
   await command('node', [resolve(root, 'infra/package/preflight.mjs'), valuesName,
     resolve(root, 'infra/package/reviewed-images.json')], valuesDirectory);
