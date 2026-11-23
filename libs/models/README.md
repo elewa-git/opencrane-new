@@ -25,7 +25,7 @@ flowchart LR
   computer["apps/computer<br/>assistant computers"] -.-> models
   models <-->|call checks and usage| gateway["agentgateway<br/>AI gateway"]
   models -.-> auth["libs/auth and libs/authz<br/>passes and permissions"]
-  models -.-> store["libs/event-store<br/>saved event log"]
+  models -.->|saves publication and dated tool checks| store["libs/event-store<br/>saved event log"]
   models -.-> projections["libs/projections<br/>read tables"]
 ```
 
@@ -39,7 +39,8 @@ flowchart LR
 - Check tool rules, approvals and the current reviewed tool list before sending a call.
 - Check selected personal accounts and record credential releases before tool calls.
 - Check access to saved memory and refuse calls that rely on facts no longer usable.
-- Prepare gateway settings and check that the running gateway has accepted them.
+- Prepare gateway settings while unchanged tool checks run, and check that the running
+  gateway has accepted them.
 - Record ownership and model grants, and provide safe spending and account records.
 - Check private image scan results and support cleanup of stored credentials.
 

@@ -1,4 +1,4 @@
-import type { EventStore } from '@opencrane/event-store';
+import type { AppendCommand, EventStore } from '@opencrane/event-store';
 import { losslessJson, type JsonValue } from '@opencrane/events/lossless-json';
 import { validateMcpCatalogue } from '@opencrane/events/mcp-catalogue';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
@@ -171,11 +171,7 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       }
       invalidated = true;
     }
-    const currentContract = revisionContract(catalogue.discoverResult);
-    const savedContract = revisionContract(policy.catalogue.discoverResult);
-    // Save withdrawn or changed dispatch promises even when every tool is identical.
-    const changed = catalogue.schemaDigest !== policy.catalogue.schemaDigest ||
-      currentContract !== savedContract;
+    const changed = catalogueChanged(catalogue, policy.catalogue);
     let type = 'mcp.catalogue_checked';
     let data: unknown = { serverId, outcome: 'unchanged', schemaDigest: catalogue.schemaDigest,
       checkedAt: catalogue.checkedAt, expiresAt: catalogue.expiresAt };
@@ -191,20 +187,10 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
     }
     await options.requireLeader();
     signal.throwIfAborted();
-    async function saveCapture(sequence: number) {
-      signal.throwIfAborted();
-      const event = envelope(silo, `mcp-${serverId}`, type, data);
-      // Reuse the policy history already read. Give each capture a new event id.
-      const command = { event, expectedSequence: sequence, deadline, signal,
-        historyChecked: true as const };
-      const result = await store.append(command);
-      if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
-      if (changed) {
-        state.driftSequence = result.sequence;
-      }
-      signal.throwIfAborted();
-    }
-    await saveCapture(policy.sequence);
+    const event = envelope(silo, `mcp-${serverId}`, type, data);
+    const command = { event, expectedSequence: policy.sequence, deadline, signal,
+      historyChecked: true as const };
+    let captureSaved = await saveCatalogueCapture(store, command, state, changed);
     // Check after the append too: evidence can expire while the event store replies.
     // Keep dispatch closed until the saved revision has invalidated old approvals.
     if (expiryNeedsFailure(state, invalidated, changed)) {
@@ -212,12 +198,18 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
       await saveFailure(serverId, signal);
       policy = await readToolPolicy(store, silo, serverId, deadline);
       await options.requireLeader();
-      await saveCapture(policy.sequence);
+      // Give renewal its own event id so deduplication cannot discard it after expiry.
+      const renewedEvent = envelope(silo, `mcp-${serverId}`, type, data);
+      const renewal = { ...command, event: renewedEvent, expectedSequence: policy.sequence };
+      captureSaved = await saveCatalogueCapture(store, renewal, state, changed);
       invalidated = true;
     }
     const holdCount = state.holdCount;
     policy = await readToolPolicy(store, silo, serverId, deadline);
     signal.throwIfAborted();
+    if (!captureSaved) {
+      requireCaptureCurrent(catalogue, serverId, policy);
+    }
     const expired = expiryNeedsFailure(state, invalidated, changed);
     // Keep any hold raised during the read, even when recovery began held.
     // Let the failure path save approval invalidation before a later check can reopen calls.
@@ -253,6 +245,37 @@ export function mcpCatalogueWatch(store: EventStore, silo: string, options: Opti
   return { check, checkDue, nextCheckAt, reconcile, requireCurrent, close };
 }
 
+async function saveCatalogueCapture(store: EventStore, command: AppendCommand,
+  state: ReturnType<typeof newWatch>, changed: boolean): Promise<boolean> {
+  command.signal?.throwIfAborted();
+  const result = await store.append(command);
+  // A concurrent publication can win without interrupting a successful unchanged capture.
+  // Keep using only saved freshness; never retry the append or invent a failed check.
+  if (result.status === 'conflict' && !changed && state.expiresAt > Date.now()) {
+    return false;
+  }
+  if (result.status !== 'appended') throw new Error('Catalogue append unconfirmed');
+  if (changed) {
+    state.driftSequence = result.sequence;
+  }
+  command.signal?.throwIfAborted();
+  return true;
+}
+
+function catalogueChanged(catalogue: Catalogue, previous: Catalogue) {
+  const currentContract = revisionContract(catalogue.discoverResult);
+  const savedContract = revisionContract(previous.discoverResult);
+  // Save withdrawn or changed dispatch promises even when every tool is identical.
+  return catalogue.schemaDigest !== previous.schemaDigest || currentContract !== savedContract;
+}
+
+function requireCaptureCurrent(catalogue: Catalogue, serverId: string,
+  policy: Awaited<ReturnType<typeof readToolPolicy>>) {
+  checkedCapture(catalogue, serverId, policy);
+  if (!policy.catalogue || catalogueChanged(catalogue, policy.catalogue)) {
+    throw new Error('Catalogue changed before capture was saved');
+  }
+}
 
 function checkedCapture(captured: Catalogue, serverId: string,
   policy: Awaited<ReturnType<typeof readToolPolicy>>) {
@@ -270,8 +293,9 @@ function checkedCapture(captured: Catalogue, serverId: string,
 
 function refreshWatchState(state: ReturnType<typeof newWatch>,
   policy: Awaited<ReturnType<typeof readToolPolicy>>, catalogue: Catalogue) {
-  state.expiresAt = Date.parse(catalogue.expiresAt!);
-  state.checkedAt = Date.parse(catalogue.checkedAt!);
+  // Bound local freshness by the saved dates, including when another command won the append.
+  state.expiresAt = Date.parse(policy.expiresAt ?? '1970-01-01T00:00:00.000Z');
+  state.checkedAt = Date.parse(policy.checkedAt ?? '1970-01-01T00:00:00.000Z');
   const receipt = policy.configurationObservation;
   if (policy.driftHeld === true) {
     state.driftHeld = true;
