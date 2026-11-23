@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
+import './operator-contract.test.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const image = 'node:22.23.1-bookworm-slim';
@@ -43,22 +44,42 @@ function dry() {
   successful(checked);
 }
 
-const refusals = [
-  ['Docker binary', 'mkdir -p /usr/local/bin; touch /usr/local/bin/docker; chmod +x /usr/local/bin/docker'],
-  ['Docker socket', 'mkdir -p /run; touch /run/docker.sock'],
-  ['foreign Kubernetes', 'mkdir -p /etc/kubernetes'],
-  ['unowned k3s', 'mkdir -p /var/lib/rancher/k3s'],
-  ['foreign containerd', 'mkdir -p /run/containerd; touch /run/containerd/containerd.sock'],
-  ['microk8s', 'mkdir -p /var/snap/microk8s'],
+const refusedPaths = [
+  '/run/docker.sock', '/var/run/docker.sock', '/etc/docker', '/var/lib/docker',
+  '/etc/kubernetes', '/var/snap/microk8s', '/etc/rancher/rke2',
+  '/run/containerd/containerd.sock', '/etc/containerd', '/var/lib/containerd',
+  '/var/lib/kubelet', '/etc/rancher/k3s', '/var/lib/rancher/k3s', '/usr/local/bin/k3s',
+  '/etc/systemd/system/k3s.service', '/etc/systemd/system/k3s-agent.service',
 ];
+const refusedBinaries = ['docker', 'dockerd', 'kubelet', 'kubeadm', 'microk8s', 'containerd'];
+const refusals = [];
+for (const path of refusedPaths) {
+  refusals.push([path, `mkdir -p "$(dirname "${path}")"; touch "${path}"`]);
+}
+for (const binary of refusedBinaries) {
+  const setup = `touch /usr/local/bin/${binary}; chmod +x /usr/local/bin/${binary}`;
+  refusals.push([binary, setup]);
+}
+refusals.push(['unknown ownership marker', `mkdir -p /var/lib/opencrane-vm
+  printf 'unknown' > /var/lib/opencrane-vm/managed-k3s`]);
 
 function registerRefusal(name, setup) {
   function refuse() {
-    for (const args of [[], ['--dry-run']]) {
-      const result = container(setup, args);
-      assert.equal(result.status, 1, result.stderr);
-      assert.match(result.stderr, /Refusing existing/);
-      assert.doesNotMatch(result.stdout, /apt-get|swapoff|Download/);
+    for (const args of [[], ['--dry-run'], ['--apply']]) {
+      const commands = fakeHost + setup + `
+        find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
+          | sort > /tmp/before
+        status=0
+        bash ${script} ${args.join(' ')} >/tmp/output 2>/tmp/error || status=$?
+        test "$status" -eq 1
+        grep -q 'Refusing existing' /tmp/error
+        ! grep -Eq 'apt-get|swapoff|Download|Write ' /tmp/output
+        test ! -e /fixture-calls
+        find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
+          | sort > /tmp/after
+        cmp /tmp/before /tmp/after
+        exit 0`;
+      successful(container(commands, args));
     }
   }
   test(`refuses ${name} before mutation, including in dry run`, refuse);
@@ -68,14 +89,21 @@ function invalidInput() {
   const result = container('printf "ID=debian\\nVERSION_ID=12\\n" > /etc/os-release');
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Ubuntu/);
-  assert.equal(container('', ['--unknown']).status, 2);
+  const invalidArguments = [['--unknown'], ['--apply', '--dry-run'],
+    ['--dry-run', '--apply'], ['--apply', '--apply'], ['--apply', 'extra']];
+  for (const args of invalidArguments) {
+    const result = container(fakeHost, args);
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /Usage:.*--dry-run.*--apply/u);
+    assert.doesNotMatch(result.stdout, /Step:|Write /u);
+  }
 }
 
 const fakeHost = `
 mkdir -p /fixture-bin
 export PATH=/fixture-bin:$PATH
 for program in apt-get swapoff sysctl systemctl tar kexec; do
-  printf '#!/bin/sh\\nexit 0\\n' > /fixture-bin/$program
+  printf '#!/bin/sh\\nprintf \"called\\\\n\" >> /fixture-calls\\nexit 0\\n' > /fixture-bin/$program
   chmod +x /fixture-bin/$program
 done
 printf '#!/bin/sh\\ncat >/dev/null\\nexit 0\\n' > /fixture-bin/sha256sum
@@ -91,13 +119,31 @@ CURL
 chmod +x /fixture-bin/*
 `;
 
+function defaultLeavesHostUnchanged() {
+  const commands = fakeHost + `
+    find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
+      | sort > /tmp/before
+    bash ${script} >/tmp/output
+    if [ -e /fixture-calls ]; then
+      printf 'No-argument bootstrap invoked a mutating host command\\n' >&2
+      exit 1
+    fi
+    find /etc /var/lib /usr/local /run -type f -exec /usr/bin/sha256sum {} + \\
+      | sort > /tmp/after
+    cmp /tmp/before /tmp/after
+  `;
+  successful(container(commands, ['--dry-run']));
+}
+
 function idempotent() {
   const commands = fakeHost + `
-    bash ${script} >/dev/null
+    bash ${script} --apply >/dev/null
+    test -s /fixture-calls
+    test -f /var/lib/opencrane-vm/managed-k3s
     mkdir -p /var/lib/kubelet
     find /etc/rancher /etc/systemd/system /etc/sysctl.d /var/lib/opencrane-vm \\
       -type f -exec /usr/bin/sha256sum {} + | sort > /tmp/before
-    bash ${script} >/dev/null
+    bash ${script} --apply >/dev/null
     find /etc/rancher /etc/systemd/system /etc/sysctl.d /var/lib/opencrane-vm \\
       -type f -exec /usr/bin/sha256sum {} + | sort > /tmp/after
     cmp /tmp/before /tmp/after
@@ -111,11 +157,11 @@ function idempotent() {
 
 function replacedBinary() {
   const commands = fakeHost + `
-    bash ${script} >/dev/null
+    bash ${script} --apply >/dev/null
     rm /fixture-bin/sha256sum
     printf 'foreign binary' > /usr/local/bin/k3s
   `;
-  const result = container(commands);
+  const result = container(commands, ['--apply']);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Refusing existing changed k3s binary/);
 }
@@ -123,7 +169,8 @@ function replacedBinary() {
 test('shellcheck accepts bootstrap and the shared runtime helper', checkShell);
 test('dry run prints node protection, downloads, runtime and storage without writing', dry);
 test('refuses unsupported OS and unknown options', invalidInput);
-test('rerun keeps the same configuration on its own simulated host', idempotent);
+test('no arguments leave the simulated host unchanged', defaultLeavesHostUnchanged);
+test('explicit apply changes the simulated host and permits an identical rerun', idempotent);
 test('an ownership marker cannot approve a replaced k3s binary', replacedBinary);
 for (const [name, setup] of refusals) {
   registerRefusal(name, setup);
