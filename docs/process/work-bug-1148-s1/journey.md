@@ -4,6 +4,75 @@ Date: 23 November 2026 UTC. Builder's own qualification only.
 
 Journey on a fresh dev stack: FAIL
 
+## Main comparison (23 November, fix round 4)
+
+Main publication: FAIL. Full slice journey: FAIL. No product code changed.
+
+Fetched `origin/main` and created a clean detached worktree at
+`5576ecd1ddb82149eff8132d613293d1acfb05ab`, which contains #1174.
+`nice -n 10 npm ci` passed there before any stack command. Main stayed at that
+commit on the final fetch; it is already an ancestor of this branch, so no new
+rebase was required and no rebase is in progress.
+
+Ten admission samples from 05:47:35 to 05:52:47 UTC showed both secondary
+slots free, no running `package-*` stack and one-minute load below six. The
+qualifying interval lasted 312 seconds. Claimed slot 1 from the detached worktree
+and passed `--id 1` literally to fresh startup, status and teardown commands.
+
+Fresh startup's automatic CORE journey failed at the mobile upload step:
+`Creation catch-up timed out` in `waitForUpload`. Startup and service logs were
+saved immediately. Services kept running and HTTP health checks passed, so the
+separate publication check continued on this same fresh stack. No second startup or publication retry ran.
+Load rose after admission; this observation does not establish a cause.
+
+The unchanged guarded launcher reported both server and models ready. An external
+comparison driver reused main's sign-in and owner setup, then the branch's current
+`prepareApprovalTool` and `reviewSavedJourneyTools` helpers against main's services.
+The driver lived outside tracked source. Main's tracked application, library and
+infrastructure files remained unchanged. Its older default journey publication
+helper was not used for this check because it sends the legacy publication payload.
+
+The saved events show:
+
+| Position | Event | UTC |
+| --- | --- | --- |
+| 241 | `mcp.server_registered` | 06:03:01.133 |
+| 242 | `mcp.server_discovered` | 06:03:02.181 |
+| 243 | `mcp.server_reviewed` | 06:03:02.633 |
+| 244 | `mcp.server_published` | 06:03:02.918 |
+
+Publication carried all six current intent fields, including the command id,
+expected sequence, review revision and fragment digest. The unchanged 90-second
+publication wait failed with `Approval journey setup timeout`.
+No `gateway.configuration_requested` or gateway observation was saved.
+
+Main failed earlier than the branch's previous observation. Its dispatcher logged
+`JetStreamError: heartbeats missed`, followed by
+`Worker failed; inspect service health before restarting`, at 05:59:01.485 UTC.
+The later database snapshot found dispatcher position 227, event-log position 247
+and no `prepare-gateway-configuration` job. This main run therefore did not reach
+that reaction. It does not reproduce the branch's completed-handler case or prove
+that enqueueing inside the held transaction caused either failure.
+
+The publication handler, policy folding, configuration preparation, dispatcher and
+queue sources are identical on main and this branch. The decision-index reader is
+used for conversation decisions; the preparation handler reads the MCP server stream
+through the unchanged history helper. No direct decision-index change to that
+reaction was found. The live main failure prevents attributing the missing request
+to this branch alone.
+
+Stopped code work as instructed: main also cannot complete the publication path.
+The orchestrator must open the main bug. Finding 4 remains blocking in this PR.
+Approval with a returned tool result, single use, reload and the post-Stop 403 with
+no upstream effect are NOT RUN. The 500-message seed was not repeated for this
+publication-only main comparison. Paid calls: zero.
+
+The private receipt `bug-1148-main-round4` retains admission samples, dependency
+installation output, the external comparison driver, event and dispatcher snapshots,
+sanitised startup/service/container/pod logs and available CORE captures. Logs were
+copied before teardown. The launcher was stopped, `down.sh --id 1` succeeded and
+slot 1 reported `free`.
+
 ## Journey 6 (23 November)
 
 The earlier controlled receipt has no guarded-launcher readiness log or demo recorder
