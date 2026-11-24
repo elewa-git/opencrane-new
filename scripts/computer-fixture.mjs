@@ -1,3 +1,5 @@
+import { rfbHandshake } from './rfb-fixture.mjs';
+
 function exposeFixtureSocketMethods() {
   const prototype = globalThis.WebSocket.prototype;
   const inherited = Object.getPrototypeOf(prototype);
@@ -12,6 +14,7 @@ function exposeFixtureSocketMethods() {
 
 export async function computerFixture(page, options = {}) {
   const leaseUntilMs = options.leaseUntilMs ?? 1500;
+  const { version, replies } = rfbHandshake(1024, 768);
   await page.evaluate(exposeFixtureSocketMethods);
   let resolveClosed;
   const closed = new Promise(resolve => { resolveClosed = resolve; });
@@ -36,22 +39,9 @@ export async function computerFixture(page, options = {}) {
     }
     let step = 0;
     function handshake() {
-      if (step === 0) socket.send(Buffer.from([1, 1]));
-      else if (step === 1) socket.send(Buffer.alloc(4));
-      else if (step === 2) {
-        const init = Buffer.alloc(24);
-        init.writeUInt16BE(1024, 0);
-        init.writeUInt16BE(768, 2);
-        init[4] = 32;
-        init[5] = 24;
-        init[7] = 1;
-        init.writeUInt16BE(255, 8);
-        init.writeUInt16BE(255, 10);
-        init.writeUInt16BE(255, 12);
-        init[14] = 16;
-        init[15] = 8;
-        socket.send(init);
-      }
+      const reply = replies[step];
+      if (!reply) return;
+      socket.send(reply);
       step++;
     }
     function disconnected() {
@@ -69,7 +59,7 @@ export async function computerFixture(page, options = {}) {
   async function start() {
     const canvas = page.locator('oc-live-view .display canvas');
     await canvas.waitFor({ state: 'attached' });
-    activeSocket.send(Buffer.from('RFB 003.008\n'));
+    activeSocket.send(version);
   }
   function revoke() { activeSocket.close({ code: 4003, reason: 'Access changed' }); }
   function disconnect() { activeSocket.close({ code: 1001, reason: 'Fixture disconnected' }); }
