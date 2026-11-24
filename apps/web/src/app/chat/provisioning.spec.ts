@@ -3,6 +3,7 @@ import { ChatSession } from './chat-session';
 import { Workspace } from './workspace';
 import { WebSocketService } from '../core/websocket.service';
 import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
+import { deferredReply } from '../../../test/support/deferred-reply';
 
 let chat: ChatSession;
 let socket: SocketLike;
@@ -20,8 +21,12 @@ function createSocket(): SocketLike {
   return socket;
 }
 
+function requestPath(input: RequestInfo | URL): string {
+  return input instanceof Request ? input.url : String(input);
+}
+
 function fetchFixture(input: RequestInfo | URL): Promise<Response> {
-  const path = input instanceof Request ? input.url : String(input);
+  const path = requestPath(input);
   requests.push(path);
   let body: unknown = { rows: [] };
   if (path === '/api/chat') body = { memberId: 'me', assistantId: null, role: 'owner' };
@@ -119,7 +124,7 @@ function receivesAssignmentWhileConnecting(): void {
   expect(chat.selectedAssistantId()).toBe('personal');
 }
 
-describe('personal assignment after workspace load', function loadedWorkspace() {
+function loadedWorkspace(): void {
   beforeEach(setup);
   it('subscribes to its own assignment before a first conversation exists', subscribesToOwnAssignment);
   it('clears provisioning on access loss and ignores later socket messages', clearsOnAccessLoss);
@@ -130,22 +135,21 @@ describe('personal assignment after workspace load', function loadedWorkspace() 
     refusesAnotherMemberAssignment);
   it('receives assignment when a new draft opens before the socket connects',
     receivesAssignmentWhileConnecting);
-});
+}
+
+describe('personal assignment after workspace load', loadedWorkspace);
 
 function holdIdentityReply() {
-  let release!: (response: Response) => void;
-  const heldReply = new Promise<Response>(function captureRelease(resolve) {
-    release = resolve;
-  });
+  const heldReply = deferredReply();
   function fetchWithHeldIdentity(input: RequestInfo | URL): Promise<Response> {
     if (input === '/auth/me') {
       requests.push(input);
-      return heldReply;
+      return heldReply.promise;
     }
     return fetchFixture(input);
   }
   function releaseIdentity(): void {
-    release(Response.json(identity));
+    heldReply.release(Response.json(identity));
   }
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetchWithHeldIdentity);
   return releaseIdentity;
@@ -155,46 +159,44 @@ function pressNewSessionShortcut(modifier: KeyboardEventInit): void {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ...modifier }));
 }
 
-it('waits for identity before opening a draft, then receives its live assignment',
-  async function draftDuringFirstLoad() {
-    vi.stubGlobal('innerWidth', 1280);
-    history.replaceState({}, '', '/workspace?initial=1');
-    requests = [];
-    const releaseIdentity = holdIdentityReply();
-    TestBed.configureTestingModule({ providers: [socketProvider] });
-    const fixture = TestBed.createComponent(Workspace);
-    try {
-      fixture.detectChanges();
-      await vi.waitFor(function identityRequested() {
-        expect(requests).toContain('/auth/me');
-      });
-      const root: unknown = fixture.nativeElement;
-      if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
-      const newSession = root.querySelector<HTMLButtonElement>('button.new-session')!;
-      newSession.click();
-      pressNewSessionShortcut({ ctrlKey: true });
-      pressNewSessionShortcut({ metaKey: true });
-      expect(location.search).toBe('?initial=1');
-      expect(newSession.disabled).toBe(true);
-
-      releaseIdentity();
-      await vi.waitFor(function readyForDraft() {
-        fixture.detectChanges();
-        expect(newSession.disabled).toBe(false);
-      });
-      newSession.click();
-      expect(location.search).toBe('');
-      openAssignmentSocket();
-      assignment();
-      fixture.detectChanges();
-      expect(root.querySelector<HTMLTextAreaElement>('textarea#message')!.disabled).toBe(false);
-      expect(requests.filter(isContextRead)).toHaveLength(1);
-    } finally {
-      releaseIdentity();
-      fixture.destroy();
-      vi.unstubAllGlobals();
+async function draftDuringFirstLoad(): Promise<void> {
+  const releaseIdentity = holdIdentityReply();
+  const fixture = mountWorkspace('?initial=1');
+  const root = workspaceRoot(fixture);
+  try {
+    function identityRequested(): void {
+      expect(requests).toContain('/auth/me');
     }
-  });
+    await vi.waitFor(identityRequested);
+    const newSession = root.querySelector<HTMLButtonElement>('button.new-session')!;
+    newSession.click();
+    pressNewSessionShortcut({ ctrlKey: true });
+    pressNewSessionShortcut({ metaKey: true });
+    expect(location.search).toBe('?initial=1');
+    expect(newSession.disabled).toBe(true);
+
+    releaseIdentity();
+    function readyForDraft(): void {
+      fixture.detectChanges();
+      expect(newSession.disabled).toBe(false);
+    }
+    await vi.waitFor(readyForDraft);
+    newSession.click();
+    expect(location.search).toBe('');
+    openAssignmentSocket();
+    assignment();
+    fixture.detectChanges();
+    expect(root.querySelector<HTMLTextAreaElement>('textarea#message')!.disabled).toBe(false);
+    expect(requests.filter(isContextRead)).toHaveLength(1);
+  } finally {
+    releaseIdentity();
+    fixture.destroy();
+    vi.unstubAllGlobals();
+  }
+}
+
+it('waits for identity before opening a draft, then receives its live assignment',
+  draftDuringFirstLoad);
 
 const latestSession = {
   conversationId: 'latest', assistantId: 'personal', createdBy: 'me',
@@ -204,9 +206,9 @@ const requestedSession = {
   ...latestSession, conversationId: 'requested', title: 'Requested chat',
 };
 
-function mountSavedLink(): ComponentFixture<Workspace> {
+function mountWorkspace(search: string): ComponentFixture<Workspace> {
   vi.stubGlobal('innerWidth', 1280);
-  history.replaceState({}, '', '/workspace?conversation=requested');
+  history.replaceState({}, '', `/workspace${search}`);
   requests = [];
   TestBed.configureTestingModule({ providers: [socketProvider] });
   const fixture = TestBed.createComponent(Workspace);
@@ -236,24 +238,27 @@ function savedSessionReply(path: string): Response | undefined {
 
 async function settlesRetryAfterSelectingSavedSession(): Promise<void> {
   let identityReads = 0;
-  let releaseIdentity!: (response: Response) => void;
-  function holdIdentity(resolve: (response: Response) => void): void {
-    releaseIdentity = resolve;
-  }
-  const heldIdentity = new Promise<Response>(holdIdentity);
+  const heldIdentity = deferredReply();
 
   function read(input: RequestInfo | URL): Promise<Response> {
-    const path = String(input);
-    if (path === '/auth/me' && ++identityReads === 2) return heldIdentity;
-    if (path === '/api/conversations') return Promise.resolve(Response.json({ rows: [latestSession] }));
-    if (path.startsWith('/api/conversations?')) return Promise.resolve(new Response(null, { status: 503 }));
+    const path = requestPath(input);
+    if (path === '/auth/me') {
+      identityReads += 1;
+      if (identityReads === 2) return heldIdentity.promise;
+    }
+    if (path === '/api/conversations') {
+      return Promise.resolve(Response.json({ rows: [latestSession] }));
+    }
+    if (path.startsWith('/api/conversations?')) {
+      return Promise.resolve(new Response(null, { status: 503 }));
+    }
     const saved = savedSessionReply(path);
     return saved ? Promise.resolve(saved) : fetchFixture(input);
   }
 
   vi.spyOn(globalThis, 'fetch').mockImplementation(read);
   const loads = vi.spyOn(ChatSession.prototype, 'load');
-  const fixture = mountSavedLink();
+  const fixture = mountWorkspace('?conversation=requested');
   const root = workspaceRoot(fixture);
   try {
     await loads.mock.results[0]!.value;
@@ -279,7 +284,7 @@ async function settlesRetryAfterSelectingSavedSession(): Promise<void> {
       expect(root.querySelector('.skeleton')).toBeNull();
     }
     await vi.waitFor(savedSessionIsOpen);
-    releaseIdentity(Response.json(identity));
+    heldIdentity.release(Response.json(identity));
     await loads.mock.results[1]!.value;
     fixture.detectChanges();
     expect(location.search).toBe('?conversation=latest');
@@ -294,7 +299,7 @@ async function settlesRetryAfterSelectingSavedSession(): Promise<void> {
     newSession.click();
     expect(location.search).toBe('');
   } finally {
-    releaseIdentity(Response.json(identity));
+    heldIdentity.release(Response.json(identity));
     fixture.destroy();
     loads.mockRestore();
     vi.unstubAllGlobals();
@@ -304,7 +309,7 @@ async function settlesRetryAfterSelectingSavedSession(): Promise<void> {
 async function keepsSavedLinkUntilFirstSuccessfulList(): Promise<void> {
   let listReads = 0;
   function read(input: RequestInfo | URL): Promise<Response> {
-    const path = String(input);
+    const path = requestPath(input);
     if (path === '/api/conversations') {
       listReads += 1;
       if (listReads === 1) return Promise.resolve(new Response(null, { status: 503 }));
@@ -317,7 +322,7 @@ async function keepsSavedLinkUntilFirstSuccessfulList(): Promise<void> {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   vi.spyOn(globalThis, 'fetch').mockImplementation(read);
   const loads = vi.spyOn(ChatSession.prototype, 'load');
-  const fixture = mountSavedLink();
+  const fixture = mountWorkspace('?conversation=requested');
   const root = workspaceRoot(fixture);
   try {
     await loads.mock.results[0]!.value;
@@ -329,12 +334,13 @@ async function keepsSavedLinkUntilFirstSuccessfulList(): Promise<void> {
     const askAgent = root.querySelector<HTMLButtonElement>('button.ask')!;
     expect.soft(newSession.disabled).toBe(true);
     expect.soft(askAgent.disabled).toBe(true);
+    newSession.click();
+    expect.soft(location.search).toBe('?conversation=requested');
+    askAgent.click();
+    expect.soft(location.search).toBe('?conversation=requested');
     pressNewSessionShortcut({ ctrlKey: true });
     expect.soft(location.search).toBe('?conversation=requested');
     pressNewSessionShortcut({ metaKey: true });
-    expect.soft(location.search).toBe('?conversation=requested');
-    newSession.click();
-    askAgent.click();
     expect.soft(location.search).toBe('?conversation=requested');
     expect(root.querySelector<HTMLTextAreaElement>('textarea#message')?.disabled).toBe(true);
 
