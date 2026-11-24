@@ -57,3 +57,6 @@ Standalone approval and real-provider journeys were NOT RUN.
   helper and provisioning declared the callbacks before use.
 - Typecheck, event catalogue (174 types), Knip, changelog lint, scoped ESLint and
   Markdown lint passed.
+- The dependency check accepts the shared response fixture from Angular specs.
+  A temporary probe confirmed that application code still cannot import a test
+  fixture or an Angular spec.
