@@ -1,0 +1,542 @@
+2026-11-24T11:23:08.837599305Z _XSERVTransmkdir: Owner of /tmp/.X11-unix should be set to root
+2026-11-24T11:23:08.839191481Z
+2026-11-24T11:23:08.839227956Z Xvnc KasmVNC 1.5.0.17265facc40ab50db5740cdf0d12c61173edafc9 - built Jun 11 2026 12:29:08
+2026-11-24T11:23:08.839234492Z Copyright (C) 1999-2026 KasmVNC Team and many others (see README.me)
+2026-11-24T11:23:08.839238805Z See http://kasmweb.com for information on KasmVNC.
+2026-11-24T11:23:08.839251272Z Underlying X server release 12101007
+2026-11-24T11:23:08.839254107Z
+2026-11-24T11:23:08.845257027Z  2026-11-24 11:23:08,842 [INFO] ICE: Using public IP 127.0.0.1 from args
+2026-11-24T11:23:08.845643617Z  2026-11-24 11:23:08,845 [INFO] vncext: VNC extension running!
+2026-11-24T11:23:08.855529437Z  2026-11-24 11:23:08,855 [INFO] vncext: Listening for websocket connections on 0.0.0.0 interface(s), port 6901
+2026-11-24T11:23:09.007117138Z  2026-11-24 11:23:09,005 [INFO] websocket 0: got client connection from 127.0.0.1
+2026-11-24T11:23:09.270053801Z  2026-11-24 11:23:09,269 [PRIO] ffmpeg: Could not open libavformat.so
+2026-11-24T11:23:09.271191124Z  2026-11-24 11:23:09,270 [INFO] VNCServerST: CPU capability: SSE2 yes, SSE4.1 yes, SSE4.2 yes, AVX512f no
+2026-11-24T11:23:09.271785751Z  2026-11-24 11:23:09,271 [INFO] VNCServerST: Hardware video encoding acceleration capability: unavailable
+2026-11-24T11:23:09.274096230Z  2026-11-24 11:23:09,273 [INFO] vncext: created VNC server for screen 0
+2026-11-24T11:23:09.720175528Z  2026-11-24 11:23:09,719 [INFO] Input: Mouse horizontal scroll factor: 50.000000
+2026-11-24T11:23:09.721674331Z [mi] mieq: warning: overriding existing handler (nil) with 0x55c2aed52d70 for event 2
+2026-11-24T11:23:09.721678469Z  2026-11-24 11:23:09,720 [INFO] Input: Mouse vertical scroll factor: 50.000000
+2026-11-24T11:23:09.721947009Z [mi] mieq: warning: overriding existing handler (nil) with 0x55c2aed52d70 for event 3
+2026-11-24T11:23:09.991347403Z  2026-11-24 11:23:09,991 [INFO] websocket 1: got client connection from 127.0.0.1
+2026-11-24T11:23:10.993257403Z  2026-11-24 11:23:10,992 [INFO] websocket 2: got client connection from 127.0.0.1
+2026-11-24T11:23:10.997746286Z {"report":"ready","bridge":"ready","codexUid":1000}
+2026-11-24T11:23:11.991585262Z  2026-11-24 11:23:11,991 [INFO] websocket 3: got client connection from 127.0.0.1
+2026-11-24T11:23:12.991381880Z  2026-11-24 11:23:12,991 [INFO] websocket 4: got client connection from 127.0.0.1
+2026-11-24T11:23:13.990850727Z  2026-11-24 11:23:13,989 [INFO] websocket 5: got client connection from 127.0.0.1
+2026-11-24T11:23:14.989798157Z  2026-11-24 11:23:14,989 [INFO] websocket 6: got client connection from 127.0.0.1
+2026-11-24T11:23:15.992431603Z  2026-11-24 11:23:15,991 [INFO] websocket 7: got client connection from 127.0.0.1
+2026-11-24T11:23:16.990285410Z  2026-11-24 11:23:16,990 [INFO] websocket 8: got client connection from 127.0.0.1
+2026-11-24T11:23:17.989674634Z  2026-11-24 11:23:17,989 [INFO] websocket 9: got client connection from 127.0.0.1
+2026-11-24T11:23:18.989746251Z  2026-11-24 11:23:18,989 [INFO] websocket 10: got client connection from 127.0.0.1
+2026-11-24T11:23:19.990601121Z  2026-11-24 11:23:19,989 [INFO] websocket 11: got client connection from 127.0.0.1
+2026-11-24T11:23:20.990180601Z  2026-11-24 11:23:20,989 [INFO] websocket 12: got client connection from 127.0.0.1
+2026-11-24T11:23:21.990571333Z  2026-11-24 11:23:21,990 [INFO] websocket 13: got client connection from 127.0.0.1
+2026-11-24T11:23:22.989603988Z  2026-11-24 11:23:22,989 [INFO] websocket 14: got client connection from 127.0.0.1
+2026-11-24T11:23:23.988796058Z  2026-11-24 11:23:23,988 [INFO] websocket 15: got client connection from 127.0.0.1
+2026-11-24T11:23:24.992578254Z  2026-11-24 11:23:24,991 [INFO] websocket 16: got client connection from 127.0.0.1
+2026-11-24T11:23:25.990465113Z  2026-11-24 11:23:25,990 [INFO] websocket 17: got client connection from 127.0.0.1
+2026-11-24T11:23:26.992449959Z  2026-11-24 11:23:26,992 [INFO] websocket 18: got client connection from 127.0.0.1
+2026-11-24T11:23:27.994507425Z  2026-11-24 11:23:27,994 [INFO] websocket 19: got client connection from 127.0.0.1
+2026-11-24T11:23:28.989687413Z  2026-11-24 11:23:28,989 [INFO] websocket 20: got client connection from 127.0.0.1
+2026-11-24T11:23:29.999477917Z  2026-11-24 11:23:29,999 [INFO] websocket 21: got client connection from 127.0.0.1
+2026-11-24T11:23:30.993508517Z  2026-11-24 11:23:30,992 [INFO] websocket 22: got client connection from 127.0.0.1
+2026-11-24T11:23:31.990024232Z  2026-11-24 11:23:31,988 [INFO] websocket 23: got client connection from 127.0.0.1
+2026-11-24T11:23:32.989388251Z  2026-11-24 11:23:32,989 [INFO] websocket 24: got client connection from 127.0.0.1
+2026-11-24T11:23:33.988691086Z  2026-11-24 11:23:33,988 [INFO] websocket 25: got client connection from 127.0.0.1
+2026-11-24T11:23:34.989741823Z  2026-11-24 11:23:34,989 [INFO] websocket 26: got client connection from 127.0.0.1
+2026-11-24T11:23:35.993746631Z  2026-11-24 11:23:35,992 [INFO] websocket 27: got client connection from 127.0.0.1
+2026-11-24T11:23:36.989014654Z  2026-11-24 11:23:36,988 [INFO] websocket 28: got client connection from 127.0.0.1
+2026-11-24T11:23:37.989306631Z  2026-11-24 11:23:37,989 [INFO] websocket 29: got client connection from 127.0.0.1
+2026-11-24T11:23:38.988262636Z  2026-11-24 11:23:38,987 [INFO] websocket 30: got client connection from 127.0.0.1
+2026-11-24T11:23:39.991707884Z  2026-11-24 11:23:39,991 [INFO] websocket 31: got client connection from 127.0.0.1
+2026-11-24T11:23:40.990226202Z  2026-11-24 11:23:40,989 [INFO] websocket 32: got client connection from 127.0.0.1
+2026-11-24T11:23:41.990187204Z  2026-11-24 11:23:41,989 [INFO] websocket 33: got client connection from 127.0.0.1
+2026-11-24T11:23:42.989332086Z  2026-11-24 11:23:42,988 [INFO] websocket 34: got client connection from 127.0.0.1
+2026-11-24T11:23:43.989399894Z  2026-11-24 11:23:43,989 [INFO] websocket 35: got client connection from 127.0.0.1
+2026-11-24T11:23:44.989642907Z  2026-11-24 11:23:44,989 [INFO] websocket 36: got client connection from 127.0.0.1
+2026-11-24T11:23:45.989491608Z  2026-11-24 11:23:45,989 [INFO] websocket 37: got client connection from 127.0.0.1
+2026-11-24T11:23:46.989028482Z  2026-11-24 11:23:46,988 [INFO] websocket 38: got client connection from 127.0.0.1
+2026-11-24T11:23:47.990119820Z  2026-11-24 11:23:47,989 [INFO] websocket 39: got client connection from 127.0.0.1
+2026-11-24T11:23:48.989374553Z  2026-11-24 11:23:48,989 [INFO] websocket 40: got client connection from 127.0.0.1
+2026-11-24T11:23:49.991024621Z  2026-11-24 11:23:49,989 [INFO] websocket 41: got client connection from 127.0.0.1
+2026-11-24T11:23:50.989520342Z  2026-11-24 11:23:50,989 [INFO] websocket 42: got client connection from 127.0.0.1
+2026-11-24T11:23:51.988467472Z  2026-11-24 11:23:51,988 [INFO] websocket 43: got client connection from 127.0.0.1
+2026-11-24T11:23:52.988941262Z  2026-11-24 11:23:52,988 [INFO] websocket 44: got client connection from 127.0.0.1
+2026-11-24T11:23:53.990275125Z  2026-11-24 11:23:53,989 [INFO] websocket 45: got client connection from 127.0.0.1
+2026-11-24T11:23:54.990667558Z  2026-11-24 11:23:54,990 [INFO] websocket 46: got client connection from 127.0.0.1
+2026-11-24T11:23:55.989344278Z  2026-11-24 11:23:55,989 [INFO] websocket 47: got client connection from 127.0.0.1
+2026-11-24T11:23:56.989123385Z  2026-11-24 11:23:56,988 [INFO] websocket 48: got client connection from 127.0.0.1
+2026-11-24T11:23:57.988692248Z  2026-11-24 11:23:57,988 [INFO] websocket 49: got client connection from 127.0.0.1
+2026-11-24T11:23:58.990417724Z  2026-11-24 11:23:58,989 [INFO] websocket 50: got client connection from 127.0.0.1
+2026-11-24T11:23:59.989785282Z  2026-11-24 11:23:59,989 [INFO] websocket 51: got client connection from 127.0.0.1
+2026-11-24T11:24:00.995585527Z  2026-11-24 11:24:00,995 [INFO] websocket 52: got client connection from 127.0.0.1
+2026-11-24T11:24:02.004602480Z  2026-11-24 11:24:01,997 [INFO] websocket 53: got client connection from 127.0.0.1
+2026-11-24T11:24:02.990600614Z  2026-11-24 11:24:02,990 [INFO] websocket 54: got client connection from 127.0.0.1
+2026-11-24T11:24:03.990491792Z  2026-11-24 11:24:03,990 [INFO] websocket 55: got client connection from 127.0.0.1
+2026-11-24T11:24:04.994673835Z  2026-11-24 11:24:04,994 [INFO] websocket 56: got client connection from 127.0.0.1
+2026-11-24T11:24:05.995691689Z  2026-11-24 11:24:05,994 [INFO] websocket 57: got client connection from 127.0.0.1
+2026-11-24T11:24:06.990550924Z  2026-11-24 11:24:06,990 [INFO] websocket 58: got client connection from 127.0.0.1
+2026-11-24T11:24:07.990671362Z  2026-11-24 11:24:07,990 [INFO] websocket 59: got client connection from 127.0.0.1
+2026-11-24T11:24:08.989290273Z  2026-11-24 11:24:08,989 [INFO] websocket 60: got client connection from 127.0.0.1
+2026-11-24T11:24:09.989118888Z  2026-11-24 11:24:09,988 [INFO] websocket 61: got client connection from 127.0.0.1
+2026-11-24T11:24:10.991006513Z  2026-11-24 11:24:10,990 [INFO] websocket 62: got client connection from 127.0.0.1
+2026-11-24T11:24:11.989441626Z  2026-11-24 11:24:11,989 [INFO] websocket 63: got client connection from 127.0.0.1
+2026-11-24T11:24:12.989981054Z  2026-11-24 11:24:12,989 [INFO] websocket 64: got client connection from 127.0.0.1
+2026-11-24T11:24:13.992314583Z  2026-11-24 11:24:13,992 [INFO] websocket 65: got client connection from 127.0.0.1
+2026-11-24T11:24:14.989251706Z  2026-11-24 11:24:14,988 [INFO] websocket 66: got client connection from 127.0.0.1
+2026-11-24T11:24:15.989249799Z  2026-11-24 11:24:15,988 [INFO] websocket 67: got client connection from 127.0.0.1
+2026-11-24T11:24:16.990098265Z  2026-11-24 11:24:16,988 [INFO] websocket 68: got client connection from 127.0.0.1
+2026-11-24T11:24:17.990255838Z  2026-11-24 11:24:17,989 [INFO] websocket 69: got client connection from 127.0.0.1
+2026-11-24T11:24:18.989856565Z  2026-11-24 11:24:18,989 [INFO] websocket 70: got client connection from 127.0.0.1
+2026-11-24T11:24:19.990117868Z  2026-11-24 11:24:19,989 [INFO] websocket 71: got client connection from 127.0.0.1
+2026-11-24T11:24:20.989408650Z  2026-11-24 11:24:20,989 [INFO] websocket 72: got client connection from 127.0.0.1
+2026-11-24T11:24:21.990719113Z  2026-11-24 11:24:21,990 [INFO] websocket 73: got client connection from 127.0.0.1
+2026-11-24T11:24:22.990652494Z  2026-11-24 11:24:22,990 [INFO] websocket 74: got client connection from 127.0.0.1
+2026-11-24T11:24:23.988289025Z  2026-11-24 11:24:23,987 [INFO] websocket 75: got client connection from 127.0.0.1
+2026-11-24T11:24:24.991190772Z  2026-11-24 11:24:24,989 [INFO] websocket 76: got client connection from 127.0.0.1
+2026-11-24T11:24:25.990472688Z  2026-11-24 11:24:25,989 [INFO] websocket 77: got client connection from 127.0.0.1
+2026-11-24T11:24:26.989214438Z  2026-11-24 11:24:26,988 [INFO] websocket 78: got client connection from 127.0.0.1
+2026-11-24T11:24:27.991911851Z  2026-11-24 11:24:27,991 [INFO] websocket 79: got client connection from 127.0.0.1
+2026-11-24T11:24:28.994965557Z  2026-11-24 11:24:28,994 [INFO] websocket 80: got client connection from 127.0.0.1
+2026-11-24T11:24:29.990657101Z  2026-11-24 11:24:29,989 [INFO] websocket 81: got client connection from 127.0.0.1
+2026-11-24T11:24:30.988685342Z  2026-11-24 11:24:30,988 [INFO] websocket 82: got client connection from 127.0.0.1
+2026-11-24T11:24:31.990548429Z  2026-11-24 11:24:31,990 [INFO] websocket 83: got client connection from 127.0.0.1
+2026-11-24T11:24:32.990991278Z  2026-11-24 11:24:32,990 [INFO] websocket 84: got client connection from 127.0.0.1
+2026-11-24T11:24:33.993389409Z  2026-11-24 11:24:33,993 [INFO] websocket 85: got client connection from 127.0.0.1
+2026-11-24T11:24:34.988654185Z  2026-11-24 11:24:34,988 [INFO] websocket 86: got client connection from 127.0.0.1
+2026-11-24T11:24:35.990601226Z  2026-11-24 11:24:35,990 [INFO] websocket 87: got client connection from 127.0.0.1
+2026-11-24T11:24:36.989340663Z  2026-11-24 11:24:36,989 [INFO] websocket 88: got client connection from 127.0.0.1
+2026-11-24T11:24:37.988790874Z  2026-11-24 11:24:37,988 [INFO] websocket 89: got client connection from 127.0.0.1
+2026-11-24T11:24:38.989114854Z  2026-11-24 11:24:38,988 [INFO] websocket 90: got client connection from 127.0.0.1
+2026-11-24T11:24:39.989794036Z  2026-11-24 11:24:39,989 [INFO] websocket 91: got client connection from 127.0.0.1
+2026-11-24T11:24:40.991226671Z  2026-11-24 11:24:40,990 [INFO] websocket 92: got client connection from 127.0.0.1
+2026-11-24T11:24:41.990614702Z  2026-11-24 11:24:41,990 [INFO] websocket 93: got client connection from 127.0.0.1
+2026-11-24T11:24:42.988704798Z  2026-11-24 11:24:42,988 [INFO] websocket 94: got client connection from 127.0.0.1
+2026-11-24T11:24:43.991421790Z  2026-11-24 11:24:43,991 [INFO] websocket 95: got client connection from 127.0.0.1
+2026-11-24T11:24:44.989889267Z  2026-11-24 11:24:44,989 [INFO] websocket 96: got client connection from 127.0.0.1
+2026-11-24T11:24:45.989993120Z  2026-11-24 11:24:45,989 [INFO] websocket 97: got client connection from 127.0.0.1
+2026-11-24T11:24:46.988660992Z  2026-11-24 11:24:46,988 [INFO] websocket 98: got client connection from 127.0.0.1
+2026-11-24T11:24:47.991691029Z  2026-11-24 11:24:47,991 [INFO] websocket 99: got client connection from 127.0.0.1
+2026-11-24T11:24:48.990279665Z  2026-11-24 11:24:48,989 [INFO] websocket 100: got client connection from 127.0.0.1
+2026-11-24T11:24:49.989881550Z  2026-11-24 11:24:49,989 [INFO] websocket 101: got client connection from 127.0.0.1
+2026-11-24T11:24:50.988664068Z  2026-11-24 11:24:50,988 [INFO] websocket 102: got client connection from 127.0.0.1
+2026-11-24T11:24:51.990691286Z  2026-11-24 11:24:51,990 [INFO] websocket 103: got client connection from 127.0.0.1
+2026-11-24T11:24:52.989549196Z  2026-11-24 11:24:52,989 [INFO] websocket 104: got client connection from 127.0.0.1
+2026-11-24T11:24:53.989556075Z  2026-11-24 11:24:53,989 [INFO] websocket 105: got client connection from 127.0.0.1
+2026-11-24T11:24:54.989635474Z  2026-11-24 11:24:54,989 [INFO] websocket 106: got client connection from 127.0.0.1
+2026-11-24T11:24:55.991582457Z  2026-11-24 11:24:55,990 [INFO] websocket 107: got client connection from 127.0.0.1
+2026-11-24T11:24:56.988830581Z  2026-11-24 11:24:56,988 [INFO] websocket 108: got client connection from 127.0.0.1
+2026-11-24T11:24:57.989394456Z  2026-11-24 11:24:57,988 [INFO] websocket 109: got client connection from 127.0.0.1
+2026-11-24T11:24:58.989402303Z  2026-11-24 11:24:58,988 [INFO] websocket 110: got client connection from 127.0.0.1
+2026-11-24T11:24:59.988948051Z  2026-11-24 11:24:59,988 [INFO] websocket 111: got client connection from 127.0.0.1
+2026-11-24T11:25:00.989063739Z  2026-11-24 11:25:00,988 [INFO] websocket 112: got client connection from 127.0.0.1
+2026-11-24T11:25:02.031889528Z  2026-11-24 11:25:02,031 [INFO] websocket 113: got client connection from 127.0.0.1
+2026-11-24T11:25:03.011465726Z  2026-11-24 11:25:03,008 [INFO] websocket 114: got client connection from 127.0.0.1
+2026-11-24T11:25:03.999553361Z  2026-11-24 11:25:03,997 [INFO] websocket 115: got client connection from 127.0.0.1
+2026-11-24T11:25:04.992325382Z  2026-11-24 11:25:04,991 [INFO] websocket 116: got client connection from 127.0.0.1
+2026-11-24T11:25:05.991723552Z  2026-11-24 11:25:05,991 [INFO] websocket 117: got client connection from 127.0.0.1
+2026-11-24T11:25:06.993945279Z  2026-11-24 11:25:06,992 [INFO] websocket 118: got client connection from 127.0.0.1
+2026-11-24T11:25:07.992862864Z  2026-11-24 11:25:07,992 [INFO] websocket 119: got client connection from 127.0.0.1
+2026-11-24T11:25:08.992814791Z  2026-11-24 11:25:08,992 [INFO] websocket 120: got client connection from 127.0.0.1
+2026-11-24T11:25:09.990084469Z  2026-11-24 11:25:09,989 [INFO] websocket 121: got client connection from 127.0.0.1
+2026-11-24T11:25:10.991162668Z  2026-11-24 11:25:10,990 [INFO] websocket 122: got client connection from 127.0.0.1
+2026-11-24T11:25:11.990129843Z  2026-11-24 11:25:11,989 [INFO] websocket 123: got client connection from 127.0.0.1
+2026-11-24T11:25:12.988967101Z  2026-11-24 11:25:12,988 [INFO] websocket 124: got client connection from 127.0.0.1
+2026-11-24T11:25:13.999645494Z  2026-11-24 11:25:13,996 [INFO] websocket 125: got client connection from 127.0.0.1
+2026-11-24T11:25:14.992928472Z  2026-11-24 11:25:14,992 [INFO] websocket 126: got client connection from 127.0.0.1
+2026-11-24T11:25:15.992309265Z  2026-11-24 11:25:15,991 [INFO] websocket 127: got client connection from 127.0.0.1
+2026-11-24T11:25:16.991383070Z  2026-11-24 11:25:16,989 [INFO] websocket 128: got client connection from 127.0.0.1
+2026-11-24T11:25:17.993561217Z  2026-11-24 11:25:17,993 [INFO] websocket 129: got client connection from 127.0.0.1
+2026-11-24T11:25:19.004494593Z  2026-11-24 11:25:19,003 [INFO] websocket 130: got client connection from 127.0.0.1
+2026-11-24T11:25:19.990328193Z  2026-11-24 11:25:19,989 [INFO] websocket 131: got client connection from 127.0.0.1
+2026-11-24T11:25:20.990219043Z  2026-11-24 11:25:20,989 [INFO] websocket 132: got client connection from 127.0.0.1
+2026-11-24T11:25:22.002673241Z  2026-11-24 11:25:21,991 [INFO] websocket 133: got client connection from 127.0.0.1
+2026-11-24T11:25:22.990034755Z  2026-11-24 11:25:22,989 [INFO] websocket 134: got client connection from 127.0.0.1
+2026-11-24T11:25:23.989248931Z  2026-11-24 11:25:23,988 [INFO] websocket 135: got client connection from 127.0.0.1
+2026-11-24T11:25:24.993381732Z  2026-11-24 11:25:24,993 [INFO] websocket 136: got client connection from 127.0.0.1
+2026-11-24T11:25:25.994023255Z  2026-11-24 11:25:25,993 [INFO] websocket 137: got client connection from 127.0.0.1
+2026-11-24T11:25:26.991306055Z  2026-11-24 11:25:26,990 [INFO] websocket 138: got client connection from 127.0.0.1
+2026-11-24T11:25:27.994871426Z  2026-11-24 11:25:27,993 [INFO] websocket 139: got client connection from 127.0.0.1
+2026-11-24T11:25:28.992228029Z  2026-11-24 11:25:28,991 [INFO] websocket 140: got client connection from 127.0.0.1
+2026-11-24T11:25:29.990072723Z  2026-11-24 11:25:29,989 [INFO] websocket 141: got client connection from 127.0.0.1
+2026-11-24T11:25:30.989118917Z  2026-11-24 11:25:30,988 [INFO] websocket 142: got client connection from 127.0.0.1
+2026-11-24T11:25:31.991030771Z  2026-11-24 11:25:31,989 [INFO] websocket 143: got client connection from 127.0.0.1
+2026-11-24T11:25:32.990560434Z  2026-11-24 11:25:32,990 [INFO] websocket 144: got client connection from 127.0.0.1
+2026-11-24T11:25:33.989538218Z  2026-11-24 11:25:33,989 [INFO] websocket 145: got client connection from 127.0.0.1
+2026-11-24T11:25:34.990652637Z  2026-11-24 11:25:34,990 [INFO] websocket 146: got client connection from 127.0.0.1
+2026-11-24T11:25:35.990553116Z  2026-11-24 11:25:35,990 [INFO] websocket 147: got client connection from 127.0.0.1
+2026-11-24T11:25:36.992844154Z  2026-11-24 11:25:36,992 [INFO] websocket 148: got client connection from 127.0.0.1
+2026-11-24T11:25:37.990501809Z  2026-11-24 11:25:37,990 [INFO] websocket 149: got client connection from 127.0.0.1
+2026-11-24T11:25:38.990681044Z  2026-11-24 11:25:38,990 [INFO] websocket 150: got client connection from 127.0.0.1
+2026-11-24T11:25:39.989300150Z  2026-11-24 11:25:39,988 [INFO] websocket 151: got client connection from 127.0.0.1
+2026-11-24T11:25:40.990280284Z  2026-11-24 11:25:40,989 [INFO] websocket 152: got client connection from 127.0.0.1
+2026-11-24T11:25:41.990955170Z  2026-11-24 11:25:41,990 [INFO] websocket 153: got client connection from 127.0.0.1
+2026-11-24T11:25:42.989087657Z  2026-11-24 11:25:42,988 [INFO] websocket 154: got client connection from 127.0.0.1
+2026-11-24T11:25:43.990130686Z  2026-11-24 11:25:43,989 [INFO] websocket 155: got client connection from 127.0.0.1
+2026-11-24T11:25:44.992856816Z  2026-11-24 11:25:44,992 [INFO] websocket 156: got client connection from 127.0.0.1
+2026-11-24T11:25:45.996725003Z  2026-11-24 11:25:45,996 [INFO] websocket 157: got client connection from 127.0.0.1
+2026-11-24T11:25:46.989068914Z  2026-11-24 11:25:46,988 [INFO] websocket 158: got client connection from 127.0.0.1
+2026-11-24T11:25:47.988738894Z  2026-11-24 11:25:47,988 [INFO] websocket 159: got client connection from 127.0.0.1
+2026-11-24T11:25:48.992440156Z  2026-11-24 11:25:48,992 [INFO] websocket 160: got client connection from 127.0.0.1
+2026-11-24T11:25:49.992893860Z  2026-11-24 11:25:49,992 [INFO] websocket 161: got client connection from 127.0.0.1
+2026-11-24T11:25:50.989617520Z  2026-11-24 11:25:50,989 [INFO] websocket 162: got client connection from 127.0.0.1
+2026-11-24T11:25:51.989463888Z  2026-11-24 11:25:51,989 [INFO] websocket 163: got client connection from 127.0.0.1
+2026-11-24T11:25:52.994483347Z  2026-11-24 11:25:52,994 [INFO] websocket 164: got client connection from 127.0.0.1
+2026-11-24T11:25:53.993158590Z  2026-11-24 11:25:53,991 [INFO] websocket 165: got client connection from 127.0.0.1
+2026-11-24T11:25:54.997852156Z  2026-11-24 11:25:54,996 [INFO] websocket 166: got client connection from 127.0.0.1
+2026-11-24T11:25:55.990064622Z  2026-11-24 11:25:55,989 [INFO] websocket 167: got client connection from 127.0.0.1
+2026-11-24T11:25:56.989283963Z  2026-11-24 11:25:56,988 [INFO] websocket 168: got client connection from 127.0.0.1
+2026-11-24T11:25:57.990981312Z  2026-11-24 11:25:57,990 [INFO] websocket 169: got client connection from 127.0.0.1
+2026-11-24T11:25:58.989448659Z  2026-11-24 11:25:58,988 [INFO] websocket 170: got client connection from 127.0.0.1
+2026-11-24T11:25:59.989292117Z  2026-11-24 11:25:59,988 [INFO] websocket 171: got client connection from 127.0.0.1
+2026-11-24T11:26:00.990338989Z  2026-11-24 11:26:00,990 [INFO] websocket 172: got client connection from 127.0.0.1
+2026-11-24T11:26:01.991643571Z  2026-11-24 11:26:01,991 [INFO] websocket 173: got client connection from 127.0.0.1
+2026-11-24T11:26:02.992786835Z  2026-11-24 11:26:02,992 [INFO] websocket 174: got client connection from 127.0.0.1
+2026-11-24T11:26:03.996204266Z  2026-11-24 11:26:03,995 [INFO] websocket 175: got client connection from 127.0.0.1
+2026-11-24T11:26:04.993174265Z  2026-11-24 11:26:04,992 [INFO] websocket 176: got client connection from 127.0.0.1
+2026-11-24T11:26:05.990571986Z  2026-11-24 11:26:05,990 [INFO] websocket 177: got client connection from 127.0.0.1
+2026-11-24T11:26:06.991523002Z  2026-11-24 11:26:06,990 [INFO] websocket 178: got client connection from 127.0.0.1
+2026-11-24T11:26:07.997041183Z  2026-11-24 11:26:07,992 [INFO] websocket 179: got client connection from 127.0.0.1
+2026-11-24T11:26:08.992727287Z  2026-11-24 11:26:08,992 [INFO] websocket 180: got client connection from 127.0.0.1
+2026-11-24T11:26:09.991966365Z  2026-11-24 11:26:09,991 [INFO] websocket 181: got client connection from 127.0.0.1
+2026-11-24T11:26:10.995177969Z  2026-11-24 11:26:10,994 [INFO] websocket 182: got client connection from 127.0.0.1
+2026-11-24T11:26:11.989403898Z  2026-11-24 11:26:11,989 [INFO] websocket 183: got client connection from 127.0.0.1
+2026-11-24T11:26:12.993636536Z  2026-11-24 11:26:12,992 [INFO] websocket 184: got client connection from 127.0.0.1
+2026-11-24T11:26:13.991536527Z  2026-11-24 11:26:13,990 [INFO] websocket 185: got client connection from 127.0.0.1
+2026-11-24T11:26:14.990034686Z  2026-11-24 11:26:14,989 [INFO] websocket 186: got client connection from 127.0.0.1
+2026-11-24T11:26:15.998943346Z  2026-11-24 11:26:15,998 [INFO] websocket 187: got client connection from 127.0.0.1
+2026-11-24T11:26:16.995029346Z  2026-11-24 11:26:16,993 [INFO] websocket 188: got client connection from 127.0.0.1
+2026-11-24T11:26:17.991649008Z  2026-11-24 11:26:17,991 [INFO] websocket 189: got client connection from 127.0.0.1
+2026-11-24T11:26:18.990034340Z  2026-11-24 11:26:18,989 [INFO] websocket 190: got client connection from 127.0.0.1
+2026-11-24T11:26:19.989093622Z  2026-11-24 11:26:19,988 [INFO] websocket 191: got client connection from 127.0.0.1
+2026-11-24T11:26:20.992557286Z  2026-11-24 11:26:20,992 [INFO] websocket 192: got client connection from 127.0.0.1
+2026-11-24T11:26:21.988695213Z  2026-11-24 11:26:21,988 [INFO] websocket 193: got client connection from 127.0.0.1
+2026-11-24T11:26:22.990104099Z  2026-11-24 11:26:22,989 [INFO] websocket 194: got client connection from 127.0.0.1
+2026-11-24T11:26:23.990630335Z  2026-11-24 11:26:23,990 [INFO] websocket 195: got client connection from 127.0.0.1
+2026-11-24T11:26:24.991846267Z  2026-11-24 11:26:24,991 [INFO] websocket 196: got client connection from 127.0.0.1
+2026-11-24T11:26:25.988956183Z  2026-11-24 11:26:25,988 [INFO] websocket 197: got client connection from 127.0.0.1
+2026-11-24T11:26:26.989604809Z  2026-11-24 11:26:26,988 [INFO] websocket 198: got client connection from 127.0.0.1
+2026-11-24T11:26:27.989311983Z  2026-11-24 11:26:27,988 [INFO] websocket 199: got client connection from 127.0.0.1
+2026-11-24T11:26:28.989287109Z  2026-11-24 11:26:28,989 [INFO] websocket 200: got client connection from 127.0.0.1
+2026-11-24T11:26:29.990874573Z  2026-11-24 11:26:29,990 [INFO] websocket 201: got client connection from 127.0.0.1
+2026-11-24T11:26:30.990245627Z  2026-11-24 11:26:30,989 [INFO] websocket 202: got client connection from 127.0.0.1
+2026-11-24T11:26:31.990819785Z  2026-11-24 11:26:31,990 [INFO] websocket 203: got client connection from 127.0.0.1
+2026-11-24T11:26:32.990238039Z  2026-11-24 11:26:32,989 [INFO] websocket 204: got client connection from 127.0.0.1
+2026-11-24T11:26:33.989590786Z  2026-11-24 11:26:33,989 [INFO] websocket 205: got client connection from 127.0.0.1
+2026-11-24T11:26:34.991086058Z  2026-11-24 11:26:34,990 [INFO] websocket 206: got client connection from 127.0.0.1
+2026-11-24T11:26:35.989431110Z  2026-11-24 11:26:35,989 [INFO] websocket 207: got client connection from 127.0.0.1
+2026-11-24T11:26:36.992591439Z  2026-11-24 11:26:36,991 [INFO] websocket 208: got client connection from 127.0.0.1
+2026-11-24T11:26:37.991167756Z  2026-11-24 11:26:37,990 [INFO] websocket 209: got client connection from 127.0.0.1
+2026-11-24T11:26:38.990453606Z  2026-11-24 11:26:38,990 [INFO] websocket 210: got client connection from 127.0.0.1
+2026-11-24T11:26:39.990413822Z  2026-11-24 11:26:39,989 [INFO] websocket 211: got client connection from 127.0.0.1
+2026-11-24T11:26:40.991337938Z  2026-11-24 11:26:40,990 [INFO] websocket 212: got client connection from 127.0.0.1
+2026-11-24T11:26:41.993134958Z  2026-11-24 11:26:41,989 [INFO] websocket 213: got client connection from 127.0.0.1
+2026-11-24T11:26:42.988954133Z  2026-11-24 11:26:42,988 [INFO] websocket 214: got client connection from 127.0.0.1
+2026-11-24T11:26:43.988090896Z  2026-11-24 11:26:43,987 [INFO] websocket 215: got client connection from 127.0.0.1
+2026-11-24T11:26:44.990531675Z  2026-11-24 11:26:44,990 [INFO] websocket 216: got client connection from 127.0.0.1
+2026-11-24T11:26:45.989450594Z  2026-11-24 11:26:45,989 [INFO] websocket 217: got client connection from 127.0.0.1
+2026-11-24T11:26:46.989103859Z  2026-11-24 11:26:46,988 [INFO] websocket 218: got client connection from 127.0.0.1
+2026-11-24T11:26:47.988441485Z  2026-11-24 11:26:47,988 [INFO] websocket 219: got client connection from 127.0.0.1
+2026-11-24T11:26:48.989741003Z  2026-11-24 11:26:48,989 [INFO] websocket 220: got client connection from 127.0.0.1
+2026-11-24T11:26:49.989227237Z  2026-11-24 11:26:49,988 [INFO] websocket 221: got client connection from 127.0.0.1
+2026-11-24T11:26:50.989498007Z  2026-11-24 11:26:50,989 [INFO] websocket 222: got client connection from 127.0.0.1
+2026-11-24T11:26:51.989336117Z  2026-11-24 11:26:51,989 [INFO] websocket 223: got client connection from 127.0.0.1
+2026-11-24T11:26:52.988596108Z  2026-11-24 11:26:52,988 [INFO] websocket 224: got client connection from 127.0.0.1
+2026-11-24T11:26:53.988257059Z  2026-11-24 11:26:53,987 [INFO] websocket 225: got client connection from 127.0.0.1
+2026-11-24T11:26:54.994696669Z  2026-11-24 11:26:54,993 [INFO] websocket 226: got client connection from 127.0.0.1
+2026-11-24T11:26:55.989283050Z  2026-11-24 11:26:55,988 [INFO] websocket 227: got client connection from 127.0.0.1
+2026-11-24T11:26:56.989084851Z  2026-11-24 11:26:56,988 [INFO] websocket 228: got client connection from 127.0.0.1
+2026-11-24T11:26:57.988787964Z  2026-11-24 11:26:57,988 [INFO] websocket 229: got client connection from 127.0.0.1
+2026-11-24T11:26:58.989299011Z  2026-11-24 11:26:58,988 [INFO] websocket 230: got client connection from 127.0.0.1
+2026-11-24T11:26:59.990710169Z  2026-11-24 11:26:59,990 [INFO] websocket 231: got client connection from 127.0.0.1
+2026-11-24T11:27:00.989593699Z  2026-11-24 11:27:00,989 [INFO] websocket 232: got client connection from 127.0.0.1
+2026-11-24T11:27:01.990518058Z  2026-11-24 11:27:01,990 [INFO] websocket 233: got client connection from 127.0.0.1
+2026-11-24T11:27:02.989783330Z  2026-11-24 11:27:02,989 [INFO] websocket 234: got client connection from 127.0.0.1
+2026-11-24T11:27:03.990362204Z  2026-11-24 11:27:03,990 [INFO] websocket 235: got client connection from 127.0.0.1
+2026-11-24T11:27:04.989181440Z  2026-11-24 11:27:04,988 [INFO] websocket 236: got client connection from 127.0.0.1
+2026-11-24T11:27:05.988538515Z  2026-11-24 11:27:05,988 [INFO] websocket 237: got client connection from 127.0.0.1
+2026-11-24T11:27:06.991823624Z  2026-11-24 11:27:06,991 [INFO] websocket 238: got client connection from 127.0.0.1
+2026-11-24T11:27:07.990898975Z  2026-11-24 11:27:07,990 [INFO] websocket 239: got client connection from 127.0.0.1
+2026-11-24T11:27:08.990181202Z  2026-11-24 11:27:08,989 [INFO] websocket 240: got client connection from 127.0.0.1
+2026-11-24T11:27:10.001049625Z  2026-11-24 11:27:10,000 [INFO] websocket 241: got client connection from 127.0.0.1
+2026-11-24T11:27:10.990618103Z  2026-11-24 11:27:10,990 [INFO] websocket 242: got client connection from 127.0.0.1
+2026-11-24T11:27:11.989235394Z  2026-11-24 11:27:11,989 [INFO] websocket 243: got client connection from 127.0.0.1
+2026-11-24T11:27:12.989946489Z  2026-11-24 11:27:12,989 [INFO] websocket 244: got client connection from 127.0.0.1
+2026-11-24T11:27:13.988589365Z  2026-11-24 11:27:13,988 [INFO] websocket 245: got client connection from 127.0.0.1
+2026-11-24T11:27:14.991852550Z  2026-11-24 11:27:14,991 [INFO] websocket 246: got client connection from 127.0.0.1
+2026-11-24T11:27:15.989509042Z  2026-11-24 11:27:15,989 [INFO] websocket 247: got client connection from 127.0.0.1
+2026-11-24T11:27:16.989291876Z  2026-11-24 11:27:16,989 [INFO] websocket 248: got client connection from 127.0.0.1
+2026-11-24T11:27:17.989384060Z  2026-11-24 11:27:17,989 [INFO] websocket 249: got client connection from 127.0.0.1
+2026-11-24T11:27:18.991184680Z  2026-11-24 11:27:18,990 [INFO] websocket 250: got client connection from 127.0.0.1
+2026-11-24T11:27:19.988784760Z  2026-11-24 11:27:19,988 [INFO] websocket 251: got client connection from 127.0.0.1
+2026-11-24T11:27:20.989703283Z  2026-11-24 11:27:20,989 [INFO] websocket 252: got client connection from 127.0.0.1
+2026-11-24T11:27:21.989763199Z  2026-11-24 11:27:21,989 [INFO] websocket 253: got client connection from 127.0.0.1
+2026-11-24T11:27:22.989386298Z  2026-11-24 11:27:22,989 [INFO] websocket 254: got client connection from 127.0.0.1
+2026-11-24T11:27:23.989353369Z  2026-11-24 11:27:23,988 [INFO] websocket 255: got client connection from 127.0.0.1
+2026-11-24T11:27:25.000349954Z  2026-11-24 11:27:24,997 [INFO] websocket 256: got client connection from 127.0.0.1
+2026-11-24T11:27:25.989839268Z  2026-11-24 11:27:25,989 [INFO] websocket 257: got client connection from 127.0.0.1
+2026-11-24T11:27:26.990213433Z  2026-11-24 11:27:26,989 [INFO] websocket 258: got client connection from 127.0.0.1
+2026-11-24T11:27:27.988830526Z  2026-11-24 11:27:27,988 [INFO] websocket 259: got client connection from 127.0.0.1
+2026-11-24T11:27:28.990101881Z  2026-11-24 11:27:28,989 [INFO] websocket 260: got client connection from 127.0.0.1
+2026-11-24T11:27:29.991277618Z  2026-11-24 11:27:29,991 [INFO] websocket 261: got client connection from 127.0.0.1
+2026-11-24T11:27:30.995201342Z  2026-11-24 11:27:30,992 [INFO] websocket 262: got client connection from 127.0.0.1
+2026-11-24T11:27:31.991404216Z  2026-11-24 11:27:31,991 [INFO] websocket 263: got client connection from 127.0.0.1
+2026-11-24T11:27:32.993016912Z  2026-11-24 11:27:32,992 [INFO] websocket 264: got client connection from 127.0.0.1
+2026-11-24T11:27:33.991317468Z  2026-11-24 11:27:33,991 [INFO] websocket 265: got client connection from 127.0.0.1
+2026-11-24T11:27:34.999889946Z  2026-11-24 11:27:34,999 [INFO] websocket 266: got client connection from 127.0.0.1
+2026-11-24T11:27:35.989953615Z  2026-11-24 11:27:35,989 [INFO] websocket 267: got client connection from 127.0.0.1
+2026-11-24T11:27:36.989529405Z  2026-11-24 11:27:36,989 [INFO] websocket 268: got client connection from 127.0.0.1
+2026-11-24T11:27:37.989381353Z  2026-11-24 11:27:37,989 [INFO] websocket 269: got client connection from 127.0.0.1
+2026-11-24T11:27:38.990594678Z  2026-11-24 11:27:38,990 [INFO] websocket 270: got client connection from 127.0.0.1
+2026-11-24T11:27:39.988653725Z  2026-11-24 11:27:39,988 [INFO] websocket 271: got client connection from 127.0.0.1
+2026-11-24T11:27:40.993019827Z  2026-11-24 11:27:40,992 [INFO] websocket 272: got client connection from 127.0.0.1
+2026-11-24T11:27:41.990340020Z  2026-11-24 11:27:41,988 [INFO] websocket 273: got client connection from 127.0.0.1
+2026-11-24T11:27:42.989856013Z  2026-11-24 11:27:42,989 [INFO] websocket 274: got client connection from 127.0.0.1
+2026-11-24T11:27:43.992708240Z  2026-11-24 11:27:43,990 [INFO] websocket 275: got client connection from 127.0.0.1
+2026-11-24T11:27:44.992348872Z  2026-11-24 11:27:44,991 [INFO] websocket 276: got client connection from 127.0.0.1
+2026-11-24T11:27:45.996160348Z  2026-11-24 11:27:45,992 [INFO] websocket 277: got client connection from 127.0.0.1
+2026-11-24T11:27:46.989588634Z  2026-11-24 11:27:46,989 [INFO] websocket 278: got client connection from 127.0.0.1
+2026-11-24T11:27:47.994194775Z  2026-11-24 11:27:47,993 [INFO] websocket 279: got client connection from 127.0.0.1
+2026-11-24T11:27:48.989464322Z  2026-11-24 11:27:48,988 [INFO] websocket 280: got client connection from 127.0.0.1
+2026-11-24T11:27:49.992024315Z  2026-11-24 11:27:49,989 [INFO] websocket 281: got client connection from 127.0.0.1
+2026-11-24T11:27:50.989746455Z  2026-11-24 11:27:50,988 [INFO] websocket 282: got client connection from 127.0.0.1
+2026-11-24T11:27:51.990863540Z  2026-11-24 11:27:51,990 [INFO] websocket 283: got client connection from 127.0.0.1
+2026-11-24T11:27:52.988667709Z  2026-11-24 11:27:52,988 [INFO] websocket 284: got client connection from 127.0.0.1
+2026-11-24T11:27:53.992556813Z  2026-11-24 11:27:53,992 [INFO] websocket 285: got client connection from 127.0.0.1
+2026-11-24T11:27:54.995367851Z  2026-11-24 11:27:54,995 [INFO] websocket 286: got client connection from 127.0.0.1
+2026-11-24T11:27:55.989959285Z  2026-11-24 11:27:55,989 [INFO] websocket 287: got client connection from 127.0.0.1
+2026-11-24T11:27:56.988826336Z  2026-11-24 11:27:56,988 [INFO] websocket 288: got client connection from 127.0.0.1
+2026-11-24T11:27:57.991593479Z  2026-11-24 11:27:57,990 [INFO] websocket 289: got client connection from 127.0.0.1
+2026-11-24T11:27:58.989633293Z  2026-11-24 11:27:58,989 [INFO] websocket 290: got client connection from 127.0.0.1
+2026-11-24T11:27:59.989194149Z  2026-11-24 11:27:59,988 [INFO] websocket 291: got client connection from 127.0.0.1
+2026-11-24T11:28:00.990152296Z  2026-11-24 11:28:00,989 [INFO] websocket 292: got client connection from 127.0.0.1
+2026-11-24T11:28:02.008310239Z  2026-11-24 11:28:02,007 [INFO] websocket 293: got client connection from 127.0.0.1
+2026-11-24T11:28:02.990371960Z  2026-11-24 11:28:02,990 [INFO] websocket 294: got client connection from 127.0.0.1
+2026-11-24T11:28:03.993274556Z  2026-11-24 11:28:03,992 [INFO] websocket 295: got client connection from 127.0.0.1
+2026-11-24T11:28:04.989989552Z  2026-11-24 11:28:04,989 [INFO] websocket 296: got client connection from 127.0.0.1
+2026-11-24T11:28:05.991115676Z  2026-11-24 11:28:05,990 [INFO] websocket 297: got client connection from 127.0.0.1
+2026-11-24T11:28:06.990184810Z  2026-11-24 11:28:06,989 [INFO] websocket 298: got client connection from 127.0.0.1
+2026-11-24T11:28:07.992549560Z  2026-11-24 11:28:07,990 [INFO] websocket 299: got client connection from 127.0.0.1
+2026-11-24T11:28:08.989442609Z  2026-11-24 11:28:08,988 [INFO] websocket 300: got client connection from 127.0.0.1
+2026-11-24T11:28:09.988853528Z  2026-11-24 11:28:09,988 [INFO] websocket 301: got client connection from 127.0.0.1
+2026-11-24T11:28:10.988695419Z  2026-11-24 11:28:10,988 [INFO] websocket 302: got client connection from 127.0.0.1
+2026-11-24T11:28:11.991693276Z  2026-11-24 11:28:11,989 [INFO] websocket 303: got client connection from 127.0.0.1
+2026-11-24T11:28:12.999130716Z  2026-11-24 11:28:12,998 [INFO] websocket 304: got client connection from 127.0.0.1
+2026-11-24T11:28:13.989237172Z  2026-11-24 11:28:13,988 [INFO] websocket 305: got client connection from 127.0.0.1
+2026-11-24T11:28:14.993612778Z  2026-11-24 11:28:14,993 [INFO] websocket 306: got client connection from 127.0.0.1
+2026-11-24T11:28:15.992995944Z  2026-11-24 11:28:15,992 [INFO] websocket 307: got client connection from 127.0.0.1
+2026-11-24T11:28:16.992004044Z  2026-11-24 11:28:16,991 [INFO] websocket 308: got client connection from 127.0.0.1
+2026-11-24T11:28:17.989344155Z  2026-11-24 11:28:17,989 [INFO] websocket 309: got client connection from 127.0.0.1
+2026-11-24T11:28:18.988735035Z  2026-11-24 11:28:18,988 [INFO] websocket 310: got client connection from 127.0.0.1
+2026-11-24T11:28:19.989581646Z  2026-11-24 11:28:19,989 [INFO] websocket 311: got client connection from 127.0.0.1
+2026-11-24T11:28:20.989592951Z  2026-11-24 11:28:20,989 [INFO] websocket 312: got client connection from 127.0.0.1
+2026-11-24T11:28:21.988667505Z  2026-11-24 11:28:21,988 [INFO] websocket 313: got client connection from 127.0.0.1
+2026-11-24T11:28:22.989778512Z  2026-11-24 11:28:22,988 [INFO] websocket 314: got client connection from 127.0.0.1
+2026-11-24T11:28:23.989670865Z  2026-11-24 11:28:23,989 [INFO] websocket 315: got client connection from 127.0.0.1
+2026-11-24T11:28:24.992234701Z  2026-11-24 11:28:24,991 [INFO] websocket 316: got client connection from 127.0.0.1
+2026-11-24T11:28:25.989518789Z  2026-11-24 11:28:25,989 [INFO] websocket 317: got client connection from 127.0.0.1
+2026-11-24T11:28:26.989995019Z  2026-11-24 11:28:26,989 [INFO] websocket 318: got client connection from 127.0.0.1
+2026-11-24T11:28:27.991719816Z  2026-11-24 11:28:27,991 [INFO] websocket 319: got client connection from 127.0.0.1
+2026-11-24T11:28:28.989670520Z  2026-11-24 11:28:28,989 [INFO] websocket 320: got client connection from 127.0.0.1
+2026-11-24T11:28:29.999688438Z  2026-11-24 11:28:29,998 [INFO] websocket 321: got client connection from 127.0.0.1
+2026-11-24T11:28:30.990472351Z  2026-11-24 11:28:30,988 [INFO] websocket 322: got client connection from 127.0.0.1
+2026-11-24T11:28:31.991412052Z  2026-11-24 11:28:31,990 [INFO] websocket 323: got client connection from 127.0.0.1
+2026-11-24T11:28:32.993668982Z  2026-11-24 11:28:32,992 [INFO] websocket 324: got client connection from 127.0.0.1
+2026-11-24T11:28:33.990161805Z  2026-11-24 11:28:33,989 [INFO] websocket 325: got client connection from 127.0.0.1
+2026-11-24T11:28:34.992720787Z  2026-11-24 11:28:34,992 [INFO] websocket 326: got client connection from 127.0.0.1
+2026-11-24T11:28:35.994000430Z  2026-11-24 11:28:35,993 [INFO] websocket 327: got client connection from 127.0.0.1
+2026-11-24T11:28:36.989323887Z  2026-11-24 11:28:36,989 [INFO] websocket 328: got client connection from 127.0.0.1
+2026-11-24T11:28:37.992775574Z  2026-11-24 11:28:37,992 [INFO] websocket 329: got client connection from 127.0.0.1
+2026-11-24T11:28:38.989486990Z  2026-11-24 11:28:38,989 [INFO] websocket 330: got client connection from 127.0.0.1
+2026-11-24T11:28:39.989469508Z  2026-11-24 11:28:39,988 [INFO] websocket 331: got client connection from 127.0.0.1
+2026-11-24T11:28:40.992454142Z  2026-11-24 11:28:40,992 [INFO] websocket 332: got client connection from 127.0.0.1
+2026-11-24T11:28:41.992006714Z  2026-11-24 11:28:41,991 [INFO] websocket 333: got client connection from 127.0.0.1
+2026-11-24T11:28:43.001786671Z  2026-11-24 11:28:42,998 [INFO] websocket 334: got client connection from 127.0.0.1
+2026-11-24T11:28:43.998008815Z  2026-11-24 11:28:43,992 [INFO] websocket 335: got client connection from 127.0.0.1
+2026-11-24T11:28:44.992132888Z  2026-11-24 11:28:44,991 [INFO] websocket 336: got client connection from 127.0.0.1
+2026-11-24T11:28:45.996678872Z  2026-11-24 11:28:45,996 [INFO] websocket 337: got client connection from 127.0.0.1
+2026-11-24T11:28:46.991971634Z  2026-11-24 11:28:46,991 [INFO] websocket 338: got client connection from 127.0.0.1
+2026-11-24T11:28:47.989952713Z  2026-11-24 11:28:47,989 [INFO] websocket 339: got client connection from 127.0.0.1
+2026-11-24T11:28:48.990143628Z  2026-11-24 11:28:48,989 [INFO] websocket 340: got client connection from 127.0.0.1
+2026-11-24T11:28:49.989455450Z  2026-11-24 11:28:49,989 [INFO] websocket 341: got client connection from 127.0.0.1
+2026-11-24T11:28:50.994494671Z  2026-11-24 11:28:50,993 [INFO] websocket 342: got client connection from 127.0.0.1
+2026-11-24T11:28:51.988834801Z  2026-11-24 11:28:51,988 [INFO] websocket 343: got client connection from 127.0.0.1
+2026-11-24T11:28:52.989264273Z  2026-11-24 11:28:52,988 [INFO] websocket 344: got client connection from 127.0.0.1
+2026-11-24T11:28:53.989111727Z  2026-11-24 11:28:53,988 [INFO] websocket 345: got client connection from 127.0.0.1
+2026-11-24T11:28:54.990632564Z  2026-11-24 11:28:54,990 [INFO] websocket 346: got client connection from 127.0.0.1
+2026-11-24T11:28:55.990487699Z  2026-11-24 11:28:55,990 [INFO] websocket 347: got client connection from 127.0.0.1
+2026-11-24T11:28:56.990045224Z  2026-11-24 11:28:56,988 [INFO] websocket 348: got client connection from 127.0.0.1
+2026-11-24T11:28:57.987988841Z  2026-11-24 11:28:57,987 [INFO] websocket 349: got client connection from 127.0.0.1
+2026-11-24T11:28:58.988745574Z  2026-11-24 11:28:58,988 [INFO] websocket 350: got client connection from 127.0.0.1
+2026-11-24T11:28:59.989539136Z  2026-11-24 11:28:59,989 [INFO] websocket 351: got client connection from 127.0.0.1
+2026-11-24T11:29:00.989388709Z  2026-11-24 11:29:00,989 [INFO] websocket 352: got client connection from 127.0.0.1
+2026-11-24T11:29:01.991021027Z  2026-11-24 11:29:01,990 [INFO] websocket 353: got client connection from 127.0.0.1
+2026-11-24T11:29:02.988867739Z  2026-11-24 11:29:02,988 [INFO] websocket 354: got client connection from 127.0.0.1
+2026-11-24T11:29:03.989340232Z  2026-11-24 11:29:03,989 [INFO] websocket 355: got client connection from 127.0.0.1
+2026-11-24T11:29:04.991140266Z  2026-11-24 11:29:04,990 [INFO] websocket 356: got client connection from 127.0.0.1
+2026-11-24T11:29:05.989215083Z  2026-11-24 11:29:05,988 [INFO] websocket 357: got client connection from 127.0.0.1
+2026-11-24T11:29:06.988457961Z  2026-11-24 11:29:06,987 [INFO] websocket 358: got client connection from 127.0.0.1
+2026-11-24T11:29:07.989514001Z  2026-11-24 11:29:07,989 [INFO] websocket 359: got client connection from 127.0.0.1
+2026-11-24T11:29:09.014147876Z  2026-11-24 11:29:09,012 [INFO] websocket 360: got client connection from 127.0.0.1
+2026-11-24T11:29:09.990213095Z  2026-11-24 11:29:09,989 [INFO] websocket 361: got client connection from 127.0.0.1
+2026-11-24T11:29:10.991672154Z  2026-11-24 11:29:10,991 [INFO] websocket 362: got client connection from 127.0.0.1
+2026-11-24T11:29:11.975541557Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "[private path]", but that path does not exist
+2026-11-24T11:29:11.991505517Z  2026-11-24 11:29:11,990 [INFO] websocket 363: got client connection from 127.0.0.1
+2026-11-24T11:29:12.989122896Z  2026-11-24 11:29:12,988 [INFO] websocket 364: got client connection from 127.0.0.1
+2026-11-24T11:29:13.988764428Z  2026-11-24 11:29:13,988 [INFO] websocket 365: got client connection from 127.0.0.1
+2026-11-24T11:29:15.001130607Z  2026-11-24 11:29:14,998 [INFO] websocket 366: got client connection from 127.0.0.1
+2026-11-24T11:29:15.997190305Z  2026-11-24 11:29:15,996 [INFO] websocket 367: got client connection from 127.0.0.1
+2026-11-24T11:29:16.988943442Z  2026-11-24 11:29:16,988 [INFO] websocket 368: got client connection from 127.0.0.1
+2026-11-24T11:29:17.992744551Z  2026-11-24 11:29:17,992 [INFO] websocket 369: got client connection from 127.0.0.1
+2026-11-24T11:29:18.992031377Z  2026-11-24 11:29:18,991 [INFO] websocket 370: got client connection from 127.0.0.1
+2026-11-24T11:29:19.996044502Z  2026-11-24 11:29:19,991 [INFO] websocket 371: got client connection from 127.0.0.1
+2026-11-24T11:29:20.293050259Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "[private path]", but that path does not exist
+2026-11-24T11:29:20.997234662Z  2026-11-24 11:29:20,996 [INFO] websocket 372: got client connection from 127.0.0.1
+2026-11-24T11:29:21.991162697Z  2026-11-24 11:29:21,990 [INFO] websocket 373: got client connection from 127.0.0.1
+2026-11-24T11:29:23.012282820Z  2026-11-24 11:29:23,009 [INFO] websocket 374: got client connection from 127.0.0.1
+2026-11-24T11:29:23.995801399Z  2026-11-24 11:29:23,993 [INFO] websocket 375: got client connection from 127.0.0.1
+2026-11-24T11:29:24.993259175Z  2026-11-24 11:29:24,992 [INFO] websocket 376: got client connection from 127.0.0.1
+2026-11-24T11:29:25.991257477Z  2026-11-24 11:29:25,990 [INFO] websocket 377: got client connection from 127.0.0.1
+2026-11-24T11:29:26.993381027Z  2026-11-24 11:29:26,992 [INFO] websocket 378: got client connection from 127.0.0.1
+2026-11-24T11:29:27.991080854Z  2026-11-24 11:29:27,990 [INFO] websocket 379: got client connection from 127.0.0.1
+2026-11-24T11:29:28.999155345Z  2026-11-24 11:29:28,997 [INFO] websocket 380: got client connection from 127.0.0.1
+2026-11-24T11:29:29.992593180Z  2026-11-24 11:29:29,992 [INFO] websocket 381: got client connection from 127.0.0.1
+2026-11-24T11:29:31.024231020Z  2026-11-24 11:29:31,022 [INFO] websocket 382: got client connection from 127.0.0.1
+2026-11-24T11:29:31.993797304Z  2026-11-24 11:29:31,993 [INFO] websocket 383: got client connection from 127.0.0.1
+2026-11-24T11:29:32.990594550Z  2026-11-24 11:29:32,989 [INFO] websocket 384: got client connection from 127.0.0.1
+2026-11-24T11:29:34.006086417Z  2026-11-24 11:29:34,005 [INFO] websocket 385: got client connection from 127.0.0.1
+2026-11-24T11:29:34.996051126Z  2026-11-24 11:29:34,994 [INFO] websocket 386: got client connection from 127.0.0.1
+2026-11-24T11:29:35.997433078Z  2026-11-24 11:29:35,996 [INFO] websocket 387: got client connection from 127.0.0.1
+2026-11-24T11:29:36.989219804Z  2026-11-24 11:29:36,988 [INFO] websocket 388: got client connection from 127.0.0.1
+2026-11-24T11:29:37.992586299Z  2026-11-24 11:29:37,992 [INFO] websocket 389: got client connection from 127.0.0.1
+2026-11-24T11:29:38.579273641Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "[private path]", but that path does not exist
+2026-11-24T11:29:38.990256272Z  2026-11-24 11:29:38,989 [INFO] websocket 390: got client connection from 127.0.0.1
+2026-11-24T11:29:39.990584617Z  2026-11-24 11:29:39,990 [INFO] websocket 391: got client connection from 127.0.0.1
+2026-11-24T11:29:40.993201671Z  2026-11-24 11:29:40,992 [INFO] websocket 392: got client connection from 127.0.0.1
+2026-11-24T11:29:41.990462043Z  2026-11-24 11:29:41,990 [INFO] websocket 393: got client connection from 127.0.0.1
+2026-11-24T11:29:42.990942031Z  2026-11-24 11:29:42,990 [INFO] websocket 394: got client connection from 127.0.0.1
+2026-11-24T11:29:43.989141669Z  2026-11-24 11:29:43,988 [INFO] websocket 395: got client connection from 127.0.0.1
+2026-11-24T11:29:44.995092896Z  2026-11-24 11:29:44,993 [INFO] websocket 396: got client connection from 127.0.0.1
+2026-11-24T11:29:45.989308453Z  2026-11-24 11:29:45,988 [INFO] websocket 397: got client connection from 127.0.0.1
+2026-11-24T11:29:46.990247639Z  2026-11-24 11:29:46,989 [INFO] websocket 398: got client connection from 127.0.0.1
+2026-11-24T11:29:47.991938046Z  2026-11-24 11:29:47,991 [INFO] websocket 399: got client connection from 127.0.0.1
+2026-11-24T11:29:48.995448991Z  2026-11-24 11:29:48,995 [INFO] websocket 400: got client connection from 127.0.0.1
+2026-11-24T11:29:49.992673849Z  2026-11-24 11:29:49,989 [INFO] websocket 401: got client connection from 127.0.0.1
+2026-11-24T11:29:50.994197926Z  2026-11-24 11:29:50,993 [INFO] websocket 402: got client connection from 127.0.0.1
+2026-11-24T11:29:51.992835045Z  2026-11-24 11:29:51,992 [INFO] websocket 403: got client connection from 127.0.0.1
+2026-11-24T11:29:52.614021996Z  2026-11-24 11:29:52,613 [INFO] websocket 404: got client connection from 127.0.0.1
+2026-11-24T11:29:52.684752564Z  2026-11-24 11:29:52,684 [INFO] EncodeManager: WEBP benchmark result: 17 ms
+2026-11-24T11:29:52.707694100Z  2026-11-24 11:29:52,707 [PRIO] Connections: accepted: viewer@127.0.0.1_1795519792.631549::websocket
+2026-11-24T11:29:52.733722371Z  2026-11-24 11:29:52,732 [INFO] SConnection: Client needs protocol version 3.8
+2026-11-24T11:29:52.746820665Z  2026-11-24 11:29:52,746 [INFO] SConnection: Client requests security type None(1)
+2026-11-24T11:29:52.746859827Z  2026-11-24 11:29:52,746 [INFO] VNCSConnST: Generated username: viewer
+2026-11-24T11:29:52.746884906Z  2026-11-24 11:29:52,746 [INFO] VNCSConnST: User viewer connected at 1795519792
+2026-11-24T11:29:52.760668416Z  2026-11-24 11:29:52,760 [INFO] VNCSConnST: Server default pixel format depth 24 (32bpp) little-endian rgb888
+2026-11-24T11:29:52.761794663Z  2026-11-24 11:29:52,761 [INFO] VNCSConnST: Authentication successful for user: viewer
+2026-11-24T11:29:52.764060771Z  2026-11-24 11:29:52,763 [INFO] VNCServerST: User viewer joined  - sent notifications to 0 clients
+2026-11-24T11:29:52.764375337Z  2026-11-24 11:29:52,764 [INFO] VNCSConnST: Notifying other clients that user 'viewer' joined the shared session
+2026-11-24T11:29:52.789320441Z  2026-11-24 11:29:52,789 [INFO] VNCSConnST: Client pixel format depth 24 (32bpp) little-endian bgr888
+2026-11-24T11:29:52.998720175Z  2026-11-24 11:29:52,998 [INFO] websocket 405: got client connection from 127.0.0.1
+2026-11-24T11:29:53.660532111Z  2026-11-24 11:29:53,659 [INFO] VNCServerST: User viewer left  - sent notifications to 0 clients
+2026-11-24T11:29:53.660653873Z  2026-11-24 11:29:53,660 [INFO] VNCSConnST: Notifying other clients that user 'viewer' left: Clean disconnection
+2026-11-24T11:29:53.660660385Z  2026-11-24 11:29:53,660 [PRIO] Connections: closed: viewer@127.0.0.1_1795519792.631549::websocket (Clean disconnection)
+2026-11-24T11:29:53.660664050Z  2026-11-24 11:29:53,660 [INFO] EncodeManager: Framebuffer updates: 1
+2026-11-24T11:29:53.660667196Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:   Raw:
+2026-11-24T11:29:53.660669930Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:     Solid: 4 rects, 231.2 kpixels
+2026-11-24T11:29:53.660672986Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:            903.172 KiB (1:1 ratio)
+2026-11-24T11:29:53.660675930Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:     Bitmap RLE: 6 rects, 248.64 kpixels
+2026-11-24T11:29:53.660678481Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:                 971.32 KiB (1:1 ratio)
+2026-11-24T11:29:53.660681157Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:     Indexed RLE: 1 rects, 160 pixels
+2026-11-24T11:29:53.660683659Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:                  652 B (1:1 ratio)
+2026-11-24T11:29:53.660700489Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:   Total: 11 rects, 480 kpixels
+2026-11-24T11:29:53.660703151Z  2026-11-24 11:29:53,660 [INFO] EncodeManager:          1.83118 MiB (1:1 ratio)
+2026-11-24T11:29:53.676446720Z  2026-11-24 11:29:53,675 [INFO] ComparingUpdateTracker: 0 pixels in / 0 pixels out
+2026-11-24T11:29:53.676485714Z  2026-11-24 11:29:53,675 [INFO] ComparingUpdateTracker: (1:-nan ratio)
+2026-11-24T11:29:53.994526631Z  2026-11-24 11:29:53,992 [INFO] websocket 406: got client connection from 127.0.0.1
+2026-11-24T11:29:55.005062897Z  2026-11-24 11:29:55,004 [INFO] websocket 407: got client connection from 127.0.0.1
+2026-11-24T11:29:55.988772662Z  2026-11-24 11:29:55,988 [INFO] websocket 408: got client connection from 127.0.0.1
+2026-11-24T11:29:57.002654681Z  2026-11-24 11:29:57,002 [INFO] websocket 409: got client connection from 127.0.0.1
+2026-11-24T11:29:57.990462378Z  2026-11-24 11:29:57,990 [INFO] websocket 410: got client connection from 127.0.0.1
+2026-11-24T11:29:58.989425782Z  2026-11-24 11:29:58,989 [INFO] websocket 411: got client connection from 127.0.0.1
+2026-11-24T11:29:59.990078190Z  2026-11-24 11:29:59,989 [INFO] websocket 412: got client connection from 127.0.0.1
+2026-11-24T11:30:00.989064216Z  2026-11-24 11:30:00,988 [INFO] websocket 413: got client connection from 127.0.0.1
+2026-11-24T11:30:02.208270687Z  2026-11-24 11:30:02,196 [INFO] websocket 414: got client connection from 127.0.0.1
+2026-11-24T11:30:03.049541983Z  2026-11-24 11:30:03,047 [INFO] websocket 415: got client connection from 127.0.0.1
+2026-11-24T11:30:04.027904676Z  2026-11-24 11:30:04,015 [INFO] websocket 416: got client connection from 127.0.0.1
+2026-11-24T11:30:05.069303571Z  2026-11-24 11:30:05,065 [INFO] websocket 417: got client connection from 127.0.0.1
+2026-11-24T11:30:06.028148900Z  2026-11-24 11:30:06,026 [INFO] websocket 418: got client connection from 127.0.0.1
+2026-11-24T11:30:07.026672329Z  2026-11-24 11:30:07,026 [INFO] websocket 419: got client connection from 127.0.0.1
+2026-11-24T11:30:08.010742336Z  2026-11-24 11:30:08,010 [INFO] websocket 420: got client connection from 127.0.0.1
+2026-11-24T11:30:09.008064699Z  2026-11-24 11:30:09,007 [INFO] websocket 421: got client connection from 127.0.0.1
+2026-11-24T11:30:10.011141405Z  2026-11-24 11:30:10,009 [INFO] websocket 422: got client connection from 127.0.0.1
+2026-11-24T11:30:10.991472288Z  2026-11-24 11:30:10,990 [INFO] websocket 423: got client connection from 127.0.0.1
+2026-11-24T11:30:11.991775886Z  2026-11-24 11:30:11,990 [INFO] websocket 424: got client connection from 127.0.0.1
+2026-11-24T11:30:13.013487783Z  2026-11-24 11:30:13,012 [INFO] websocket 425: got client connection from 127.0.0.1
+2026-11-24T11:30:13.993829828Z  2026-11-24 11:30:13,993 [INFO] websocket 426: got client connection from 127.0.0.1
+2026-11-24T11:30:15.004736812Z  2026-11-24 11:30:15,002 [INFO] websocket 427: got client connection from 127.0.0.1
+2026-11-24T11:30:16.024456466Z  2026-11-24 11:30:16,023 [INFO] websocket 428: got client connection from 127.0.0.1
+2026-11-24T11:30:16.996831658Z  2026-11-24 11:30:16,996 [INFO] websocket 429: got client connection from 127.0.0.1
+2026-11-24T11:30:17.991097694Z  2026-11-24 11:30:17,990 [INFO] websocket 430: got client connection from 127.0.0.1
+2026-11-24T11:30:18.995075526Z  2026-11-24 11:30:18,994 [INFO] websocket 431: got client connection from 127.0.0.1
+2026-11-24T11:30:19.995644669Z  2026-11-24 11:30:19,995 [INFO] websocket 432: got client connection from 127.0.0.1
+2026-11-24T11:30:20.614418824Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "[private path]", but that path does not exist
+2026-11-24T11:30:20.996403779Z  2026-11-24 11:30:20,995 [INFO] websocket 433: got client connection from 127.0.0.1
+2026-11-24T11:30:21.992958142Z  2026-11-24 11:30:21,992 [INFO] websocket 434: got client connection from 127.0.0.1
+2026-11-24T11:30:23.009538435Z  2026-11-24 11:30:23,005 [INFO] websocket 435: got client connection from 127.0.0.1
+2026-11-24T11:30:23.999630374Z  2026-11-24 11:30:23,999 [INFO] websocket 436: got client connection from 127.0.0.1
+2026-11-24T11:30:25.003170437Z  2026-11-24 11:30:24,995 [INFO] websocket 437: got client connection from 127.0.0.1
+2026-11-24T11:30:26.005857833Z  2026-11-24 11:30:26,005 [INFO] websocket 438: got client connection from 127.0.0.1
+2026-11-24T11:30:26.992689670Z  2026-11-24 11:30:26,991 [INFO] websocket 439: got client connection from 127.0.0.1
+2026-11-24T11:30:27.991235388Z  2026-11-24 11:30:27,990 [INFO] websocket 440: got client connection from 127.0.0.1
+2026-11-24T11:30:28.991393921Z  2026-11-24 11:30:28,991 [INFO] websocket 441: got client connection from 127.0.0.1
+2026-11-24T11:30:29.993436032Z  2026-11-24 11:30:29,993 [INFO] websocket 442: got client connection from 127.0.0.1
+2026-11-24T11:30:31.013993506Z  2026-11-24 11:30:31,010 [INFO] websocket 443: got client connection from 127.0.0.1
+2026-11-24T11:30:31.995889608Z  2026-11-24 11:30:31,995 [INFO] websocket 444: got client connection from 127.0.0.1
+2026-11-24T11:30:32.993772326Z  2026-11-24 11:30:32,993 [INFO] websocket 445: got client connection from 127.0.0.1
+2026-11-24T11:30:33.999087407Z  2026-11-24 11:30:33,998 [INFO] websocket 446: got client connection from 127.0.0.1
+2026-11-24T11:30:34.991092228Z  2026-11-24 11:30:34,990 [INFO] websocket 447: got client connection from 127.0.0.1
+2026-11-24T11:30:35.995097276Z  2026-11-24 11:30:35,994 [INFO] websocket 448: got client connection from 127.0.0.1
+2026-11-24T11:30:36.991740036Z  2026-11-24 11:30:36,991 [INFO] websocket 449: got client connection from 127.0.0.1
+2026-11-24T11:30:37.995842482Z  2026-11-24 11:30:37,995 [INFO] websocket 450: got client connection from 127.0.0.1
+2026-11-24T11:30:38.989958286Z  2026-11-24 11:30:38,988 [INFO] websocket 451: got client connection from 127.0.0.1
+2026-11-24T11:30:39.993817832Z  2026-11-24 11:30:39,993 [INFO] websocket 452: got client connection from 127.0.0.1
+2026-11-24T11:30:40.996070866Z  2026-11-24 11:30:40,994 [INFO] websocket 453: got client connection from 127.0.0.1
+2026-11-24T11:30:42.038402997Z  2026-11-24 11:30:42,038 [INFO] websocket 454: got client connection from 127.0.0.1
+2026-11-24T11:30:42.992675899Z  2026-11-24 11:30:42,991 [INFO] websocket 455: got client connection from 127.0.0.1
+2026-11-24T11:30:43.135131197Z WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "[private path]", but that path does not exist
+2026-11-24T11:30:43.991468798Z  2026-11-24 11:30:43,991 [INFO] websocket 456: got client connection from 127.0.0.1
+2026-11-24T11:30:45.008767841Z  2026-11-24 11:30:45,008 [INFO] websocket 457: got client connection from 127.0.0.1
+2026-11-24T11:30:45.993146755Z  2026-11-24 11:30:45,992 [INFO] websocket 458: got client connection from 127.0.0.1
+2026-11-24T11:30:46.996357319Z  2026-11-24 11:30:46,995 [INFO] websocket 459: got client connection from 127.0.0.1
+2026-11-24T11:30:47.991566678Z  2026-11-24 11:30:47,991 [INFO] websocket 460: got client connection from 127.0.0.1
+2026-11-24T11:30:48.991667182Z  2026-11-24 11:30:48,991 [INFO] websocket 461: got client connection from 127.0.0.1
+2026-11-24T11:30:49.026078619Z  2026-11-24 11:30:49,025 [INFO] websocket 462: got client connection from 127.0.0.1
+2026-11-24T11:30:49.180346641Z  2026-11-24 11:30:49,179 [INFO] EncodeManager: WEBP benchmark result: 18 ms
+2026-11-24T11:30:49.186567224Z  2026-11-24 11:30:49,186 [PRIO] Connections: accepted: viewer@127.0.0.1_1795519849.108559::websocket
+2026-11-24T11:30:49.215338092Z  2026-11-24 11:30:49,212 [INFO] SConnection: Client needs protocol version 3.8
+2026-11-24T11:30:49.230721679Z  2026-11-24 11:30:49,229 [INFO] SConnection: Client requests security type None(1)
+2026-11-24T11:30:49.230754051Z  2026-11-24 11:30:49,230 [INFO] VNCSConnST: Generated username: viewer
+2026-11-24T11:30:49.230757205Z  2026-11-24 11:30:49,230 [INFO] VNCSConnST: User viewer connected at 1795519849
+2026-11-24T11:30:49.230760468Z  2026-11-24 11:30:49,230 [INFO] VNCSConnST: Server default pixel format depth 24 (32bpp) little-endian rgb888
+2026-11-24T11:30:49.230763049Z  2026-11-24 11:30:49,230 [INFO] VNCSConnST: Authentication successful for user: viewer
+2026-11-24T11:30:49.240729823Z  2026-11-24 11:30:49,240 [INFO] VNCServerST: User viewer joined  - sent notifications to 0 clients
+2026-11-24T11:30:49.240759695Z  2026-11-24 11:30:49,240 [INFO] VNCSConnST: Notifying other clients that user 'viewer' joined the shared session
+2026-11-24T11:30:49.262734951Z  2026-11-24 11:30:49,262 [INFO] VNCSConnST: Client pixel format depth 24 (32bpp) little-endian bgr888
+2026-11-24T11:30:49.994455496Z  2026-11-24 11:30:49,993 [INFO] websocket 463: got client connection from 127.0.0.1
+2026-11-24T11:30:50.134097863Z  2026-11-24 11:30:50,133 [INFO] VNCServerST: User viewer left  - sent notifications to 0 clients
+2026-11-24T11:30:50.134742487Z  2026-11-24 11:30:50,134 [INFO] VNCSConnST: Notifying other clients that user 'viewer' left: Clean disconnection
+2026-11-24T11:30:50.134806309Z  2026-11-24 11:30:50,134 [PRIO] Connections: closed: viewer@127.0.0.1_1795519849.108559::websocket (Clean disconnection)
+2026-11-24T11:30:50.135198977Z  2026-11-24 11:30:50,134 [INFO] EncodeManager: Framebuffer updates: 1
+2026-11-24T11:30:50.135255794Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:   Raw:
+2026-11-24T11:30:50.135259987Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:     Solid: 4 rects, 231.2 kpixels
+2026-11-24T11:30:50.135263559Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:            903.172 KiB (1:1 ratio)
+2026-11-24T11:30:50.135267229Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:     Bitmap RLE: 6 rects, 248.64 kpixels
+2026-11-24T11:30:50.135270374Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:                 971.32 KiB (1:1 ratio)
+2026-11-24T11:30:50.135310179Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:     Indexed RLE: 1 rects, 160 pixels
+2026-11-24T11:30:50.135315256Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:                  652 B (1:1 ratio)
+2026-11-24T11:30:50.135317528Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:   Total: 11 rects, 480 kpixels
+2026-11-24T11:30:50.135319967Z  2026-11-24 11:30:50,135 [INFO] EncodeManager:          1.83118 MiB (1:1 ratio)
+2026-11-24T11:30:50.179221261Z  2026-11-24 11:30:50,177 [INFO] ComparingUpdateTracker: 0 pixels in / 0 pixels out
+2026-11-24T11:30:50.182163011Z  2026-11-24 11:30:50,180 [INFO] ComparingUpdateTracker: (1:-nan ratio)
+2026-11-24T11:30:50.994599566Z  2026-11-24 11:30:50,994 [INFO] websocket 464: got client connection from 127.0.0.1
+2026-11-24T11:30:52.007964115Z  2026-11-24 11:30:52,005 [INFO] websocket 465: got client connection from 127.0.0.1

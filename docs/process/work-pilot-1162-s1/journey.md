@@ -1,11 +1,56 @@
 # Pilot VM sizing and bootstrap receipt
 
-Date: 23 November 2026. Branch: `work/pilot-1162-s1`. Last passing packaged
-product source: `abe90b2e9`. Rebased qualification source: `8a53932e7`.
+Date: 24 November 2026. Branch: `work/pilot-1162-s1`. Last passing packaged
+product source: `9cb7e672c`.
 
-Journey on the rebased fresh package: PARTIAL for one person at 1280 and 390 pixels.
-The earlier approved-source journey remains PASS for that source.
-Current own checks and source status: [final fixes](round-3.md).
+Journey on a fresh dev stack: PASS for one person at 1280 and 390 pixels.
+The receipt records the accepted local host exception and does not qualify production
+host protection or a minimum machine size. Current source checks: [final fixes](round-3.md).
+
+## 24 November rebased packaged journey
+
+PASS: fetched and rebased onto `origin/main` at `3bf5b9c16`. The rebased product
+commit was `9cb7e672ce2f41808f706516f10fe4590ced796e`. CI passed in run
+[45376193266](https://github.com/elewa-git/opencrane-new/actions/runs/45376193266).
+The application and scanner approvals passed in runs
+[45376193433](https://github.com/elewa-git/opencrane-new/actions/runs/45376193433) and
+[45376199689](https://github.com/elewa-git/opencrane-new/actions/runs/45376199689).
+Their fresh artifacts were present before package preparation and were bound to that
+product commit.
+
+PASS: installed a fresh package in a newly claimed secondary slot. The install record
+has a new namespace UID and install ID. Package preparation, private settings,
+package-up and package-check passed. The accepted
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch was used for package-up;
+the install record retains the F1 and F2 host findings and the override. No host
+settings changed.
+
+PASS: one person signed in, chatted, received an anonymous history refusal, got the
+PDF answer, viewed a decoded live desktop frame and opened the budget at both widths.
+The desktop check read pixels from the 800 by 600 canvas; the captured frame shows the
+visible desktop fixture. No journey step failed or was skipped.
+
+The journey sampled 94 resource points from 11:27:51 to 11:30:57 UTC with no failed
+samples. Package peaks were 2,273.711 millicores CPU and 3,177,906,176 bytes working
+set. Whole-node peaks were 2,738.944 millicores CPU and 5,866,405,888 bytes memory
+including swap. These samples cover the journey, not package installation.
+
+The [browser outcomes](logs/attempt-9/browser-result.json),
+[resource summary](logs/attempt-9/summary.json), [measurements](logs/attempt-9/measurements.csv),
+[install record](logs/attempt-9/install-record.json),
+[approval records](logs/attempt-9/qualified-approvals.json) and sanitised service logs
+are retained under `logs/attempt-9/`. Screenshots show [sign-in at 1280](screenshots/attempt-9/owner-signed-in-1280.png),
+[chat at 1280](screenshots/attempt-9/one-person-chat-1280.png),
+[PDF at 1280](screenshots/attempt-9/upload-0-1280.png),
+[decoded desktop at 1280](screenshots/attempt-9/desktop-0-1280.png),
+[budget at 1280](screenshots/attempt-9/budget-1280.png),
+[sign-in at 390](screenshots/attempt-9/owner-signed-in-390.png),
+[chat at 390](screenshots/attempt-9/one-person-chat-390.png),
+[PDF at 390](screenshots/attempt-9/upload-0-390.png),
+[decoded desktop at 390](screenshots/attempt-9/desktop-0-390.png) and
+[budget at 390](screenshots/attempt-9/budget-390.png). Sanitised startup and service
+logs, screenshots, measurements and the install record were copied before teardown.
+Package teardown and slot release passed.
 
 ## 23 November post-rebase packaged rerun
 
@@ -18,9 +63,8 @@ The public privacy and secret scans passed before creating the ref. No product f
 
 The required quiet window did not pass before the 1.25-hour work limit. At 11:12:34 UTC the
 one-minute load was 7.02. Earlier checks found slot 1 locked by another task's package install;
-slot 2 reported free. No slot was claimed and no packaged journey step ran. The fresh package
-journey and new CPU/memory measurements are NOT RUN. The previous PARTIAL result remains the
-latest journey evidence; this attempt does not change it.
+slot 2 reported free. No slot was claimed and no packaged journey step ran in that attempt.
+The later 24 November section records the successful packaged rerun.
 
 The [passing journey](#23-november-packaged-one-person-journey) records the accepted scope.
 The [rebased run](#23-november-rebased-source-qualification) records its incomplete checks.

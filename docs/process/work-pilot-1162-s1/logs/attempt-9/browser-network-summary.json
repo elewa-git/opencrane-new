@@ -1,0 +1,74 @@
+[
+  {
+    "phase": "desktop-frame-1280",
+    "kind": "frame",
+    "count": 5,
+    "bytes": 1920181
+  },
+  {
+    "phase": "desktop-frame-1280",
+    "kind": "lease",
+    "count": 9,
+    "bytes": 357
+  },
+  {
+    "phase": "desktop-frame-390",
+    "kind": "frame",
+    "count": 5,
+    "bytes": 1920181
+  },
+  {
+    "phase": "desktop-frame-390",
+    "kind": "lease",
+    "count": 11,
+    "bytes": 437
+  },
+  {
+    "phase": "one-person-chat-1280",
+    "kind": "frame",
+    "count": 9,
+    "bytes": 3952
+  },
+  {
+    "phase": "one-person-chat-390",
+    "kind": "frame",
+    "count": 10,
+    "bytes": 4161
+  },
+  {
+    "phase": "one-person-chat-390",
+    "kind": "socket_closed",
+    "count": 1,
+    "bytes": 0
+  },
+  {
+    "phase": "pdf-answer-1280",
+    "kind": "frame",
+    "count": 8,
+    "bytes": 3791
+  },
+  {
+    "phase": "pdf-answer-1280",
+    "kind": "socket_closed",
+    "count": 1,
+    "bytes": 0
+  },
+  {
+    "phase": "pdf-answer-390",
+    "kind": "frame",
+    "count": 8,
+    "bytes": 3791
+  },
+  {
+    "phase": "pdf-answer-390",
+    "kind": "socket_closed",
+    "count": 1,
+    "bytes": 0
+  },
+  {
+    "phase": "sign-in-owner-1280",
+    "kind": "console_error",
+    "count": 1,
+    "bytes": 0
+  }
+]

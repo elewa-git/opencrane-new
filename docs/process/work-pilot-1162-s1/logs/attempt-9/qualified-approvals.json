@@ -1,0 +1,15 @@
+{
+  "application": {
+    "runId": 45376193433,
+    "revision": "9cb7e672ce2f41808f706516f10fe4590ced796e",
+    "imageDigest": "sha256:cb1d55bd6d5aef393369be2a693fa693bdff328ab3a0ed152c2ecbc8baa9249b",
+    "imageId": "sha256:cb2a7e75cd5364ddaf8ade6d3c3919b135632a93fd602e1fb68be19912027149",
+    "scanSha256": "aa46d83aa6ed5db6a4c9d11b0c1d15897c03e1e3e5d7b40e70d9e1a1492f08ec"
+  },
+  "scanner": {
+    "runId": 45376199689,
+    "revision": "9cb7e672ce2f41808f706516f10fe4590ced796e",
+    "imageDigest": "sha256:d002b611a55cca5dd2b6e507d95b462fd612071e5cd79eeba22c894e0c61cbfa",
+    "approvedSha": "5fa1eb9523e595e6f51d6d4e3df5fd9e9a0482e27a345420877d3d451b9e8c6d"
+  }
+}

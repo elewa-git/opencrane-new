@@ -1,0 +1,33 @@
+2026-11-24T11:21:56.379698754Z Limits: Global time limit set to 120000 milliseconds.
+2026-11-24T11:21:56.379751241Z Limits: Global size limit set to 83886080 bytes.
+2026-11-24T11:21:56.379754985Z Limits: File size limit set to 22020096 bytes.
+2026-11-24T11:21:56.379757252Z Limits: Recursion level limit set to 16.
+2026-11-24T11:21:56.379759995Z Limits: Files limit set to 2000.
+2026-11-24T11:21:56.379762171Z Limits: MaxEmbeddedPE limit set to 41943040 bytes.
+2026-11-24T11:21:56.379764350Z Limits: MaxHTMLNormalize limit set to 41943040 bytes.
+2026-11-24T11:21:56.379766497Z Limits: MaxHTMLNoTags limit set to 8388608 bytes.
+2026-11-24T11:21:56.379771578Z Limits: MaxScriptNormalize limit set to 20971520 bytes.
+2026-11-24T11:21:56.379773864Z Limits: MaxZipTypeRcg limit set to 1048576 bytes.
+2026-11-24T11:21:56.379775993Z Limits: MaxPartitions limit set to 50.
+2026-11-24T11:21:56.379778268Z Limits: MaxIconsPE limit set to 100.
+2026-11-24T11:21:56.379780687Z Limits: MaxRecHWP3 limit set to 16.
+2026-11-24T11:21:56.379784173Z Limits: PCREMatchLimit limit set to 100000.
+2026-11-24T11:21:56.379786441Z Limits: PCRERecMatchLimit limit set to 2000.
+2026-11-24T11:21:56.379806770Z Limits: PCREMaxFileSize limit set to 104857600.
+2026-11-24T11:21:56.379822171Z Archive support enabled.
+2026-11-24T11:21:56.379825539Z Image (graphics) scanning support enabled.
+2026-11-24T11:21:56.379828037Z Detection using image fuzzy hash enabled.
+2026-11-24T11:21:56.379831444Z Alerting of encrypted archives _and_ documents enabled.
+2026-11-24T11:21:56.379834036Z Heuristic alerting enabled for scans that exceed set maximums.
+2026-11-24T11:21:56.379836946Z Heuristic alerts enabled.
+2026-11-24T11:21:56.379839427Z Portable Executable support enabled.
+2026-11-24T11:21:56.379841813Z ELF support enabled.
+2026-11-24T11:21:56.379844318Z Mail files support enabled.
+2026-11-24T11:21:56.379847557Z OLE2 support enabled.
+2026-11-24T11:21:56.379849748Z PDF support enabled.
+2026-11-24T11:21:56.379852239Z SWF support enabled.
+2026-11-24T11:21:56.379854871Z HTML support enabled.
+2026-11-24T11:21:56.379857032Z XMLDOCS support enabled.
+2026-11-24T11:21:56.379859540Z HWP3 support enabled.
+2026-11-24T11:21:56.379862013Z OneNote support enabled.
+2026-11-24T11:21:56.379870846Z Self checking disabled.

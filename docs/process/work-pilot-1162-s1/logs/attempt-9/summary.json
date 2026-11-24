@@ -1,0 +1,277 @@
+{
+  "start": "2026-11-24T11:27:51Z",
+  "end": "2026-11-24T11:30:57Z",
+  "sampleCount": 94,
+  "errorSamples": 0,
+  "phases": {
+    "1-person/budget-390": {
+      "samples": 4,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 2273.711,
+      "meanPackageCpuMillicores": 1927.0217499999999,
+      "maxPackageWorkingSetBytes": 3175059456,
+      "meanPackageWorkingSetBytes": 3158921216,
+      "maxPackageSwapBytes": 35520512,
+      "meanPackageSwapBytes": 33927168,
+      "maxWholeNodeCpuMillicores": 2496.756,
+      "meanWholeNodeCpuMillicores": 2442.4047499999997,
+      "maxWholeNodeMemoryWithSwapBytes": 5866405888,
+      "meanWholeNodeMemoryWithSwapBytes": 5822073856,
+      "maxPackageEphemeralBytes": 116695040,
+      "meanPackageEphemeralBytes": 116694016
+    },
+    "1-person/desktop-frame-1280": {
+      "samples": 2,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 2226.615,
+      "meanPackageCpuMillicores": 2064.8585,
+      "maxPackageWorkingSetBytes": 3174518784,
+      "meanPackageWorkingSetBytes": 3171430400,
+      "maxPackageSwapBytes": 21221376,
+      "meanPackageSwapBytes": 21221376,
+      "maxWholeNodeCpuMillicores": 2560.025,
+      "meanWholeNodeCpuMillicores": 2560.025,
+      "maxWholeNodeMemoryWithSwapBytes": 5789102080,
+      "meanWholeNodeMemoryWithSwapBytes": 5789102080,
+      "maxPackageEphemeralBytes": 116084736,
+      "meanPackageEphemeralBytes": 116068352
+    },
+    "1-person/desktop-frame-390": {
+      "samples": 2,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 1954.036,
+      "meanPackageCpuMillicores": 1948.6565,
+      "maxPackageWorkingSetBytes": 3091304448,
+      "meanPackageWorkingSetBytes": 3090946048,
+      "maxPackageSwapBytes": 29147136,
+      "meanPackageSwapBytes": 29147136,
+      "maxWholeNodeCpuMillicores": 2496.756,
+      "meanWholeNodeCpuMillicores": 2496.756,
+      "maxWholeNodeMemoryWithSwapBytes": 5807296512,
+      "meanWholeNodeMemoryWithSwapBytes": 5807296512,
+      "maxPackageEphemeralBytes": 116654080,
+      "meanPackageEphemeralBytes": 116635648
+    },
+    "1-person/one-person-chat-1280": {
+      "samples": 4,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 889.01,
+      "meanPackageCpuMillicores": 870.58125,
+      "maxPackageWorkingSetBytes": 2955063296,
+      "meanPackageWorkingSetBytes": 2950273024,
+      "maxPackageSwapBytes": 0,
+      "meanPackageSwapBytes": 0,
+      "maxWholeNodeCpuMillicores": 1841.867,
+      "meanWholeNodeCpuMillicores": 1467.8015,
+      "maxWholeNodeMemoryWithSwapBytes": 5503795200,
+      "meanWholeNodeMemoryWithSwapBytes": 5401586688,
+      "maxPackageEphemeralBytes": 115142656,
+      "meanPackageEphemeralBytes": 115073024
+    },
+    "1-person/one-person-chat-390": {
+      "samples": 5,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 1619.995,
+      "meanPackageCpuMillicores": 1420.3794,
+      "maxPackageWorkingSetBytes": 3060854784,
+      "meanPackageWorkingSetBytes": 3054194688,
+      "maxPackageSwapBytes": 23408640,
+      "meanPackageSwapBytes": 23408640,
+      "maxWholeNodeCpuMillicores": 2704.78,
+      "meanWholeNodeCpuMillicores": 1901.3519999999999,
+      "maxWholeNodeMemoryWithSwapBytes": 5716566016,
+      "meanWholeNodeMemoryWithSwapBytes": 5672978022.4,
+      "maxPackageEphemeralBytes": 116326400,
+      "meanPackageEphemeralBytes": 116208435.2
+    },
+    "1-person/one-person-idle": {
+      "samples": 30,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 956.787,
+      "meanPackageCpuMillicores": 903.6124,
+      "maxPackageWorkingSetBytes": 2963578880,
+      "meanPackageWorkingSetBytes": 2947417565.866667,
+      "maxPackageSwapBytes": 0,
+      "meanPackageSwapBytes": 0,
+      "maxWholeNodeCpuMillicores": 1353.571,
+      "meanWholeNodeCpuMillicores": 1287.4973333333332,
+      "maxWholeNodeMemoryWithSwapBytes": 5366427648,
+      "meanWholeNodeMemoryWithSwapBytes": 5362189380.266666,
+      "maxPackageEphemeralBytes": 114982912,
+      "meanPackageEphemeralBytes": 114972672
+    },
+    "1-person/pdf-answer-1280": {
+      "samples": 17,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 2006.109,
+      "meanPackageCpuMillicores": 1808.4206470588235,
+      "maxPackageWorkingSetBytes": 3168342016,
+      "meanPackageWorkingSetBytes": 3096651896.470588,
+      "maxPackageSwapBytes": 21221376,
+      "meanPackageSwapBytes": 4993264.94117647,
+      "maxWholeNodeCpuMillicores": 2560.025,
+      "meanWholeNodeCpuMillicores": 2237.5966470588232,
+      "maxWholeNodeMemoryWithSwapBytes": 5789102080,
+      "meanWholeNodeMemoryWithSwapBytes": 5551096771.764706,
+      "maxPackageEphemeralBytes": 115998720,
+      "meanPackageEphemeralBytes": 115819218.8235294
+    },
+    "1-person/pdf-answer-390": {
+      "samples": 15,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 2086.835,
+      "meanPackageCpuMillicores": 1821.3912666666668,
+      "maxPackageWorkingSetBytes": 3161370624,
+      "meanPackageWorkingSetBytes": 3123340356.266667,
+      "maxPackageSwapBytes": 29147136,
+      "meanPackageSwapBytes": 24527667.2,
+      "maxWholeNodeCpuMillicores": 2738.944,
+      "meanWholeNodeCpuMillicores": 2584.8824,
+      "maxWholeNodeMemoryWithSwapBytes": 5807296512,
+      "meanWholeNodeMemoryWithSwapBytes": 5747715003.733334,
+      "maxPackageEphemeralBytes": 116572160,
+      "meanPackageEphemeralBytes": 116427434.66666667
+    },
+    "1-person/sign-in-owner-1280": {
+      "samples": 5,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 882.25,
+      "meanPackageCpuMillicores": 851.4526,
+      "maxPackageWorkingSetBytes": 2937958400,
+      "meanPackageWorkingSetBytes": 2936691916.8,
+      "maxPackageSwapBytes": 0,
+      "meanPackageSwapBytes": 0,
+      "maxWholeNodeCpuMillicores": 1343.113,
+      "meanWholeNodeCpuMillicores": 1274.6284,
+      "maxWholeNodeMemoryWithSwapBytes": 5367517184,
+      "meanWholeNodeMemoryWithSwapBytes": 5358802534.4,
+      "maxPackageEphemeralBytes": 114982912,
+      "meanPackageEphemeralBytes": 114982912
+    },
+    "1-person/sign-in-owner-390": {
+      "samples": 6,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 2245.021,
+      "meanPackageCpuMillicores": 1831.703,
+      "maxPackageWorkingSetBytes": 3177906176,
+      "meanPackageWorkingSetBytes": 3105376256,
+      "maxPackageSwapBytes": 23408640,
+      "meanPackageSwapBytes": 22679552,
+      "maxWholeNodeCpuMillicores": 2269.176,
+      "meanWholeNodeCpuMillicores": 2174.395833333333,
+      "maxWholeNodeMemoryWithSwapBytes": 5674016768,
+      "meanWholeNodeMemoryWithSwapBytes": 5672027477.333333,
+      "maxPackageEphemeralBytes": 116121600,
+      "meanPackageEphemeralBytes": 116115456
+    },
+    "one-person journey": {
+      "samples": 4,
+      "maxComputers": 1,
+      "maxPackageCpuMillicores": 912.521,
+      "meanPackageCpuMillicores": 903.254,
+      "maxPackageWorkingSetBytes": 2941644800,
+      "meanPackageWorkingSetBytes": 2941294592,
+      "maxPackageSwapBytes": 0,
+      "meanPackageSwapBytes": 0,
+      "maxWholeNodeCpuMillicores": 1353.571,
+      "meanWholeNodeCpuMillicores": 1306.83825,
+      "maxWholeNodeMemoryWithSwapBytes": 5362839552,
+      "meanWholeNodeMemoryWithSwapBytes": 5361923072,
+      "maxPackageEphemeralBytes": 114966528,
+      "meanPackageEphemeralBytes": 114966528
+    }
+  },
+  "perPodPeaks": {
+    "worker-mcp-catalogue-fd986c9f6-7fgn9": {
+      "cpuMillicores": 46.641318,
+      "workingSetBytes": 107479040,
+      "swapBytes": 0
+    },
+    "nats-0": {
+      "cpuMillicores": 177.355497,
+      "workingSetBytes": 11935744,
+      "swapBytes": 0
+    },
+    "worker-dispatcher-756ff6787c-6kqxl": {
+      "cpuMillicores": 351.047514,
+      "workingSetBytes": 187097088,
+      "swapBytes": 0
+    },
+    "worker-audit-f568b6ddc-pccdn": {
+      "cpuMillicores": 32.355543,
+      "workingSetBytes": 105365504,
+      "swapBytes": 0
+    },
+    "openfga-75c8b7c5b9-7xq2g": {
+      "cpuMillicores": 32.824565,
+      "workingSetBytes": 25563136,
+      "swapBytes": 0
+    },
+    "worker-conversations-77df7bdc9c-dc94d": {
+      "cpuMillicores": 47.45565,
+      "workingSetBytes": 100876288,
+      "swapBytes": 0
+    },
+    "worker-computers-6b9c945cd-2dw84": {
+      "cpuMillicores": 29.15351,
+      "workingSetBytes": 99061760,
+      "swapBytes": 0
+    },
+    "postgres-0": {
+      "cpuMillicores": 443.465495,
+      "workingSetBytes": 156852224,
+      "swapBytes": 0
+    },
+    "worker-files-5559cbbc6-bsklb": {
+      "cpuMillicores": 38.283002,
+      "workingSetBytes": 103653376,
+      "swapBytes": 0
+    },
+    "worker-budgets-6c68f685-45km8": {
+      "cpuMillicores": 31.887701,
+      "workingSetBytes": 105668608,
+      "swapBytes": 0
+    },
+    "objects-0": {
+      "cpuMillicores": 7.942629,
+      "workingSetBytes": 84369408,
+      "swapBytes": 0
+    },
+    "server-69d445dfbd-jv8k9": {
+      "cpuMillicores": 553.809268,
+      "workingSetBytes": 351080448,
+      "swapBytes": 0
+    },
+    "backup-catalogue-bcc74d945-fctlt": {
+      "cpuMillicores": 0,
+      "workingSetBytes": 565248,
+      "swapBytes": 0
+    },
+    "worker-members-6644698495-w8p5t": {
+      "cpuMillicores": 109.238869,
+      "workingSetBytes": 109350912,
+      "swapBytes": 0
+    },
+    "scanner-767bd65696-k2zdv": {
+      "cpuMillicores": 7.848989,
+      "workingSetBytes": 1093410816,
+      "swapBytes": 0
+    },
+    "computer-8758be48bf6edde9f441c77886319c13": {
+      "cpuMillicores": 767.100919,
+      "workingSetBytes": 518946816,
+      "swapBytes": 35520512
+    },
+    "web-c6db5cb65-th4qz": {
+      "cpuMillicores": 18.158332,
+      "workingSetBytes": 45588480,
+      "swapBytes": 0
+    }
+  },
+  "maximumPackageCpuMillicores": 2273.711,
+  "maximumPackageWorkingSetBytes": 3177906176,
+  "maximumWholeNodeCpuMillicores": 2738.944,
+  "maximumWholeNodeMemoryWithSwapBytes": 5866405888,
+  "maximumOwnedVolumeBytes": 94744576,
+  "diskSamples": 6
+}
