@@ -3,7 +3,7 @@ import { z } from 'zod';
 import {
   authorityFence, AuthorityApplying, groupMembership,
 } from '@opencrane/models';
-import type { EventStore } from '@opencrane/event-store';
+import { readFirstEvent, type EventStore } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { readActiveMember, GroupRefused } from '../members/groups.ts';
 
@@ -14,13 +14,9 @@ const sessionSchema = z.object({
 // Read only the creation event. Later messages cannot change the session's owner or payer.
 export async function creationEvent(store: Pick<EventStore, 'readStream'>, silo: string,
   subject: string, type: string, deadline = performance.now() + 10_000) {
-  for await (const row of store.readStream(subject, 1, deadline)) {
-    if (row.event.silo !== silo || row.event.type !== type) {
-      throw new Error('Creation history unavailable');
-    }
-    return row.event;
-  }
-  throw new Error('Creation history unavailable');
+  const request = { silo, subject, type, deadline };
+  const row = await readFirstEvent(store, request);
+  return row.event;
 }
 
 // Keep saved conversations readable after the member loses permission to spend.

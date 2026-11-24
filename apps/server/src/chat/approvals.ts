@@ -1,6 +1,6 @@
 import { sha256Hex } from '@opencrane/events/digest';
 import { recordIdSchema } from '@opencrane/events';
-import { readStoredApprovalReview } from '@opencrane/models';
+import { readStoredApprovalReview, decisionConversationReader } from '@opencrane/models';
 import { toolApprovalRequestedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createHmac } from 'node:crypto';
@@ -73,12 +73,13 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
         return reply.code(401).send(refusedStatus);
       }
       if (!options) throw new Error('Chat unavailable');
-      const deadline = performance.now() + 10_000;
+      const conversationHistory = decisionConversationReader(options.store, options.db, options.silo);
+      const readOptions = { deadline: performance.now() + 10_000, conversationHistory };
       let result: Awaited<ReturnType<typeof readOriginalCallStatus>> | undefined;
       let readFailure: unknown;
       try {
         result = await readOriginalCallStatus(options.store, options.silo,
-          logicalRequestId, undefined, deadline);
+          logicalRequestId, undefined, readOptions);
       } catch (error) {
         readFailure = error;
       }
@@ -129,7 +130,9 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         const deadline = performance.now() + 10_000;
         const approvalRows = await approvalRequestEvents(configured, conversationId,
           access.historyPosition, deadline);
-        const readOptions = { deadline, approvalRows, readOnly,
+        const conversationHistory = decisionConversationReader(
+          configured.store, configured.db, configured.silo);
+        const readOptions = { deadline, approvalRows, conversationHistory, readOnly,
           requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
           configured.store, configured.silo, conversationId, memberId, readOptions);
@@ -225,24 +228,23 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
     decision: z.enum(['approved', 'rejected', 'retry']),
   }).strict();
   const input = inputSchema.parse(req.body);
-  const checked = await readDecisionApproval(options, input.approvalId);
+  const checked = await readDecisionApproval(options, input.approvalId, memberId, conversationId);
   const { request, requestPosition } = checked;
-  if (request.conversationId !== conversationId || request.requesterId !== memberId) {
-    return reply.code(403).send({ status: 'refused' });
-  }
   if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
   const text = request.review;
   readStoredApprovalReview(text);
   const reviewDigest = sha256Hex(text);
   if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
+  const conversationHistory = decisionConversationReader(options.store, options.db, options.silo);
+  const activityOptions = { deadline: performance.now() + 10_000, conversationHistory };
   const activity = await approvalActivity(options.store, options.silo, request.assistantId,
-    conversationId, request.turnId, performance.now() + 10_000);
+    conversationId, request.turnId, activityOptions);
   if (input.decision !== 'rejected' && activity.computer.control) {
     return reply.code(409).send({ status: 'conflict' });
   }
   if (input.decision === 'retry') {
     const original = await readOriginalCallStatus(options.store, options.silo,
-      input.approvalId, undefined, performance.now() + 10_000);
+      input.approvalId, undefined, activityOptions);
     if (original.conversationId !== conversationId ||
         original.status.requesterId !== memberId) {
       return reply.code(403).send({ status: 'refused' });
@@ -274,12 +276,20 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   return reply.code(statusCode).send({ status: result.status });
 }
 
-async function readDecisionApproval(options: ChatOptions, approvalId: string) {
-  const readOptions = { deadline: performance.now() + 10_000, deferInvalidation: true };
+async function readDecisionApproval(options: ChatOptions, approvalId: string,
+  memberId: string, conversationId: string) {
+  const conversationHistory = decisionConversationReader(options.store, options.db, options.silo);
+  const readOptions = { deadline: performance.now() + 10_000, deferInvalidation: true,
+    conversationHistory };
   try {
     const subject = `approval-${approvalId}`;
     for await (const { event } of options.store.readStream(subject, 1, readOptions.deadline)) {
       if (event.silo !== options.silo) throw new MemberRefusal(403, 'refused');
+      const request = toolApprovalRequestedDataSchema.parse(event.data);
+      // Refuse foreign requests before loading their conversation or preparing cancellation.
+      if (request.conversationId !== conversationId || request.requesterId !== memberId) {
+        throw new MemberRefusal(403, 'refused');
+      }
       break;
     }
     return await readApproval(options.store, options.silo, approvalId, readOptions);

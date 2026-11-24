@@ -20,7 +20,7 @@ Callers check access before returning private data.
 flowchart LR
   ops["apps/ops<br/>background workers"] -.->|reads ordered events and updates tables| projections["libs/projections<br/>read tables"]
   server["apps/server<br/>back end"] -.-> projections
-  models["libs/models<br/>AI access rules"] -.-> projections
+  models["libs/models<br/>AI access rules"] -.->|prove saved decision records| projections
   projections -.-> store["libs/event-store<br/>saved event log"]
   projections -.-> events["libs/events<br/>event definitions"]
   projections -->|reads and writes tables| pg["PostgreSQL<br/>content database"]
@@ -29,7 +29,7 @@ flowchart LR
 ## What it is responsible for
 
 - Turn saved events into tables and keep each worker's saved position with its changes.
-- Keep membership, participation and grant history for callers to check.
+- Keep membership, participation and grant history, and index saved chat records with coverage counts for call checks.
 - Keep chat messages, activity, files and each person's private list choices.
 - Keep tool reviews, publication records and provider choices separate from permission to act.
 - Keep spending records as integer euro cents.

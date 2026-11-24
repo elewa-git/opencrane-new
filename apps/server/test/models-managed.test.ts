@@ -6,7 +6,6 @@ import { mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { expect, it, onTestFinished } from 'vitest';
-import { databases } from '@opencrane/authz/testing';
 import { history } from '@opencrane/models';
 import { losslessJson } from '@opencrane/events/lossless-json';
 import { managedFixture, credential } from '../../../libs/models/test/managed-fixture.ts';
@@ -15,14 +14,13 @@ type Setup = Awaited<ReturnType<typeof managedFixture>>;
 
 async function startModels(setup: Setup, patch: NodeJS.ProcessEnv = {}) {
   await setup.stopDispatch();
-  const dbs = await databases();
   const directory = await mkdtemp(`${tmpdir()}/oc-managed-start-`);
   const jwksFile = `${directory}/jwks.json`;
   await writeFile(jwksFile, JSON.stringify(setup.identity.jwks));
   const gatewayPort = await freePort();
   const readinessPort = await freePort();
   const env = { ...process.env, ...setup.nats.env('command'),
-    DATABASE_URL: await dbs.postgres(), SILO_ID: 'test',
+    DATABASE_URL: setup.databaseUrl, SILO_ID: 'test',
     TOKEN_ISSUER: setup.identity.issuer, MODEL_STATE_DIR: directory,
     MODEL_JWKS_FILE: jwksFile, MODEL_DECISION_PORT: String(await freePort()),
     MODEL_GATEWAY_PORT: String(gatewayPort), MODEL_READINESS_PORT: String(readinessPort),
@@ -46,7 +44,6 @@ async function startModels(setup: Setup, patch: NodeJS.ProcessEnv = {}) {
       child.kill('SIGTERM');
       await exited(child);
     }
-    await dbs.close();
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(close);

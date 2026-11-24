@@ -1,3 +1,4 @@
+import { decisionConversationReader } from '@opencrane/models';
 import { routineLifecycle } from './routine-lifecycle.ts';
 import { bindRoutineBudgetOwner } from './routine-delivery-owner.ts';
 import type { ChildProcess } from 'node:child_process';
@@ -69,7 +70,8 @@ try {
     const signingFile = process.env['TOKEN_SIGNING_KEY_FILE'];
     let memory: Awaited<ReturnType<typeof tokenIssuer>> | undefined;
     if (signingFile) memory = await tokenIssuer({ privateKeyPath: signingFile, issuer });
-    const identity = { jwks, issuer, ...(memory ? { memory } : {}) };
+    const conversationHistory = decisionConversationReader(events.store, db.db, silo);
+    const identity = { jwks, issuer, conversationHistory, ...(memory ? { memory } : {}) };
     const binding = { silo, apiUrl: required('OPENFGA_API_URL'),
       storeId: required('OPENFGA_STORE_ID'),
       authorizationModelId: required('OPENFGA_MODEL_ID') };

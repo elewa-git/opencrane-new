@@ -5,6 +5,18 @@ import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { ScriptTarget, transpileModule } from 'typescript';
+import { runsCoreAtStartup } from './journey-guard.ts';
+
+function startsCoreOnlyForOrdinarySecondaryStartup() {
+  assert.equal(runsCoreAtStartup(true, false, undefined), true);
+  assert.equal(runsCoreAtStartup(true, false, '0'), true);
+  assert.equal(runsCoreAtStartup(true, false, '1'), false);
+  assert.equal(runsCoreAtStartup(true, true, undefined), false);
+  assert.equal(runsCoreAtStartup(false, false, undefined), false);
+}
+
+void test('focused startup defers browser checks until the demo is ready',
+  startsCoreOnlyForOrdinarySecondaryStartup);
 
 type LauncherRun = { environment: Record<string, string> };
 

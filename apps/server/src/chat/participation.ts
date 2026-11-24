@@ -1,3 +1,4 @@
+import { readFirstEvent, FirstEventRefused } from '@opencrane/event-store';
 import { conversationParticipation, conversationHistoryPosition } from '@opencrane/models';
 import { conversationEventId } from '@opencrane/events';
 import { readStreamSummary, WrongSiloError, type EventStore, type StoredEvent, type SummaryKind }
@@ -84,20 +85,20 @@ export function legacyParticipation(store: Pick<EventStore, 'readEvent' | 'clock
 
 async function participationCreation(store: Pick<EventStore, 'readStream' | 'clock'>,
   silo: string, conversationId: string, deadline: number): Promise<StoredEvent> {
-  let creation: StoredEvent | undefined;
-  for await (const row of store.readStream(`conversation-${conversationId}`, 1, deadline)) {
-    if (row.event.silo !== silo) throw new ParticipationRefused('Conversation refused');
-    if (row.event.type !== 'conversation.created') {
+  const request = { silo, subject: `conversation-${conversationId}`,
+    type: 'conversation.created', deadline };
+  try {
+    const creation = await readFirstEvent(store, request);
+    if (conversationEventId(creation.event) !== conversationId) {
       throw new ParticipationRefused('Conversation refused');
     }
-    creation = row;
-    break;
+    return creation;
+  } catch (error) {
+    if (error instanceof FirstEventRefused) {
+      throw new ParticipationRefused('Conversation refused', { cause: error });
+    }
+    throw error;
   }
-  if (!creation) throw new ParticipationRefused('Conversation refused');
-  if (conversationEventId(creation.event) !== conversationId) {
-    throw new ParticipationRefused('Conversation refused');
-  }
-  return creation;
 }
 
 function legacyChanges(legacy: StoredEvent[] | Changes, silo: string, conversationId: string) {

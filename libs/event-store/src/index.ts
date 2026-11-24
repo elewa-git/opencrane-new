@@ -4,6 +4,7 @@ export { connectNats, isEventStoreUnavailable } from "./nats-connection.ts";
 export { createEventStore, connectEventStore, EventStore, readBeforeDeadline } from "./jetstream.ts";
 export {
   wireSubject,
+  matchesConversationRead,
   sameCommand,
   type AppendOutcome,
   decodeEvent,
@@ -12,5 +13,6 @@ export {
   type StoredEvent,
 } from "./contract.ts";
 export { readEventAt } from './read-event-at.ts';
+export { readFirstEvent, FirstEventRefused, type FirstEventRead } from './read-first-event.ts';
 export { snapshotPositions } from './snapshot-positions.ts';
-export { readStreamSummary, WrongSiloError, type SummaryKind } from './stream-summary.ts';
+export { readStreamSummary, peekStreamSummary, WrongSiloError, type SummaryKind } from './stream-summary.ts';

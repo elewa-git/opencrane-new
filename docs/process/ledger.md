@@ -160,3 +160,23 @@ The evidence does not qualify these conditions yet:
 - Rendered Office previews. Upload's latest complete fresh handback journey was FAIL, rather than NOT RUN.
 - MCP live-view reliability across complete startup journeys; the isolated MCP assertions passed but complete runs failed.
 - Fresh screenshot capture and persistence across startup; retained capture and reload passed, but the fresh viewer failed under #77.
+
+## Long-conversation tool decisions
+
+17 November 2026, issue #1148. Real NATS, PostgreSQL, OpenFGA and gateway; approval
+required. See [the measurement receipt](work-bug-1148-s1/measurement.md) for the
+failure, read path and manual strength check. Before numbers include the background
+summary after the gateway has already timed out; its existing ten-second deadline
+stops the 5,000-message read early.
+
+| Earlier messages | Before: conversation / total events | Before: decision / conversation read ms | Before HTTP | After: conversation / total events | After: decision / conversation read ms | After HTTP |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 | 103 / 126 | 1,149.59 / 619.30 | 403 | 3 / 26 | 353.60 / 10.59 | 403 |
+| 1,500 | 1,503 / 1,506 | 2,023.50 / 5,846.08 | 503 | 3 / 26 | 246.20 / 6.94 | 403 |
+| 5,000 | 2,152 / 2,155 | 2,012.00 / 10,000.18 | 503 | 3 / 26 | 335.28 / 8.02 | 403 |
+
+Fresh secondary CORE: PASS at source head
+`76a45566cf8f876283f49548ce6a207ac4b407d5`, including the post-status browser run
+at 1280 and 390 px. The [journey receipt](work-bug-1148-s1/journey.md) includes
+captures, source gates, earlier incomplete or failed attempts and explicit skipped
+live coverage. The final shutdown exited 0 and the slot reported free.

@@ -118,7 +118,8 @@ capped at 500 ms, for at most one second per NATS read. Each request keeps its
 250 ms timeout.
 `readEvent(sequence, deadline)` reads exactly one global position and refuses a
 missing record. It lets readers check a table’s saved event number against the log.
-`readStream(subject, fromSequence, deadline)` and `head(subject, deadline)` accept
+`readStream(subject, fromSequence, deadline, includeConversationCloses, throughSequence)`
+and `head(subject, deadline)` accept
 an absolute `store.clock.now()` deadline; an earlier caller deadline stops retries
 and rejects late replies. Reads still throw when their bound expires, and other
 service errors throw immediately. `isEventStoreUnavailable(error)` identifies
@@ -204,6 +205,19 @@ name, annotations and SHA-256 revision. The catalogue digest is calculated from 
 checked names and revisions. A nested changed catalogue must also match its event's
 server id and new digest. Old undated records still parse; policy reads keep them blocked.
 The event parser requires the exact `mcp-<serverId>` subject for all MCP records.
+
+## First event and saved upper positions
+
+The optional fifth `readStream` argument is an inclusive global upper position. A read
+never returns an event after it, even when the stream has grown. Omitting it preserves
+the existing finite snapshot behaviour.
+
+`readFirstEvent(store, request)` checks one creation event's silo, subject and type.
+An indexed position bounds its first read; callers without an index discover only one
+row. Later callers reuse the saved first position and recheck the actual event and id.
+The cache retains only positions and ids for at most 64 streams per store instance.
+It caches no membership, permission result or event content. `FirstEventRefused`
+distinguishes an invalid creation from an event-store outage.
 
 ## Stream summaries
 
@@ -330,6 +344,10 @@ or earlier that yield more than the allowed rows. This helper does not count
 whole-log reads through `subscribe`. Security tests prove command/reader/excluded roles,
 unknown and missing credentials, plaintext and wrong-CA refusals. The pinned NATS server is 2.15.0; both downloaded
 platform archives have fixed SHA-256 checksums.
+
+`peekStreamSummary` returns an already read prefix only when its saved position reaches
+the requested position. It starts no history read. Gateway decisions use this to refuse
+large projection gaps while a separate summary catch-up runs.
 
 `test/stream-summary.test.ts` covers replay, queued freshness, store/kind/silo
 separation, eviction, caller timeouts, retained progress and background errors.

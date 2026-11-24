@@ -1,5 +1,6 @@
 import './journey-entry.ts';
-import { phase4JourneyScope, requireJourneyProviderMode } from './journey-guard.ts';
+import { phase4JourneyScope, requireJourneyProviderMode, requireStandInJourney } from './journey-guard.ts';
+import { approvalJourney } from './approval-journey.ts';
 import { realModelJourney } from './real-model-journey.ts';
 import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
@@ -38,6 +39,8 @@ import { suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycl
 
 const settings = await readEnv('settings');
 requireJourneyProviderMode(settings);
+const approvalJourneyOnly = process.env['APPROVAL_JOURNEY_ONLY'] === '1';
+if (approvalJourneyOnly) requireStandInJourney(settings);
 const binding = await readEnv('binding');
 const config = loadAuthConfig(await authEnv());
 const silo = settings['SILO_ID']!;
@@ -339,9 +342,10 @@ async function append(type: string, subject: string, data: Record<string, unknow
     time: new Date().toISOString(), principal: { kind: 'human', id: principalId },
     data: { ...example, ...data } });
   assert(parsed.success);
-  let expectedSequence = 0;
-  for await (const stored of events.store.readStream(subject)) expectedSequence = stored.sequence;
-  const result = await events.store.append({ event: parsed.event, expectedSequence });
+  // Use the fresh command id above; no earlier retry can have used it.
+  const expectedSequence = await events.store.head(subject);
+  const result = await events.store.append({ event: parsed.event, expectedSequence,
+    historyChecked: true });
   assert.equal(result.status, 'appended');
 }
 function headers(memberId: string) {
@@ -487,7 +491,7 @@ async function modelGrantsRecorded() {
 function readActiveModelId(model: typeof models[number]) {
   return model.id;
 }
-try {
+journeyChecks: try {
   await until(modelGrantsRecorded, 'model grant history for existing members/assistants');
   console.log('PASS existing members/assistants have model grant history, including explicit revocations');
   assert.equal((await fetch(`${server}/api/org/integrations`)).status, 401);
@@ -545,6 +549,15 @@ try {
     assert(secondary && browser);
     await realModelJourney(browser.ownerPage, browser.memberPages[0]!, origin, events.store, silo);
   } else {
+  if (approvalJourneyOnly) {
+    assert(browser);
+    await approvalJourney(browser.ownerPage, browser.memberPages, events.store, authz, append,
+      { silo, origin, requesterId: member, assistantId: computer!.assistant_id,
+        computerId: computer!.computer_id, generation: computer!.generation });
+    // Keep login, socket and database cleanup shared with the CORE journey.
+    break journeyChecks;
+  }
+  console.log('SKIP long-chat approvals: select APPROVAL_JOURNEY_ONLY on a fresh secondary stack');
   const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
     const failedTransport: string[] = [];
@@ -570,7 +583,6 @@ try {
       throw error;
     } finally { page.off('requestfailed', failed); }
   }
-  console.log('SKIP approval journey: waits for #45 rows 4, 5 and 14');
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();

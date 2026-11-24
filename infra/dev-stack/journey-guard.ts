@@ -3,6 +3,11 @@ export const fleetProviderRefusal = 'Fleet tasks require the stand-in model';
 const automatedJourneyRefusal =
   'Automated journeys require a secondary stack';
 
+export function runsCoreAtStartup(secondary: boolean, tokenBootstrap: boolean,
+  approvalOnly: string | undefined): boolean {
+  return secondary && !tokenBootstrap && approvalOnly !== '1';
+}
+
 export function phase4JourneyScope(attempt: string): 'groups' | 'all' {
   if (attempt.startsWith('nightly-')) {
     return 'groups';
