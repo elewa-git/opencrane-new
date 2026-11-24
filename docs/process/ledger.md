@@ -107,25 +107,22 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ### Pilot VM sizing
 
-On 23 November 2026, the one-person packaged journey passed sign-in, chat, PDF upload,
+On 24 November 2026, the one-person packaged journey passed sign-in, chat, PDF upload,
 decoded desktop viewing, history refusal and spending at 1280 and 390 pixels on
-approved product source `abe90b2e9`. Whole-node peaks were **2.695 CPU cores and
-5.21 GiB including swap**; the package peaked at **2.075 CPU cores and 2.97 GiB
-working set**, with 33.79 MiB swap. The 85 samples covered 168 seconds after package
-readiness. Installation was not sampled; bound PVC use peaked at 76.68 MiB.
+approved rebased product source `9cb7e672c`. Whole-node peaks were **2.739 CPU cores and
+5.46 GiB including swap**; the package peaked at **2.274 CPU cores and 2.96 GiB
+working set**. The 94 samples covered the journey. Installation was not sampled.
 
 These observations do not qualify a minimum machine or spare-capacity recommendation.
 The owner dropped concurrent three-person sizing from this ticket. The
-[final receipt](work-pilot-1162-s1/journey.md#23-november-packaged-one-person-journey)
-links the browser results, measurements and sanitised screenshots. Earlier failed
-attempts remain historical evidence there; their 3.654-core observation is superseded.
-The [rebased source run](work-pilot-1162-s1/journey.md#23-november-rebased-source-qualification)
-is PARTIAL because PDF upload and desktop viewing did not pass at either width.
-It does not replace the completed one-person sizing observation above.
+[final receipt](work-pilot-1162-s1/journey.md#24-november-rebased-packaged-journey)
+links the browser results, measurements and sanitised screenshots. Earlier attempts,
+including failed attempts, remain historical evidence in that receipt; superseded
+measurements are not current sizing guidance.
 
 Host protection remains PARTIAL under the recorded accepted development-box switch.
 Bootstrap ran on this box only as a dry run and refused existing Docker before writes.
-Real Ubuntu bootstrap/reboot remain NOT RUN. No host setting changed.
+Real Ubuntu bootstrap and reboot remain NOT RUN. No host setting changed.
 
 ### Lint size debt
 

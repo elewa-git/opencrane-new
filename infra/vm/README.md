@@ -36,13 +36,13 @@ flowchart LR
 2. **An operator repeats preparation.** The script checks its ownership record and
    installed k3s checksum. It reapplies the same configuration and restarts k3s;
    running workloads may pause.
-3. **An operator chooses a machine size.** The one-person journey passed on
-   approved packaged source `abe90b2e9`:
+3. **An operator chooses a machine size.** The 24 November one-person journey passed on
+   approved rebased product source `9cb7e672c`:
    sign-in, chat, PDF upload, desktop viewing and spending at desktop and phone widths.
-   Whole-node peaks were 2.695 cores / 5.21 GiB including swap; the package peaked at
-   2.075 cores / 2.97 GiB working set. Installation was not sampled. These observations
-   do not qualify a minimum machine size or spare-capacity recommendation. A run on
-   the rebased source remains partial because PDF upload and desktop viewing did not pass.
+   Whole-node peaks were 2.739 cores / 5.46 GiB including swap; the package peaked at
+   2.274 cores / 2.96 GiB working set. Installation was not sampled. These observations
+   do not qualify a minimum machine size or spare-capacity recommendation. Real Ubuntu
+   bootstrap and reboot have not been run.
 
 ## How to run or test it
 

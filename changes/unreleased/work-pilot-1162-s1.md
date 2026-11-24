@@ -7,12 +7,9 @@ package CPU, memory and disk demand; these observations do not qualify a minimum
 Keep the packaged website available when a desktop connection fails. Share the WebSocket
 connection handling with the development static server and close both peers.
 
-Open the read-only desktop in the packaged website at desktop and phone widths.
-Load the noVNC constructor consistently in development and production builds. A fresh
-one-person packaged journey passed on approved source `abe90b2e9`: sign-in, chat,
-PDF upload, decoded desktop viewing,
-history refusal and spending at 1280 and 390 pixels. Whole-node peaks were 2.695 cores /
-5.21 GiB including swap; the package peaked at 2.075 cores / 2.97 GiB working set.
-Installation was not sampled; these observations do not qualify a minimum machine size.
-After rebasing onto main, the repeat packaged journey remained partial because
-PDF upload and desktop viewing did not pass at either width.
+The 24 November one-person packaged journey passed on approved rebased product source
+`9cb7e672c`: sign-in, chat, PDF upload, decoded desktop viewing, history refusal and
+spending at 1280 and 390 pixels. Whole-node peaks were 2.739 cores / 5.46 GiB including
+swap; the package peaked at 2.274 cores / 2.96 GiB working set. Installation was not
+sampled; these observations do not qualify a minimum machine size. Real Ubuntu bootstrap
+and reboot are NOT RUN.

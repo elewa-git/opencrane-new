@@ -114,21 +114,17 @@ node totals, including system pods and runtime overhead. Block I/O bytes are
 traffic counters, not occupied disk space. Capture filesystem/PVC use and cached
 image bytes separately. Do not count unrelated owner workloads as pilot use.
 
-The 23 November one-person packaged journey passed on approved source
-`abe90b2e9` at both widths.
-Whole-node peaks were 2.695 CPU cores and 5.21 GiB including swap. The owned package
-peaked at 2.075 CPU cores and 2.97 GiB working set, with 33.79 MiB swap. The 85
-samples covered 168 seconds after package readiness; installation was not sampled.
-Bound PVC use peaked at 76.68 MiB. The [receipt](../../docs/process/work-pilot-1162-s1/journey.md#23-november-packaged-one-person-journey)
-retains the final results, screenshots and historical failed attempts. The accepted
-scope is one person; the owner dropped concurrent three-person sizing.
-The rebased source's repeat packaged journey is partial: PDF upload and desktop
-viewing did not pass at either width. Its result does not replace the passing
-source's measurements.
+The 24 November one-person packaged journey passed on approved rebased product source
+`9cb7e672c` at both widths. It sampled 94 resource points.
+Whole-node peaks were 2.739 CPU cores and 5.46 GiB including swap. The owned package
+peaked at 2.274 CPU cores and 2.96 GiB working set. Installation was not sampled.
+The [receipt](../../docs/process/work-pilot-1162-s1/journey.md#24-november-rebased-packaged-journey)
+retains the results, screenshots and historical attempts. The accepted scope is one
+person; the owner dropped concurrent three-person sizing.
 
 These observations do not qualify a minimum machine size or spare-capacity
 recommendation. A shared k3d result estimates VM demand, not a proven smallest VM.
-A VM recommendation still needs actual VM measurements, including installation,
-CPU/RAM spare capacity and disk reserve for the OS, images, retained events/files
-and backups. Copy measurements, service/startup logs and masked screenshots to the
-receipt before package-down and down remove slot data.
+Real Ubuntu bootstrap and reboot are NOT RUN. A VM recommendation still needs actual VM
+measurements, including installation, CPU/RAM spare capacity and disk reserve for the OS,
+images, retained events/files and backups. Copy measurements, service/startup logs and
+masked screenshots to the receipt before package-down and down remove slot data.

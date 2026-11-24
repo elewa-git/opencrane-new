@@ -16,10 +16,13 @@ function currentOperatorContract() {
   for (const path of documents) {
     const document = readDocument(path);
     assert.match(document, /one-person.*(?:passed|PASS)/iu, path);
-    for (const measurement of ['2.695', '5.21 GiB', '2.075', '2.97 GiB']) {
+    assert.match(document, /24 November/iu, path);
+    assert.match(document, /9cb7e672c/iu, path);
+    for (const measurement of ['2.739', '5.46 GiB', '2.274', '2.96 GiB']) {
       assert.ok(document.includes(measurement), `${path}: missing ${measurement}`);
     }
     assert.match(document, /(?:not|do not).*qualif.*minimum/iu, path);
+    assert.doesNotMatch(document, /rebased.*(?:partial|failed).*PDF|PDF upload.*desktop viewing.*did not pass/iu, path);
     assert.doesNotMatch(document, /phone PDF step|steps remain incomplete|Repeat at 1280/iu, path);
     assert.doesNotMatch(document, /three-person.*(?:remain|incomplete)|both journeys pass/iu, path);
   }
@@ -27,15 +30,15 @@ function currentOperatorContract() {
 
 function finalPassScreenshots() {
   const receipt = readDocument('docs/process/work-pilot-1162-s1/journey.md');
-  const finalPass = receipt.split('## 23 November packaged one-person journey')[1];
+  const finalPass = receipt.split('## 24 November rebased packaged journey')[1];
   assert.ok(finalPass, 'Missing final packaged PASS');
-  assert.match(finalPass, /collector.*`attempt-7\/browser\.mjs`/iu);
-  const links = [...finalPass.matchAll(/\]\((screenshots\/attempt-7\/[^)]+\.png)\)/gu)];
+  assert.match(finalPass, /94 resource points/iu);
+  const links = [...finalPass.matchAll(/\]\((screenshots\/attempt-9\/[^)]+\.png)\)/gu)];
   assert.equal(links.length, 10, 'Link all final screenshots beside the final PASS');
   const expectedNames = ['owner-signed-in', 'one-person-chat', 'upload-0', 'desktop-0', 'budget'];
   for (const width of [1280, 390]) {
     for (const name of expectedNames) {
-      const relativePath = `screenshots/attempt-7/${name}-${width}.png`;
+      const relativePath = `screenshots/attempt-9/${name}-${width}.png`;
       assert.ok(finalPass.includes(`](${relativePath})`), `Missing ${relativePath}`);
       const path = resolve(receiptDirectory, relativePath);
       assert.ok(existsSync(path), `Screenshot is not published: ${relativePath}`);
@@ -49,5 +52,5 @@ function finalPassScreenshots() {
 
 test('the current operator contract records the accepted one-person PASS and peaks',
   currentOperatorContract);
-test('the final PASS links portable screenshots and identifies its retained collector',
+test('the final PASS records its samples and links portable screenshots',
   finalPassScreenshots);
