@@ -1,4 +1,6 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import type { ChatRow, ServerMessage } from '@opencrane/protocol';
+import { z } from 'zod';
 import { ChatSession } from './chat-session';
 import { Workspace } from './workspace';
 import { WebSocketService } from '../core/websocket.service';
@@ -365,3 +367,117 @@ it('settles the rail after selecting a saved session during Retry',
   settlesRetryAfterSelectingSavedSession);
 it('preserves the saved link and refuses drafts until the first successful list read',
   keepsSavedLinkUntilFirstSuccessfulList);
+
+const createCommand = z.object({ conversationId: z.string() });
+const messageCommand = z.object({ id: z.string() });
+const draftPrompt = 'Send from the draft';
+
+function holdSavedTranscript() {
+  const held = deferredReply();
+  const state = { historyRequested: false, conversationId: '', messageId: '' };
+  const conversations = [requestedSession];
+
+  function read(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const path = requestPath(input);
+    if (path === '/api/conversations/requested/messages?tail=50') {
+      state.historyRequested = true;
+      return held.promise;
+    }
+    if (path === '/api/conversations') {
+      if (init?.method === 'POST' && typeof init.body === 'string') {
+        const command = createCommand.parse(JSON.parse(init.body));
+        state.conversationId = command.conversationId;
+        conversations.push({ ...requestedSession, conversationId: state.conversationId });
+        return Promise.resolve(Response.json({ status: 'appended' }));
+      }
+      return Promise.resolve(Response.json({ rows: conversations }));
+    }
+    if (path.endsWith('/messages') && init?.method === 'POST' && typeof init.body === 'string') {
+      const command = messageCommand.parse(JSON.parse(init.body));
+      state.messageId = command.id;
+      return Promise.resolve(Response.json({ status: 'appended' }));
+    }
+    return fetchFixture(input);
+  }
+
+  function release(): void {
+    held.release(Response.json({ rows: [], position: 0, generation: 1, computerState: 'ready' }));
+  }
+
+  vi.spyOn(globalThis, 'fetch').mockImplementation(read);
+  return { state, release };
+}
+
+function sendConversationFrame(message: ServerMessage): void {
+  socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(message) }));
+}
+
+function sendReply(conversationId: string, turnId: string): void {
+  const feed = { version: 1, topic: 'conversation', conversationId, generation: 1 } as const;
+  const time = '2026-10-04T13:01:00Z';
+  const message: ChatRow = { id: turnId, position: 1, type: 'message.posted', time,
+    data: { authorId: 'me', text: draftPrompt } };
+  const reply: ChatRow = { id: 'reply', position: 2, type: 'agent.message_completed', time,
+    data: { turnId, text: 'A new draft reply' } };
+  const end: ChatRow = { id: 'end', position: 3, type: 'agent.turn_completed', time,
+    data: { turnId } };
+  sendConversationFrame({ ...feed, type: 'event', position: 1, row: message });
+  sendConversationFrame({ ...feed, type: 'ready', position: 1 });
+  sendConversationFrame({ ...feed, type: 'event', position: 2, row: reply });
+  sendConversationFrame({ ...feed, type: 'event', position: 3, row: end });
+}
+
+async function opensDraftWhileSavedTranscriptLoads(): Promise<void> {
+  const saved = holdSavedTranscript();
+  const loads = vi.spyOn(ChatSession.prototype, 'load');
+  const fixture = mountWorkspace('?conversation=requested');
+  const root = workspaceRoot(fixture);
+  try {
+    const newSession = root.querySelector<HTMLButtonElement>('button.new-session')!;
+    function savedTranscriptIsPending(): void {
+      fixture.detectChanges();
+      expect(saved.state.historyRequested).toBe(true);
+      expect(root.querySelector('.skeleton')).not.toBeNull();
+      expect(newSession.disabled).toBe(false);
+    }
+    await vi.waitFor(savedTranscriptIsPending);
+    newSession.click();
+    expect(location.search).toBe('');
+    openAssignmentSocket();
+    assignment();
+    saved.release();
+    await loads.mock.results[0]!.value;
+    fixture.detectChanges();
+
+    const composer = root.querySelector<HTMLTextAreaElement>('textarea#message')!;
+    expect(composer.disabled).toBe(false);
+    composer.value = draftPrompt;
+    composer.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    root.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click();
+
+    function sentDraftIsVisible(): void {
+      fixture.detectChanges();
+      expect(saved.state.messageId).not.toBe('');
+      expect(root.textContent).toContain(draftPrompt);
+    }
+    await vi.waitFor(sentDraftIsVisible);
+    socket.onopen?.(new Event('open'));
+    fixture.detectChanges();
+    expect(sent).toHaveBeenCalledWith(JSON.stringify({ type: 'subscribe', topic: 'conversation',
+      conversationId: saved.state.conversationId, since: 0, generation: 0 }));
+    sendReply(saved.state.conversationId, saved.state.messageId);
+    fixture.detectChanges();
+    const agentReply = root.querySelector('article[aria-label="Agent reply"]');
+    expect(agentReply?.textContent).toContain('A new draft reply');
+    expect(agentReply?.textContent).toContain('Done');
+  } finally {
+    saved.release();
+    fixture.destroy();
+    loads.mockRestore();
+    vi.unstubAllGlobals();
+  }
+}
+
+it('shows the live reply after opening a draft before the saved transcript loads',
+  opensDraftWhileSavedTranscriptLoads);
