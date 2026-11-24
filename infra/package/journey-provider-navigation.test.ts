@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { chromium } from 'playwright';
-import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
+import { chromium, type Response } from 'playwright';
+import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
+  from './provider-navigation.ts';
 
 function serve(request: IncomingMessage, response: ServerResponse): void {
   if (request.url === '/api/check') {
@@ -14,6 +15,15 @@ function serve(request: IncomingMessage, response: ServerResponse): void {
   response.writeHead(200, { 'content-type': 'text/html' });
   if (request.url === '/') {
     response.end('<script>fetch("/api/check")</script>');
+  } else if (request.url === '/redirect-after-check') {
+    response.end(`<script>
+      async function go() {
+        const response = await fetch('/api/check');
+        const data = await response.json();
+        if (data.result === 'safe') location.assign('/next');
+      }
+      go();
+    </script>`);
   } else {
     response.end('<p>Next page</p>');
   }
@@ -63,6 +73,49 @@ async function keepsResponseBodies(): Promise<void> {
 
 test('navigation waits for API disclosure inspection before discarding the old response body',
   keepsResponseBodies);
+
+async function scansReplyBeforePageNavigation(): Promise<void> {
+  const server = createServer(serve);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const moved = page.waitForURL(`${origin}/next`);
+    const replies: Promise<void>[] = [];
+    const bodies: string[] = [];
+    function delayPassiveRead(response: Response): void {
+      if (response.url() !== `${origin}/api/check`) return;
+      const read = response.text.bind(response);
+      // Let the page leave before the passive inspector tries to read Chromium's old handle.
+      async function readAfterNavigation(): Promise<string> {
+        await moved;
+        return read();
+      }
+      response.text = readAfterNavigation;
+    }
+    function inspect(body: string): void {
+      bodies.push(body);
+    }
+    page.on('response', delayPassiveRead);
+    await watchBrowserReplies(page, origin, replies, inspect);
+    await page.goto(`${origin}/redirect-after-check`);
+    await moved;
+    await finishBrowserReplies(browser, replies);
+    assert.deepEqual(bodies, ['{"result":"safe"}']);
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('the browser collector scans API replies when the application immediately navigates',
+  scansReplyBeforePageNavigation);
 
 async function preservesInspectionFailures(): Promise<void> {
   const browser = await chromium.launch({ headless: true });

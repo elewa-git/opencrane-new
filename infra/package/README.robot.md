@@ -283,11 +283,13 @@ a different status method. `journey-provider-probe.test.ts` pins the native 401 
 The runner waits for the model answer to appear before capturing either width. It
 clicks Select chat default in Settings and waits for the recorded change before
 starting the drain.
-Before navigating, the driver waits for current network activity and pending API
-body inspections to finish. An inspection failure still fails the journey and is
-recorded in its receipt; it cannot become an unhandled rejection during navigation.
-`journey-provider-navigation.test.ts` reproduces Chromium discarding an old response
-body and verifies that a failed disclosure inspection still refuses navigation.
+The driver inspects each browser API response while Chromium holds it, then lets
+Chromium deliver the same response to the page. The page can navigate as soon as
+it receives a reply, so a collector that reads afterwards can lose the body.
+`journey-provider-navigation.test.ts` reproduces that loss as the page navigates
+and verifies that a failed disclosure inspection still refuses navigation.
+Before the driver navigates, it waits for current network activity and pending
+inspections. An inspection failure still fails the journey and is recorded.
 Before recording PASS, the driver closes the browser and checks again for any
 inspection failure received during shutdown.
 The event-disclosure command reads the saved events inside the server Pod and

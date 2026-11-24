@@ -9,7 +9,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
-import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
+import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
+  from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, wrongKeyStatusScript } from './provider-probe.ts';
 import { checkProviderStatus, createProviderConnection, finishSelectingProviderModels, providerSetup,
@@ -65,6 +66,7 @@ async function wrongKeyStatus() {
 async function login(role) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
+  await watchBrowserReplies(page, origin, responses, assertNoBrowserDisclosure);
   page.setDefaultTimeout(30_000);
   const user = setup.users[role];
   assert(user, 'The claimed slot must have this separate test identity');
@@ -79,20 +81,11 @@ async function login(role) {
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   function returned(url) { return url.origin === origin && !url.pathname.startsWith('/auth/'); }
   await page.waitForURL(returned);
-  page.on('response', inspectReply);
   return page;
 }
 
-function inspectReply(response) {
-  if (!response.url().startsWith(`${origin}/api/`)) return;
-  async function inspect() {
-    const body = await response.text();
-    for (const secret of secrets) assert(!body.includes(secret), 'An API reply disclosed a key');
-  }
-  const inspection = inspect();
-  // Keep errors for the next navigation or final check so the receipt records the failure.
-  void Promise.allSettled([inspection]);
-  responses.push(inspection);
+function assertNoBrowserDisclosure(body) {
+  for (const secret of secrets) assert(!body.includes(secret), 'An API reply disclosed a key');
 }
 
 async function capture(page, name, width) {
