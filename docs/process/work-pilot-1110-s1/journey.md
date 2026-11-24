@@ -1,8 +1,112 @@
 # Packaged connected-provider journey
 
-**FAIL — the round 5 journey stopped at the chat-default bindings read.**
-Paid provider calls and external charges were zero. Both live blocking findings
-remain open and the PR stays draft.
+**FAIL — the round 6 packaged journey did not complete in one fresh run.**
+The custody check and both member replies passed on attempt 2. The corrected
+standalone event check passed on attempt 4. The PR remains draft.
+
+## Round 6 fresh package
+
+On 24 November 2026 UTC, secondary slot 1 installed a new namespace and volumes
+from `790e6ef3b4a910e8e02371958940cad04b48f8bf` with exact-source approved images. It claimed the slot after
+358 sampled seconds below six with both secondary slots free.
+One-minute load at the final queue check was 2.21. The sampled peak
+was 10.02. The install logged
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366`; the F1/F2 host checks
+retained their refusals. The private values file was supplied once by path.
+The fleet marker stayed present and the qualification used the restricted free
+stand-in. Paid calls and external charges were zero.
+
+| Condition | Result |
+| --- | --- |
+| Fresh images, namespace, volumes and package readiness | PASS on attempt 4 |
+| Settings and the Key form at both widths | PASS on attempt 4 |
+| Wrong key refused by the stand-in with HTTP 401, and no visible or API disclosure through refusal | PASS on attempt 4 |
+| Right key, quoted test and settled model answer at both widths | PASS on attempt 4 |
+| Model selection, chat default and switch-on | PASS on attempt 4 |
+| Synthetic 0600 file, 0700 directory and unchanged bytes across Pod recreation | PASS on attempts 2 and 4 |
+| Member reply at 1280 and 390 px after Pod recreation | PASS on attempt 2. Attempt 4 stalled at 1280 px. The 390 px reply was NOT RUN |
+| Final values, manifests, browser/API replies and event inspection in one run | NOT RUN to completion |
+| Separate event check on attempt 4 | PASS — 110 saved events |
+| Dispatcher restarts on attempt 4 | PASS — zero across 2 observed Pods |
+| Logs retained before teardown, slot released | PASS |
+
+The fourth run captured switch-on at both widths. The recreated server Pod was
+ready, but the browser runner stopped advancing and produced no member image or
+terminal result. The builder stopped the runner after observing the stall and
+saved service logs before teardown. Closing the browser ended a pending response
+body inspection. The underlying stall is unresolved. The
+standalone event check used the same installed package and synthetic inputs as
+that attempt. It returned only the number of saved events checked.
+
+- [Attempt 4 observations](live/round-6/result.json), [bindings and dispatcher diagnostics](live/round-6/diagnostics.json),
+  [image and volume binding](live/round-6/installation.json) and [event check](live/round-6/event-disclosure.json).
+- Key form at [1280 px](live/round-6/new-key-entry-1280.png) and [390 px](live/round-6/new-key-entry-390.png),
+  and wrong-key refusal at [1280 px](live/round-6/wrong-key-refused-1280.png) and [390 px](live/round-6/wrong-key-refused-390.png).
+- Settled model answer at [1280 px](live/round-6/model-test-passed-1280.png) and
+  [390 px](live/round-6/model-test-passed-390.png), and switch-on at
+  [1280 px](live/round-6/provider-switched-on-1280.png) and [390 px](live/round-6/provider-switched-on-390.png).
+- Attempt 2 member replies at [1280 px](live/round-6/attempt-2-member-chat-1280.png)
+  and [390 px](live/round-6/attempt-2-member-chat-390.png).
+
+[Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45498384591) and
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45498390820) for the fourth install.
+
+### Earlier round 6 attempts
+
+1. **FAIL at package startup** on `2bfb06ecf`. Two server Pods overlapped during
+   the installer’s computer-gateway update. The old Pod’s models container was
+   ready, the replacement’s was waiting, and a PostgreSQL advisory lock still
+   had a waiter at teardown. The dispatcher recorded zero restarts. The Pod to
+   connection pairing could not be collected before teardown. Test-first
+   `bd9b83b4b` pins the rollout ordering. `82c58b375` makes the provider-mode
+   server use `Recreate`, so the old process can release the budget lock before
+   the new one starts. The default and explicit stub renders still match the
+   original bytes. The second install showed the old server Pod gone before
+   the new one appeared. [Startup result](live/round-6/attempt-1-result.json).
+2. **FAIL at the event-disclosure command** on `82c58b375`. The run reached
+   switch-on, proved 0600/0700 custody and unchanged synthetic key bytes across
+   Pod recreation, and captured member replies at both widths. The values,
+   manifests and server logs passed the inspection preceding the event command.
+   The command exited before producing an event count. The native Node fixture
+   in `739c7f32a` reproduces the missing `readEvents` export. `c26a1ec71` imports
+   the reader from `@opencrane/projections`. The same command now counts real
+   fixture events and refuses a matching event. [Result](live/round-6/attempt-2-result.json).
+3. **FAIL during model selection** on `c26a1ec71`. The wrong key, right key and
+   quoted test passed. The models read returned the saved selection, then
+   Playwright waited to click a disabled Check status button that detached when
+   setup advanced. The Chromium fixture in `8bbbf5c12` reproduced that failure.
+   `790e6ef3b` uses the existing next-step driver to follow Access. The API
+   model check and the Access heading must both pass. [Result](live/round-6/attempt-3-result.json).
+
+Startup, service and browser diagnostics for the failed attempts were retained
+privately before teardown. The first attempt’s slot had no `failure.log`.
+Each attempt released its own claim. Paid calls and external charges were zero.
+
+### Round 6 source checks
+
+Test-first `c9839c155` reproduced the single-read failure on the Settings
+control. `2bfb06ecf` reads fresh binding positions once after a 503. A second
+failure gives an actionable message and sends no binding command. The bindings
+route uses the same 503 when dependency preparation fails for another reason.
+The source tests cover that contract, current positions, repeat refusal and 403.
+Both refusal cases failed when a temporary change allowed a write after 403. The
+committed code was restored. The server routes and history guard match main.
+
+PASS twice on 109 Angular cases, 47 server binding-guard and managed-start cases,
+323 chart, key storage and package cases after the rollout fix, two real NATS
+checks of the event command and 14 browser-driver cases after the final driver
+fix. Typecheck, event catalogue agreement, Knip, changelog, Markdown, README
+structure, public privacy and secret scans passed. Scoped ESLint found zero
+errors on covered files. Repository configuration excludes the six changed
+infrastructure code files. Local tests and checks used `nice -n 10`.
+
+The rebase onto `4553898593de57e95b825f71c693317cc103169d` finished, retaining
+the changes in #1149, #1183, #1185 and #1171. The rebased head and rollout source passed
+hosted CI and both package approvals with fresh artifacts. The last changes
+were to the local test commands and their fixtures. The installed application
+and chart code match the approved rollout source.
+[Rebased CI](https://github.com/elewa-git/opencrane-new/actions/runs/45476373828)
+and [rollout CI](https://github.com/elewa-git/opencrane-new/actions/runs/45488667705).
 
 ## Round 5 fresh package
 

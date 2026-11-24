@@ -1,0 +1,23 @@
+{
+  "status": "FAIL",
+  "source": "c26a1ec71e1874934bced842beb7453ec9a55173",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "model selection",
+      "result": "FAIL",
+      "errorType": "TimeoutError",
+      "detail": "The selected chat models must finish applying."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

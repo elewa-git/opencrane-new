@@ -1,0 +1,33 @@
+{
+  "bindingsRequests": [],
+  "dispatcherObservations": [
+    {
+      "podUid": "beff2b60-df27-4cf7-9c38-34cd073d9920",
+      "restartCount": 0
+    },
+    {
+      "podUid": "fb6027cd-ee9f-43fa-9ab0-7f22b65ea694",
+      "restartCount": 0
+    }
+  ],
+  "dispatcherPresentAtTeardown": [
+    {
+      "pod": "worker-dispatcher-575bc4c4f6-ggh2b",
+      "restartCount": 0
+    }
+  ],
+  "dispatcherPoolAcquisitionErrors": 0,
+  "queueBeforeClaim": {
+    "utc": "2026-11-24T21:03:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.37,
+    "clearSeconds": 3148,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  "maximumOneMinuteLoad": 7.19,
+  "slotReleased": true
+}
