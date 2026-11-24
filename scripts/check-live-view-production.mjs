@@ -9,26 +9,12 @@ import { promisify } from 'node:util';
 import { chromium } from 'playwright';
 import { WebSocketServer } from 'ws';
 import { startWebServer } from '../infra/dev-stack/web-server.mjs';
+import { rfbHandshake } from './rfb-fixture.mjs';
 
 const execute = promisify(execFile);
 
-function serverInit() {
-  const bytes = Buffer.alloc(24);
-  bytes.writeUInt16BE(800);
-  bytes.writeUInt16BE(600, 2);
-  bytes[4] = 32;
-  bytes[5] = 24;
-  bytes[7] = 1;
-  bytes.writeUInt16BE(255, 8);
-  bytes.writeUInt16BE(255, 10);
-  bytes.writeUInt16BE(255, 12);
-  bytes[14] = 16;
-  bytes[15] = 8;
-  return bytes;
-}
-
 function framebuffer(pixelFormat) {
-  // Draw a red pixel at the origin through a real raw RFB rectangle.
+  // Use a known colour so a blank canvas cannot pass.
   const bytes = Buffer.alloc(20);
   bytes.writeUInt16BE(1, 2);
   bytes.writeUInt16BE(1, 8);
@@ -44,6 +30,7 @@ function framebuffer(pixelFormat) {
 }
 
 function connectDesktop(socket) {
+  const { version, replies } = rfbHandshake(800, 600);
   let step = 0;
   let frameSent = false;
   let pixelFormat;
@@ -54,16 +41,10 @@ function connectDesktop(socket) {
     socket.send(message);
   }
   function receive(bytes) {
-    if (step === 0) {
-      const securityTypes = Buffer.from([1, 1]);
-      socket.send(securityTypes);
-    } else if (step === 1) {
-      const securityAccepted = Buffer.alloc(4);
-      socket.send(securityAccepted);
-    } else if (step === 2) {
-      const initialDisplay = serverInit();
-      socket.send(initialDisplay);
-    } else if (step === 3) {
+    const reply = replies[step];
+    if (reply) {
+      socket.send(reply);
+    } else if (step === replies.length) {
       assert.equal(bytes[0], 0, 'The viewer selects its pixel format');
       assert.equal(bytes[4], 32, 'The fixture uses 32-bit pixels');
       pixelFormat = Buffer.from(bytes);
@@ -81,7 +62,6 @@ function connectDesktop(socket) {
   }
   socket.once('close', disconnected);
   socket.on('message', receive);
-  const version = Buffer.from('RFB 003.008\n');
   socket.send(version);
 }
 
