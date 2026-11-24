@@ -208,14 +208,8 @@ export class ChatSession implements OnDestroy {
     this.requestedLookupFailed.set(false);
     const revision = ++this.revision;
     this.sawReconnecting = false;
-    this.conversationReady = false;
-    this.caughtUp.set(false);
-    this.historyFailure.set(false);
+    this.resetHistoryRead();
     this.needsReplacement = false;
-    this.olderBefore.set(null);
-    this.olderLoading.set(false);
-    this.olderFailure.set(false);
-    this.bufferedRows = [];
     this.stopState.reset();
     this.reconnectCount = 0;
     this.reconnectedAt.set('');
@@ -250,17 +244,13 @@ export class ChatSession implements OnDestroy {
   newSession(): void {
     if (this.busy() || this.pending || this.uploadBatch.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
+    this.resetHistoryRead();
     this.stopState.reset();
     this.reconnectedAt.set('');
     this.clearUpload(); this.assignment.openDraft(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
     this.readMarker.clear();
-    this.caughtUp.set(false);
-    this.bufferedRows = [];
     this.needsReplacement = false;
-    this.olderBefore.set(null);
-    this.olderLoading.set(false);
-    this.olderFailure.set(false);
     this.requestedUnavailable.set(false);
     this.requestedLookupFailed.set(false);
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
@@ -409,6 +399,14 @@ export class ChatSession implements OnDestroy {
   }
   private resetForNewJoin(): void {
     // Clear old rows before the new join can acknowledge anything on screen.
+    this.resetHistoryRead();
+    this.rows.set([]);
+    this.position = 0;
+    this.generation = 0;
+    this.socket.disconnect();
+  }
+  private resetHistoryRead(): void {
+    // Discard the old read and the live rows that were waiting for it.
     this.caughtUp.set(false);
     this.conversationReady = false;
     this.historyRun += 1;
@@ -418,10 +416,6 @@ export class ChatSession implements OnDestroy {
     this.olderLoading.set(false);
     this.olderFailure.set(false);
     this.bufferedRows = [];
-    this.rows.set([]);
-    this.position = 0;
-    this.generation = 0;
-    this.socket.disconnect();
   }
   private readAllowed(): boolean {
     return !this.denied() && this.caughtUp() && document.visibilityState === 'visible'

@@ -625,8 +625,9 @@ when an assistant is available. The draft buttons and shortcuts wait for the mem
 ID and the first successful session-list read. If that list read fails, retry keeps
 the requested session address. Choosing a different session during a retry takes over
 the transcript, and the list's loading indicator clears when the retry finishes.
-Opening a new draft while the assistant is absent restarts assignment delivery on the
-socket without repeating the HTTP context read or reloading the page.
+Opening a draft stops waiting for the previous transcript and discards its buffered updates.
+While the assistant is absent, the draft restarts assignment delivery on the socket
+without repeating the HTTP context read or reloading the page.
 Access loss clears the workspace; a late frame cannot restore it. Selecting an
 existing conversation uses its normal subscription instead. Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`
