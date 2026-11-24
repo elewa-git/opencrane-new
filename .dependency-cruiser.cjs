@@ -1,5 +1,6 @@
 // Only current packages and adapters belong here; spikes and infra qualify separately.
 const libraries = ['libs/events', 'libs/auth', 'libs/observability', 'libs/protocol', 'libs/event-store', 'libs/projections', 'libs/handlers', 'libs/authz', 'libs/models'];
+const angularSpecPath = '^apps/web/src/.*\\.spec\\.ts$';
 const publicEntrypoints = {
   'libs/observability': '^libs/observability/(src/index|test/memory-sink)\\.ts$',
   'libs/events': '^libs/events/src/(index|ids|digest|tool-call|command-activity-label|lossless-json|mcp-catalogue|routine-schedule|session-configuration)\\.ts$',
@@ -38,8 +39,8 @@ module.exports = {
       from: { path: '^(apps|libs)/[^/]+/src/' },
       to: { path: '^scripts/' } },
     { name: 'runtime-does-not-import-tests', severity: 'error',
-      from: { path: '^(apps|libs)/[^/]+/src/' },
-      to: { path: '/tests?/' } },
+      from: { path: '^(apps|libs)/[^/]+/src/', pathNot: angularSpecPath },
+      to: { path: `/tests?/|${angularSpecPath}` } },
     ...libraries.map(libraryEntrypointRule),
     { name: 'nats-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/(event-store/src/(jetstream|nats-connection|certificates)|handlers/src/dispatcher)\\.ts$' }, to: { path: 'node_modules/@nats-io/' } },
     { name: 'openfga-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/authz/src/client\\.ts$' }, to: { path: 'node_modules/@openfga/sdk/' } },

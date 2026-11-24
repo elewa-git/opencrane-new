@@ -8,6 +8,7 @@ import { ChildReview } from './child-review';
 import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 import { WebSocketService } from '../core/websocket.service';
 import type { ChatRow } from '@opencrane/protocol';
+import { deferredReply } from '../../../test/support/deferred-reply';
 
 type ReplyOverride = (request: RequestRecord) => Response | Promise<Response> | undefined;
 
@@ -867,18 +868,6 @@ async function waitForText(fixture: ComponentFixture<DirectChat>, text: string):
 async function openExisting(fixture: ComponentFixture<DirectChat>): Promise<void> {
   root(fixture).querySelector<HTMLButtonElement>('.conversation-row')?.click();
   await waitForText(fixture, 'Is the Tuesday slot still open?');
-}
-
-function deferredReply() {
-  let release: (response: Response) => void = missingRelease;
-  function missingRelease(): void {
-    throw new Error('The reply was not held');
-  }
-  function hold(resolve: (response: Response) => void): void {
-    release = resolve;
-  }
-  const promise = new Promise<Response>(hold);
-  return { promise, release };
 }
 
 async function keepsFirstSendAndEdits(): Promise<void> {

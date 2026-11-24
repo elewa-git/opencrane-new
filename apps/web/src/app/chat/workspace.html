@@ -364,7 +364,7 @@
     </aside>
   }
   <oc-navigation-menu id="workspace-navigation" [open]="rail()" label="Sessions"
-    [returnFocusTo]="navigationOpener" (closed)="navigationClosed()">
+    [returnFocusTo]="navigationOpener" (closed)="rail.set(false)">
     @if (rail()) {
       <ng-container [ngTemplateOutlet]="sessionNavigation" />
       <footer class="rail-footer">
@@ -417,10 +417,10 @@
   <ng-template #sessionNavigation>
     <div class="rail-content" [attr.aria-busy]="chat.railLoading()">
       <button type="button" class="new-session" [class.active]="!chat.selected()"
-        (click)="newSession()">
+        [disabled]="!canOpenDraft()" (click)="newSession()">
         <oc-icon name="plus" /> New session <kbd>⌘N</kbd>
       </button>
-      <button type="button" class="ask" (click)="newSession()">
+      <button type="button" class="ask" [disabled]="!canOpenDraft()" (click)="newSession()">
         <oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd>
       </button>
       <a class="new-direct" href="/workspace/direct">New direct chat</a>
@@ -506,7 +506,7 @@
         </svg>
         <strong>No conversations yet</strong>
         <p>Start one and it will live here.</p>
-        <button type="button" (click)="newSession()">New session</button>
+        <button type="button" [disabled]="!canOpenDraft()" (click)="newSession()">New session</button>
       </div>
     }
   </ng-template>

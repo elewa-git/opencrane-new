@@ -40,6 +40,10 @@ h2 { margin: 0; }
 .empty-rail { color: var(--oc-ink-muted); font-size: 11px; padding: 0 10px; }
 .session-row { animation: oc-deal 380ms var(--oc-ease-fold) calc(var(--row,0)*34ms) backwards; }
 .new-session.active { background: #e7ebec; }
+.new-session:disabled, .ask:disabled, .rail-empty button:disabled {
+  cursor: default;
+  opacity: .55;
+}
 .session-row.active { background: #e1e7e8; box-shadow: inset 2px 0 #0db5cc; font-weight: 600; }
 .slug { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-transform: lowercase; }
 .rail-content .archive { color: var(--oc-ink-muted); font-size: 11px; margin-top: 18px; }
