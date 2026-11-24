@@ -1,0 +1,62 @@
+TAP version 13
+# Subtest: keeps a safe specific failure and real PNG before context closure
+not ok 1 - keeps a safe specific failure and real PNG before context closure
+  ---
+  duration_ms: 945.068377
+  type: 'test'
+  location: '<worktree>/infra/package/qualification-failure.test.mjs:80:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      {
+        code: 'BROWSER_TIMEOUT',
+        result: 'FAIL',
+    +   screenshot: 'FAIL',
+    -   screenshot: 'PASS',
+        step: 'member 1280px draft'
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    step: 'member 1280px draft'
+    result: 'FAIL'
+    code: 'BROWSER_TIMEOUT'
+    screenshot: 'PASS'
+  actual:
+    step: 'member 1280px draft'
+    result: 'FAIL'
+    code: 'BROWSER_TIMEOUT'
+    screenshot: 'FAIL'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.capturesBeforeClosing (file://<worktree>/infra/package/qualification-failure.test.mjs:34:12)
+    runNextTicks (node:internal/process/task_queues:64:5)
+    process.processImmediate (node:internal/timers:452:9)
+    process.callbackTrampoline (node:internal/async_hooks:130:17)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: private messages, codes and steps cannot enter failure receipts
+ok 2 - private messages, codes and steps cannot enter failure receipts
+  ---
+  duration_ms: 2.2224
+  type: 'test'
+  ...
+# Subtest: records unavailable screenshot without hiding the journey failure
+ok 3 - records unavailable screenshot without hiding the journey failure
+  ---
+  duration_ms: 0.866318
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 2
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2043.47344

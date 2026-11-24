@@ -1,6 +1,7 @@
 import { subscribePrivateOutput } from './private-output.ts';
 import type { WebSocket } from 'ws';
-import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
+import type { AuthConfig, SessionData } from '@opencrane/auth';
+import { validChatSession } from './session-auth.ts';
 import { chatMessageSchema, type ChatRow } from '@opencrane/protocol';
 import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
@@ -81,7 +82,7 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
   }
   const watchdog = setTimeout(expire, 1500);
   try {
-    if (!validSession(session, config, options)) {
+    if (!validChatSession(session, config, options)) {
       refuse(state);
       return;
     }
@@ -101,7 +102,7 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
     state.accessPassed = true;
     if (!state.privateSubscribed && state.memberId) {
       function current() {
-        return validSession(session, config, options) && socket.readyState === socket.OPEN;
+        return validChatSession(session, config, options) && socket.readyState === socket.OPEN;
       }
       async function confirm() {
         if (!current() || !state.access) return false;
@@ -312,9 +313,4 @@ function send(state: Subscription, type: string, extra = {}) {
 function refuse(state: Subscription) {
   send(state, 'refused');
   state.socket.close(1008);
-}
-
-function validSession(session: SessionData, config: AuthConfig, options: ChatOptions) {
-  return isOrganisationSession(config, session) && session.exp * 1000 > Date.now() &&
-    options.silo === options.binding.silo;
 }

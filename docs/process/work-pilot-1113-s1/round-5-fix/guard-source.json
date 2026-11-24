@@ -1,0 +1,27 @@
+[
+  {
+    "file": "apps/server/src/chat/context-live.ts",
+    "guardBlob": "a30323463fc35e92ae5718f760f189d04c02bf84",
+    "result": "PASS"
+  },
+  {
+    "file": "apps/server/src/chat/context.ts",
+    "guardBlob": "f828531733c715f51c2374b6767f8edd5d28107d",
+    "result": "PASS"
+  },
+  {
+    "file": "apps/server/src/chat/session-auth.ts",
+    "guardBlob": "d55f397d024efbaa581238a041be00b9a23d7efa",
+    "result": "PASS"
+  },
+  {
+    "file": "apps/server/src/members/bootstrap.ts",
+    "guardBlob": "6963b7eb7764e7be68634d3dd7a465c7d70d7df9",
+    "result": "PASS"
+  },
+  {
+    "file": "apps/web/src/app/chat/personal-assignment.ts",
+    "guardBlob": "c4de82093e9f0b46f42f4c724a4b4c33e86a0529",
+    "result": "PASS"
+  }
+]

@@ -1,0 +1,43 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false --include=src/app/chat/composer-fast-enter.spec.ts --include=src/app/chat/composer.spec.ts --include=src/app/chat/workspace.spec.ts --include=src/app/chat/direct-chat.spec.ts
+❯ Building...
+✔ Building...
+Initial chunk files                  | Names                             |  Raw size
+spec-app-chat-workspace.js           | spec-app-chat-workspace           | 949.71 kB | 
+spec-app-chat-direct-chat.js         | spec-app-chat-direct-chat         | 396.84 kB | 
+chunk-RLHLAPXD.js                    | -                                 | 137.09 kB | 
+chunk-BAHCL4QN.js                    | -                                 |  58.56 kB | 
+styles.css                           | styles                            |  16.42 kB | 
+spec-app-chat-composer.js            | spec-app-chat-composer            |   6.67 kB | 
+chunk-JBWBLPNK.js                    | -                                 |   5.19 kB | 
+spec-app-chat-composer-fast-enter.js | spec-app-chat-composer-fast-enter |   2.99 kB | 
+init-testbed.js                      | init-testbed                      |   1.21 kB | 
+vitest-mock-patch.js                 | vitest-mock-patch                 | 974 bytes | 
+
+                                     | Initial total                     |   1.58 MB
+
+Lazy chunk files                     | Names                             |  Raw size
+mermaid-library.js                   | mermaid-library                   |   7.89 MB | 
+chunk-H7TOJMXM.js                    | mermaid-renderer                  |   4.10 kB | 
+chunk-V3BQLDE6.js                    | viewer                            | 202 bytes | 
+
+Application bundle generation complete. [42.480 seconds] - 2026-11-20T21:33:46.336Z
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+
+ Test Files  4 passed (4)
+      Tests  230 passed (230)
+   Start at  21:33:46
+   Duration  34.44s (transform 6.40s, setup 3.01s, import 7.67s, tests 52.00s, environment 5.13s)
+

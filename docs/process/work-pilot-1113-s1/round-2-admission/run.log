@@ -1,0 +1,4 @@
+FAIL secondary slot availability; details withheld
+PASS package-down cleanup
+PASS down cleanup
+Safe logs retained before teardown; screenshots=0

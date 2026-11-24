@@ -1781,7 +1781,15 @@ before opening their short access check.
 `GET /api/chat` returns the authenticated member id, display name, own role
 (`owner`, `admin` or `member`) and personal assistant id (null while provisioning).
 `chatContextSchema` checks this reply; its optional role keeps older replies readable. It requires live silo membership and `acts_for`;
-it does not expose the organisation computer register. Conversation list rows
+it does not expose the organisation computer register. The `chat-context` socket
+subscription uses the same context builder. It checks the issuer-bound session and
+active membership before and after each read, and requires `acts_for` for the
+assignment. It checks changes every 250 ms, with one read at a time and a
+1.5-second watchdog. It emits the initial context and later assignment changes.
+It closes on refusal, failed reads, expiry or excess buffered output. No
+conversation or conversation authority fence is needed. Subscription tests use real
+identity bindings for two active people, separate silos, denied assistant permission,
+expiry and membership removal during a held context read. Conversation list rows
 include an event-derived title and status, computed only after per-conversation
 read permission. No administrative bypass grants access to private sessions.
 

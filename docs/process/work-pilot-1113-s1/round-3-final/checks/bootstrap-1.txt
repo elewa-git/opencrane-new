@@ -1,0 +1,11 @@
+npm notice run npx
+npm notice run 'vitest' run infra/package/bootstrap.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  38 passed (38)
+   Start at  21:20:07
+   Duration  132.82s (tests 94%, transform 3%, import 2%)
+

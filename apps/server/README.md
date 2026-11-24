@@ -18,7 +18,7 @@ The server uses shared libraries to read events, check permissions and load read
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] <-->|requests and assignment updates| server["apps/server<br/>the back end"]
   server <-->|work and replies| computer["apps/computer<br/>assistant computers"]
   server -->|reads and saves permitted events| nats["NATS<br/>the event log"]
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
@@ -33,7 +33,7 @@ flowchart LR
 - Sign people in and keep their browser sessions.
 - Check access before returning private information or saving changes.
 - Serve verified pilot restores with writes and assistant work held.
-- Carry chat messages, assistant work, live replies, stops and tool approvals.
+- Carry personal assistant assignments, chat messages, live replies, stops and tool approvals.
 - Check and scan files before storing them or passing them to a computer.
 - Serve desktop views and screenshots to people with access. Refuse signed-out view
   requests without adding events, and audit signed-in refusals.

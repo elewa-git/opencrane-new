@@ -11,6 +11,7 @@ const files = [
   'infra/clamav/database.mjs',
   'infra/package/prepare-nats-routes.ts',
   'infra/package/check-nats-inputs.ts',
+  'infra/package/public-settings.mjs',
   'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/command-limits.ts',
   'infra/dev-stack/cnpg.ts',

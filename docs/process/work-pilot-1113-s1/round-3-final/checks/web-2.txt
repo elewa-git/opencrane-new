@@ -1,0 +1,41 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false --include=src/app/chat/provisioning.spec.ts --include=src/app/chat/private-reply.spec.ts --include=src/app/chat/workspace.spec.ts
+❯ Building...
+✔ Building...
+Initial chunk files            | Names                       |  Raw size
+spec-app-chat-workspace.js     | spec-app-chat-workspace     |   1.03 MB | 
+chunk-J35HQFJZ.js              | -                           | 106.92 kB | 
+styles.css                     | styles                      |  16.42 kB | 
+spec-app-chat-private-reply.js | spec-app-chat-private-reply |  14.89 kB | 
+chunk-JBWBLPNK.js              | -                           |   5.19 kB | 
+spec-app-chat-provisioning.js  | spec-app-chat-provisioning  |   2.91 kB | 
+init-testbed.js                | init-testbed                |   1.21 kB | 
+vitest-mock-patch.js           | vitest-mock-patch           | 974 bytes | 
+
+                               | Initial total               |   1.18 MB
+
+Lazy chunk files               | Names                       |  Raw size
+mermaid-library.js             | mermaid-library             |   7.89 MB | 
+chunk-H7TOJMXM.js              | mermaid-renderer            |   4.10 kB | 
+chunk-V3BQLDE6.js              | viewer                      | 202 bytes | 
+
+Application bundle generation complete. [45.311 seconds] - 2026-11-20T21:18:22.183Z
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+
+ Test Files  3 passed (3)
+      Tests  167 passed (167)
+   Start at  21:18:22
+   Duration  29.82s (transform 7.70s, setup 2.69s, import 10.20s, tests 24.80s, environment 3.92s)
+

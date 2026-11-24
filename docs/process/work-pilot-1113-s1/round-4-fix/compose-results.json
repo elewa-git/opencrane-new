@@ -1,0 +1,11 @@
+{
+  "freshStack": "PASS",
+  "slot": 1,
+  "upFresh": "PASS",
+  "status": "PASS",
+  "repeatJourney": "PASS",
+  "browserWidths": [1280, 390],
+  "logsRetained": 28,
+  "down": "PASS",
+  "slotReleased": true
+}

@@ -1,0 +1,15 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/chat-context-live.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 <worktree>
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:15:34
+   Duration  17.75s (transform 57%, tests 25%, import 18%)
+
+  Transform  transforming modules took 9.90s · 57% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

@@ -1,0 +1,27 @@
+[pod/nats-0/nats] 2026-11-20T20:45:38.158400168Z [1] 2026/11/20 20:45:38.158220 [INF] Starting nats-server
+[pod/nats-0/nats] 2026-11-20T20:45:38.159009801Z [1] 2026/11/20 20:45:38.158406 [INF]   Version:  2.15.0
+[pod/nats-0/nats] 2026-11-20T20:45:38.159028497Z [1] 2026/11/20 20:45:38.158417 [INF]   Git:      [eb76367]
+[pod/nats-0/nats] 2026-11-20T20:45:38.159031974Z [1] 2026/11/20 20:45:38.158421 [INF]   Name:     NASDOCU6CHV5DUNOS7S3CEMWAPYRCJUIGKEZORSM2NYXRKJJDMFY7REI
+[pod/nats-0/nats] 2026-11-20T20:45:38.159035329Z [1] 2026/11/20 20:45:38.158430 [INF]   Node:     HsUmzVMe
+[pod/nats-0/nats] 2026-11-20T20:45:38.159037687Z [1] 2026/11/20 20:45:38.158432 [INF]   ID:       NASDOCU6CHV5DUNOS7S3CEMWAPYRCJUIGKEZORSM2NYXRKJJDMFY7REI
+[pod/nats-0/nats] 2026-11-20T20:45:38.159041265Z [1] 2026/11/20 20:45:38.158461 [INF] Using configuration file: /etc/nats/nats.conf (sha256:6011094db3db65f4da8d98106165413a7e79f520d5bdf923a5d868c4342db579)
+[pod/nats-0/nats] 2026-11-20T20:45:38.161012472Z [1] 2026/11/20 20:45:38.159367 [INF] Starting JetStream
+[pod/nats-0/nats] 2026-11-20T20:45:38.161032125Z [1] 2026/11/20 20:45:38.159743 [INF]     _ ___ _____ ___ _____ ___ ___   _   __  __
+[pod/nats-0/nats] 2026-11-20T20:45:38.161034988Z [1] 2026/11/20 20:45:38.159753 [INF]  _ | | __|_   _/ __|_   _| _ \ __| /_\ |  \/  |
+[pod/nats-0/nats] 2026-11-20T20:45:38.161038084Z [1] 2026/11/20 20:45:38.159755 [INF] | || | _|  | | \__ \ | | |   / _| / _ \| |\/| |
+[pod/nats-0/nats] 2026-11-20T20:45:38.161040791Z [1] 2026/11/20 20:45:38.159757 [INF]  \__/|___| |_| |___/ |_| |_|_\___/_/ \_\_|  |_|
+[pod/nats-0/nats] 2026-11-20T20:45:38.161044088Z [1] 2026/11/20 20:45:38.159759 [INF]
+[pod/nats-0/nats] 2026-11-20T20:45:38.161047716Z [1] 2026/11/20 20:45:38.159761 [INF]          https://docs.nats.io/jetstream
+[pod/nats-0/nats] 2026-11-20T20:45:38.161050338Z [1] 2026/11/20 20:45:38.159764 [INF]
+[pod/nats-0/nats] 2026-11-20T20:45:38.161053164Z [1] 2026/11/20 20:45:38.159766 [INF] ---------------- JETSTREAM ----------------
+[pod/nats-0/nats] 2026-11-20T20:45:38.161055825Z [1] 2026/11/20 20:45:38.159769 [INF]   Strict:          true
+[pod/nats-0/nats] 2026-11-20T20:45:38.161058778Z [1] 2026/11/20 20:45:38.159776 [INF]   Max Memory:      11.71 GB
+[pod/nats-0/nats] 2026-11-20T20:45:38.161061661Z [1] 2026/11/20 20:45:38.159780 [INF]   Max Storage:     44.71 GB
+[pod/nats-0/nats] 2026-11-20T20:45:38.161064224Z [1] 2026/11/20 20:45:38.159782 [INF]   Store Directory: "/data/jetstream"
+[pod/nats-0/nats] 2026-11-20T20:45:38.161067016Z [1] 2026/11/20 20:45:38.159785 [INF]   API Level:       5
+[pod/nats-0/nats] 2026-11-20T20:45:38.161069796Z [1] 2026/11/20 20:45:38.159788 [INF] -------------------------------------------
+[pod/nats-0/nats] 2026-11-20T20:45:38.161662042Z [1] 2026/11/20 20:45:38.160482 [INF] Took 1.098029ms to start JetStream
+[pod/nats-0/nats] 2026-11-20T20:45:38.161673112Z [1] 2026/11/20 20:45:38.160954 [INF] Listening for client connections on 0.0.0.0:4222
+[pod/nats-0/nats] 2026-11-20T20:45:38.161675773Z [1] 2026/11/20 20:45:38.160962 [INF] TLS required for client connections
+[pod/nats-0/nats] 2026-11-20T20:45:38.161678966Z [1] 2026/11/20 20:45:38.160965 [WRN] Clients that are not using "TLS Handshake First" option will fail to connect
+[pod/nats-0/nats] 2026-11-20T20:45:38.161681763Z [1] 2026/11/20 20:45:38.161467 [INF] Server is ready

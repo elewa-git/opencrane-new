@@ -1,0 +1,57 @@
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.442826980Z The files belonging to this database system will be owned by user "postgres".
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.442890052Z This user must also own the server process.
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.442894765Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.443309011Z The database cluster will be initialized with locale "en_US.utf8".
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.443329962Z The default database encoding has accordingly been set to "UTF8".
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.443334472Z The default text search configuration will be set to "english".
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.443337454Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.443341448Z Data page checksums are disabled.
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.465675930Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.465714456Z fixing permissions on existing directory /var/lib/postgresql/data ... ok
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.466854103Z creating subdirectories ... ok
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.466873339Z selecting dynamic shared memory implementation ... posix
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.498884488Z selecting default "max_connections" ... 100
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.600652085Z selecting default "shared_buffers" ... 128MB
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.683053147Z selecting default time zone ... Etc/UTC
+[pod/postgres-0/postgres] 2026-11-20T20:45:41.684375365Z creating configuration files ... ok
+[pod/postgres-0/postgres] 2026-11-20T20:45:42.288247216Z running bootstrap script ... ok
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.174185909Z performing post-bootstrap initialization ... ok
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391436021Z syncing data to disk ... ok
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391474350Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391478105Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391481925Z Success. You can now start the database server using:
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391484728Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391487314Z     pg_ctl -D /var/lib/postgresql/data -l logfile start
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391489598Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391465004Z initdb: warning: enabling "trust" authentication for local connections
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.391498489Z initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.496318664Z waiting for server to start....2026-11-20 20:45:44.495 UTC [62] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.498600545Z 2026-11-20 20:45:44.498 UTC [62] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.507058979Z 2026-11-20 20:45:44.506 UTC [65] LOG:  database system was shut down at 2026-11-20 20:45:44 UTC
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.516096135Z 2026-11-20 20:45:44.515 UTC [62] LOG:  database system is ready to accept connections
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.533331465Z  done
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.533362839Z server started
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.683840767Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.683883802Z /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.683887516Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.686415797Z waiting for server to shut down...2026-11-20 20:45:44.686 UTC [62] LOG:  received fast shutdown request
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.699699796Z .2026-11-20 20:45:44.699 UTC [62] LOG:  aborting any active transactions
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.703320749Z 2026-11-20 20:45:44.702 UTC [62] LOG:  background worker "logical replication launcher" (PID 68) exited with exit code 1
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.703350640Z 2026-11-20 20:45:44.703 UTC [63] LOG:  shutting down
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.759761621Z 2026-11-20 20:45:44.759 UTC [63] LOG:  checkpoint starting: shutdown immediate
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.798018428Z 2026-11-20 20:45:44.797 UTC [63] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.009 s, sync=0.002 s, total=0.095 s; sync files=2, longest=0.002 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/14EF800, redo lsn=0/14EF800
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.808990202Z 2026-11-20 20:45:44.808 UTC [62] LOG:  database system is shut down
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.886792823Z  done
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.886863062Z server stopped
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.892187662Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.892225871Z PostgreSQL init process complete; ready for start up.
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.892228968Z
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.948689763Z 2026-11-20 20:45:44.948 UTC [1] LOG:  starting PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.949135863Z 2026-11-20 20:45:44.948 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.949159171Z 2026-11-20 20:45:44.948 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.957224751Z 2026-11-20 20:45:44.957 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.969329159Z 2026-11-20 20:45:44.969 UTC [76] LOG:  database system was shut down at 2026-11-20 20:45:44 UTC
+[pod/postgres-0/postgres] 2026-11-20T20:45:44.989564690Z 2026-11-20 20:45:44.989 UTC [1] LOG:  database system is ready to accept connections
+[pod/postgres-0/postgres] 2026-11-20T20:45:52.677123622Z 2026-11-20 20:45:52.675 UTC [92] ERROR:  relation "goose_db_version" does not exist at character 36
+[pod/postgres-0/postgres] 2026-11-20T20:45:52.677181397Z 2026-11-20 20:45:52.675 UTC [92] STATEMENT:  SELECT version_id, is_applied from goose_db_version ORDER BY id DESC
+[pod/postgres-0/postgres] 2026-11-20T20:50:45.084090250Z 2026-11-20 20:50:45.083 UTC [74] LOG:  checkpoint starting: time

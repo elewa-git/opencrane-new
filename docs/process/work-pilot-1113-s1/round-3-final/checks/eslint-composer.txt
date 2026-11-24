@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'eslint' apps/web/src/app/chat/composer.ts apps/web/src/app/chat/composer-fast-enter.spec.ts

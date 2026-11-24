@@ -1,0 +1,12 @@
+{"time": "2026-11-20T20:36:55.966617+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.2080078125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T20:37:26.023819+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 2.744140625, "qualifiedSeconds": 30, "qualified": false}
+{"time": "2026-11-20T20:37:56.321973+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 2.30224609375, "qualifiedSeconds": 60, "qualified": false}
+{"time": "2026-11-20T20:38:26.017435+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.744140625, "qualifiedSeconds": 90, "qualified": false}
+{"time": "2026-11-20T20:38:56.003529+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.439453125, "qualifiedSeconds": 120, "qualified": false}
+{"time": "2026-11-20T20:39:26.590228+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 0.998046875, "qualifiedSeconds": 150, "qualified": false}
+{"time": "2026-11-20T20:39:56.224542+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.01171875, "qualifiedSeconds": 180, "qualified": false}
+{"time": "2026-11-20T20:40:27.298888+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 0.96142578125, "qualifiedSeconds": 211, "qualified": false}
+{"time": "2026-11-20T20:40:56.808785+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.091796875, "qualifiedSeconds": 240, "qualified": false}
+{"time": "2026-11-20T20:41:26.285297+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.56201171875, "qualifiedSeconds": 270, "qualified": false}
+{"time": "2026-11-20T20:41:56.273686+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.6416015625, "qualifiedSeconds": 300, "qualified": true}
+{"time": "2026-11-20T20:42:26.195367+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 1.22314453125, "qualifiedSeconds": 330, "qualified": true}

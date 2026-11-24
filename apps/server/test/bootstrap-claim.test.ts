@@ -2,11 +2,14 @@ import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as crypto from 'node:crypto';
 import { encodeSession, type SessionData } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
+
+vi.mock('node:crypto', { spy: true });
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 const session: SessionData = {
@@ -324,3 +327,19 @@ it('reports an unavailable event store and admits a safe retry after it recovers
   expect((await claim()).statusCode).toBe(201);
   expect(await nats.store.head()).toBe(1);
 }, 45_000);
+
+async function usesConstantTimeTokenComparison(): Promise<void> {
+  const compare = vi.mocked(crypto.timingSafeEqual);
+  compare.mockClear();
+  const response = await claim(session, 'incorrect-token');
+  expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_token' });
+  expect(compare).toHaveBeenCalledOnce();
+  const comparison = compare.mock.calls[0];
+  expect(comparison?.[0]).toHaveLength(32);
+  expect(comparison?.[1]).toHaveLength(32);
+  compare.mockClear();
+  expect((await claim()).statusCode).toBe(201);
+  expect(compare).toHaveBeenCalledOnce();
+}
+it('delegates both refused and accepted token comparisons to the constant-time primitive',
+  usesConstantTimeTokenComparison);

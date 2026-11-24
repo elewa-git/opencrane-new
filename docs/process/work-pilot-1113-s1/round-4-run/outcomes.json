@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-20",
+  "source": "75ffe9be9da3c3695a31cb913a4b475bb022bd7e",
+  "productSource": "b53d05e69496734966c4a10be02b691c5a595527",
+  "environment": "fresh guarded secondary package slot 1; namespace recorded, but no pods, PVCs, services or jobs",
+  "admission": "PASS; both slot checks and locks were free, no package namespace was present, and all 11 one-minute load samples were below 6 over more than five minutes",
+  "steps": [
+    {"step": "fresh package preparation", "result": "FAIL", "observed": "Package command refused; check pins, named secrets and slot ownership"},
+    {"step": "package startup and service logs", "result": "NOT RUN", "observed": "an owned namespace was recorded; the pods, PVCs, services and jobs list was empty"},
+    {"step": "install refusals, wrong-organisation sign-in, owner claim, wrong-token and reuse refusals", "result": "NOT RUN"},
+    {"step": "owner, admin and member sign-in, chat at 1280px and 390px, Secure and HttpOnly cookies", "result": "NOT RUN"},
+    {"step": "screenshots", "result": "NOT RUN", "observed": "no browser journey started"},
+    {"step": "package-down cleanup", "result": "PASS"},
+    {"step": "secondary slot down and release", "result": "PASS"}
+  ],
+  "evidence": ["admission-observations.log", "load-during-run.log", "installation.json", "resources.json", "package-prepare-error.log"],
+  "journey": "FAIL"
+}

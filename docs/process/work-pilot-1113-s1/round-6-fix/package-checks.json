@@ -1,0 +1,234 @@
+{
+  "product": "e64f862c481f26686a6726a97a024369fa16fc26",
+  "fresh": true,
+  "installation": [
+    {
+      "step": "fresh guarded package namespace and approved images",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_EXPECTED_ORG_ID refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private NODE_ENV refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_COOKIE_SECURE refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_REDIRECT_URI refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_EXTRA_IDENTITIES refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private DEV_OWNER_EMAIL refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "saved runtime refuses an insecure cookie before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "saved bootstrap refuses a development owner before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "missing token record refuses before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "host swap and crash-dump production checks",
+      "result": "PARTIAL"
+    },
+    {
+      "step": "fresh hardened package installed and ready",
+      "result": "PASS"
+    },
+    {
+      "step": "wrong-organisation real sign-in creates no member or event",
+      "result": "PASS"
+    },
+    {
+      "step": "controlled delayed assistant fixture appended through the event store",
+      "result": "PASS"
+    },
+    {
+      "step": "packaged sign-in, token refusals and chat at both widths",
+      "result": "PASS"
+    },
+    {
+      "step": "package-down cleanup",
+      "result": "PASS"
+    },
+    {
+      "step": "down cleanup",
+      "result": "PASS"
+    },
+    {
+      "step": "temporary test app cleanup",
+      "result": "PASS"
+    }
+  ],
+  "browser": [
+    {
+      "step": "owner Secure and HttpOnly session at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "wrong token refused without retaining the input",
+      "result": "PASS"
+    },
+    {
+      "step": "one-time token creates the first owner",
+      "result": "PASS"
+    },
+    {
+      "step": "used token refuses a second owner claim",
+      "result": "PASS"
+    },
+    {
+      "step": "owner real sign-in and packaged stand-in-model chat at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "owner Secure and HttpOnly session at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "owner real sign-in and packaged stand-in-model chat at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "admin Secure and HttpOnly session at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "joined member access is applied before the first protected read",
+      "result": "PASS"
+    },
+    {
+      "step": "admin real sign-in and packaged stand-in-model chat at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "admin Secure and HttpOnly session at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "admin real sign-in and packaged stand-in-model chat at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "member Secure and HttpOnly session at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "joined member access is applied before the first protected read",
+      "result": "PASS"
+    },
+    {
+      "step": "member real sign-in and packaged stand-in-model chat at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "member Secure and HttpOnly session at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "member real sign-in and packaged stand-in-model chat at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "member cannot reuse the installation token to become owner",
+      "result": "PASS"
+    },
+    {
+      "step": "joined member access is applied before the first protected read",
+      "result": "PASS"
+    },
+    {
+      "step": "unassigned draft receives live assignment and enables its composer without reload at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "unassigned draft receives live assignment and enables its composer without reload at 390px",
+      "result": "PASS"
+    },
+    {
+      "step": "unassigned draft receives real delayed assignment without reload and chats at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "unassigned draft receives real delayed assignment without reload and chats at 390px",
+      "result": "PASS"
+    }
+  ],
+  "wrongOrganisation": [
+    {
+      "step": "real token from another organisation pin refused at 1280px",
+      "result": "PASS"
+    },
+    {
+      "step": "real token from another organisation pin refused at 390px",
+      "result": "PASS"
+    }
+  ],
+  "draftAssignment": {
+    "1280": {
+      "initiallyAssigned": false,
+      "contextReads": 1,
+      "documentRequests": 1,
+      "liveAssignments": [
+        false,
+        false,
+        false,
+        true
+      ],
+      "actions": [
+        "New session",
+        "Ask your agent",
+        "Ctrl+N",
+        "Cmd+N"
+      ],
+      "result": "PASS"
+    },
+    "390": {
+      "initiallyAssigned": false,
+      "contextReads": 1,
+      "documentRequests": 1,
+      "liveAssignments": [
+        false,
+        false,
+        false,
+        true
+      ],
+      "actions": [
+        "New session",
+        "Ask your agent",
+        "Ctrl+N",
+        "Cmd+N"
+      ],
+      "result": "PASS"
+    }
+  },
+  "dispatcher": {
+    "sampleCount": 41,
+    "sampledDispatcherPods": 2,
+    "observedRestarts": 0,
+    "finalRestartCounts": [
+      0
+    ],
+    "cpuMaxValues": [
+      "100000 100000"
+    ],
+    "peakSampledAverageMcpu": 952,
+    "poolTimeoutLines": 0,
+    "computerWatcherFailureLines": 0
+  }
+}

@@ -1,0 +1,83 @@
+TAP version 13
+# Subtest: the executable qualification runner resolves its helpers before checking the slot
+not ok 1 - the executable qualification runner resolves its helpers before checking the slot
+  ---
+  duration_ms: 128.961601
+  type: 'test'
+  location: '<worktree>/infra/package/qualification-import.test.mjs:24:1'
+  failureType: 'testCodeFailure'
+  error: 'Runner cannot resolve its local helpers'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.loadsTheRunnerBeforeItsSlotRefusal (file://<worktree>/infra/package/qualification-import.test.mjs:19:3)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# node:internal/modules/esm/resolve:275
+#     throw new ERR_MODULE_NOT_FOUND(
+#           ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<worktree>/infra/package/join-handoff.mjs' imported from <worktree>/infra/package/qualification-join.test.mjs
+#     at finalizeResolution (node:internal/modules/esm/resolve:275:11)
+#     at moduleResolve (node:internal/modules/esm/resolve:865:10)
+#     at defaultResolve (node:internal/modules/esm/resolve:989:11)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
+#   code: 'ERR_MODULE_NOT_FOUND',
+#   url: 'file://<worktree>/infra/package/join-handoff.mjs'
+# }
+# Node.js v22.23.3
+# Subtest: infra/package/qualification-join.test.mjs
+not ok 2 - infra/package/qualification-join.test.mjs
+  ---
+  duration_ms: 92.698097
+  type: 'test'
+  location: '<worktree>/infra/package/qualification-join.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:internal/modules/esm/resolve:275
+#     throw new ERR_MODULE_NOT_FOUND(
+#           ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<worktree>/infra/package/tls-cleanup.mjs' imported from <worktree>/infra/package/qualification-tls.test.mjs
+#     at finalizeResolution (node:internal/modules/esm/resolve:275:11)
+#     at moduleResolve (node:internal/modules/esm/resolve:865:10)
+#     at defaultResolve (node:internal/modules/esm/resolve:989:11)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:747:20)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:724:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:320:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:182:49) {
+#   code: 'ERR_MODULE_NOT_FOUND',
+#   url: 'file://<worktree>/infra/package/tls-cleanup.mjs'
+# }
+# Node.js v22.23.3
+# Subtest: infra/package/qualification-tls.test.mjs
+not ok 3 - infra/package/qualification-tls.test.mjs
+  ---
+  duration_ms: 121.243485
+  type: 'test'
+  location: '<worktree>/infra/package/qualification-tls.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 0
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 248.502391

@@ -1,0 +1,86 @@
+[
+  {
+    "guard": "membership-before-read",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "checks active membership before reading personal content",
+    "observedFailure": "The content read count increased from 1 to 2 after removal."
+  },
+  {
+    "guard": "membership-after-read",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "refuses delivery when membership is removed during a delayed context read",
+    "observedFailure": "An assignment frame arrived instead of close code 1008."
+  },
+  {
+    "guard": "owner-filter",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "filters personal ownership even when another assistant permits acts_for",
+    "observedFailure": "The context selected another person’s assistant instead of null."
+  },
+  {
+    "guard": "silo-filter",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "selects context from the requested silo when member ids match",
+    "observedFailure": "The context selected the other silo’s assistant instead of null."
+  },
+  {
+    "guard": "acts-for",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "withholds a projected assistant when acts_for permission is denied",
+    "observedFailure": "The context included the denied assistant instead of null."
+  },
+  {
+    "guard": "identity-mapping",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "delivers assignment through a real identity binding, then revokes access",
+    "observedFailure": "No member context arrived when the raw identity subject replaced lookup."
+  },
+  {
+    "guard": "constant-time",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "delegates both refused and accepted token comparisons to the constant-time primitive",
+    "observedFailure": "The constant-time primitive was called zero times instead of once."
+  },
+  {
+    "guard": "subscription-session",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "refuses an expired session while already subscribed",
+    "observedFailure": "An assignment frame arrived after expiry instead of close code 1008."
+  },
+  {
+    "guard": "session-organisation",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "rechecks the organisation pin while subscribed",
+    "observedFailure": "An assignment frame arrived instead of close code 1008."
+  },
+  {
+    "guard": "session-expiry",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "refuses an expired session while already subscribed",
+    "observedFailure": "An assignment frame arrived instead of close code 1008."
+  },
+  {
+    "guard": "session-silo",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "refuses a silo that no longer matches its permission binding",
+    "observedFailure": "An assignment frame arrived instead of close code 1008."
+  },
+  {
+    "guard": "browser-member-id",
+    "result": "PASS",
+    "mutatedTestExit": 1,
+    "test": "ignores another member assignment and keeps listening for its own",
+    "observedFailure": "The browser member id changed to another-member instead of staying me."
+  }
+]

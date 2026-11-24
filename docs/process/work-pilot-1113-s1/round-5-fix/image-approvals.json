@@ -1,0 +1,40 @@
+[
+  {
+    "role": "application",
+    "run": 45152147580,
+    "source": "8fd998ea9949555d27c7aba70628a723fe8f9bb2",
+    "result": "PASS",
+    "verifiedAt": "2026-11-23T11:37:30.570514+00:00",
+    "artifacts": [
+      {
+        "name": "application-image",
+        "expired": false,
+        "expiresAt": "2026-11-24T10:06:15Z"
+      },
+      {
+        "name": "application-approval",
+        "expired": false,
+        "expiresAt": "2026-11-24T10:06:14Z"
+      }
+    ]
+  },
+  {
+    "role": "scanner",
+    "run": 45152152614,
+    "source": "8fd998ea9949555d27c7aba70628a723fe8f9bb2",
+    "result": "PASS",
+    "verifiedAt": "2026-11-23T11:37:30.570514+00:00",
+    "artifacts": [
+      {
+        "name": "scanner-approval",
+        "expired": false,
+        "expiresAt": "2026-11-24T10:02:00Z"
+      },
+      {
+        "name": "scanner-image",
+        "expired": false,
+        "expiresAt": "2026-11-24T10:02:01Z"
+      }
+    ]
+  }
+]

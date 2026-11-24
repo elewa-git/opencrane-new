@@ -630,3 +630,13 @@ async function waitsForDeletedSetupStreamToDisappear() {
 }
 it('waits for the deleted setup stream to disappear from the real account count',
   waitsForDeletedSetupStreamToDisappear);
+
+async function leavesFirstOwnerForTokenClaim() {
+  const bootstrap = await bootstrapFixture({ NATS_REPLICAS: '1',
+    COMMAND_NATS_REPLICAS: '1', DEV_OWNER_BOOTSTRAP: '0' });
+  await bootstrap.bootstrapOwner(binding);
+  expect(bootstrap.actions).toEqual([]);
+  expect(bootstrap.files.size).toBe(0);
+}
+it('token installation creates no development owner or owner command files',
+  leavesFirstOwnerForTokenClaim);

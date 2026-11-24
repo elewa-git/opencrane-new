@@ -209,7 +209,7 @@ class ImageLayerTests(unittest.TestCase):
         result = subprocess.run(command, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, "Packaged projection worker imports are incomplete")
 
-    def test_real_bootstrap_entry_point_with_synthetic_services(self):
+    def bootstrap_result(self, environment=()):
         image = self.inspection["Id"]
         fixture = Path("infra/package/bootstrap-runtime-fixture.mjs").resolve()
         arguments = ["docker", "run", "--rm", "--network", "none", "--read-only",
@@ -217,14 +217,28 @@ class ImageLayerTests(unittest.TestCase):
                      "--tmpfs", "/tmp:uid=1000,gid=1000,mode=1777",
                      "--mount", f"type=bind,src={fixture},"
                      "dst=/app/infra/package/bootstrap-runtime-fixture.mjs,readonly",
-                     "--env", "NODE_OPTIONS=--import=/app/infra/package/bootstrap-runtime-fixture.mjs",
-                     image, "node", "--experimental-strip-types", "infra/package/bootstrap.ts"]
+                     "--env", "NODE_OPTIONS=--import=/app/infra/package/bootstrap-runtime-fixture.mjs"]
+        for setting in environment:
+            arguments.extend(["--env", setting])
+        arguments.extend([image, "node", "--experimental-strip-types", "infra/package/bootstrap.ts"])
         result = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
         # Withhold dependency errors and fixture values, even when Node cannot load an import.
         self.assertEqual(result.returncode, 0, "Synthetic packaged bootstrap failed")
+        return result
+
+    def test_real_bootstrap_entry_point_with_synthetic_services(self):
+        result = self.bootstrap_result()
         self.assertIn("PASS package databases, event stream, OpenFGA and separate owner",
                       result.stdout)
         self.assertIn("PASS synthetic bootstrap completed through owner setup", result.stdout)
+
+    def test_real_token_bootstrap_entry_point_with_synthetic_services(self):
+        result = self.bootstrap_result(("DEV_OWNER_BOOTSTRAP=0",))
+        self.assertIn("PASS package databases, event stream, OpenFGA and owner claim readiness",
+                      result.stdout)
+        self.assertIn("PASS synthetic token bootstrap completed without owner setup", result.stdout)
+        self.assertNotIn("PASS package databases, event stream, OpenFGA and separate owner",
+                         result.stdout)
 
     def test_removed_files_are_absent_from_every_shipped_layer(self):
         for removed in REMOVED_PATHS:

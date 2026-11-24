@@ -25,6 +25,10 @@ exposure:
   ingress: false
   loadBalancer: false
   funnel: false
+  public:
+    enabled: false
+    host: ""
+    tlsSecret: ""
 postgres:
   mode: standalone
   operatorContract: ""

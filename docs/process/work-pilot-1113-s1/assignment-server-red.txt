@@ -1,0 +1,138 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/chat-context-live.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 [private-path]
+
+ ❯ apps/server/test/chat-context-live.test.ts (2 tests | 2 failed) 3960ms
+   × delivers the personal assignment after projection without a conversation, then revokes access 77ms
+   × never delivers another member context to a signed-in non-member 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/chat-context-live.test.ts > delivers the personal assignment after projection without a conversation, then revokes access
+AssertionError: expected { type: 'error', …(1) } to match object { type: 'context', …(2) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "data": {
+-     "assistantId": null,
+-     "memberId": "alice",
+-     "role": "member",
+-   },
+-   "topic": "chat-context",
+-   "type": "context",
++   "type": "error",
+  }
+
+ ❯ followsProvisioning apps/server/test/chat-context-live.test.ts:94:23
+     92|   }
+     93|   await until(initialContextReceived);
+     94|   expect(messages[0]).toMatchObject({ type: 'context', topic: 'chat-co…
+       |                       ^
+     95|     data: { memberId: 'alice', assistantId: null, role: 'member' } });
+     96|   await append({ subject: 'assistant-personal', type: 'assistant.creat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/server/test/chat-context-live.test.ts > never delivers another member context to a signed-in non-member
+AssertionError: expected Buffer[ 123, 34, 116, 121, 112, …(-30) ] to be 1008 // Object.is equality
+
+- Expected:
+1008
+
++ Received:
+Buffer [
+  123,
+  34,
+  116,
+  121,
+  112,
+  101,
+  34,
+  58,
+  34,
+  101,
+  114,
+  114,
+  111,
+  114,
+  34,
+  44,
+  34,
+  109,
+  101,
+  115,
+  115,
+  97,
+  103,
+  101,
+  34,
+  58,
+  34,
+  101,
+  120,
+  112,
+  101,
+  99,
+  116,
+  101,
+  100,
+  32,
+  97,
+  32,
+  104,
+  101,
+  108,
+  108,
+  111,
+  32,
+  111,
+  114,
+  32,
+  118,
+  97,
+  108,
+  105,
+  100,
+  97,
+  116,
+  101,
+  69,
+  118,
+  101,
+  110,
+  116,
+  32,
+  109,
+  101,
+  115,
+  115,
+  97,
+  103,
+  101,
+  34,
+  125,
+]
+
+ ❯ refusesNonMember apps/server/test/chat-context-live.test.ts:119:21
+    117|   const { messages, firstOutcome } = await connect('outsider');
+    118|   const result: unknown[] = await firstOutcome;
+    119|   expect(result[0]).toBe(1008);
+       |                     ^
+    120|   expect(messages).toEqual([]);
+    121| }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:00:58
+   Duration  20.17s (transform 62%, tests 20%, import 18%)
+
+  Transform  transforming modules took 12.17s · 62% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
