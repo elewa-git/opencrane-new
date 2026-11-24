@@ -12,6 +12,12 @@ export async function checkProviderStatus(page: Page): Promise<void> {
   }
 }
 
+export async function finishSelectingProviderModels(page: Page): Promise<void> {
+  await checkProviderStatus(page);
+  const setup = providerSetup(page);
+  await setup.getByRole('heading', { name: 'Step 5 of 6 · Access', exact: true }).waitFor();
+}
+
 export async function createProviderConnection(page: Page, name: string): Promise<void> {
   const actions = page.locator('.page-actions');
   await actions.getByRole('button', { name: 'Connect a provider', exact: true }).click();

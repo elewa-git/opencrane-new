@@ -12,7 +12,7 @@ import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, wrongKeyStatusScript } from './provider-probe.ts';
-import { checkProviderStatus, createProviderConnection, providerSetup,
+import { checkProviderStatus, createProviderConnection, finishSelectingProviderModels, providerSetup,
   saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
@@ -157,7 +157,7 @@ async function waitForModels(page, providerId) {
     assert.equal(response.status(), 200);
     const result = await response.json();
     if (result.rows[0]?.enabledModels.includes('gpt-6.1-sol')) {
-      await checkProviderStatus(page);
+      await finishSelectingProviderModels(page);
       return;
     }
     await delay(100);
@@ -218,7 +218,6 @@ async function connect(admin) {
   await admin.getByRole('checkbox', { name: /gpt-6-luna/ }).check();
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   await waitForModels(admin, providerId);
-  await admin.getByRole('heading', { name: /Step 5 of 6/ }).waitFor();
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   await admin.getByRole('button', { name: 'Go to Models', exact: true }).click();
   step('select chat default', 'Selecting the chat default must save its model binding.');

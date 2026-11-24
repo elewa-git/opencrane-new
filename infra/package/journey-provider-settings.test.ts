@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chromium } from 'playwright';
-import { checkProviderStatus, createProviderConnection, enterProviderKey,
+import { checkProviderStatus, createProviderConnection, enterProviderKey, finishSelectingProviderModels,
   saveProviderKey } from './provider-settings.ts';
 
 const fixture = `
@@ -156,3 +156,36 @@ async function checksOnlyOpenSetup(): Promise<void> {
 
 test('verification checks the open setup when the background table also offers Check status',
   checksOnlyOpenSetup);
+
+async function followsModelsAdvancingToAccess(): Promise<void> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const width of [1280, 390]) {
+      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      page.setDefaultTimeout(2000);
+      await page.setContent(`
+        <dialog open aria-label="Connect a provider">
+          <h3>Step 4 of 6 · Models</h3>
+          <button disabled>Check status</button>
+        </dialog>
+        <script>
+          function showAccess() {
+            const setup = document.querySelector('dialog');
+            setup.innerHTML = '<h3>Step 5 of 6 · Access</h3>';
+          }
+          window.advanceToAccess = () => setTimeout(showAccess, 350);
+        </script>`);
+      await page.evaluate('window.advanceToAccess()');
+      await finishSelectingProviderModels(page);
+      const setup = page.getByRole('dialog', { name: 'Connect a provider', exact: true });
+      const access = setup.getByRole('heading', { name: 'Step 5 of 6 · Access', exact: true });
+      assert.equal(await access.isVisible(), true);
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+test('model selection follows Access when automatic advancement removes a disabled status button',
+  followsModelsAdvancingToAccess);
