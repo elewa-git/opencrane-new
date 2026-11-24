@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ChatSession } from './chat-session';
+import { Workspace } from './workspace';
 import { WebSocketService } from '../core/websocket.service';
 import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 
@@ -8,6 +9,7 @@ let socket: SocketLike;
 let requests: string[];
 let sent = vi.fn();
 let closed = vi.fn();
+const socketProvider = { provide: SOCKET_FACTORY, useValue: createSocket };
 
 function createSocket(): SocketLike {
   sent = vi.fn();
@@ -30,13 +32,11 @@ async function setup(): Promise<void> {
   history.replaceState({}, '', '/workspace');
   requests = [];
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetchFixture);
-  const provider = { provide: SOCKET_FACTORY, useValue: createSocket };
-  TestBed.configureTestingModule({ providers: [ChatSession, provider] });
+  TestBed.configureTestingModule({ providers: [ChatSession, socketProvider] });
   chat = TestBed.inject(ChatSession);
   await chat.load();
   TestBed.tick();
 }
-beforeEach(setup);
 
 function assignment(memberId = 'me'): void {
   const message = { type: 'context', topic: 'chat-context',
@@ -59,7 +59,6 @@ function subscribesToOwnAssignment(): void {
   expect(chat.selected()).toBe('');
   expect(requests.filter(isContextRead)).toHaveLength(1);
 }
-it('subscribes to its own assignment before a first conversation exists', subscribesToOwnAssignment);
 
 function isContextRead(path: string): boolean {
   return path === '/api/chat';
@@ -74,14 +73,12 @@ function clearsOnAccessLoss(): void {
   assignment();
   expect(chat.selectedAssistantId()).toBeNull();
 }
-it('clears provisioning on access loss and ignores later socket messages', clearsOnAccessLoss);
 
 function closesOnDestroy(): void {
   expect(socket).toBeDefined();
   chat.ngOnDestroy();
   expect(closed).toHaveBeenCalled();
 }
-it('closes the provisioning subscription when the page is destroyed', closesOnDestroy);
 
 function receivesAssignmentAfterNewDraft(): void {
   socket.onopen?.(new Event('open'));
@@ -96,8 +93,6 @@ function receivesAssignmentAfterNewDraft(): void {
   expect(chat.denied()).toBe(false);
   expect(requests.filter(isContextRead)).toHaveLength(1);
 }
-it('receives assignment without reload after opening an unassigned draft',
-  receivesAssignmentAfterNewDraft);
 
 function refusesAnotherMemberAssignment(): void {
   socket.onopen?.(new Event('open'));
@@ -109,8 +104,6 @@ function refusesAnotherMemberAssignment(): void {
   assignment();
   expect(chat.selectedAssistantId()).toBe('personal');
 }
-it('ignores another member assignment and keeps listening for its own',
-  refusesAnotherMemberAssignment);
 
 function receivesAssignmentWhileConnecting(): void {
   chat.newSession();
@@ -120,5 +113,83 @@ function receivesAssignmentWhileConnecting(): void {
   assignment();
   expect(chat.selectedAssistantId()).toBe('personal');
 }
-it('receives assignment when a new draft opens before the socket connects',
-  receivesAssignmentWhileConnecting);
+
+describe('personal assignment after workspace load', function loadedWorkspace() {
+  beforeEach(setup);
+  it('subscribes to its own assignment before a first conversation exists', subscribesToOwnAssignment);
+  it('clears provisioning on access loss and ignores later socket messages', clearsOnAccessLoss);
+  it('closes the provisioning subscription when the page is destroyed', closesOnDestroy);
+  it('receives assignment without reload after opening an unassigned draft',
+    receivesAssignmentAfterNewDraft);
+  it('ignores another member assignment and keeps listening for its own',
+    refusesAnotherMemberAssignment);
+  it('receives assignment when a new draft opens before the socket connects',
+    receivesAssignmentWhileConnecting);
+});
+
+function holdIdentityReply() {
+  let release!: (response: Response) => void;
+  const identity = new Promise<Response>(function captureRelease(resolve) {
+    release = resolve;
+  });
+  function fetchWithHeldIdentity(input: RequestInfo | URL): Promise<Response> {
+    if (input === '/auth/me') {
+      requests.push(input);
+      return identity;
+    }
+    return fetchFixture(input);
+  }
+  function releaseIdentity(): void {
+    release(new Response('{"authenticated":true,"user":{"name":"Alex"}}'));
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(fetchWithHeldIdentity);
+  return releaseIdentity;
+}
+
+function pressNewSessionShortcut(modifier: KeyboardEventInit): void {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ...modifier }));
+}
+
+it('waits for identity before opening a draft, then receives its live assignment',
+  async function draftDuringFirstLoad() {
+    vi.stubGlobal('innerWidth', 1280);
+    history.replaceState({}, '', '/workspace?initial=1');
+    requests = [];
+    const releaseIdentity = holdIdentityReply();
+    TestBed.configureTestingModule({ providers: [socketProvider] });
+    const fixture = TestBed.createComponent(Workspace);
+    try {
+      fixture.detectChanges();
+      await vi.waitFor(function identityRequested() {
+        expect(requests).toContain('/auth/me');
+      });
+      const root: HTMLElement = fixture.nativeElement;
+      const newSession = root.querySelector<HTMLButtonElement>('button.new-session')!;
+      newSession.click();
+      pressNewSessionShortcut({ ctrlKey: true });
+      pressNewSessionShortcut({ metaKey: true });
+      expect(location.search).toBe('?initial=1');
+      expect(newSession.disabled).toBe(true);
+
+      releaseIdentity();
+      await vi.waitFor(function readyForDraft() {
+        fixture.detectChanges();
+        expect(newSession.disabled).toBe(false);
+      });
+      newSession.click();
+      expect(location.search).toBe('');
+      socket.onopen?.(new Event('open'));
+      TestBed.tick();
+      expect(sent).toHaveBeenCalledWith(JSON.stringify({
+        type: 'subscribe', topic: 'chat-context',
+      }));
+      assignment();
+      fixture.detectChanges();
+      expect(root.querySelector<HTMLTextAreaElement>('textarea#message')!.disabled).toBe(false);
+      expect(requests.filter(isContextRead)).toHaveLength(1);
+    } finally {
+      releaseIdentity();
+      fixture.destroy();
+      vi.unstubAllGlobals();
+    }
+  });
