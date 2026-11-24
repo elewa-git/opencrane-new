@@ -1,4 +1,4 @@
-import type { Duplex } from 'node:stream';
+import { PassThrough, type Duplex } from 'node:stream';
 import type { AppendCommand } from '@opencrane/event-store';
 import { parseEventByType } from '@opencrane/events';
 import { WebSocket } from 'ws';
@@ -16,6 +16,10 @@ const viewUrl = '/api/conversations/chat/view';
 
 function openDesktop(): Promise<never> {
   return Promise.reject(new Error('A refused request must not open a desktop'));
+}
+
+function openAvailableDesktop() {
+  return Promise.resolve(new PassThrough());
 }
 
 function isRefusalLog(line: string) {
@@ -133,29 +137,42 @@ function refusedUpgrade(address: string, headers: IncomingHttpHeaders): Promise<
 
 type BaseViewFixture = Awaited<ReturnType<typeof viewFixture>>;
 
-async function capacityTickets(fixture: BaseViewFixture) {
-  const { app, config } = fixture;
+async function grantDesktopToAlice(fixture: BaseViewFixture) {
   const grant = {
     resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
     granteeKind: 'member', grantedBy: 'owner',
   };
   await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
+}
+
+function aliceViewHeaders(config: BaseViewFixture['config']) {
   const sessionArguments = {
     sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
     exp: Math.floor(Date.now() / 1000) + 120,
   };
   const session = encodeSession(config, sessionArguments);
-  const headers = {
+  return {
     origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
     cookie: `${config.cookieName}=${session}`,
   };
+}
+
+async function issueTicket(fixture: BaseViewFixture, headers: IncomingHttpHeaders) {
   const requestArguments = { method: 'POST' as const, url: viewUrl, headers };
+  const admission = await fixture.app.inject(requestArguments);
+  expect(admission.statusCode).toBe(200);
+  const body = admission.json<{ ticket: string }>();
+  expect(body.ticket).toBeTruthy();
+  return body.ticket;
+}
+
+async function capacityTickets(fixture: BaseViewFixture) {
+  await grantDesktopToAlice(fixture);
+  const headers = aliceViewHeaders(fixture.config);
   const tickets: string[] = [];
   for (let index = 0; index < 16; index++) {
-    const admission = await app.inject(requestArguments);
-    expect(admission.statusCode).toBe(200);
-    const body = admission.json<{ ticket: string }>();
-    tickets.push(body.ticket);
+    const ticket = await issueTicket(fixture, headers);
+    tickets.push(ticket);
   }
   return { headers, tickets };
 }
@@ -234,8 +251,10 @@ function noCapacityToRelease() {
   return Promise.resolve();
 }
 
-async function upgradeFixture(atCapacity: boolean) {
-  const fixture = await viewFixture(openDesktop);
+async function upgradeFixture(
+  atCapacity: boolean, open: Parameters<typeof viewFixture>[0] = openDesktop,
+) {
+  const fixture = await viewFixture(open);
   let releaseCapacity = noCapacityToRelease;
   const sockets: WebSocket[] = [];
   async function close() {
@@ -276,41 +295,57 @@ async function refuseAnonymousCapacityUpgrade() {
   await checkAnonymousUpgrade(true);
 }
 
-async function checkOriginDecisions(route: 'admission' | 'upgrade', atCapacity = false) {
-  const fixture = await upgradeFixture(atCapacity);
+type ViewRoute = 'admission' | 'upgrade';
+type UpgradeFixture = Awaited<ReturnType<typeof upgradeFixture>>;
+
+async function expectOriginRefusal(
+  fixture: UpgradeFixture, route: ViewRoute, headers: IncomingHttpHeaders,
+  testName: string, expectedEvents: number,
+) {
+  const { app, nats, address } = fixture;
+  const before = await nats.store.head();
+  if (route === 'admission') {
+    const requestArguments = { method: 'POST' as const, url: viewUrl, headers };
+    const response = await app.inject(requestArguments);
+    expect(response.statusCode, testName).toBe(403);
+  } else {
+    expect(await refusedUpgrade(address, headers), testName).toBe(403);
+  }
+  expect(await nats.store.head(), testName).toBe(before + expectedEvents);
+  if (expectedEvents) {
+    for await (const record of nats.store.subscribe(before + 1)) {
+      expect(record.event.type).toBe('computer.view_refused');
+      break;
+    }
+  }
+}
+
+async function checkOriginDecisions(route: ViewRoute, atCapacity = false) {
+  const open = atCapacity ? openDesktop : openAvailableDesktop;
+  const fixture = await upgradeFixture(atCapacity, open);
   try {
-    const { app, config, nats, address } = fixture;
-    const sessionArguments = {
-      sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
-      exp: Math.floor(Date.now() / 1000) + 120,
-    };
-    const session = encodeSession(config, sessionArguments);
-    const origins = [undefined, 'https://hostile.example.test'];
+    if (!atCapacity) await grantDesktopToAlice(fixture);
+    const aliceHeaders = aliceViewHeaders(fixture.config);
+    const origins = ['https://hostile.example.test', undefined];
     const sessions = [
-      { name: 'valid session', value: session, auditCount: 1 },
-      { name: 'invalid session', value: 'invalid-cookie-value', auditCount: 0 },
+      { name: 'valid session', cookie: aliceHeaders.cookie, auditCount: 1 },
+      {
+        name: 'invalid session', cookie: `${fixture.config.cookieName}=invalid-cookie-value`,
+        auditCount: 0,
+      },
     ];
     for (const identity of sessions) {
       for (const origin of origins) {
-        const headers = {
-          cookie: `${config.cookieName}=${identity.value}`, 'x-opencrane-view': '1',
-          ...(origin ? { origin } : {}),
+        const headers: IncomingHttpHeaders = {
+          cookie: identity.cookie, 'x-opencrane-view': aliceHeaders['x-opencrane-view'],
         };
-        const before = await nats.store.head();
-        if (route === 'admission') {
-          const requestArguments = { method: 'POST' as const, url: viewUrl, headers };
-          const response = await app.inject(requestArguments);
-          expect(response.statusCode, identity.name).toBe(403);
-        } else {
-          expect(await refusedUpgrade(address, headers), identity.name).toBe(403);
+        if (origin) headers.origin = origin;
+        if (route === 'upgrade' && !atCapacity) {
+          const ticket = await issueTicket(fixture, aliceHeaders);
+          headers['sec-websocket-protocol'] = `binary, ${ticket}`;
         }
-        expect(await nats.store.head(), identity.name).toBe(before + identity.auditCount);
-        if (identity.auditCount) {
-          for await (const record of nats.store.subscribe(before + 1)) {
-            expect(record.event.type).toBe('computer.view_refused');
-            break;
-          }
-        }
+        const testName = `${identity.name}, ${origin ? 'hostile' : 'missing'} Origin`;
+        await expectOriginRefusal(fixture, route, headers, testName, identity.auditCount);
       }
     }
   } finally {
