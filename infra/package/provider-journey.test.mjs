@@ -11,7 +11,7 @@ import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies } from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
-import { wrongKeyStatusScript } from './provider-probe.ts';
+import { providerEventDisclosureScript, wrongKeyStatusScript } from './provider-probe.ts';
 import { checkProviderStatus, createProviderConnection, providerSetup,
   saveProviderKey } from './provider-settings.ts';
 import { enterLoginName } from '../dev-stack/browser-signin.ts';
@@ -323,29 +323,7 @@ async function checkDisclosure() {
   for (const content of [values, manifests, logs]) {
     for (const secret of secrets) assert(!content.includes(secret), 'A public artifact disclosed a key');
   }
-  const script = `
-import { connectEventStore, readEvents } from '@opencrane/event-store';
-let input = '';
-for await (const chunk of process.stdin) input += chunk.toString();
-const secrets = JSON.parse(input);
-const events = await connectEventStore();
-let count = 0;
-try {
-  const until = await events.store.head();
-  if (until) {
-    for await (const row of readEvents(events.store, 1, until)) {
-      const text = JSON.stringify(row.event);
-      for (const secret of secrets) {
-        if (text.includes(secret)) throw new Error('Credential in event');
-      }
-      count++;
-    }
-  }
-  console.log(JSON.stringify({ checkedEvents: count }));
-} finally {
-  await events.close();
-}`;
-  const inspected = await privateScript(script, secrets);
+  const inspected = await privateScript(providerEventDisclosureScript, secrets);
   assert(inspected.checkedEvents > 0);
   outcomes.push({ check: 'keys absent from values, manifests, environment values, logs and events',
     result: 'PASS', checkedEvents: inspected.checkedEvents });
