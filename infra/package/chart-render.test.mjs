@@ -940,6 +940,18 @@ function protectsProviderRemounts() {
 test('provider storage avoids recursive remount changes and checks modes before startup',
   protectsProviderRemounts);
 
+function replacesProviderLeaderBeforeStartingItsSuccessor() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server');
+  assert.equal(server.spec.replicas, 1);
+  assert.deepEqual(server.spec.strategy, { type: 'Recreate' },
+    'The replacement cannot become ready until the old Pod releases the budget lock');
+}
+test('provider updates stop the budget leader before starting the replacement',
+  replacesProviderLeaderBeforeStartingItsSuccessor);
+
 function assertPrivateProviderMounts(resources) {
   const mounts = [];
   for (const resource of resources.values()) {
