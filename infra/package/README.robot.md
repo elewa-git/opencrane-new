@@ -267,7 +267,8 @@ and actions to the open, named dialog, waits for the named step and uses an enab
 status control while the original change is applying. A disabled control does not
 stop the runner from following automatic advancement to the next step. Closed replacement dialogs are not
 key-entry targets. Verification and model-selection status reads use that same
-open dialog even when a background provider row also offers Check status.
+open dialog even when a background provider row also offers Check status. Model
+selection follows the Access heading when the saved models advance automatically.
 The setup driver keeps the expected next heading in its click target too. If
 automatic advancement removes Check status while the pointer moves, Playwright
 can finish on that heading instead of waiting for the old button. The next-step
