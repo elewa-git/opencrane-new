@@ -170,11 +170,20 @@ async function verifyCompletion() {
     await files.writeFile('/tmp/owner-fixture-complete', 'complete', { mode: 0o600 });
     return;
   }
-  const completion = await files.readFile('/tmp/owner-fixture-complete', 'utf8');
-  assert.equal(completion, 'complete', 'Owner subprocess did not finish');
+  if (process.env.DEV_OWNER_BOOTSTRAP === '0') {
+    assert.equal(ownerWrites, 0, 'Token bootstrap created a development owner');
+    await assert.rejects(files.stat('/tmp/owner-fixture-complete'), { code: 'ENOENT' });
+  } else {
+    const completion = await files.readFile('/tmp/owner-fixture-complete', 'utf8');
+    assert.equal(completion, 'complete', 'Owner subprocess did not finish');
+  }
   const ready = patched.at(-2)?.data?.OWNER_BOOTSTRAP_READY;
   assert.equal(ready, Buffer.from('ready').toString('base64'), 'Bootstrap did not finish');
-  console.log('PASS synthetic bootstrap completed through owner setup');
+  if (process.env.DEV_OWNER_BOOTSTRAP === '0') {
+    console.log('PASS synthetic token bootstrap completed without owner setup');
+  } else {
+    console.log('PASS synthetic bootstrap completed through owner setup');
+  }
 }
 function finish() {
   function failed() {

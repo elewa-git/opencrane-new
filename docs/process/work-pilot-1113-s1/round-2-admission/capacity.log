@@ -1,0 +1,107 @@
+{"time": "2026-11-20T16:33:12.488812+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:33:42.322757+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:34:15.079686+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:34:42.617470+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:35:12.563118+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:35:43.083849+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:36:14.105654+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:36:43.775646+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:37:13.725624+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:37:43.925323+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:38:13.023010+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:38:43.176201+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:39:13.568460+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:39:43.608423+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:40:13.951658+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:40:44.044902+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:41:14.160520+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:41:43.598697+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:42:14.419523+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:42:43.417529+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:43:12.917959+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:43:43.179860+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:44:13.424830+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:44:43.388500+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:45:13.692471+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:45:44.498870+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:46:14.517322+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:46:43.915916+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:47:13.455951+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:47:43.735235+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:48:13.353786+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:48:37.505822+00:00", "slot1Free": true, "slot2Free": false, "packageFree": true, "load": 18.1708984375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:49:13.870491+00:00", "qualified": false, "reason": "capacity_lookup_failed"}
+{"time": "2026-11-20T16:49:43.289400+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 12.1240234375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:49:51.269255+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 11.39013671875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:50:21.465880+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 10.23876953125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:50:51.264971+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 9.0185546875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:51:20.906737+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.95849609375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:51:50.728534+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.4658203125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:52:22.029223+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.97412109375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:52:52.324214+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.2255859375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:53:22.308749+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.78173828125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:53:52.369024+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.51220703125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:54:21.375163+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.71240234375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:54:52.322557+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.31298828125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:55:22.761224+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.46826171875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:55:52.287239+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.25146484375, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T16:56:21.785875+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.63330078125, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T16:56:51.689065+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.68115234375, "qualifiedSeconds": 88, "qualified": false}
+{"time": "2026-11-20T16:57:21.587265+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.251953125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:57:51.605121+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.91845703125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:58:21.404838+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.16796875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:58:51.228446+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.55078125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T16:59:21.230393+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.4599609375, "qualifiedSeconds": 30, "qualified": false}
+{"time": "2026-11-20T16:59:50.979759+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.75830078125, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T17:00:23.617296+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.16650390625, "qualifiedSeconds": 92, "qualified": false}
+{"time": "2026-11-20T17:00:52.274419+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.40380859375, "qualifiedSeconds": 121, "qualified": false}
+{"time": "2026-11-20T17:01:22.352077+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.7197265625, "qualifiedSeconds": 151, "qualified": false}
+{"time": "2026-11-20T17:01:51.577092+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.37548828125, "qualifiedSeconds": 180, "qualified": false}
+{"time": "2026-11-20T17:02:21.256386+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.30517578125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:02:51.169467+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.79248046875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:03:21.798964+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.66943359375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:03:51.421860+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.92919921875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:04:21.012026+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.94775390625, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T17:04:51.290349+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.931640625, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T17:05:23.262330+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.4609375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:05:52.217475+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.212890625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:06:22.697300+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.49658203125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:06:51.844092+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.70751953125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:07:22.311566+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.36572265625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:07:51.368683+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.462890625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:08:21.243159+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.43212890625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:08:52.366750+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.80517578125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:09:22.362713+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.306640625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:09:52.366001+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 7.0146484375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:10:22.384498+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.32080078125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:10:51.925355+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.91162109375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:11:21.803714+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.01708984375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:11:51.511200+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.38671875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:12:22.323976+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.794921875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:12:51.306204+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.3359375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:13:21.491821+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.15576171875, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:13:51.229794+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.09033203125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:14:21.242697+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.22314453125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:14:50.584237+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.1025390625, "qualifiedSeconds": 29, "qualified": false}
+{"time": "2026-11-20T17:15:22.312897+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.8642578125, "qualifiedSeconds": 61, "qualified": false}
+{"time": "2026-11-20T17:15:51.427080+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.64697265625, "qualifiedSeconds": 90, "qualified": false}
+{"time": "2026-11-20T17:16:21.129358+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.2666015625, "qualifiedSeconds": 119, "qualified": false}
+{"time": "2026-11-20T17:16:51.222478+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.283203125, "qualifiedSeconds": 149, "qualified": false}
+{"time": "2026-11-20T17:17:20.967990+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.93701171875, "qualifiedSeconds": 179, "qualified": false}
+{"time": "2026-11-20T17:17:51.132831+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.3310546875, "qualifiedSeconds": 209, "qualified": false}
+{"time": "2026-11-20T17:18:22.329240+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.10009765625, "qualifiedSeconds": 241, "qualified": false}
+{"time": "2026-11-20T17:18:50.877951+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.64990234375, "qualifiedSeconds": 269, "qualified": false}
+{"time": "2026-11-20T17:19:21.193193+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.3681640625, "qualifiedSeconds": 299, "qualified": false}
+{"time": "2026-11-20T17:19:51.241524+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.13720703125, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:20:22.339187+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 6.22412109375, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:20:51.511175+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.47900390625, "qualifiedSeconds": 0, "qualified": false}
+{"time": "2026-11-20T17:21:22.174178+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.6943359375, "qualifiedSeconds": 30, "qualified": false}
+{"time": "2026-11-20T17:21:51.249225+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.43603515625, "qualifiedSeconds": 59, "qualified": false}
+{"time": "2026-11-20T17:22:21.529743+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 3.75, "qualifiedSeconds": 90, "qualified": false}
+{"time": "2026-11-20T17:22:51.215827+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 3.5859375, "qualifiedSeconds": 119, "qualified": false}
+{"time": "2026-11-20T17:23:21.209246+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 3.630859375, "qualifiedSeconds": 149, "qualified": false}
+{"time": "2026-11-20T17:23:50.481031+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 3.20263671875, "qualifiedSeconds": 178, "qualified": false}
+{"time": "2026-11-20T17:24:20.640129+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 2.81298828125, "qualifiedSeconds": 209, "qualified": false}
+{"time": "2026-11-20T17:24:52.043850+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 4.29541015625, "qualifiedSeconds": 240, "qualified": false}
+{"time": "2026-11-20T17:25:22.034589+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.3056640625, "qualifiedSeconds": 270, "qualified": false}
+{"time": "2026-11-20T17:25:52.038393+00:00", "slot1Free": true, "slot2Free": true, "packageFree": true, "load": 5.69140625, "qualifiedSeconds": 300, "qualified": true}

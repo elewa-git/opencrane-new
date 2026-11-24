@@ -1,0 +1,113 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false --include=src/app/chat/composer-fast-enter.spec.ts
+❯ Building...
+✔ Building...
+Initial chunk files                  | Names                             |  Raw size
+spec-app-chat-composer-fast-enter.js | spec-app-chat-composer-fast-enter |  61.05 kB | 
+styles.css                           | styles                            |  16.42 kB | 
+chunk-CGZBV6BD.js                    | -                                 |   4.07 kB | 
+init-testbed.js                      | init-testbed                      |   1.21 kB | 
+vitest-mock-patch.js                 | vitest-mock-patch                 | 974 bytes | 
+
+                                     | Initial total                     |  83.73 kB
+
+Lazy chunk files                     | Names                             |  Raw size
+mermaid-library.js                   | mermaid-library                   |   7.89 MB | 
+
+Application bundle generation complete. [46.007 seconds] - 2026-11-20T21:32:12.585Z
+
+▲ [WARNING] Comparison with -0 using the "==" operator will also match 0 [equals-negative-zero]
+
+    angular:script/global:mermaid-library.js:601:230178:
+      601 │ ...e){var n;return Ul(e)?(n=e,n==-0?0:n):ucn(e)}i(j2,"Xdb");funct...
+          ╵                                  ~~
+
+  Floating-point equality is defined such that 0 and -0 are equal, so "x === -0" returns true for both 0 and -0. You need to use "Object.is(x, -0)" instead to test for -0.
+
+
+
+ RUN  v4.1.11 <worktree>/apps/web
+
+ ❯ |web| src/app/chat/composer-fast-enter.spec.ts (3 tests | 3 failed) 759ms
+   × submits current text "" → "Say hello briefly." when Enter precedes the next render 601ms
+   × submits current text "Earlier text" → "Current text" when Enter precedes the next render 67ms
+   × submits current text "Earlier text" → "" when Enter precedes the next render 84ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |web| src/app/chat/composer-fast-enter.spec.ts > submits current text "" → "Say hello briefly." when Enter precedes the next render
+AssertionError: expected [] to deeply equal [ 'Say hello briefly.' ]
+
+- Expected
++ Received
+
+- [
+-   "Say hello briefly.",
+- ]
++ []
+
+ ❯ submitsCurrentInputBeforeTheNextRender src/app/chat/composer-fast-enter.spec.ts:28:47
+     26|   field.dispatchEvent(new Event('input', { bubbles: true }));
+     27|   field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bub…
+     28|   expect(fixture.componentInstance.submitted).toEqual(expected);
+       |                                               ^
+     29| }
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |web| src/app/chat/composer-fast-enter.spec.ts > submits current text "Earlier text" → "Current text" when Enter precedes the next render
+AssertionError: expected [ 'Earlier text' ] to deeply equal [ 'Current text' ]
+
+- Expected
++ Received
+
+  [
+-   "Current text",
++   "Earlier text",
+  ]
+
+ ❯ submitsCurrentInputBeforeTheNextRender src/app/chat/composer-fast-enter.spec.ts:28:47
+     26|   field.dispatchEvent(new Event('input', { bubbles: true }));
+     27|   field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bub…
+     28|   expect(fixture.componentInstance.submitted).toEqual(expected);
+       |                                               ^
+     29| }
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |web| src/app/chat/composer-fast-enter.spec.ts > submits current text "Earlier text" → "" when Enter precedes the next render
+AssertionError: expected [ 'Earlier text' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Earlier text",
++ ]
+
+ ❯ submitsCurrentInputBeforeTheNextRender src/app/chat/composer-fast-enter.spec.ts:28:47
+     26|   field.dispatchEvent(new Event('input', { bubbles: true }));
+     27|   field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bub…
+     28|   expect(fixture.componentInstance.submitted).toEqual(expected);
+       |                                               ^
+     29| }
+     30|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  21:32:13
+   Duration  3.49s (transform 306ms, setup 795ms, import 238ms, tests 759ms, environment 1.32s)
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path <worktree>/apps/web
+npm error workspace @opencrane/web@0.1.0
+npm error location <worktree>/apps/web
+npm error command failed
+npm error command sh -c ng test --watch=false --include=src/app/chat/composer-fast-enter.spec.ts

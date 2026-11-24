@@ -1,0 +1,10 @@
+PASS owner Secure and HttpOnly session at 1280px
+PASS wrong token refused without retaining the input
+PASS one-time token creates the first owner
+PASS used token refuses a second owner claim
+PASS owner real sign-in and packaged stand-in-model chat at 1280px
+PASS owner Secure and HttpOnly session at 390px
+PASS owner real sign-in and packaged stand-in-model chat at 390px
+PASS admin Secure and HttpOnly session at 1280px
+FAIL admin 1280px packaged chat; code=ERR_ASSERTION; details withheld
+Initial workspace context read failed

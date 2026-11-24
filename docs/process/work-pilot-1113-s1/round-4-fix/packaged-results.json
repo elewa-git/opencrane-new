@@ -1,0 +1,95 @@
+{
+  "source": "2a51769652a6eb6aaf68527912038d1f701cd547",
+  "fresh": true,
+  "steps": [
+    {
+      "step": "fresh guarded package namespace and approved images",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_EXPECTED_ORG_ID refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private NODE_ENV refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_COOKIE_SECURE refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_REDIRECT_URI refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private OIDC_EXTRA_IDENTITIES refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "private DEV_OWNER_EMAIL refusal before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "saved runtime refuses an insecure cookie before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "saved bootstrap refuses a development owner before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "missing token record refuses before Helm",
+      "result": "PASS"
+    },
+    {
+      "step": "host swap and crash-dump production checks",
+      "result": "PARTIAL",
+      "reason": "documented accepted dev-box exception; production F1/F2 are not qualified"
+    },
+    {
+      "step": "fresh hardened package installed and ready",
+      "result": "PASS"
+    },
+    {
+      "step": "wrong-organisation real sign-in creates no member or event",
+      "result": "PASS"
+    },
+    {
+      "step": "packaged sign-in, token refusals and chat at both widths",
+      "result": "PASS"
+    },
+    {
+      "step": "package-down cleanup",
+      "result": "PASS"
+    },
+    {
+      "step": "--id cleanup",
+      "result": "PASS"
+    },
+    {
+      "step": "temporary test app cleanup",
+      "result": "PASS"
+    }
+  ],
+  "browserChecks": [
+    "owner Secure and HttpOnly session at 1280px",
+    "wrong token refused without retaining the input",
+    "one-time token creates the first owner",
+    "used token refuses a second owner claim",
+    "owner real sign-in and packaged stand-in-model chat at 1280px",
+    "owner Secure and HttpOnly session at 390px",
+    "owner real sign-in and packaged stand-in-model chat at 390px",
+    "admin Secure and HttpOnly session at 1280px",
+    "joined member access is applied before the first protected read",
+    "admin real sign-in and packaged stand-in-model chat at 1280px",
+    "admin Secure and HttpOnly session at 390px",
+    "admin real sign-in and packaged stand-in-model chat at 390px",
+    "member Secure and HttpOnly session at 1280px",
+    "joined member access is applied before the first protected read",
+    "member real sign-in and packaged stand-in-model chat at 1280px",
+    "member Secure and HttpOnly session at 390px",
+    "member real sign-in and packaged stand-in-model chat at 390px",
+    "member cannot reuse the installation token to become owner"
+  ]
+}

@@ -70,7 +70,10 @@ against the [event catalogue package](../events/README.md) before accepting it.
 `integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
 
 `chatContextSchema` includes the authorised member’s optional display name and
-role (`owner`, `admin` or `member`), and personal assistant id. The role reuses
+role (`owner`, `admin` or `member`), and personal assistant id.
+`chat-context.ts` defines the strict `subscribe` request for `chat-context` and the
+`context` reply containing this same `chatContextSchema`. The server binds the
+member to the authenticated session; the request accepts no member or assistant id. The role reuses
 `memberHeaderSchema`; older replies may omit it. `ChatContext` is the shared reply type. Chat feed and live reply schemas type the computer state
 as ready, starting, recovering or not applicable. They may include the time of
 the latest computer loss. `sessionSlug` formats the first message consistently for

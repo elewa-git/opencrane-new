@@ -1,0 +1,59 @@
+TAP version 13
+# Subtest: accepts the exact existing-owner refusal for the member identity
+not ok 1 - accepts the exact existing-owner refusal for the member identity
+  ---
+  duration_ms: 3.060545
+  type: 'test'
+  location: '<worktree>/infra/package/qualification-token.test.mjs:23:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    A member reused the owner token
+    + actual - expected
+    
+    + 'owner_exists'
+    - 'token_used'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'token_used'
+  actual: 'owner_exists'
+  operator: 'strictEqual'
+  stack: |-
+    assertMemberTokenRefusal (file://<worktree>/infra/package/qualification-token.mjs:4:10)
+    TestContext.acceptsTheDocumentedRefusalForAnotherIdentity (file://<worktree>/infra/package/qualification-token.test.mjs:6:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: rejects success, owner-token reuse reasons and malformed refusal bodies
+not ok 2 - rejects success, owner-token reuse reasons and malformed refusal bodies
+  ---
+  duration_ms: 2.222306
+  type: 'test'
+  location: '<worktree>/infra/package/qualification-token.test.mjs:25:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    code: 'ERR_ASSERTION'
+  operator: 'throws'
+  stack: |-
+    TestContext.rejectsSuccessfulClaimsAndOtherRefusals (file://<worktree>/infra/package/qualification-token.test.mjs:19:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 129.507716

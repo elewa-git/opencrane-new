@@ -17,6 +17,7 @@ import {
 import {
   subscribeSchema,
   chatSubscribeSchema,
+  chatContextSubscribeSchema,
   errorMessageSchema,
   eventValidationResultSchema,
   helloMessageSchema,
@@ -24,6 +25,7 @@ import {
   type HelloEcho,
 } from '@opencrane/protocol';
 
+import { contextSubscription } from './chat/context-live.ts';
 import { conversationSubscription } from './chat/realtime.ts';
 import { trackSessionSocket } from './auth/session-sockets.ts';
 import { memberSubscription, type RealtimeOptions } from './realtime.ts';
@@ -136,6 +138,7 @@ export function attachWebSocketServer(
     trackSessionSocket(httpServer, cookie, socket);
     const subscribe = memberSubscription(socket, session, authConfig, logger, realtime);
     const chat = conversationSubscription(socket, session, authConfig, realtime?.chat);
+    const context = contextSubscription(socket, session, authConfig, logger, realtime?.chat);
     let subscribed = false;
     heartbeat(socket, heartbeatIntervalMs);
     let windowStart = Date.now();
@@ -157,6 +160,13 @@ export function attachWebSocketServer(
         return;
       }
 
+      const personal = chatContextSubscribeSchema.safeParse(parsed);
+      if (personal.success) {
+        if (subscribed) { socket.close(1008); return; }
+        subscribed = true;
+        context();
+        return;
+      }
       const conversation = chatSubscribeSchema.safeParse(parsed);
       if (conversation.success) {
         if (subscribed) { socket.close(1008); return; } subscribed = true;

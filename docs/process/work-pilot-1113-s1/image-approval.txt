@@ -1,0 +1,2 @@
+{"msg": "Application CI approval refused", "name": "application-approval", "reason": "malformed", "stage": "metadata"}
+Application CI approval refused

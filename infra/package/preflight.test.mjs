@@ -338,3 +338,155 @@ async function jobOutputPasses() {
 }
 test('preflight accepts the CI output and refuses matching locally replaced approvals',
   jobOutputPasses);
+
+function publicFixture() {
+  const setup = fixture();
+  setup.values.exposure.public = {
+    enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls',
+  };
+  setup.settings = {
+    OIDC_EXPECTED_ORG_ID: 'test-organisation', NODE_ENV: 'production',
+    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
+  };
+  return setup;
+}
+
+function checkPublic(setup) {
+  const file = join(setup.directory, 'public-settings.json');
+  writeFileSync(file, JSON.stringify(setup.settings), { mode: 0o600 });
+  const approved = applicationApprovalFixture(setup.directory, reviewedImage);
+  const env = { ...approved.env, PACKAGE_PUBLIC_SETTINGS_FILE: file };
+  return check(setup.values, setup.review, setup.directory, env);
+}
+
+function admitsHardenedSettings() {
+  const setup = publicFixture();
+  try {
+    const result = checkPublic(setup);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    rmSync(setup.directory, { recursive: true });
+  }
+}
+test('explicit public-address mode accepts private production sign-in settings', admitsHardenedSettings);
+
+const publicRefusals = [
+  ['missing organisation', 'OIDC_EXPECTED_ORG_ID', undefined],
+  ['blank organisation', 'OIDC_EXPECTED_ORG_ID', '   '],
+  ['missing production mode', 'NODE_ENV', undefined],
+  ['development mode', 'NODE_ENV', 'development'],
+  ['insecure cookie', 'OIDC_COOKIE_SECURE', 'false'],
+  ['missing secure cookie', 'OIDC_COOKIE_SECURE', undefined],
+  ['HTTP redirect', 'OIDC_REDIRECT_URI', 'http://pilot.example.test/auth/callback'],
+  ['another host', 'OIDC_REDIRECT_URI', 'https://another.example.test/auth/callback'],
+  ['redirect suffix', 'OIDC_REDIRECT_URI', 'https://pilot.example.test/auth/callback/'],
+  ['extra identities', 'OIDC_EXTRA_IDENTITIES', 'private-canary'],
+  ['empty extra identities', 'OIDC_EXTRA_IDENTITIES', ''],
+  ['development owner', 'DEV_OWNER_EMAIL', 'private-canary'],
+  ['empty development owner', 'DEV_OWNER_EMAIL', ''],
+];
+for (const [name, field, value] of publicRefusals) {
+  function refusesPublicSettings() {
+    const setup = publicFixture();
+    try {
+      if (value === undefined) delete setup.settings[field];
+      else setup.settings[field] = value;
+      const result = checkPublic(setup);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, new RegExp(field, 'u'));
+      assert.doesNotMatch(result.stderr, /private-canary/u);
+    } finally {
+      rmSync(setup.directory, { recursive: true });
+    }
+  }
+  test(`public address refuses ${name} before Helm`, refusesPublicSettings);
+}
+
+for (const flag of ['ingress', 'loadBalancer', 'funnel']) {
+  function keepsLegacyRefusal() {
+    const setup = publicFixture();
+    try {
+      setup.values.exposure[flag] = true;
+      const result = checkPublic(setup);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /Public ingress, LoadBalancer and Funnel are refused/u);
+    } finally {
+      rmSync(setup.directory, { recursive: true });
+    }
+  }
+  test(`public-address choice does not admit legacy ${flag}`, keepsLegacyRefusal);
+}
+
+const addressRefusals = [
+  ['missing hostname', 'host', undefined, /plain DNS name/u],
+  ['scheme in hostname', 'host', 'https://pilot.example.test', /plain DNS name/u],
+  ['port in hostname', 'host', 'pilot.example.test:443', /plain DNS name/u],
+  ['IP address', 'host', '127.0.0.1', /plain DNS name/u],
+  ['wildcard', 'host', '*.example.test', /plain DNS name/u],
+  ['missing TLS reference', 'tlsSecret', undefined, /TLS secret name/u],
+  ['invalid TLS reference', 'tlsSecret', 'private/secret', /TLS secret name/u],
+  ['implicit choice', 'enabled', 'true', /explicit enabled choice/u],
+];
+for (const [name, field, value, expected] of addressRefusals) {
+  function refusesAddress() {
+    const setup = publicFixture();
+    try {
+      setup.values.exposure.public[field] = value;
+      const result = checkPublic(setup);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, expected);
+    } finally {
+      rmSync(setup.directory, { recursive: true });
+    }
+  }
+  test(`public address refuses ${name}`, refusesAddress);
+}
+
+function refusesMissingPrivateSettings() {
+  const setup = publicFixture();
+  try {
+    const env = applicationApprovalFixture(setup.directory, reviewedImage).env;
+    delete env.PACKAGE_PUBLIC_SETTINGS_FILE;
+    const result = check(setup.values, setup.review, setup.directory, env);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Public sign-in settings file is unavailable or invalid/u);
+    assert.doesNotMatch(result.stderr, /TypeError|undefined|ENOENT/u);
+  } finally {
+    rmSync(setup.directory, { recursive: true });
+  }
+}
+test('public address refuses absent private settings without exposing dependency output',
+  refusesMissingPrivateSettings);
+
+function refusesInvalidValuesArguments(argumentsList, environmentValue) {
+  const environment = { ...process.env, DEV_STACK_ID: '1' };
+  delete environment.PACKAGE_VALUES_FILE;
+  if (environmentValue !== undefined) {
+    environment.PACKAGE_VALUES_FILE = environmentValue;
+  }
+  const result = spawnSync(process.execPath, ['--experimental-strip-types',
+    'infra/package/prepare.ts', ...argumentsList], { env: environment, encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr,
+    'Package secret preparation failed during values arguments (invalid_values_arguments)\n');
+}
+
+function refusesDuplicateValuesSources() {
+  refusesInvalidValuesArguments(['/private/values.json'], '/private/values.json');
+}
+
+test('preparation names duplicate values arguments without printing the private path',
+  refusesDuplicateValuesSources);
+
+function refusesMissingValuesPath() {
+  refusesInvalidValuesArguments([], undefined);
+}
+
+test('preparation names a missing values argument before preflight', refusesMissingValuesPath);
+
+function refusesExtraValuesArguments() {
+  refusesInvalidValuesArguments(['/private/values.json', '/private/extra.json'], undefined);
+}
+
+test('preparation names extra values arguments before preflight', refusesExtraValuesArguments);

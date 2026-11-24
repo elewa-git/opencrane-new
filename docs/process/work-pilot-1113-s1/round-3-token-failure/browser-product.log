@@ -1,0 +1,18 @@
+PASS owner Secure and HttpOnly session at 1280px
+PASS wrong token refused without retaining the input
+PASS one-time token creates the first owner
+PASS used token refuses a second owner claim
+PASS owner real sign-in and packaged stand-in-model chat at 1280px
+PASS owner Secure and HttpOnly session at 390px
+PASS owner real sign-in and packaged stand-in-model chat at 390px
+PASS admin Secure and HttpOnly session at 1280px
+PASS joined member access is applied before the first protected read
+PASS admin real sign-in and packaged stand-in-model chat at 1280px
+PASS admin Secure and HttpOnly session at 390px
+PASS admin real sign-in and packaged stand-in-model chat at 390px
+PASS member Secure and HttpOnly session at 1280px
+PASS joined member access is applied before the first protected read
+PASS member real sign-in and packaged stand-in-model chat at 1280px
+PASS member Secure and HttpOnly session at 390px
+PASS member real sign-in and packaged stand-in-model chat at 390px
+FAIL member 390px token reuse; code=ASSERTION_FAILED; screenshot=PASS

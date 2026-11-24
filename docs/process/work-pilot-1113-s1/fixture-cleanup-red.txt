@@ -1,0 +1,33 @@
+TAP version 13
+# Subtest: qualification cleanup closes upgraded CONNECT tunnels
+not ok 1 - qualification cleanup closes upgraded CONNECT tunnels
+  ---
+  duration_ms: 29.33537
+  type: 'test'
+  location: '[qualification-script]:36:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Qualification cleanup leaves its CONNECT tunnel open
+
+    false !== true
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.closesConnectTunnel (file://[qualification-script]:28:12)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 194.587953

@@ -579,7 +579,7 @@ export class Workspace implements OnInit {
     if (this.chat.loading()) return 'Loading your workspace…';
     if (this.chat.railUnavailable()) return 'Reconnect to your computer to start a session.';
     if (!this.chat.selected() && !this.recipient()) return 'Choose your agent to start a session.';
-    if (!this.chat.selectedAssistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
+    if (!this.chat.selectedAssistantId()) return 'Your personal agent is being prepared.';
     return '';
   }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }

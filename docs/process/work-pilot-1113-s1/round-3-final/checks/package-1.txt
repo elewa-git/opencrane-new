@@ -1,0 +1,14 @@
+Complete output is retained in the private source-check receipt.
+
+  duration_ms: 1.261846
+  type: 'test'
+  ...
+1..646
+# tests 646
+# suites 0
+# pass 646
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 719033.468399

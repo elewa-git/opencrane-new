@@ -18,7 +18,7 @@ The browser uses the website's own address for server connections.
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
   web -->|sends requests and messages| server["apps/server<br/>back end"]
-  server -->|returns saved and live results| web
+  server -->|returns saved results and personal assignment updates| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
 
@@ -28,7 +28,7 @@ flowchart LR
 - Show the installation's name and provide sign-out from desktop and phone menus.
 - Offer Settings to owners and admins.
 - Support assistant sessions and direct or group chats with colleagues.
-- Show live and saved replies, safe formatting, code, images and diagrams.
+- Show a newly assigned personal assistant, live and saved replies, and formatted messages.
 - Keep private personal replies only in page memory and clear them when access ends.
 - Open recent and archived chats, load older messages and show saved action details.
 - Upload and preview files, explain refusals and show when files are ready to send.
@@ -50,7 +50,8 @@ Not built yet:
 1. **A person signs in.** Their company account identifies them.
    The first owner can claim a new installation; the welcome survey saves personal
    wishes without granting access to tools or groups.
-2. **A person chats.** They send a message and watch the assistant's reply arrive.
+2. **A person chats.** They press Enter or Send to send their current text and watch the assistant's reply
+   arrive.
    Stop requests an end to the reply; a spending stop explains the relevant limit.
    Colleague chats save human messages without starting assistant work.
 3. **A person asks a shared assistant for work.** They review the audience, paying

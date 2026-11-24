@@ -102,6 +102,9 @@ spec:
             - secretRef: { name: {{ .Values.secrets.runtime | quote }} }
             - secretRef: { name: {{ .Values.secrets.bootstrap | quote }} }
           env:
+            {{- if .Values.exposure.public.enabled }}
+            - { name: DEV_OWNER_BOOTSTRAP, value: "0" }
+            {{- end }}
             - { name: RUNTIME_SECRET, value: {{ .Values.secrets.runtime | quote }} }
             - name: KUBE_NAMESPACE
               valueFrom:
