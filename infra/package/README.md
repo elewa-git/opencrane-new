@@ -65,6 +65,7 @@ Not built yet:
 3. **An owner connects a model provider.** With `models.mode: provider`, they save
    its key in Settings, run the quoted test, select the chat model and switch on.
    Members can then get real replies. The default install keeps the stand-in.
+   When the provider-mode server is updated, it stops before its replacement starts.
 4. **A developer opens the website.** A local port forward connects their browser
    to the private website. A closed desktop connection leaves other requests available.
    A missing or changed cluster target stops forwarding.

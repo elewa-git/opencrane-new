@@ -15,3 +15,5 @@ Follow automatic provider setup advancement when its status button disappears
 during a click.
 Read the chat default again when an update interrupts the first read, and show
 how to continue when the default is still unavailable.
+Start the replacement provider-mode server after the old Pod releases the
+budget lock so the package can finish starting.

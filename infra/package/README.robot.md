@@ -221,6 +221,10 @@ differently. Keep that commit available when running the package tests.
 values. The default chart output stays byte-for-byte unchanged. Provider preparation
 writes no fallback key or local stub settings. The launcher starts managed routing
 before setup; recorded switch-on is still required for admission.
+The provider-mode server Deployment uses `Recreate`. Its one models process
+holds the budget lock for its lifetime. An update stops that Pod before starting
+its replacement, which takes the lock before reporting readiness. This includes
+the computer-gateway update during a fresh install.
 
 Provider mode creates a 1 GiB `provider-secrets` PVC. The startup permission check
 and server mount it read-write; models mounts it read-only. The server and models

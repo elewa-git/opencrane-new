@@ -52,6 +52,11 @@ metadata:
   name: server
 spec:
   replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
+{{- if eq (toString .Values.models.mode) "provider" }}
+  {{- /* Let the old models process release the budget lock before starting its replacement. */}}
+  strategy:
+    type: Recreate
+{{- end }}
   selector:
     matchLabels: { app: server }
   template:

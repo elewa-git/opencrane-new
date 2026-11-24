@@ -46,7 +46,9 @@ flowchart LR
 Private installation credentials are prepared outside this folder. The chart refers
 to them by name. With `models.mode: provider`, the owner saves the model key in
 Settings. The startup permission check and the server and models containers mount its private volume;
-the models mount is read-only. No provider key belongs in Helm values. The optional database standby needs separately prepared credentials and a
+the models mount is read-only. The server Pod stops before an update starts its replacement,
+so the new models process can take the budget lock. No provider key belongs in Helm values.
+The optional database standby needs separately prepared credentials and a
 CloudNativePG controller. It has been checked by rendering the chart, which does
 not prove a running standby. An optional render also describes three private NATS
 peers. It needs separate route trust and one certificate reference per peer.
