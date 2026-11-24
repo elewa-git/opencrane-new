@@ -1,0 +1,64 @@
+{
+  "bindingsReads": [
+    {
+      "startedAt": "2026-11-24T11:10:27.325Z",
+      "method": "GET",
+      "finishedAt": "2026-11-24T11:10:27.718Z",
+      "status": 503
+    },
+    {
+      "startedAt": "2026-11-24T11:10:27.425Z",
+      "method": "GET",
+      "finishedAt": "2026-11-24T11:10:27.839Z",
+      "status": 503
+    }
+  ],
+  "dispatcherObservations": [
+    {
+      "podUid": "f887cf94-2c47-4011-ac2c-a9f2ffa45daa",
+      "restartCount": 0
+    },
+    {
+      "podUid": "fb41e6e8-bd7d-4e88-a581-b890dd6148d5",
+      "restartCount": 0
+    }
+  ],
+  "dispatcherPresentAtTeardown": [
+    {
+      "pod": "worker-dispatcher-68795bdf97-jsw48",
+      "restartCount": 0
+    }
+  ],
+  "dispatcherPoolAcquisitionErrors": 5,
+  "reactions": [
+    {
+      "utc": "2026-11-24T11:10:11.764Z",
+      "type": "provider.created",
+      "handler": "update-openfga",
+      "outcome": "handler.started"
+    },
+    {
+      "utc": "2026-11-24T11:10:11.984Z",
+      "type": "provider.created",
+      "handler": "update-openfga",
+      "outcome": "handler.completed"
+    },
+    {
+      "utc": "2026-11-24T11:10:26.824Z",
+      "type": "provider.models_selected",
+      "handler": "seed-provider-default",
+      "outcome": "handler.started"
+    },
+    {
+      "utc": "2026-11-24T11:10:27.677Z",
+      "type": "provider.models_selected",
+      "handler": "seed-provider-default",
+      "outcome": "handler.completed"
+    }
+  ],
+  "loadAtFinalQueueCheck": 2.24,
+  "quietSecondsBeforeClaim": 812,
+  "maximumOneMinuteLoad": 16.24,
+  "failureLog": "No slot failure.log was present before teardown.",
+  "startupAndServiceLogsSavedBeforeTeardown": true
+}

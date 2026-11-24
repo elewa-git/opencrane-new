@@ -1,0 +1,23 @@
+{
+  "status": "FAIL",
+  "source": "589bc623c481f9b6efaba0e9d7db0946d52c4f1c",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "select chat default",
+      "result": "FAIL",
+      "errorType": "AssertionError",
+      "detail": "Selecting the chat default must save its model binding."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

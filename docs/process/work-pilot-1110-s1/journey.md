@@ -1,15 +1,98 @@
 # Packaged connected-provider journey
 
-**PARTIAL — the full journey has not passed.** Paid calls: **0**; external charges:
-**0 cents**. The latest fresh installed source is
-`5ad52ff2f6822f7d2f364430ce1493ce3ae4a2f9`. Its run failed while advancing provider
-creation to Key. It had no dispatcher restart. Both live blocking findings remain
-open; this PR must remain draft and must not merge on these receipts.
+**FAIL — the round 5 journey stopped at the chat-default bindings read.**
+Paid provider calls and external charges were zero. Both live blocking findings
+remain open and the PR stays draft.
 
-These are the builder's own checks. No independent review result is claimed.
-Hosted checks and image approvals are linked in the PR's Evidence section.
+## Round 5 fresh package
 
-## Latest fresh run
+On 24 November 2026 UTC, secondary slot 1 installed a new namespace and volumes
+using approved images for `589bc623c481f9b6efaba0e9d7db0946d52c4f1c`. The rebase
+onto `3bf5b9c16` kept the versions of #1170, #1174, #1176, #1178 and #1180 on
+main. The duplicate dispatcher code and test commits from #1174 were removed.
+The chart test compares the default render byte for byte with that main revision.
+
+Both slots were free with no other package or journey detected. Load stayed
+below six for 812 seconds before the claim, with 2.24 at the final queue check.
+During installation and the browser run, the sampled one-minute load reached
+16.24. The installer logged the documented
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch and retained the
+F1/F2 refusals. The private values file was passed once to preparation by path.
+The inherited fleet marker remained present. The qualification provider
+stayed on its restricted free route.
+
+| Condition | Result |
+| --- | --- |
+| Fresh image approval, namespace, provider volume and package readiness | PASS |
+| Owner, admin and member sign-in, Settings and visible Key form at 1280 and 390 px | PASS |
+| Wrong-key reachability refusal and HTTP 401 from the same stand-in credential | PASS |
+| Wrong key absent from inspected API responses and visible text through that step | PASS |
+| Correct-key reachability, quoted test consent and successful model result | PASS in the API and at 390 px |
+| Settled model-result screenshot at 1280 px | PARTIAL — still checking the recorded test |
+| Model selection reaches the Access step | PASS |
+| Chat-default GET before the explicit selection | FAIL — HTTP 503 |
+| Switch-on, member replies at both widths and post-recreation chat | NOT RUN |
+| Synthetic 0600 file and 0700 directory before and after Pod recreation | NOT RUN |
+| Final values, manifest, event, log and browser disclosure inspection | NOT RUN |
+| Dispatcher container restarts | PASS — zero on both observed Pods |
+| Logs retained and slot released | PASS |
+
+The 390 px screen records one settled cent inside the qualification budget. The
+request used the free stand-in and incurred zero external charges.
+
+Two GET requests to the bindings endpoint returned 503. Both started before
+`seed-provider-default` finished handling the model selection and completed
+immediately afterwards. The existing provider binding guard regression exercises
+a 503 when provider history changes during that read. Both dependency history
+guard cases passed twice after the run. The timing is consistent
+with that race, and the live response does not identify the internal cause.
+The dispatcher logged five queue pool-acquisition errors earlier in the run.
+Neither dispatcher container restarted during the installer rollout or browser run.
+
+The Key-step stall did not recur. The conditional Key-step product fix was
+unnecessary. This round used its one fresh packaged run. The bindings failure
+remains open alongside live remount custody. The mode-repair regression and the
+backup CronJob isolation regression both remain in the branch.
+
+Startup, service, browser and continuous dispatcher logs were saved in the private
+task receipt before teardown. The slot had no `failure.log` to copy. Both package
+teardown and slot cleanup completed. These are the builder's checks.
+
+- [Result](live/round-5/result.json), [request timing and restarts](live/round-5/diagnostics.json),
+  and [image and volume binding](live/round-5/installation.json).
+- [Queue observations](live/round-5/queue.json) and [load samples](live/round-5/load.json).
+- Settings at [1280 px](live/round-5/admin-settings-1280.png) and
+  [390 px](live/round-5/admin-settings-390.png).
+- Key form at [1280 px](live/round-5/new-key-entry-1280.png) and
+  [390 px](live/round-5/new-key-entry-390.png).
+- Wrong-key refusal at [1280 px](live/round-5/wrong-key-refused-1280.png) and
+  [390 px](live/round-5/wrong-key-refused-390.png).
+- Quoted test at [1280 px](live/round-5/quoted-test-1280.png) and
+  [390 px](live/round-5/quoted-test-390.png). The test was still
+  [checking at 1280 px](live/round-5/model-test-checking-1280.png) and showed
+  [the answer at 390 px](live/round-5/model-test-passed-390.png).
+
+### Round 5 source checks
+
+PASS twice on 675 chart, installer, preflight and custody cases, 75 focused
+Vitest cases, 51 startup cases, 13 browser driver cases, three Angular cases and
+two source image checks. Typecheck, event agreement, Knip, changelog, Markdown,
+README structure, package licences and whole-stream read lint passed. ESLint
+reported zero errors on the changed files and 34 infrastructure files excluded
+by repository configuration. Local tests, lint and typechecking used
+`nice -n 10` with focused suites.
+
+Exact-source hosted checks and fresh artifacts passed for the installed revision.
+[CI](https://github.com/elewa-git/opencrane-new/actions/runs/45375976197),
+[application package](https://github.com/elewa-git/opencrane-new/actions/runs/45376041262)
+and [scanner package](https://github.com/elewa-git/opencrane-new/actions/runs/45376041637).
+
+After the run, main advanced to `8a1001c0701cef0c380d37e6c715a8c4a2e79200`
+with #1149. The final rebase kept its conversation reader inside the provider-mode
+models process. The chart on main stayed byte-for-byte the same. This receipt
+records the one authorised fresh run, with the installed image and source above.
+
+## Last round 4 run
 
 **FAIL — 20 November 2026 UTC, secondary slot 1.** The new namespace and PVCs used
 exact-source approved application and scanner images. Both slots were free, no
@@ -71,9 +154,9 @@ worktree is retained for review.
 | Package teardown and claim release | PASS |
 | Complete requested journey | FAIL |
 
-## Remaining blocker and owner hold
+## Round 4 owner hold
 
-This is the authorised last fix round. The Key-step gate still fails live after
+At the end of round 4, the Key-step gate still failed live after
 the status-control corrections. The assumption that following those controls is
 enough to finish provider setup is not established. Hold the two live blockers for
 the owner under the [engineering discipline](../standards.md#engineering-discipline-make-it-work-then-make-it-right).
@@ -219,7 +302,7 @@ crash fixture keeps the same commit barriers around transactions on that client.
 Its SIGKILL, replay and effect assertions are unchanged. All 20 real dispatcher/runtime checks passed twice, including readiness withdrawal
 and all three SIGKILL recovery cases. All 44 upgrade checks passed.
 
-## Original review findings
+## Review findings after round 4
 
 - **BLOCKING — private modes on remount: PARTIAL.** Retained failing-first
   `3557f4d11`, repair/refusal and `OnRootMismatch`. Focused source checks passed
@@ -227,13 +310,14 @@ and all three SIGKILL recovery cases. All 44 upgrade checks passed.
 - **BLOCKING — full packaged journey: PARTIAL.** The first run passed setup and
   wrong-key HTTP 401, then failed at the chat default. With the pool fix installed,
   the dispatcher stayed running, but the driver timed out on its status control.
-  A matching disappearing-button race was reproduced independently. The subsequent run also failed at Key; see the latest run above.
+  A matching disappearing-button race was reproduced independently. The last
+  round 4 run also failed at Key.
 - **FIX — backup CronJob isolation: PASS (source).** Retained failing-first
   `76847bdd9` and claim-based checks across workloads and init containers, including
   aliased and same-name mounts. Focused checks passed twice. No new live backup
   qualification is claimed.
 
-## Source checks and rebase
+## Round 4 source checks and rebase
 
 PASS: seventeen final driver/native-source checks twice; eleven focused custody, provider
 and CronJob checks twice; twenty real dispatcher/runtime checks twice; all 44
@@ -295,24 +379,33 @@ records the earlier driver regressions and screenshots.
 
 Use a new namespace and PVCs through the claimed secondary package path. A live
 Compose stack is refused by package preparation; this recipe uses package startup.
-Keep both image approvals bound to the exact source. Set only reference paths in
-private preparation and retain host-check fields and command output.
+Verify both exact-source image approvals still have their artifacts. Wait until
+both slots are free, no other package or journey is active and the one-minute
+load has stayed below six for five minutes. Set only reference paths in private
+preparation and retain the host-check fields and command output.
 
 ```sh
-stack_id=$(infra/dev-stack/claim.sh) || exit 1
-export DEV_STACK_ID="$stack_id"
+infra/dev-stack/claim.sh
+# These commands use slot 1. Use the literal id printed by claim.sh throughout.
+export DEV_STACK_ID=1
 # Set ZITADEL_KEY_FILE to the authorised existing credential path.
-infra/dev-stack/run.sh package-prepare --id "$stack_id"
-# Set models.mode=provider and models.qualification=true in private package values.
-PACKAGE_SKIP_PROVIDER_SETUP=1 nice -n 10 node --experimental-strip-types infra/package/prepare.ts
+infra/dev-stack/run.sh package-prepare --id 1
+values_file=/path/to/private/package-values.json
+# Set models.mode=provider and models.qualification=true in the private values file.
+unset PACKAGE_VALUES_FILE
+PACKAGE_SKIP_PROVIDER_SETUP=1 nice -n 10 node --experimental-strip-types \
+  infra/package/prepare.ts "$values_file"
 OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366 \
-  nice -n 10 infra/dev-stack/run.sh package-up --id "$stack_id" --values "$PACKAGE_VALUES_FILE"
-infra/dev-stack/run.sh package-check --id "$stack_id"
-infra/package/forward.sh
+  nice -n 10 infra/dev-stack/run.sh package-up --id 1 --values "$values_file"
+infra/dev-stack/run.sh package-check --id 1
+infra/package/forward.sh &
+forward_pid=$!
+# Wait for the package's local browser port to open before starting the browser.
 nice -n 10 node --experimental-strip-types infra/package/provider-journey.test.mjs
-# Copy sanitised startup, current/previous service logs and screenshots before teardown.
-infra/dev-stack/run.sh package-down --id "$stack_id"
-infra/dev-stack/down.sh --id "$stack_id"
+kill "$forward_pid"
+# Inspect the slot's failure.log and copy sanitised logs and screenshots before teardown.
+infra/dev-stack/run.sh package-down --id 1
+infra/dev-stack/down.sh --id 1
 ```
 
 The free upstream stays fixed to `model-qualification:43003`. Synthetic credentials
