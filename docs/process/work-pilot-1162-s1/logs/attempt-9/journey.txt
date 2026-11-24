@@ -1,0 +1,16 @@
+one-person-idle
+sign-in-owner-1280
+one-person-chat-1280
+history-refusal-1280
+one-person-upload-desktop-1280
+pdf-answer-1280
+desktop-frame-1280
+budget-1280
+sign-in-owner-390
+one-person-chat-390
+history-refusal-390
+one-person-upload-desktop-390
+pdf-answer-390
+desktop-frame-390
+budget-390
+PASS packaged sign-in, chat, upload, desktop and budget sizing journey

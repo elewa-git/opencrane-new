@@ -1,0 +1,24 @@
+{
+  "utc": "2026-11-20T16:55:27.373689+00:00",
+  "source": "e0c4a9b063f5cfcdd189134eaa145592727110fb",
+  "runs": {
+    "ci": {
+      "runId": 44773161512,
+      "conclusion": "success",
+      "headSha": "e0c4a9b063f5cfcdd189134eaa145592727110fb",
+      "status": "completed"
+    },
+    "application": {
+      "runId": 44773151009,
+      "conclusion": "success",
+      "headSha": "e0c4a9b063f5cfcdd189134eaa145592727110fb",
+      "status": "completed"
+    },
+    "scanner": {
+      "runId": 44773156887,
+      "conclusion": "success",
+      "headSha": "e0c4a9b063f5cfcdd189134eaa145592727110fb",
+      "status": "completed"
+    }
+  }
+}

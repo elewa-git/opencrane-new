@@ -50,6 +50,7 @@ function partitionsTests() {
     assert.ok(!argumentsList.some(isShardArgument));
   }
   assert.ok(!image.includes('--maxWorkers=1'));
+  assert.ok(image.includes('--maxWorkers=2'), 'Bound native image fixture concurrency');
   assert.ok(browser.includes('--maxWorkers=1'));
 }
 

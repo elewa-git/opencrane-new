@@ -1,0 +1,3 @@
+{"time":"2026-11-22T18:00:18Z","load1":6.14,"slot1":"in-use; opencrane-dev-1 services visible","slot2":"free","packageStack":"none visible","action":"wait"}
+{"time":"2026-11-22T18:01:29Z","load1":12.35,"slot1":"in-use; opencrane-dev-1 services visible","slot2":"free","packageStack":"none visible","action":"wait"}
+{"time":"2026-11-22T18:02:20Z","load1":14.81,"slot1":"in-use; status command produced no state line","slot2":"last reported free","packageStack":"none visible","action":"stop before claim; five-minute low-load window not met"}

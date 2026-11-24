@@ -1,0 +1,22 @@
+{
+  "namespaceUid": "b1bc2b0f-707c-4047-b483-a4e50350a7f6",
+  "installId": "395b2e45-114d-4250-a04a-d6d4a26a8329",
+  "previous": [
+    {
+      "attempt": "attempt-1",
+      "namespaceUid": "e887f70f-80e2-4cba-912a-a9f14a70dd20",
+      "installId": "54c26ff5-696a-4e98-87f7-0c7e6b719e48"
+    },
+    {
+      "attempt": "attempt-2",
+      "namespaceUid": "bc8f6a14-721c-4e92-a29a-db0c4fc14f24",
+      "installId": "a9b4ca0d-8e5c-493d-a45f-57fd5b33ffb2"
+    },
+    {
+      "attempt": "attempt-3",
+      "namespaceUid": "c102af31-6444-41c3-9bf1-b3751d499869",
+      "installId": "61be9127-a20d-434f-a65b-78d0b30ea1d9"
+    }
+  ],
+  "distinct": true
+}

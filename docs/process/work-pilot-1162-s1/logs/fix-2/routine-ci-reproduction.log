@@ -1,0 +1,14 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/routine-sender.test.ts -t polls saved Denied and interrupts only the accepted native routine turn once --maxWorkers=2
+
+ RUN  v5.0.3 [checkout]
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 113 skipped (114)
+   Start at  15:57:06
+   Duration  16.96s (tests 48%, transform 38%, import 14%)
+
+  Transform  transforming modules took 6.36s · 38% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

@@ -1,0 +1,7 @@
+All listed package services reported stopped:
+members, mcp-catalogue, computers, conversations, files, budgets, audit, routines,
+minio-tokens, dispatcher, server, web, connection-custody, memory.
+Package command refused; check pins, named secrets and slot ownership
+
+No package services started and no service logs existed. Owned cleanup completed:
+package-down --id 2; down.sh --id 2. Final slot status: free.

@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: keeps fixture files out of all four shards
+ok 1 - keeps fixture files out of all four shards
+  ---
+  duration_ms: 4.585772
+  type: 'test'
+  ...
+# Subtest: detects browser and image use without matching ordinary data
+ok 2 - detects browser and image use without matching ordinary data
+  ---
+  duration_ms: 1.060013
+  type: 'test'
+  ...
+# Subtest: refuses an unknown test group
+ok 3 - refuses an unknown test group
+  ---
+  duration_ms: 1.079849
+  type: 'test'
+  ...
+# Subtest: accepts every file exactly once
+ok 4 - accepts every file exactly once
+  ---
+  duration_ms: 0.310085
+  type: 'test'
+  ...
+# Subtest: refuses missing files
+ok 5 - refuses missing files
+  ---
+  duration_ms: 0.399095
+  type: 'test'
+  ...
+# Subtest: refuses duplicate files
+ok 6 - refuses duplicate files
+  ---
+  duration_ms: 0.403832
+  type: 'test'
+  ...
+# Subtest: refuses unexpected files
+ok 7 - refuses unexpected files
+  ---
+  duration_ms: 0.400572
+  type: 'test'
+  ...
+# Subtest: checks new fixture use whenever CI verifies file lists
+ok 8 - checks new fixture use whenever CI verifies file lists
+  ---
+  duration_ms: 652.394137
+  type: 'test'
+  ...
+# Subtest: detects Chromium through the real chat browser scripts
+ok 9 - detects Chromium through the real chat browser scripts
+  ---
+  duration_ms: 1.649236
+  type: 'test'
+  ...
+# Subtest: accepts the real chat browser suite in the fixture list
+ok 10 - accepts the real chat browser suite in the fixture list
+  ---
+  duration_ms: 95.317266
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 891.797039

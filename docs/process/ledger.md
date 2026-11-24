@@ -105,6 +105,25 @@ fresh-install proof. Phase 5 remains in the index linked above.
 
 ## Measurements
 
+### Pilot VM sizing
+
+On 24 November 2026, the one-person packaged journey passed sign-in, chat, PDF upload,
+decoded desktop viewing, history refusal and spending at 1280 and 390 pixels on
+approved rebased product source `9cb7e672c`. Whole-node peaks were **2.739 CPU cores and
+5.46 GiB including swap**; the package peaked at **2.274 CPU cores and 2.96 GiB
+working set**. The 94 samples covered the journey. Installation was not sampled.
+
+These observations do not qualify a minimum machine or spare-capacity recommendation.
+The owner dropped concurrent three-person sizing from this ticket. The
+[final receipt](work-pilot-1162-s1/journey.md#24-november-rebased-packaged-journey)
+links the browser results, measurements and sanitised screenshots. Earlier attempts,
+including failed attempts, remain historical evidence in that receipt; superseded
+measurements are not current sizing guidance.
+
+Host protection remains PARTIAL under the recorded accepted development-box switch.
+Bootstrap ran on this box only as a dry run and refused existing Docker before writes.
+Real Ubuntu bootstrap and reboot remain NOT RUN. No host setting changed.
+
 ### Lint size debt
 
 On 13 November 2026, the [size-debt receipt](clean-120-s1.md#final-full-lint)

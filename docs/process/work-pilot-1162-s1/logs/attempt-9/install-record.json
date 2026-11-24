@@ -1,0 +1,30 @@
+{
+  "context": "k3d-ocn",
+  "namespace": "opencrane-package-1",
+  "namespaceUid": "dedddfa6-51e3-4969-9af1-40c57468219a",
+  "release": "opencrane-package-1",
+  "releaseSecretUid": "57e5549b-4482-4cf6-a1d7-0934c84b750f",
+  "installId": "f750fc86-2de9-403a-b646-856caab7dac0",
+  "hostPreflight": {
+    "checkedAt": "2026-11-24T11:20:52.678Z",
+    "nodes": [
+      {
+        "name": "k3d-ocn-server-0",
+        "uid": "6323484b-1787-4ece-98bf-6ac9bc848198",
+        "failures": [
+          "F1: disable swap, or use plain dm-crypt swap with a fresh random key at each boot (/etc/crypttab: NAME DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256); activate only that mapped swap device and reboot to verify the boot configuration.",
+          "F2: disable host crash reporters (including apport and systemd-coredump); persist kernel.core_pattern= and kernel.core_uses_pid=0 in /etc/sysctl.d/99-no-core.conf, apply those settings and verify they remain after reboot."
+        ]
+      },
+      {
+        "name": "underlying-k3d-host",
+        "uid": "local",
+        "failures": [
+          "F1: disable swap, or use plain dm-crypt swap with a fresh random key at each boot (/etc/crypttab: NAME DEVICE /dev/urandom plain,swap,cipher=aes-xts-plain64,size=256); activate only that mapped swap device and reboot to verify the boot configuration.",
+          "F2: disable host crash reporters (including apport and systemd-coredump); persist kernel.core_pattern= and kernel.core_uses_pid=0 in /etc/sysctl.d/99-no-core.conf, apply those settings and verify they remain after reboot."
+        ]
+      }
+    ],
+    "override": "accepted-dev-box-366"
+  }
+}

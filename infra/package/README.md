@@ -20,6 +20,7 @@ flowchart LR
   stack["infra/dev-stack<br/>stack ownership"] -->|checks and launches| package["infra/package<br/>local Helm install"]
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
+  browser["Browser<br/>chat and desktop"] -->|connects through website proxy| apps
   package -->|checks settings and installs apps| apps["Server, website, workers and computer<br/>first owner token claim"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
@@ -61,7 +62,8 @@ Not built yet:
    ownership with a one-time token. Workers start an assistant's computer when needed.
    The worker that sends saved events to reactions can use a full CPU when work arrives together.
 3. **A developer opens the website.** A local port forward connects their browser
-   to the private website. A missing or changed cluster target stops forwarding.
+   to the private website. A closed desktop connection leaves other requests available.
+   A missing or changed cluster target stops forwarding.
 4. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
 5. **A backup runs.** The job stops writes, drains read tables and saves matching

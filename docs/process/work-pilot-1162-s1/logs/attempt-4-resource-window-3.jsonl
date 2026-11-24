@@ -1,0 +1,71 @@
+{"time":"2026-11-22T16:35:43Z","load1":1.97,"slot1":"free","slot2":"busy-lock","lockHeld":true}
+{"time":"2026-11-22T16:36:15Z","load1":3.37,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:36:48Z","load1":2.04,"slot1":"free","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T16:37:23Z","load1":1.78,"slot1":"free","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T16:37:59Z","load1":1.42,"slot1":"free","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T16:38:35Z","load1":1.89,"slot1":"free","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T16:39:10Z","load1":2.21,"slot1":"free","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T16:39:46Z","load1":2.49,"slot1":"free","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T16:40:21Z","load1":1.76,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:40:55Z","load1":2.68,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:41:27Z","load1":3.80,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:42:02Z","load1":7.47,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:42:36Z","load1":7.70,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:43:10Z","load1":8.37,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:43:43Z","load1":7.12,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:44:16Z","load1":6.45,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:44:50Z","load1":6.83,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:45:24Z","load1":14.87,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:45:58Z","load1":23.91,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:46:33Z","load1":21.15,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:47:06Z","load1":22.23,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:47:40Z","load1":17.22,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:48:13Z","load1":15.52,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:48:47Z","load1":12.97,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:49:21Z","load1":10.80,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:49:54Z","load1":10.29,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:50:27Z","load1":12.05,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:51:01Z","load1":14.31,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:51:36Z","load1":13.62,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:52:10Z","load1":11.05,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:52:44Z","load1":9.26,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:53:17Z","load1":8.02,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:53:51Z","load1":16.58,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:54:24Z","load1":17.89,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:54:58Z","load1":17.72,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:55:33Z","load1":22.33,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:56:08Z","load1":25.22,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:56:42Z","load1":20.87,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:57:16Z","load1":19.65,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:57:51Z","load1":16.45,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:58:25Z","load1":11.88,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:58:59Z","load1":8.87,"slot1":"busy-lock","slot2":"free","lockHeld":true}
+{"time":"2026-11-22T16:59:32Z","load1":7.61,"slot1":"members: running (3407297)
+mcp-catalogue: running (3407298)
+computers: running (3407316)
+conversations: running (3407321)
+files: running (3407343)
+budgets: running (3407356)
+audit: running (3407357)
+routines: running (3407377)
+minio-tokens: running (3406795)
+dispatcher: running (3408618)
+server: running (3409100)
+web: running (3412437)
+connection-custody: running (3408149)
+memory: running (3407370)
+NAME                         IMAGE                                                                                                               COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+opencrane-dev-1-clamav-1     opencrane-clamav:1.5.2-no-unrar                                                                                     "/usr/sbin/clamd --c…"   clamav     18 minutes ago   Up 18 minutes (healthy)   127.0.0.1:25111->3310/tcp
+opencrane-dev-1-minio-1      alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4   "minio server /data …"   minio      18 minutes ago   Up 18 minutes             127.0.0.1:25103->9000/tcp, 127.0.0.1:25104->9001/tcp
+opencrane-dev-1-models-1     node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3                  "docker-entrypoint.s…"   models     17 minutes ago   Up 17 minutes             
+opencrane-dev-1-nats-1       nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4                          "docker-entrypoint.s…"   nats       19 minutes ago   Up 19 minutes             6222/tcp, 8222/tcp, 127.0.0.1:25107-25110->25107-25110/tcp, 127.0.0.1:25101->4222/tcp
+opencrane-dev-1-openfga-1    openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55                     "/openfga run --http…"   openfga    18 minutes ago   Up 18 minutes             127.0.0.1:25102->8080/tcp
+opencrane-dev-1-postgres-1   postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f                                 "docker-entrypoint.s…"   postgres   19 minutes ago   Up 19 minutes (healthy)   127.0.0.1:25100->5432/tcp
+opencrane-dev-1-scanner-1    node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3                  "docker-entrypoint.s…"   scanner    18 minutes ago   Up 18 minutes             127.0.0.1:25113->8443/tcp
+
+healthy: http://127.0.0.1:25105/healthz
+healthy: http://127.0.0.1:25102/healthz
+healthy: http://127.0.0.1:25103/minio/health/live
+healthy: http://127.0.0.1:25106/org/integrations
+healthy: http://127.0.0.1:25109/healthz/ready","slot2":"free","lockHeld":false}
+{"time":"2026-11-22T17:00:10Z","load1":7.35,"slot1":"busy-lock","slot2":"free","lockHeld":true}

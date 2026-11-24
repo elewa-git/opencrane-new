@@ -1,0 +1,113 @@
+download ()
+{
+    local url="$1";
+    local destination="$2";
+    local expected_sha256="$3";
+    if [ -f "$destination" ] && printf '%s  %s\n' "$expected_sha256" "$destination" | sha256sum --check --status; then
+        return;
+    fi;
+    local partial="${destination}.part";
+    curl --fail --location --retry 3 --output "$partial" "$url";
+    printf '%s  %s\n' "$expected_sha256" "$partial" | sha256sum --check --status || fail "checksum did not match for $url";
+    mv "$partial" "$destination"
+}
+install_runtime_class ()
+{
+    kubectl apply -f - <<'EOF'
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: gvisor
+handler: runsc
+EOF
+
+}
+install_agent_sandbox ()
+{
+    printf 'Installing Agent Sandbox %s...\n' "$AGENT_SANDBOX_VERSION";
+    local manifest="${CACHE_DIR}/agent-sandbox-with-extensions-${AGENT_SANDBOX_VERSION}.yaml";
+    download "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" "$manifest" "$AGENT_SANDBOX_SHA256";
+    local controller_image="registry.k8s.io/agent-sandbox/agent-sandbox-controller:${AGENT_SANDBOX_VERSION}";
+    [ "$(grep -Fc "image: ${controller_image}" "$manifest")" -eq 1 ] || fail "the verified Agent Sandbox manifest has an unexpected controller image";
+    local pinned_manifest="${TEMP_DIR}/agent-sandbox-with-extensions.yaml";
+    sed "s|image: ${controller_image}|image: ${controller_image}@${AGENT_SANDBOX_IMAGE_DIGEST}|" "$manifest" > "$pinned_manifest";
+    kubectl apply --server-side --field-manager=opencrane-devbox -f "$pinned_manifest" > /dev/null;
+    kubectl wait --for=condition=Established --timeout=120s crd/sandboxes.agents.x-k8s.io crd/sandboxclaims.extensions.agents.x-k8s.io crd/sandboxtemplates.extensions.agents.x-k8s.io crd/sandboxwarmpools.extensions.agents.x-k8s.io;
+    kubectl rollout status deployment/agent-sandbox-controller --namespace agent-sandbox-system --timeout=180s
+}
+Step: apt-get update
+Step: apt-get install -y --no-install-recommends ca-certificates curl bzip2 kexec-tools
+Step: mkdir -p /var/lib/opencrane-vm/cache /var/lib/opencrane-vm/work
+Download pinned k3s and gVisor; verify each with sha256sum before installation.
+Step: download https://github.com/k3s-io/k3s/releases/download/v1.37.0+k3s1/k3s /var/lib/opencrane-vm/cache/k3s 39eed8f53f277497dfc2542f66eab0ed68a94dfc598946dbebfb50366916c7a2
+Step: download https://github.com/google/gvisor/releases/download/release-20260928.0/gvisor-x86_64.tar.bz2 /var/lib/opencrane-vm/cache/gvisor.tar.bz2 f3ed9131bc252259df150e270154180188f9df56b73a2312940325e1f522a2d6
+Step: install -m 0755 /var/lib/opencrane-vm/cache/k3s /usr/local/bin/k3s
+Step: tar -xjf /var/lib/opencrane-vm/cache/gvisor.tar.bz2 -C /usr/local/bin
+Step: ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl
+Step: swapoff --all
+Step: sed -i /\^\[\^#\].\*\[\[:space:\]\]swap\[\[:space:\]\]/s/\^/#\ Disabled\ by\ OpenCrane:\ / /etc/fstab
+Step: systemctl mask swap.target
+Step: systemctl mask --now apport.service
+Step: systemctl mask --now whoopsie.service
+Step: systemctl mask --now kdump-tools.service
+Step: systemctl mask --now systemd-coredump.socket
+Write /etc/default/apport:
+enabled=0
+Write /etc/default/kdump-tools:
+USE_KDUMP=0
+Write /etc/systemd/coredump.conf.d/99-opencrane.conf:
+[Coredump]
+Storage=none
+ProcessSizeMax=0
+Write /etc/systemd/system.conf.d/99-opencrane.conf:
+[Manager]
+DefaultLimitCORE=0
+Write /etc/security/limits.d/99-opencrane.conf:
+* hard core 0
+* soft core 0
+root hard core 0
+root soft core 0
+Write /etc/sysctl.d/99-opencrane.conf:
+kernel.core_pattern=
+kernel.core_uses_pid=0
+fs.suid_dumpable=0
+Step: sysctl --load=/etc/sysctl.d/99-opencrane.conf
+Write /etc/rancher/k3s/config.yaml:
+write-kubeconfig-mode: "0600"
+disable:
+  - traefik
+  - servicelb
+Write /var/lib/rancher/k3s/agent/etc/containerd/config-v3.toml.tmpl:
+{{ template "base" . }}
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes."runsc"]
+  runtime_type = "io.containerd.runsc.v1"
+Write /etc/systemd/system/k3s.service:
+[Unit]
+Description=OpenCrane single-node Kubernetes
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/k3s server
+Restart=on-failure
+Delegate=yes
+KillMode=process
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=0
+TasksMax=infinity
+[Install]
+WantedBy=multi-user.target
+Write /var/lib/opencrane-vm/managed-k3s:
+39eed8f53f277497dfc2542f66eab0ed68a94dfc598946dbebfb50366916c7a2
+Step: systemctl daemon-reload
+Step: systemctl enable k3s.service
+Step: systemctl restart k3s.service
+Step: kubectl wait --for=condition=Ready node --all --timeout=180s
+Step: install_runtime_class
+Step: install_agent_sandbox
+Step: kubectl get runtimeclass gvisor
+Step: kubectl wait --for=create deployment/local-path-provisioner -n kube-system --timeout=180s
+Step: kubectl rollout status deployment/local-path-provisioner -n kube-system --timeout=180s
+Step: kubectl get storageclass local-path
+Host configuration ready. Reboot, then run package preflight before installation.

@@ -1,0 +1,382 @@
+# Pilot VM sizing and bootstrap receipt
+
+Date: 24 November 2026. Branch: `work/pilot-1162-s1`. Last passing packaged
+product source: `9cb7e672c`.
+
+Journey on a fresh dev stack: PASS for one person at 1280 and 390 pixels.
+The receipt records the accepted local host exception and does not qualify production
+host protection or a minimum machine size. Current source checks: [final fixes](round-3.md).
+
+## 24 November rebased packaged journey
+
+PASS: fetched and rebased onto `origin/main` at `3bf5b9c16`. The rebased product
+commit was `9cb7e672ce2f41808f706516f10fe4590ced796e`. CI passed in run
+[45376193266](https://github.com/elewa-git/opencrane-new/actions/runs/45376193266).
+The application and scanner approvals passed in runs
+[45376193433](https://github.com/elewa-git/opencrane-new/actions/runs/45376193433) and
+[45376199689](https://github.com/elewa-git/opencrane-new/actions/runs/45376199689).
+Their fresh artifacts were present before package preparation and were bound to that
+product commit.
+
+PASS: installed a fresh package in a newly claimed secondary slot. The install record
+has a new namespace UID and install ID. Package preparation, private settings,
+package-up and package-check passed. The accepted
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch was used for package-up;
+the install record retains the F1 and F2 host findings and the override. No host
+settings changed.
+
+PASS: one person signed in, chatted, received an anonymous history refusal, got the
+PDF answer, viewed a decoded live desktop frame and opened the budget at both widths.
+The desktop check read pixels from the 800 by 600 canvas; the captured frame shows the
+visible desktop fixture. No journey step failed or was skipped.
+
+The journey sampled 94 resource points from 11:27:51 to 11:30:57 UTC with no failed
+samples. Package peaks were 2,273.711 millicores CPU and 3,177,906,176 bytes working
+set. Whole-node peaks were 2,738.944 millicores CPU and 5,866,405,888 bytes memory
+including swap. These samples cover the journey, not package installation.
+
+The [browser outcomes](logs/attempt-9/browser-result.json),
+[resource summary](logs/attempt-9/summary.json), [measurements](logs/attempt-9/measurements.csv),
+[install record](logs/attempt-9/install-record.json),
+[approval records](logs/attempt-9/qualified-approvals.json) and sanitised service logs
+are retained under `logs/attempt-9/`. Screenshots show [sign-in at 1280](screenshots/attempt-9/owner-signed-in-1280.png),
+[chat at 1280](screenshots/attempt-9/one-person-chat-1280.png),
+[PDF at 1280](screenshots/attempt-9/upload-0-1280.png),
+[decoded desktop at 1280](screenshots/attempt-9/desktop-0-1280.png),
+[budget at 1280](screenshots/attempt-9/budget-1280.png),
+[sign-in at 390](screenshots/attempt-9/owner-signed-in-390.png),
+[chat at 390](screenshots/attempt-9/one-person-chat-390.png),
+[PDF at 390](screenshots/attempt-9/upload-0-390.png),
+[decoded desktop at 390](screenshots/attempt-9/desktop-0-390.png) and
+[budget at 390](screenshots/attempt-9/budget-390.png). Sanitised startup and service
+logs, screenshots, measurements and the install record were copied before teardown.
+Package teardown and slot release passed.
+
+## 23 November post-rebase packaged rerun
+
+NOT RUN: rebased head `56077ff4e` was pushed after fetching main `42a261e03`; the rebase
+completed without conflicts. CI passed on that head. Fresh application and scanner approval
+artifacts were produced for product commit `cbbc96bbe` on temporary source ref
+`work/pilot-1162-s1-package-source` (runs [45161913648](https://github.com/elewa-git/opencrane-new/actions/runs/45161913648)
+and [45161919960](https://github.com/elewa-git/opencrane-new/actions/runs/45161919960)).
+The public privacy and secret scans passed before creating the ref. No product files changed.
+
+The required quiet window did not pass before the 1.25-hour work limit. At 11:12:34 UTC the
+one-minute load was 7.02. Earlier checks found slot 1 locked by another task's package install;
+slot 2 reported free. No slot was claimed and no packaged journey step ran in that attempt.
+The later 24 November section records the successful packaged rerun.
+
+The [passing journey](#23-november-packaged-one-person-journey) records the accepted scope.
+The [rebased run](#23-november-rebased-source-qualification) records its incomplete checks.
+Earlier attempts retain their original outcomes as history. The observations describe one
+person only and do not qualify a minimum machine size.
+
+## Historical source, ownership and fresh installation
+
+PASS: fetched main at the start and before pushing. It remained
+`ed3662d8530338cde94d557713264f1ebf1057ae`, already contained in this branch. No rebase was needed
+or left in progress. The installed source passed
+[CI](https://github.com/elewa-git/opencrane-new/actions/runs/44773161512), [application
+approval](https://github.com/elewa-git/opencrane-new/actions/runs/44773151009) and [scanner
+approval](https://github.com/elewa-git/opencrane-new/actions/runs/44773156887) before installation.
+The real approval consumers accepted both exact-source records; the runtime file and licence checks
+were unchanged.
+
+The first package attempt claimed secondary id 1 after the 17:25:51 UTC observation, load 5.69,
+following 302 continuous qualifying seconds. The post-claim load rose to 6.51; this was recorded
+before installation. The corrected collector waited until the two-hour resource limit. At 17:56:49
+UTC, load rose to 6.23 and reset the final window; no second slot was claimed. The [rerun
+observations](logs/fix-2/attempt-2/resource-window.jsonl) retain each reset.
+
+Waited for both secondary ids to report free, no package stack and one-minute load below six for
+five minutes. Checked every 30 seconds and reset the window when another journey held a slot or load
+rose. The [observations](logs/fix-2/resource-window.jsonl) include the competing package and
+qualifying intervals. Never installed beside another secondary journey.
+
+The packaged procedure uses a new namespace, Helm install identity and PVCs. The CORE comparison
+used the following commands; up includes the browser journey. The baseline run also repeated
+journey.sh explicitly.
+
+```sh
+stack_id=$(infra/dev-stack/claim.sh) || exit 1
+export DEV_STACK_ID="$stack_id"
+# Set ZITADEL_KEY_FILE by path only.
+nice -n 10 infra/dev-stack/up.sh --fresh --id "$stack_id"
+infra/dev-stack/status.sh --id "$stack_id"
+# Save startup and service logs before teardown, including after failure.
+nice -n 10 infra/dev-stack/down.sh --id "$stack_id"
+```
+
+The packaged procedure used:
+
+```sh
+stack_id=$(infra/dev-stack/claim.sh) || exit 1
+export DEV_STACK_ID="$stack_id"
+# Set ZITADEL_KEY_FILE and PACKAGE_VALUES_FILE by path only.
+nice -n 10 infra/dev-stack/run.sh package-prepare --id "$stack_id"
+nice -n 10 node --experimental-strip-types infra/package/prepare.ts
+OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366 \
+  nice -n 10 infra/dev-stack/run.sh package-up --id "$stack_id" \
+  --values "$PACKAGE_VALUES_FILE"
+nice -n 10 infra/dev-stack/run.sh package-check --id "$stack_id"
+DEV_STACK_ID="$stack_id" infra/package/forward.sh
+# Run Chromium and collect node, pod and owned-volume observations.
+# Copy startup and sanitised service logs before both teardown commands.
+nice -n 10 infra/dev-stack/run.sh package-down --id "$stack_id"
+nice -n 10 infra/dev-stack/down.sh --id "$stack_id"
+```
+
+Used the existing [accepted local
+exception](../../../infra/package/README.robot.md#accepted-local-exception). The preflight still
+records the host's swap and crash-reporting failures. Host protection for a production VM remains
+NOT RUN. Changed no host setting and left the owner stack untouched. No paid model or paid VM was
+used.
+
+## Desktop cause and CORE comparison
+
+The production build wrapped the CommonJS noVNC constructor in a default-export object. The old
+viewer re-export passed that object to new Rfb, which threw a TypeError. Its caller then closed the
+browser socket before any decoded frame. The development server exposed the class directly,
+explaining the earlier CORE passes. An isolated production-browser regression reproduces this
+without an ingress or computer. Test-first commits `de6cc73ef` and `1bd7ff9d5` precede fix
+`dfd8aa424`, which describes both shapes and selects the constructor at import.
+
+The unchanged viewer passed both widths in two full CORE runs on a fresh stack. PASS after the fix:
+the fresh id 2 CORE journey installed e0c4a9b06 and passed both widths, including decoded frames,
+viewing during a turn, access revocation, PDF answers and budget refusals. Collection and teardown
+both exited zero. No connection retry, reconnect loop, longer timeout or access/memory change was
+added. The existing website EPIPE regression also passes twice. The new test driver's browser-global
+lint failure was recorded in `5e21fdc0f` before fix `e0c4a9b06`; the lint rule and exact pixel
+assertion remain unchanged.
+
+## Packaged browser outcome
+
+Used real SSO in the development organisation and Chromium at 1280 and 390 pixels. The package uses
+the scripted provider. The PDF is uploaded and scanned through the package services; the response
+must contain Willow-47. The scripted provider can use inline text or read the existing project.pdf
+fixture when the text is unavailable. Anonymous history reads are refused. Budget results use the
+shared schema.
+
+The package journey uses one person. A known xmessage window makes a decoded 800 by 600 desktop
+frame distinguishable from an empty canvas.
+
+| People | Width | Result |
+| --- | --- | --- |
+| 1 | 1280 | PASS sign-in, chat, history refusal, PDF answer, decoded desktop and budget |
+| 1 | 390 | PASS sign-in, chat, history refusal and budget; FAIL PDF answer; desktop NOT RUN |
+
+The [qualification status](logs/fix-2/qualification.json),
+[assertions](logs/fix-2/browser-result.json) and masked screenshots record each condition. The pod
+snapshot retains restart counts. No restart or incomplete browser result is excused as a pass.
+
+PASS for the earlier run: sanitised startup and service logs were retained before package-down/down.
+Both owned teardown commands exited zero and both slots were released. The first controller exited
+143; its journey=0 field is invalid and its browser FAIL is retained.
+
+## Earlier attempt in this round
+
+FAIL: the first packaged attempt in this round decoded a desktop at 1280 pixels, but its mobile PDF
+answer failed. The private collector uploaded sizing.pdf; the [scripted
+provider](../../../infra/dev-stack/model-stub.ts) recognises the existing project.pdf.md fixture
+path when it needs to read the file. The corrected collector uses the existing project.pdf fixture
+name; its fresh rerun remains NOT RUN. Product code, PDF-answer assertions and provider behaviour
+remain unchanged.
+
+The controlling shell then exited with signal 15. Its cleanup overlapped the browser, making the
+later owner sign-in timeout unreliable. Its final-status file incorrectly reports journey=0, so
+browser-result.json is authoritative and that attempt is not a pass. The collector now stops its
+browser before collecting logs and tearing down on a signal, and separately checks the required
+browser outcomes. The root measurements describe that first attempt. The [failed browser
+outcomes](logs/fix-2/attempt-1/browser-result.json), [controller
+status](logs/fix-2/attempt-1/control-status.json), measurements and [masked failure
+screenshot](screenshots/fix-2/failed-extra-1-0-390.png) remain available. No product retry or
+deadline changed.
+
+## Measured one-person demand
+
+Measured on the existing eight-logical-CPU, nominal 16 GiB development box through its single shared
+k3d node. Browsers run outside the measured node, as remote clients would. Added no second container
+runtime. These measurements cover the local package, scripted model, short chat/PDF turns and live
+viewing.
+
+Sampled kubelet CPU, working-set memory and swap about every two seconds. The underlying CPU
+counters refresh less often, so short bursts can be missed. The [CSV](logs/fix-2/measurements.csv)
+and [summary](logs/fix-2/summary.json) retain sample timestamps, phases and counts. Package totals
+sum only the owned namespace. Whole-node totals include Kubernetes services, the shared gateway and
+runtime overhead; they exclude the owner services outside k3d. Never add node and pod values
+together. For each CPU, working-set and swap counter, use the greater of the node value and
+owned-pod sum to allow for different refresh times. Add working-set and swap bytes for the memory
+total. Swapped pages are not free RAM.
+
+Occupied disk uses read-only du -sk on bound PVC paths after matching namespace, claim and UID.
+Image-cache sizes are separate CRI counters. They are neither occupied PVC bytes nor block-I/O
+traffic. OS, image unpacking, retained data and backups also need disk reserve.
+
+The latest one-person measurement retained 289 observations from 2026-11-20T17:27:05Z to
+2026-11-20T17:36:41Z, with 0 error samples. Whole-node peaks were **3.654 CPU cores and 5.12 GiB
+including swap**. Package peaks were 2.640 cores and 2.97 GiB working set; bound-PVC use peaked at
+84.13 MiB. The run passed the requested 1280-pixel steps, but the 390-pixel PDF answer failed and
+desktop viewing did not run. These numbers describe that measured one-person run only.
+
+NOT QUALIFIED: these observations do not establish a minimum machine size or spare-capacity
+recommendation.
+
+The existing node and image cache were already running. A smaller physical VM, cold VM
+bootstrap/reboot, long-running workloads and long-term storage growth remain NOT RUN. The bootstrap
+on this host ran only with --dry-run and safely refused its existing Docker socket before writes.
+Local container fixtures use stubbed system operations and cannot qualify a real Ubuntu VM.
+
+## 22 November packaged journey attempts
+
+PARTIAL: on source `abe90b2e9a574af2be43c03ae16fd14b0c09b7b2`, the first new attempt claimed slot 1
+after both slots were free, no package stack was running and load stayed below six for 324 seconds.
+`package-prepare --id 1` failed with the exact message:
+`Package command refused; check pins, named secrets and slot ownership`. The slot's `failure.log`
+was not created, and no package services started. The scanner approval directory remained empty.
+Read-only GitHub checks found that the successful scanner run `44788706844` and application run
+`44788700765` had no downloadable artifacts. Both workflows retain artifacts for one day, and
+these runs were older than one day. This identifies the failed check as the scanner approval
+artifact download; it does not come from a `failure.log`.
+
+The owned package namespace was removed and slot 1 reported free. Both successful approval runs
+were rerun on the same source SHA; each completed successfully and their checked approval and image
+artifacts became available. A second package preparation did not run: another task took slot 1,
+load rose above six, and the five-minute clear window did not return before the 1.5-hour task limit.
+The [safe preparation record](logs/attempt-4-package-prepare.json) and [approval refresh record]
+(logs/attempt-4-approval-refresh.json) document this attempt. The browser journey and new
+measurements are NOT RUN. No product code or package guard changed.
+
+After the receipt commit, I checked the packaged-run prerequisites again. The approval and image
+artifacts were still present and unexpired. Slot 2 reported free, while slot 1's
+`opencrane-dev-1-*` services were running. The one-minute load was 6.14 at 18:00 UTC, then 12.35
+at 18:01 UTC and 14.81 at 18:02 UTC. The required five-minute window below six did not begin, so I
+did not claim a slot or start a package. The new packaged browser journey and CPU/memory peaks are
+NOT RUN. This is a resource-window stop, not a package preparation failure. The
+[resource check record](logs/attempt-5-resource-window.jsonl) records the observed checks.
+
+## Retained earlier results and own gates
+
+Fix round 1 remains PARTIAL: one-person sign-in/chat/PDF/history refusal/budget passed at both
+widths and desktop failed after upgrade. It measured 3.870 whole-node cores and 5.23 GiB including
+swap. Those observations did not establish a minimum. The
+[previous
+receipt](https://github.com/elewa-git/opencrane-new/blob/7485b5b531a431208534c0f01a80cf1ec15633b1/docs/process/work-pilot-1162-s1/journey.md)
+and logs/fix-1 retain the failed conditions, earlier website crash and teardown.
+
+The [own-check receipt](checks.md) records failing-first evidence and confirmed exit results: branch
+tests twice, production pixels twice, viewer unit checks twice, typecheck, catalogue, Knip, scoped
+lint and document checks. It separately retains the unsuccessful broader routine-sender timing
+investigation; no routine code, deadline or assertion changed and no timing failure is claimed
+fixed. No full local root suite ran. These are own checks; no independent-review result is claimed.
+The PR remains draft.
+
+## Packaged rerun after the receipt commit
+
+On 22 November, both approval runs for approved source `abe90b2e9` succeeded and their application,
+scanner and image artifacts were present and unexpired. The
+[attempt record](logs/attempt-6-package-prepare.json) contains the run ids and expiry times. A
+backup branch preserved the draft PR tip while this worktree was reset to the approved source and
+restored afterwards.
+
+PASS: both secondary slots stayed free, no package stack was running, and one-minute load remained
+below six for 316 seconds. The nine recorded checks ran from 21:03:46 to 21:09:02 UTC. Package
+preparation created its owned namespace and approval files, and the package owner check passed.
+
+FAIL: private secret preparation stopped during preflight with the exact message
+`Package secret preparation failed during preflight`. The command was run without its private
+values-file argument and `PACKAGE_VALUES_FILE` was unset, so the argument check stopped before the
+browser journey. The slot's `failure.log` was not created. Package teardown and slot release passed.
+The one-person browser journey is NOT RUN for this attempt, and no new CPU or memory peak was
+measured. The previous one-person observation remains 3.654 whole-node CPU cores and 5.12 GiB
+including swap; it is not a measurement from this attempt. Journey status remains PARTIAL.
+
+## 23 November packaged one-person journey
+
+PASS: on approved product source `abe90b2e9`, the fresh package passed the one-person journey at
+1280 and 390 pixels. Both widths passed sign-in, chat, history refusal, the PDF answer, a decoded
+live desktop frame and budget. The [browser outcomes](logs/attempt-7/browser-result.json) retain
+each assertion. The frame check read the 800 by 600 canvas pixels and required a decoded image.
+
+The retained collector is `attempt-7/browser.mjs` in the private receipt. It masked email and
+password inputs and email text before capture. The published copies were visually checked for
+private details and copied unchanged from that run. Its SHA-256 is
+`34b0a1a4913aced9711435fd9eb4b824dcf2dbd6983d50e2589736a79b9d177e`.
+
+| Final screenshot | 1280 pixels | 390 pixels |
+| --- | --- | --- |
+| Signed in | [Desktop](screenshots/attempt-7/owner-signed-in-1280.png) | [Phone](screenshots/attempt-7/owner-signed-in-390.png) |
+| Chat | [Desktop](screenshots/attempt-7/one-person-chat-1280.png) | [Phone](screenshots/attempt-7/one-person-chat-390.png) |
+| PDF answer | [Desktop](screenshots/attempt-7/upload-0-1280.png) | [Phone](screenshots/attempt-7/upload-0-390.png) |
+| Decoded desktop | [Desktop](screenshots/attempt-7/desktop-0-1280.png) | [Phone](screenshots/attempt-7/desktop-0-390.png) |
+| Spending | [Desktop](screenshots/attempt-7/budget-1280.png) | [Phone](screenshots/attempt-7/budget-390.png) |
+
+Both approval runs still had their application, scanner and image artifacts before package
+preparation. The recorded run ids and expiry times are in the [journey record]
+(logs/attempt-7-package-journey.json). The five-minute quiet window passed with both slots free,
+no package stack and a maximum one-minute load of 5.28. A backup branch kept the PR tip while
+the worktree was reset to the approved source, then the tip was restored.
+
+Package preparation, private secret preparation with the values file supplied once, package-up
+and the owner check all passed. Package-up used the documented
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch for this command. The install record
+retains the host swap and crash-reporter findings. No host setting changed.
+
+The 85 samples retained from 05:41:25 to 05:44:13 UTC had no errors. After package readiness,
+whole-node peaks were **2.695 CPU cores and 5.21 GiB including swap**. The owned package peaked
+at **2.075 CPU cores and 2.97 GiB working set**, with 33.79 MiB swap. Bound PVC use peaked at
+76.68 MiB. The [measurements](logs/attempt-7/measurements.csv) and [summary]
+(logs/attempt-7/summary.json) retain the observations. These are journey-period observations;
+package installation was not sampled. They do not qualify a minimum machine size or spare-capacity
+recommendation.
+
+PASS: sanitised service logs and package metadata were collected before teardown. Both package
+teardown and secondary-stack release passed; slots 1 and 2 now report free. No product code changed.
+
+## 23 November rebased source qualification
+
+PARTIAL: the branch was rebased onto main `5576ecd1d`. The rebase completed after one
+developer-stack README conflict. The new product source `8a53932e7` differs from
+approved source `abe90b2e9` in runtime, test and build files, so the earlier
+packaged PASS does not qualify this head.
+
+The fresh CORE stack passed sign-in, chat, PDF upload, decoded desktop viewing,
+spending and the remaining browser checks at 390 and 1280 pixels. Its startup,
+sanitised service logs and ten browser captures were saved in the private
+`attempt-8` receipt before `down.sh --id 1` released the slot. The production
+browser test file passed locally, 5/5. The rebased CI run
+[45129666341](https://github.com/elewa-git/opencrane-new/actions/runs/45129666341)
+failed its production desktop fixture with `Disconnected`; its other jobs passed.
+
+After another five-minute quiet window with both slots free, the one-minute load
+below six and no package stack, `claim.sh` assigned slot 2. Exact-source
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45129660862)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45129661043)
+had all four required artifacts present and unexpired. Package preparation, private
+values preparation with `PACKAGE_VALUES_FILE` supplied once, package-up and
+package-check passed. Package-up used the documented
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch; the production host
+check was not changed.
+
+The retained `attempt-8/browser.mjs` collector in the private receipt ran the
+one-person browser journey at both widths. Its [browser results]
+(logs/attempt-8/browser-result.json) show PASS for sign-in, chat, HTTP 401 history
+refusal and spending at both widths. The upload-and-desktop check timed out at
+both widths before it saved an upload or decoded desktop capture, so the packaged
+journey is PARTIAL. The worker log records `file.uploaded` followed by
+`file.delivered` about 37 seconds later on each attempt. This shows delivery
+after the browser's Ready wait expired; it does not establish why delivery took
+that long. No assertion, timeout, retry or product guard was changed.
+
+The 97 [measurements](logs/attempt-8/measurements.csv) from 08:14:11 to 08:17:22
+UTC had no sampling errors. The [summary](logs/attempt-8/summary.json) records
+partial-run whole-node peaks of 3.378 cores and 6.44 GiB including swap, and
+package peaks of 1.721 cores and 3.02 GiB working set. These do not replace the
+completed journey's 2.695 cores / 5.21 GiB whole-node and 2.075 cores /
+2.97 GiB package observations. Installation was not sampled in either run, and
+neither run qualifies a minimum machine size.
+
+The collector saved its browser network record, diagnostic screenshots,
+installation metadata and sanitised startup/service logs in the private receipt
+before package-down and `down.sh --id 2`. The final status was journey FAIL,
+collection PASS, sampling PASS, package-down PASS and slot release PASS. No
+owner stack, host setting or paid provider was changed.

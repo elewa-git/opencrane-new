@@ -1,0 +1,9 @@
+{
+  "verdict": "PARTIAL",
+  "measuredAttempt": "first packaged attempt in this round",
+  "requiredThreePersonJourney": "NOT RUN",
+  "minimumMachineSize": "NOT RUN",
+  "controllerExit": 143,
+  "journeyExitFieldReliable": false,
+  "correctedFreshRun": "NOT RUN: resource window expired"
+}

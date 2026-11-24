@@ -1,0 +1,52 @@
+[
+  {
+    "people": 1,
+    "width": 1280,
+    "signIn": "PASS",
+    "chat": "PASS",
+    "historyRefusal": "PASS"
+  },
+  {
+    "people": 1,
+    "width": 1280,
+    "participant": 0,
+    "uploadAnswer": "PASS"
+  },
+  {
+    "people": 1,
+    "width": 1280,
+    "participant": 0,
+    "uploadAnswer": "PASS",
+    "desktop": "PASS"
+  },
+  {
+    "people": 1,
+    "width": 1280,
+    "budget": "PASS"
+  },
+  {
+    "people": 1,
+    "width": 390,
+    "signIn": "PASS",
+    "chat": "PASS",
+    "historyRefusal": "PASS"
+  },
+  {
+    "people": 1,
+    "width": 390,
+    "participant": 0,
+    "check": "upload-desktop",
+    "verdict": "FAIL",
+    "category": "TimeoutError"
+  },
+  {
+    "people": 1,
+    "width": 390,
+    "budget": "PASS"
+  },
+  {
+    "stage": "sign-in-owner-1280",
+    "verdict": "FAIL",
+    "category": "TimeoutError"
+  }
+]

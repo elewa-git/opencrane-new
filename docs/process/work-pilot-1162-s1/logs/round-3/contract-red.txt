@@ -1,0 +1,181 @@
+TAP version 13
+# Subtest: the current operator contract records the accepted one-person PASS and peaks
+not ok 1 - the current operator contract records the accepted one-person PASS and peaks
+  ---
+  duration_ms: 3.630801
+  type: 'test'
+  location: '<checkout>/infra/vm/operator-contract.test.mjs:49:1'
+  failureType: 'testCodeFailure'
+  error: 'infra/vm/README.md'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    # infra/vm
+
+    ## What this is
+
+    Prepare a fresh Ubuntu virtual machine to run the OpenCrane package.
+    A virtual machine is a computer rented or created for this installation.
+    The script installs single-node Kubernetes and the gVisor runtime that isolates
+    assistant computers. Its first real run still waits for the pilot machine.
+
+    ## Where it fits
+
+    An operator runs this before the package installer. It shares verified runtime
+    releases with the developer-box setup, but never uses that setup to change a VM.
+
+    ```mermaid
+    flowchart LR
+      operator["Operator<br/>checks sizing and prepares the machine"] -->|runs bootstrap| vm["infra/vm<br/>prepares package host"]
+      vm -->|configures services| host["Ubuntu VM<br/>runs single node"]
+      vm -.->|uses verified releases| tools["infra/devbox<br/>shares runtime tools"]
+      package["infra/package<br/>installs the application"] -->|uses prepared host| host
+    ```
+
+    ## What it is responsible for
+
+    - Refuse Docker, another Kubernetes installation or standalone containerd.
+    - Install k3s, gVisor, the assistant controller and local persistent storage.
+    - Disable swap and crash dumps before starting Kubernetes.
+    - Explain the work without changing the machine when `--dry-run` is set.
+    - Keep reruns limited to the k3s installation owned by this script.
+
+    ## Processes it handles
+
+    1. **An operator prepares a fresh VM.** The script checks the machine before making
+       changes. It installs verified releases, configures node protection and waits for
+       Kubernetes, the assistant controller and local storage.
+    2. **An operator repeats preparation.** The script checks its ownership record and
+       installed k3s checksum. It reapplies the same configuration and restarts k3s;
+       running workloads may pause.
+    3. **An operator chooses a machine size.** One-person idle and peak
+       observations are recorded for a fresh local package. It decoded a desktop at
+       1280 pixels. The phone PDF step and complete three-person journey still need
+       testing. These observations do not support a minimum machine size or a measured
+       spare-capacity recommendation yet.
+
+    ## How to run or test it
+
+    On a fresh Ubuntu 22.04 or 24.04 LTS x86-64 VM, from a repository checkout:
+
+    ```sh
+    sudo infra/vm/bootstrap.sh --dry-run
+    sudo infra/vm/bootstrap.sh
+    ```
+
+    Reboot after preparation, then run the existing package preflight. The dry run
+    also refuses existing runtimes. Never run preparation on the developer box.
+
+    Safe local checks use disposable containers without networking or privileges:
+
+    ```sh
+    nice -n 10 node --test infra/vm/bootstrap.test.mjs
+    ```
+
+    ## Where to read more
+
+    - [Operator details](README.robot.md): settings, versions, limitations and measurement procedure.
+    - [Package guide](../package/README.md): install and check the application.
+    - [Developer stack](../dev-stack/README.md): claim and release spare local slots.
+    - [Measurements ledger](../../docs/process/ledger.md#measurements): recorded sizing evidence.
+
+  operator: 'match'
+  stack: |-
+    TestContext.currentOperatorContract (file://<checkout>/infra/vm/operator-contract.test.mjs:18:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: the final PASS links portable screenshots and identifies its retained collector
+not ok 2 - the final PASS links portable screenshots and identifies its retained collector
+  ---
+  duration_ms: 1.723608
+  type: 'test'
+  location: '<checkout>/infra/vm/operator-contract.test.mjs:51:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /collector.*`attempt-7\/browser\.mjs`/iu. Input:
+
+    '\n' +
+      '\n' +
+      'PASS: on approved product source `abe90b2e9`, the fresh package passed the one-person journey at\n' +
+      '1280 and 390 pixels. Both widths passed sign-in, chat, history refusal, the PDF answer, a decoded\n' +
+      'live desktop frame and budget. The [browser outcomes](logs/attempt-7/browser-result.json) retain\n' +
+      'each assertion. The frame check read the 800 by 600 canvas pixels and required a decoded image.\n' +
+      '\n' +
+      'Both approval runs still had their application, scanner and image artifacts before package\n' +
+      'preparation. The recorded run ids and expiry times are in the [journey record]\n' +
+      '(logs/attempt-7-package-journey.json). The five-minute quiet window passed with both slots free,\n' +
+      'no package stack and a maximum one-minute load of 5.28. A backup branch kept the PR tip while\n' +
+      'the worktree was reset to the approved source, then the tip was restored.\n' +
+      '\n' +
+      'Package preparation, private secret preparation with the values file supplied once, package-up\n' +
+      'and the owner check all passed. Package-up used the documented\n' +
+      '`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch for this command. The install record\n' +
+      'retains the host swap and crash-reporter findings. No host setting changed.\n' +
+      '\n' +
+      'The 85 samples retained from 05:41:25 to 05:44:13 UTC had no errors. After package readiness,\n' +
+      'whole-node peaks were **2.695 CPU cores and 5.21 GiB including swap**. The owned package peaked\n' +
+      'at **2.075 CPU cores and 2.97 GiB working set**, with 33.79 MiB swap. Bound PVC use peaked at\n' +
+      '76.68 MiB. The [measurements](logs/attempt-7/measurements.csv) and [summary]\n' +
+      '(logs/attempt-7/summary.json) retain the observations. These are journey-period observations;\n' +
+      'package installation was not sampled. They do not qualify a minimum machine size or spare-capacity\n' +
+      'recommendation.\n' +
+      '\n' +
+      'PASS: sanitised service logs and package metadata were collected before teardown. Both package\n' +
+      'teardown and secondary-stack release passed; slots 1 and 2 now report free. No product code changed.\n'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+
+
+    PASS: on approved product source `abe90b2e9`, the fresh package passed the one-person journey at
+    1280 and 390 pixels. Both widths passed sign-in, chat, history refusal, the PDF answer, a decoded
+    live desktop frame and budget. The [browser outcomes](logs/attempt-7/browser-result.json) retain
+    each assertion. The frame check read the 800 by 600 canvas pixels and required a decoded image.
+
+    Both approval runs still had their application, scanner and image artifacts before package
+    preparation. The recorded run ids and expiry times are in the [journey record]
+    (logs/attempt-7-package-journey.json). The five-minute quiet window passed with both slots free,
+    no package stack and a maximum one-minute load of 5.28. A backup branch kept the PR tip while
+    the worktree was reset to the approved source, then the tip was restored.
+
+    Package preparation, private secret preparation with the values file supplied once, package-up
+    and the owner check all passed. Package-up used the documented
+    `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch for this command. The install record
+    retains the host swap and crash-reporter findings. No host setting changed.
+
+    The 85 samples retained from 05:41:25 to 05:44:13 UTC had no errors. After package readiness,
+    whole-node peaks were **2.695 CPU cores and 5.21 GiB including swap**. The owned package peaked
+    at **2.075 CPU cores and 2.97 GiB working set**, with 33.79 MiB swap. Bound PVC use peaked at
+    76.68 MiB. The [measurements](logs/attempt-7/measurements.csv) and [summary]
+    (logs/attempt-7/summary.json) retain the observations. These are journey-period observations;
+    package installation was not sampled. They do not qualify a minimum machine size or spare-capacity
+    recommendation.
+
+    PASS: sanitised service logs and package metadata were collected before teardown. Both package
+    teardown and secondary-stack release passed; slots 1 and 2 now report free. No product code changed.
+
+  operator: 'match'
+  stack: |-
+    TestContext.finalPassScreenshots (file://<checkout>/infra/vm/operator-contract.test.mjs:32:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 0
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 139.13812
