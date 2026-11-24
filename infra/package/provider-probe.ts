@@ -13,7 +13,8 @@ if (body.includes(key)) {
 console.log(JSON.stringify({ status: response.status }));`;
 
 export const providerEventDisclosureScript = `
-import { connectEventStore, readEvents } from '@opencrane/event-store';
+import { connectEventStore } from '@opencrane/event-store';
+import { readEvents } from '@opencrane/projections';
 let input = '';
 for await (const chunk of process.stdin) input += chunk.toString();
 const secrets = JSON.parse(input);

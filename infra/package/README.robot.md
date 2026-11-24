@@ -289,6 +289,9 @@ recorded in its receipt; it cannot become an unhandled rejection during navigati
 body and verifies that a failed disclosure inspection still refuses navigation.
 Before recording PASS, the driver closes the browser and checks again for any
 inspection failure received during shutdown.
+The event-disclosure command reads the saved events inside the server Pod and
+returns only the number checked. Its fixture runs the same command against a
+disposable event store and requires a matching event to be refused.
 The result records the current operation, a fixed expected condition and a bounded
 error category on failure. It never copies exception messages, names or page content
 into the public result. Detailed failures remain in the private slot for collection
