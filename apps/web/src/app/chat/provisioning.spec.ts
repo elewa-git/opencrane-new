@@ -10,6 +10,7 @@ let requests: string[];
 let sent = vi.fn();
 let closed = vi.fn();
 const socketProvider = { provide: SOCKET_FACTORY, useValue: createSocket };
+const identity = { authenticated: true, user: { name: 'Alex' } };
 
 function createSocket(): SocketLike {
   sent = vi.fn();
@@ -24,7 +25,7 @@ function fetchFixture(input: RequestInfo | URL): Promise<Response> {
   requests.push(path);
   let body: unknown = { rows: [] };
   if (path === '/api/chat') body = { memberId: 'me', assistantId: null, role: 'owner' };
-  if (path === '/auth/me') body = { authenticated: true, user: { name: 'Alex' } };
+  if (path === '/auth/me') body = identity;
   return Promise.resolve(new Response(JSON.stringify(body)));
 }
 
@@ -45,14 +46,18 @@ function assignment(memberId = 'me'): void {
   TestBed.tick();
 }
 
-function subscribesToOwnAssignment(): void {
-  const service = TestBed.inject(WebSocketService);
-  expect(service.state()).toBe('connecting');
+function openAssignmentSocket(): void {
   socket.onopen?.(new Event('open'));
   TestBed.tick();
   expect(sent).toHaveBeenCalledWith(JSON.stringify({
     type: 'subscribe', topic: 'chat-context',
   }));
+}
+
+function subscribesToOwnAssignment(): void {
+  const service = TestBed.inject(WebSocketService);
+  expect(service.state()).toBe('connecting');
+  openAssignmentSocket();
   assignment();
   expect(chat.selectedAssistantId()).toBe('personal');
   expect(chat.role()).toBe('owner');
@@ -129,18 +134,18 @@ describe('personal assignment after workspace load', function loadedWorkspace() 
 
 function holdIdentityReply() {
   let release!: (response: Response) => void;
-  const identity = new Promise<Response>(function captureRelease(resolve) {
+  const heldReply = new Promise<Response>(function captureRelease(resolve) {
     release = resolve;
   });
   function fetchWithHeldIdentity(input: RequestInfo | URL): Promise<Response> {
     if (input === '/auth/me') {
       requests.push(input);
-      return identity;
+      return heldReply;
     }
     return fetchFixture(input);
   }
   function releaseIdentity(): void {
-    release(new Response('{"authenticated":true,"user":{"name":"Alex"}}'));
+    release(Response.json(identity));
   }
   vi.spyOn(globalThis, 'fetch').mockImplementation(fetchWithHeldIdentity);
   return releaseIdentity;
@@ -163,7 +168,8 @@ it('waits for identity before opening a draft, then receives its live assignment
       await vi.waitFor(function identityRequested() {
         expect(requests).toContain('/auth/me');
       });
-      const root: HTMLElement = fixture.nativeElement;
+      const root: unknown = fixture.nativeElement;
+      if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
       const newSession = root.querySelector<HTMLButtonElement>('button.new-session')!;
       newSession.click();
       pressNewSessionShortcut({ ctrlKey: true });
@@ -178,11 +184,7 @@ it('waits for identity before opening a draft, then receives its live assignment
       });
       newSession.click();
       expect(location.search).toBe('');
-      socket.onopen?.(new Event('open'));
-      TestBed.tick();
-      expect(sent).toHaveBeenCalledWith(JSON.stringify({
-        type: 'subscribe', topic: 'chat-context',
-      }));
+      openAssignmentSocket();
       assignment();
       fixture.detectChanges();
       expect(root.querySelector<HTMLTextAreaElement>('textarea#message')!.disabled).toBe(false);

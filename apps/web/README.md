@@ -28,7 +28,8 @@ flowchart LR
 - Show the installation's name and provide sign-out from desktop and phone menus.
 - Offer Settings to owners and admins.
 - Support assistant sessions and direct or group chats with colleagues.
-- Show a newly assigned personal assistant, live and saved replies, and formatted messages.
+- Let people open a draft once the workspace has loaded their identity and session list.
+  Show their personal assistant as soon as it is assigned, along with live and saved replies.
 - Keep private personal replies only in page memory and clear them when access ends.
 - Open recent and archived chats, load older messages and show saved action details.
 - Upload and preview files, explain refusals and show when files are ready to send.
