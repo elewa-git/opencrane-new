@@ -40,6 +40,7 @@
         "scripts/ci/refresh-timings.mjs",
         "scripts/ci/*.test.mjs",
         "scripts/check-chat-mermaid.mjs",
+        "scripts/check-live-view-production.mjs",
         "scripts/check-private-reply-signout.mjs",
         "scripts/check-private-reply-retention.mjs"
       ],
