@@ -82,9 +82,9 @@ import {
 export class Workspace implements OnInit {
   protected readonly chat = inject(ChatSession);
   protected readonly isOwnerOrAdmin = isOwnerOrAdmin;
-  // Opening a draft cancels the initial reads, so wait for the member and session list.
+  // Opening a draft makes the workspace ignore unfinished reads.
   protected readonly canOpenDraft = () =>
-    Boolean(this.chat.memberId()) && !this.chat.railLoading();
+    Boolean(this.chat.memberId()) && this.chat.sessionListLoaded() && !this.chat.railLoading();
   protected readonly closeReview = new CloseReview(
     this.chat.load.bind(this.chat), this.chat.clearAfterAccessChange.bind(this.chat));
   protected readonly capture = inject(ScreenshotCapture);

@@ -1,4 +1,18 @@
 import { z } from 'zod';
+import { chatContextSchema, type ChatContext } from '@opencrane/protocol';
+
+const identitySchema = z.object({
+  authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable(),
+});
+
+type ChatIdentity = { context: ChatContext; displayName: string };
+
+export async function readChatIdentity(): Promise<ChatIdentity> {
+  const context = chatContextSchema.parse(await requestChat('/api/chat'));
+  const identity = identitySchema.parse(await requestChat('/auth/me'));
+  const name = identity.authenticated ? identity.user?.name?.trim() : undefined;
+  return { context, displayName: name || 'You' };
+}
 
 export class ReadFailure extends Error {
   readonly status: number;

@@ -6,8 +6,7 @@ import { canStartUpload, uploadWaitReason } from './chat-session-upload';
 import { UploadBatch } from './upload-batch';
 import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
-import { z } from 'zod';
-import { sessionDefaults, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema,
+import { sessionDefaults, chatFeedSchema, chatListSchema, chatRowSchema,
   type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ChatContext, ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
@@ -17,7 +16,7 @@ import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { sessionWaitingReason, updateComputerStatus, applyComputerMessage } from './chat-session-status';
-import { ReadFailure, requestChat, savedChatChange } from './chat-session-http';
+import { readChatIdentity, ReadFailure, requestChat, savedChatChange } from './chat-session-http';
 import { ReadMarker } from './read-marker';
 import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
   createPendingMessage, resumeAgentSession, selectedSessionPayingGroupId,
@@ -51,6 +50,7 @@ export class ChatSession implements OnDestroy {
   readonly loading = signal(true);
   readonly railLoading = signal(true);
   readonly railUnavailable = signal(false);
+  readonly sessionListLoaded = signal(false);
   readonly listHasMore = signal(false);
   readonly requestedUnavailable = signal(false);
   readonly requestedLookupFailed = signal(false);
@@ -99,6 +99,7 @@ export class ChatSession implements OnDestroy {
   private position = 0;
   /** Change on session switch or destroy so old async work can be ignored. */
   private revision = 0;
+  private loadAttempt = 0;
   private sawReconnecting = false;
   private conversationReady = false;
   private historyLoading = false;
@@ -144,44 +145,40 @@ export class ChatSession implements OnDestroy {
   async load(): Promise<void> {
     if (this.denied()) return;
     const revision = this.revision;
+    const attempt = ++this.loadAttempt;
     this.error.set('');
     this.announcement.set('');
     this.loading.set(true);
     this.railLoading.set(true);
     this.railUnavailable.set(false);
     try {
-      const context = chatContextSchema.parse(await requestChat('/api/chat'));
-      const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await requestChat('/auth/me'));
-      if (revision !== this.revision) return;
-      this.assignment.apply(context);
-      this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You');
-      this.denied.set(false);
-      await this.list(revision);
-      if (revision !== this.revision) return;
+      const identity = await readChatIdentity();
+      if (!this.isCurrentLoad(revision, attempt)) return;
+      this.assignment.apply(identity.context);
+      this.displayName.set(identity.displayName);
+      await this.list(revision, attempt);
+      if (!this.isCurrentLoad(revision, attempt)) return;
       this.railLoading.set(false);
       const id = new URL(location.href).searchParams.get('conversation');
-      if (id) await this.resumeRequested(id, revision);
+      if (id) await this.resumeRequested(id, revision, attempt);
       else if (this.conversations()[0]) await this.select(this.conversations()[0]!.conversationId);
-      if (!this.selected()) this.assignment.watch();
+      if (attempt === this.loadAttempt && !this.selected()) this.assignment.watch();
     } catch (error) {
-      if (revision === this.revision) {
-        this.fail(error);
-        this.railUnavailable.set(this.shouldRetryRail());
-      }
-    }
-    finally {
-      if (revision === this.revision) {
-        this.loading.set(false);
-        this.railLoading.set(false);
-      }
+      if (!this.isCurrentLoad(revision, attempt)) return;
+      this.fail(error);
+      this.railUnavailable.set(!this.denied() && !this.selected() && !this.requestedLookupFailed());
+    } finally {
+      // A session switch takes over the transcript. Only a newer load takes over the rail.
+      if (attempt === this.loadAttempt) this.railLoading.set(false);
+      if (this.isCurrentLoad(revision, attempt)) this.loading.set(false);
     }
   }
-  private shouldRetryRail(): boolean {
-    return !this.denied() && !this.selected() && !this.requestedLookupFailed();
+  private isCurrentLoad(revision: number, attempt: number): boolean {
+    return revision === this.revision && attempt === this.loadAttempt;
   }
-  private async resumeRequested(id: string, revision: number): Promise<void> {
+  private async resumeRequested(id: string, revision: number, attempt: number): Promise<void> {
     const requested = await resumeAgentSession(id, this.conversations());
-    if (revision !== this.revision) return;
+    if (!this.isCurrentLoad(revision, attempt)) return;
     if (requested.kind === 'denied') {
       this.clearDenied();
       return;
@@ -397,12 +394,14 @@ export class ChatSession implements OnDestroy {
   private currentActiveTurn() { return this.active(); }
   private currentRevision(): number { return this.revision; }
 
-  private async list(revision = this.revision): Promise<void> {
+  private async list(revision = this.revision, attempt?: number): Promise<void> {
     const previous = this.selectedConversation();
     const value = chatListSchema.parse(await requestChat('/api/conversations'));
     if (revision !== this.revision || this.denied()) return;
+    if (attempt !== undefined && attempt !== this.loadAttempt) return;
     this.listHasMore.set(Boolean(value.nextCursor));
     this.conversations.set(displayAgentSessions(value.rows));
+    this.sessionListLoaded.set(true);
     const current = this.selectedConversation();
     if (previous?.joinEventId && current?.joinEventId
       && previous.joinEventId !== current.joinEventId) this.resetForNewJoin();
@@ -726,6 +725,7 @@ export class ChatSession implements OnDestroy {
     this.rows.set([]);
     this.conversations.set([]);
     this.listHasMore.set(false);
+    this.sessionListLoaded.set(false);
     this.memberId.set('');
     this.role.set(undefined);
     this.displayName.set('You');

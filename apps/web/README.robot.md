@@ -621,10 +621,12 @@ from another chat at 1280 and 390 pixels.
 After sign-in, choose **Open workspace** (`/workspace`). While the personal assistant
 id is absent, `PersonalAssignment` subscribes to `chat-context` on the authenticated
 socket. It applies the signed-in member's assignment and closes that subscription
-when an assistant is available. The draft buttons and shortcuts wait for the loaded
-member ID and for the session-list read to finish. Opening a new draft while the
-assistant is absent restarts assignment delivery on the socket without repeating the
-HTTP context read or reloading the page.
+when an assistant is available. The draft buttons and shortcuts wait for the member
+ID and the first successful session-list read. If that list read fails, retry keeps
+the requested session address. Choosing a different session during a retry takes over
+the transcript, and the list's loading indicator clears when the retry finishes.
+Opening a new draft while the assistant is absent restarts assignment delivery on the
+socket without repeating the HTTP context read or reloading the page.
 Access loss clears the workspace; a late frame cannot restore it. Selecting an
 existing conversation uses its normal subscription instead. Personal Agent sessions
 use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`
