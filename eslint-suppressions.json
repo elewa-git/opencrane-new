@@ -72,7 +72,7 @@
   },
   "apps/ops/src/lifecycle.ts": {
     "max-params": {
-      "count": 7
+      "count": 6
     }
   },
   "apps/ops/src/memory-cleanup.ts": {

@@ -27,6 +27,22 @@ export interface EventSource {
 
 const replayIdleMs = 1_000;
 
+export class EventReadTimeoutError extends Error {
+  constructor(cause: unknown) {
+    super('EVENTS stream read timed out with an incomplete result', { cause });
+    this.name = 'EventReadTimeoutError';
+  }
+}
+
+function readTimeout(signal: AbortSignal) {
+  return new Promise<never>(function rejectOnTimeout(_resolve, reject) {
+    function expired() {
+      reject(new EventReadTimeoutError(signal.reason));
+    }
+    signal.addEventListener('abort', expired, { once: true });
+  });
+}
+
 /** Read finite history without waiting forever when the source reports events it cannot return. */
 export async function* readEvents(
   source: EventSource,
@@ -44,16 +60,7 @@ export async function* readEvents(
   try {
     while (sequence < toSequence) {
       const timeout = AbortSignal.timeout(replayIdleMs);
-      const next = await Promise.race([
-        iterator.next(),
-        new Promise<never>((_resolve, reject) => {
-          timeout.addEventListener(
-            "abort",
-            () => reject(new Error("EVENTS stream is incomplete")),
-            { once: true },
-          );
-        }),
-      ]);
+      const next = await Promise.race([iterator.next(), readTimeout(timeout)]);
       signal?.throwIfAborted();
       if (next.done || next.value.sequence !== sequence + 1) {
         throw new Error("EVENTS stream is incomplete");

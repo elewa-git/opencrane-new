@@ -20,7 +20,7 @@ await runtime.start();
 async function startWorkers() {
   await runtime.work(4);
 }
-await dispatch(connection, runtime, abortController.signal, startWorkers);
+await dispatch(connection, runtime, abortController.signal, { ready: startWorkers });
 await runtime.stop();
 ```
 
@@ -34,8 +34,8 @@ Welcome completion also omits this attempt log because its stream id identifies
 the member. A failed attempt stores a fixed error without its private cause.
 Its attempt errors may contain private custody details, so the runtime replaces them with
 a fixed error before pg-boss stores the failed attempt. It does not log the raw error.
-Queue errors
-are logged; dispatcher errors reject its promise and require host restart.
+Queue errors are logged. Dispatch fails on database errors, invalid event
+delivery or exhausted JetStream recovery.
 
 `provision.ts` uses the event-store package's five-second management request
 timeout for EVENTS lookup and creation. The real PostgreSQL/NATS test fixture
@@ -50,6 +50,23 @@ Dispatch uses the connection reserved by its lifetime advisory lock, so busy
 reaction workers cannot make dispatch wait for another pool slot. Queue-setting
 reads made by pg-boss during enqueue also use that transaction. Workers and
 maintenance continue to use the ordinary pool outside enqueue.
+Each pull keeps its one-second expiry. On a disconnect the dispatcher closes
+the active fetch iterator before the SDK can reuse it. The next attempt waits
+up to three seconds for reconnection before opening a new fetch on the same
+durable consumer. Missed heartbeats and interrupted pulls use the same budget.
+Recovery keeps the lock and the SQL checkpoint.
+
+If an acknowledgement reply fails after SQL commits, the dispatcher checks the
+same durable again. It acknowledges a redelivery of the committed event without
+repeating the transaction. A later delivery confirms progress and goes through
+the usual checkpoint checks. If a healthy pull is empty, the dispatcher checks
+the durable's saved acknowledgement position. The SDK acknowledgement timeout
+remains five seconds.
+
+Each recovery operation has up to four retries, after 100, 200, 400 and 800 ms.
+It logs the cause of each retry and its outcome. Exhaustion rejects with the last
+cause. A closed NATS connection is terminal. The ops computer watcher uses the
+same recovery policy around incremental reads.
 The checkpoint row serialises overlapping dispatchers and rejects gaps,
 silo mismatches and subscription changes. Registration takes a catalogue
 name and handle function; subscriptions come from `libs/events`, checked

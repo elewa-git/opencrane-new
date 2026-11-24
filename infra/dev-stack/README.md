@@ -19,7 +19,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts and checks services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps and shows worker recovery| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks hosts and launches| package["infra/package<br/>Helm install"]
 ```
@@ -49,7 +49,8 @@ Not built yet:
    Each copy has its own ports, data and private keys. Cleanup removes only that copy.
 2. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
    provider, then starts the apps. It waits for the website and dispatcher before
-   running the core browser journey.
+   running the core browser journey. The status command shows recovery attempts
+   for event delivery, acknowledgements and computer watcher reads.
 3. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,
    desktop viewing and organisation settings. The core journey finishes its browser

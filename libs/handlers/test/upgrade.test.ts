@@ -209,7 +209,7 @@ function upgradeTests() {
     const log = vi.spyOn(runtime.options.logger, "error");
     const stop = new AbortController();
     const ready = vi.fn();
-    const task = dispatch(current.nats.dispatcherConnection, runtime, stop.signal, ready);
+    const task = dispatch(current.nats.dispatcherConnection, runtime, stop.signal, { ready });
     function observeFailure() {
       return undefined;
     }

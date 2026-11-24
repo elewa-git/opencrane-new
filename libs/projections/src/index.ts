@@ -11,6 +11,7 @@ export { pgliteDb } from "./pglite.ts";
 export {
   ProjectionRunner,
   readEvents,
+  EventReadTimeoutError,
   type Projection,
   type EventSource,
 } from "./runner.ts";

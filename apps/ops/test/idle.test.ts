@@ -21,7 +21,8 @@ async function leavesIdleComputerAlone() {
   const sink = vi.fn().mockResolvedValue(undefined);
   const reads = vi.spyOn(nats.store, 'readStream');
   const subscriptions = vi.spyOn(nats.store, 'subscribe');
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   function appliedSuspension() {
     return mode.mock.calls.length > 0;
   }
@@ -75,7 +76,8 @@ async function limitsIdleChecksDuringRetries() {
   const state = vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
   vi.spyOn(kube, 'mode').mockResolvedValue();
   const sink = vi.fn().mockRejectedValue(new Error('Temporary credential delivery failure'));
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 1000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 1000, signal: stop.signal });
   function firstAttemptFinished() {
     return sink.mock.calls.length > 0;
   }
@@ -139,7 +141,8 @@ async function keepsNewMessagesActiveDuringPodReads() {
   vi.spyOn(kube, 'state').mockImplementation(readPod);
   vi.spyOn(kube, 'mode').mockResolvedValue();
   const sink = vi.fn().mockResolvedValue(undefined);
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 1000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 1000, signal: stop.signal });
   function computerStayedReady() {
     return sink.mock.calls.length > 0;
   }
@@ -173,7 +176,8 @@ async function limitsReadyPodChecks() {
   vi.spyOn(kube, 'mode').mockResolvedValue();
   const sink = vi.fn().mockResolvedValue(undefined);
   const heads = vi.spyOn(nats.store, 'head');
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 900_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 900_000, signal: stop.signal });
   function firstPassFinished() {
     return sink.mock.calls.length > 0;
   }
@@ -221,7 +225,8 @@ async function recoversAfterOutsideSuspension() {
   vi.spyOn(kube, 'state').mockImplementation(readPod);
   vi.spyOn(kube, 'claim').mockResolvedValue('sandbox');
   const sink = vi.fn().mockResolvedValue(undefined);
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 900_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 900_000, signal: stop.signal });
   function firstPassFinished() {
     return sink.mock.calls.length > 0;
   }
@@ -282,7 +287,8 @@ async function correctsSuspendedComputerDrift() {
   const state = vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
   const sink = vi.fn().mockResolvedValue(undefined);
   const heads = vi.spyOn(nats.store, 'head');
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 900_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 900_000, signal: stop.signal });
   async function initialSuspensionApplied() {
     try {
       const commands = await kubectl.commands();
@@ -338,7 +344,8 @@ async function backsOffRefusedModePatches() {
   const refusal = new Error('ValidatingAdmissionPolicy denied request');
   const mode = vi.spyOn(kube, 'mode').mockRejectedValue(refusal);
   const sink = vi.fn().mockResolvedValue(undefined);
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   function attemptedOnce() {
     return log.mock.calls.length >= 1;
   }
@@ -388,7 +395,8 @@ async function upgradesRunningComputerAtNextSuspend() {
   const upgrade = vi.spyOn(kube, 'upgrade').mockResolvedValue();
   vi.spyOn(kube, 'claim').mockResolvedValue('new-sandbox');
   const sink = vi.fn().mockResolvedValue(undefined);
-  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 600_000, signal: stop.signal });
   function computerStillRunning() {
     return sink.mock.calls.length > 0;
   }

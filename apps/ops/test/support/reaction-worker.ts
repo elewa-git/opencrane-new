@@ -96,7 +96,7 @@ export async function reactionWorker(pauseHandlers = false) {
     }
   }
   async function watch(...args: Parameters<typeof import('../../src/lifecycle.ts').watchComputers>) {
-    const signal = args[6];
+    const { signal } = args[4];
     await new Promise<void>(wait);
     function wait(resolve: () => void) {
       if (signal.aborted) {

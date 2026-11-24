@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { event } from "@opencrane/event-store/testing";
-import { jetstreamManager } from "@nats-io/jetstream";
 import { createEventStore } from "@opencrane/event-store";
 import { members, ProjectionRunner, type EventSource } from "@opencrane/projections";
 import { createLogger } from "@opencrane/observability";
@@ -293,8 +292,7 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
         expect(Number(rows.rows[0]?.sequence)).toBe(
           boundary === "before-commit" ? 0 : 1,
         );
-        const manager = await jetstreamManager(f.nats.connection);
-        const info = await manager.consumers.info("EVENTS", "handler-dispatcher");
+        const info = await f.nats.dispatcherInfo();
         expect(info.ack_floor.stream_seq).toBe(boundary === "after-ack" ? 1 : 0);
         expect(info.delivered.stream_seq).toBe(boundary === "after-ack" ? 2 : 1);
         const runtime = await f.runtime(

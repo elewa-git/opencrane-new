@@ -27,7 +27,7 @@ async function dispatchWithoutSpareConnection() {
   }
   try {
     await runtime.start();
-    task = dispatch(services.nats.dispatcherConnection, runtime, stop.signal, markReady);
+    task = dispatch(services.nats.dispatcherConnection, runtime, stop.signal, { ready: markReady });
     await Promise.race([ready.promise, task]);
     const id = randomUUID();
     const sequence = await services.append(id);
