@@ -150,19 +150,6 @@ async function waitForFact(page, providerId, fact, outcome) {
   throw new Error('Provider verification did not reach the expected terminal outcome');
 }
 
-async function waitForDefault(page, providerId) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const response = await page.request.get(`${origin}/api/org/providers/${providerId}/bindings`);
-    assert.equal(response.status(), 200);
-    const result = await response.json();
-    function isDefault(row) { return row.kind === 'silo_default'; }
-    if (result.rows.some(isDefault)) return;
-    await delay(100);
-  }
-  throw new Error('The selected model default did not finish applying');
-}
-
 async function waitForModels(page, providerId) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -223,6 +210,7 @@ async function connect(admin) {
   await screenshots(admin, 'quoted-test');
   await admin.getByRole('button', { name: 'Run priced test', exact: true }).click();
   await waitForFact(admin, providerId, 'modelAnswer', 'pass');
+  await facts.getByText(/ answered$/u).waitFor();
   await screenshots(admin, 'model-test-passed');
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   step('model selection', 'The selected chat models must finish applying.');
@@ -236,8 +224,9 @@ async function connect(admin) {
   step('select chat default', 'Selecting the chat default must save its model binding.');
   const chat = admin.getByRole('region', { name: 'Member chat setup' });
   await chat.getByLabel('Chat model').selectOption('gpt-6.1-sol');
-  await waitForDefault(admin, providerId);
   await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
+  await chat.getByText('Change recorded. Check chat setup to read its current status.',
+    { exact: true }).waitFor();
   step('switch on member chats', 'Drained provider admission must allow member chats to switch on.');
   await chat.getByRole('button', { name: 'Pause new calls', exact: true }).click();
   await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();

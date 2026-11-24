@@ -23,8 +23,9 @@ that the value reaches the web container.
 
 The root `.dockerignore` excludes repository test folders and test files from the
 package build. Its allow-list includes provider startup, model settings and the fleet
-guard. `runtime-context.test.mjs` checks their actual Docker build context before
-the application image is built. It includes `web.mjs` and its shared `web-page.mjs` renderer.
+guard. `runtime-context.test.mjs` checks these paths in the Docker build context
+before the application image is built. The context includes `web.mjs` and its
+shared `web-page.mjs` renderer.
 The development static server imports the upgrade handler from `web.mjs`;
 importing it does not start a package listener. The upgrade handler
 uses Node's HTTP upgrade response, preserves both initial byte buffers and closes
@@ -208,7 +209,7 @@ storage is content, and the upload command remains the only business write.
 ## Default render regression
 
 `chart-render.test.mjs` extracts the original chart from commit
-`c791103b365ced8fd56195ded9d0dcfabf202597` with `git archive` and tar. It renders
+`3bf5b9c1639b9bd3c56b3edf417210f3625864ba` with `git archive` and tar. It renders
 that chart and the current default chart with the same Helm executable, namespace
 and values, then compares complete output bytes. The explicit stub render must
 also match. This keeps the default contract exact when Helm versions format YAML
@@ -274,6 +275,9 @@ confirms HTTP 401 for that same synthetic wrong credential from the server Pod.
 The private probe passes the credential through stdin and records only its status.
 It reads the native Fetch response's numeric status; the browser request API has
 a different status method. `journey-provider-probe.test.ts` pins the native 401 response.
+The runner waits for the model answer to appear before capturing either width. It
+clicks Select chat default in Settings and waits for the recorded change before
+starting the drain.
 Before navigating, the driver waits for current network activity and pending API
 body inspections to finish. An inspection failure still fails the journey and is
 recorded in its receipt; it cannot become an unhandled rejection during navigation.

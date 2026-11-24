@@ -1663,6 +1663,10 @@ widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.
 Models & providers shows member-chat setup for connections with enabled models.
 `provider-chat.ts` selects a model through the existing bindings route, pauses calls
 through the drain route and requests switch-on. Each action reads current positions
-first. An unknown command keeps its original reference and blocks another write
+first. If the bindings read returns 503 while selecting the chat default, the page
+reads it once more. The server uses the same unavailable response when provider
+history changes and when it cannot prepare dependencies for another reason. If the
+second read fails, the page shows an error and sends no command. An unknown
+command keeps its original reference and blocks another write
 until Check chat setup finds the receipt. No control grants model access or bypasses
 the server's verification, drain or default-selection checks.

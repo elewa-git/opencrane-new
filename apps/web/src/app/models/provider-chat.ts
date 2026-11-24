@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { z } from 'zod';
-import { readJson, readProviderChange, sendProviderCommand, type ProviderRow } from './provider-api';
+import { readJson, readProviderChange, sendProviderCommand,
+  type ApiResult, type ProviderRow } from './provider-api';
 
 const sequence = z.number().int().nonnegative();
 const drainSchema = z.object({ revision: sequence, sequence, expectedProviderSequence: sequence,
@@ -9,6 +10,18 @@ const bindingsSchema = z.object({ expectedProviderSequence: sequence, rows: z.ar
   kind: z.string(), dependantId: z.string(), position: sequence,
 })) });
 type Drain = z.infer<typeof drainSchema>;
+type Bindings = z.infer<typeof bindingsSchema>;
+
+function isDefault(row: Bindings['rows'][number]): boolean {
+  return row.kind === 'silo_default';
+}
+
+function bindingReadMessage(kind: Exclude<ApiResult<Bindings>, { kind: 'ok' }>['kind']): string {
+  if (kind === 'access' || kind === 'forbidden') {
+    return 'You no longer have access to read the chat default. Refresh Settings.';
+  }
+  return 'Could not read the chat default. Select chat default again.';
+}
 
 @Component({
   selector: 'oc-provider-chat',
@@ -69,6 +82,16 @@ export class ProviderChat {
     if (result.value.enabled) this.message.set('Member chats switched on');
     return result.value;
   }
+  private async readBindings(): Promise<ApiResult<Bindings>> {
+    const url = `${this.route()}/bindings`;
+    const signal = this.controller.signal;
+    const result = await readJson(url, bindingsSchema, signal);
+    // Saving the first default can invalidate an in-flight read. Read fresh positions once.
+    if (result.kind === 'failed' && result.status === 503 && !signal.aborted) {
+      return readJson(url, bindingsSchema, signal);
+    }
+    return result;
+  }
   private positions(status: Drain) {
     return { expectedRevision: status.revision,
       expectedProviderSequence: status.expectedProviderSequence,
@@ -96,12 +119,14 @@ export class ProviderChat {
     if (this.busy() || this.pending()) return;
     this.busy.set(true);
     try {
-      const result = await readJson(`${this.route()}/bindings`, bindingsSchema,
-        this.controller.signal);
-      function isDefault(row: { kind: string }) { return row.kind === 'silo_default'; }
-      const previous = result.kind === 'ok' ? result.value.rows.find(isDefault) : undefined;
-      if (!previous || result.kind !== 'ok') {
-        this.message.set('The default is still applying or unavailable. Check chat setup.');
+      const result = await this.readBindings();
+      if (result.kind !== 'ok') {
+        this.message.set(bindingReadMessage(result.kind));
+        return;
+      }
+      const previous = result.value.rows.find(isDefault);
+      if (!previous) {
+        this.message.set('The chat default is still applying. Select chat default again.');
         return;
       }
       const command = { action: 'select', kind: 'silo_default',

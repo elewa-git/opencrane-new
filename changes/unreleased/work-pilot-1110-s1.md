@@ -13,3 +13,5 @@ Fresh owner bootstrap finishes applying ownership permissions before opening the
 installation for checked owner commands.
 Follow automatic provider setup advancement when its status button disappears
 during a click.
+Read the chat default again when an update interrupts the first read, and show
+how to continue when the default is still unavailable.
