@@ -1,10 +1,66 @@
 # Packaged connected-provider journey
 
+Journey on a fresh dev stack: PASS
+
+## Fresh packaged run on 24 November 2026
+
+Secondary slot 1 installed a new namespace and volumes from approved images for
+`f7acfefaa022cdb4f44b35827c0470ff803288ce`. Both slots were free with no other
+package running and 390 sampled seconds below a one-minute load of six before
+the claim. Load was 1.75 at the final queue check and peaked at 12.49 during the
+run. Preparation received the private values file once by path. The
+installer logged `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` for this
+dev host and recorded the F1/F2 host refusals. The fleet marker stayed present
+throughout provider-mode qualification with the restricted free stand-in.
+Paid calls and external charges were zero.
+
+| Condition in this run | Result |
+| --- | --- |
+| Approved images, fresh namespace and volumes, package readiness | PASS |
+| Owner, admin and member sign-in, Settings and new-key form at both widths | PASS |
+| Wrong key refused by the stand-in with HTTP 401 and absent from inspected UI and API replies | PASS |
+| Right key, quoted model test and settled model answer at both widths | PASS |
+| Model selection, chat default and switch-on | PASS. Settings read 503, read 200 and wrote 200 in order |
+| Synthetic 0600 file and 0700 directory with unchanged bytes across server Pod recreation | PASS |
+| Member chat with the expected reply and Done at 1280 and 390 px after recreation | PASS |
+| Final values, manifests, server logs, browser/API replies and saved events checked for disclosure | PASS. The run inspected 87 browser API bodies and 140 saved events |
+| Dispatcher stayed running during installation and the browser journey | PASS. Zero restarts across two observed Pods |
+| Private logs retained before teardown and secondary slot released | PASS |
+
+The first browser run on approved source `790e6ef3b` reached switch-on and
+proved remount custody. At 1280 px the runner stopped before sending any member
+message. The trace shows a completed admin GET with HTTP 200 whose body Chromium
+could no longer retrieve. The server log correlates it with the earlier
+`/api/my/tools/needs` read. The replacement server Pod was ready. Both observed
+dispatcher Pods had zero restarts. Server, models, computer bridge and dispatcher
+logs were retained before teardown. An earlier preparation on the receipt-only
+tip was stopped before browser launch and its claim was released.
+
+The Chromium fixture reproduced the missing response body with the old
+collector. The corrected runner inspects the original HTTP body while Chromium
+holds the response, before the page can use it and navigate. The same
+disclosure assertions still apply. The fix changes the journey runner only.
+Fifteen focused checks passed twice. Typecheck, event catalogue agreement, Knip,
+changelog, Markdown, public privacy and secret scans passed. Scoped ESLint
+reported that the three changed runner files are excluded by repository configuration.
+
+- [Complete journey result](live/qualification-20261124/result.json),
+  [fresh installation](live/qualification-20261124/installation.json) and
+  [run diagnostics](live/qualification-20261124/diagnostics.json).
+- [First run result](live/qualification-20261124/first-result.json) and
+  [browser and dispatcher diagnosis](live/qualification-20261124/first-diagnostics.json).
+- Member replies at [1280 px](live/qualification-20261124/member-chat-1280.png)
+  and [390 px](live/qualification-20261124/member-chat-390.png).
+- [CI at the original receipt head](https://github.com/elewa-git/opencrane-new/actions/runs/45501456178)
+  and both fresh approvals for the qualifying run
+  ([application](https://github.com/elewa-git/opencrane-new/actions/runs/45512376563),
+  [scanner](https://github.com/elewa-git/opencrane-new/actions/runs/45512382269)).
+
+## Round 6 fresh package
+
 **FAIL — the round 6 packaged journey did not complete in one fresh run.**
 The custody check and both member replies passed on attempt 2. The corrected
 standalone event check passed on attempt 4. The PR remains draft.
-
-## Round 6 fresh package
 
 On 24 November 2026 UTC, secondary slot 1 installed a new namespace and volumes
 from `790e6ef3b4a910e8e02371958940cad04b48f8bf` with exact-source approved images. It claimed the slot after

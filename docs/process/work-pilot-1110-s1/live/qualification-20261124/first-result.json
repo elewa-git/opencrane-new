@@ -1,0 +1,40 @@
+{
+  "status": "FAIL",
+  "source": "790e6ef3b4a910e8e02371958940cad04b48f8bf",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "admin Settings connects, tests, selects and switches on",
+      "result": "PASS"
+    },
+    {
+      "check": "setup logs checked before Pod recreation",
+      "result": "PASS"
+    },
+    {
+      "check": "Pod recreation preserves synthetic credential bytes and modes",
+      "result": "PASS",
+      "directoryModeBefore": "0700",
+      "directoryModeAfter": "0700",
+      "fileModeBefore": "0600",
+      "fileModeAfter": "0600",
+      "keys": 1
+    },
+    {
+      "check": "member chat at 1280px",
+      "result": "FAIL",
+      "errorType": "Error",
+      "detail": "A member message must receive the expected free-provider reply."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

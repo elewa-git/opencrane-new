@@ -169,7 +169,7 @@ Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1
 
 | Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
 | --- | --- | --- | --- | --- |
-| Packaged connected-provider chat | [#1110](https://github.com/elewa-git/opencrane-new/issues/1110) | No | PARTIAL: startup only | [Receipt](work-pilot-1110-s1/journey.md) |
+| Packaged connected-provider chat | [#1110](https://github.com/elewa-git/opencrane-new/issues/1110) | No | PASS (24 November 2026, `f7acfefaa`, restricted free stand-in) | [Receipt](work-pilot-1110-s1/journey.md#fresh-packaged-run-on-24-november-2026) |
 
 ## Still NOT RUN
 
