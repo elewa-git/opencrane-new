@@ -322,6 +322,9 @@ async function refusesWrongQualificationKey() {
       assert.equal(answer.includes(value), false);
       assert.equal(answer.includes(file), false);
     }
+    const counts = await fetch(`${origin}/journey-counts`);
+    assert.deepEqual(await counts.json(), { modelRequests: 3 },
+      'A request that reaches the stand-in counts even if its key is refused');
   } finally {
     const stopped = once(stub, 'exit');
     stub.kill('SIGTERM');
