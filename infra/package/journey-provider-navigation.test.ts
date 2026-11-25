@@ -1,10 +1,10 @@
 /// <reference lib="dom" />
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium, type Response } from 'playwright';
+import { chromium, type Page, type Response } from 'playwright';
 import { answer } from '../dev-stack/real-model-journey.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
@@ -251,3 +251,48 @@ async function preservesLateInspectionFailures(): Promise<void> {
 
 test('an inspection failure arriving during browser shutdown still refuses a journey PASS',
   preservesLateInspectionFailures);
+
+const cancelledResponse = new Error(
+  'cdpSession.send: Protocol error (Fetch.continueResponse): Invalid InterceptionId.');
+
+async function pausedResponse(inspect: (body: string) => void, bodyError?: Error,
+  continueError = cancelledResponse) {
+  const events = new EventEmitter();
+  async function send(method: string) {
+    if (method === 'Fetch.enable') return;
+    if (method === 'Fetch.getResponseBody') {
+      if (bodyError) throw bodyError;
+      return { body: 'inspection fixture', base64Encoded: false };
+    }
+    assert.equal(method, 'Fetch.continueResponse');
+    throw continueError;
+  }
+  const session = { on: events.on.bind(events), send };
+  async function newCDPSession() { return session; }
+  function context() { return { newCDPSession }; }
+  function on() {}
+  const page = { on, context } as unknown as Page;
+  const replies: Promise<void>[] = [];
+  await watchBrowserReplies(page, 'http://fixture.invalid', replies, inspect);
+  events.emit('Fetch.requestPaused', { requestId: 'response', responseStatusCode: 200 });
+  assert.equal(replies.length, 1);
+  await Promise.all(replies);
+}
+
+async function keepsInspectionWhenBrowserCancels() {
+  const inspected: string[] = [];
+  function record(body: string) { inspected.push(body); }
+  await pausedResponse(record);
+  assert.deepEqual(inspected, ['inspection fixture']);
+  const missingBody = new Error('The browser could not supply the response body');
+  await assert.rejects(pausedResponse(record, missingBody), missingBody);
+  const failedInspection = new Error('A response failed inspection');
+  function refuse() { throw failedInspection; }
+  await assert.rejects(pausedResponse(refuse), failedInspection);
+  const unexpectedContinuation = new Error('Unexpected continuation failure');
+  await assert.rejects(pausedResponse(record, undefined, unexpectedContinuation),
+    unexpectedContinuation);
+}
+
+test('a cancelled continuation preserves completed and failed inspections',
+  keepsInspectionWhenBrowserCancels);
