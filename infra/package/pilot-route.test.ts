@@ -17,19 +17,26 @@ function routeFixture(savedRoute: string) {
     redirect: `https://${host}/auth/callback`, logoutRedirect: `https://${host}/` };
   let target: string | undefined = demoTarget;
   let writes = 0;
+  let etag = 'original';
+  let changeAtWrite: string | undefined;
+  let confirmationMissing = false;
+  let listenerReplacedAfterStatus = false;
   const tailscale = { dnsName: `${host}.`, funnel: {} as Record<string, boolean>,
-    foreground: {}, extraHandlers: {}, extraHosts: {}, extraPorts: {}, services: {} };
+    foreground: {}, extraHandlers: {}, extraHosts: {}, extraPorts: {}, services: {}, https: true };
   let forwarder = true;
   let listenerOwned = true;
   async function deviceName() {
     return tailscale.dnsName;
   }
   async function serveStatus() {
-    const root = target ? { '/': { Proxy: target } } : {};
+    if (listenerReplacedAfterStatus) listenerOwned = false;
+    const visible = confirmationMissing && writes > 0 ? undefined : target;
+    const root = visible ? { '/': { Proxy: visible } } : {};
     const Handlers = { ...root, ...tailscale.extraHandlers };
     const Web = { [`${host}:443`]: { Handlers }, ...tailscale.extraHosts };
+    const https = tailscale.https ? { '443': { HTTPS: true } } : {};
     return { AllowFunnel: tailscale.funnel, Web, Foreground: tailscale.foreground,
-      TCP: { '443': { HTTPS: true }, ...tailscale.extraPorts }, Services: tailscale.services };
+      TCP: { ...https, ...tailscale.extraPorts }, Services: tailscale.services };
   }
   async function ownsForwarder(origin: string) {
     assert.equal(origin, pilotTarget);
@@ -39,7 +46,12 @@ function routeFixture(savedRoute: string) {
     assert.equal(origin, pilotTarget);
     return forwarder;
   }
-  async function serve(origin: string) {
+  async function serve(origin: string, checked?: { etag: string }) {
+    if (changeAtWrite) {
+      target = changeAtWrite;
+      etag = 'changed';
+    }
+    if (checked && checked.etag !== etag) throw new Error('Serve configuration changed');
     writes++;
     target = origin === 'off' ? undefined : origin;
   }
@@ -48,11 +60,71 @@ function routeFixture(savedRoute: string) {
     settings, controls, tailscale,
     stopForwarder() { forwarder = false; },
     replaceListener() { listenerOwned = false; },
+    replaceListenerAfterStatus() { listenerReplacedAfterStatus = true; },
+    changeAtWriteTo(origin: string) { changeAtWrite = origin; },
+    hideConfirmation() { confirmationMissing = true; },
     externalChange(origin: string) { target = origin; },
     current() { return target; },
     changes() { return writes; },
   };
 }
+
+async function withRoute(action: (fixture: ReturnType<typeof routeFixture>) => Promise<void>) {
+  const directory = await mkdtemp(join(tmpdir(), 'pilot-serve-'));
+  try {
+    const fixture = routeFixture(join(directory, 'demo-target'));
+    await action(fixture);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function refusesMissingHttps() {
+  async function check(fixture: ReturnType<typeof routeFixture>) {
+    fixture.tailscale.https = false;
+    await assert.rejects(switchPilot(fixture.settings, fixture.controls), /root HTTPS/u);
+    assert.equal(fixture.current(), demoTarget);
+    assert.equal(fixture.changes(), 0);
+  }
+  await withRoute(check);
+}
+
+async function refusesReplacedListener() {
+  async function check(fixture: ReturnType<typeof routeFixture>) {
+    fixture.replaceListenerAfterStatus();
+    await assert.rejects(switchPilot(fixture.settings, fixture.controls), /forwarder/u);
+    assert.equal(fixture.current(), demoTarget);
+    assert.equal(fixture.changes(), 0);
+  }
+  await withRoute(check);
+}
+
+async function keepsInterveningRoute() {
+  async function check(fixture: ReturnType<typeof routeFixture>) {
+    const replacement = 'http://127.0.0.1:29996';
+    fixture.changeAtWriteTo(replacement);
+    await assert.rejects(switchPilot(fixture.settings, fixture.controls), /configuration changed/u);
+    assert.equal(fixture.current(), replacement);
+    assert.equal(fixture.changes(), 0);
+  }
+  await withRoute(check);
+}
+
+async function reportsFailedConfirmation() {
+  async function check(fixture: ReturnType<typeof routeFixture>) {
+    fixture.hideConfirmation();
+    const { settings, controls } = fixture;
+    await assert.rejects(switchPilot(settings, controls), /run the saved demo recovery/u);
+    assert.equal(fixture.current(), pilotTarget);
+    assert.equal(await readFile(settings.savedRoute, 'utf8'), `${demoTarget}\n`);
+  }
+  await withRoute(check);
+}
+
+test('a root proxy requires a TCP HTTPS listener', refusesMissingHttps);
+test('a listener replaced after reading Serve leaves the demo mapped', refusesReplacedListener);
+test('a concurrent Serve change keeps its mapping', keepsInterveningRoute);
+test('a switch without confirmation reports how to restore the saved demo', reportsFailedConfirmation);
 
 const prerequisites = [
   ['device name', /This device needs its own tailnet DNS name/u],
@@ -253,7 +325,8 @@ async function refusesStaleListener() {
     const answer = await fetch(`${origin}/auth/me`);
     assert.deepEqual(await answer.json(), { authenticated: false });
     const args = packageForwardArgs(['--context=disposable'], 'test-package', origin);
-    assert.equal(await ownsPackageForwarder(origin, args), false);
+    const target = { clusterUid: 'disposable-cluster', namespaceUid: 'disposable-package' };
+    assert.equal(await ownsPackageForwarder(origin, args, target), false);
   } finally {
     await new Promise<void>(function closeStale(resolve) {
       function closed() { resolve(); }
