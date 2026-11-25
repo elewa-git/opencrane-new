@@ -2,6 +2,56 @@
 
 Journey on a fresh dev stack: PASS
 
+## Fresh packaged run on 25 November 2026
+
+Secondary slot 1 installed a new namespace and volumes from the approved product
+commit `8bcc94db89abda8f7a460a32549ec8a977cd7b52`. Before the claim, both slots were
+free with no other package running and 1,462 sampled seconds below a one-minute
+load of six. The last sample was 2.81 and load peaked at 9.18 during the run.
+Preparation received the private values file once by path. The installer logged
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` with its F1/F2 host refusals.
+The task inherited the fleet marker. The installer set the models container's
+marker directly, and `DEV_REAL_PROVIDER` stayed unset.
+
+| Condition | Result |
+| --- | --- |
+| Approved images, fresh namespace and volumes, package readiness | PASS |
+| Owner, admin and member sign-in, Settings and new-key form at both widths | PASS |
+| Wrong key refused with HTTP 401 and absent from inspected UI and API replies | PASS |
+| Right key, quoted test, model selection, chat default and switch-on | PASS. Both binding reads and the write returned 200 |
+| Binding read recovery after HTTP 503 | NOT RUN in this installation. The binding reads succeeded |
+| Synthetic 0600 file and 0700 directory with unchanged bytes after server Pod recreation | PASS |
+| Expected member reply and Done at 1280 and 390 px after recreation | PASS |
+| Provider key absent from inspected values, manifests, logs, API replies and saved events | PASS. Inspected 88 browser API bodies and 140 saved events |
+| Fleet marker and restricted gateway routes before and after Pod recreation | PASS. All four model routes used the free stand-in |
+| External model traffic and spending | PASS. The stand-in handled three model requests. The network capture recorded zero external model connections and dropped zero packets. Paid calls and cents were zero |
+| Dispatcher, log retention and slot release | PASS. Zero restarts across two observed dispatcher Pods. Logs were saved before package and slot teardown |
+
+The test-first commit `e1cbcd379` reproduced both installer marker mismatches,
+the missing qualification upstream and the missing marker in the rendered models
+container. The installer now refuses ordinary provider mode in fleet tasks before
+Helm, refuses fleet-prepared runtime settings in an unmarked installer and passes
+its decision to the models container. Removing the install-time admission check
+made the regression fail again with installer exit 0. The check was restored.
+
+The first hosted CI run found that the shared test fixture did not copy the
+installer's new import. The fixture's existing import check reproduced that
+failure locally. `4aa24ac81` adds the guard to the shared fixture list and
+removes the duplicate copies from its callers. This changes test files only.
+The 601 package, Helm and launcher tests passed twice. Typecheck, event catalogue
+agreement, Knip, changelog, Markdown, public privacy and secret scans passed.
+Scoped ESLint reported that repository configuration excludes the changed files.
+
+- [Journey result](live/qualification-20261125/result.json),
+  [fresh installation](live/qualification-20261125/installation.json),
+  [browser and dispatcher diagnostics](live/qualification-20261125/diagnostics.json)
+  and [model traffic evidence](live/qualification-20261125/network-evidence.json).
+- Member replies at [1280 px](live/qualification-20261125/member-chat-1280.png)
+  and [390 px](live/qualification-20261125/member-chat-390.png).
+- [Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45521230411),
+  [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45521234456)
+  and [CI run that found the fixture omission](https://github.com/elewa-git/opencrane-new/actions/runs/45521186595).
+
 ## Fresh packaged run on 24 November 2026
 
 Secondary slot 1 installed a new namespace and volumes from approved images for
