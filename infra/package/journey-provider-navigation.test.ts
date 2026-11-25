@@ -272,6 +272,61 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
 test('shutdown drains inspected replies before a new approval poll can reach the server',
   drainsBeforeClosingWithAPoll);
 
+async function closesWithReplyStillAtServer(): Promise<void> {
+  const reachedServer = Promise.withResolvers<void>();
+  const connectionClosed = Promise.withResolvers<boolean>();
+  function respond(request: IncomingMessage, response: ServerResponse): void {
+    if (request.url !== '/api/held') {
+      serve(request, response);
+      return;
+    }
+    function closed(): void {
+      connectionClosed.resolve(response.headersSent);
+    }
+    response.once('close', closed);
+    reachedServer.resolve();
+  }
+  const server = createServer(respond);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  try {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const replies: Promise<void>[] = [];
+    const bodies: string[] = [];
+    function inspect(body: string): void {
+      bodies.push(body);
+    }
+    await watchBrowserReplies(page, origin, replies, inspect);
+    await page.goto(`${origin}/idle`);
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(startApprovalPoll, '/api/held');
+    await reachedServer.promise;
+
+    async function receiveBody(): Promise<string> {
+      const response = await fetch('/api/check');
+      return response.text();
+    }
+    assert.equal(await page.evaluate(receiveBody), '{"result":"safe"}');
+    await finishBrowserReplies(browser, replies);
+    assert.equal(browser.isConnected(), false);
+    assert.equal(await connectionClosed.promise, false, 'The held reply sent no headers');
+    assert.deepEqual(bodies, ['{"result":"safe"}']);
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('shutdown checks the completed reply and closes a request that received no response',
+  closesWithReplyStillAtServer);
+
 function loseBodyReads(page: Page, command: 'Fetch.getResponseBody' | 'Network.getResponseBody',
   error: Error): void {
   const context = page.context();
