@@ -1,6 +1,45 @@
 # Packaged monthly budget journey
 
-## Fresh packaged run on 25 November 2026
+## Fresh packaged run after the shutdown fix
+
+Packaged qualification **PASS** on 25 November 2026, using approved
+`f9117476e9b7bcb37034ff8a562e12133af563e3`.
+The stand-in returned HTTP 401 for the wrong key. Settings refused it without
+showing the key. The owner connected, tested and switched on the stand-in with
+the correct key. [Browser result](fix4-result.json)
+
+The admin saved a 500-cent monthly ceiling at both widths. Change history
+showed the reservation and charge for each member reply. Spending showed the
+settled total. After the admin lowered the ceiling, chat explained the limit
+and the stand-in received no new request.
+
+| Width | Reserved cents | Charged cents | Group spent cents | Lowered ceiling cents | Requests before and after refusal |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1280 px | 16 | 1 | 1 | 0 | 2 → 2 |
+| 390 px | 16 | 1 | 2 | 1 | 3 → 3 |
+
+- 1280 px [Spending](screenshots/fix4-spending-1280.png) and
+  [chat refusal](screenshots/fix4-refusal-1280.png)
+- 390 px [Spending](screenshots/fix4-spending-390.png) and
+  [chat refusal](screenshots/fix4-refusal-390.png)
+
+The disclosure checks passed for the package values, manifests, environment
+values, server logs, 166 saved events and 129 browser API replies. The
+browser check finished through shutdown. Zero paid calls and zero paid euro
+cents.
+
+Both secondary slots were free, no other secondary package was up, and the
+one-minute load stayed below 6 for seven minutes before the runner claimed
+slot 1. The exact commit's application and scanner approval artifacts were
+available before preparation. [Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45643243069),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45643243058)
+
+The fresh Helm install and `package-check` passed. The install recorded
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366`. The runner saved
+`browser.log`, `package-up.log` and the service logs before teardown.
+`package-down` and `down.sh` exited with status 0. Slot 1 reported free.
+
+## Previous fresh run with the listening collector
 
 Packaged qualification **FAIL** on `f3ac73819f7533d5af6f02087756909169fc30ae`.
 In the single run, the stand-in returned HTTP 401 for the wrong key. Settings
@@ -145,6 +184,26 @@ each HTTP connection. The test checks that both GETs reach the API once and
 carry the same session.
 
 ## Source checks
+
+Before the fix, Chromium reproduced a 30-second collector timeout while an
+API request was waiting for its first response. The regression in `883541583`
+checks that the driver inspects a completed reply and closes the browser while
+the other request is still waiting. The test server confirms that the held
+request closed before it sent any headers. The driver still fails if it
+cannot read a reply the browser received. A fixture checks that the shutdown
+exception and its cause go only to the private log.
+
+On the fixed commit, all 47 focused tests and two saved-event disclosure tests
+passed twice. Typecheck, the event catalogue, Knip, changelog, Markdown,
+README and both privacy scans passed. The ESLint configuration excluded the
+five changed infrastructure files.
+
+Two routine-composition tests failed in an earlier CI shard and passed when run
+on their own. They cover late schema and destination changes.
+[Earlier source CI](https://github.com/elewa-git/opencrane-new/actions/runs/45633509419),
+[fixed source CI](https://github.com/elewa-git/opencrane-new/actions/runs/45643249066)
+
+### Source checks for the earlier listening collector
 
 On `f3ac73819`, 45 focused tests and two saved-event disclosure tests passed
 twice. Typecheck, the event catalogue, Knip, changelog, Markdown and both
