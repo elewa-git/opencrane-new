@@ -11,14 +11,23 @@ import { packageBackupSource } from './scheduled-backup-source.ts';
 import { captureScheduledBackup, listBackups } from './scheduled-backup.ts';
 
 const database = vi.hoisted(function databaseState() {
-  return { behind: '', clients: '0', names: [] as string[] };
+  return { behind: '', clients: '0', names: [] as string[],
+    deferDisconnect: false, pendingDisconnects: 0 };
 });
 vi.mock('pg', function databaseBoundary() {
-  class Pool {
+  class Client {
+    protected readCheckpoints = false;
+
+    connect() { return Promise.resolve(); }
+
     query(sql: string) {
-      if (sql.includes('pg_stat_activity')) return { rows: [{ count: database.clients }] };
+      if (sql.includes('pg_stat_activity')) {
+        const count = Number(database.clients) + database.pendingDisconnects;
+        return { rows: [{ count: String(count) }] };
+      }
       if (sql.includes('pg_current_wal_lsn')) return { rows: [{ lsn: '0/123' }] };
       if (sql.includes('projection_checkpoints')) {
+        this.readCheckpoints = true;
         const rows = [];
         for (const name of database.names) {
           const sequence = database.behind === name ? '0' : '1';
@@ -26,12 +35,24 @@ vi.mock('pg', function databaseBoundary() {
         }
         return { rows };
       }
-      if (sql.includes('handler_dispatcher')) return { rows: [{ sequence: '1' }] };
+      if (sql.includes('handler_dispatcher')) {
+        this.readCheckpoints = true;
+        return { rows: [{ sequence: '1' }] };
+      }
       throw new Error('Unexpected database query');
     }
     end() { return Promise.resolve(); }
   }
-  return { Pool };
+  class Pool extends Client {
+    override end() {
+      // Let pool shutdown finish before PostgreSQL sees the reader disconnect.
+      if (this.readCheckpoints && database.deferDisconnect) {
+        database.pendingDisconnects += 1;
+      }
+      return super.end();
+    }
+  }
+  return { Client, Pool };
 });
 vi.mock('node:timers/promises', async function pollingClock(importOriginal) {
   const actual = await importOriginal<typeof import('node:timers/promises')>();
@@ -53,6 +74,8 @@ afterEach(function reset() {
   vi.unstubAllEnvs();
   database.behind = '';
   database.clients = '0';
+  database.deferDisconnect = false;
+  database.pendingDisconnects = 0;
 });
 
 async function fixture(ready = true, providerMode = false) {
@@ -120,6 +143,20 @@ it('captures through the real pause, verify, event and restart adapter', async f
     expect(calls).toContain(`rollout status deployment/${name} --timeout=60s`);
   }
 });
+
+it('publishes a checked set even when a pool would leave its checkpoint readers connected',
+  async function closesCheckpointReaders() {
+    const test = await fixture();
+    const filesPart = test.source.parts.files;
+    async function captureFiles(destination: string) {
+      const details = await filesPart(destination);
+      database.deferDisconnect = true;
+      return details;
+    }
+    test.source.parts.files = captureFiles;
+    const manifest = await captureScheduledBackup(test.options, test.source);
+    expect(await listBackups(test.directory)).toEqual([manifest]);
+  });
 
 for (const brokenPart of [false, true]) {
   it(`retains maintenance after accepted scales with unavailable replacements (part=${brokenPart})`,
