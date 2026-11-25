@@ -2201,7 +2201,8 @@ for the next turn, and the stand-in's `/journey-counts` counter stays the same.
 It counts every request to a `/v1/` route before checking the route or key.
 The disclosure check includes values read from the installed Helm release and
 logs from the server and stand-in pods. It reads the previous log from every
-container that restarted, and fails if expected evidence is missing.
+container that restarted. Failed reads and missing server or stand-in output
+fail the check. A successful read can be empty for a container that writes no logs.
 
 Copy the masked screenshots and `result.json` from the slot's
 `package-budget-journey` directory before `package-down` and `down.sh`. On failure,

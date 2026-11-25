@@ -49,13 +49,14 @@ async function checkPodLogs(pod: Pod, reader: ArtifactReader, secrets: readonly 
     assert(current, 'Missing container status evidence');
     const args = ['logs', pod.metadata.name, '-c', name, '--tail=-1'];
     const content = await reader.kube(args);
-    // A successful read is enough for init containers that may write no output.
-    const appContainer = spec.containers.includes(container);
-    checkArtifact(content, secrets, 'current container log', appContainer);
+    // Require output from the server and stand-in, which log at startup.
+    // For quiet containers, a successful log command is evidence even with no lines.
+    const expectsOutput = name === 'server' || name === 'stand-in';
+    checkArtifact(content, secrets, 'current container log', expectsOutput);
     if (current.restartCount > 0) {
       const previousArgs = [...args, '--previous'];
       const previous = await reader.kube(previousArgs);
-      checkArtifact(previous, secrets, 'previous container log');
+      checkArtifact(previous, secrets, 'previous container log', expectsOutput);
       previousLogs++;
     }
   }
