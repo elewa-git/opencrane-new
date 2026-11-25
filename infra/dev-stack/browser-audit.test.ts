@@ -40,10 +40,14 @@ async function checksAdminMoney() {
     for (const example of cases) {
       current = example;
       async function check() {
-        await assertAuditMoney(owner, origin, memberRow);
+        return assertAuditMoney(owner, origin, memberRow);
       }
-      if (example.passes) await check();
-      else await assert.rejects(check);
+      if (example.passes) {
+        const amounts = await check();
+        assert.deepEqual(amounts, {
+          reservedCents: example.row.reservedCents, chargedCents: example.row.settledCents,
+        });
+      } else await assert.rejects(check);
     }
   } finally {
     await client.dispose();
