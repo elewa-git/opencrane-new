@@ -302,6 +302,9 @@ and their response inspections. This includes requests that start after the page
 first reports idle. The navigation tests hold a late request and check that the
 driver waits for it. After closing the browser, the driver checks again for any
 inspection failure before recording PASS.
+Chromium may cancel a paused response after its body has been checked. An invalid
+continuation handle then leaves the completed inspection valid. A missing body
+or an inspection failure still fails the run and keeps its original cause.
 The event-disclosure command reads the saved events inside the server Pod and
 returns only the number checked. Its fixture runs the same command against a
 disposable event store and requires a matching event to be refused.

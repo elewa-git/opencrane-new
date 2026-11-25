@@ -19,6 +19,20 @@ function watchApiRequests(page: Page, apiRoot: string): void {
   page.on('requestfailed', finished);
 }
 
+async function inspectResponseBody(session: CDPSession, request: { requestId: string },
+  inspect: (body: string) => void): Promise<void> {
+  const response = await session.send('Fetch.getResponseBody', request);
+  const body = response.base64Encoded
+    ? Buffer.from(response.body, 'base64').toString('utf8')
+    : response.body;
+  inspect(body);
+}
+
+function continuationWasCancelled(error: unknown) {
+  return error instanceof Error && error.message ===
+    'cdpSession.send: Protocol error (Fetch.continueResponse): Invalid InterceptionId.';
+}
+
 async function inspectPausedReply(session: CDPSession, reply: PausedReply,
   inspect: (body: string) => void): Promise<void> {
   const request = { requestId: reply.requestId };
@@ -27,14 +41,13 @@ async function inspectPausedReply(session: CDPSession, reply: PausedReply,
     await session.send('Fetch.continueRequest', request);
     return;
   }
-  try {
-    const response = await session.send('Fetch.getResponseBody', request);
-    const body = response.base64Encoded
-      ? Buffer.from(response.body, 'base64').toString('utf8')
-      : response.body;
-    inspect(body);
-  } finally {
-    await session.send('Fetch.continueResponse', request);
+  const [inspection] = await Promise.allSettled([inspectResponseBody(session, request, inspect)]);
+  const [continuation] = await Promise.allSettled([session.send('Fetch.continueResponse', request)]);
+  // Chromium can cancel a paused response after its body has been checked.
+  // A cancelled continuation must never replace a body-read or inspection failure.
+  if (inspection.status === 'rejected') throw inspection.reason;
+  if (continuation.status === 'rejected' && !continuationWasCancelled(continuation.reason)) {
+    throw continuation.reason;
   }
 }
 
