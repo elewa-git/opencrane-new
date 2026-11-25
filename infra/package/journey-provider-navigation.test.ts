@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type Response } from 'playwright';
 import { answer } from '../dev-stack/real-model-journey.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
@@ -123,6 +124,54 @@ async function waitsBeforeReloadingReply() {
 }
 
 test('the charged reply waits for disclosure inspection before reloading', waitsBeforeReloadingReply);
+
+async function waitsForRequestsStartedAfterLoad() {
+  const received = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  async function respond(request: IncomingMessage, response: ServerResponse) {
+    if (request.url !== '/api/held') {
+      serve(request, response);
+      return;
+    }
+    received.resolve();
+    await release.promise;
+    response.end('held response');
+  }
+  const server = createServer(respond);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const replies: Promise<void>[] = [];
+    const bodies: string[] = [];
+    function inspect(body: string) { bodies.push(body); }
+    await watchBrowserReplies(page, origin, replies, inspect);
+    await page.goto(`${origin}/idle`);
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => { void fetch('/api/held'); });
+    await received.promise;
+    const navigation = navigateWithReplies(page, `${origin}/next`, replies);
+    const finishedFirst = await Promise.race([navigation.then(() => 'navigation'),
+      delay(250, 'still waiting')]);
+    release.resolve();
+    await navigation;
+    assert.equal(finishedFirst, 'still waiting', 'Stay on the old page while its request is in flight');
+    assert.deepEqual(bodies, ['held response']);
+  } finally {
+    release.resolve();
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('navigation waits for API requests started after the page had finished loading',
+  waitsForRequestsStartedAfterLoad);
 
 async function scansReplyBeforePageNavigation(): Promise<void> {
   const server = createServer(serve);
