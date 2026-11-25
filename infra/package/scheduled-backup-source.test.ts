@@ -247,7 +247,12 @@ for (const reader of ['projection', 'handler'] as const) {
     }
     test.source.parts.files = captureFiles;
     const pending = captureScheduledBackup(test.options, test.source);
-    await started.promise;
+    async function finishedBeforeDisconnect() {
+      await pending;
+      throw new Error('The backup finished before starting the checkpoint disconnect');
+    }
+    const finished = finishedBeforeDisconnect();
+    await Promise.race([started.promise, finished]);
     await new Promise<void>(function allowDatabaseRead(resolve) {
       setImmediate(resolve);
     });
