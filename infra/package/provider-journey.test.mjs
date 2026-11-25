@@ -11,9 +11,9 @@ import { postJourneyCommand, readJourneyApi } from '../dev-stack/browser-api.ts'
 import { chargedBudgetJourney } from '../dev-stack/charged-budget-journey.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
-import { finishBrowserReplies, navigateWithReplies, waitForBrowserReplies, watchBrowserReplies }
-  from './provider-navigation.ts';
-import { providerFailure } from './provider-failure.ts';
+import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrowserReplies,
+  watchBrowserReplies } from './provider-navigation.ts';
+import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
   from './provider-probe.ts';
 import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
@@ -41,6 +41,9 @@ let stage = { check: 'browser launch', detail: 'Chromium must launch for the pac
 function step(check, detail) {
   stage = { check, detail };
 }
+
+const recordShutdownFailure = writeShutdownFailure.bind(
+  undefined, `${directory}/browser-shutdown.log`, secrets);
 
 async function kube(args) {
   const result = await execute('kubectl', [...connection.args, '-n', owner.namespace, ...args],
@@ -356,7 +359,7 @@ try {
   await checkDisclosure();
   step('finish API disclosure inspections',
     'All response inspections must pass through browser shutdown.');
-  await finishBrowserReplies(browser, responses);
+  await finishBrowserReplies(browser, responses, recordShutdownFailure);
   browser = undefined;
   const browserDisclosure = { check: stage.check, result: 'PASS',
     checkedReplies: responses.length };
@@ -378,5 +381,13 @@ try {
   console.error(`FAIL packaged provider journey during ${failure.check}: ${failure.detail}`);
   process.exitCode = 1;
 } finally {
-  await browser?.close();
+  if (browser) {
+    const closeBrowser = browser.close.bind(browser);
+    try {
+      await runShutdownStep('closing the browser', closeBrowser, recordShutdownFailure);
+    } catch {
+      console.error('FAIL while closing Chromium; inspect the claimed slot');
+      process.exitCode = 1;
+    }
+  }
 }

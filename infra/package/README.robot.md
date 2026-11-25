@@ -303,12 +303,15 @@ page so that a page change does not discard them. The browser keeps up to
 body fails the check. The driver never sends the request again.
 Before a driver navigation or reload, it waits for active API requests and their
 response inspections. This includes requests that start after the page first
-reports idle. At shutdown it stops new API requests before they reach the server,
-then waits for requests already in progress and inspects their replies. The
-driver checks for inspection failures again after closing the browser.
+reports idle. At shutdown the driver blocks new API requests and finishes
+checking the replies Chromium has reported. It keeps listening while it closes
+the pages, their contexts and the browser. Once Chromium confirms both the page
+and its listener have closed, a request with no reply may be left out. The
+driver still checks a reply reported during close. An unreadable reply fails
+the journey.
 `journey-provider-navigation.test.ts` covers an immediate page change, a late
-request before navigation, a new chat approval poll at shutdown and an
-unreadable reply that the page received.
+request before navigation, and shutdown with a finished reply, a new chat
+approval poll, or an unreadable reply that the page received.
 The event-disclosure command reads the saved events inside the server Pod and
 returns only the number checked. Its fixture runs the same command against a
 disposable event store and requires a matching event to be refused.
@@ -317,6 +320,10 @@ error category on failure. If Chromium fails to read an API response,
 the result includes the operation and HTTP status. It identifies the chat approval
 read without its conversation ID or query. It never copies upstream exception
 messages or page content. A successful result records the number of replies checked.
+The claimed slot's private `browser-shutdown.log` records the failed shutdown
+step and the exception class, message and stack, including causes. The driver
+removes the journey credentials from these records. The public result keeps
+its fixed error details.
 
 The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
 packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2

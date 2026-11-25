@@ -1,4 +1,4 @@
-import type { Browser, CDPSession, Page, Request } from 'playwright';
+import type { Browser, BrowserContext, CDPSession, Page, Request } from 'playwright';
 
 type HttpReply = { url: string; status: number };
 
@@ -17,11 +17,27 @@ type ApiRequest = {
 type WatchedPage = {
   apiRoot: string;
   session: CDPSession;
+  closed: boolean;
   pending: Map<string, ApiRequest>;
   pageRequests: Map<Request, PromiseWithResolvers<void>>;
 };
 
 const watchedPages = new WeakMap<Page, WatchedPage>();
+
+export type ShutdownStep = 'draining the collector' | 'closing pages' | 'closing the context'
+  | 'closing the browser';
+
+type ShutdownFailure = (step: ShutdownStep, error: unknown) => Promise<void>;
+
+export async function runShutdownStep(step: ShutdownStep, action: () => Promise<void>,
+  recordFailure?: ShutdownFailure): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    await recordFailure?.(step, error);
+    throw error;
+  }
+}
 
 function responseName(response: HttpReply, method: string): string {
   const url = URL.parse(response.url);
@@ -75,9 +91,14 @@ function trackPageRequests(page: Page, apiRoot: string): WatchedPage['pageReques
     pending.delete(request);
     completion?.resolve();
   }
+  function closed(): void {
+    for (const completion of pending.values()) completion.resolve();
+    pending.clear();
+  }
   page.on('request', started);
   page.on('requestfinished', finished);
   page.on('requestfailed', finished);
+  page.on('close', closed);
   return pending;
 }
 
@@ -128,6 +149,7 @@ function listenForReplies(watcher: WatchedPage, replies: Promise<void>[],
     stopRequest(request, new Error(event.errorText));
   }
   function sessionClosed(): void {
+    watcher.closed = true;
     const cause = new Error('Chromium closed before the reply finished');
     for (const request of pending.values()) stopRequest(request, cause);
     pending.clear();
@@ -148,7 +170,7 @@ export async function watchBrowserReplies(page: Page, origin: string, replies: P
   // Observe page requests in Playwright too. Its actions can return before the other session
   // that reads the body reports the request, even after the server has received it.
   const pageRequests = trackPageRequests(page, apiRoot);
-  const watcher = { apiRoot, session, pending, pageRequests };
+  const watcher = { apiRoot, session, pending, pageRequests, closed: false };
   listenForReplies(watcher, replies, inspect);
   // Keep bodies available when the page immediately navigates after a reply.
   await session.send('Network.configureDurableMessages', {
@@ -173,27 +195,36 @@ function pageRequestFinished(completion: PromiseWithResolvers<void>): Promise<vo
   return completion.promise;
 }
 
+async function waitForPendingRequests(watcher: WatchedPage): Promise<void> {
+  const { pending, pageRequests } = watcher;
+  while (pending.size + pageRequests.size > 0) {
+    const requests = Array.from(pending.values(), requestFinished);
+    const pageCompletions = Array.from(pageRequests.values(), pageRequestFinished);
+    const completions = [...requests, ...pageCompletions];
+    await Promise.all(completions);
+  }
+}
+
+async function waitForCompletion(completion: Promise<void>, message: string): Promise<void> {
+  const limit = Promise.withResolvers<void>();
+  function timedOut(): void {
+    limit.reject(new Error(message));
+  }
+  const timer = setTimeout(timedOut, 30_000);
+  try {
+    await Promise.race([completion, limit.promise]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function waitForIdle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle');
   // A settled page can start API requests after the browser first reports it idle.
   const watcher = watchedPages.get(page);
-  if (!watcher || watcher.pending.size + watcher.pageRequests.size === 0) return;
-  const { pending, pageRequests } = watcher;
-  const limit = Promise.withResolvers<void>();
-  function timedOut() {
-    limit.reject(new Error('Browser API requests did not finish before navigation'));
-  }
-  const timer = setTimeout(timedOut, 30_000);
-  try {
-    while (pending.size + pageRequests.size > 0) {
-      const requests = Array.from(pending.values(), requestFinished);
-      const pageCompletions = Array.from(pageRequests.values(), pageRequestFinished);
-      const completions = [...requests, ...pageCompletions];
-      await Promise.race([Promise.all(completions), limit.promise]);
-    }
-  } finally {
-    clearTimeout(timer);
-  }
+  if (!watcher) return;
+  const completion = waitForPendingRequests(watcher);
+  await waitForCompletion(completion, 'Browser API requests did not finish before navigation');
 }
 
 export async function waitForBrowserReplies(page: Page, replies: Promise<void>[]): Promise<void> {
@@ -202,25 +233,64 @@ export async function waitForBrowserReplies(page: Page, replies: Promise<void>[]
   await Promise.all(replies);
 }
 
-async function drainPage(page: Page): Promise<void> {
+async function stopNewRequests(page: Page): Promise<void> {
   const watcher = watchedPages.get(page);
   if (watcher) {
     // Stop new polls while replies already on their way finish.
     const urls = [`${watcher.apiRoot}*`];
     await watcher.session.send('Network.setBlockedURLs', { urls });
   }
-  await waitForIdle(page);
+}
+
+async function inspectReplies(replies: Promise<void>[]): Promise<void> {
+  let checked = 0;
+  while (checked < replies.length) {
+    const batch = replies.slice(checked);
+    checked += batch.length;
+    await Promise.all(batch);
+  }
+}
+
+async function closeWatchedPage(page: Page): Promise<void> {
+  const watcher = watchedPages.get(page);
+  if (watcher?.closed) throw new Error('Chromium stopped reporting API replies before page close');
+  await page.close();
 }
 
 export async function finishBrowserReplies(browser: Browser,
-  replies: Promise<void>[]): Promise<void> {
-  const idlePages = [];
-  for (const context of browser.contexts()) {
-    for (const page of context.pages()) idlePages.push(drainPage(page));
+  replies: Promise<void>[], recordFailure?: ShutdownFailure): Promise<void> {
+  const contexts = browser.contexts();
+  const pages = contexts.flatMap(browserContextPages);
+  async function drainBeforeClose(): Promise<void> {
+    for (const page of pages) await stopNewRequests(page);
+    const inspection = inspectReplies(replies);
+    await waitForCompletion(inspection, 'Chromium did not finish replies it had already received');
   }
-  await Promise.all(idlePages);
-  // Check pending inspections and any that arrive during shutdown before recording PASS.
-  await Promise.all(replies);
-  await browser.close();
-  await Promise.all(replies);
+  async function drainAfterClose(): Promise<void> {
+    // Keep watching until Chromium closes each page. Only then can a request with
+    // no observed reply be left out. Any reply announced during close still counts.
+    for (const page of pages) {
+      const watcher = watchedPages.get(page);
+      if (watcher && (!page.isClosed() || !watcher.closed)) {
+        throw new Error('Chromium did not confirm the end of API reply collection');
+      }
+    }
+    await inspectReplies(replies);
+  }
+  await runShutdownStep('draining the collector', drainBeforeClose, recordFailure);
+  for (const page of pages) {
+    const closePage = closeWatchedPage.bind(undefined, page);
+    await runShutdownStep('closing pages', closePage, recordFailure);
+  }
+  for (const context of contexts) {
+    const closeContext = context.close.bind(context);
+    await runShutdownStep('closing the context', closeContext, recordFailure);
+  }
+  const closeBrowser = browser.close.bind(browser);
+  await runShutdownStep('closing the browser', closeBrowser, recordFailure);
+  await runShutdownStep('draining the collector', drainAfterClose, recordFailure);
+}
+
+function browserContextPages(context: BrowserContext): Page[] {
+  return context.pages();
 }

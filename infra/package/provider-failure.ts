@@ -1,5 +1,6 @@
 import { AssertionError } from 'node:assert';
-import { BrowserReplyFailure } from './provider-navigation.ts';
+import { appendFile } from 'node:fs/promises';
+import { BrowserReplyFailure, type ShutdownStep } from './provider-navigation.ts';
 
 export type ProviderJourneyStep = {
   check: string;
@@ -53,4 +54,32 @@ export function providerFailure(step: ProviderJourneyStep, error: unknown) {
   // Use only fixed expectations: upstream errors can contain keys, page content or paths.
   const detail = failureDetail(step, error);
   return { check: step.check, result: 'FAIL' as const, errorType, detail };
+}
+
+function errorDetails(error: unknown) {
+  const details = [];
+  const seen = new Set<Error>();
+  let cause = error;
+  while (cause instanceof Error && !seen.has(cause)) {
+    details.push({ class: cause.constructor.name, message: cause.message, stack: cause.stack });
+    seen.add(cause);
+    cause = cause.cause;
+  }
+  if (!(cause instanceof Error) && (cause !== undefined || details.length === 0)) {
+    details.push({ class: typeof cause, message: String(cause) });
+  }
+  return details;
+}
+
+export async function writeShutdownFailure(file: string, secrets: readonly string[],
+  step: ShutdownStep, error: unknown): Promise<void> {
+  const errors = errorDetails(error);
+  let line = JSON.stringify({ step, errors });
+  // Keep the exception in the claimed slot. Remove known credentials even from this copy.
+  for (const secret of secrets) {
+    if (!secret) continue;
+    const serialised = JSON.stringify(secret);
+    line = line.replaceAll(serialised.slice(1, -1), '[Redacted]');
+  }
+  await appendFile(file, `${line}\n`, { mode: 0o600 });
 }

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { providerFailure } from './provider-failure.ts';
+import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
+import { runShutdownStep } from './provider-navigation.ts';
 
 function recordsSafeFailure(): void {
   const step = {
@@ -86,3 +90,39 @@ function recordsDisconnectedRequest(): void {
 
 test('a disconnected request keeps the cause without copying its HTTP headers',
   recordsDisconnectedRequest);
+
+async function recordsPrivateShutdownFailure(): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'browser-shutdown-'));
+  try {
+    const file = join(directory, 'browser-shutdown.log');
+    const secret = 'fixture-shutdown-credential';
+    const cause = new TypeError(`Chromium stopped with ${secret}`);
+    const error = new Error('Could not close the page', { cause });
+    async function closePage(): Promise<void> {
+      throw error;
+    }
+    const record = writeShutdownFailure.bind(undefined, file, [secret]);
+    const close = runShutdownStep('closing pages', closePage, record);
+    await assert.rejects(close, error);
+    const contents = await readFile(file, 'utf8');
+    const entry = JSON.parse(contents);
+    assert.equal(entry.step, 'closing pages');
+    assert.equal(entry.errors[0].class, 'Error');
+    assert.equal(entry.errors[0].message, error.message);
+    assert.equal(entry.errors[0].stack, error.stack);
+    assert.equal(entry.errors[1].class, 'TypeError');
+    assert.equal(entry.errors[1].message, 'Chromium stopped with [Redacted]');
+    assert.match(entry.errors[1].stack, /recordsPrivateShutdownFailure/u);
+    assert.equal(contents.includes(secret), false);
+    assert.equal((await stat(file)).mode & 0o777, 0o600);
+
+    const step = { check: 'finish browser', detail: 'Every delivered reply must be checked.' };
+    const result = JSON.stringify(providerFailure(step, error));
+    assert.doesNotMatch(result, /Could not close|Chromium stopped|fixture-shutdown/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+test('shutdown saves the failed step and exception only in the private log',
+  recordsPrivateShutdownFailure);

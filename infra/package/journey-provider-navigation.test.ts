@@ -237,9 +237,10 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
   assert(address && typeof address !== 'string');
   const origin = `http://127.0.0.1:${address.port}`;
   const browser = await chromium.launch({ headless: true, channel: 'chromium' });
-  const close = browser.close.bind(browser);
   try {
-    const page = await browser.newPage();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const close = page.close.bind(page);
     const pollUrl = `${origin}${pollPath}`;
     const replies: Promise<void>[] = [];
     const bodies: string[] = [];
@@ -257,12 +258,12 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
       await Promise.race([reachedServer.promise, rejected]);
       await close();
     }
-    browser.close = closeWithPoll;
+    page.close = closeWithPoll;
     await finishBrowserReplies(browser, replies);
     assert.equal(polls, 0, 'A closing page cannot start another request at the server');
     assert.deepEqual(bodies, ['{"result":"safe"}']);
   } finally {
-    await close();
+    await browser.close();
     server.closeAllConnections();
     server.close();
     await once(server, 'close');
