@@ -41,6 +41,7 @@ async function fixture() {
     const name = destination.split('/').at(-1)!;
     observations.push(name);
     await writeFile(destination, `${name} at sequence 42`, { mode: 0o600 });
+    if (name === 'files') return { bucket: 'files', objects: [] };
     return { position: 42 };
   }
   function resume() {

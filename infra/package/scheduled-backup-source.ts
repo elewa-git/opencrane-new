@@ -11,6 +11,9 @@ import { hashBackupBytes } from './backup-bytes.ts';
 import { z } from 'zod';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
 import { pilotStorage } from './pilot-storage.ts';
+import {
+  checkPilotFileInventory, maximumPilotObjects, readPilotFileReferences,
+} from './pilot-file-inventory.ts';
 import type { BackupPoint, BackupSource, ScheduledBackupOptions } from './scheduled-backup.ts';
 
 const execute = promisify(execFile);
@@ -206,14 +209,18 @@ class PilotBackupSource implements BackupSource {
     return pilotDatabaseDetailsSchema.parse({ databases: names, lsn: this.point.lsn, access });
   }
   async files(destination: string) {
+    // Read the event-backed table after its worker has caught up and all writers have stopped.
+    const expected = await readPilotFileReferences(this.db, this.options.silo);
     const client = await pilotStorage(this.deadline);
     const objects: { key: string; byteCount: number; sha256: string }[] = [];
     const lines: string[] = [];
     let total = 0;
     for await (const object of client.listObjectsV2('files', '', true)) {
       this.remaining();
+      if (objects.length === maximumPilotObjects) throw new Error('Too many stored objects');
       const entrySchema = z.object({ name: z.string().min(1) });
       const objectEntry = entrySchema.parse(object);
+      if (!expected.has(objectEntry.name)) throw new Error('Stored object has no event');
       const stream = await client.getObject('files', objectEntry.name);
       const chunks: Buffer[] = [];
       for await (const chunk of stream) {
@@ -232,6 +239,7 @@ class PilotBackupSource implements BackupSource {
       const serialisedObject = JSON.stringify(archivedObject);
       lines.push(serialisedObject);
     }
+    checkPilotFileInventory(expected, objects);
     await writeFile(destination, lines.join('\n'), { mode: 0o600, flag: 'wx', flush: true });
     return { bucket: 'files', objects };
   }

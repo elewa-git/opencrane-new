@@ -4,11 +4,11 @@ import { z } from 'zod';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { rebuildMembers, deleteStoreById, type Binding } from '@opencrane/authz';
 import { connectProjectionDb } from '@opencrane/projections';
-import { fileUploadedDataSchema } from '@opencrane/events';
 import { hashBackupBytes } from './backup-bytes.ts';
 import { captureBounds, infoSchema, eventBackupMaximumBytes } from './event-backup.ts';
 import { checkHistory, restoreOfflineEventBackup } from './event-restore.ts';
 import { pilotDatabaseDetailsSchema, type CheckedPilotBackup } from './pilot-backup-contract.ts';
+import { checkPilotFileInventory, readPilotFileReferences } from './pilot-file-inventory.ts';
 import { checkPilotCheckpoints, replayPilotDatabase } from './pilot-restore-database.ts';
 import { restoreKube } from './pilot-restore-kube.ts';
 import { packageDatabaseRoles } from './package-database.ts';
@@ -223,18 +223,8 @@ class PackageRestoreTarget implements PilotRestoreTarget {
   private async checkedFiles(backup: CheckedPilotBackup) {
     const content = connectProjectionDb(this.env.PROJECTION_DATABASE_URL, this.disconnected.bind(this));
     try {
-      const references = await content.db.query<{ data: unknown }>(
-        'SELECT data FROM conversation_files WHERE silo=$1', [this.options.silo]);
-      const expected = new Map<string, CheckedPilotBackup['files']['objects'][number]>();
-      for (const { data } of references.rows) {
-        const file = fileUploadedDataSchema.parse(data);
-        const previous = expected.get(file.objectKey);
-        if (previous && (previous.byteCount !== file.size || previous.sha256 !== file.sha256)) {
-          throw new Error('Conflicting event file references');
-        }
-        expected.set(file.objectKey, { key: file.objectKey, byteCount: file.size, sha256: file.sha256 });
-      }
-      if (expected.size !== backup.objects.size) throw new Error('Event file inventory differs');
+      const expected = await readPilotFileReferences(content.db, this.options.silo);
+      checkPilotFileInventory(expected, backup.files.objects);
       const present = new Set<string>();
       const objects = await this.storage();
       for await (const object of objects.listObjectsV2('files', '', true)) {
@@ -243,12 +233,6 @@ class PackageRestoreTarget implements PilotRestoreTarget {
         if (!entry || present.has(key)) throw new Error('Foreign file in restore target');
         await checkStoredObject(objects, entry);
         present.add(key);
-      }
-      for (const entry of backup.files.objects) {
-        const event = expected.get(entry.key);
-        if (!event || event.byteCount !== entry.byteCount || event.sha256 !== entry.sha256) {
-          throw new Error('File differs from events');
-        }
       }
       return present;
     } finally {

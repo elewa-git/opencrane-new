@@ -6,7 +6,9 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { descriptorSchema } from './event-backup.ts';
 import { readPrivateFile } from './event-restore.ts';
+import { pilotFileDetailsSchema } from './pilot-file-inventory.ts';
 
+export const maximumManifestBytes = 1024 * 1024;
 const identifier = descriptorSchema.shape.attempt;
 const integer = descriptorSchema.shape.lastSequence;
 const pointSchema = z.object({
@@ -132,8 +134,12 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
       point, parts, startedAt, stoppedAt, completedAt: new Date().toISOString(),
       images: options.images, chartVersion: '0.1.0' };
     const manifest = manifestSchema.parse(manifestValue);
+    stage = 'manifest';
+    pilotFileDetailsSchema.parse(manifest.parts.files.details);
+    const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2));
+    if (manifestBytes.length > maximumManifestBytes) throw new Error('Manifest size refused');
     stage = 'publish';
-    await writeFile(join(temporary, 'manifest.json'), JSON.stringify(manifest, null, 2),
+    await writeFile(join(temporary, 'manifest.json'), manifestBytes,
       { mode: 0o600, flag: 'wx', flush: true });
     await rename(temporary, join(options.directory, options.id));
     return manifest;
@@ -165,8 +171,9 @@ export async function showBackup(directory: string, id: string) {
   await privateDirectory(directory);
   const backup = join(directory, id);
   await privateDirectory(backup);
-  const bytes = readPrivateFile(join(backup, 'manifest.json'), 1024 * 1024);
+  const bytes = readPrivateFile(join(backup, 'manifest.json'), maximumManifestBytes);
   const manifest = manifestSchema.parse(JSON.parse(bytes.toString('utf8')));
+  pilotFileDetailsSchema.parse(manifest.parts.files.details);
   if (manifest.id !== id) throw new Error('Backup identity differs');
   drained(manifest.point);
   for (const name of ['events', 'database', 'files'] as const) {

@@ -4,16 +4,11 @@ import { z } from 'zod';
 import { hashBackupBytes } from './backup-bytes.ts';
 import { descriptorSchema } from './event-backup.ts';
 import { readPrivateFile } from './event-restore.ts';
-import { manifestSchema, showBackup } from './scheduled-backup.ts';
+import { manifestSchema, maximumManifestBytes, showBackup } from './scheduled-backup.ts';
+import { pilotFileDetailsSchema, pilotFileEntrySchema } from './pilot-file-inventory.ts';
 import { pilotProjectionNames } from './pilot-projections.ts';
 import type { PilotRestoreOptions } from './pilot-restore.ts';
 
-const objectSchema = z.object({ key: z.string().min(1).max(1024),
-  byteCount: z.int().nonnegative().max(64 * 1024 * 1024),
-  sha256: descriptorSchema.shape.sha256 }).strict();
-export const pilotFileDetailsSchema = z.object({
-  bucket: z.literal('files'), objects: z.array(objectSchema).max(10_000),
-}).strict();
 const storeReference = descriptorSchema.shape.attempt.refine(isBoundStore);
 export const pilotDatabaseDetailsSchema = z.object({ databases: z.array(z.string()),
   lsn: manifestSchema.shape.point.shape.lsn,
@@ -78,7 +73,7 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
     database: checkedPart(directory, manifest.parts.database),
     files: checkedPart(directory, manifest.parts.files),
   };
-  const manifestBytes = readPrivateFile(join(directory, 'manifest.json'), 1024 * 1024);
+  const manifestBytes = readPrivateFile(join(directory, 'manifest.json'), maximumManifestBytes);
   const reread = manifestSchema.parse(JSON.parse(manifestBytes.toString('utf8')));
   if (!isDeepStrictEqual(reread, manifest)) throw new Error('Manifest changed');
   const manifestDigest = hashBackupBytes(manifestBytes);
@@ -87,8 +82,8 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
 }
 
 function decodeFiles(details: CheckedPilotBackup['files'], bytes: Buffer) {
-  const entrySchema = objectSchema.extend({ data: z.string().max(90 * 1024 * 1024) });
-  const inventory = new Map<string, z.infer<typeof objectSchema>>();
+  const entrySchema = pilotFileEntrySchema.extend({ data: z.string().max(90 * 1024 * 1024) });
+  const inventory = new Map<string, z.infer<typeof pilotFileEntrySchema>>();
   for (const entry of details.objects) {
     if (inventory.has(entry.key)) throw new Error('Duplicate object inventory');
     inventory.set(entry.key, entry);
