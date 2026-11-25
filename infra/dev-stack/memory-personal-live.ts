@@ -10,7 +10,8 @@ import { requireStageBStack } from './stage-b-guard.ts';
 import { requireStandInJourney } from './journey-guard.ts';
 import { directory, readEnv, root } from './config.ts';
 import { exercisePersonalMemory } from './memory-personal-steps.ts';
-import { enterLoginName, testUsers } from './browser-signin.ts';
+import { completeProviderSignIn, testUsers } from './browser-signin.ts';
+import { issuer } from './zitadel-api.ts';
 import { captureMemory, memoryOutput, openMemory,
   recordMemory } from './memory-personal-browser.ts';
 
@@ -59,11 +60,8 @@ try {
   const user = (await testUsers()).owner;
   await page.goto(`${origin}/claim`);
   await page.getByRole('link', { name: 'Sign in to claim', exact: true }).click();
-  await page.locator('input[name=loginName]').waitFor();
-  await page.waitForLoadState('networkidle');
-  await enterLoginName(page, user.login);
-  await page.locator('input[type=password]').fill(await readFile(user.passwordFile, 'utf8'));
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  const password = await readFile(user.passwordFile, 'utf8');
+  await completeProviderSignIn(page, user.login, password, origin, issuer);
   await page.waitForURL(`${origin}/claim`);
   stage = 'owner claim';
   await page.getByLabel('Display name').fill('Memory test owner');

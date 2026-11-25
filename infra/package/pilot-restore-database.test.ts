@@ -35,3 +35,25 @@ async function replaysReadableContentWithoutEffects() {
 }
 it('replays every installed projection from real events without appending effects',
   replaysReadableContentWithoutEffects);
+
+async function replaysTheProviderRoutinesProjection() {
+  const events = await natsFixture();
+  const content = await database('pg');
+  try {
+    const created = envelope('test', 'conversation-chat', 'conversation.created', {
+      conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
+    });
+    await events.store.append({ event: created, expectedSequence: 0 });
+    await replayPilotTables(content.db, events.store, 1, true);
+    const tables = await content.db.query<{ relation: string | null }>(
+      "SELECT to_regclass('public.routines') AS relation");
+    expect(tables.rows[0]?.relation).toBe('routines');
+    await checkPilotCheckpoints(content.db, 1, true);
+    expect(await events.store.head()).toBe(1);
+  } finally {
+    await content.close();
+    await events.close();
+  }
+}
+it('rebuilds the provider-mode routines tables at the saved event position',
+  replaysTheProviderRoutinesProjection);

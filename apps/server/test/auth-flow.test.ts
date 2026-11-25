@@ -488,3 +488,32 @@ async function refusesOversizedEmailClaim() {
 }
 it('refuses a signed email claim longer than 320 characters without writing a session',
   refusesOversizedEmailClaim);
+
+it('replaces a remembered provider session and returns to the invitation', refreshInvitationLogin);
+
+async function refreshInvitationLogin() {
+  const oldAuthentication = Math.floor(Date.now() / 1000) - 7200;
+  const user = { ...DEFAULT_MOCK_USER, authTime: oldAuthentication };
+  const stack = await startStack({ user, remembersSession: true });
+  const previous = cookieValue(await signIn(stack), stack.config.cookieName);
+  const remembered = await whoAmI(stack, previous);
+  expect(remembered.user?.authTime).toBe(oldAuthentication);
+
+  const invitation = '/join/a-member/an-invitation';
+  const returnTo = encodeURIComponent(invitation);
+  const cookies = { [stack.config.cookieName]: previous };
+  const login = await stack.app.inject({ url: `/auth/login?fresh=1&returnTo=${returnTo}`, cookies });
+  expect(login.statusCode).toBe(302);
+  const address = new URL(String(login.headers.location));
+  expect(address.searchParams.get('prompt')).toBe('login');
+  expect(address.searchParams.get('max_age')).toBe('0');
+  const authorize = await fetch(address, { redirect: 'manual' });
+  const target = new URL(authorize.headers.get('location')!);
+  const url = `${target.pathname}${target.search}`;
+  cookies[stack.config.flowCookieName] = cookieValue(login, stack.config.flowCookieName);
+  const callback = await stack.app.inject({ url, cookies });
+  expect(callback.headers.location).toBe(invitation);
+  const current = cookieValue(callback, stack.config.cookieName);
+  const refreshed = await whoAmI(stack, current);
+  expect(refreshed.user?.authTime).toBeGreaterThan(oldAuthentication);
+}

@@ -70,7 +70,9 @@ export function checkPublicSettings(values, settings) {
   if (settings.OIDC_REDIRECT_URI !== redirect) {
     throw new Error('Public address requires the exact HTTPS OIDC_REDIRECT_URI');
   }
-  for (const name of ['OIDC_EXTRA_IDENTITIES', 'DEV_OWNER_EMAIL']) {
+  const privateSettings = ['OIDC_EXTRA_IDENTITIES', 'DEV_OWNER_EMAIL', 'DEV_OIDC_CLIENT_SECRET',
+    'OIDC_CLIENT_SECRET_ENV_VAR', 'OIDC_CLIENT_SECRET_FILE'];
+  for (const name of privateSettings) {
     if (Object.hasOwn(settings, name)) {
       throw new Error(`Public address refuses ${name}`);
     }

@@ -189,6 +189,7 @@ jobs:
           infra/dev-stack/cnpg-backup-identity.test.ts
           infra/package/preflight.test.mjs infra/package/application-approval.test.mjs
           infra/package/chart.test.mjs
+          infra/package/pilot-route.test.ts infra/package/pilot-archive-import.test.ts
           infra/vm/bootstrap.test.mjs
 
       - name: Check application approval and signed-index refusals

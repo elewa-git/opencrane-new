@@ -13,7 +13,7 @@ import { connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
 import { buildServer } from '../../apps/server/src/server.ts';
 import { attachWebSocketServer } from '../../apps/server/src/websocket.ts';
 import { remoteReference } from '../../apps/server/src/integrations/registration.ts';
-import { enterLoginName, testUsers } from './browser-signin.ts';
+import { completeProviderSignIn, testUsers } from './browser-signin.ts';
 import { authEnv, directory, readEnv, root } from './config.ts';
 import { secondary } from './identity.ts';
 
@@ -68,11 +68,8 @@ try {
   const owner = (await testUsers()).owner;
   await page.goto(origin);
   await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
-  await page.locator('input[name=loginName]').waitFor();
-  await page.waitForLoadState('networkidle');
-  await enterLoginName(page, owner.login);
-  await page.locator('input[type=password]').fill(await readFile(owner.passwordFile, 'utf8'));
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  const password = await readFile(owner.passwordFile, 'utf8');
+  await completeProviderSignIn(page, owner.login, password, origin, config.issuerUrl);
   await page.waitForURL(origin + '/');
   await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
   console.log('PASS owner signed in through Zitadel on the secondary stack');

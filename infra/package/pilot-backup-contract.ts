@@ -34,9 +34,10 @@ export type CheckedPilotBackup = {
   bytes: Record<'events' | 'database' | 'files', Buffer>;
 };
 
-function validatePositions(manifest: CheckedPilotBackup['manifest']) {
+function validatePositions(manifest: CheckedPilotBackup['manifest'], providerMode?: boolean) {
   const actualNames = Object.keys(manifest.point.checkpoints).sort();
-  const names = [...pilotProjectionNames, 'dispatcher'].sort();
+  const expectedNames = pilotProjectionNames(providerMode);
+  const names = [...expectedNames, 'dispatcher'].sort();
   if (!isDeepStrictEqual(actualNames, names)) throw new Error('Checkpoint inventory differs');
   const start = Date.parse(manifest.startedAt);
   const stop = Date.parse(manifest.stoppedAt);
@@ -57,7 +58,7 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
   for (const image of Object.values(manifest.images)) {
     if (!/@sha256:[a-f0-9]{64}$/u.test(image)) throw new Error('Image pin refused');
   }
-  validatePositions(manifest);
+  validatePositions(manifest, options.providerMode);
   const events = descriptorSchema.parse(manifest.parts.events.details);
   if (events.silo !== manifest.silo || events.attempt !== manifest.id ||
       events.lastSequence !== manifest.point.sequence || events.config['num_replicas'] !== 1 ||

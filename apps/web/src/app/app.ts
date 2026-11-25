@@ -28,6 +28,7 @@ import { GroupDetailScreen } from './people/group-detail-screen';
 import { MemberDetailScreen } from './people/member-detail-screen';
 import { SharedAssistantAdmin } from './people/shared-assistant-admin';
 import { OwnershipScreen } from './people/ownership-screen';
+import { InvitationJoin, invitationLink } from './people/invitation-join';
 import { SharedAssistantPicker } from './chat/shared-assistant-picker';
 import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
 import { SurveyScreen } from './welcome/survey';
@@ -44,7 +45,7 @@ import { organisationName } from './core/organisation-name';
     OrganisationShell, OverviewScreen,
     AccountScreen, MyTools, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, MemberDetailScreen,
     SharedAssistantAdmin, SharedAssistantPicker, OwnershipScreen, SurveyScreen, PersonaReview,
-    WelcomeChat,
+    WelcomeChat, InvitationJoin,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -59,6 +60,7 @@ export class App {
   protected readonly overviewPages = signal<readonly OrganisationPage[]>([]);
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
+  protected readonly invitation = invitationLink(this.pathname);
   protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly directChatPage = this.pathname === '/workspace/direct';
   protected readonly conversationsPage = this.pathname === '/workspace/conversations';

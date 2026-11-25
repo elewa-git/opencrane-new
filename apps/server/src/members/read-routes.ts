@@ -1,8 +1,10 @@
 import { recordIdSchema } from '@opencrane/events';
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { isEventStoreUnavailable } from '@opencrane/event-store';
+import type { FastifyBaseLogger, FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { currentMembership, readActiveMember, MemberAccessRefused } from '@opencrane/models';
+import { AuthorityApplying, currentMembership, readActiveMember,
+  MemberAccessRefused } from '@opencrane/models';
 import { memberHeaderSchema, memberPageQuerySchema, memberDetailSchema,
   memberDirectorySchema } from '@opencrane/protocol';
 import { registerToolExplanation } from '../integrations/explanation-routes.ts';
@@ -29,44 +31,76 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
     reply.header('cache-control', 'no-store');
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
-    if (!options) return reply.code(503).send({ status: 'unavailable' });
+    if (!options) {
+      request.log.error({ reason: 'dependencies_missing' }, 'Member read unavailable');
+      return reply.code(503).send({ status: 'unavailable' });
+    }
     if (!trustedRead(config, options, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
+    let stage = 'request';
     function expire() {
-      if (!reply.sent) void reply.code(503).send({ status: 'unavailable' });
+      if (reply.sent) return;
+      request.log.error({ stage, reason: 'deadline_exceeded' }, 'Member read unavailable');
+      void reply.code(503).send({ status: 'unavailable' });
     }
     const watchdog = setTimeout(expire, 10_000);
     try {
       const { memberId } = parseRequest(parameters, request.params);
       let query: z.infer<typeof memberPageQuerySchema> | undefined;
       if (!memberId) query = parseRequest(memberPageQuerySchema, request.query);
+      stage = 'caller_identity';
       const caller = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!caller) throw new MemberAccessRefused('Active membership required');
+      stage = 'caller_membership';
       const membership = await currentMembership(options.store, options.silo, caller);
       const management = isManager(membership.role);
       requireDirectoryRole(memberId, management);
       let requiredRole: 'member' | 'admin' = 'member';
       if (management) requiredRole = 'admin';
+      stage = 'caller_authorisation';
       await readActiveMember(options.store, options.binding, caller, requiredRole);
       if (!memberId) {
-        const directory = await readDirectory(options, query);
+        stage = 'member_directory';
+        const directory = await readDirectory(options, query, request.log);
         if (reply.sent) return reply;
         return reply.send(memberDirectorySchema.parse(directory));
       }
+      stage = 'member_detail';
       const response = await readHeader(options, memberId, management, membership.role);
       if (reply.sent) return reply;
       return reply.code(response.code).send(response.body);
     } catch (error) {
       if (reply.sent) return reply;
-      let code = 503;
-      if (error instanceof InvalidMemberRequest) code = 400;
-      if (error instanceof MemberAccessRefused) code = 403;
-      return reply.code(code).send({ status: code === 503 ? 'unavailable' : 'refused' });
+      if (error instanceof InvalidMemberRequest) return reply.code(400).send({ status: 'refused' });
+      if (error instanceof MemberAccessRefused) return reply.code(403).send({ status: 'refused' });
+      const reason = memberReadFailure(error);
+      request.log.error({ stage, reason }, 'Member read unavailable');
+      return reply.code(503).send({ status: 'unavailable' });
     } finally {
       clearTimeout(watchdog);
     }
   }
+}
+
+function memberReadFailure(error: unknown) {
+  // Dependency messages and validation issues can contain private data.
+  if (isEventStoreUnavailable(error)) return 'event_store_unavailable';
+  if (error instanceof AuthorityApplying) return 'membership_applying';
+  if (error instanceof z.ZodError) return 'invalid_stored_data';
+  if (error instanceof Error) {
+    const code: unknown = Reflect.get(error, 'code');
+    const severity: unknown = Reflect.get(error, 'severity');
+    if (typeof severity === 'string' && typeof code === 'string' && /^[A-Z0-9]{5}$/u.test(code)) {
+      return code;
+    }
+    if (error.message === 'IAM unavailable') return 'iam_unavailable';
+    if (error.message === 'Members feed unavailable') return 'members_feed_unavailable';
+    if (error.message === 'Query read timeout') return 'database_timeout';
+    if (error.message === 'Member content unavailable') return 'member_content_unavailable';
+    if (error.message === 'Member groups exceed read limit') return 'member_group_limit';
+  }
+  return 'unexpected_error';
 }
 
 function parseRequest<T>(schema: z.ZodType<T>, input: unknown) {
@@ -102,7 +136,7 @@ async function directoryRow(options: GroupOptions, memberId: string,
 }
 
 async function readDirectory(options: GroupOptions,
-  input: z.infer<typeof memberPageQuerySchema> | undefined) {
+  input: z.infer<typeof memberPageQuerySchema> | undefined, logger: FastifyBaseLogger) {
   if (!input) throw new Error('Directory query was not parsed');
   const result = await options.db.query<{ member_id: string }>(
     `SELECT member_id FROM members WHERE silo = $1 AND status = 'joined' AND member_id > $2
@@ -118,7 +152,7 @@ async function readDirectory(options: GroupOptions,
   let next: string | null = null;
   if (result.rows.length > input.limit) next = page.at(-1)?.member_id ?? null;
   const checkedAt = new Date().toISOString();
-  const totals = await memberCounts(options, checkedAt);
+  const totals = await memberCounts(options, checkedAt, logger);
   return { rows, next, ...totals, checkedAt, permissions: { invite: true } };
 }
 

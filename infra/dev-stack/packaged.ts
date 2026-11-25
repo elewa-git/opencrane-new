@@ -267,12 +267,12 @@ function requiredSecretFields(name: string, tokenBootstrap: boolean) {
   if (!tokenBootstrap) {
     return fields;
   }
-  const required: string[] = [];
-  for (const field of fields) {
-    if (!['DEV_OWNER_EMAIL', 'PACKAGE_OWNER_SUBJECT'].includes(field)) {
-      required.push(field);
-    }
+  const privateFields = ['DEV_OWNER_EMAIL', 'PACKAGE_OWNER_SUBJECT',
+    'OIDC_CLIENT_SECRET_ENV_VAR', 'zitadel-client-secret'];
+  function publicField(field: string): boolean {
+    return !privateFields.includes(field);
   }
+  const required = fields.filter(publicField);
   if (name === 'runtimeFiles') {
     required.push('bootstrap-token.json');
   }
@@ -283,7 +283,10 @@ function checkSecretFields(name: string, stored: SecretData, tokenBootstrap = fa
   for (const key of requiredSecretFields(name, tokenBootstrap)) {
     if (!stored.data?.[key]) throw new Error(`Required secret field is absent: ${name}.${key}`);
   }
-  if (name === 'runtime') {
+  if (tokenBootstrap && name === 'runtimeFiles' && stored.data?.['zitadel-client-secret']) {
+    throw new Error('Public sign-in refuses a credential in shared runtime files');
+  }
+  if (!tokenBootstrap && name === 'runtime') {
     const encodedName = stored.data!['OIDC_CLIENT_SECRET_ENV_VAR']!;
     const secretName = Buffer.from(encodedName, 'base64').toString('utf8').trim();
     if (!/^[A-Z][A-Z0-9_]*$/u.test(secretName) || !stored.data?.[secretName]) {
@@ -390,6 +393,12 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
     const bootstrap = decodeSecret(secrets['bootstrap']!);
     checkPublicSettings(values, runtime);
     checkPublicSettings(values, { ...runtime, ...bootstrap });
+    const found = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret',
+      'package-sign-in', '--ignore-not-found', '-o', 'json']);
+    const signIn = found ? JSON.parse(found) as SecretData : undefined;
+    if (!signIn?.data?.['credential']) {
+      throw new Error('Public sign-in credential is absent');
+    }
   }
   if (values.models?.qualification) {
     const found = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret',

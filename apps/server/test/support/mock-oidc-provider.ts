@@ -45,7 +45,7 @@ const KEY_ID = 'test-key';
 // `endSessionEndpoint` sets the logout address the discovery document advertises:
 // leave it out for the mock's own /endsession, or pass null for a provider that has none.
 export async function startMockOidcProvider(
-  options: { clientId?: string; clientSecret?: string; user?: MockUser; endSessionEndpoint?: string | null } = {},
+  options: { clientId?: string; clientSecret?: string; user?: MockUser; endSessionEndpoint?: string | null; remembersSession?: boolean } = {},
 ): Promise<MockOidcProvider> {
   const clientId = options.clientId ?? 'test-client';
   const user = options.user ?? DEFAULT_MOCK_USER;
@@ -93,7 +93,13 @@ export async function startMockOidcProvider(
       return;
     }
     const code = randomUUID();
-    codes.set(code, { redirectUri, nonce: query['nonce'], codeChallenge, user, used: false });
+    // Model a remembered session until the app explicitly asks the provider to sign in again.
+    let signedInUser = user;
+    if (options.remembersSession && query['prompt'] === 'login' && query['max_age'] === '0') {
+      signedInUser = { ...user, authTime: Math.floor(Date.now() / 1000) };
+    }
+    codes.set(code, { redirectUri, nonce: query['nonce'], codeChallenge,
+      user: signedInUser, used: false });
     const target = new URL(redirectUri);
     target.searchParams.set('code', code);
     const state = query['state'];

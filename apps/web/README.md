@@ -17,14 +17,14 @@ The browser uses the website's own address for server connections.
 ```mermaid
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
-  web -->|sends settings changes and chat messages| server["apps/server<br/>back end"]
+  web -->|sends invitation acceptances, settings and messages| server["apps/server<br/>back end"]
   server -->|returns saved and live results and personal assignment updates| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
 
 ## What it is responsible for
 
-- Show sign-in, first-owner setup, the welcome survey and private persona review.
+- Show sign-in, first-owner setup, invitation acceptance, the welcome survey and private persona review.
 - Show the installation's name and provide sign-out from desktop and phone menus.
 - Offer Settings to owners and admins.
 - Support assistant sessions and direct or group chats with colleagues.
@@ -51,7 +51,8 @@ Not built yet:
 ## Processes it handles
 
 1. **A person signs in.** Their company account identifies them.
-   The first owner can claim a new installation; the welcome survey saves personal
+   The first owner can claim a new installation. An invited person accepts
+   their link with the account it was sent to. The welcome survey saves personal
    wishes without granting access to tools or groups.
 2. **A person chats.** They press Enter or Send to send their current text and watch the assistant's reply
    arrive.

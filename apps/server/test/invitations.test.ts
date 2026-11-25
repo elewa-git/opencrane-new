@@ -8,7 +8,8 @@ import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing'
 import { history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import type { Query } from '@opencrane/projections';
-import { members, pgDb, ProjectionRunner, auditTrail, rebuildAuditProjection } from '@opencrane/projections';
+import { groups, members, pgDb, ProjectionRunner, auditTrail, rebuildAuditProjection } from '@opencrane/projections';
+import { memberDirectorySchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 import { refusalDigest } from '../src/members/refusals.ts';
@@ -46,7 +47,8 @@ function server(db: Query = pgDb(dbs.queue)) {
   const options = { silo: 'acme', store: nats.store, binding, db, now,
     feed: { memberId: resolveMember } };
   const membership = { silo: 'acme', store: nats.store, db: pgDb(dbs.queue), now };
-  return buildServer(config, { invitationEmail: options, membership, audit: options });
+  return buildServer(config, { invitationEmail: options, membership, audit: options,
+    memberReads: options });
 }
 export interface FixtureAppendOptions {
   subject: string;
@@ -664,6 +666,42 @@ function acceptInvitation(payload: unknown) {
     payload: JSON.stringify(payload) };
   return app.inject(options);
 }
+
+async function readsMembersAfterAcceptance(countsAvailable: boolean) {
+  const runner = await prepareAcceptanceProjection();
+  await runner.initialise(groups);
+  const invited = await request('POST', input, 'owner');
+  expect(invited.statusCode).toBe(200);
+  const { invitationId } = invited.json<{ invitationId: string }>();
+  const joined = await acceptInvitation({ memberId, invitationId, commandId: 'join-first',
+    displayName: 'Person' });
+  expect(joined.statusCode).toBe(200);
+  expect(joined.json()).toMatchObject({ status: 'joined' });
+  await runner.run(members);
+  await runner.run(groups);
+
+  if (!countsAvailable) {
+    expireMemberCounts();
+  }
+  const identity = { sub: 'owner', orgId: 'org-acme', roles: [], authTime: 1, exp: 2000000000 };
+  const headers = { cookie: `${config.cookieName}=${encodeSession(config, identity)}` };
+  const response = await app.inject({ method: 'GET', url: '/api/members', headers });
+  expect(response.statusCode).toBe(200);
+  const directory = memberDirectorySchema.parse(response.json());
+  expect(directory.rows).toContainEqual(expect.objectContaining({ memberId, email,
+    displayName: 'Person', role: 'member' }));
+  expect(directory.permissions.invite).toBe(true);
+  if (countsAvailable) {
+    expect(directory.counts.acceptedInvitations).toEqual({ status: 'current', value: 1 });
+  } else {
+    const unavailable = { status: 'unavailable', value: null };
+    expect(directory.counts).toEqual({ members: unavailable, groups: unavailable,
+      pendingInvitations: unavailable, acceptedInvitations: unavailable });
+    expect(directory.projection.content).toBe('applying');
+  }
+}
+it.each([true, false])('lists the new member immediately after accepting (counts available: %s)',
+  readsMembersAfterAcceptance);
 
 async function assertOneJoined(firstId: string, secondId: string) {
   const first = await history(nats.store, `member-${firstId}`, 'acme');
@@ -1410,3 +1448,91 @@ async function refusesForeignAuditSession(url: string) {
 it.each(['/api/org/history', '/api/conversations/private-chat/history'])(
   'refuses an extra sign-in identity from another organisation on %s', refusesForeignAuditSession,
 );
+
+const directoryRefusals = [
+  { guard: 'session', expected: 401 },
+  { guard: 'organisation', expected: 403 },
+  { guard: 'silo binding', expected: 403 },
+  { guard: 'caller presence', expected: 403 },
+  { guard: 'manager role', expected: 403 },
+  { guard: 'active membership in IAM', expected: 403 },
+] as const;
+
+it.each(directoryRefusals)('keeps the directory $guard check when counts are offline',
+  refusesDirectoryWithoutCounts);
+
+async function refusesDirectoryWithoutCounts(
+  { guard, expected }: (typeof directoryRefusals)[number],
+) {
+  const runner = await prepareAcceptanceProjection();
+  await runner.initialise(groups);
+  await runner.run(groups);
+  const caller = directoryCaller(guard);
+  if (guard === 'active membership in IAM') {
+    const memberData = { memberId: caller.sub, displayName: 'Pending member',
+      email: 'pending@example.test', role: 'admin' };
+    await appendAndProject({ subject: `member-${caller.sub}`, type: 'member.joined',
+      data: memberData });
+  }
+
+  const checkedBinding = { ...binding };
+  if (guard === 'silo binding') {
+    checkedBinding.silo = 'other-silo';
+  }
+  function resolveCaller() {
+    if (guard === 'caller presence') {
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(caller.sub);
+  }
+  const feed = { memberId: vi.fn(resolveCaller) };
+  const db = pgDb(dbs.queue);
+  const directoryApp = buildServer(config, { memberReads: {
+    silo: 'acme', store: nats.store, binding: checkedBinding, db, feed,
+  } });
+  const readStream = vi.spyOn(nats.store, 'readStream');
+  const readPosition = expireMemberCounts();
+
+  try {
+    const headers: Record<string, string> = {};
+    if (guard !== 'session') {
+      headers['cookie'] = `${config.cookieName}=${encodeSession(config, caller)}`;
+    }
+    const response = await directoryApp.inject({ url: '/api/members', headers });
+    expect(response.statusCode).toBe(expected);
+    expect(response.json()).toEqual({ status: 'refused' });
+    if (['session', 'organisation', 'silo binding'].includes(guard)) {
+      expect(feed.memberId).not.toHaveBeenCalled();
+    }
+    if (guard === 'caller presence') {
+      expect(readStream).not.toHaveBeenCalled();
+    }
+    expect(readPosition).not.toHaveBeenCalledWith(undefined, expect.anything());
+  } finally {
+    await directoryApp.close();
+  }
+}
+
+function directoryCaller(guard: string) {
+  const session = { sub: 'owner', orgId: 'org-acme', roles: [], authTime: 1, exp: 2000000000 };
+  if (guard === 'organisation') {
+    session.orgId = 'other-org';
+  } else if (guard === 'manager role') {
+    session.sub = 'member';
+  } else if (guard === 'active membership in IAM') {
+    session.sub = 'iam-pending';
+  }
+  return session;
+}
+
+function expireMemberCounts() {
+  // Expire only the global position used for the optional totals.
+  const head = nats.store.head.bind(nats.store);
+  function position(subject?: string, deadline?: number) {
+    if (subject === undefined) {
+      return head(undefined, performance.now() - 1);
+    }
+    return head(subject, deadline);
+  }
+  return vi.spyOn(nats.store, 'head').mockImplementation(position);
+}

@@ -1,0 +1,43 @@
+<main>
+  <a class="brand" href="/">OpenCrane</a>
+  <section aria-labelledby="invitation-heading">
+    @if (state() === 'joined') {
+      <h1 id="invitation-heading">Invitation accepted</h1>
+      <a class="button" href="/workspace">Open workspace</a>
+    } @else {
+      <h1 id="invitation-heading">Accept your invitation</h1>
+      @switch (state()) {
+        @case ('loading') {
+          <p role="status">Checking your sign-in…</p>
+        }
+        @case ('unavailable') {
+          <p role="alert">We could not check your sign-in. Reload this page to try again.</p>
+        }
+        @case ('signin') {
+          <p>Use the account that received this invitation.</p>
+          <a class="button" [href]="signInLink()">Sign in to accept</a>
+        }
+        @case ('fresh-signin') {
+          <p>Confirm your sign-in with the account that received this invitation.</p>
+          <a class="button" [href]="signInLink(true)">Sign in again to accept</a>
+        }
+        @case ('wrong-account') {
+          <p class="message" role="alert">Sign in with the account this invitation was sent to.</p>
+          <p>Sign out, then open the invitation link again.</p>
+          <oc-sign-out />
+        }
+        @case ('ready') {
+          <form (submit)="accept($event, displayName.value)">
+            <label for="invite-display-name">Display name</label>
+            <input #displayName id="invite-display-name" name="displayName"
+              autocomplete="name" required maxlength="200">
+            <button class="button" type="submit" [disabled]="sending()">
+              {{ sending() ? 'Accepting…' : 'Accept invitation' }}
+            </button>
+          </form>
+        }
+      }
+    }
+    @if (message()) { <p class="message" role="alert">{{ message() }}</p> }
+  </section>
+</main>

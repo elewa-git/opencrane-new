@@ -865,6 +865,10 @@ function publicInstallFixture() {
   }
   delete fixture.secrets.runtime.data.DEV_OWNER_EMAIL;
   delete fixture.secrets.runtime.data.PACKAGE_OWNER_SUBJECT;
+  delete fixture.secrets.runtime.data.CLIENT_SECRET;
+  delete fixture.secrets.runtime.data.OIDC_CLIENT_SECRET_ENV_VAR;
+  delete fixture.secrets.runtimefiles.data['zitadel-client-secret'];
+  fixture.secrets['package-sign-in'] = secret({ credential: canary });
   fixture.secrets.runtimefiles.data['bootstrap-token.json'] = encoded('private-token-hash-record');
   return fixture;
 }

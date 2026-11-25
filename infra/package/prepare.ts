@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, resolve } from 'node:path';
+import { constants } from 'node:fs';
+import { chmod, copyFile, mkdtemp, open, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/src/certificates.ts';
 import { tokenIssuer } from '@opencrane/auth';
@@ -32,11 +33,11 @@ async function command(program: string, args: string[], cwd = root) {
   await execute(program, args, { cwd, env, timeout: 120_000 });
 }
 
-async function createSecret(owner: PackageOwner, name: string, environment?: string,
-    files: Record<string, string> = {}) {
+async function createSecret(owner: PackageOwner, name: string,
+  environment: string | Record<string, string> = {}, files: Record<string, string> = {}) {
   const source = await mkdtemp(`${directory}/package-secret-`);
   try {
-    const settings = environment ? await readEnv(environment) : {};
+    const settings = typeof environment === 'string' ? await readEnv(environment) : environment;
     for (const [key, value] of Object.entries(settings)) {
       await writeFile(`${source}/${key}`, value, { mode: 0o600 });
     }
@@ -89,37 +90,77 @@ async function prepareModelFiles(models: PackageModels | undefined) {
   }
 }
 
-async function packageAuthSettings(values: PublicPackageValues) {
-  let publicSettings: Record<string, string> = {};
-  if (values.exposure?.public?.enabled === true) {
-    publicSettings = readPublicSettings(values);
+async function preparePublicClientCredential(settings: Record<string, string>) {
+  const source = settings['PACKAGE_OIDC_CLIENT_SECRET_FILE'];
+  if (source === undefined) {
+    return undefined;
   }
+  assert(isAbsolute(source), 'Public sign-in needs an absolute client secret path');
+  assert(settings['OIDC_CLIENT_ID']?.trim(), 'Public sign-in needs the matching client id');
+  // Inspect the open file so changing the path cannot swap in a different file.
+  const flags = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+  const file = await open(source, flags);
+  try {
+    const details = await file.stat();
+    assert(details.isFile(), 'Public sign-in needs a regular file');
+    assert(details.uid === process.getuid?.(), 'Public sign-in file must be owned by the current user');
+    assert((details.mode & 0o7777) === 0o600, 'Public sign-in file must have mode 0600');
+    const content = await file.readFile('utf8');
+    const credential = content.trim();
+    assert(credential && !/[\r\n]/u.test(credential), 'Public sign-in file needs one credential');
+    delete settings['PACKAGE_OIDC_CLIENT_SECRET_FILE'];
+    return credential;
+  } finally {
+    await file.close();
+  }
+}
+
+async function privateAuthSettings(auth: Record<string, string>, ownerEmail: string) {
+  const identitySettings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
+    users: { owner: { id: string } };
+  };
+  assert(identitySettings.users.owner.id, 'The separate test owner has no identity');
+  return { ...auth, DEV_OWNER_EMAIL: ownerEmail,
+    PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id,
+    OIDC_CLIENT_SECRET_FILE: '/run/opencrane/files/zitadel-client-secret' };
+}
+
+async function preparePublicToken(settings: Record<string, string>) {
+  const tokenFile = settings['BOOTSTRAP_TOKEN_FILE'];
+  assert(tokenFile, 'Public installation requires a private BOOTSTRAP_TOKEN_FILE');
+  const token = await readBootstrapToken(tokenFile);
+  assert(token.silo === 'dev', 'Bootstrap token belongs to another silo');
+  const destination = `${directory}/package-bootstrap-token.json`;
+  await copyFile(tokenFile, destination);
+  await chmod(destination, 0o600);
+}
+
+async function packageAuthSettings(values: PublicPackageValues) {
+  const publicInstall = values.exposure?.public?.enabled === true;
+  const publicSettings = publicInstall ? readPublicSettings(values) : {};
+  const dedicatedCredential = await preparePublicClientCredential(publicSettings);
   let ownerEmail: string | undefined;
-  if (values.exposure?.public?.enabled !== true) {
+  if (publicInstall) {
+    await preparePublicToken(publicSettings);
+  } else {
     ownerEmail = await readOwnerEmail();
     assert(ownerEmail, 'Private dev-owner-email file is empty');
-  } else {
-    const tokenFile = publicSettings['BOOTSTRAP_TOKEN_FILE'];
-    assert(tokenFile, 'Public installation requires a private BOOTSTRAP_TOKEN_FILE');
-    const token = await readBootstrapToken(tokenFile);
-    assert(token.silo === 'dev', 'Bootstrap token belongs to another silo');
-    await copyFile(tokenFile, `${directory}/package-bootstrap-token.json`);
-    await chmod(`${directory}/package-bootstrap-token.json`, 0o600);
   }
   await generate(localOrigin);
   const auth: Record<string, string> = await authEnv();
-  if (ownerEmail) {
-    const identitySettings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
-      users: { owner: { id: string } };
-    };
-    assert(identitySettings.users.owner.id, 'The separate test owner has no identity');
-    return { ...auth, DEV_OWNER_EMAIL: ownerEmail,
-      PACKAGE_OWNER_SUBJECT: identitySettings.users.owner.id };
+  const clientCredential = dedicatedCredential ?? auth['DEV_OIDC_CLIENT_SECRET'];
+  assert(clientCredential, 'Package sign-in needs a client secret');
+  if (ownerEmail !== undefined) {
+    return { runtime: await privateAuthSettings(auth, ownerEmail) };
   }
-  // Use the organisation check alone when the operator chooses production sign-in.
+  // Keep the sign-in credential in a Secret that only the server reads.
+  delete auth['DEV_OIDC_CLIENT_SECRET'];
+  delete auth['OIDC_CLIENT_SECRET_ENV_VAR'];
+  delete auth['OIDC_CLIENT_SECRET_FILE'];
   delete auth['OIDC_EXTRA_IDENTITIES'];
-  return { ...auth, ...publicSettings,
+  const runtime = { ...auth, ...publicSettings,
     BOOTSTRAP_TOKEN_FILE: '/var/lib/opencrane/bootstrap/token.json' };
+  return { runtime, publicCredential: clientCredential };
 }
 
 async function prepareSettings(values: PublicPackageValues & {
@@ -148,8 +189,7 @@ async function prepareSettings(values: PublicPackageValues & {
     commandForDispatcher[`COMMAND_${name}`] = value;
   }
   await writeEnv('package-runtime', {
-    ...auth, ...commandSettings, ...commandForDispatcher,
-    OIDC_CLIENT_SECRET_FILE: '/run/opencrane/files/zitadel-client-secret',
+    ...auth.runtime, ...commandSettings, ...commandForDispatcher,
     DATABASE_URL: serverDatabase,
     PROJECTION_DATABASE_URL: projectionDatabase,
     HANDLER_DATABASE_URL: handlerDatabase,
@@ -178,10 +218,11 @@ async function prepareSettings(values: PublicPackageValues & {
     OPENFGA_DATASTORE_URI: databaseUrl('openfga', passwords['openfga']!, 'openfga') +
       '?sslmode=disable',
   });
+  return auth.publicCredential;
 }
 
 async function provisionSecrets(names: Record<string, string>, owner: PackageOwner,
-  tokenBootstrap = false, models?: PackageModels) {
+  publicCredential: string | undefined, models?: PackageModels) {
   await createSecret(owner, names['postgres']!, 'postgres');
   await createSecret(owner, names['nats']!, 'package-nats', {
     'nats.conf': `${root}/infra/nats/nats.conf`,
@@ -203,7 +244,6 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
     'dispatcher.key': `${directory}/dispatcher.key`,
     'dispatcher.seed': `${directory}/dispatcher.seed`,
     'token-signing-key.pem': `${directory}/token-signing-key.pem`,
-    'zitadel-client-secret': `${directory}/zitadel-client-secret`,
     'model-jwks.json': `${directory}/model-jwks.json`,
     'scanner-ca.crt': `${directory}/scanner-ca.crt`,
   };
@@ -211,8 +251,11 @@ async function provisionSecrets(names: Record<string, string>, owner: PackageOwn
     const qualificationFiles = { credential: `${directory}/model-qualification-key` };
     await createSecret(owner, 'model-qualification', undefined, qualificationFiles);
   }
-  if (tokenBootstrap) {
+  if (publicCredential !== undefined) {
     runtimeFiles['bootstrap-token.json'] = `${directory}/package-bootstrap-token.json`;
+    await createSecret(owner, 'package-sign-in', { credential: publicCredential });
+  } else {
+    runtimeFiles['zitadel-client-secret'] = `${directory}/zitadel-client-secret`;
   }
   if (models?.mode !== 'provider') {
     runtimeFiles['model-stub-key'] = `${directory}/model-stub-key`;
@@ -274,12 +317,11 @@ async function main() {
       'infra/dev-stack/zitadel-setup.ts', '--read-only']);
   }
   stage = 'private settings';
-  await prepareSettings(values);
+  const publicCredential = await prepareSettings(values);
   stage = 'file services';
   await prepareFileServices(values, owner);
   stage = 'Kubernetes secrets';
-  const tokenBootstrap = values.exposure?.public?.enabled === true;
-  await provisionSecrets(values.secrets, owner, tokenBootstrap, values.models);
+  await provisionSecrets(values.secrets, owner, publicCredential, values.models);
   console.log('PASS private package secrets created from files in the claimed slot');
 }
 

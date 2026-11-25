@@ -74,6 +74,26 @@ async function restoresAnEmptyInstallationBeforeAdmission() {
 it('restores all three parts into an empty installation before opening reading',
   restoresAnEmptyInstallationBeforeAdmission);
 
+async function restoresProviderCheckpointInventory() {
+  const options = await pilotBackupFixture();
+  const path = join(options.directory, options.id, 'manifest.json');
+  const manifest = manifestSchema.parse(JSON.parse(await readFile(path, 'utf8')));
+  manifest.point.checkpoints['routines'] = manifest.point.sequence;
+  await writeFile(path, JSON.stringify(manifest), { mode: 0o600 });
+  const runtime = emptyTarget();
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'invalid_backup', stage: 'backup',
+  });
+  expect(runtime.stages).toEqual([]);
+  const providerOptions = { ...options, providerMode: true };
+  await expect(restorePilotBackup(providerOptions, runtime.target)).resolves.toMatchObject({
+    status: 'complete', backupId: options.id, sequence: manifest.point.sequence,
+  });
+  expect(runtime.admitted()).toBe(true);
+}
+it('restores the provider backup only when the matching routines projection is selected',
+  restoresProviderCheckpointInventory);
+
 async function refusesAnUnboundAccessStore() {
   const options = await pilotBackupFixture();
   const path = join(options.directory, options.id, 'manifest.json');

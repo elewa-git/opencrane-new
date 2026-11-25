@@ -4,7 +4,7 @@ import { AssertionError } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type Browser, type BrowserContext, type ConsoleMessage,
-  type Page, type Request as BrowserRequest, type Response as BrowserResponse } from 'playwright';
+  type Locator, type Page, type Request as BrowserRequest, type Response as BrowserResponse } from 'playwright';
 import { z } from 'zod';
 import { decodeSession, type AuthConfig } from '@opencrane/auth';
 import { buildServer } from '../../apps/server/src/server.ts';
@@ -16,20 +16,63 @@ export async function testUsers() {
   return setupSchema.parse(JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'))).users;
 }
 type User = z.infer<typeof userSchema>;
-export async function enterLoginName(page: Page, name: string) {
+async function fillProviderField(
+  locator: Locator, value: string, expectedOrigin: string,
+): Promise<void> {
+  // Use the same element for the origin check and the fill. A locator can
+  // find a field in a different document if the page moves between the two.
+  const field = await locator.elementHandle();
+  try {
+    function originOf(element: HTMLElement | SVGElement): string | undefined {
+      return element.ownerDocument.location?.origin;
+    }
+    const origin = await field.evaluate(originOf);
+    assert.equal(origin, expectedOrigin, 'Unexpected identity provider origin');
+    await field.fill(value);
+  } finally {
+    await field.dispose();
+  }
+}
+
+export async function enterLoginName(page: Page, name: string, providerOrigin: string) {
   const field = page.locator('input[name=loginName]');
   for (let attempt = 0; attempt < 2; attempt++) {
-    await field.fill(name);
+    await fillProviderField(field, name, providerOrigin);
     try {
       await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 5000 });
       return;
     } catch (error) {
       // The provider can replace an early-filled input while its page becomes interactive.
-      if (attempt === 1 || !await field.isVisible() || await field.inputValue() !== '') throw error;
+      if (attempt === 1 || !await field.isVisible() || await field.inputValue() !== '') {
+        throw error;
+      }
     }
   }
 }
-async function login(page: Page, origin: string, user: User, selectRememberedAccount = false, attempt = 0): Promise<void> {
+
+export async function completeProviderSignIn(
+  page: Page, loginName: string, password: string, origin: string, issuer: string,
+): Promise<void> {
+  const expectedOrigin = new URL(issuer).origin;
+  // Follow usable fields while the provider still has background requests open.
+  await enterLoginName(page, loginName, expectedOrigin);
+  const passwordField = page.locator('input[type=password]');
+  await fillProviderField(passwordField, password, expectedOrigin);
+  const submit = page.getByRole('button', { name: 'Continue', exact: true });
+  await submit.click();
+  function returnedToApplication(url: URL): boolean {
+    return url.origin === origin && !url.pathname.startsWith('/auth/');
+  }
+  await page.waitForURL(returnedToApplication);
+}
+
+function signInOrigins(config: AuthConfig, origin: string) {
+  return { application: origin, provider: new URL(config.issuerUrl).origin };
+}
+
+async function login(page: Page, origins: { application: string; provider: string },
+  user: User, selectRememberedAccount = false, attempt = 0): Promise<void> {
+  const { application: origin, provider: providerOrigin } = origins;
   let step = 'home', transport = '';
   const pageErrors: string[] = [];
   const failedPaths: string[] = [];
@@ -74,7 +117,7 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     await page.waitForLoadState('networkidle');
     if (await page.locator('input[name=loginName]').isVisible()) {
       step = 'username';
-      await enterLoginName(page, user.login);
+      await enterLoginName(page, user.login, providerOrigin);
     }
     step = 'password';
     await page.locator('input[type=password]').waitFor();
@@ -82,7 +125,9 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
       const me = await readAuthenticationState(page, origin);
       assert.equal(me.authenticated, false, 'Remembered account selection must not create a session without credentials');
     }
-    await page.locator('input[type=password]').fill(await readFile(user.passwordFile, 'utf8'));
+    const password = await readFile(user.passwordFile, 'utf8');
+    const passwordField = page.locator('input[type=password]');
+    await fillProviderField(passwordField, password, providerOrigin);
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     step = 'return';
     await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith('/auth/'));
@@ -100,7 +145,7 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
       page.off('pageerror', pageFailed);
       page.off('console', browserConsole);
       page.off('response', responseFailed);
-      return login(page, origin, user, selectRememberedAccount, attempt + 1);
+      return login(page, origins, user, selectRememberedAccount, attempt + 1);
     }
     await page.screenshot({ path: `${directory}/signin-failure.png` });
     const location = new URL(page.url());
@@ -132,6 +177,7 @@ async function cookie(context: BrowserContext, config: AuthConfig, origin: strin
   return session.value;
 }
 export async function browserSessions(config: AuthConfig, origin: string) {
+  const origins = signInOrigins(config, origin);
   const browser = await chromium.launch({ headless: true, channel: 'chromium' });
   let stage = 'launch';
   try {
@@ -145,7 +191,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       page = await context.newPage();
       page.setDefaultTimeout(30_000);
       stage = `${role} ${width}px login`;
-      await login(page, origin, users[role]);
+      await login(page, origins, users[role]);
       stage = `${role} signed-in screen`;
       await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
       stage = `${role} cookie`;
@@ -176,7 +222,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
         stage = 'form logout';
         await formLogout(memberPage, config, origin, step => { stage = `form logout: ${step}`; });
         stage = 'credentials after logout';
-        await login(memberPage, origin, users.member, true);
+        await login(memberPage, origins, users.member, true);
         await memberPage.getByRole('heading', { name: 'You are signed in' }).waitFor();
         assert.equal(decodeSession(config, await cookie(memberPage.context(), config, origin)).sub, users.member.id);
         console.log('PASS next sign-in: remembered identity still requires credentials; successful reauthentication');
@@ -212,7 +258,7 @@ async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin:
     try {
       const page = await context.newPage();
       stage(`login for ${transport}`);
-      await login(page, origin, user);
+      await login(page, signInOrigins(config, origin), user);
       await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
       stage(`${transport} exposure`);
       const idToken = decodeSession(config, await cookie(context, config, origin)).idToken;
@@ -315,7 +361,7 @@ async function refusalChecks(browser: Browser, config: AuthConfig, origin: strin
         await route.fulfill({ response });
       });
       const page = await context.newPage();
-      await login(page, origin, user);
+      await login(page, signInOrigins(config, origin), user);
       if (check === 'organisation') {
         assert.equal(new URL(page.url()).searchParams.get('reason'), 'organisation');
         await page.getByText(/^Your account isn't part of/).waitFor();

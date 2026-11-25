@@ -75,10 +75,11 @@ only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
 cannot prepare a package while that slot's Compose processes or containers run. The
 slot lock keeps these checks and the following operation together. An operator
-then runs `prepare.ts` with the private values file. That command creates eight
-named Kubernetes secrets from files under the claimed slot. It also prepares the
-development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
-values in Helm values, command arguments or receipts.
+then runs `prepare.ts` with the private values file. It creates the eight
+standard Kubernetes Secrets from the slot’s private files. Public-address
+mode also creates the server’s sign-in Secret. Preparation uses the
+development sign-in app inside the OpenCrane 2 Dev organisation. Secret
+values stay in private files and Kubernetes Secrets.
 Owner bootstrap seeds ownership and checks its permission receipts before opening
 the server, so the first owner command does not race an unapplied ownership change.
 The default owner bootstrap links the separate development sign-in account to the
@@ -100,7 +101,7 @@ The default `models.mode: stub` keeps the local stand-in. Set `models.mode: prov
 before preparation to use a connected provider. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
-database setup credentials. The installer checks all eight names and required
+database setup credentials. The installer checks the required Secrets and
 fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 
@@ -179,6 +180,8 @@ enter the runner log. No extra browser retries are added.
 JSON input on stdin. It requires a claimed secondary slot and stand-in provider
 settings. Its receipt directory comes from `JOURNEY_RECEIPT_DIR`. The coordinator
 prepares joined membership access before the first protected workspace read.
+The packaged browser drivers enter credentials when the sign-in fields are ready,
+even if the sign-in service has unrelated background requests open.
 `qualification-failure.mjs` keeps only a fixed step name and an allowlisted error
 code. Failed chat checks also record the operation and numeric HTTP status,
 without request addresses or response text. Each role and width captures its failure
@@ -269,14 +272,17 @@ and actions to the open, named dialog, waits for the named step and uses an enab
 status control while the original change is applying. A disabled control does not
 stop the runner from following automatic advancement to the next step. Closed replacement dialogs are not
 key-entry targets. Verification and model-selection status reads use that same
-open dialog even when a background provider row also offers Check status. Model
-selection follows the Access heading when the saved models advance automatically.
+open dialog even when a background provider row also offers Check status.
+The verification driver waits for the selected provider's command response before
+reading the saved outcome. Both requests must succeed and the outcome must match.
+Model selection follows the Access heading when the saved models advance automatically.
 The setup driver keeps the expected next heading in its click target too. If
 automatic advancement removes Check status while the pointer moves, Playwright
 can finish on that heading instead of waiting for the old button. The next-step
 and visible-key assertions still apply at both widths.
-`journey-provider-settings.test.ts` reproduces that pending
-creation and key-save path in Chromium at 1280 and 390 px. The live journey saves
+`journey-provider-settings.test.ts` reproduces that pending creation and key-save
+path in Chromium at 1280 and 390 px. `journey-pilot-browser.test.ts` checks mobile
+sign-in with an open request and provider status reads after submission. The live journey saves
 both new-key form screenshots before typing, checks the browser refusal, and
 confirms HTTP 401 for that same synthetic wrong credential from the server Pod.
 The private probe passes the credential through stdin and records only its status.
@@ -749,10 +755,12 @@ single-line environment settings. Keep the file outside the repository with mode
 | `OIDC_REDIRECT_URI` | Exactly `https://<host>/auth/callback` |
 | `OIDC_EXTRA_IDENTITIES` | Absent, including no empty value |
 | `DEV_OWNER_EMAIL` | Absent, including no empty value |
+| `DEV_OIDC_CLIENT_SECRET`, `OIDC_CLIENT_SECRET_ENV_VAR`, `OIDC_CLIENT_SECRET_FILE` | Absent. Only the server reads the sign-in Secret. |
 
 Preparation reads the existing secondary development sign-in setup in read-only
 mode. It generates local credentials, removes the development identity exception
-and applies these checked settings. This is still a spare-slot development package;
+and applies these checked settings. The public app credential lives in
+`package-sign-in` and only the server container receives it. This is still a spare-slot development package;
 it is not a hosted identity provisioner. No sign-in organisation or instance setting
 is changed by this preparation mode. The installer checks the saved runtime Secret
 and the bootstrap Secret's overrides against the same rule before any Helm command.
@@ -782,6 +790,213 @@ test hostname and a self-signed certificate, real sign-in in the test organisati
 chat at 1280 and 390 px, a wrong-organisation refusal and token reuse refusal.
 Source tests do not qualify this journey. Keep screenshots and safe logs before
 `package-down` and `down.sh` remove the slot.
+
+## Pilot switch-over
+
+Use the [pilot operator guide](PILOT.md) for the checklist. These commands are
+for the owner or orchestrator. Run from the retained checkout of the CI-approved
+revision chosen for the rehearsal. Keep the demo revision, data
+location and start command in a mode-0700 `PRIVATE_DIR` outside the checkout.
+Put its restart command in `$PRIVATE_DIR/restart-demo.sh`. It uses the saved
+data and revision without a fresh reset. Read the current mapping with
+`tailscale serve status` and set `PILOT_DEMO_TARGET` to the demo’s expected
+loopback URL. The switch command saves that URL once in
+`$PRIVATE_DIR/demo-serve-target`. It checks the URL against the live Serve
+configuration.
+
+```sh
+TAILNET_HOST=$(tailscale status --json | jq -er '.Self.DNSName | rtrimstr(".")')
+export PRIVATE_DIR PILOT_DEMO_TARGET DEV_STACK_ID
+```
+
+Create a separate Zitadel web app
+in the approved organisation with authorization code flow and client secret
+POST authentication. Enable verified email claims. Register exactly
+`https://<tailnet-host>/auth/callback` and `https://<tailnet-host>/` for the
+sign-in and sign-out redirects. Retain its client credential in a private
+mode-0600 file. Keep the demo app and its redirects available for rollback.
+Use the same issuer and organisation for the initial owner, invited members
+and the separate owner test account. Keep that test account's email in the
+private handoff.
+
+Claim an unused slot using `infra/dev-stack/claim.sh` and export the returned
+`DEV_STACK_ID`. The preparation command still needs the slot's ordinary
+secondary Zitadel metadata. If it has never been set up, run the existing
+`node --experimental-strip-types infra/dev-stack/zitadel-setup.ts` with that
+slot and the approved setup credential path before preparing the package.
+Public-address preparation subsequently reads the secondary configuration
+without writing to Zitadel.
+
+Run `infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"`. Use the
+generated mode-0600 `package-values.json` under the claimed slot directory.
+Leave the generated pins and Secret names in place. Set the following keys,
+replacing the sample hostname with `TAILNET_HOST`:
+
+```json
+{
+  "models": { "mode": "provider" },
+  "exposure": {
+    "ingress": false,
+    "loadBalancer": false,
+    "funnel": false,
+    "public": { "enabled": true, "host": "node.tailnet.ts.net", "tlsSecret": "pilot-tls" }
+  }
+}
+```
+
+The existing `public` switch enables hardened sign-in. It creates no network
+listener. The chart currently validates the `tlsSecret` name only. Tailscale
+Serve obtains the certificate and terminates HTTPS on the host. Keep standalone
+PostgreSQL and one NATS server for the built-in 02:00 UTC backup. The ordinary
+source values omit `pilotRestore`.
+
+Generate the token as in [Public-address sign-in hardening](#public-address-sign-in-hardening).
+Create the mode-0600 settings JSON separately. Replace every sample ID,
+hostname and path:
+
+```json
+{
+  "NODE_ENV": "production",
+  "OIDC_EXPECTED_ORG_ID": "PILOT_ORGANISATION_ID",
+  "OIDC_CLIENT_ID": "PILOT_WEB_APP_CLIENT_ID",
+  "OIDC_COOKIE_SECURE": "true",
+  "OIDC_REDIRECT_URI": "https://node.tailnet.ts.net/auth/callback",
+  "OIDC_POST_LOGOUT_REDIRECT_URI": "https://node.tailnet.ts.net/",
+  "BOOTSTRAP_TOKEN_FILE": "/private/pilot/first-owner.json",
+  "PACKAGE_OIDC_CLIENT_SECRET_FILE": "/private/pilot/oidc-client-secret"
+}
+```
+
+`PACKAGE_OIDC_CLIENT_SECRET_FILE` is a preparation-only key in that JSON. It
+requires an absolute path and the matching `OIDC_CLIENT_ID`. The credential
+file must be a regular file, with mode 0600 and owned by the operator.
+Preparation refuses a symbolic link and checks the file it opened. Only the
+server’s sign-in process reads the credential from the `package-sign-in`
+Secret. If the path setting is absent, preparation uses the secondary app
+credential for public sign-in.
+
+Export `PACKAGE_PUBLIC_SETTINGS_FILE` as the path to the JSON. Set `values`
+to the private values path. Use the positional path with `prepare.ts` and
+leave `PACKAGE_VALUES_FILE` unset when using this form:
+
+```sh
+node --experimental-strip-types infra/package/prepare.ts "$values"
+infra/dev-stack/run.sh package-up --id "$DEV_STACK_ID" --values "$values"
+infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID"
+```
+
+If the disk check refuses, follow [Host disk protection](#host-disk-protection).
+Record the documented local exception if authorised for this box. Do not
+change swap or crash-dump settings as part of the route switch.
+
+Use systemd to keep `infra/package/forward.sh` running from this checkout with
+the claimed `DEV_STACK_ID`. The unit restarts on failure and after reboot.
+Set `PILOT_FORWARD_UNIT` to its name. The loopback port is 25106 for slot 1
+or 25206 for slot 2.
+
+The switch command checks the configured host against this device’s tailnet
+name. It also checks the installed sign-in and sign-out redirects, confirms
+Funnel is off, compares the current root HTTPS mapping to the expected demo,
+and reads `/auth/me` through the claimed slot’s forwarder. A failed check
+leaves the demo mapped. A repeat after a successful switch keeps the saved
+demo target.
+
+```sh
+sudo -v &&
+  node --experimental-strip-types infra/package/pilot-route.ts switch "$values"
+```
+
+Check the actual certificate and route from a connected device. A device off
+the tailnet should be unable to open it. The pilot uses
+[Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
+without Funnel. The first-owner token goes in the claim form.
+
+### Roll back the pilot route
+
+When the demo is still running, restore the saved root HTTPS handler and
+stop the pilot forwarder after the mapping is back. Run these commands from
+the same checkout with the same `PRIVATE_DIR` and `DEV_STACK_ID`.
+
+```sh
+sudo -v &&
+  node --experimental-strip-types infra/package/pilot-route.ts restore &&
+  sudo systemctl stop "${PILOT_FORWARD_UNIT:?Set the pilot forwarder unit}" &&
+  node --experimental-strip-types infra/package/pilot-route.ts check-demo
+```
+
+When the demo has stopped, remove only the pilot’s root HTTPS handler,
+start the previous demo from its saved data, and then restore the mapping.
+
+```sh
+sudo -v &&
+  node --experimental-strip-types infra/package/pilot-route.ts pause &&
+  sh "$PRIVATE_DIR/restart-demo.sh" &&
+  node --experimental-strip-types infra/package/pilot-route.ts restore &&
+  sudo systemctl stop "${PILOT_FORWARD_UNIT:?Set the pilot forwarder unit}" &&
+  node --experimental-strip-types infra/package/pilot-route.ts check-demo
+```
+
+The last command checks that Serve reports the original demo URL. Check
+sign-in and a reply from the tailnet. The saved pilot data stays in its own
+installation.
+
+## Pilot backup and recovery commands
+
+The latest backup rehearsal recorded scheduled backup FAIL at verify, zero completed sets,
+restore NOT RUN. The commands below apply once a later rehearsal has a
+complete backup.
+
+Set `source_namespace="opencrane-package-$DEV_STACK_ID"` and
+`SOURCE_CONTEXT` to the source context. Set `SOURCE_KUBECONFIG` to the
+source connection file for the export. Check `pilot-backup` reports schedule
+`0 2 * * *`, time zone `Etc/UTC` and `suspend=false`. Check the controller
+created a successful Job after the latest scheduled time. The
+[scheduled backup instructions](#scheduled-pilot-backup) show the Job checks,
+manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
+before using it. Save the verified archive with its source cluster ID and
+namespace so an import can refuse the original installation.
+
+```sh
+(
+  set -eu
+  umask 077
+  archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
+  source_cluster=$(kubectl --kubeconfig "${SOURCE_KUBECONFIG:?Set the source connection file}" \
+    --context "${SOURCE_CONTEXT:?Set the source context}" \
+    get namespace kube-system -o 'jsonpath={.metadata.uid}')
+  test -n "$source_cluster"
+  partial=$(mktemp "$PRIVATE_DIR/pilot-backup.XXXXXX")
+  trap 'rm -f -- "$partial"' EXIT
+  kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" -n "$source_namespace" \
+    exec deployment/backup-catalogue -- tar -C /backups/sets -cf - "$BACKUP_ID" > "$partial"
+  printf '%s %s\n' "$source_cluster" "$source_namespace" > "$archive.source"
+  mv -- "$partial" "$archive"
+)
+```
+
+For a recovery drill, prepare an empty package with the same approved images,
+`models.mode`, silo and sign-in identity settings. Use a separate slot and
+keep the recovery listener on loopback until checked. For an HTTPS sign-in
+drill use a private test origin with its own registered callback and the same
+issuer and account subjects. Set `pilotRestore` to
+`{"enabled": true, "backupId": "BACKUP_ID"}` with the real ID. After
+`package-up`, set `DEV_STACK_ID` to the recovery slot. The import uses the
+connection and namespace recorded for that slot for both the rollout check
+and extraction. It refuses a source cluster and namespace match, even when
+the context names differ.
+
+```sh
+archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
+read -r source_cluster source_namespace < "$archive.source" &&
+  node --experimental-strip-types infra/package/pilot-archive-import.ts \
+    "$archive" "$source_cluster" "$source_namespace"
+```
+
+Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
+catalogue and run the restore Job. Confirm the saved chat is readable and
+`restore_read_only` refuses writes. Never point the live pilot route at a
+drill install. Clear the drill through the guarded package cleanup after
+retaining its evidence.
 
 ## Private owner email
 
@@ -2315,8 +2530,8 @@ load capture clients or require connections to running services.
 ## Restore one pilot backup
 
 Restore only a completed scheduled pilot set into a new, empty installation.
-Use the same chart and all eight immutable images recorded by that set, its silo
-identity, sign-in issuer and organisation, and original person subject mappings.
+Use the same chart and all eight immutable images recorded by that set, its model
+mode, silo identity, sign-in issuer and organisation, and original person subject mappings.
 Supply fresh service credentials and the retained secret-store references.
 Memory facts and survey answers still require their existing separate key custody.
 Conversation reads require no chat key. Computer homes are outside this backup.
@@ -2336,15 +2551,24 @@ In the destination, copy that directory to `/backups/sets/BACKUP_ID` through the
 restore-mode catalogue. Preserve directory mode 0700 and file mode 0600, owned by
 uid 1000. Then stop the catalogue and wait for its Pod to disappear. Do not run
 Helm, change workloads, edit restored data or write to the stores during recovery.
-Use the destination slot's recorded Kubernetes context for these commands:
+After the [checked archive import](#pilot-backup-and-recovery-commands),
+set `RECOVERY_CONTEXT` and `RECOVERY_KUBECONFIG` to the context and connection
+file recorded for the recovery slot. `DEV_STACK_ID` is the recovery slot.
 
 ```sh
-namespace="opencrane-package-$DEV_STACK_ID"
-kubectl -n "$namespace" scale deployment/backup-catalogue --replicas=0
-kubectl -n "$namespace" wait --for=delete pod -l app=backup-catalogue --timeout=60s
-kubectl -n "$namespace" create job --from=cronjob/pilot-restore restore-manual
-kubectl -n "$namespace" wait --for=condition=complete job/restore-manual --timeout=600s
-kubectl -n "$namespace" logs job/restore-manual -c backup
+(
+  set -eu
+  recovery_namespace="opencrane-package-${DEV_STACK_ID:?Set the recovery slot}"
+  recovery_kubectl() {
+    kubectl --kubeconfig "${RECOVERY_KUBECONFIG:?Set the recovery connection file}" \
+      --context "${RECOVERY_CONTEXT:?Set the recovery context}" -n "$recovery_namespace" "$@"
+  }
+  recovery_kubectl scale deployment/backup-catalogue --replicas=0
+  recovery_kubectl wait --for=delete pod -l app=backup-catalogue --timeout=60s
+  recovery_kubectl create job --from=cronjob/pilot-restore restore-manual
+  recovery_kubectl wait --for=condition=complete job/restore-manual --timeout=600s
+  recovery_kubectl logs job/restore-manual -c backup
+)
 ```
 
 The Job reads the set through a read-only mount and validates private regular files,
@@ -2359,8 +2583,10 @@ an eight-minute operation; native events retain their 60-second and 64 MiB limit
 
 Recovery first transfers the native event snapshot and verifies event identities,
 subjects, positions and retained range. It then loads all four databases with SQL
-errors fatal, renews application role credentials, rebuilds all fourteen installed
-projections in a separate database and compares every content table with the dump.
+errors fatal and renews application role credentials. It rebuilds the fourteen
+base projections and, in provider mode, the routines projection in a separate
+database. Backup and restore use the same projection list. Restore checks that
+the set has exactly those checkpoints and compares every content table with the dump.
 Only replayed content becomes readable. The saved dispatcher checkpoint stays held.
 OpenFGA is rebuilt from events and checked against the saved rights. The source LSN
 must match the manifest; logical restore does not recreate a physical WAL position.

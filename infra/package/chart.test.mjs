@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import { test } from 'node:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync,
   writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
@@ -198,9 +198,16 @@ function writeTokenFixture(directory, enabled) {
 }
 
 function readPublicPreparationSettings(directory, values) {
+  const host = values.exposure.public.host;
   const settings = { NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
-    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
+    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: `https://${host}/auth/callback`,
     BOOTSTRAP_TOKEN_FILE: join(directory, 'bootstrap-token.json') };
+  if (host === 'node.tailnet.ts.net') {
+    settings.OIDC_CLIENT_ID = 'pilot-sign-in-app';
+    settings.PACKAGE_OIDC_CLIENT_SECRET_FILE = join(directory, 'pilot-client-secret');
+    writeFileSync(settings.PACKAGE_OIDC_CLIENT_SECRET_FILE, 'pilot-credential-fixture',
+      { mode: 0o600 });
+  }
   checkPublicSettings(values, settings);
   return settings;
 }
@@ -245,6 +252,11 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   }
   async function writeFixture(name, value) {
     settings.set(name, value);
+  }
+  async function readAuthFixture() {
+    const credential = readFileSync(join(directory, 'zitadel-client-secret'), 'utf8');
+    return { OIDC_CLIENT_SECRET_ENV_VAR: 'DEV_OIDC_CLIENT_SECRET',
+      DEV_OIDC_CLIENT_SECRET: credential, OIDC_EXTRA_IDENTITIES: 'development-exception' };
   }
   const commands = [];
   function executeFixture(program, args, options, callback) {
@@ -291,8 +303,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     '../../libs/event-store/src/certificates.ts': { issueCertificate: async () => {} },
     '@opencrane/auth': { tokenIssuer: async () => ({ jwks: { keys: [] } }) },
     '../dev-stack/config.ts': {
-      authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET',
-        OIDC_EXTRA_IDENTITIES: 'development-exception' }),
+      authEnv: readAuthFixture,
       directory, generate: generateFixture, readEnv: readFixture,
       readOwnerEmail: readOwnerFixture,
       root: process.cwd(), writeEnv: writeFixture,
@@ -332,8 +343,8 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       'prepareSettings', replacements);
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
-    await prepareSettings({ ...packageValues, scanner: values.scanner });
-    await provisionSecrets(values.secrets, owner, tokenBootstrap, packageValues.models);
+    const credential = await prepareSettings({ ...packageValues, scanner: values.scanner });
+    await provisionSecrets(values.secrets, owner, credential, packageValues.models);
     return { key, settings, secrets, tokenRecord, files: readdirSync(directory) };
   } finally {
     const remainingFiles = readdirSync(directory);
@@ -1002,6 +1013,123 @@ async function preparesPublicTokenWithoutDevOwner() {
 }
 test('public preparation stores the existing token hash and requires no development owner',
   preparesPublicTokenWithoutDevOwner);
+
+async function preparesPilotSignInCredential() {
+  const exposure = { ingress: false, loadBalancer: false, funnel: false,
+    public: { enabled: true, host: 'node.tailnet.ts.net', tlsSecret: 'pilot-tls' } };
+  const prepared = await preparedSecretsFixture(true, false, false, { exposure });
+  const runtime = prepared.secrets.get('runtime');
+  const files = prepared.secrets.get('runtime-files');
+  assert.equal(runtime.OIDC_CLIENT_ID.toString('utf8'), 'pilot-sign-in-app');
+  assert.equal(Object.hasOwn(runtime, 'DEV_OIDC_CLIENT_SECRET'), false);
+  assert.equal(Object.hasOwn(files, 'zitadel-client-secret'), false);
+  assert.equal(Object.hasOwn(runtime, 'PACKAGE_OIDC_CLIENT_SECRET_FILE'), false);
+  const signIn = prepared.secrets.get('package-sign-in');
+  assert.equal(signIn.credential.toString('utf8'), 'pilot-credential-fixture');
+
+  const previous = values.exposure;
+  values.exposure = exposure;
+  try {
+    assertPilotSignInSecretUse(resources());
+  } finally {
+    values.exposure = previous;
+  }
+}
+test('only packaged server sign-in receives the pilot credential',
+  preparesPilotSignInCredential);
+
+function assertPilotSignInSecretUse(rendered) {
+  let signInReferences = 0;
+  for (const resource of rendered) {
+    if (resource?.kind !== 'Deployment') {
+      continue;
+    }
+    const pod = resource.spec.template.spec;
+    for (const volume of pod.volumes ?? []) {
+      assert.notEqual(volume.secret?.secretName, 'package-sign-in');
+    }
+    const containers = [...pod.containers, ...(pod.initContainers ?? [])];
+    for (const container of containers) {
+      for (const mount of container.volumeMounts ?? []) {
+        function mountedVolume(volume) {
+          return volume.name === mount.name;
+        }
+        const mounted = pod.volumes.find(mountedVolume);
+        assert.notEqual(mounted?.secret?.secretName, 'package-sign-in');
+      }
+      for (const source of container.envFrom ?? []) {
+        assert.notEqual(source.secretRef?.name, 'package-sign-in');
+      }
+      for (const setting of container.env ?? []) {
+        const key = setting.valueFrom?.secretKeyRef;
+        if (key?.name === 'package-sign-in') {
+          assert.equal(resource.metadata.name, 'server');
+          assert.equal(container.name, 'server');
+          assert.equal(key.key, 'credential');
+          signInReferences++;
+        } else if (container.name !== 'server') {
+          assert.notEqual(setting.name, 'DEV_OIDC_CLIENT_SECRET');
+        }
+      }
+    }
+  }
+  assert.equal(signInReferences, 1);
+}
+
+const unsafePilotCredentials = [
+  ['relative path', /absolute client secret path/u],
+  ['missing client ID', /client id/u],
+  ['group-readable file', /mode 0600/u],
+  ['symlink', { code: 'ELOOP' }],
+  ['directory', /regular file/u],
+  ['another owner', /owned by the current user/u],
+];
+
+for (const [unsafe, error] of unsafePilotCredentials) {
+  test(`public preparation refuses a pilot credential with ${unsafe}`,
+    async function refusesUnsafeCredential() {
+      const directory = mkdtempSync(join(tmpdir(), 'package-pilot-credential-'));
+      try {
+        const source = join(directory, 'client-secret');
+        const settings = { OIDC_CLIENT_ID: 'pilot-sign-in-app',
+          PACKAGE_OIDC_CLIENT_SECRET_FILE: source };
+        const replacements = {
+          '../../apps/server/src/bootstrap-token.ts': { readBootstrapToken },
+          '../dev-stack/config.ts': { directory },
+          '../dev-stack/packaged.ts': {},
+          '../clamav/release.mjs': {},
+        };
+        const fixtureProcess = { getuid: process.getuid };
+        if (unsafe === 'relative path') {
+          settings.PACKAGE_OIDC_CLIENT_SECRET_FILE = relative(process.cwd(), source);
+        } else if (unsafe === 'missing client ID') {
+          delete settings.OIDC_CLIENT_ID;
+        }
+        if (unsafe === 'directory') {
+          mkdirSync(source, { mode: 0o600 });
+        } else if (unsafe === 'symlink') {
+          const target = join(directory, 'target');
+          writeFileSync(target, 'fixture-credential', { mode: 0o600 });
+          symlinkSync(target, source);
+        } else {
+          const mode = unsafe === 'group-readable file' ? 0o640 : 0o600;
+          writeFileSync(source, 'fixture-credential', { mode });
+        }
+        if (unsafe === 'another owner') {
+          fixtureProcess.getuid = differentOwner;
+        }
+        const prepare = loadPrivateFunction('infra/package/prepare.ts',
+          'preparePublicClientCredential', replacements, fixtureProcess);
+        await assert.rejects(prepare(settings), error);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+}
+
+function differentOwner() {
+  return process.getuid() + 1;
+}
 
 async function preparesOnlyProviderSettings() {
   const packageValues = { models: { mode: 'provider' } };
