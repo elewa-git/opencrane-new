@@ -116,6 +116,28 @@ it('does not report corrupted saved bytes as a complete backup', async function 
   await expect(listBackups(test.directory)).rejects.toThrow('Backup bytes differ');
 });
 
+for (const [count, keyLength] of [[7_500, 70], [10_001, 5]] as const) {
+  it(`leaves no published set for an inventory with ${count} objects`,
+    async function refusesOversizedInventory() {
+      const test = await fixture();
+      async function captureInventory(destination: string) {
+        const objects = [];
+        for (let index = 0; index < count; index += 1) {
+          const key = String(index).padStart(keyLength, '0');
+          objects.push({ key, byteCount: 1, sha256: 'a'.repeat(64) });
+        }
+        await writeFile(destination, 'fixture objects', { mode: 0o600 });
+        return { bucket: 'files', objects };
+      }
+      test.source.parts.files = captureInventory;
+      await expect(captureScheduledBackup(test.options, test.source))
+        .rejects.toThrow('Scheduled backup failed');
+      expect(test.wasResumed()).toBe(true);
+      expect(await listBackups(test.directory)).toEqual([]);
+      expect(await readdir(test.directory)).toEqual([]);
+    });
+}
+
 it('leaves an interrupted capture alone and refuses overlapping work', async function overlap() {
   const test = await fixture();
   await writeFile(join(test.directory, '.lock'), 'interrupted');

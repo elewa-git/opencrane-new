@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { budgets } from '@opencrane/models';
@@ -10,9 +11,25 @@ import { members, mcpCatalogue, computers, conversations, files, auditTrail,
 import { packageBackupSource } from './scheduled-backup-source.ts';
 import { captureScheduledBackup, listBackups } from './scheduled-backup.ts';
 
+const storage = vi.hoisted(function storageState() {
+  return new Map<string, Buffer>();
+});
+vi.mock('./pilot-storage.ts', function objectStoreBoundary() {
+  async function* listObjectsV2() {
+    for (const name of storage.keys()) yield { name };
+  }
+  async function getObject(_bucket: string, key: string) {
+    return Readable.from([storage.get(key)!]);
+  }
+  async function pilotStorage() {
+    return { listObjectsV2, getObject };
+  }
+  return { pilotStorage };
+});
+
 const database = vi.hoisted(function databaseState() {
   return { behind: '', clients: '0', names: [] as string[],
-    deferDisconnect: false, pendingDisconnects: 0 };
+    deferDisconnect: false, pendingDisconnects: 0, fileReferences: [] as unknown[] };
 });
 vi.mock('pg', function databaseBoundary() {
   class Client {
@@ -21,6 +38,10 @@ vi.mock('pg', function databaseBoundary() {
     connect() { return Promise.resolve(); }
 
     query(sql: string) {
+      if (sql.includes('conversation_files')) {
+        function asRow(data: unknown) { return { data }; }
+        return { rows: database.fileReferences.map(asRow) };
+      }
       if (sql.includes('pg_stat_activity')) {
         const count = Number(database.clients) + database.pendingDisconnects;
         return { rows: [{ count: String(count) }] };
@@ -76,9 +97,11 @@ afterEach(function reset() {
   database.clients = '0';
   database.deferDisconnect = false;
   database.pendingDisconnects = 0;
+  database.fileReferences = [];
+  storage.clear();
 });
 
-async function fixture(ready = true, providerMode = false) {
+async function fixture(ready = true, providerMode = false, captureFiles = false) {
   database.names = projectionNames;
   const directory = await mkdtemp(join(tmpdir(), 'backup-adapter-'));
   const nats = await natsFixture();
@@ -123,7 +146,7 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   }
   vi.spyOn(runtime.source, 'kube').mockImplementation(kube);
   runtime.source.parts.database = databasePart;
-  runtime.source.parts.files = filesPart;
+  if (!captureFiles) runtime.source.parts.files = filesPart;
   async function close() {
     await runtime.close();
     await nats.close();
@@ -131,6 +154,28 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   }
   onTestFinished(close);
   return { directory: backupDirectory, options, source: runtime.source, calls, kube, nats };
+}
+
+const upload = {
+  conversationId: 'conv_1', fileId: 'file_1', uploadedBy: 'mem_1', name: 'notes.txt',
+  size: 3, sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  mime: 'text/plain', objectKey: 'test/conv_1/file_1',
+};
+
+for (const mismatch of ['object without event', 'event without object', 'wrong object bytes']) {
+  it(`refuses publication with ${mismatch}`, async function refusesFilesMismatch() {
+    const test = await fixture(true, false, true);
+    if (mismatch !== 'object without event') database.fileReferences.push(upload);
+    if (mismatch === 'object without event') storage.set(upload.objectKey, Buffer.from('abc'));
+    if (mismatch === 'wrong object bytes') storage.set(upload.objectKey, Buffer.from('abd'));
+    await expect(captureScheduledBackup(test.options, test.source)).rejects.toMatchObject({
+      cause: { kind: 'scheduled_backup', reason: 'parts' },
+    });
+    expect(await listBackups(test.directory)).toEqual([]);
+    expect(await readdir(test.directory)).toEqual([]);
+    const calls = await readFile(test.calls, 'utf8');
+    expect(calls).toContain('scale deployment/server --replicas=1');
+  });
 }
 
 it('captures through the real pause, verify, event and restart adapter', async function valid() {
