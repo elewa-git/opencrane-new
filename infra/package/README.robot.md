@@ -75,10 +75,11 @@ only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
 cannot prepare a package while that slot's Compose processes or containers run. The
 slot lock keeps these checks and the following operation together. An operator
-then runs `prepare.ts` with the private values file. That command creates eight
-named Kubernetes secrets from files under the claimed slot. It also prepares the
-development sign-in app inside the OpenCrane 2 Dev organisation. Never put secret
-values in Helm values, command arguments or receipts.
+then runs `prepare.ts` with the private values file. It creates the eight
+standard Kubernetes Secrets from the slot’s private files. Public-address
+mode also creates the server’s sign-in Secret. Preparation uses the
+development sign-in app inside the OpenCrane 2 Dev organisation. Secret
+values stay in private files and Kubernetes Secrets.
 Owner bootstrap seeds ownership and checks its permission receipts before opening
 the server, so the first owner command does not race an unapplied ownership change.
 The default owner bootstrap links the separate development sign-in account to the
@@ -100,7 +101,7 @@ The default `models.mode: stub` keeps the local stand-in. Set `models.mode: prov
 before preparation to use a connected provider. The `postgres` secret holds PostgreSQL startup
 settings. The `nats` secret holds `nats.conf` and its private certificate files.
 The `openfga` secret holds its database settings. The `bootstrap` secret holds
-database setup credentials. The installer checks all eight names and required
+database setup credentials. The installer checks the required Secrets and
 fields before Helm applies resources. NATS, PostgreSQL and OpenFGA URLs must use the private service
 names in the chart.
 

@@ -1,10 +1,61 @@
 # Tailnet pilot rehearsal
 
-Journey on a fresh dev stack: NOT RUN on the review fixes.
+Journey on a fresh dev stack: FAIL on the review fixes.
 
 The rehearsal result is scheduled backup FAIL at verify, zero completed sets,
 restore NOT RUN. Switch-over is allowed for testing with disposable data.
 Real data waits for slice 2 to pass backup and restore.
+
+## Review fixes packaged rehearsal
+
+On 25 November 2026 the packaged rehearsal used product commit
+`3eb2569216beff0920447f86cf9d8c5f1e403093`. The application and scanner
+approvals had unexpired artifacts for that exact commit.
+[Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45605739273),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45605739538)
+and [hosted CI](https://github.com/elewa-git/opencrane-new/actions/runs/45605678590).
+
+- **PASS** Ordinary fresh startup, status and journey, followed by teardown.
+  Before each claim both slots were free, no other package was running and
+  the one-minute load had stayed below six for five minutes. The last
+  samples were 1.23 before the ordinary run and 1.48 before the package.
+- **PASS** Installed in a fresh package namespace with new volumes. The
+  installer recorded the `accepted-dev-box-366` exception for the F1 swap
+  and F2 crash-dump checks. Browser sign-in, first-owner claim, provider
+  connection, the quoted model test and switching on member chats passed.
+  [Provider connected](screenshots/review-fixes/provider-connected.png).
+- **PASS** The wrong account was refused at 390 px. The first invited
+  person signed in and accepted. The owner returned to People and sent
+  a second invitation, which the separate test account accepted.
+  [Wrong account refused](screenshots/review-fixes/wrong-account-390.png).
+- **PASS** The Owners page confirmed the appointment and listed both owners.
+  [Appointment confirmation](screenshots/review-fixes/appointment-confirmed.png).
+- **FAIL** The browser driver tried to click **Check status** while the
+  page was confirming the appointment. The app removed the button and
+  the click timed out. The local fixture reproduced the detached button.
+  The corrected driver reads the saved change status before deciding
+  whether to click. Two local browser cases passed.
+- **NOT RUN** Opening the owner controls as the newly appointed person
+  and receiving member replies at 1280 and 390 px. The driver stopped at
+  the original owner's screen. One packaged run was authorised.
+- **NOT RUN** Scheduled backup verification and restore in this run. They
+  follow in slice 2.
+- **PASS** Startup and service logs and the masked failure screenshot were
+  retained before teardown. The package and slot were released, and the
+  temporary sign-in app was removed. The click trace is in `failure-detail.log`.
+
+**PASS** Focused server and auth runs passed with 209 and 210 tests, and the
+separate provider-form test passed twice. The six invitation page tests
+passed twice. The package fixture suite passed 699 tests. The focused repeat
+passed 420 tests, including the public installer checks. Typecheck, the event
+catalogue, Knip, changelog lint, Markdown lint, the whole-stream read check,
+the README check and scoped ESLint passed. ESLint excludes infrastructure
+and has no rule for the Angular template. The package and dev-stack
+typechecks, Node tests and Angular tests cover those files.
+
+Each directory and credential guard test failed when its guard was removed.
+All eight guards were restored.
+[Review findings and fixes](https://github.com/elewa-git/opencrane-new/pull/1187#issuecomment-7161236736).
 
 ## Fix round 2 packaged rehearsal
 

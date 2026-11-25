@@ -9,8 +9,9 @@ This folder shows People & groups and its member, group and owner pages. Owners 
 - Changes Member and Admin roles, and reviews departures before removal. The review names lost access, affected personal [computers](../../../../../GLOSSARY.md#computer), shared work needing a decision and retained history. Pending role and removal requests cannot overlap.
 - Adds active members to local groups and reviews removals. Changes wait for both saved data and permissions to catch up. Groups managed by a company sign-in service keep their membership controls separate.
 - Creates a group's shared assistant with selected model and tool permissions and a fixed paying group, whose budget pays for it. Group membership does not grant desktop access.
-- Creates email invitation links and shows their expiry. A person accepts the link
-  after signing in. The operator sends the link and the Invitations list is unavailable.
+- Creates email invitation links and shows when they expire. A person can sign in
+  again if their session is old and retry acceptance if the reply is lost.
+  The operator sends the link and the Invitations list is unavailable.
 - Lists owners and lets an owner appoint an active successor by member ID or step down. Appointment keeps the current owner; stepping down is separate. The server prevents removal of the last owner.
 
 A missing member clears the whole detail page, as does lost access. A temporary
