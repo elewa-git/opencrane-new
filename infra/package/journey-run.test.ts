@@ -38,7 +38,6 @@ async function prepare(home: string, scenario: string) {
   for (const file of files) {
     await cp(`infra/package/${file}`, join(worktree, 'infra/package', file));
   }
-  await cp('infra/dev-stack/journey-guard.ts', join(worktree, 'infra/dev-stack/journey-guard.ts'));
   await symlink(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   await writeFile(join(worktree, 'package.json'), '{"type":"module"}');
   const ownerTree = scenario === 'foreign claim' ? '/foreign' : worktree;

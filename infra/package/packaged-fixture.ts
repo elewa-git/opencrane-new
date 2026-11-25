@@ -20,6 +20,7 @@ const files = [
   'infra/dev-stack/cnpg-backup-identity.ts',
   'infra/dev-stack/config.ts',
   'infra/dev-stack/identity.ts',
+  'infra/dev-stack/journey-guard.ts',
   'infra/dev-stack/packaged.ts',
   'infra/dev-stack/package-review.ts',
   'infra/dev-stack/package-hosts.ts',

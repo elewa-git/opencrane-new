@@ -100,7 +100,6 @@ async function prepareCollector(home: string) {
     'fresh-twice-entry.ts', 'browser-capture.ts', 'forward.ts'];
   mkdirSync(join(worktree, 'infra/package'), { recursive: true });
   mkdirSync(join(worktree, 'infra/nats'), { recursive: true });
-  cpSync('infra/dev-stack/journey-guard.ts', join(worktree, 'infra/dev-stack/journey-guard.ts'));
   for (const file of files) cpSync(`infra/package/${file}`, join(worktree, 'infra/package', file));
   cpSync('infra/nats/nats.conf', join(worktree, 'infra/nats/nats.conf'));
   cpSync('infra/nats/cluster.conf', join(worktree, 'infra/nats/cluster.conf'));
