@@ -5,6 +5,8 @@ import { once } from 'node:events';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type CDPSession, type Page } from 'playwright';
+import { postJourneyCommand, readJourneyApi } from '../dev-stack/browser-api.ts';
+import { assertNoBrowserDisclosure } from './provider-disclosure.ts';
 import { answer } from '../dev-stack/real-model-journey.ts';
 import { providerFailure } from './provider-failure.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
@@ -418,7 +420,10 @@ async function refusesUnreadableDeliveredBody(): Promise<void> {
       assert.doesNotMatch(JSON.stringify(result), /private|fixture/u);
       return true;
     }
-    await assert.rejects(finishBrowserReplies(browser, replies), recordedFailure);
+    function cannotWrite(): Promise<never> {
+      return Promise.reject(new Error('The private log cannot be written'));
+    }
+    await assert.rejects(finishBrowserReplies(browser, replies, cannotWrite), recordedFailure);
   } finally {
     await browser.close();
     server.closeAllConnections();
@@ -429,3 +434,115 @@ async function refusesUnreadableDeliveredBody(): Promise<void> {
 
 test('an unreadable browser reply fails the disclosure check even when the page received it',
   refusesUnreadableDeliveredBody);
+
+const disclosureMarker = 'synthetic-fixture-credential';
+
+type ReplyFixture = {
+  page: Page;
+  browser: import('playwright').Browser;
+  origin: string;
+  replies: Promise<void>[];
+};
+
+async function withMarkedReply(run: (fixture: ReplyFixture) => Promise<void>): Promise<void> {
+  function respond(request: IncomingMessage, response: ServerResponse): void {
+    if (request.url === '/api/marked') {
+      request.resume();
+      response.end(JSON.stringify({ value: disclosureMarker }));
+      return;
+    }
+    serve(request, response);
+  }
+  const server = createServer(respond);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const replies: Promise<void>[] = [];
+    await run({ page, browser, origin, replies });
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+function omitReplyNotification(page: Page, url: string): void {
+  const context = page.context();
+  const newSession = context.newCDPSession.bind(context);
+  async function openSession(target: Parameters<typeof newSession>[0]) {
+    const session = await newSession(target);
+    const subscribe = session.on.bind(session);
+    function on(event: string, listener: (value: { response: { url: string } }) => void) {
+      function deliver(value: { response: { url: string } }): void {
+        if (value.response.url !== url) {
+          listener(value);
+        }
+      }
+      return subscribe(event, event === 'Network.responseReceived' ? deliver : listener);
+    }
+    session.on = on;
+    return session;
+  }
+  context.newCDPSession = openSession;
+}
+
+const inspectMarkedBody = assertNoBrowserDisclosure.bind(undefined, [disclosureMarker]);
+
+async function readMarkedBody() {
+  const safe = await fetch('/api/check');
+  await safe.text();
+  const marked = await fetch('/api/marked');
+  return marked.text();
+}
+
+async function assertMarkedPageRefused(fixture: ReplyFixture, omitted: boolean): Promise<void> {
+  const { page, browser, origin, replies } = fixture;
+  if (omitted) {
+    omitReplyNotification(page, `${origin}/api/marked`);
+  }
+  await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  await page.goto(`${origin}/idle`);
+  const body = await page.evaluate(readMarkedBody);
+  assert(body.includes(disclosureMarker), 'The page received the marked body');
+  const expected = omitted ? /delivered API reply was not inspected/u : /API reply disclosed a key/u;
+  await assert.rejects(finishBrowserReplies(browser, replies), expected);
+}
+
+const absentNotification = assertMarkedPageRefused.bind(undefined);
+async function missingPageReply(fixture: ReplyFixture): Promise<void> {
+  await absentNotification(fixture, true);
+}
+
+async function disclosedPageReply(fixture: ReplyFixture): Promise<void> {
+  await assertMarkedPageRefused(fixture, false);
+}
+
+const testMissingPageReply = withMarkedReply.bind(undefined, missingPageReply);
+test('shutdown refuses a delivered page reply missing from Chromium inspection', testMissingPageReply);
+
+const testDisclosedPageReply = withMarkedReply.bind(undefined, disclosedPageReply);
+test('the disclosure check refuses a marked page reply', testDisclosedPageReply);
+
+async function disclosedDirectRead({ page, origin, replies }: ReplyFixture): Promise<void> {
+  await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  await assert.rejects(readJourneyApi(page, `${origin}/api/marked`), /API reply disclosed a key/u);
+}
+
+const testDisclosedDirectRead = withMarkedReply.bind(undefined, disclosedDirectRead);
+test('a direct read checks for disclosure before returning the reply', testDisclosedDirectRead);
+
+async function disclosedDirectCommand({ page, origin, replies }: ReplyFixture): Promise<void> {
+  await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  const body = { fixture: true };
+  const command = postJourneyCommand(page, origin, '/api/marked', body);
+  await assert.rejects(command, /API reply disclosed a key/u);
+}
+
+const testDisclosedDirectCommand = withMarkedReply.bind(undefined, disclosedDirectCommand);
+test('a direct command checks for disclosure before returning the reply', testDisclosedDirectCommand);

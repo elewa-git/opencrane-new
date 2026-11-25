@@ -13,6 +13,7 @@ import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrowserReplies,
   watchBrowserReplies } from './provider-navigation.ts';
+import { assertNoBrowserDisclosure } from './provider-disclosure.ts';
 import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
   from './provider-probe.ts';
@@ -33,6 +34,7 @@ const setup = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'));
 const credential = (await readFile(`${directory}/model-qualification-key`, 'utf8')).trim();
 const wrongCredential = randomUUID();
 const secrets = [credential, wrongCredential];
+const inspectBrowserBody = assertNoBrowserDisclosure.bind(undefined, secrets);
 const responses = [];
 const outcomes = [];
 let browser;
@@ -74,7 +76,7 @@ async function wrongKeyStatus() {
 async function login(role) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
-  await watchBrowserReplies(page, origin, responses, assertNoBrowserDisclosure);
+  await watchBrowserReplies(page, origin, responses, inspectBrowserBody);
   page.setDefaultTimeout(30_000);
   const user = setup.users[role];
   assert(user, 'The claimed slot must have this separate test identity');
@@ -84,10 +86,6 @@ async function login(role) {
   secrets.push(password.trim());
   await completeProviderSignIn(page, user.login, password, origin, setup.issuer);
   return page;
-}
-
-function assertNoBrowserDisclosure(body) {
-  for (const secret of secrets) assert(!body.includes(secret), 'An API reply disclosed a key');
 }
 
 async function capture(page, name, width) {

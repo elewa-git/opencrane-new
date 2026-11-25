@@ -43,6 +43,8 @@ async function readsOnlyQualificationCount() {
   await assert.rejects(countReply(503, '{"modelRequests":5}'), /request count unavailable/u);
   await assert.rejects(countReply(200, '{"modelRequests":0.5}'),
     /Invalid qualification request count/u);
+  await assert.rejects(countReply(200, '{"modelRequests":-1}'),
+    /Invalid qualification request count/u);
 }
 test('the packaged qualification probe returns only a valid stand-in request count',
   readsOnlyQualificationCount);

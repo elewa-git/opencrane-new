@@ -348,3 +348,25 @@ it('shows readable ownership evidence and uses a native modal', async () => {
   expect(root.textContent).not.toContain('member-Marie');
   expect(root.querySelector('.history-detail')?.textContent).not.toContain('owner-change');
 });
+
+it('shows the reservation and charge for the selected change in whole cents', async () => {
+  const settled = { ...row, reservedCents: 16, settledCents: 1 };
+  const detail = { id: settled.id, records: settled.records };
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  fetch.mockResolvedValueOnce(reply(200, { rows: [settled] }));
+  fetch.mockResolvedValueOnce(reply(200, detail));
+  const fixture = TestBed.createComponent(AuditScreen);
+  fixture.detectChanges();
+  const root = screenRoot(fixture);
+  function showsRow() {
+    expect(root.querySelector('.row-button')).not.toBeNull();
+  }
+  await vi.waitFor(showsRow);
+  root.querySelector<HTMLButtonElement>('.row-button')!.click();
+  function showsAmounts() {
+    const dialog = root.querySelector('dialog');
+    expect(dialog?.querySelector('[aria-label="Turn spending"]')?.textContent)
+      .toMatch(/Reservation\s*16 cents\s*Charge\s*1 cent/u);
+  }
+  await vi.waitFor(showsAmounts);
+});
