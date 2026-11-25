@@ -57,3 +57,38 @@ it('refuses a supervised process for the previous namespace with identical argum
   runningForwarder(checked.clusterUid, 'namespace-retired');
   expect(await ownsPackageForwarder(origin, args, checked)).toBe(false);
 });
+
+for (const [check, changedSocket] of [
+  ['two sockets', `${socket}\n${socket}`],
+  ['wrong address', socket.replace('127.0.0.1:25106', '0.0.0.0:25106')],
+  ['other process name', socket.replace('"kubectl"', '"node"')],
+] as const) {
+  async function refusesSocket() {
+    runningForwarder();
+    fixture.sockets = changedSocket;
+    expect(await ownsPackageForwarder(origin, args, checked)).toBe(false);
+  }
+  it(`refuses a listener with ${check}`, refusesSocket);
+}
+
+for (const [check, file, content] of [
+  ['different kubectl arguments', '/proc/123/cmdline', 'kubectl\0port-forward\0wrong-service\0'],
+  ['missing parent process', '/proc/123/status', 'State:\trunning\n'],
+  ['different launcher', '/proc/321/cmdline', 'node\0other-launcher.ts\0'],
+  ['missing target identity', '/proc/123/environ', 'UNRELATED_SETTING=fixture\0'],
+] as const) {
+  async function refusesProcess() {
+    runningForwarder();
+    fixture.files.set(file, content);
+    expect(await ownsPackageForwarder(origin, args, checked)).toBe(false);
+  }
+  it(`refuses a socket when its process has ${check}`, refusesProcess);
+}
+
+async function refusesOtherCheckout() {
+  runningForwarder();
+  fixture.directory = '/disposable/other-checkout';
+  expect(await ownsPackageForwarder(origin, args, checked)).toBe(false);
+}
+
+it('refuses a launcher in another checkout', refusesOtherCheckout);

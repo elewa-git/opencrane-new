@@ -11,6 +11,14 @@ import { members, mcpCatalogue, computers, conversations, files, auditTrail,
 import { packageBackupSource } from './scheduled-backup-source.ts';
 import { captureScheduledBackup, listBackups } from './scheduled-backup.ts';
 
+type CheckpointReader = 'projection' | 'handler';
+
+type HeldDisconnect = {
+  reader: CheckpointReader;
+  started(): void;
+  released: Promise<void>;
+};
+
 const storage = vi.hoisted(function storageState() {
   return new Map<string, Buffer>();
 });
@@ -29,13 +37,21 @@ vi.mock('./pilot-storage.ts', function objectStoreBoundary() {
 
 const database = vi.hoisted(function databaseState() {
   return { behind: '', clients: '0', names: [] as string[],
-    deferDisconnect: false, pendingDisconnects: 0, fileReferences: [] as unknown[] };
+    activeReaders: new Set<object>(), heldDisconnect: undefined as HeldDisconnect | undefined,
+    countedWhileHeld: false, fileReferences: [] as unknown[] };
 });
 vi.mock('pg', function databaseBoundary() {
   class Client {
-    protected readCheckpoints = false;
+    protected readonly reader: CheckpointReader | undefined;
 
-    connect() { return Promise.resolve(); }
+    constructor(options: { connectionString?: string }) {
+      if (options.connectionString?.endsWith('/projection')) this.reader = 'projection';
+      if (options.connectionString?.endsWith('/handler')) this.reader = 'handler';
+    }
+
+    async connect() {
+      if (this.reader) database.activeReaders.add(this);
+    }
 
     query(sql: string) {
       if (sql.includes('conversation_files')) {
@@ -43,37 +59,46 @@ vi.mock('pg', function databaseBoundary() {
         return { rows: database.fileReferences.map(asRow) };
       }
       if (sql.includes('pg_stat_activity')) {
-        const count = Number(database.clients) + database.pendingDisconnects;
+        const count = Number(database.clients) + database.activeReaders.size;
+        if (database.heldDisconnect && database.activeReaders.size > 0) {
+          database.countedWhileHeld = true;
+        }
         return { rows: [{ count: String(count) }] };
       }
-      if (sql.includes('pg_current_wal_lsn')) return { rows: [{ lsn: '0/123' }] };
+      if (sql.includes('pg_current_wal_lsn')) {
+        return { rows: [{ lsn: '0/123' }] };
+      }
       if (sql.includes('projection_checkpoints')) {
-        this.readCheckpoints = true;
+        this.requireReader('projection');
         const rows = [];
         for (const name of database.names) {
-          const sequence = database.behind === name ? '0' : '1';
+          let sequence = '1';
+          if (database.behind === name) sequence = '0';
           rows.push({ name, sequence });
         }
         return { rows };
       }
       if (sql.includes('handler_dispatcher')) {
-        this.readCheckpoints = true;
+        this.requireReader('handler');
         return { rows: [{ sequence: '1' }] };
       }
       throw new Error('Unexpected database query');
     }
-    end() { return Promise.resolve(); }
-  }
-  class Pool extends Client {
-    override end() {
-      // Let pool shutdown finish before PostgreSQL sees the reader disconnect.
-      if (this.readCheckpoints && database.deferDisconnect) {
-        database.pendingDisconnects += 1;
+    private requireReader(reader: CheckpointReader) {
+      expect(this.reader).toBe(reader);
+      expect(database.activeReaders.has(this)).toBe(true);
+    }
+
+    async end() {
+      const held = database.heldDisconnect;
+      if (held && held.reader === this.reader) {
+        held.started();
+        await held.released;
       }
-      return super.end();
+      database.activeReaders.delete(this);
     }
   }
-  return { Client, Pool };
+  return { Client, Pool: Client };
 });
 vi.mock('node:timers/promises', async function pollingClock(importOriginal) {
   const actual = await importOriginal<typeof import('node:timers/promises')>();
@@ -95,13 +120,14 @@ afterEach(function reset() {
   vi.unstubAllEnvs();
   database.behind = '';
   database.clients = '0';
-  database.deferDisconnect = false;
-  database.pendingDisconnects = 0;
+  database.activeReaders.clear();
+  database.heldDisconnect = undefined;
+  database.countedWhileHeld = false;
   database.fileReferences = [];
   storage.clear();
 });
 
-async function fixture(ready = true, providerMode = false, captureFiles = false) {
+async function backupFixture(ready = true, providerMode = false, captureFiles = false) {
   database.names = projectionNames;
   const directory = await mkdtemp(join(tmpdir(), 'backup-adapter-'));
   const nats = await natsFixture();
@@ -120,6 +146,8 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   vi.stubEnv('PATH', `${directory}:${process.env['PATH']}`);
   vi.stubEnv('BACKUP_TEST_CALLS', calls);
   vi.stubEnv('BACKUP_TEST_READY', ready ? 'yes' : 'no');
+  vi.stubEnv('PROJECTION_DATABASE_URL', 'postgres://fixture/projection');
+  vi.stubEnv('HANDLER_DATABASE_URL', 'postgres://fixture/handler');
   const backupDirectory = join(directory, 'sets');
   await mkdir(backupDirectory, { mode: 0o700 });
   const options = { directory: backupDirectory, id: 'adapter-backup',
@@ -164,7 +192,7 @@ const upload = {
 
 for (const mismatch of ['object without event', 'event without object', 'wrong object bytes']) {
   it(`refuses publication with ${mismatch}`, async function refusesFilesMismatch() {
-    const test = await fixture(true, false, true);
+    const test = await backupFixture(true, false, true);
     if (mismatch !== 'object without event') database.fileReferences.push(upload);
     if (mismatch === 'object without event') storage.set(upload.objectKey, Buffer.from('abc'));
     if (mismatch === 'wrong object bytes') storage.set(upload.objectKey, Buffer.from('abd'));
@@ -178,8 +206,8 @@ for (const mismatch of ['object without event', 'event without object', 'wrong o
   });
 }
 
-it('captures through the real pause, verify, event and restart adapter', async function valid() {
-  const test = await fixture();
+async function capturesAndRestarts() {
+  const test = await backupFixture();
   await captureScheduledBackup(test.options, test.source);
   expect(await listBackups(test.directory)).toHaveLength(1);
   const calls = await readFile(test.calls, 'utf8');
@@ -187,27 +215,44 @@ it('captures through the real pause, verify, event and restart adapter', async f
     expect(calls).toContain(`scale deployment/${name} --replicas=1`);
     expect(calls).toContain(`rollout status deployment/${name} --timeout=60s`);
   }
-});
+}
+it('captures through the real pause, verify, event and restart adapter', capturesAndRestarts);
 
-it('publishes a checked set even when a pool would leave its checkpoint readers connected',
-  async function closesCheckpointReaders() {
-    const test = await fixture();
+for (const reader of ['projection', 'handler'] as const) {
+  async function waitsForReader() {
+    const test = await backupFixture();
+    const started = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
     const filesPart = test.source.parts.files;
     async function captureFiles(destination: string) {
       const details = await filesPart(destination);
-      database.deferDisconnect = true;
+      // Hold this checkpoint reader open during the final verification.
+      database.heldDisconnect = { reader, started: started.resolve, released: released.promise };
       return details;
     }
     test.source.parts.files = captureFiles;
-    const manifest = await captureScheduledBackup(test.options, test.source);
+    const pending = captureScheduledBackup(test.options, test.source);
+    await started.promise;
+    await new Promise<void>(function allowDatabaseRead(resolve) {
+      setImmediate(resolve);
+    });
+    const countedWhileHeld = database.countedWhileHeld;
+    released.resolve();
+    const manifest = await pending;
+    expect(countedWhileHeld).toBe(false);
+    expect(database.activeReaders.size).toBe(0);
     expect(await listBackups(test.directory)).toEqual([manifest]);
-  });
+  }
+  it(`waits for the ${reader} checkpoint reader to disconnect before counting clients`, waitsForReader);
+}
 
 for (const brokenPart of [false, true]) {
   it(`retains maintenance after accepted scales with unavailable replacements (part=${brokenPart})`,
     async function unavailableReplacements() {
-      const test = await fixture(false);
-      function failPart() { return Promise.reject(new Error('broken part')); }
+      const test = await backupFixture(false);
+      function failPart() {
+        return Promise.reject(new Error('broken part'));
+      }
       if (brokenPart) test.source.parts.files = failPart;
       await expect(captureScheduledBackup(test.options, test.source))
         .rejects.toThrow('Maintenance remains active; services could not restart');
@@ -226,7 +271,7 @@ const violations = ['replicas', 'pods', 'deployment', 'created', 'first_seq', 'l
 for (const violation of violations) {
   it(`refuses an otherwise valid capture with ${violation} changed and recovers`,
     async function refusesViolation() {
-      const test = await fixture();
+      const test = await backupFixture();
       const originalInfo = test.source.eventInfo.bind(test.source);
       let infoReads = 0;
       async function eventInfo() {
@@ -279,7 +324,7 @@ for (const violation of violations) {
 }
 
 async function pausesProviderSelectionProjection() {
-  const test = await fixture(true, true);
+  const test = await backupFixture(true, true);
   database.names = [...projectionNames, routines.name];
   const command = vi.mocked(test.source.kube);
   await test.source.pause();
@@ -294,7 +339,7 @@ it('provider backups pause and resume the model-selection projection',
   pausesProviderSelectionProjection);
 
 async function refusesLaggingProviderProjection() {
-  const test = await fixture(true, true);
+  const test = await backupFixture(true, true);
   database.names = [...projectionNames, routines.name];
   database.behind = routines.name;
   await expect(test.source.pause()).rejects.toThrow('Backup deadline');

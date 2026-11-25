@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { captureScheduledBackup, listBackups, showBackup } from './scheduled-backup.ts';
-import type { BackupPoint } from './scheduled-backup.ts';
+import type { BackupPoint, BackupSource } from './scheduled-backup.ts';
 
 const directories: string[] = [];
 type MaintenanceHandle = Pick<FileHandle, 'writeFile' | 'sync'>;
@@ -51,7 +51,7 @@ async function fixture() {
   }
   function wasResumed() { return resumed; }
   const parts = { events: capture, database: capture, files: capture };
-  const source = { pause, verify, resume, parts };
+  const source: BackupSource = { pause, verify, resume, parts };
   const options = { directory, id: 'backup-one', silo: 'test', images: { server: 'test-image' } };
   return { directory, options, source, observations, point, wasResumed };
 }
@@ -117,7 +117,9 @@ it('does not report corrupted saved bytes as a complete backup', async function 
   await expect(listBackups(test.directory)).rejects.toThrow('Backup bytes differ');
 });
 
-for (const [count, keyLength] of [[7_500, 70], [10_001, 5]] as const) {
+for (const [count, keyLength, reason] of [
+  [7_500, 70, 'manifest_size'], [10_001, 5, 'manifest_inventory'],
+] as const) {
   it(`leaves no published set for an inventory with ${count} objects`,
     async function refusesOversizedInventory() {
       const test = await fixture();
@@ -131,8 +133,10 @@ for (const [count, keyLength] of [[7_500, 70], [10_001, 5]] as const) {
         return { bucket: 'files', objects };
       }
       test.source.parts.files = captureInventory;
-      await expect(captureScheduledBackup(test.options, test.source))
-        .rejects.toThrow('Scheduled backup failed');
+      await expect(captureScheduledBackup(test.options, test.source)).rejects.toMatchObject({
+        message: 'Scheduled backup failed',
+        cause: { kind: 'scheduled_backup', reason },
+      });
       expect(test.wasResumed()).toBe(true);
       expect(await listBackups(test.directory)).toEqual([]);
       expect(await readdir(test.directory)).toEqual([]);
