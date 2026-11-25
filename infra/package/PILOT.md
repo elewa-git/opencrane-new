@@ -71,6 +71,18 @@ phone while writes are refused. The
 show how to identify the separate recovery installation. The backup excludes
 provider credentials and assistant computer homes.
 
+## Update the running pilot
+
+An update applies the approved application and scanner images to the existing
+Helm release. The pilot keeps its volumes, sign-in settings, chat history and
+saved demo route. Plan a maintenance window away from the nightly backup, and
+keep a checked backup away from the installation before starting.
+
+The [update and rollback commands](README.robot.md#update-the-running-pilot)
+record the Helm revision to return to. After the update, check that a member
+can sign in and open a saved chat and upload. Check that the next scheduled
+backup uses the new image and can be restored into an empty installation.
+
 ## Roll back to the demo
 
 If sign-in, access or a reply fails, stop sending invitations and follow the

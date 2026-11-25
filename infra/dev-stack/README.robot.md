@@ -35,6 +35,11 @@ manual run, authentication and refusal rules. Use that private values file with
 variables. Application approval requires the signed-index and licence checks;
 the other image roles retain their existing review and
 publication described in the [package notes](../package/README.robot.md#packaged-upload-services).
+`package-upgrade` checks the installed pilot's release and applies the images
+approved for the current checkout. `package-rollback --revision` returns that
+release to a recorded revision. See the
+[pilot update steps](../package/README.robot.md#update-the-running-pilot).
+
 Do not run Compose in the same slot. Always run `run.sh package-down` and `down.sh`
 for that id afterwards, including when preparation, installation or the browser fails.
 

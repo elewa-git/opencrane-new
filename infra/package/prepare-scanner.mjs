@@ -1,26 +1,13 @@
-import { execFileSync } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { isIP } from 'node:net';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { fetchApplicationApproval } from './application-approval.mjs';
-import { fetchScannerApproval } from '../clamav/approval.mjs';
+import {
+  publishApprovedApplication, publishApprovedScanner,
+} from './publish-approved-images.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const directory = process.argv[2];
-const artifactDirectory = join(directory, 'scanner-approval');
-await mkdir(artifactDirectory, { mode: 0o700 });
-const approved = await fetchScannerApproval(artifactDirectory, true);
-const commandOptions = { encoding: 'utf8', timeout: 120_000,
-  stdio: ['ignore', 'pipe', 'pipe'] };
-const inspection = execFileSync('docker', ['inspect', 'k3d-ocn-registry'], commandOptions);
-const registry = JSON.parse(inspection)[0];
-const address = registry.NetworkSettings.Networks['k3d-ocn'].IPAddress;
-if (isIP(address) !== 4) throw new Error('Development registry address is absent');
-publishImage(artifactDirectory, 'scanner.tar', approved.image);
-const applicationDirectory = join(directory, 'application-approval');
-await mkdir(applicationDirectory, { mode: 0o700 });
-const application = await fetchApplicationApproval(applicationDirectory, true);
-publishImage(applicationDirectory, 'application.tar', application.image);
+const approved = await publishApprovedScanner(directory);
+const application = await publishApprovedApplication(directory);
 const review = JSON.parse(await readFile(join(root, 'infra/package/reviewed-images.json'), 'utf8'));
 review.images.server = application.image;
 review.images.web = application.image;
@@ -36,8 +23,3 @@ await writeFile(join(directory, 'package-values.json'), JSON.stringify(values), 
 process.stdout.write(`PASS scanner approval fetched from GitHub run ${approved.runId}\n`);
 process.stdout.write(`PASS application approval fetched from GitHub run ${application.runId}\n`);
 
-function publishImage(source, filename, image) {
-  const argumentsList = [join(root, 'infra/package/publish-image.py'),
-    join(source, filename), `http://${address}:5000`, image];
-  execFileSync('python3', argumentsList, commandOptions);
-}

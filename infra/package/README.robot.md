@@ -1023,6 +1023,57 @@ catalogue and run the restore Job. Confirm the saved chat is readable and
 drill install. Clear the drill through the guarded package cleanup after
 retaining its evidence.
 
+## Update the running pilot
+
+`package-upgrade` is for a running packaged pilot on the same chart version.
+It keeps the existing Helm values for storage, sign-in and site address. It
+changes the application images, including the image for the next scheduled
+backup, and the scanner image and its signed database records. The completed
+bootstrap Job keeps its original image because Kubernetes fixes the Job's
+template once it has run. Each scanner record has its own Secret. Older
+releases still refer to their original Secret for rollback.
+
+Use the worktree recorded when the pilot was installed. Keep an exported
+backup that has passed the catalogue check. Record the current deployed
+revision from `helm history` for the recorded context, namespace and release.
+Also record the namespace and volume claim IDs and the server, web and scanner
+image digests. Keep the saved route file in its private directory. Schedule
+the update away from the backup window and keep other operators out of
+Helm until the update and checks finish.
+
+Check out the approved branch and exact revision in that worktree. Both image
+approvals for that revision must still have their artifacts. Use the existing
+slot number. This path leaves the namespace, volumes and Serve configuration
+in place.
+
+```sh
+infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID" &&
+  infra/dev-stack/run.sh package-upgrade --id "$DEV_STACK_ID"
+```
+
+Compare the namespace and volume claim IDs with the values recorded before
+the update. Check that the deployment and backup Job template use the new
+approved digests, then sign in with an existing member and open their chat
+and upload. Check the next scheduled backup in the catalogue and restore it
+on an empty recovery installation using its exact image pins. Keep the
+earlier verified backup until recovery has passed.
+
+Helm attempts to return to the previous revision if the upgrade or its
+readiness checks fail. Check `helm history` before taking further action. If
+the new application still runs but a sign-in, upload or backup check fails,
+return to the recorded working revision with the guarded rollback command.
+The old scanner record must still be within its approved lifetime.
+
+```sh
+infra/dev-stack/run.sh package-rollback --id "$DEV_STACK_ID" --revision "$PREVIOUS_REVISION"
+```
+
+Check the deployed revision's image digests, the saved route and the member's
+chat and upload again. If the release cannot return to service, preserve the
+volumes and use the separate recovery installation. The
+[demo route rollback](#roll-back-the-pilot-route) can take the pilot out of
+the way without deleting its data.
+
 ## Private owner email
 
 Only the default private development mode reads the development owner email from the [private host file](../dev-stack/README.robot.md#private-owner-email)

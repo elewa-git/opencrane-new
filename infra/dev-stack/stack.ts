@@ -28,6 +28,7 @@ import { setupDevProvider } from './provider-setup.ts';
 import { ownerRunRefusal, requireOwnerRun } from './owner-run.ts';
 import { approvalJourneyTool } from './journey-tool-policy.ts';
 import { installPackage, packagedSlotIsBusy, preparePackage, removePackage,
+  rollbackPackage, upgradePackage,
   requireOwner, verifyPackageOwner } from './packaged.ts';
 import { packageCommandMessage } from './package-error.ts';
 import { createTarget, removeTarget, targetConnection, targetRecorded } from './target.ts';
@@ -955,7 +956,8 @@ try {
         !process.stdin.isTTY || process.env['OPENCRANE_FLEET_TASK'] !== undefined)) {
       requireOwnerRun(ownerRun);
     }
-  } else if (flags.length > 1 || (flag && action !== 'package-up')) {
+  } else if (flags.length > 0 ||
+      (flag && action !== 'package-up' && action !== 'package-rollback')) {
     throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   }
   const directoryPresent = await stat(directory).then(() => true, () => false);
@@ -1014,6 +1016,8 @@ try {
     else if (action === 'package-up' && (flag || process.env['PACKAGE_VALUES_FILE'])) {
       await installPackage(flag ?? process.env['PACKAGE_VALUES_FILE']!);
     }
+    else if (action === 'package-upgrade') await upgradePackage();
+    else if (action === 'package-rollback' && flag) await rollbackPackage(flag);
     else if (action === 'package-down') await removePackage();
     else if (action === 'package-check') await verifyPackageOwner();
     else throw new Error('Unknown package action');
