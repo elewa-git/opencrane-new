@@ -59,6 +59,21 @@ function rendersOnlyManifests() {
 
 test('the real package chart renders only Kubernetes manifests', rendersOnlyManifests);
 
+function upgradeKeepsTheFinishedBootstrapImage() {
+  const values = chartValues();
+  const priorImage = `example.invalid/server@sha256:${'b'.repeat(64)}`;
+  values.bootstrapImage = priorImage;
+  const resources = renderedResources(values);
+  const bootstrap = resources.get('Job/bootstrap').spec.template.spec;
+  assert.equal(bootstrap.initContainers[0].image, priorImage);
+  assert.equal(bootstrap.containers[0].image, priorImage);
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  assert.equal(backup.containers[0].image, values.images.server);
+}
+
+test('an application update keeps the finished bootstrap Job on its original image',
+  upgradeKeepsTheFinishedBootstrapImage);
+
 function cnpgValues() {
   const values = chartValues();
   values.postgres = {
