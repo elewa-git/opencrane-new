@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import { test } from 'node:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync,
   writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -1021,12 +1021,108 @@ async function preparesPilotSignInCredential() {
   const runtime = prepared.secrets.get('runtime');
   const files = prepared.secrets.get('runtime-files');
   assert.equal(runtime.OIDC_CLIENT_ID.toString('utf8'), 'pilot-sign-in-app');
-  assert.equal(runtime.DEV_OIDC_CLIENT_SECRET.toString('utf8'), 'pilot-credential-fixture');
-  assert.equal(files['zitadel-client-secret'].toString('utf8'), 'pilot-credential-fixture');
+  assert.equal(Object.hasOwn(runtime, 'DEV_OIDC_CLIENT_SECRET'), false);
+  assert.equal(Object.hasOwn(files, 'zitadel-client-secret'), false);
   assert.equal(Object.hasOwn(runtime, 'PACKAGE_OIDC_CLIENT_SECRET_FILE'), false);
+  const signIn = prepared.secrets.get('package-sign-in');
+  assert.equal(signIn.credential.toString('utf8'), 'pilot-credential-fixture');
+
+  const previous = values.exposure;
+  values.exposure = exposure;
+  try {
+    assertPilotSignInSecretUse(resources());
+  } finally {
+    values.exposure = previous;
+  }
 }
-test('public preparation uses the dedicated sign-in credential without passing on its host path',
+test('only packaged server sign-in receives the pilot credential',
   preparesPilotSignInCredential);
+
+function assertPilotSignInSecretUse(rendered) {
+  let signInReferences = 0;
+  for (const resource of rendered) {
+    if (resource?.kind !== 'Deployment') {
+      continue;
+    }
+    const pod = resource.spec.template.spec;
+    for (const volume of pod.volumes ?? []) {
+      assert.notEqual(volume.secret?.secretName, 'package-sign-in');
+    }
+    const containers = [...pod.containers, ...(pod.initContainers ?? [])];
+    for (const container of containers) {
+      for (const source of container.envFrom ?? []) {
+        assert.notEqual(source.secretRef?.name, 'package-sign-in');
+      }
+      for (const setting of container.env ?? []) {
+        const key = setting.valueFrom?.secretKeyRef;
+        if (key?.name === 'package-sign-in') {
+          assert.equal(resource.metadata.name, 'server');
+          assert.equal(container.name, 'server');
+          assert.equal(key.key, 'credential');
+          signInReferences++;
+        } else if (container.name !== 'server') {
+          assert.notEqual(setting.name, 'DEV_OIDC_CLIENT_SECRET');
+        }
+      }
+    }
+  }
+  assert.equal(signInReferences, 1);
+}
+
+const unsafePilotCredentials = [
+  ['relative path', /absolute client secret path/u],
+  ['missing client ID', /client id/u],
+  ['group-readable file', /mode 0600/u],
+  ['symlink', { code: 'ELOOP' }],
+  ['directory', /regular file/u],
+  ['another owner', /owned by the current user/u],
+];
+
+for (const [unsafe, error] of unsafePilotCredentials) {
+  test(`public preparation refuses a pilot credential with ${unsafe}`,
+    async function refusesUnsafeCredential() {
+      const directory = mkdtempSync(join(tmpdir(), 'package-pilot-credential-'));
+      try {
+        const source = join(directory, 'client-secret');
+        const settings = { OIDC_CLIENT_ID: 'pilot-sign-in-app',
+          PACKAGE_OIDC_CLIENT_SECRET_FILE: source };
+        const replacements = {
+          '../../apps/server/src/bootstrap-token.ts': { readBootstrapToken },
+          '../dev-stack/config.ts': { directory },
+          '../dev-stack/packaged.ts': {},
+          '../clamav/release.mjs': {},
+        };
+        const fixtureProcess = { getuid: process.getuid };
+        if (unsafe === 'relative path') {
+          settings.PACKAGE_OIDC_CLIENT_SECRET_FILE = 'relative-client-secret';
+        } else if (unsafe === 'missing client ID') {
+          delete settings.OIDC_CLIENT_ID;
+        }
+        if (unsafe === 'directory') {
+          mkdirSync(source, { mode: 0o600 });
+        } else if (unsafe === 'symlink') {
+          const target = join(directory, 'target');
+          writeFileSync(target, 'fixture-credential', { mode: 0o600 });
+          symlinkSync(target, source);
+        } else {
+          const mode = unsafe === 'group-readable file' ? 0o640 : 0o600;
+          writeFileSync(source, 'fixture-credential', { mode });
+        }
+        if (unsafe === 'another owner') {
+          fixtureProcess.getuid = differentOwner;
+        }
+        const prepare = loadPrivateFunction('infra/package/prepare.ts',
+          'preparePublicClientCredential', replacements, fixtureProcess);
+        await assert.rejects(prepare(settings), error);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+}
+
+function differentOwner() {
+  return process.getuid() + 1;
+}
 
 async function preparesOnlyProviderSettings() {
   const packageValues = { models: { mode: 'provider' } };

@@ -1454,3 +1454,86 @@ async function refusesForeignAuditSession(url: string) {
 it.each(['/api/org/history', '/api/conversations/private-chat/history'])(
   'refuses an extra sign-in identity from another organisation on %s', refusesForeignAuditSession,
 );
+
+const directoryRefusals = [
+  { guard: 'session', expected: 401 },
+  { guard: 'organisation', expected: 403 },
+  { guard: 'silo binding', expected: 403 },
+  { guard: 'caller presence', expected: 403 },
+  { guard: 'manager role', expected: 403 },
+  { guard: 'active membership in IAM', expected: 403 },
+];
+
+it.each(directoryRefusals)('keeps the directory $guard check when counts are offline',
+  refusesDirectoryWithoutCounts);
+
+async function refusesDirectoryWithoutCounts(
+  { guard, expected }: (typeof directoryRefusals)[number],
+) {
+  const runner = await prepareAcceptanceProjection();
+  await runner.initialise(groups);
+  await runner.run(groups);
+  const caller = directoryCaller(guard);
+  if (guard === 'active membership in IAM') {
+    const memberData = { memberId: caller.sub, displayName: 'Pending member',
+      email: 'pending@example.test', role: 'admin' };
+    await appendAndProject({ subject: `member-${caller.sub}`, type: 'member.joined',
+      data: memberData });
+  }
+
+  const checkedBinding = { ...binding };
+  if (guard === 'silo binding') {
+    checkedBinding.silo = 'other-silo';
+  }
+  async function resolveCaller() {
+    if (guard === 'caller presence') {
+      return undefined;
+    }
+    return caller.sub;
+  }
+  const feed = { memberId: vi.fn(resolveCaller) };
+  const db = pgDb(dbs.queue);
+  const directoryApp = buildServer(config, { memberReads: {
+    silo: 'acme', store: nats.store, binding: checkedBinding, db, now, feed,
+  } });
+  const readStream = vi.spyOn(nats.store, 'readStream');
+  const head = nats.store.head.bind(nats.store);
+  function position(subject?: string, deadline?: number) {
+    if (subject === undefined) {
+      return head(undefined, performance.now() - 1);
+    }
+    return head(subject, deadline);
+  }
+  const readPosition = vi.spyOn(nats.store, 'head').mockImplementation(position);
+
+  try {
+    const headers: Record<string, string> = {};
+    if (guard !== 'session') {
+      headers['cookie'] = `${config.cookieName}=${encodeSession(config, caller)}`;
+    }
+    const response = await directoryApp.inject({ url: '/api/members', headers });
+    expect(response.statusCode).toBe(expected);
+    expect(response.json()).toEqual({ status: 'refused' });
+    if (['session', 'organisation', 'silo binding'].includes(guard)) {
+      expect(feed.memberId).not.toHaveBeenCalled();
+    }
+    if (guard === 'caller presence') {
+      expect(readStream).not.toHaveBeenCalled();
+    }
+    expect(readPosition).not.toHaveBeenCalledWith(undefined, expect.anything());
+  } finally {
+    await directoryApp.close();
+  }
+}
+
+function directoryCaller(guard: string) {
+  const session = { sub: 'owner', orgId: 'org-acme', roles: [], authTime: 1, exp: 2000000000 };
+  if (guard === 'organisation') {
+    session.orgId = 'other-org';
+  } else if (guard === 'manager role') {
+    session.sub = 'member';
+  } else if (guard === 'active membership in IAM') {
+    session.sub = 'iam-pending';
+  }
+  return session;
+}

@@ -127,3 +127,60 @@ async function readAfterVerification(): Promise<void> {
 }
 
 test('the provider status read starts after verification responds', readAfterVerification);
+
+const providerOrigin = 'https://identity-fixture.test';
+const foreignOrigin = 'https://foreign-fixture.test';
+const foreignForm = `<form onsubmit="return false">
+  <input name="loginName"><input type="password"><button>Continue</button>
+</form>`;
+
+async function foreignPage(route: Route): Promise<void> {
+  await route.fulfill({ contentType: 'text/html', body: foreignForm });
+}
+
+async function redirectAfterLoginName(route: Route): Promise<void> {
+  const body = `<form>
+    <input name="loginName" required><button>Continue</button>
+  </form><script>
+    document.querySelector('form').onsubmit = function () {
+      location.assign('${foreignOrigin}/password');
+      return false;
+    };
+  </script>`;
+  await route.fulfill({ contentType: 'text/html', body });
+}
+
+async function blocksForeignForm(startOnProvider: boolean): Promise<void> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(1000);
+    await page.route(`${foreignOrigin}/**`, foreignPage);
+    await page.route(`${providerOrigin}/**`, redirectAfterLoginName);
+    const startingOrigin = startOnProvider ? providerOrigin : foreignOrigin;
+    await page.goto(`${startingOrigin}/login`);
+    const signIn = completeProviderSignIn(
+      page, 'pilot-member', 'fixture-password', origin, providerOrigin,
+    );
+    const [outcome] = await Promise.allSettled([signIn]);
+    const login = page.locator('input[name=loginName]');
+    const password = page.locator('input[type=password]');
+    assert.equal(await login.inputValue(), '');
+    assert.equal(await password.inputValue(), '');
+    assert.equal(outcome.status, 'rejected');
+    assert.match(String(outcome.reason), /identity provider origin/u);
+  } finally {
+    await browser.close();
+  }
+}
+
+test('a foreign login form receives neither credential', blocksForeignLoginName);
+test('a foreign password form stays empty after the provider redirects', blocksForeignPassword);
+
+function blocksForeignLoginName(): Promise<void> {
+  return blocksForeignForm(false);
+}
+
+function blocksForeignPassword(): Promise<void> {
+  return blocksForeignForm(true);
+}

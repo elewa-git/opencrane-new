@@ -91,3 +91,82 @@ it('keeps a wrong account out of the workspace', async function refuseWrongAccou
   });
   expect(element.querySelector('a[href="/workspace"]')).toBeNull();
 });
+
+it('requests fresh authentication when the provider session is old', async function refresh() {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
+  fetchSpy.mockResolvedValueOnce(reply({ status: 'refused', reason: 'sign_in_again' }, 403));
+  const { element, fixture } = await openInvitation('input[name=displayName]');
+  accept(element);
+
+  await vi.waitFor(function showsFreshSignIn() {
+    fixture.detectChanges();
+    const link = element.querySelector<HTMLAnchorElement>('a[href^="/auth/login"]');
+    expect(link?.textContent?.trim()).toBe('Sign in again to accept');
+    const address = new URL(link!.href);
+    expect(address.searchParams.get('fresh')).toBe('1');
+    expect(address.searchParams.get('returnTo')).toBe(path);
+  });
+});
+
+function stallRequest(_resource: RequestInfo | URL, options?: RequestInit): Promise<Response> {
+  const signal = options?.signal;
+  return new Promise(function waitForAbort(_resolve, reject) {
+    function abort() {
+      reject(new DOMException('Deadline passed', 'TimeoutError'));
+    }
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
+function controlDeadline() {
+  const deadline = new AbortController();
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(function timeout(milliseconds) {
+    expect(milliseconds).toBeGreaterThan(0);
+    expect(milliseconds).toBeLessThanOrEqual(15_000);
+    return deadline.signal;
+  });
+  return deadline;
+}
+
+it('ends the session check when the reply stalls', async function boundSessionCheck() {
+  const deadline = controlDeadline();
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockImplementationOnce(stallRequest);
+  const { element, fixture } = await openInvitation('[role=status]');
+  const options = fetchSpy.mock.calls[0]?.[1];
+  expect(options?.signal).toBe(deadline.signal);
+  deadline.abort();
+
+  await vi.waitFor(function showsCheckFailure() {
+    fixture.detectChanges();
+    expect(element.querySelector('[role=alert]')?.textContent).toContain('Reload this page');
+  });
+});
+
+it('retries a lost join reply with the original command', async function retryJoin() {
+  const deadline = controlDeadline();
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
+  fetchSpy.mockImplementationOnce(stallRequest);
+  fetchSpy.mockResolvedValueOnce(reply({ status: 'already_joined' }));
+  const { element, fixture } = await openInvitation('input[name=displayName]');
+  accept(element);
+  const sent = fetchSpy.mock.calls[1]?.[1];
+  expect(sent?.signal).toBe(deadline.signal);
+  deadline.abort();
+  await vi.waitFor(function allowsRetry() {
+    fixture.detectChanges();
+    expect(element.querySelector('[role=alert]')?.textContent).toContain('Try again');
+    expect(element.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(false);
+  });
+
+  accept(element);
+  await vi.waitFor(function showsWorkspace() {
+    fixture.detectChanges();
+    expect(element.querySelector('a[href="/workspace"]')).not.toBeNull();
+  });
+  const repeated = fetchSpy.mock.calls[2]?.[1];
+  expect(typeof sent?.body).toBe('string');
+  expect(repeated?.body).toBe(sent?.body);
+});
