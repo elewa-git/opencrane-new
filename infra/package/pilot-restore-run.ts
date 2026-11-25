@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { createLogger } from '@opencrane/observability';
 import { descriptorSchema } from './event-backup.ts';
+import { backupProviderMode } from './model-settings.ts';
 import { restorePilotBackup, PilotRestoreRefused } from './pilot-restore.ts';
 import { packageRestoreTarget } from './pilot-restore-target.ts';
 
@@ -13,7 +14,7 @@ async function main() {
   const id = descriptorSchema.shape.attempt.parse(argument);
   const images = z.record(z.string(), z.string()).parse(JSON.parse(process.env['BACKUP_IMAGES'] ?? '{}'));
   const options = { directory: '/backups/sets', stateDirectory: '/restore/state', id,
-    silo: process.env['SILO_ID'] ?? '', images };
+    silo: process.env['SILO_ID'] ?? '', images, providerMode: backupProviderMode(process.env) };
   const runtime = await packageRestoreTarget(options);
   try {
     const result = await restorePilotBackup(options, runtime.target);

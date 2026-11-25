@@ -45,6 +45,7 @@ flowchart LR
 - Give assistant computers the private gateway address and short-lived passes.
 - Save scheduled backups of events, databases and uploaded files together.
 - Restore one complete pilot backup into empty storage, then open authenticated reading.
+  Recovery uses the same model mode as the source so it rebuilds the same tables.
 - Remove only the install owned by the claimed stack, including after interruption.
 
 Not built yet:

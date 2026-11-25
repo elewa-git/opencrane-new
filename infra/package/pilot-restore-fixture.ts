@@ -19,7 +19,7 @@ export async function pilotBackupFixture(eventSource?: Parameters<typeof collect
     images[name] = `registry.example.test/${name}@sha256:${'a'.repeat(64)}`;
   }
   const checkpoints: Record<string, number> = { dispatcher: 1 };
-  for (const name of pilotProjectionNames) checkpoints[name] = 1;
+  for (const name of pilotProjectionNames()) checkpoints[name] = 1;
   const point = { sequence: 1, lsn: '0/1', checkpoints };
   const options = { directory, stateDirectory, id: 'pilot-backup', silo: 'dev', images };
   function pause() { return Promise.resolve(point); }

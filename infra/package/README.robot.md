@@ -925,8 +925,8 @@ else
 fi
 ```
 
-For a recovery drill, prepare an empty package with the same approved images
-and silo and the original sign-in identity settings. Use a separate slot and
+For a recovery drill, prepare an empty package with the same approved images,
+`models.mode`, silo and sign-in identity settings. Use a separate slot and
 keep the recovery listener on loopback until checked. For an HTTPS sign-in
 drill use a private test origin with its own registered callback and the same
 issuer and account subjects. Set `pilotRestore` to
@@ -2478,8 +2478,8 @@ load capture clients or require connections to running services.
 ## Restore one pilot backup
 
 Restore only a completed scheduled pilot set into a new, empty installation.
-Use the same chart and all eight immutable images recorded by that set, its silo
-identity, sign-in issuer and organisation, and original person subject mappings.
+Use the same chart and all eight immutable images recorded by that set, its model
+mode, silo identity, sign-in issuer and organisation, and original person subject mappings.
 Supply fresh service credentials and the retained secret-store references.
 Memory facts and survey answers still require their existing separate key custody.
 Conversation reads require no chat key. Computer homes are outside this backup.
@@ -2522,8 +2522,10 @@ an eight-minute operation; native events retain their 60-second and 64 MiB limit
 
 Recovery first transfers the native event snapshot and verifies event identities,
 subjects, positions and retained range. It then loads all four databases with SQL
-errors fatal, renews application role credentials, rebuilds all fourteen installed
-projections in a separate database and compares every content table with the dump.
+errors fatal and renews application role credentials. It rebuilds the fourteen
+base projections and, in provider mode, the routines projection in a separate
+database. Backup and restore use the same projection list. Restore checks that
+the set has exactly those checkpoints and compares every content table with the dump.
 Only replayed content becomes readable. The saved dispatcher checkpoint stays held.
 OpenFGA is rebuilt from events and checked against the saved rights. The source LSN
 must match the manifest; logical restore does not recreate a physical WAL position.

@@ -13,6 +13,7 @@ export type PilotRestoreOptions = {
   silo: string;
   images: Record<string, string>;
   stateDirectory: string;
+  providerMode?: boolean;
 };
 
 export type PilotRestoreTarget = {

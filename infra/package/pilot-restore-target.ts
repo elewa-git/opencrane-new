@@ -177,8 +177,7 @@ class PackageRestoreTarget implements PilotRestoreTarget {
     for (const role of packageDatabaseRoles()) {
       await this.admin.query(`ALTER ROLE ${role.name} PASSWORD '${role.password}'`);
     }
-    await replayPilotDatabase(this.admin, this.env.PROJECTION_DATABASE_URL,
-      this.store, backup.manifest.point.sequence, true);
+    await this.rebuildReadTables(backup, true);
     await this.kube(['scale', 'deployment/openfga', '--replicas=1']);
     await this.kube(['rollout', 'status', 'deployment/openfga', '--timeout=60s']);
     const original: Binding = { silo: this.options.silo, apiUrl: 'http://openfga:8080',
@@ -187,6 +186,11 @@ class PackageRestoreTarget implements PilotRestoreTarget {
       { verifyAgainst: original });
     await this.patchRuntime({ OPENFGA_STORE_ID: replayed.binding.storeId,
       OPENFGA_MODEL_ID: replayed.binding.authorizationModelId });
+  }
+  private async rebuildReadTables(backup: CheckedPilotBackup, replace: boolean) {
+    const replay = { sequence: backup.manifest.point.sequence, replace,
+      providerMode: this.options.providerMode ?? false };
+    await replayPilotDatabase(this.admin, this.env.PROJECTION_DATABASE_URL, this.store, replay);
   }
   private async patchRuntime(stringData: Record<string, string>) {
     const patch = Buffer.from(JSON.stringify({ stringData }));
@@ -260,13 +264,13 @@ class PackageRestoreTarget implements PilotRestoreTarget {
     } finally {
       bounds.dispose();
     }
-    await replayPilotDatabase(this.admin, this.env.PROJECTION_DATABASE_URL,
-      this.store, backup.manifest.point.sequence, false);
+    await this.rebuildReadTables(backup, false);
     const content = connectProjectionDb(this.env.PROJECTION_DATABASE_URL, this.disconnected.bind(this));
     const handlers = new Pool({ connectionString: this.env.HANDLER_DATABASE_URL,
       connectionTimeoutMillis: 2000, query_timeout: 5000 });
     try {
-      await checkPilotCheckpoints(content.db, backup.manifest.point.sequence);
+      await checkPilotCheckpoints(content.db, backup.manifest.point.sequence,
+        this.options.providerMode);
       const dispatcher = await handlers.query<{ sequence: string }>(
         'SELECT sequence::text FROM handler_dispatcher WHERE id=1');
       if (Number(dispatcher.rows[0]?.sequence) !== backup.manifest.point.checkpoints['dispatcher']) {

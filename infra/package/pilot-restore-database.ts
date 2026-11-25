@@ -4,7 +4,7 @@ import type { EventStore } from '@opencrane/event-store';
 import { initialiseBudgetProjection } from '@opencrane/models';
 import { connectProjectionDb, ProjectionRunner, type Db } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { pilotProjections, pilotProjectionNames } from './pilot-projections.ts';
+import { pilotProjectionsFor, pilotProjectionNames } from './pilot-projections.ts';
 import { grantPackageReads } from './package-database.ts';
 
 const logger = createLogger('pilot-restore-projections', { level: 'silent' });
@@ -24,21 +24,24 @@ async function tableContents(db: Db) {
   return tables;
 }
 
-export async function replayPilotTables(db: Db, store: EventStore, sequence: number) {
+export async function replayPilotTables(db: Db, store: EventStore, sequence: number,
+  providerMode?: boolean) {
   if (await store.head() !== sequence) throw new Error('Event position differs');
   await initialiseBudgetProjection(db, store, logger);
   const runner = new ProjectionRunner(db, store, logger);
-  for (const projection of pilotProjections) {
+  const selected = pilotProjectionsFor(providerMode);
+  for (const projection of selected) {
     await runner.initialise(projection);
     await runner.run(projection, { toSequence: sequence });
   }
-  await checkPilotCheckpoints(db, sequence);
+  await checkPilotCheckpoints(db, sequence, providerMode);
 }
 
-export async function checkPilotCheckpoints(db: Db, sequence: number) {
+export async function checkPilotCheckpoints(db: Db, sequence: number, providerMode?: boolean) {
   const result = await db.query<{ name: string; sequence: string }>(
     'SELECT name, sequence::text FROM projection_checkpoints ORDER BY name');
-  const expected = [...pilotProjectionNames].sort();
+  const expected = pilotProjectionNames(providerMode);
+  expected.sort();
   const names: string[] = [];
   for (const row of result.rows) {
     names.push(row.name);
@@ -47,9 +50,11 @@ export async function checkPilotCheckpoints(db: Db, sequence: number) {
   if (!isDeepStrictEqual(names, expected)) throw new Error('Projection inventory differs');
 }
 
+export type PilotDatabaseReplay = { sequence: number; replace: boolean; providerMode?: boolean };
+
 /** Rebuild beside the dump, compare every table, then serve only replayed content. */
 export async function replayPilotDatabase(admin: Pool, connectionString: string,
-  store: EventStore, sequence: number, replace: boolean) {
+  store: EventStore, replay: PilotDatabaseReplay) {
   await admin.query('DROP DATABASE IF EXISTS pilot_replay WITH (FORCE)');
   await admin.query('CREATE DATABASE pilot_replay OWNER projection');
   await admin.query('REVOKE CONNECT ON DATABASE pilot_replay FROM PUBLIC');
@@ -64,14 +69,14 @@ export async function replayPilotDatabase(admin: Pool, connectionString: string,
   const rebuilt = connectProjectionDb(replayUrl.href, disconnected);
   try {
     const before = await tableContents(current.db);
-    await replayPilotTables(rebuilt.db, store, sequence);
+    await replayPilotTables(rebuilt.db, store, replay.sequence, replay.providerMode);
     const replayed = await tableContents(rebuilt.db);
     if (failure) throw failure;
     if (!isDeepStrictEqual(before, replayed)) throw new Error('Replayed content differs');
   } finally {
     await Promise.all([current.close(), rebuilt.close()]);
   }
-  if (replace) {
+  if (replay.replace) {
     await admin.query('ALTER DATABASE projections RENAME TO pilot_dump');
     await admin.query('ALTER DATABASE pilot_replay RENAME TO projections');
     await admin.query('DROP DATABASE pilot_dump');

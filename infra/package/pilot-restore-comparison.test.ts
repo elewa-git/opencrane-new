@@ -5,7 +5,7 @@ import { database } from '@opencrane/projections/testing';
 import { BudgetActor } from '@opencrane/models';
 import { replayPilotTables, replayPilotDatabase } from './pilot-restore-database.ts';
 
-async function comparisonFixture() {
+async function comparisonFixture(providerMode = false) {
   const events = await natsFixture();
   const current = await database('pg');
   const admin = new Pool({ connectionString: process.env['PG_TEST_URL'] });
@@ -26,7 +26,7 @@ async function comparisonFixture() {
   const actor = new BudgetActor(events.store, 'test');
   await actor.start(5000, 500, 'personal-default');
   const sequence = await events.store.head();
-  await replayPilotTables(current.db, events.store, sequence);
+  await replayPilotTables(current.db, events.store, sequence, providerMode);
   async function snapshot() {
     const tables = await current.db.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename");
@@ -38,7 +38,8 @@ async function comparisonFixture() {
     return saved;
   }
   async function compare() {
-    await replayPilotDatabase(admin, url.href, events.store, sequence, false);
+    const replay = { sequence, replace: false, providerMode };
+    await replayPilotDatabase(admin, url.href, events.store, replay);
   }
   async function close() {
     await admin.query('DROP DATABASE IF EXISTS pilot_replay WITH (FORCE)');
@@ -75,8 +76,8 @@ it.each(['cents', 'application table'])(
   'production dump-versus-replay comparison refuses altered %s without replacing content',
   refusesChangedDump);
 
-async function acceptsEqualDump() {
-  const fixture = await comparisonFixture();
+async function acceptsEqualDump(providerMode: boolean) {
+  const fixture = await comparisonFixture(providerMode);
   try {
     const before = await fixture.snapshot();
     await fixture.compare();
@@ -87,4 +88,4 @@ async function acceptsEqualDump() {
     await fixture.close();
   }
 }
-it('production dump-versus-replay comparison accepts an unchanged dump', acceptsEqualDump);
+it.each([false, true])('accepts an unchanged dump with provider mode %s', acceptsEqualDump);

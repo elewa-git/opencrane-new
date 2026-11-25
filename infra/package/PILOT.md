@@ -32,7 +32,9 @@ flowchart LR
 5. From a tailnet client, open the pilot in a clean browser. Check that HTTPS
    is trusted and that another client off the tailnet cannot reach the site.
    Open `/claim`, sign in with the first owner's account and enter the
-   one-time token in the form. Confirm that the owner can open Settings.
+   one-time token in the form. Open **People & groups → Owners**. Refresh the
+   page until the first owner appears before opening Settings. The claim
+   confirmation can arrive before the permissions are ready.
 
 ## Connect the provider and invite people
 
@@ -48,7 +50,8 @@ flowchart LR
    handoff. Have that person accept in a separate browser session. In People,
    open their member record and copy the member ID from the page address.
    In **Owners → Appoint an owner**, enter that ID, review and confirm.
-   Check that both owners are listed and that the new owner can sign in.
+   Use **Check status** if the appointment is still applying. Check that
+   both owners are listed and that the new owner can sign in.
 4. Ask an invited member to send a message and see a completed reply on
    desktop at 1280 px and on a phone at 390 px. Record the result before
    opening the pilot to the rest of the group.
@@ -59,10 +62,10 @@ Check that the nightly job completes and the backup catalogue lists its
 verified set. Writes pause during the backup. Copy the complete set to private
 storage away from this box. Use the [backup and recovery commands](README.robot.md#pilot-backup-and-recovery-commands).
 
-Restore into an empty installation with separate storage. Sign in as the
-same member and open the saved chat at both widths. Check that writes are
-refused. The restored site is for reading. The backup excludes provider
-credentials and assistant computer homes.
+Restore into an empty installation with separate storage and the same model
+mode as the source. Sign in as the same member and open the saved chat at
+both widths. Check that writes are refused. The restored site is for reading.
+The backup excludes provider credentials and assistant computer homes.
 
 ## Roll back to the demo
 
