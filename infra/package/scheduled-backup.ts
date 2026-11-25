@@ -134,8 +134,9 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
       point, parts, startedAt, stoppedAt, completedAt: new Date().toISOString(),
       images: options.images, chartVersion: '0.1.0' };
     const manifest = manifestSchema.parse(manifestValue);
-    stage = 'manifest';
+    stage = 'manifest_inventory';
     pilotFileDetailsSchema.parse(manifest.parts.files.details);
+    stage = 'manifest_size';
     const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2));
     if (manifestBytes.length > maximumManifestBytes) throw new Error('Manifest size refused');
     stage = 'publish';

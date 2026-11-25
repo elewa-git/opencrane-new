@@ -532,6 +532,17 @@ async function checkBackupIsIdle(owner: PackageOwner) {
   if (active) throw new Error('Wait for the scheduled backup to finish before changing the release');
 }
 
+async function recordHostPreflight(owner: PackageOwner, image: string) {
+  function checkOnTarget(args: string[]) {
+    return ownedKubectl(owner, args);
+  }
+  const options: HostCheckOptions = { command: checkOnTarget, namespace, image, localCommand: command };
+  const override = process.env['OPENCRANE_ACCEPT_DEV_HOST_RISK'];
+  if (override !== undefined) options.override = override;
+  owner.hostPreflight = await checkPackageHosts(options);
+  await saveOwner(owner);
+}
+
 async function prepareUpgradeScanner(owner: PackageOwner, previousName: string, approvals: string) {
   const { publishApprovedScanner } = await import('../package/publish-approved-images.mjs');
   const approval = await publishApprovedScanner(approvals);
@@ -581,6 +592,7 @@ export async function upgradePackage() {
   const approvals = resolve(directory, 'release-approvals', revision);
   const approval = await publishApprovedApplication(approvals);
   if (approval.image === serverImage) throw new Error('This application image is already installed');
+  await recordHostPreflight(owner, approval.image);
   await checkLiveExposure(owner);
   await checkBackupIsIdle(owner);
   const scanner = await prepareUpgradeScanner(owner, scannerSecret, approvals);
@@ -661,13 +673,7 @@ export async function installPackage(valuesFile: string) {
   requireFleetStandInProvider(values.models?.mode === 'provider' && !values.models.qualification);
   // Give the models container the same restriction even if preparation had no marker.
   const fleetSetting = `models.fleetTask=${fleetTask}`;
-  const hostOptions: HostCheckOptions = {
-    command: checkedKubectl, namespace, image: values.images['server']!,
-    localCommand: command };
-  const override = process.env['OPENCRANE_ACCEPT_DEV_HOST_RISK'];
-  if (override !== undefined) hostOptions.override = override;
-  owner.hostPreflight = await checkPackageHosts(hostOptions);
-  await saveOwner(owner);
+  await recordHostPreflight(owner, values.images['server']!);
   await checkCnpgInstallation(values, namespace, checkedKubectl);
   const secrets = await checkNamedSecrets(values, review, owner, fleetTask);
   if (values.natsCluster?.enabled) {
