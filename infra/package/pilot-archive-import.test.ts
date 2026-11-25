@@ -4,7 +4,7 @@ import { importPilotArchive, type ArchiveDestination } from './pilot-archive-imp
 
 const source = { clusterUid: 'source-cluster', namespace: 'opencrane-package-1' };
 
-function destinationFixture(clusterUid: string, namespace: string) {
+function destinationFixture(clusterUid: string, namespace: string, namespaceUid = 'target-id') {
   const calls: string[][] = [];
   async function run(args: string[], archive?: string): Promise<string> {
     const call = [...args];
@@ -17,7 +17,8 @@ function destinationFixture(clusterUid: string, namespace: string) {
     }
     return '';
   }
-  const destination: ArchiveDestination = { namespace, run };
+  const recorded = { namespace, namespaceUid, run };
+  const destination: ArchiveDestination = recorded;
   return { calls, destination };
 }
 
@@ -28,6 +29,24 @@ test('the source cluster and namespace match even when context names differ',
       /source cluster and namespace/u);
     assert.deepEqual(fixture.calls, [['get', 'namespace', 'kube-system',
       '-o', 'jsonpath={.metadata.uid}']]);
+  });
+
+test('the archive may go into a fresh namespace that reuses the old name',
+  async function importsAfterReinstall() {
+    const fixture = destinationFixture(source.clusterUid, source.namespace);
+    const exported = { ...source, namespaceUid: 'original-id' };
+    await importPilotArchive(exported, fixture.destination, 'archive.tar');
+    assert.equal(fixture.calls.at(-1)?.at(-1), 'archive.tar');
+  });
+
+test('the archive cannot go back into the namespace that produced it',
+  async function refusesOriginalNamespace() {
+    const namespaceUid = 'original-id';
+    const fixture = destinationFixture(source.clusterUid, source.namespace, namespaceUid);
+    const exported = { ...source, namespaceUid };
+    await assert.rejects(importPilotArchive(exported, fixture.destination, 'archive.tar'),
+      /source cluster and namespace/u);
+    assert.equal(fixture.calls.length, 1);
   });
 
 test('rollout and extraction both use the checked destination namespace',

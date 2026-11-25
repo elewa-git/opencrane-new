@@ -137,6 +137,20 @@ async function writeDeadOwner(slotDirectory: string, ageMinutes: number) {
   return owner;
 }
 
+test('a request for a busy slot leaves the other slot unclaimed', refusesSelectedBusySlot);
+
+async function refusesSelectedBusySlot() {
+  const fixture = await createClaimFixture();
+  try {
+    const owner = await writeDeadOwner(fixture.slotDirectory, 1);
+    await assert.rejects(exec('infra/dev-stack/claim.sh', ['--id', '1'], { env: fixture.env }));
+    await assert.rejects(stat(`${fixture.home}/stack-2.lock`), { code: 'ENOENT' });
+    assert.equal(await readFile(`${fixture.slotDirectory}/stack-owner`, 'utf8'), owner);
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+
 async function freshClaimIsReserved() {
   const fixture = await createClaimFixture();
   try {
