@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page } from 'playwright';
 import { modelForTask } from '@opencrane/models';
+import { postJourneyCommand, readJourneyApi } from './browser-api.ts';
 import type { BeforePageNavigation } from './browser-signin.ts';
 
 export async function prepareBudgetAssistant(owner: Page, members: Page[],
@@ -44,15 +45,14 @@ export async function openBudgetConversation(member: Page, origin: string,
 }
 
 async function save(page: Page, origin: string, path: string, data: unknown) {
-  const options = { headers: { origin }, data };
-  const response = await page.request.post(`${origin}${path}`, options);
+  const response = await postJourneyCommand(page, origin, path, data);
   assert.equal(response.status(), 200, `Prepare budget journey through ${path}`);
 }
 
 async function waitForChange(page: Page, origin: string, path: string) {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    const response = await page.request.get(`${origin}${path}`);
+    const response = await readJourneyApi(page, `${origin}${path}`);
     // An accepted command can be absent until its read table first sees the receipt.
     if (response.status() !== 404) {
       assert.equal(response.status(), 200);
@@ -67,7 +67,7 @@ async function waitForChange(page: Page, origin: string, path: string) {
 async function waitForAssistant(member: Page, origin: string, assistantId: string) {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    const response = await member.request.get(`${origin}/api/assistants/${assistantId}`);
+    const response = await readJourneyApi(member, `${origin}/api/assistants/${assistantId}`);
     assert.equal(response.status(), 200);
     const body = await response.json() as {
       rows: Array<{ assistantId: string; status: string; canStartSession: boolean }>;

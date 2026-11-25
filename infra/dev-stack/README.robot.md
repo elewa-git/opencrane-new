@@ -1509,7 +1509,10 @@ Personal assistants are not valid choices in the spending editor.
 The journey restores that exact paying group, assistant and global limits after the
 budget browser checks, whether they pass or fail. Audit checks finish before budget
 setup and change no ceilings. Cleanup uses the authenticated
-budget API rather than loading the Spending page. It waits for the budget table to
+budget API rather than loading the Spending page. The direct browser API helpers
+keep the signed-in session but close each HTTP connection after its response, so a
+port forward cannot send the next request on a connection that already expired.
+Cleanup waits for the budget table to
 catch up before the next step. Monthly test limits are 20,000 cents; the daily global
 limit is 5,000 cents. It attempts every scope and reports any failed restoration.
 

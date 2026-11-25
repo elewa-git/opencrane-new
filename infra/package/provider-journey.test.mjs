@@ -7,6 +7,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { postJourneyCommand, readJourneyApi } from '../dev-stack/browser-api.ts';
 import { chargedBudgetJourney } from '../dev-stack/charged-budget-journey.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
@@ -109,8 +110,7 @@ async function invite(ownerPage, role, membershipRole) {
     personalAssistant: 'provision', expectedSequence: 0 };
   stage = { check: `invite ${membershipRole}`, expectedHttpStatus: 200,
     detail: 'The owner must be able to save the invitation.' };
-  const response = await ownerPage.request.post(`${origin}/api/invitations`,
-    { headers: { origin }, data });
+  const response = await postJourneyCommand(ownerPage, origin, '/api/invitations', data);
   assert.equal(response.status(), 200, 'The owner can invite a separate journey identity');
   const invitation = await response.json();
   assert(invitation.invitationId, 'The invitation must be recorded');
@@ -118,9 +118,9 @@ async function invite(ownerPage, role, membershipRole) {
   const page = await login(role);
   stage = { check: `${membershipRole} accepts invitation`, expectedHttpStatus: 200,
     detail: 'The separately signed-in person must be able to accept the invitation.' };
-  const joined = await page.request.post(`${origin}/members/join`, { headers: { origin },
-    data: { memberId, invitationId: invitation.invitationId, commandId: randomUUID(),
-      displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' } });
+  const join = { memberId, invitationId: invitation.invitationId, commandId: randomUUID(),
+    displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' };
+  const joined = await postJourneyCommand(page, origin, '/members/join', join);
   assert.equal(joined.status(), 200, 'The separately signed-in person can accept');
   assert.equal((await joined.json()).status, 'joined');
   return { page, memberId };
@@ -129,7 +129,7 @@ async function invite(ownerPage, role, membershipRole) {
 async function waitForModels(page, providerId) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const response = await page.request.get(`${origin}/api/org/providers/${providerId}`);
+    const response = await readJourneyApi(page, `${origin}/api/org/providers/${providerId}`);
     assert.equal(response.status(), 200);
     const result = await response.json();
     if (result.rows[0]?.enabledModels.includes('gpt-6.1-sol')) {
@@ -163,7 +163,7 @@ async function connect(admin) {
   step('save wrong synthetic key', 'Saving the key must advance to the Verify step.');
   await saveProviderKey(admin, wrongCredential);
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).waitFor();
-  const inventory = await admin.request.get(`${origin}/api/org/providers`);
+  const inventory = await readJourneyApi(admin, `${origin}/api/org/providers`);
   const providerId = (await inventory.json()).rows[0].providerId;
   const providerUrl = `${origin}/api/org/providers/${providerId}`;
   step('wrong-key reachability', 'Verification must report failed reachability for the wrong key.');

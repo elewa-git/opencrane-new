@@ -9,6 +9,7 @@ import type { EventEnvelope } from '@opencrane/events';
 import { history, migrateBudgetDefault } from '@opencrane/models';
 import { budgetSummarySchema, type BudgetSummary } from '@opencrane/protocol';
 import { readEvents } from '@opencrane/projections';
+import { postJourneyCommand, readJourneyApi } from './browser-api.ts';
 import { directory, root } from './config.ts';
 import type { BeforePageNavigation } from './browser-signin.ts';
 
@@ -227,8 +228,7 @@ async function restoreBudgetCeiling(owner: Page, origin: string, store: EventSto
     scope, ceilingCents: 20000,
     ...(scope === 'global' ? { dailyCeilingCents: 5000 } : { scopeId }),
   };
-  const request = { headers: { origin }, data: command };
-  const response = await owner.request.post(`${origin}/api/org/models`, request);
+  const response = await postJourneyCommand(owner, origin, '/api/org/models', command);
   assert.equal(response.status(), 200, `Restore the ${scope} test ceiling`);
   const saved = await budgetFromResponse(response);
   await waitForProjectedBudget(owner, origin, saved.sequence);
@@ -246,7 +246,7 @@ async function waitForProjectedBudget(owner: Page, origin: string, sequence: num
 }
 
 export async function readBudgetSummary(owner: Page, origin: string) {
-  const response = await owner.request.get(`${origin}/api/org/models`);
+  const response = await readJourneyApi(owner, `${origin}/api/org/models`);
   return budgetFromResponse(response);
 }
 

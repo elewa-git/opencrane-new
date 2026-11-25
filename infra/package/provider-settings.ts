@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Locator, Page, Response } from 'playwright';
 import { z } from 'zod';
+import { readJourneyApi } from '../dev-stack/browser-api.ts';
 import { waitForSeededDefault, type ProviderBindings } from '../dev-stack/provider-default.ts';
 
 const verificationFacts = {
@@ -49,7 +50,7 @@ async function waitForVerificationFact(
 ): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const response = await page.request.get(providerUrl);
+    const response = await readJourneyApi(page, providerUrl);
     assert.equal(response.status(), 200, 'Provider status read failed');
     const result = verificationStatus.parse(await response.json());
     if (result.rows[0]?.[fact]?.outcome === outcome) return;
@@ -66,7 +67,7 @@ export async function selectChatDefault(page: Page, origin: string, providerId: 
   model: string): Promise<Locator> {
   const bindingUrl = `${origin}/api/org/providers/${encodeURIComponent(providerId)}/bindings`;
   async function readBindings() {
-    const response = await page.request.get(bindingUrl);
+    const response = await readJourneyApi(page, bindingUrl);
     if (response.status() === 503) return undefined;
     assert.equal(response.status(), 200, 'Provider bindings are readable');
     const body = await response.json() as ProviderBindings;

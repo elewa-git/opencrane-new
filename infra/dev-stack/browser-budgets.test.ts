@@ -192,6 +192,8 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
   const fixtureSource = `${fixture}/browser-budgets.ts`;
   const source = new URL('./browser-budgets.ts', import.meta.url);
   await files.copyFile(source, fixtureSource);
+  const api = new URL('./browser-api.ts', import.meta.url);
+  await files.copyFile(api, `${fixture}/browser-api.ts`);
   const configuration = `export const directory = ${JSON.stringify(fixture)};\n`
     + `export const root = ${JSON.stringify(fixture)};\n`;
   await files.writeFile(`${fixture}/config.ts`, configuration);

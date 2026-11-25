@@ -27,7 +27,11 @@ guard. `runtime-context.test.mjs` checks these paths in the Docker build context
 before the application image is built. The context includes `web.mjs` and its
 shared `web-page.mjs` renderer.
 The development static server imports the upgrade handler from `web.mjs`;
-importing it does not start a package listener. The upgrade handler
+importing it does not start a package listener. For ordinary HTTP, the package
+proxy removes connection-specific headers in both directions, including any
+fields named in `Connection`. This lets each connection use its own idle timeout
+and body framing. `web-proxy.test.mjs` checks that a budget read through a forward
+opens a new connection after the website connection expires. The upgrade handler
 uses Node's HTTP upgrade response, preserves both initial byte buffers and closes
 both connections on either peer's error or closure. It logs connection errors
 through the structured logger before closing. A failed viewer write cannot stop
@@ -2172,6 +2176,8 @@ checkout's approved images and private values using the
 [operator commands](#local-operator-guide). Run `package-check` and start the
 loopback forward before running the browser check. The runner requires the claimed
 namespace and the separate qualification stand-in before it begins provider setup.
+Direct Playwright API requests keep the browser's session and use a fresh HTTP
+connection for each read or command through the forward.
 
 The owner connects the provider in Settings. A separate admin sets the paying
 group's monthly ceiling to 500 cents in Spending. At 1280 and 390 px a member
