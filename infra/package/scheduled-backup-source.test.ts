@@ -55,6 +55,7 @@ vi.mock('pg', function databaseBoundary() {
 
     query(sql: string) {
       if (sql.includes('conversation_files')) {
+        this.requireReader('projection');
         function asRow(data: unknown) { return { data }; }
         return { rows: database.fileReferences.map(asRow) };
       }
@@ -189,6 +190,20 @@ const upload = {
   size: 3, sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
   mime: 'text/plain', objectKey: 'test/conv_1/file_1',
 };
+
+async function publishesMatchingUpload() {
+  const test = await backupFixture(true, false, true);
+  database.fileReferences.push(upload);
+  storage.set(upload.objectKey, Buffer.from('abc'));
+  const manifest = await captureScheduledBackup(test.options, test.source);
+  const archived = await readFile(join(test.directory, test.options.id, 'files'), 'utf8');
+  const file = { key: upload.objectKey, byteCount: 3, sha256: upload.sha256, data: 'YWJj' };
+  expect(JSON.parse(archived)).toEqual(file);
+  expect(await listBackups(test.directory)).toEqual([manifest]);
+}
+
+it('copies a stored upload that matches its event in the projection database',
+  publishesMatchingUpload);
 
 for (const mismatch of ['object without event', 'event without object', 'wrong object bytes']) {
   it(`refuses publication with ${mismatch}`, async function refusesFilesMismatch() {
