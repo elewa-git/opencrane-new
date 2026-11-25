@@ -15,9 +15,6 @@ import { checkCnpgInstallation } from './cnpg.ts';
 import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from './package-hosts.ts';
 import { checkPublicSettings, type PublicPackageValues } from '../package/public-settings.mjs';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
-import {
-  publishApprovedApplication, publishApprovedScanner,
-} from '../package/publish-approved-images.mjs';
 import { requireFleetStandInProvider } from './journey-guard.ts';
 
 import { checkModelSecrets, type PackageModels } from '../package/model-settings.ts';
@@ -536,6 +533,7 @@ async function checkBackupIsIdle(owner: PackageOwner) {
 }
 
 async function prepareUpgradeScanner(owner: PackageOwner, previousName: string) {
+  const { publishApprovedScanner } = await import('../package/publish-approved-images.mjs');
   const approval = await publishApprovedScanner(directory);
   const name = `package-scanner-${approval.approvedSha}`;
   const previousText = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret', previousName,
@@ -575,6 +573,7 @@ async function createUpgradeSecret(owner: PackageOwner, secret: unknown) {
 }
 
 export async function upgradePackage() {
+  const { publishApprovedApplication } = await import('../package/publish-approved-images.mjs');
   const owner = await checkedRelease();
   const { bootstrapImage, scannerSecret, serverImage } = await pilotUpgradeValues(owner);
   await command('git', ['diff', '--quiet', 'HEAD', '--', 'infra/package/chart']);

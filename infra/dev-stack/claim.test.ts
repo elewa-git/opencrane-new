@@ -648,7 +648,13 @@ if (program === 'helm' && args.includes('list')) {
   }
 }
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
-if (program === 'kubectl' && args.includes('namespace') && state.namespace) {
+if (program === 'kubectl' && args.includes('config') && args.includes('view')) {
+  process.stdout.write('PRIVATE-FORWARD-CONNECTION');
+}
+if (program === 'kubectl' && args.includes('kube-system') && state.namespace) {
+  output({ items: [{ metadata: { name: 'kube-system', uid: 'test-cluster' } },
+    { metadata: { name: 'opencrane-package-1', uid: state.namespace.metadata.uid } }] });
+} else if (program === 'kubectl' && args.includes('namespace') && state.namespace) {
   output(state.namespace);
   if (state.loseTarget) fs.rmSync(ownerFile, { force: true });
 }
@@ -908,8 +914,13 @@ async function packageConnectionLifecycle(isolated: boolean) {
     await fixture.loadState();
     for (const [index, call] of fixture.state.calls.entries()) {
       if (call[0] !== 'kubectl' && call[0] !== 'helm') continue;
+      const kubeconfig = fixture.state.kubeconfigs[index];
       assert.equal(call.includes('--kubeconfig'), false);
-      if (isolated) {
+      if (call.includes('kube-system') || call.includes('port-forward')) {
+        assert.ok(kubeconfig?.startsWith(`${fixture.slotDirectory}/forward-`));
+        assert.ok(kubeconfig?.endsWith('/connection.yaml'));
+        assert.equal(call.includes(kubeconfig!), false);
+      } else if (isolated) {
         assert.equal(fixture.state.kubeconfigs[index], `${fixture.slotDirectory}/target.kubeconfig`);
         assert.equal(call.includes(`${fixture.slotDirectory}/target.kubeconfig`), false);
       }

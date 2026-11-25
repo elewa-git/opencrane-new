@@ -35,8 +35,9 @@ function routeFixture(savedRoute: string) {
     const Handlers = { ...root, ...tailscale.extraHandlers };
     const Web = { [`${host}:443`]: { Handlers }, ...tailscale.extraHosts };
     const https = tailscale.https ? { '443': { HTTPS: true } } : {};
-    return { AllowFunnel: tailscale.funnel, Web, Foreground: tailscale.foreground,
+    const configuration = { AllowFunnel: tailscale.funnel, Web, Foreground: tailscale.foreground,
       TCP: { ...https, ...tailscale.extraPorts }, Services: tailscale.services };
+    return { configuration, etag };
   }
   async function ownsForwarder(origin: string) {
     assert.equal(origin, pilotTarget);

@@ -79,13 +79,16 @@ Not built yet:
 6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
 7. **A backup runs.** The job stops writes, drains read tables and saves matching
-   events, databases and files. It checks that writers stayed stopped before the
-   services restart. It publishes a complete backup only after the stopped
+   events, databases and files. It waits for the read tables to catch up and checks
+   that saved events account for every stored file. It checks that writers stayed
+   stopped before services restart. It publishes the backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
 8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-9. **A developer checks or removes an install.** Fresh-install checks use new storage
+9. **An operator updates a pilot.** The new approved images replace the running
+   images. The pilot keeps the same storage and sign-in.
+10. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
    Provider journey results name the failed step and its expected condition.

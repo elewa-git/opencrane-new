@@ -915,14 +915,20 @@ The loopback port is 25106 for slot 1 or 25206 for slot 2.
 The switch command checks the configured host against this device’s tailnet
 name. It checks both installed sign-in redirects and checks foreground and
 background sessions for Funnel. It accepts only the expected root HTTPS
-proxy. It reads `/auth/me` and checks that `kubectl` owns the listening socket,
-uses the claimed namespace and was started by the forwarder in this checkout.
-A failed check leaves the demo mapped. A repeat after a successful switch
-keeps the saved demo target.
+proxy with a TCP HTTPS listener on port 443. It reads `/auth/me` and checks
+that `kubectl` owns the listening socket, was started from this checkout and
+uses the checked cluster and namespace. The forwarder uses a private copy
+of the connection settings for its identity check and listening process.
+
+The command checks the listener again just before it writes. Tailscale's
+local API applies the write only if the configuration still matches the
+version the command checked. A repeat after a successful switch keeps the
+saved demo target. If a write or confirmation is uncertain, the saved demo
+recovery below returns the route to the demo.
 
 On this box `sudo -v` needs a terminal. The switch uses `sudo -n`, which
 refuses a password prompt. The operator can skip `sudo -v` when sudo needs
-no password for the Serve command.
+no password for the local API request through `curl`.
 
 ```sh
 sudo -v &&
@@ -935,6 +941,14 @@ the tailnet should be unable to open it. The pilot uses
 without Funnel. The first-owner token goes in the claim form.
 
 ### Roll back the pilot route
+
+If a switch reports that it could not confirm the write or the new mapping,
+stop inviting people and keep the saved route file. Run the first recovery
+block below if the demo is running. If the guarded command reports a changed
+or unexpected Serve configuration, keep the forwarder running and inspect
+`tailscale serve status --json` with the operator who owns the current routes.
+Resolve the conflict before running the recovery block again. A refused
+recovery leaves the current configuration in place.
 
 When the demo is still running, restore the saved root HTTPS handler and
 stop the pilot forwarder after the mapping is back. Run these commands from
