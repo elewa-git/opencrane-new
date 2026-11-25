@@ -61,6 +61,16 @@ export async function finishSelectingProviderModels(page: Page): Promise<void> {
   await waitForProviderStep(page, 'Step 5 of 6 · Access');
 }
 
+export async function selectChatDefault(page: Page, _origin: string, _providerId: string,
+  model: string): Promise<Locator> {
+  const chat = page.getByRole('region', { name: 'Member chat setup' });
+  await chat.getByLabel('Chat model').selectOption(model);
+  await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
+  const recorded = 'Change recorded. Check chat setup to read its current status.';
+  await chat.getByText(recorded, { exact: true }).waitFor();
+  return chat;
+}
+
 export async function createProviderConnection(page: Page, name: string): Promise<void> {
   const actions = page.locator('.page-actions');
   await actions.getByRole('button', { name: 'Connect a provider', exact: true }).click();

@@ -16,7 +16,7 @@ import { providerFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
   from './provider-probe.ts';
 import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
-  verifyProvider } from './provider-settings.ts';
+  selectChatDefault, verifyProvider } from './provider-settings.ts';
 import { completeProviderSignIn } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -195,11 +195,7 @@ async function connect(admin) {
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   await admin.getByRole('button', { name: 'Go to Models', exact: true }).click();
   step('select chat default', 'Selecting the chat default must save its model binding.');
-  const chat = admin.getByRole('region', { name: 'Member chat setup' });
-  await chat.getByLabel('Chat model').selectOption('gpt-6.1-sol');
-  await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
-  await chat.getByText('Change recorded. Check chat setup to read its current status.',
-    { exact: true }).waitFor();
+  const chat = await selectChatDefault(admin, origin, providerId, 'gpt-6.1-sol');
   step('switch on member chats', 'Drained provider admission must allow member chats to switch on.');
   await chat.getByRole('button', { name: 'Pause new calls', exact: true }).click();
   await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();
