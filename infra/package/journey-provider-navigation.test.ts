@@ -252,6 +252,75 @@ async function preservesLateInspectionFailures(): Promise<void> {
 test('an inspection failure arriving during browser shutdown still refuses a journey PASS',
   preservesLateInspectionFailures);
 
+async function drainsBeforeClosingWithAPoll(): Promise<void> {
+  const pausedPoll = Promise.withResolvers<void>();
+  const pollPath = '/api/conversations/fixture/approvals';
+  let polls = 0;
+  function respond(request: IncomingMessage, response: ServerResponse): void {
+    if (request.url !== pollPath) {
+      serve(request, response);
+      return;
+    }
+    polls++;
+    // Hold the reply open so closing Chromium during the inspection loses its body.
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.flushHeaders();
+  }
+  const server = createServer(respond);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  const close = browser.close.bind(browser);
+  try {
+    const page = await browser.newPage();
+    const context = page.context();
+    const openSession = context.newCDPSession.bind(context);
+    const pollUrl = `${origin}${pollPath}`;
+    async function observeSession(target: Parameters<typeof openSession>[0]) {
+      const session = await openSession(target);
+      function responsePaused(event: { request: { url: string }; responseStatusCode?: number }) {
+        if (event.request.url === pollUrl && event.responseStatusCode === 200) pausedPoll.resolve();
+      }
+      session.on('Fetch.requestPaused', responsePaused);
+      return session;
+    }
+    context.newCDPSession = observeSession;
+    const replies: Promise<void>[] = [];
+    const bodies: string[] = [];
+    function inspect(body: string) { bodies.push(body); }
+    await watchBrowserReplies(page, origin, replies, inspect);
+    const initialReply = page.waitForResponse(`${origin}/api/check`);
+    await page.goto(origin);
+    await initialReply;
+    async function closeWithPoll(): Promise<void> {
+      function isApprovalPoll(request: { url(): string }): boolean {
+        return request.url() === pollUrl;
+      }
+      const rejected = page.waitForEvent('requestfailed', isApprovalPoll);
+      await page.evaluate(path => {
+        void fetch(path).catch(() => undefined);
+      }, pollPath);
+      await Promise.race([pausedPoll.promise, rejected]);
+      await close();
+    }
+    browser.close = closeWithPoll;
+    await finishBrowserReplies(browser, replies);
+    assert.equal(polls, 0, 'A closing page cannot start another request at the server');
+    assert.deepEqual(bodies, ['{"result":"safe"}']);
+  } finally {
+    await close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('shutdown drains inspected replies before a new approval poll can reach the server',
+  drainsBeforeClosingWithAPoll);
+
 const cancelledResponse = new Error(
   'cdpSession.send: Protocol error (Fetch.continueResponse): Invalid InterceptionId.');
 
