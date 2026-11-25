@@ -202,6 +202,9 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.runtime | quote }}
                   key: PROJECTION_DATABASE_URL
+{{- if .Values.models.fleetTask }}
+            - { name: OPENCRANE_FLEET_TASK, value: "package-qualification" }
+{{- end }}
 {{- if eq (toString .Values.models.mode) "provider" }}
             - { name: PACKAGE_PROVIDER_MODE, value: "1" }
 {{- if .Values.models.qualification }}

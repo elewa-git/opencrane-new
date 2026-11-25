@@ -259,8 +259,10 @@ stand-in mounts that Secret; runtime file Secrets contain no copy. The stand-in
 requires its credential and returns 401 for every wrong or missing key. Its network
 policy permits requests only from the server Pod and denies outbound traffic.
 The synthetic credential still goes through Settings and ordinary provider custody.
-The fleet marker remains set; `DEV_REAL_PROVIDER` is never set for this route.
-Paid qualification remains a separate, explicitly authorised journey.
+Installation requires the fixed upstream in the runtime Secret. It uses its own
+fleet marker to refuse ordinary provider mode before Helm and to mark the models
+container, even when preparation was unmarked. An unmarked installer refuses a
+fleet-prepared runtime Secret. `DEV_REAL_PROVIDER` stays unset during qualification.
 
 `provider-journey.test.mjs` follows the visible Settings setup. It scopes key entry
 and actions to the open, named dialog, waits for the named step and uses an enabled Check

@@ -47,6 +47,13 @@ export function checkModelSecrets(name: string, stored: SecretData,
         throw new Error('Provider mode refuses stand-in settings');
       }
     }
+    if (name === 'runtime' && models.qualification) {
+      requirePackageProviderDestination({
+        PACKAGE_PROVIDER_MODE: '1', PACKAGE_PROVIDER_QUALIFICATION: '1',
+        MODEL_UPSTREAM: Buffer.from(data['MODEL_UPSTREAM'] ?? '', 'base64').toString('utf8'),
+        DEV_REAL_PROVIDER: data['DEV_REAL_PROVIDER'],
+      });
+    }
     return;
   }
   const requiredKeys = name === 'runtime' ? ['MODEL_UPSTREAM', 'MODEL_KEY_FILE'] : ['model-stub-key'];

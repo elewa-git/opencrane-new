@@ -17,7 +17,7 @@ in the recorded Kubernetes cluster.
 
 ```mermaid
 flowchart LR
-  stack["infra/dev-stack<br/>stack ownership"] -->|checks and launches| package["infra/package<br/>local Helm install"]
+  stack["infra/dev-stack<br/>stack ownership"] -->|checks hosts and provider mode, then launches| package["infra/package<br/>local Helm install"]
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
   browser["Browser<br/>chat and desktop"] -->|connects through website proxy| apps
@@ -65,6 +65,7 @@ Not built yet:
 3. **An owner connects a model provider.** With `models.mode: provider`, they save
    its key in Settings, run the quoted test, select the chat model and switch on.
    Members can then get real replies. The default install keeps the stand-in.
+   Fleet tasks can use provider mode with the restricted free stand-in.
    When the provider-mode server is updated, it stops before its replacement starts.
 4. **A developer opens the website.** A local port forward connects their browser
    to the private website. A closed desktop connection leaves other requests available.

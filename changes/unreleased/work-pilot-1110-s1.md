@@ -7,6 +7,8 @@ stand-in behaviour.
 Keep connected provider keys private after Pod recreation. Admins can select the
 chat default and switch on from Settings. A restricted, separate free provider
 supports packaged qualification with wrong-key refusal and ordinary key custody.
+Fleet package installs enforce the free stand-in at install time, even when the
+saved settings came from a different environment.
 Provider journey failures name the step and expected condition without copying
 credentials or private paths into the public result.
 Fresh owner bootstrap finishes applying ownership permissions before opening the

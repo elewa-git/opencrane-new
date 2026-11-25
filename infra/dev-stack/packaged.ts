@@ -15,6 +15,7 @@ import { checkCnpgInstallation } from './cnpg.ts';
 import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from './package-hosts.ts';
 import { checkPublicSettings, type PublicPackageValues } from '../package/public-settings.mjs';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
+import { requireFleetStandInProvider } from './journey-guard.ts';
 
 import { checkModelSecrets, type PackageModels } from '../package/model-settings.ts';
 
@@ -367,7 +368,8 @@ async function checkClusterNodes(owner: PackageOwner) {
   }
 }
 
-async function checkNamedSecrets(values: PackageValues, review: PackageReview, owner: PackageOwner) {
+async function checkNamedSecrets(values: PackageValues, review: PackageReview, owner: PackageOwner,
+  fleetTask: boolean) {
   const secrets: Record<string, SecretData> = {};
   for (const name of review.requiredSecrets) {
     const secret = values.secrets[name]!;
@@ -375,6 +377,9 @@ async function checkNamedSecrets(values: PackageValues, review: PackageReview, o
       '--ignore-not-found', '-o', 'json']);
     if (!found) throw new Error(`Required secret is absent: ${name}`);
     const stored = JSON.parse(found) as SecretData;
+    if (name === 'runtime' && !fleetTask && stored.data?.['OPENCRANE_FLEET_TASK'] !== undefined) {
+      throw new Error('Package prepared by a fleet task requires a fleet installer');
+    }
     checkReplicaSettings(name, stored, values);
     checkSecretFields(name, stored, values.exposure?.public?.enabled === true);
     checkModelSecrets(name, stored, values.models);
@@ -408,10 +413,11 @@ function decodeSecret(secret: SecretData) {
   return settings;
 }
 
-async function checkRenderedPackage(valuesFile: string, review: PackageReview) {
+async function checkRenderedPackage(valuesFile: string, review: PackageReview, fleetSetting: string) {
   const location = valuesLocation(valuesFile);
-  const rendered = await command('helm', ['template', release, chartDirectory,
-    '--namespace', namespace, '--values', location.name], 120_000, location.directory);
+  const args = ['template', release, chartDirectory, '--namespace', namespace,
+    '--values', location.name, '--set', fleetSetting];
+  const rendered = await command('helm', args, 120_000, location.directory);
   const reviewedImages = new Set(Object.values(review.images));
   const renderedImages = rendered.matchAll(/^\s*"?(image|imageName)"?:\s*"?([^",\n]+)"?,?\s*$/gmu);
   let imageCount = 0;
@@ -516,6 +522,10 @@ export async function installPackage(valuesFile: string) {
     return ownedKubectl(owner, args, timeoutMs, signal, deadline);
   }
   const { values, review } = await readReviewedValues(valuesFile);
+  const fleetTask = process.env['OPENCRANE_FLEET_TASK'] !== undefined;
+  requireFleetStandInProvider(values.models?.mode === 'provider' && !values.models.qualification);
+  // Give the models container the same restriction even if preparation had no marker.
+  const fleetSetting = `models.fleetTask=${fleetTask}`;
   const hostOptions: HostCheckOptions = {
     command: checkedKubectl, namespace, image: values.images['server']!,
     localCommand: command };
@@ -524,14 +534,14 @@ export async function installPackage(valuesFile: string) {
   owner.hostPreflight = await checkPackageHosts(hostOptions);
   await saveOwner(owner);
   await checkCnpgInstallation(values, namespace, checkedKubectl);
-  const secrets = await checkNamedSecrets(values, review, owner);
+  const secrets = await checkNamedSecrets(values, review, owner, fleetTask);
   if (values.natsCluster?.enabled) {
     await checkClusterNodes(owner);
     const { checkPreparedNatsRoutes } = await import('../package/prepare-nats-routes.ts');
     await checkPreparedNatsRoutes(valuesFile, owner);
   }
   await checkNatsInputs(secrets);
-  await checkRenderedPackage(valuesFile, review);
+  await checkRenderedPackage(valuesFile, review, fleetSetting);
   if (await releaseSecret(owner)) throw new Error('A Helm release already uses this namespace');
   // Save the identity before Helm runs so interrupted cleanup can recognise this install.
   owner.installId = randomUUID();
@@ -542,7 +552,7 @@ export async function installPackage(valuesFile: string) {
     await command('helm', ['install', release, chartDirectory,
       '--kube-context', owner.context, '--namespace', namespace, '--values', location.name,
       '--labels', `${installIdLabel}=${owner.installId}`,
-      '--wait=false'], 180_000, location.directory);
+      '--wait=false', '--set', fleetSetting], 180_000, location.directory);
   } catch (error) {
     const releaseUid = await ownedReleaseSecretUid(owner);
     if (releaseUid) owner.releaseSecretUid = releaseUid;

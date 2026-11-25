@@ -40,7 +40,10 @@ for that id afterwards, including when preparation, installation or the browser 
 
 The packaged installer runs preflight and Helm from the values file's directory.
 It passes only the filename as the values argument, so an absolute private
-directory does not enter child command arguments.
+directory does not enter child command arguments. The installer reads its own fleet
+marker, including an empty marker, before Helm. A marked installer refuses ordinary
+provider mode and passes the marker directly to the models container. An unmarked
+installer refuses a runtime Secret prepared by a fleet task.
 
 ## Personal Memory response collection
 
