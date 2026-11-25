@@ -1,6 +1,58 @@
 # Packaged monthly budget journey
 
-## Fresh run after the quiet-container log fix
+## Fresh packaged run 2
+
+Packaged qualification **PASS** on 25 November 2026. One fresh Helm install on
+secondary slot 1 used source `60121fef3d897138d466127abe136e6aacc66a09`.
+The one-minute host load stayed below 6 across 30-second samples for more than
+six minutes before the claim. Both image approvals matched this revision, and
+their artifacts were available. [CI](https://github.com/elewa-git/opencrane-new/actions/runs/45684027922),
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45684039512)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45684039122).
+
+Package preparation, installation and the ownership check **PASS**. The install
+recorded `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` for this
+development host. The owner invited a separate admin and member. The free
+stand-in returned HTTP 401 to the wrong key. The owner connected, tested and
+switched on the stand-in for member chats.
+
+Both browser widths **PASS**. The admin saved a 500-cent monthly group ceiling.
+The member opened the shared assistant and received a reply. Member action
+history kept both amounts private. The admin opened the matching turn in Change
+history and saw the reservation and charge. Spending showed the settled group
+total. The admin lowered the ceiling, and chat explained the limit on the next
+turn. That turn sent no request to the stand-in.
+
+| Width | Reserved cents | Charged cents | Group spent cents | Lowered ceiling cents | Arrivals before and after refusal |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1280 px | 16 | 1 | 1 | 0 | 5 → 5 |
+| 390 px | 16 | 1 | 2 | 1 | 6 → 6 |
+
+- 1280 px [Turn spending](screenshots/run-2-turn-spending-1280.png),
+  [group spending](screenshots/run-2-settled-spending-1280.png) and
+  [chat refusal](screenshots/run-2-budget-refused-1280.png)
+- 390 px [Turn spending](screenshots/run-2-turn-spending-390.png),
+  [group spending](screenshots/run-2-settled-spending-390.png) and
+  [chat refusal](screenshots/run-2-budget-refused-390.png)
+
+Server disclosure **PASS**. The run checked local and installed Helm values,
+running manifests, eight container logs and 166 saved events. All checked
+containers were on their first start. The fixtures cover logs from restarted
+containers. Final browser reconciliation **PASS**. The driver inspected 256 API
+replies and matched the completed page requests to their inspected replies
+through shutdown. Zero paid calls and zero paid euro cents.
+[Browser result](run-2-result.json)
+
+The runner saved `package-up.log`, `browser.log` and the service logs before
+teardown. `package-down` and `down.sh` both exited with status 0. Slot 1 reported
+free.
+
+The 84 focused Node tests, 26 Change history tests and two saved-event
+disclosure tests passed twice. Typecheck, the event catalogue, Knip, the
+changelog, Markdown and README checks passed. ESLint passed on the changed
+web files. Its configuration excludes the infrastructure files.
+
+## Earlier fresh run after the quiet-container log fix
 
 Packaged qualification **FAIL** on 25 November 2026. One fresh Helm install on
 secondary slot 1 used source `285e5cc28948f853195440ae23047656cf407a80`. CI
