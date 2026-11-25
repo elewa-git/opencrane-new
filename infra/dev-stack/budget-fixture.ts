@@ -34,6 +34,9 @@ export async function openBudgetConversation(member: Page, origin: string,
   const conversationId = randomUUID();
   const session = { id: randomUUID(), conversationId, assistantId, payingGroupId: groupId };
   await save(member, origin, '/api/conversations', session);
+  const change = `/api/conversations/${conversationId}/changes/${session.id}`;
+  // The workspace can only open the session after its read table and access are ready.
+  await waitForChange(member, origin, change);
   await member.goto(`${origin}/workspace?conversation=${conversationId}`);
   await member.getByRole('textbox', { name: 'Message your agent' }).waitFor();
 }
@@ -44,13 +47,16 @@ async function save(page: Page, origin: string, path: string, data: unknown) {
   assert.equal(response.status(), 200, `Prepare budget journey through ${path}`);
 }
 
-async function waitForChange(owner: Page, origin: string, path: string) {
+async function waitForChange(page: Page, origin: string, path: string) {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    const response = await owner.request.get(`${origin}${path}`);
-    assert.equal(response.status(), 200);
-    const body = await response.json() as { projection: { content: string; iam: string } };
-    if (body.projection.content === 'current' && body.projection.iam === 'current') return;
+    const response = await page.request.get(`${origin}${path}`);
+    // An accepted command can be absent until its read table first sees the receipt.
+    if (response.status() !== 404) {
+      assert.equal(response.status(), 200);
+      const body = await response.json() as { projection: { content: string; iam: string } };
+      if (body.projection.content === 'current' && body.projection.iam === 'current') return;
+    }
     await delay(100);
   }
   assert.fail(`Budget journey change reaches its read table and access records: ${path}`);

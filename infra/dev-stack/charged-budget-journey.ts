@@ -39,7 +39,13 @@ async function showSettledCost(admin: Page, origin: string, groupId: string, cen
   await amount.filter({ hasText: `(${cents} cents)` }).waitFor({ state: 'visible' });
 }
 
+async function chooseMemoryFreeTurn(member: Page) {
+  const choice = { name: 'Start a fresh memory-free turn', exact: true };
+  await member.getByRole('button', choice).click();
+}
+
 async function refuseNextTurn(member: Page, prompt: string) {
+  await chooseMemoryFreeTurn(member);
   await sendForReply(member, prompt);
   const notice = await findBudgetNoticeForPrompt(member, prompt);
   await notice.getByText(/^Group monthly limit reached/u).waitFor({ state: 'visible' });
@@ -61,10 +67,13 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   const previousCents = scopedBudget(starting, scope, groupId).monthCents;
   await capture(admin, 'monthly-ceiling', width);
 
+  step(`open member chat at ${width}px`, 'The shared assistant session must open for the member.');
+  await openBudgetConversation(member, origin, assistant);
   step(`charge member turn at ${width}px`,
     'The member must receive a reply and Spending must show its charge in whole euro cents.');
-  await openBudgetConversation(member, origin, assistant);
   const requestsBefore = await readRequestCount();
+  // Exercise a saved reply without depending on private-memory deployment settings.
+  await chooseMemoryFreeTurn(member);
   const prompt = `Say hello briefly at ${width}px.`;
   await answer(member, prompt, [/^Hello from your computer\.$/u]);
   const spentCents = await waitForCharge(admin, origin, groupId, previousCents);

@@ -2171,7 +2171,8 @@ namespace and the separate qualification stand-in before it begins provider setu
 
 The owner connects the provider in Settings. A separate admin sets the paying
 group's monthly ceiling to 500 cents in Spending. At 1280 and 390 px a member
-gets a completed reply. Admin Change history supplies the reservation and charge
+opens a shared assistant session once its saved change is applied and gets a
+completed reply using the memory-free option. Admin Change history supplies the reservation and charge
 for that exact turn, and Spending shows the new settled total in whole euro cents.
 The admin saves a ceiling one cent below the total. Chat shows the monthly limit
 for the next turn, and the stand-in's `/journey-counts` counter stays the same.
