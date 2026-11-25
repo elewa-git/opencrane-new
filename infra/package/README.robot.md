@@ -783,6 +783,162 @@ chat at 1280 and 390 px, a wrong-organisation refusal and token reuse refusal.
 Source tests do not qualify this journey. Keep screenshots and safe logs before
 `package-down` and `down.sh` remove the slot.
 
+## Pilot switch-over
+
+Use the [pilot operator guide](PILOT.md) for the checklist. These commands are
+for the owner or orchestrator. Run from the retained checkout of the merged,
+CI-approved revision. Record the original Serve route, demo revision, data
+location and start command privately before changing anything.
+
+```sh
+TAILNET_HOST=$(tailscale status --json | jq -er '.Self.DNSName | rtrimstr(".")')
+case "$TAILNET_HOST" in
+  *.*.ts.net) ;;
+  *) echo 'The pilot requires this device’s tailnet DNS name' >&2; exit 1 ;;
+esac
+tailscale serve status --json > "$PRIVATE_DIR/demo-serve-before.json"
+jq -e '(.AllowFunnel // {} | to_entries | all(.value == false))' \
+  "$PRIVATE_DIR/demo-serve-before.json"
+```
+
+Use a mode-0700 `PRIVATE_DIR` outside the checkout. Confirm the recorded route
+contains only changes you intend to make. Create a separate Zitadel web app
+in the approved organisation with authorization code flow and client secret
+POST authentication. Enable verified email claims. Register exactly
+`https://<tailnet-host>/auth/callback` and `https://<tailnet-host>/` for the
+sign-in and sign-out redirects. Retain its client credential in a private
+mode-0600 file. Keep the demo app and its redirects available for rollback.
+Use the same issuer and organisation for the initial owner, invited members
+and the separate owner test account. Keep that test account's email in the
+private handoff.
+
+Claim an unused slot using `infra/dev-stack/claim.sh` and export the returned
+`DEV_STACK_ID`. The preparation command still needs the slot's ordinary
+secondary Zitadel metadata. If it has never been set up, run the existing
+`node --experimental-strip-types infra/dev-stack/zitadel-setup.ts` with that
+slot and the approved setup credential path before preparing the package.
+Public-address preparation subsequently reads the secondary configuration
+without writing to Zitadel.
+
+Run `infra/dev-stack/run.sh package-prepare --id "$DEV_STACK_ID"`. Use the
+generated mode-0600 `package-values.json` under the claimed slot directory.
+Leave the generated pins and Secret names in place. Set the following keys,
+replacing the sample hostname with `TAILNET_HOST`:
+
+```json
+{
+  "models": { "mode": "provider" },
+  "exposure": {
+    "ingress": false,
+    "loadBalancer": false,
+    "funnel": false,
+    "public": { "enabled": true, "host": "node.tailnet.ts.net", "tlsSecret": "pilot-tls" }
+  }
+}
+```
+
+The existing `public` switch enables hardened sign-in. It creates no network
+listener. The chart currently validates the `tlsSecret` name only. Tailscale
+Serve obtains the certificate and terminates HTTPS on the host. Keep standalone
+PostgreSQL and one NATS server for the built-in 02:00 UTC backup. The ordinary
+source values omit `pilotRestore`.
+
+Generate the token as in [Public-address sign-in hardening](#public-address-sign-in-hardening).
+Create the mode-0600 settings JSON separately. Replace every sample ID,
+hostname and path:
+
+```json
+{
+  "NODE_ENV": "production",
+  "OIDC_EXPECTED_ORG_ID": "PILOT_ORGANISATION_ID",
+  "OIDC_CLIENT_ID": "PILOT_WEB_APP_CLIENT_ID",
+  "OIDC_COOKIE_SECURE": "true",
+  "OIDC_REDIRECT_URI": "https://node.tailnet.ts.net/auth/callback",
+  "OIDC_POST_LOGOUT_REDIRECT_URI": "https://node.tailnet.ts.net/",
+  "BOOTSTRAP_TOKEN_FILE": "/private/pilot/first-owner.json",
+  "PACKAGE_OIDC_CLIENT_SECRET_FILE": "/private/pilot/oidc-client-secret"
+}
+```
+
+`PACKAGE_OIDC_CLIENT_SECRET_FILE` is a preparation-only key in that JSON. It
+requires an absolute path and the matching `OIDC_CLIENT_ID`. Preparation uses
+the existing private credential files and named Kubernetes Secrets for the
+value and omits the host path from runtime settings. If the key is absent,
+preparation uses the secondary app credential as before.
+
+Export `PACKAGE_PUBLIC_SETTINGS_FILE` as the path to the JSON. Set `values`
+to the private values path. Use the positional path with `prepare.ts` and
+leave `PACKAGE_VALUES_FILE` unset when using this form:
+
+```sh
+node --experimental-strip-types infra/package/prepare.ts "$values"
+infra/dev-stack/run.sh package-up --id "$DEV_STACK_ID" --values "$values"
+infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID"
+```
+
+If the disk check refuses, follow [Host disk protection](#host-disk-protection).
+Record the documented local exception if authorised for this box. Do not
+change swap or crash-dump settings as part of the route switch.
+
+Use the existing host service supervisor to keep `infra/package/forward.sh`
+running from this checkout with the claimed `DEV_STACK_ID`. Use a service that
+restarts it on failure and after reboot. The loopback port is 25106 for slot 1
+or 25206 for slot 2. Confirm the forwarder's `/auth/me` responds locally and
+that the root HTTPS mapping still matches the recorded demo. Then set the
+pilot mapping, with `port` set to the checked loopback port:
+
+```sh
+curl --fail --silent --output /dev/null "http://127.0.0.1:$port/auth/me"
+sudo tailscale serve --bg --https=443 "http://127.0.0.1:$port"
+tailscale serve status
+tailscale serve status --json | jq -e '(.AllowFunnel // {} | to_entries | all(.value == false))'
+```
+
+See [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
+for the HTTPS command. Check the actual certificate and route from a connected
+device, and check that a device off the tailnet cannot open it. Never enable
+Funnel. Keep the first-owner token out of the browser address and evidence.
+If the cut-over fails, point the same Serve handler at the recorded demo
+target. If the demo needs restarting, remove the pilot's root HTTPS handler
+first and start the previous demo with its saved data. Do not reset Serve,
+delete the package or run a fresh demo start as part of rollback.
+
+## Pilot backup and recovery commands
+
+Set `namespace="opencrane-package-$DEV_STACK_ID"` and use only the recorded
+cluster context and connection file. Check `pilot-backup` reports schedule
+`0 2 * * *`, time zone `Etc/UTC` and `suspend=false`. Check the controller
+created a successful Job after the latest scheduled time. The
+[scheduled backup instructions](#scheduled-pilot-backup) show the Job checks,
+manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
+before using it. Archive the verified set to private storage:
+
+```sh
+(umask 077; kubectl -n "$namespace" exec deployment/backup-catalogue -- \
+  tar -C /backups/sets -cf - "$BACKUP_ID" > "$PRIVATE_DIR/pilot-backup.tar")
+```
+
+For a recovery drill, prepare an empty package with the same approved images
+and silo and the original sign-in identity settings. Use a separate slot and
+keep the recovery listener on loopback until checked. For an HTTPS sign-in
+drill use a private test origin with its own registered callback and the same
+issuer and account subjects. Set `pilotRestore` to
+`{"enabled": true, "backupId": "BACKUP_ID"}` with the real ID. After
+`package-up`, import the archive as the catalogue's unprivileged user:
+
+```sh
+kubectl -n "$namespace" rollout status deployment/backup-catalogue --timeout=60s
+kubectl -n "$namespace" exec -i deployment/backup-catalogue -- \
+  sh -ec 'mkdir -m 700 -p /backups/sets && tar -xpf - -C /backups/sets' \
+  < "$PRIVATE_DIR/pilot-backup.tar"
+```
+
+Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
+catalogue and run the restore Job. Confirm the saved chat is readable and
+`restore_read_only` refuses writes. Never point the live pilot route at a
+drill install. Clear the drill through the guarded package cleanup after
+retaining its evidence.
+
 ## Private owner email
 
 Only the default private development mode reads the development owner email from the [private host file](../dev-stack/README.robot.md#private-owner-email)

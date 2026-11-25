@@ -5,6 +5,7 @@
 This package installs OpenCrane on a developer's local Kubernetes system.
 It uses [Helm](../../GLOSSARY.md#helm) to install the apps and services together.
 Developers use it to check the approach intended for customer installations.
+The pilot operator uses it to run the demo on one tailnet device.
 The customer installer is still planned.
 
 ## Where it fits
@@ -21,6 +22,7 @@ flowchart LR
   packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
   package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
   browser["Browser<br/>chat and desktop"] -->|connects through website proxy| apps
+  tailnet["Pilot users<br/>Tailscale Serve"] -->|uses the loopback forwarder| browser
   package -->|checks settings and installs apps| apps["Server, website, workers and computer<br/>first owner token claim"]
   package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   apps -->|uses the stand-in or a connected provider| models["Model gateway"]
@@ -34,7 +36,7 @@ flowchart LR
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
 - Keep private settings in named Secrets and check production sign-in before installation.
-- Keep network access private while the public-address installer is being built.
+- Keep package listeners private and let Tailscale Serve carry pilot HTTPS.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log and development sign-in.
 - Let the first person claim ownership with a one-time token in public-address mode.
@@ -111,6 +113,7 @@ exact settings and commands to rerun the production F1 and F2 disk probes.
 ## Where to read more
 
 - [README.robot.md](README.robot.md): settings, folders, image review and recovery contracts.
+- [Pilot operator guide](PILOT.md): prepare, check and roll back the tailnet pilot.
 - [Local operator guide](README.robot.md#local-operator-guide): commands and recovery limits.
 - [infra/dev-stack](../dev-stack/README.md): spare stack claims and the other local install path.
 - [infra/clamav](../clamav/README.md): upload scanning.

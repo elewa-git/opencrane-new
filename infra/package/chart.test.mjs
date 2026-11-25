@@ -198,12 +198,16 @@ function writeTokenFixture(directory, enabled) {
 }
 
 function readPublicPreparationSettings(directory, values) {
+  const host = values.exposure.public.host;
   const settings = { NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
-    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
-    OIDC_CLIENT_ID: 'pilot-sign-in-app',
-    PACKAGE_OIDC_CLIENT_SECRET_FILE: join(directory, 'pilot-client-secret'),
+    OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: `https://${host}/auth/callback`,
     BOOTSTRAP_TOKEN_FILE: join(directory, 'bootstrap-token.json') };
-  writeFileSync(settings.PACKAGE_OIDC_CLIENT_SECRET_FILE, 'pilot-credential-fixture', { mode: 0o600 });
+  if (host === 'node.tailnet.ts.net') {
+    settings.OIDC_CLIENT_ID = 'pilot-sign-in-app';
+    settings.PACKAGE_OIDC_CLIENT_SECRET_FILE = join(directory, 'pilot-client-secret');
+    writeFileSync(settings.PACKAGE_OIDC_CLIENT_SECRET_FILE, 'pilot-credential-fixture',
+      { mode: 0o600 });
+  }
   checkPublicSettings(values, settings);
   return settings;
 }
@@ -1012,7 +1016,7 @@ test('public preparation stores the existing token hash and requires no developm
 
 async function preparesPilotSignInCredential() {
   const exposure = { ingress: false, loadBalancer: false, funnel: false,
-    public: { enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls' } };
+    public: { enabled: true, host: 'node.tailnet.ts.net', tlsSecret: 'pilot-tls' } };
   const prepared = await preparedSecretsFixture(true, false, false, { exposure });
   const runtime = prepared.secrets.get('runtime');
   const files = prepared.secrets.get('runtime-files');

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { chmod, copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { issueCertificate } from '../../libs/event-store/src/certificates.ts';
 import { tokenIssuer } from '@opencrane/auth';
@@ -89,6 +89,18 @@ async function prepareModelFiles(models: PackageModels | undefined) {
   }
 }
 
+async function preparePublicClientCredential(settings: Record<string, string>) {
+  const source = settings['PACKAGE_OIDC_CLIENT_SECRET_FILE'];
+  if (source === undefined) return;
+  assert(isAbsolute(source) && settings['OIDC_CLIENT_ID']?.trim(),
+    'Public sign-in needs an absolute client secret path and its client id');
+  const destination = `${directory}/zitadel-client-secret`;
+  // Keep the pilot credential in this install's scratch copy, away from the saved dev app.
+  await copyFile(source, destination);
+  await chmod(destination, 0o600);
+  delete settings['PACKAGE_OIDC_CLIENT_SECRET_FILE'];
+}
+
 async function packageAuthSettings(values: PublicPackageValues) {
   let publicSettings: Record<string, string> = {};
   if (values.exposure?.public?.enabled === true) {
@@ -107,7 +119,9 @@ async function packageAuthSettings(values: PublicPackageValues) {
     await chmod(`${directory}/package-bootstrap-token.json`, 0o600);
   }
   await generate(localOrigin);
+  await preparePublicClientCredential(publicSettings);
   const auth: Record<string, string> = await authEnv();
+  assert(auth['DEV_OIDC_CLIENT_SECRET'], 'Package sign-in needs a client secret');
   if (ownerEmail) {
     const identitySettings = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8')) as {
       users: { owner: { id: string } };
