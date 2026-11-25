@@ -18,7 +18,7 @@ in the recorded Kubernetes cluster.
 
 ```mermaid
 flowchart LR
-  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>local Helm install"]
+  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install and update"]
   ci["GitHub packaging job<br/>approved images"] --> package
   package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
@@ -43,6 +43,7 @@ flowchart LR
 - Save scheduled backups of events, databases and uploaded files together.
 - Restore one complete pilot backup into empty storage, then open authenticated reading.
   Recovery uses the same model mode as the source so it rebuilds the same tables.
+- Update an owned pilot release and keep its storage and sign-in.
 - Remove only the install owned by the claimed stack, including after interruption.
 
 Not built yet:

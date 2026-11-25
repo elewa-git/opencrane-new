@@ -947,8 +947,19 @@ stop inviting people and keep the saved route file. Run the first recovery
 block below if the demo is running. If the guarded command reports a changed
 or unexpected Serve configuration, keep the forwarder running and inspect
 `tailscale serve status --json` with the operator who owns the current routes.
-Resolve the conflict before running the recovery block again. A refused
-recovery leaves the current configuration in place.
+If the only entry is the expected pilot root and its HTTPS listener is
+missing, the operator can restore the saved HTTPS root from a terminal after
+other operators have stopped changing Serve:
+
+```sh
+saved_demo=$(cat "$PRIVATE_DIR/demo-serve-target") &&
+  sudo tailscale serve --bg --https=443 --set-path=/ "$saved_demo" &&
+  node --experimental-strip-types infra/package/pilot-route.ts check-demo
+```
+
+An unrelated route or Funnel needs the operator who owns it to resolve the
+conflict. Start the first recovery block again after checking the demo.
+A refused recovery leaves the current configuration in place.
 
 When the demo is still running, restore the saved root HTTPS handler and
 stop the pilot forwarder after the mapping is back. Run these commands from
@@ -2575,7 +2586,10 @@ stores or run Helm concurrently with this maintenance window.
 While writers stay stopped, the Job calls `collectEventBackup`, dumps databases
 without role passwords, and copies every object in `files` through the existing
 short-lived storage lease. It checks the stream identity, retained range and
-checkpoints again before resuming through normal service startup. PostgreSQL's
+checkpoints again before resuming through normal service startup. The stopped
+file read table lists the objects named by the events. Every saved object must
+have a matching reference, byte count and SHA-256. A reference without its
+object also fails the backup. PostgreSQL's
 LSN identifies the start of this stopped interval; background WAL maintenance can
 continue, so it is not a promise that the physical WAL bytes remain unchanged.
 `backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
@@ -2587,7 +2601,8 @@ inventory with each key, size and checksum. The `files` part is UTF-8 JSON lines
 each line adds base64 `data` to that object's inventory entry.
 
 Only after all parts succeed and every restored deployment is ready does an atomic
-directory rename publish the set. The catalogue ignores hidden interrupted sets
+directory rename publish the set. Publication and the catalogue both enforce a
+1 MiB manifest limit and at most 10,000 objects. The catalogue ignores hidden interrupted sets
 and verifies every saved part against the manifest before listing or showing it.
 A failure publishes nothing, removes only this run's temporary output and restores
 saved replica counts. It attempts every saved restart even if one fails. Scaling each

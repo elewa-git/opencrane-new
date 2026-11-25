@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -156,6 +156,7 @@ for (const slot of ['1', '2']) {
   async function claimsSelectedFreeSlot() {
     const fixture = await createClaimFixture();
     try {
+      await rmdir(fixture.slotDirectory);
       const claim = await exec('infra/dev-stack/claim.sh', ['--id', slot], { env: fixture.env });
       assert.equal(claim.stdout.trim(), slot);
       const selected = `${fixture.home}/.config/opencrane/dev-stack-${slot}/stack-owner`;

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -155,123 +155,172 @@ test('a listener replaced after reading Serve leaves the demo mapped', refusesRe
 test('a concurrent Serve change keeps its mapping', keepsInterveningRoute);
 test('a switch without confirmation reports how to restore the saved demo', reportsFailedConfirmation);
 
-const prerequisites = [
-  ['device name', /This device needs its own tailnet DNS name/u],
-  ['configured host', /configured host/u],
-  ['sign-in redirect', /sign-in redirect/u],
-  ['sign-out redirect', /sign-out redirect/u],
-  ['background Funnel', /Funnel/u],
-  ['foreground Funnel', /Funnel/u],
-  ['extra Serve path', /Serve.+root/u],
-  ['extra Serve host', /Serve.+root/u],
-  ['foreground Serve', /Serve.+root/u],
-  ['TCP forwarding', /Serve.+root/u],
-  ['Tailscale service', /Serve.+root/u],
-  ['foreground TCP', /Serve.+root/u],
-  ['foreground service', /Serve.+root/u],
-  ['unexpected policy field', /Unrecognized key/u],
-  ['unexpected web field', /Unrecognized key/u],
-  ['extra root handler field', /Serve.+root/u],
-  ['root handler without a proxy', /Serve.+root/u],
-  ['other hostname at port 443', /Serve.+root/u],
-  ['extra TCP port', /Serve.+root/u],
-  ['wrong TCP handler at port 443', /Serve.+root/u],
-  ['non-local demo', /separate loopback/u],
-  ['demo port out of range', /separate loopback/u],
-  ['pilot port out of range', /separate loopback/u],
-  ['shared port', /separate loopback/u],
-  ['unowned listener', /pilot forwarder.+listen/u],
-  ['demo mapping', /Serve target/u],
-  ['forwarder', /forwarder/u],
-] as const;
+type RouteFixture = ReturnType<typeof routeFixture>;
 
-function breakPrerequisite(fixture: ReturnType<typeof routeFixture>, check: string) {
-  switch (check) {
-    case 'device name':
+const prerequisites: Record<string, { error: RegExp; change(fixture: RouteFixture): void }> = {
+  'device name': {
+    error: /This device needs its own tailnet DNS name/u,
+    change(fixture) {
       fixture.tailscale.dnsName = 'node.example.test.';
-      break;
-    case 'configured host':
+    },
+  },
+  'configured host': {
+    error: /configured host/u,
+    change(fixture) {
       fixture.settings.host = 'pilot.example.test';
-      break;
-    case 'sign-in redirect':
+    },
+  },
+  'sign-in redirect': {
+    error: /sign-in redirect/u,
+    change(fixture) {
       fixture.settings.redirect = 'https://wrong.tailnet.ts.net/auth/callback';
-      break;
-    case 'sign-out redirect':
+    },
+  },
+  'sign-out redirect': {
+    error: /sign-out redirect/u,
+    change(fixture) {
       fixture.settings.logoutRedirect = 'https://wrong.tailnet.ts.net/';
-      break;
-    case 'background Funnel':
+    },
+  },
+  'background Funnel': {
+    error: /Funnel/u,
+    change(fixture) {
       fixture.tailscale.funnel[`${host}:443`] = true;
-      break;
-    case 'foreground Funnel':
+    },
+  },
+  'foreground Funnel': {
+    error: /Funnel/u,
+    change(fixture) {
       fixture.tailscale.foreground = { terminal: { AllowFunnel: { [`${host}:8443`]: true } } };
-      break;
-    case 'extra Serve path':
+    },
+  },
+  'extra Serve path': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraHandlers = { '/old': { Proxy: demoTarget } };
-      break;
-    case 'extra Serve host':
-      fixture.tailscale.extraHosts = { [`${host}:8443`]: { Handlers: { '/': { Proxy: demoTarget } } } };
-      break;
-    case 'foreground Serve':
+    },
+  },
+  'extra Serve host': {
+    error: /Serve.+root/u,
+    change(fixture) {
+      fixture.tailscale.extraHosts = { [`${host}:8443`]: demoWebHandler() };
+    },
+  },
+  'foreground Serve': {
+    error: /Serve.+root/u,
+    change(fixture) {
       setForegroundWeb(fixture);
-      break;
-    case 'TCP forwarding':
+    },
+  },
+  'TCP forwarding': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraPorts = { '8443': { TCPForward: '127.0.0.1:44200' } };
-      break;
-    case 'Tailscale service':
+    },
+  },
+  'Tailscale service': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.services = { 'svc:demo': { Tun: true } };
-      break;
-    case 'foreground TCP':
+    },
+  },
+  'foreground TCP': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.foreground = { terminal: { TCP: { '8443': { HTTPS: true } } } };
-      break;
-    case 'foreground service':
+    },
+  },
+  'foreground service': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.foreground = { terminal: { Services: { 'svc:demo': { Tun: true } } } };
-      break;
-    case 'unexpected policy field':
+    },
+  },
+  'unexpected policy field': {
+    error: /Unrecognized key/u,
+    change(fixture) {
       fixture.tailscale.extraFields = { UnknownPolicy: true };
-      break;
-    case 'unexpected web field':
+    },
+  },
+  'unexpected web field': {
+    error: /Unrecognized key/u,
+    change(fixture) {
       fixture.tailscale.webFields = { UnknownHandler: true };
-      break;
-    case 'extra root handler field':
+    },
+  },
+  'extra root handler field': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraHandlers = { '/': { Proxy: demoTarget, Path: '/unexpected' } };
-      break;
-    case 'root handler without a proxy':
+    },
+  },
+  'root handler without a proxy': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraHandlers = { '/': { Path: '/unexpected' } };
-      break;
-    case 'other hostname at port 443':
+    },
+  },
+  'other hostname at port 443': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraFields = { Web: { 'other.tailnet.ts.net:443': demoWebHandler() } };
-      break;
-    case 'extra TCP port':
+    },
+  },
+  'extra TCP port': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraPorts = { '8443': { HTTPS: true } };
-      break;
-    case 'wrong TCP handler at port 443':
+    },
+  },
+  'wrong TCP handler at port 443': {
+    error: /Serve.+root/u,
+    change(fixture) {
       fixture.tailscale.extraPorts = { '443': { HTTP: true } };
-      break;
-    case 'non-local demo':
+    },
+  },
+  'non-local demo': {
+    error: /separate loopback/u,
+    change(fixture) {
       fixture.settings.demoTarget = 'http://192.0.2.1:44200';
-      break;
-    case 'demo port out of range':
+    },
+  },
+  'demo port out of range': {
+    error: /separate loopback/u,
+    change(fixture) {
       fixture.settings.demoTarget = 'http://127.0.0.1:65536';
-      break;
-    case 'pilot port out of range':
+    },
+  },
+  'pilot port out of range': {
+    error: /separate loopback/u,
+    change(fixture) {
       fixture.settings.pilotTarget = 'http://127.0.0.1:65536';
-      break;
-    case 'shared port':
+    },
+  },
+  'shared port': {
+    error: /separate loopback/u,
+    change(fixture) {
       fixture.settings.demoTarget = 'http://localhost:25106';
-      break;
-    case 'unowned listener':
+    },
+  },
+  'unowned listener': {
+    error: /pilot forwarder.+listen/u,
+    change(fixture) {
       fixture.replaceListener();
-      break;
-    case 'demo mapping':
+    },
+  },
+  'demo mapping': {
+    error: /Serve target/u,
+    change(fixture) {
       fixture.settings.demoTarget = 'http://127.0.0.1:44444';
-      break;
-    case 'forwarder':
+    },
+  },
+  'forwarder': {
+    error: /forwarder/u,
+    change(fixture) {
       fixture.stopForwarder();
-      break;
-    default:
-      throw new Error('Unknown fixture check');
-  }
-}
+    },
+  },
+};
 
 function demoWebHandler() {
   const root = { Proxy: demoTarget };
@@ -283,11 +332,11 @@ function setForegroundWeb(fixture: ReturnType<typeof routeFixture>) {
   fixture.tailscale.foreground = { terminal: { Web: web } };
 }
 
-for (const [check, error] of prerequisites) {
+for (const [check, prerequisite] of Object.entries(prerequisites)) {
   async function refusesSwitch() {
     async function checkRoute(fixture: ReturnType<typeof routeFixture>) {
-      breakPrerequisite(fixture, check);
-      await assert.rejects(switchPilot(fixture.settings, fixture.controls), error);
+      prerequisite.change(fixture);
+      await assert.rejects(switchPilot(fixture.settings, fixture.controls), prerequisite.error);
       assert.equal(fixture.current(), demoTarget);
       assert.equal(fixture.changes(), 0);
       await assert.rejects(readFile(fixture.settings.savedRoute), { code: 'ENOENT' });
@@ -296,8 +345,6 @@ for (const [check, error] of prerequisites) {
   }
   test(`a failed ${check} check leaves the demo mapped`, refusesSwitch);
 }
-
-type RouteFixture = ReturnType<typeof routeFixture>;
 
 async function saveDemo(fixture: RouteFixture, origin = demoTarget) {
   await writeFile(fixture.settings.savedRoute, `${origin}\n`, { mode: 0o600 });
@@ -454,7 +501,7 @@ for (const health of ['anonymous', 'failure', 'authenticated', 'redirect']) {
 }
 
 async function openHealthListener(health: string) {
-  function respond(request: { url?: string }, reply: ServerResponse) {
+  function respond(request: IncomingMessage, reply: ServerResponse) {
     if (health === 'redirect' && request.url === '/auth/me') {
       reply.writeHead(302, { Location: '/ready' });
       reply.end();
