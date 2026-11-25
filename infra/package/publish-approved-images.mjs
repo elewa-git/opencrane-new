@@ -25,7 +25,7 @@ function publishImage(source, filename, image) {
 
 export async function publishApprovedApplication(directory) {
   const destination = join(directory, 'application-approval');
-  await mkdir(destination, { mode: 0o700 });
+  await mkdir(destination, { mode: 0o700, recursive: true });
   const approval = await fetchApplicationApproval(destination, true);
   publishImage(destination, 'application.tar', approval.image);
   return approval;
@@ -33,7 +33,7 @@ export async function publishApprovedApplication(directory) {
 
 export async function publishApprovedScanner(directory) {
   const destination = join(directory, 'scanner-approval');
-  await mkdir(destination, { mode: 0o700 });
+  await mkdir(destination, { mode: 0o700, recursive: true });
   const approval = await fetchScannerApproval(destination, true);
   publishImage(destination, 'scanner.tar', approval.image);
   return { ...approval, destination };

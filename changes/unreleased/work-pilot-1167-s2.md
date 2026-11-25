@@ -1,6 +1,6 @@
-Operators can verify a scheduled pilot backup and use it to recover a chat in
-an empty installation. Recovery keeps the chat readable while refusing writes.
-The backup closes its own checkpoint readers before it checks for other writers.
-The pilot switch checks foreground and background Funnel sessions, the full
-Serve configuration and the process listening on the pilot port. Rollback treats
-`localhost` and `127.0.0.1` on the same port as the same address.
+Operators can update a running pilot in place, keeping its volumes and sign-in,
+and return to the previous Helm revision. A scheduled backup verifies every
+upload against its saved event and refuses sets that exceed the catalogue limits.
+Recovery opens the saved chat and upload for reading on an empty installation.
+The pilot switch confirms the HTTPS route and the cluster and namespace behind
+the listener. It applies the change only while the checked Serve setup matches.

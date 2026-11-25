@@ -532,9 +532,9 @@ async function checkBackupIsIdle(owner: PackageOwner) {
   if (active) throw new Error('Wait for the scheduled backup to finish before changing the release');
 }
 
-async function prepareUpgradeScanner(owner: PackageOwner, previousName: string) {
+async function prepareUpgradeScanner(owner: PackageOwner, previousName: string, approvals: string) {
   const { publishApprovedScanner } = await import('../package/publish-approved-images.mjs');
-  const approval = await publishApprovedScanner(directory);
+  const approval = await publishApprovedScanner(approvals);
   const name = `package-scanner-${approval.approvedSha}`;
   const previousText = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret', previousName,
     '-o', 'json']);
@@ -577,11 +577,13 @@ export async function upgradePackage() {
   const owner = await checkedRelease();
   const { bootstrapImage, scannerSecret, serverImage } = await pilotUpgradeValues(owner);
   await command('git', ['diff', '--quiet', 'HEAD', '--', 'infra/package/chart']);
-  const approval = await publishApprovedApplication(directory);
+  const revision = await command('git', ['rev-parse', 'HEAD']);
+  const approvals = resolve(directory, 'release-approvals', revision);
+  const approval = await publishApprovedApplication(approvals);
   if (approval.image === serverImage) throw new Error('This application image is already installed');
   await checkLiveExposure(owner);
   await checkBackupIsIdle(owner);
-  const scanner = await prepareUpgradeScanner(owner, scannerSecret);
+  const scanner = await prepareUpgradeScanner(owner, scannerSecret, approvals);
   await checkBackupIsIdle(owner);
   // Keep the original release Secret for ownership checks and leave the finished Job intact.
   await releaseCommand(owner, ['upgrade', owner.release, chartDirectory, '--reuse-values',

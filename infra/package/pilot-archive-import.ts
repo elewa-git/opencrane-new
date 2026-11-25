@@ -23,7 +23,8 @@ export async function importPilotArchive(
   const { namespace, namespaceUid, run } = destination;
   const clusterId = await run(['get', 'namespace', 'kube-system', '-o', 'jsonpath={.metadata.uid}']);
   const clusterUid = clusterId.trim();
-  if (!source.clusterUid || !source.namespace || !clusterUid || !namespaceUid) {
+  if (!source.clusterUid.trim() || !source.namespace.trim() || !clusterUid ||
+      !namespace.trim() || !namespaceUid.trim() || source.namespaceUid?.trim() === '') {
     throw new ImportRefused('The source and destination identities are required');
   }
   const sameName = source.namespace === namespace && source.clusterUid === clusterUid;

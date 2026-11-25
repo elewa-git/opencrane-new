@@ -29,7 +29,7 @@ flowchart LR
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
-  stack -->|checks hosts and provider mode, then launches| package["infra/package<br/>Helm install"]
+  stack -->|installs and updates owned releases| package["infra/package<br/>Helm install"]
 ```
 
 ## What it is responsible for
@@ -44,7 +44,7 @@ flowchart LR
 - Run browser journeys and keep screenshots and original results.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
-  local host-risk exception and remove only owned resources.
+  local host-risk exception. Update and remove only owned releases.
 - Provide guarded demo checks and a daily fresh-stack check.
 
 Not built yet:

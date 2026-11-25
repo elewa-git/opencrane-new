@@ -249,7 +249,7 @@ async function serveStatus(): Promise<ServeSnapshot> {
   return { configuration: JSON.parse(response.body) as unknown, etag };
 }
 
-async function healthyForwarder(origin: string) {
+export async function healthyForwarder(origin: string) {
   try {
     const response = await fetch(`${origin}/auth/me`, {
       redirect: 'error', signal: AbortSignal.timeout(5000),
