@@ -200,7 +200,10 @@ function writeTokenFixture(directory, enabled) {
 function readPublicPreparationSettings(directory, values) {
   const settings = { NODE_ENV: 'production', OIDC_EXPECTED_ORG_ID: 'test-organisation',
     OIDC_COOKIE_SECURE: 'true', OIDC_REDIRECT_URI: 'https://pilot.example.test/auth/callback',
+    OIDC_CLIENT_ID: 'pilot-sign-in-app',
+    PACKAGE_OIDC_CLIENT_SECRET_FILE: join(directory, 'pilot-client-secret'),
     BOOTSTRAP_TOKEN_FILE: join(directory, 'bootstrap-token.json') };
+  writeFileSync(settings.PACKAGE_OIDC_CLIENT_SECRET_FILE, 'pilot-credential-fixture', { mode: 0o600 });
   checkPublicSettings(values, settings);
   return settings;
 }
@@ -245,6 +248,11 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   }
   async function writeFixture(name, value) {
     settings.set(name, value);
+  }
+  async function readAuthFixture() {
+    const credential = readFileSync(join(directory, 'zitadel-client-secret'), 'utf8');
+    return { OIDC_CLIENT_SECRET_ENV_VAR: 'DEV_OIDC_CLIENT_SECRET',
+      DEV_OIDC_CLIENT_SECRET: credential, OIDC_EXTRA_IDENTITIES: 'development-exception' };
   }
   const commands = [];
   function executeFixture(program, args, options, callback) {
@@ -291,8 +299,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     '../../libs/event-store/src/certificates.ts': { issueCertificate: async () => {} },
     '@opencrane/auth': { tokenIssuer: async () => ({ jwks: { keys: [] } }) },
     '../dev-stack/config.ts': {
-      authEnv: async () => ({ OIDC_CLIENT_SECRET_ENV_VAR: 'OIDC_CLIENT_SECRET',
-        OIDC_EXTRA_IDENTITIES: 'development-exception' }),
+      authEnv: readAuthFixture,
       directory, generate: generateFixture, readEnv: readFixture,
       readOwnerEmail: readOwnerFixture,
       root: process.cwd(), writeEnv: writeFixture,
@@ -1002,6 +1009,20 @@ async function preparesPublicTokenWithoutDevOwner() {
 }
 test('public preparation stores the existing token hash and requires no development owner',
   preparesPublicTokenWithoutDevOwner);
+
+async function preparesPilotSignInCredential() {
+  const exposure = { ingress: false, loadBalancer: false, funnel: false,
+    public: { enabled: true, host: 'pilot.example.test', tlsSecret: 'pilot-tls' } };
+  const prepared = await preparedSecretsFixture(true, false, false, { exposure });
+  const runtime = prepared.secrets.get('runtime');
+  const files = prepared.secrets.get('runtime-files');
+  assert.equal(runtime.OIDC_CLIENT_ID.toString('utf8'), 'pilot-sign-in-app');
+  assert.equal(runtime.DEV_OIDC_CLIENT_SECRET.toString('utf8'), 'pilot-credential-fixture');
+  assert.equal(files['zitadel-client-secret'].toString('utf8'), 'pilot-credential-fixture');
+  assert.equal(Object.hasOwn(runtime, 'PACKAGE_OIDC_CLIENT_SECRET_FILE'), false);
+}
+test('public preparation uses the dedicated sign-in credential without passing on its host path',
+  preparesPilotSignInCredential);
 
 async function preparesOnlyProviderSettings() {
   const packageValues = { models: { mode: 'provider' } };
