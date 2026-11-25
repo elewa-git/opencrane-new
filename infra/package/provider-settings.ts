@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Locator, Page, Response } from 'playwright';
 import { z } from 'zod';
+import { waitForSeededDefault, type ProviderBindings } from '../dev-stack/provider-default.ts';
 
 const verificationFacts = {
   'Check provider reachability': 'reachable',
@@ -61,8 +62,18 @@ export async function finishSelectingProviderModels(page: Page): Promise<void> {
   await waitForProviderStep(page, 'Step 5 of 6 · Access');
 }
 
-export async function selectChatDefault(page: Page, _origin: string, _providerId: string,
+export async function selectChatDefault(page: Page, origin: string, providerId: string,
   model: string): Promise<Locator> {
+  const bindingUrl = `${origin}/api/org/providers/${encodeURIComponent(providerId)}/bindings`;
+  async function readBindings() {
+    const response = await page.request.get(bindingUrl);
+    if (response.status() === 503) return undefined;
+    assert.equal(response.status(), 200, 'Provider bindings are readable');
+    const body = await response.json() as ProviderBindings;
+    return body;
+  }
+  // Wait for the saved automatic selection before clicking the one explicit selection.
+  await waitForSeededDefault(readBindings);
   const chat = page.getByRole('region', { name: 'Member chat setup' });
   await chat.getByLabel('Chat model').selectOption(model);
   await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();

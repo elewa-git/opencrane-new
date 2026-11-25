@@ -101,7 +101,8 @@ async function waitsForTheSeededDefault() {
       response.end(JSON.stringify({ rows }));
     } else if (request.url === '/select-default' && request.method === 'POST') {
       selections++;
-      response.writeHead(reads >= 3 ? 200 : 409).end();
+      response.writeHead(reads >= 3 ? 200 : 409);
+      response.end();
     } else {
       response.setHeader('content-type', 'text/html');
       response.end(chatDefaultFixture);

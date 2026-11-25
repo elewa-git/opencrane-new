@@ -289,8 +289,9 @@ The private probe passes the credential through stdin and records only its statu
 It reads the native Fetch response's numeric status; the browser request API has
 a different status method. `journey-provider-probe.test.ts` pins the native 401 response.
 The runner waits for the model answer to appear before capturing either width. It
-clicks Select chat default in Settings and waits for the recorded change before
-starting the drain.
+waits for the background worker to save the first chat default, then clicks
+Select chat default in Settings once. It waits for the explicit choice to be
+recorded before starting the drain.
 The driver inspects each browser API response while Chromium holds it, then lets
 Chromium deliver the same response to the page. The page can navigate as soon as
 it receives a reply, so a collector that reads afterwards can lose the body.
