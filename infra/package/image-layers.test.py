@@ -33,6 +33,24 @@ def read_checked_blob(archive, digest):
     return json.loads(contents)
 
 
+class SourceReviewTests(unittest.TestCase):
+    def test_provider_runtime_paths_are_permitted(self):
+        checker = ImageLayerTests("test_development_files_stay_within_the_narrow_allowlist")
+        checker.paths = {
+            "app/infra/package/web-page.mjs", "app/infra/package/provider-secrets.mjs",
+            "app/infra/package/model-settings.ts", "app/infra/dev-stack/journey-guard.ts",
+        }
+        checker.test_development_files_stay_within_the_narrow_allowlist()
+
+    def test_reviewed_helper_hashes_match_repository_source(self):
+        review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
+        for path, expected in review["files"].items():
+            if path.startswith("app/"):
+                with self.subTest(source=path):
+                    actual = hashlib.sha256(Path(path[4:]).read_bytes()).hexdigest()
+                    self.assertEqual(actual, expected)
+
+
 class ImageLayerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -132,6 +150,16 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
+    def test_provider_gateway_has_system_https_trust(self):
+        self.assertIn("etc/ssl/certs/ca-certificates.crt", self.paths)
+        result = subprocess.run([
+            "docker", "run", "--rm", "--network", "none", "--entrypoint", "openssl",
+            os.environ["PACKAGE_IMAGE_NAME"], "crl2pkcs7", "-nocrl", "-certfile",
+            "/etc/ssl/certs/ca-certificates.crt", "-outform", "DER",
+        ], capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0)
+        self.assertGreater(len(result.stdout), 1000)
+
     def test_missing_model_import_refuses_even_with_entry_point_present(self):
         required = ("infra/dev-stack/connection-custody-bridge.ts",
                     "infra/dev-stack/model-stub.ts", "infra/dev-stack/stage-b-model.ts",
@@ -174,9 +202,10 @@ class ImageLayerTests(unittest.TestCase):
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
-                   "secondary-models.ts", "zitadel.json"}
+                   "secondary-models.ts", "journey-guard.ts", "zitadel.json"}
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
                          "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs",
+                         "model-settings.ts", "provider-secrets.mjs",
                          "scheduled-backup-run.ts", "scheduled-backup.ts",
                          "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts",
                          "event-restore.ts", "package-database.ts", "pilot-projections.ts",
@@ -190,6 +219,14 @@ class ImageLayerTests(unittest.TestCase):
             if path.startswith("app/infra/dev-stack/"):
                 self.assertIn(path.removeprefix("app/infra/dev-stack/"), allowed)
             self.assertFalse(path.startswith(("app/.keys/", "app/.tools/", "app/.git/")))
+
+    def test_provider_startup_is_present_with_exact_source_bytes(self):
+        required = ("infra/package/provider-secrets.mjs", "infra/package/model-settings.ts",
+                    "infra/dev-stack/journey-guard.ts")
+        for path in required:
+            with self.subTest(module=path):
+                self.assertIn("app/" + path, self.paths)
+                self.assertEqual(self.sources[path], Path(path).read_text())
 
     def test_scanner_imports_and_storage_readiness_entry_point_are_packaged(self):
         required = ("app/infra/clamav/database.mjs", "app/infra/package/object-lease-ready.mjs")

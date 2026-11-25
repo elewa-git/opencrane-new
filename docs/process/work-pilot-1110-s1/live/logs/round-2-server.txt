@@ -1,0 +1,79 @@
+{"level": 30, "time": 1795163038280, "name": "opencrane-server", "request_id": "req-1", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163038297, "name": "opencrane-server", "request_id": "req-1", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163043205, "name": "opencrane-server", "request_id": "req-2", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163043208, "name": "opencrane-server", "request_id": "req-2", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163048203, "name": "opencrane-server", "request_id": "req-3", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163048204, "name": "opencrane-server", "request_id": "req-3", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163053203, "name": "opencrane-server", "request_id": "req-4", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163053206, "name": "opencrane-server", "request_id": "req-4", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163058204, "name": "opencrane-server", "request_id": "req-5", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163058208, "name": "opencrane-server", "request_id": "req-5", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163063204, "name": "opencrane-server", "request_id": "req-6", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163063206, "name": "opencrane-server", "request_id": "req-6", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163068204, "name": "opencrane-server", "request_id": "req-7", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163068205, "name": "opencrane-server", "request_id": "req-7", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163073204, "name": "opencrane-server", "request_id": "req-8", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163073205, "name": "opencrane-server", "request_id": "req-8", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163078204, "name": "opencrane-server", "request_id": "req-9", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163078208, "name": "opencrane-server", "request_id": "req-9", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163080694, "name": "opencrane-server", "request_id": "req-a", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163080696, "name": "opencrane-server", "request_id": "req-a", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163083203, "name": "opencrane-server", "request_id": "req-b", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163083205, "name": "opencrane-server", "request_id": "req-b", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163083685, "name": "opencrane-server", "request_id": "req-c", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/login"}}
+{"level": 30, "time": 1795163083879, "name": "opencrane-server", "request_id": "req-c", "msg": "request completed", "statusCode": 302}
+{"level": 30, "time": 1795163086763, "name": "opencrane-server", "request_id": "req-d", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/callback"}}
+{"level": 30, "time": 1795163086858, "name": "opencrane-server", "request_id": "req-d", "msg": "sign-in completed"}
+{"level": 30, "time": 1795163086861, "name": "opencrane-server", "request_id": "req-d", "msg": "request completed", "statusCode": 302}
+{"level": 30, "time": 1795163087931, "name": "opencrane-server", "request_id": "req-e", "msg": "incoming request", "request": {"method": "POST", "path": "/api/invitations"}}
+{"level": 30, "time": 1795163088148, "name": "opencrane-server", "request_id": "req-e", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163088203, "name": "opencrane-server", "request_id": "req-f", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163088205, "name": "opencrane-server", "request_id": "req-f", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163088341, "name": "opencrane-server", "request_id": "req-g", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163088346, "name": "opencrane-server", "request_id": "req-g", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163089369, "name": "opencrane-server", "request_id": "req-h", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163089370, "name": "opencrane-server", "request_id": "req-h", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163092434, "name": "opencrane-server", "request_id": "req-i", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/login"}}
+{"level": 30, "time": 1795163092438, "name": "opencrane-server", "request_id": "req-i", "msg": "request completed", "statusCode": 302}
+{"level": 30, "time": 1795163093203, "name": "opencrane-server", "request_id": "req-j", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163093204, "name": "opencrane-server", "request_id": "req-j", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163095778, "name": "opencrane-server", "request_id": "req-k", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/callback"}}
+{"level": 30, "time": 1795163095874, "name": "opencrane-server", "request_id": "req-k", "msg": "sign-in completed"}
+{"level": 30, "time": 1795163095875, "name": "opencrane-server", "request_id": "req-k", "msg": "request completed", "statusCode": 302}
+{"level": 30, "time": 1795163096603, "name": "opencrane-server", "request_id": "req-l", "msg": "incoming request", "request": {"method": "POST", "path": "/members/join"}}
+{"level": 30, "time": 1795163096690, "name": "opencrane-server", "request_id": "req-l", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163096737, "name": "opencrane-server", "request_id": "req-m", "msg": "incoming request", "request": {"method": "POST", "path": "/api/invitations"}}
+{"level": 30, "time": 1795163096894, "name": "opencrane-server", "request_id": "req-m", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163096938, "name": "opencrane-server", "request_id": "req-n", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163096940, "name": "opencrane-server", "request_id": "req-n", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163097837, "name": "opencrane-server", "request_id": "req-o", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163097838, "name": "opencrane-server", "request_id": "req-o", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163098212, "name": "opencrane-server", "request_id": "req-p", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163098215, "name": "opencrane-server", "request_id": "req-p", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163100944, "name": "opencrane-server", "request_id": "req-q", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/login"}}
+{"level": 30, "time": 1795163100947, "name": "opencrane-server", "request_id": "req-q", "msg": "request completed", "statusCode": 302}
+{"level": 30, "time": 1795163103207, "name": "opencrane-server", "request_id": "req-r", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163103212, "name": "opencrane-server", "request_id": "req-r", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163104978, "name": "opencrane-server", "request_id": "req-s", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/callback"}}
+{"level": 30, "time": 1795163105112, "name": "opencrane-server", "request_id": "req-s", "msg": "sign-in completed"}
+{"level": 30, "time": 1795163105113, "name": "opencrane-server", "request_id": "req-s", "msg": "request completed", "statusCode": 302}
+{"level": 30, "time": 1795163105724, "name": "opencrane-server", "request_id": "req-t", "msg": "incoming request", "request": {"method": "POST", "path": "/members/join"}}
+{"level": 30, "time": 1795163105911, "name": "opencrane-server", "request_id": "req-t", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163106271, "name": "opencrane-server", "request_id": "req-u", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163106279, "name": "opencrane-server", "request_id": "req-u", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163106870, "name": "opencrane-server", "request_id": "req-v", "msg": "incoming request", "request": {"method": "GET", "path": "/api/chat"}}
+{"level": 30, "time": 1795163106950, "name": "opencrane-server", "request_id": "req-v", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163107045, "name": "opencrane-server", "request_id": "req-w", "msg": "incoming request", "request": {"method": "GET", "path": "/auth/me"}}
+{"level": 30, "time": 1795163107049, "name": "opencrane-server", "request_id": "req-w", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163107115, "name": "opencrane-server", "request_id": "req-x", "msg": "incoming request", "request": {"method": "GET", "path": "/api/conversations"}}
+{"level": 30, "time": 1795163107139, "name": "opencrane-server", "request_id": "req-y", "msg": "incoming request", "request": {"method": "GET", "path": "/api/my/tools/needs"}}
+{"level": 30, "time": 1795163107262, "name": "opencrane-server", "request_id": "req-y", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163107295, "name": "opencrane-server", "request_id": "req-x", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163108037, "name": "opencrane-server", "request_id": "req-z", "msg": "incoming request", "request": {"method": "GET", "path": "/api/org/integrations"}}
+{"level": 30, "time": 1795163108198, "name": "opencrane-server", "request_id": "req-z", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163108202, "name": "opencrane-server", "request_id": "req-10", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163108203, "name": "opencrane-server", "request_id": "req-10", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163113203, "name": "opencrane-server", "request_id": "req-11", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163113204, "name": "opencrane-server", "request_id": "req-11", "msg": "request completed", "statusCode": 200}
+{"level": 30, "time": 1795163118205, "name": "opencrane-server", "request_id": "req-12", "msg": "incoming request", "request": {"method": "GET", "path": "/healthz"}}
+{"level": 30, "time": 1795163118206, "name": "opencrane-server", "request_id": "req-12", "msg": "request completed", "statusCode": 200}

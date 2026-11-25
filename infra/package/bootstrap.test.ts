@@ -9,7 +9,8 @@ import { JetStreamApiError, jetstreamManager } from '@nats-io/jetstream';
 import { expect, it, vi } from 'vitest';
 import { connectNats, createEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { provisionDispatcher } from '@opencrane/handlers';
-import { natsFixture } from '../../libs/event-store/test/testing.ts';
+import { appendEvent, natsFixture } from '@opencrane/event-store/testing';
+import { openfga, permissionStore, until } from '@opencrane/authz/testing';
 import { clusterFixture, waitForClusterStream }
   from '../../libs/event-store/test/cluster-fixture.ts';
 
@@ -640,3 +641,82 @@ async function leavesFirstOwnerForTokenClaim() {
 }
 it('token installation creates no development owner or owner command files',
   leavesFirstOwnerForTokenClaim);
+
+const memberId = 'jente-rosseel';
+const email = 'owner@example.test';
+const identity = { issuer: 'https://identity.example.test', subject: 'fixture-subject' };
+
+async function waitsForOwnershipPermission(): Promise<void> {
+  const nats = await natsFixture();
+  const fga = await openfga();
+  try {
+    const { binding, auth } = await permissionStore(fga, 'test');
+    const principal = { kind: 'human' as const, id: identity.subject };
+    const common = { silo: 'test', subject: `member-${memberId}`, principal };
+    await appendEvent(nats.store, { ...common, type: 'member.invited', data: {
+      memberId, email, role: 'owner', invitedBy: 'dev-only-bootstrap',
+      invitationId: 'invite-jente-rosseel',
+      invitedIdentity: { issuer: identity.issuer, sub: identity.subject },
+      expiresAt: '2099-01-01T00:00:00Z',
+    } });
+    const joined = await appendEvent(nats.store, { ...common, type: 'member.joined', data: {
+      memberId, email, role: 'owner', invitationId: 'invite-jente-rosseel',
+      displayName: 'Jente Rosseel',
+    } });
+    function noSql(): never { throw new Error('Unexpected permission SQL'); }
+    await auth.handler.handle(joined.event, { query: noSql });
+    expect((await auth.check(memberId, 'owner')).allowed).toBe(true);
+
+    const source = await readFile('infra/dev-stack/owner-bootstrap.ts', 'utf8');
+    const compiled = ts.transpileModule(source, { compilerOptions: {
+      module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
+    } });
+    async function readEnv(name: string) {
+      if (name === 'settings') return { SILO_ID: 'test' };
+      if (name === 'binding') return { OPENFGA_API_URL: binding.apiUrl,
+        OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId };
+      return {};
+    }
+    async function readOwnerEmail() { return email; }
+    async function readIdentity() { return JSON.stringify({ extraIdentities: [identity] }); }
+    async function connectEvents() { return { store: nats.store, close: closeConnection }; }
+    async function closeConnection() { /* The fixture owns the NATS connection. */ }
+    class Pool {
+      async query() { return { rows: [{ member_id: memberId, status: 'joined', role: 'owner' }] }; }
+      async end() { /* No database is used by this permission-readiness test. */ }
+    }
+    const nativeRequire = createRequire(resolve('infra/dev-stack/owner-bootstrap.ts'));
+    function fixtureRequire(name: string): unknown {
+      if (name === './config.ts') return { readEnv, readOwnerEmail, root: '/fixture' };
+      if (name === 'node:fs/promises') return { readFile: readIdentity };
+      if (name === 'pg') return { Pool };
+      if (name === '@opencrane/event-store') return { connectEventStore: connectEvents };
+      return nativeRequire(name);
+    }
+    let completed = false;
+    function finished() { completed = true; }
+    const environment = { process: { env: {} }, require: fixtureRequire, exports: {},
+      performance, setTimeout, console };
+    const running = runInNewContext(`(async () => { ${compiled.outputText}\n })()`,
+      environment) as Promise<void>;
+    const completion = running.then(finished);
+    async function seededOrCompleted() {
+      return completed || await nats.store.head('ownership-test') > 0;
+    }
+    await until(seededOrCompleted);
+    expect(await nats.store.head('ownership-test')).toBeGreaterThan(0);
+    expect(completed).toBe(false);
+    for await (const row of nats.store.readStream('ownership-test')) {
+      assert.equal(await auth.applied(row.event.id), false);
+      await auth.handler.handle(row.event, { query: noSql });
+    }
+    await completion;
+    expect(completed).toBe(true);
+  } finally {
+    await fga.close();
+    await nats.close();
+  }
+}
+
+it('keeps bootstrap incomplete until seeded ownership permissions are applied',
+  waitsForOwnershipPermission);

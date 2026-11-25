@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "kind": "rendered website fixture",
+  "source": "5c4c8146a1c167b4ef6e25038da7f3c31e9fa22d",
+  "rows": [
+    {
+      "width": 1280,
+      "visibleKeyFields": 1,
+      "accessibleKeyFields": 1,
+      "openSetupDialogs": 1,
+      "fieldLabel": "API key Required",
+      "fieldType": "password",
+      "result": "PASS"
+    },
+    {
+      "width": 390,
+      "visibleKeyFields": 1,
+      "accessibleKeyFields": 1,
+      "openSetupDialogs": 1,
+      "fieldLabel": "API key Required",
+      "fieldType": "password",
+      "result": "PASS"
+    }
+  ],
+  "paidCalls": 0
+}

@@ -1,0 +1,99 @@
+{
+  "memberSteps": [
+    {
+      "utc": "2026-11-24T23:38:40.234Z",
+      "event": "stage",
+      "check": "member chat at 1280px"
+    },
+    {
+      "utc": "2026-11-24T23:38:40.235Z",
+      "event": "wait-network-idle"
+    },
+    {
+      "utc": "2026-11-24T23:38:40.236Z",
+      "event": "network-idle"
+    },
+    {
+      "utc": "2026-11-24T23:38:40.236Z",
+      "event": "wait-inspections",
+      "count": 51
+    },
+    {
+      "utc": "2026-11-24T23:38:40.236Z",
+      "event": "journey-failed",
+      "check": "member chat at 1280px"
+    }
+  ],
+  "memberWrites": [],
+  "bindings": [
+    {
+      "method": "GET",
+      "utc": "2026-11-24T23:37:56.315Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "utc": "2026-11-24T23:37:56.380Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "utc": "2026-11-24T23:37:56.725Z",
+      "status": 200
+    }
+  ],
+  "unfinishedInspections": [
+    {
+      "id": 3,
+      "request": {
+        "utc": "2026-11-24T23:37:39.119Z",
+        "event": "request",
+        "role": "without-assistant",
+        "id": 3,
+        "method": "GET",
+        "route": "/api/*/*/*",
+        "resource": "fetch"
+      },
+      "response": {
+        "utc": "2026-11-24T23:37:39.271Z",
+        "event": "response",
+        "role": "without-assistant",
+        "id": 3,
+        "status": 200,
+        "type": "json"
+      },
+      "body-read-start": {
+        "utc": "2026-11-24T23:37:39.272Z",
+        "event": "body-read-start",
+        "id": 3
+      },
+      "request-finished": {
+        "utc": "2026-11-24T23:37:39.274Z",
+        "event": "request-finished",
+        "role": "without-assistant",
+        "id": 3
+      }
+    }
+  ],
+  "apiBodiesInspectedWhilePaused": 0,
+  "dispatcherRestarts": [
+    0,
+    0
+  ],
+  "dispatcherPoolAcquisitionErrors": 0,
+  "retainedComputerLogs": 3,
+  "slotReleased": true,
+  "packageFailureLogPresent": false,
+  "maximumOneMinuteLoad": 9.5,
+  "queueBeforeClaim": {
+    "utc": "2026-11-24T23:32:58+00:00",
+    "slot1": "free",
+    "slot2": "free",
+    "package": "clear",
+    "load": 1.63,
+    "clearSeconds": 316
+  },
+  "source": "790e6ef3b4a910e8e02371958940cad04b48f8bf",
+  "inspectionFailure": "Chromium could not retrieve the body of a completed admin API request",
+  "correlatedServerRoute": "/api/my/tools/needs"
+}

@@ -1,0 +1,13 @@
+{
+  "status": "FAIL",
+  "source": "2bfb06ecf9e3b6689d7186c7ca2f96a693858cf9",
+  "outcomes": [
+    {
+      "check": "packaged startup",
+      "result": "FAIL",
+      "detail": "No browser result was written."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

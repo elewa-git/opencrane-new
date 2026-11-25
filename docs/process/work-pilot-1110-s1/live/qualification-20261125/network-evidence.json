@@ -1,0 +1,15 @@
+{
+  "modelsFleetMarkerBeforeAndAfterRecreation": true,
+  "modelRoutesBeforeAndAfterRecreation": [
+    4,
+    4
+  ],
+  "observedServerPods": 3,
+  "localStandInTcpConnections": 14,
+  "localStandInModelRequests": 3,
+  "localStandInManagedRequests": 4,
+  "permittedSignInTcpConnections": 4,
+  "otherExternalTcpConnections": 0,
+  "noCaptureDrops": true,
+  "status": "PASS"
+}

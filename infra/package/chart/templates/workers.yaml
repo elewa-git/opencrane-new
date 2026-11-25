@@ -1,5 +1,9 @@
 {{- $root := . -}}
-{{- range $mode := list "members" "mcp-catalogue" "computers" "conversations" "files" "budgets" "audit" "dispatcher" }}
+{{- $modes := list "members" "mcp-catalogue" "computers" "conversations" "files" "budgets" "audit" "dispatcher" -}}
+{{- if eq (toString .Values.models.mode) "provider" -}}
+{{- $modes = append $modes "routines" -}}
+{{- end -}}
+{{- range $mode := $modes }}
 {{- $dispatcher := eq $mode "dispatcher" }}
 ---
 apiVersion: apps/v1

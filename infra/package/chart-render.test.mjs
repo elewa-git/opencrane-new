@@ -78,9 +78,9 @@ function clusterValues() {
   return values;
 }
 
-function renderChart(values) {
+function renderChart(values, chart = 'infra/package/chart') {
   const options = { encoding: 'utf8', input: JSON.stringify(values) };
-  const args = ['template', 'chart-test', 'infra/package/chart',
+  const args = ['template', 'chart-test', chart,
     '--namespace', 'cluster-test', '--values', '-'];
   const result = spawnSync('helm', args, options);
   assert.equal(result.error, undefined);
@@ -889,3 +889,238 @@ for (const [name, field, value] of [
   }
   test(`chart refuses public address with ${name}`, refusesPublicAddress);
 }
+
+async function originalChartRender(values) {
+  const directory = await mkdtemp(join(tmpdir(), 'original-package-chart-'));
+  try {
+    const baseline = '3bf5b9c1639b9bd3c56b3edf417210f3625864ba';
+    const args = ['archive', baseline, 'infra/package/chart'];
+    const archive = spawnSync('git', args);
+    assert.equal(archive.status, 0, 'The original chart must be available in repository history');
+    const extractionArgs = ['-x', '-C', directory];
+    const extractionOptions = { input: archive.stdout };
+    const extracted = spawnSync('tar', extractionArgs, extractionOptions);
+    assert.equal(extracted.status, 0, 'The original chart must be extracted without changes');
+    const chart = join(directory, 'infra/package/chart');
+    const result = renderChart(values, chart);
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+  } finally {
+    const cleanup = { recursive: true, force: true };
+    await rm(directory, cleanup);
+  }
+}
+
+async function defaultModelBytesStayTheSame() {
+  const values = chartValues();
+  const original = renderChart(values);
+  assert.equal(original.status, 0, original.stderr);
+  // Compare immutable source with the same renderer; Helm versions format YAML differently.
+  const baseline = await originalChartRender(values);
+  assert.equal(original.stdout, baseline);
+  values.models = { mode: 'stub' };
+  assert.equal(renderChart(values).stdout, original.stdout);
+}
+test('default and explicit stub mode preserve the original chart bytes', defaultModelBytesStayTheSame);
+
+function protectsProviderRemounts() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const pod = resources.get('Deployment/server').spec.template.spec;
+  assert.equal(pod.securityContext.fsGroupChangePolicy, 'OnRootMismatch');
+  function preparesKeys(container) { return container.name === 'private-provider-keys'; }
+  const prepare = pod.initContainers.find(preparesKeys);
+  assert.ok(prepare, 'Check private custody before server and models start');
+  assert.deepEqual(prepare.command, ['node', 'infra/package/provider-secrets.mjs',
+    '/var/lib/opencrane/provider-secrets']);
+  assert.deepEqual(prepare.volumeMounts, [{ name: 'provider-secrets',
+    mountPath: '/var/lib/opencrane/provider-secrets' }]);
+}
+test('provider storage avoids recursive remount changes and checks modes before startup',
+  protectsProviderRemounts);
+
+function replacesProviderLeaderBeforeStartingItsSuccessor() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server');
+  assert.equal(server.spec.replicas, 1);
+  assert.deepEqual(server.spec.strategy, { type: 'Recreate' },
+    'The replacement cannot become ready until the old Pod releases the budget lock');
+}
+test('provider updates stop the budget leader before starting the replacement',
+  replacesProviderLeaderBeforeStartingItsSuccessor);
+
+function assertPrivateProviderMounts(resources) {
+  const mounts = [];
+  for (const resource of resources.values()) {
+    const workload = `${resource.kind}/${resource.metadata.name}`;
+    const pod = resource.kind === 'Pod' ? resource.spec :
+      resource.spec?.jobTemplate?.spec?.template?.spec ?? resource.spec?.template?.spec;
+    const claims = new Map();
+    for (const volume of pod?.volumes ?? []) {
+      claims.set(volume.name, volume.persistentVolumeClaim?.claimName);
+    }
+    const containers = [...(pod?.initContainers ?? []), ...(pod?.containers ?? []),
+      ...(pod?.ephemeralContainers ?? [])];
+    for (const container of containers) {
+      for (const mount of container.volumeMounts ?? []) {
+        if (claims.get(mount.name) === 'provider-secrets') {
+          const entry = { workload, container: container.name, ...mount };
+          mounts.push(entry);
+        }
+      }
+    }
+  }
+  assert.deepEqual(mounts, [
+    { workload: 'Deployment/server', container: 'private-provider-keys',
+      name: 'provider-secrets',
+      mountPath: '/var/lib/opencrane/provider-secrets' },
+    { workload: 'Deployment/server', container: 'server', name: 'provider-secrets',
+      mountPath: '/var/lib/opencrane/provider-secrets' },
+    { workload: 'Deployment/server', container: 'models', name: 'provider-secrets',
+      mountPath: '/var/lib/opencrane/provider-secrets', readOnly: true },
+  ]);
+}
+
+function rendersPrivateProviderStorage() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  assertPrivateProviderMounts(resources);
+  const volumes = new Map();
+  for (const volume of server.volumes) volumes.set(volume.name, volume);
+  assert.deepEqual(volumes.get('provider-secrets'), {
+    name: 'provider-secrets', persistentVolumeClaim: { claimName: 'provider-secrets' },
+  });
+  assert.deepEqual(resources.get('PersistentVolumeClaim/provider-secrets').spec, {
+    accessModes: ['ReadWriteOnce'], resources: { requests: { storage: '1Gi' } },
+  });
+  for (const container of server.containers) {
+    const environment = {};
+    for (const setting of container.env ?? []) environment[setting.name] = setting.value;
+    if (container.name === 'server' || container.name === 'models') {
+      assert.equal(environment.PROVIDER_SECRETS_DIR, '/var/lib/opencrane/provider-secrets/keys');
+    } else {
+      assert.equal(environment.PROVIDER_SECRETS_DIR, undefined);
+    }
+    if (container.name === 'models') {
+      assert.equal(environment.PACKAGE_PROVIDER_MODE, '1');
+      assert.equal(environment.DEV_REAL_PROVIDER, undefined);
+    }
+    for (const name of Object.keys(environment)) {
+      assert.doesNotMatch(name, /^MODEL_(UPSTREAM|KEY_FILE|STUB_)/u);
+    }
+  }
+}
+test('provider mode shares persistent key storage only with server and read-only models',
+  rendersPrivateProviderStorage);
+
+for (const mode of ['unknown', '', 42, true]) {
+  function refusesModelMode() {
+    const values = chartValues();
+    values.models = { mode };
+    const result = renderChart(values);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Unsupported models mode/u);
+    assert.equal(result.stdout, '');
+  }
+  test(`Helm refuses models mode ${mode}`, refusesModelMode);
+}
+
+function providerIncludesSelectionProjection() {
+  const values = chartValues();
+  const ordinary = renderedResources(values);
+  assert.equal(ordinary.has('Deployment/worker-routines'), false);
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const routines = resources.get('Deployment/worker-routines');
+  assert.ok(routines, 'Provider selection needs the routines checkpoint');
+  assert.deepEqual(routines.spec.template.spec.containers[0].command,
+    ['node', 'infra/package/worker.mjs', 'routines']);
+  const backupRole = resources.get('Role/package-backup');
+  for (const rule of backupRole.rules) {
+    if (rule.resources.includes('deployments') || rule.resources.includes('deployments/scale')) {
+      assert.ok(rule.resourceNames.includes('worker-routines'));
+    }
+  }
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  assert.ok(backup.containers[0].env.some(providerBackupMode));
+}
+test('provider mode runs the projection required by default-model selection',
+  providerIncludesSelectionProjection);
+
+function providerBackupMode(setting) {
+  return setting.name === 'BACKUP_PROVIDER_MODE' && setting.value === 'true';
+}
+
+function detectsBackupKeyMount() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  backup.volumes.push({ name: 'innocent-alias',
+    persistentVolumeClaim: { claimName: 'provider-secrets' } });
+  backup.initContainers[0].volumeMounts.push({ name: 'innocent-alias', mountPath: '/leaked-keys' });
+  const inspectMounts = assertPrivateProviderMounts.bind(undefined, resources);
+  assert.throws(inspectMounts,
+    { code: 'ERR_ASSERTION' }, 'A backup init container must never read provider keys');
+}
+test('provider isolation detects a key PVC mounted by an aliased backup init container',
+  detectsBackupKeyMount);
+
+function rendersSeparateQualificationProvider() {
+  const values = chartValues();
+  values.models = { mode: 'provider', qualification: true };
+  const resources = renderedResources(values);
+  const stub = resources.get('Deployment/model-qualification');
+  assert.ok(stub, 'Run the free stand-in separately from provider custody');
+  const pod = resources.get('Deployment/server').spec.template.spec;
+  function modelsContainer(container) { return container.name === 'models'; }
+  const models = pod.containers.find(modelsContainer);
+  const settings = {};
+  for (const item of models.env) settings[item.name] = item.value;
+  assert.equal(settings.DEV_REAL_PROVIDER, undefined);
+  assert.equal(settings.PACKAGE_PROVIDER_MODE, '1');
+  assert.equal(settings.PACKAGE_PROVIDER_QUALIFICATION, '1');
+  assertPrivateProviderMounts(resources);
+}
+test('packaged provider qualification uses a separate free stand-in with private custody',
+  rendersSeparateQualificationProvider);
+
+function takeProviderMount(container) {
+  const retained = [];
+  const transferred = [];
+  for (const mount of container.volumeMounts) {
+    if (mount.name === 'provider-secrets') {
+      transferred.push(mount);
+    } else {
+      retained.push(mount);
+    }
+  }
+  container.volumeMounts = retained;
+  return { name: container.name, volumeMounts: transferred };
+}
+
+function detectsRelocatedProviderContainers() {
+  const values = chartValues();
+  values.models = { mode: 'provider' };
+  const resources = renderedResources(values);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  backup.volumes.push({ name: 'provider-secrets',
+    persistentVolumeClaim: { claimName: 'provider-secrets' } });
+  for (const container of server.containers) {
+    if (container.name === 'server' || container.name === 'models') {
+      const moved = takeProviderMount(container);
+      backup.initContainers.push(moved);
+    }
+  }
+  const inspectMounts = assertPrivateProviderMounts.bind(undefined, resources);
+  assert.throws(inspectMounts,
+    { code: 'ERR_ASSERTION' }, 'Matching container names in another workload must not grant custody');
+}
+test('provider isolation refuses the same container names and mounts moved into the backup',
+  detectsRelocatedProviderContainers);

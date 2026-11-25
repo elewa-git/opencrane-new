@@ -189,7 +189,7 @@ async function prepareRunnerFiles(home: string, scenario: RunnerCase) {
   await mkdir(bin);
   await copyPackagedFixture(worktree);
   const files = ['infra/package/fresh-twice.ts', 'infra/package/browser-capture.ts',
-    'infra/package/fresh-twice-entry.ts', 'infra/package/journey-check.ts', 'infra/dev-stack/journey-guard.ts'];
+    'infra/package/fresh-twice-entry.ts', 'infra/package/journey-check.ts'];
   for (const file of files) {
     await cp(file, join(worktree, file));
   }
@@ -316,6 +316,8 @@ async function copiesProductionImports() {
     await copyPackagedFixture(directory);
     const copied = await readFile(join(directory, 'infra/dev-stack/package-review.ts'), 'utf8');
     assert.match(copied, /export type PackageReview/u);
+    const modelSettings = await readFile(join(directory, 'infra/package/model-settings.ts'), 'utf8');
+    assert.equal(modelSettings, await readFile('infra/package/model-settings.ts', 'utf8'));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

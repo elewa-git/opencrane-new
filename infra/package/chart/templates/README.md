@@ -20,6 +20,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 - Describes an optional database standby with its own storage on another node.
 - Gives background workers the settings and access needed for their jobs.
 - Prepares storage, database setup and the first owner.
+- Prepares private key permissions before giving server and models access.
 - Describes assistant computers and limits their network connections.
 - Refuses public network access, missing private setting names and unpinned images.
 
@@ -30,6 +31,8 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `files.yaml` | Runs MinIO, the scanner and the rule that permits only its HTTPS port. |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
+| `model-qualification.yaml` | Runs the separate free provider for restricted package checks. |
+| `provider-secrets.yaml` | Keeps provider keys on private persistent storage when selected. |
 | `data.yaml` | Describes the database, optional backup and recovery settings, event log and saved storage. |
 | `pilot-backup.yaml` | Runs the pilot backup, restricted restore Job and private catalogue. |
 | `backup.yaml` | Describes one paused database backup schedule for preview only. |
@@ -51,7 +54,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs, files, scanner, pilot backup and restore, and database previews"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, private provider storage, files, scanner, backup and restore"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

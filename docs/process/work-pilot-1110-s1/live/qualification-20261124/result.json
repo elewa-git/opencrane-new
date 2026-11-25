@@ -1,0 +1,47 @@
+{
+  "status": "PASS",
+  "source": "f7acfefaa022cdb4f44b35827c0470ff803288ce",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "admin Settings connects, tests, selects and switches on",
+      "result": "PASS"
+    },
+    {
+      "check": "setup logs checked before Pod recreation",
+      "result": "PASS"
+    },
+    {
+      "check": "Pod recreation preserves synthetic credential bytes and modes",
+      "result": "PASS",
+      "directoryModeBefore": "0700",
+      "directoryModeAfter": "0700",
+      "fileModeBefore": "0600",
+      "fileModeAfter": "0600",
+      "keys": 1
+    },
+    {
+      "check": "member chat at 1280px",
+      "result": "PASS"
+    },
+    {
+      "check": "member chat at 390px",
+      "result": "PASS"
+    },
+    {
+      "check": "keys absent from values, manifests, environment values, logs and events",
+      "result": "PASS",
+      "checkedEvents": 140
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

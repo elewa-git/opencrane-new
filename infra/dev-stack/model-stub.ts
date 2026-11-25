@@ -29,7 +29,21 @@ function countProviderRequest(authorization: string | undefined) {
     providerCounts.other++;
   }
 }
+function refusesProviderKey(authorization: string | undefined) {
+  if (process.env['MODEL_STUB_REQUIRE_KEY'] !== '1') return false;
+  const file = process.env['MODEL_STUB_MANAGED_FILE'];
+  if (!file) return true;
+  const value = readFileSync(file, 'utf8').trim();
+  return !value || authorization !== `Bearer ${value}`;
+}
 const server = createServer((req, res) => {
+  if ((req.url === '/v1/models' || req.url === '/v1/responses') &&
+      refusesProviderKey(req.headers.authorization)) {
+    req.resume();
+    res.writeHead(401, { 'content-type': 'application/json' });
+    res.end('{"error":{"message":"Invalid provider credential","type":"authentication_error"}}');
+    return;
+  }
   if (process.env['MODEL_STUB_PROXY_HOLD'] === '1' && req.method === 'POST' &&
       req.url === '/mcp/memory/server') {
     req.resume();
@@ -148,5 +162,5 @@ const server = createServer((req, res) => {
     res.end();
   })().catch(() => res.destroy()); });
 });
-server.listen(Number(process.env['MODEL_STUB_PORT'] ?? process.env['STUB_PORT'] ?? 43003), '127.0.0.1', () => { const address = server.address(); if (address && typeof address !== 'string') console.log(`Stub ready ${address.port}`); });
+server.listen(Number(process.env['MODEL_STUB_PORT'] ?? process.env['STUB_PORT'] ?? 43003), process.env['MODEL_STUB_HOST'] ?? '127.0.0.1', () => { const address = server.address(); if (address && typeof address !== 'string') console.log(`Stub ready ${address.port}`); });
 for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { server.closeAllConnections(); server.close(); });

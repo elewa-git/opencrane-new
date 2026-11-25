@@ -18,12 +18,14 @@ for (const name of ['event-store', 'authz', 'handlers']) {
 // Load the real service packages before replacing calls to disposable services.
 // Keep their own imports and workspace links subject to Node's normal resolution.
 for (const name of ['pg', '@opencrane/event-store', '@opencrane/authz',
-  '@opencrane/handlers', '@opencrane/events', '@nats-io/jetstream']) {
+  '@opencrane/handlers', '@opencrane/events', '@opencrane/models', '@nats-io/jetstream']) {
   await import(name);
 }
 
 const owner = process.argv[1]?.endsWith('/owner-bootstrap.ts');
 let ownerWrites = 0;
+const ownerEvents = [];
+const appliedReads = new Set();
 const defaults = {
   NATS_REPLICAS: '1', COMMAND_NATS_REPLICAS: '1', DEV_STACK_ID: 'owner',
   POSTGRES_ADMIN_URL: 'postgres://fixture', PROJECTION_DATABASE_URL: 'postgres://fixture',
@@ -94,7 +96,16 @@ const services = {
       async function check() {
         return { allowed: true };
       }
-      return { check };
+      async function applied(eventId) {
+        for (const row of ownerEvents) {
+          if (row.event.id === eventId) {
+            appliedReads.add(eventId);
+            return true;
+          }
+        }
+        return false;
+      }
+      return { check, applied };
     },
   },
   '@opencrane/event-store': {
@@ -117,13 +128,31 @@ const services = {
     },
     async connectEventStore() {
       let sequence = 0;
-      async function head() {
+      async function head(subject) {
+        for (const row of ownerEvents.toReversed()) {
+          if (subject === undefined || row.event.subject === subject) {
+            return row.sequence;
+          }
+        }
         return 0;
       }
-      async function* readStream() {}
-      async function append() {
+      async function* readStream(subject) {
+        for (const row of ownerEvents) {
+          const prefix = subject.slice(0, -1);
+          const wildcard = subject.endsWith('*') && row.event.subject.startsWith(prefix);
+          if (row.event.subject === subject || wildcard) {
+            yield row;
+          }
+        }
+      }
+      async function append(command) {
+        assert.equal(command.expectedSequence, await head(command.event.subject));
+        if (command.expectedGlobalSequence !== undefined) {
+          assert.equal(command.expectedGlobalSequence, sequence);
+        }
         sequence += 1;
         ownerWrites += 1;
+        ownerEvents.push({ event: command.event, sequence });
         return { status: 'appended', sequence };
       }
       async function close() {}
@@ -166,7 +195,14 @@ async function verifyCompletion() {
     return;
   }
   if (owner) {
-    assert.equal(ownerWrites, 2, 'Synthetic owner setup did not finish');
+    assert.equal(ownerWrites, 3, 'Synthetic owner setup did not finish');
+    const types = [];
+    for (const row of ownerEvents) {
+      types.push(row.event.type);
+    }
+    assert.deepEqual(types, ['member.invited', 'member.joined', 'ownership.seeded']);
+    const seeded = ownerEvents[2].event;
+    assert.equal(appliedReads.has(seeded.id), true, 'Ownership permission receipt was not checked');
     await files.writeFile('/tmp/owner-fixture-complete', 'complete', { mode: 0o600 });
     return;
   }

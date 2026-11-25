@@ -1,0 +1,153 @@
+{
+  "memberSteps": [
+    {
+      "utc": "2026-11-25T01:22:29.646Z",
+      "event": "stage",
+      "check": "member chat at 1280px"
+    },
+    {
+      "utc": "2026-11-25T01:22:29.647Z",
+      "event": "wait-network-idle"
+    },
+    {
+      "utc": "2026-11-25T01:22:29.648Z",
+      "event": "network-idle"
+    },
+    {
+      "utc": "2026-11-25T01:22:29.648Z",
+      "event": "wait-inspections",
+      "count": 61
+    },
+    {
+      "utc": "2026-11-25T01:22:29.649Z",
+      "event": "inspections-finished"
+    },
+    {
+      "utc": "2026-11-25T01:22:29.817Z",
+      "event": "navigation-finished"
+    },
+    {
+      "utc": "2026-11-25T01:22:29.817Z",
+      "event": "member-composer",
+      "width": 1280
+    },
+    {
+      "utc": "2026-11-25T01:22:31.001Z",
+      "event": "member-sent",
+      "width": 1280
+    },
+    {
+      "utc": "2026-11-25T01:22:39.933Z",
+      "event": "member-done",
+      "width": 1280
+    },
+    {
+      "utc": "2026-11-25T01:22:40.067Z",
+      "event": "stage",
+      "check": "member chat at 390px"
+    },
+    {
+      "utc": "2026-11-25T01:22:40.086Z",
+      "event": "wait-network-idle"
+    },
+    {
+      "utc": "2026-11-25T01:22:40.087Z",
+      "event": "network-idle"
+    },
+    {
+      "utc": "2026-11-25T01:22:40.087Z",
+      "event": "wait-inspections",
+      "count": 73
+    },
+    {
+      "utc": "2026-11-25T01:22:40.087Z",
+      "event": "inspections-finished"
+    },
+    {
+      "utc": "2026-11-25T01:22:40.240Z",
+      "event": "navigation-finished"
+    },
+    {
+      "utc": "2026-11-25T01:22:40.241Z",
+      "event": "member-composer",
+      "width": 390
+    },
+    {
+      "utc": "2026-11-25T01:22:41.308Z",
+      "event": "member-sent",
+      "width": 390
+    },
+    {
+      "utc": "2026-11-25T01:22:46.690Z",
+      "event": "member-done",
+      "width": 390
+    }
+  ],
+  "memberWrites": [
+    {
+      "step": "member chat at 1280px",
+      "id": 66,
+      "utc": "2026-11-25T01:22:30.996Z",
+      "route": "/api/conversations",
+      "status": 200
+    },
+    {
+      "step": "member chat at 1280px",
+      "id": 71,
+      "utc": "2026-11-25T01:22:32.155Z",
+      "route": "/api/conversations/*/messages",
+      "status": 200
+    },
+    {
+      "step": "member chat at 390px",
+      "id": 80,
+      "utc": "2026-11-25T01:22:41.304Z",
+      "route": "/api/conversations",
+      "status": 200
+    },
+    {
+      "step": "member chat at 390px",
+      "id": 85,
+      "utc": "2026-11-25T01:22:42.549Z",
+      "route": "/api/conversations/*/messages",
+      "status": 200
+    }
+  ],
+  "bindings": [
+    {
+      "method": "GET",
+      "utc": "2026-11-25T01:21:45.295Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "utc": "2026-11-25T01:21:45.376Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "utc": "2026-11-25T01:21:45.828Z",
+      "status": 200
+    }
+  ],
+  "unfinishedInspections": [],
+  "apiBodiesInspectedWhilePaused": 88,
+  "dispatcherRestarts": [
+    0,
+    0
+  ],
+  "dispatcherPoolAcquisitionErrors": 0,
+  "retainedComputerLogs": 3,
+  "slotReleased": true,
+  "packageFailureLogPresent": false,
+  "maximumOneMinuteLoad": 9.18,
+  "queueBeforeClaim": {
+    "utc": "2026-11-25T01:16:01+00:00",
+    "slot1": "free",
+    "slot2": "free",
+    "package": "clear",
+    "load": 2.81,
+    "clearSeconds": 1462
+  },
+  "source": "8bcc94db89abda8f7a460a32549ec8a977cd7b52"
+}

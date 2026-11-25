@@ -1,3 +1,5 @@
+import { requireFleetStandInProvider } from './journey-guard.ts';
+import { requirePackageProviderDestination } from '../package/model-settings.ts';
 import { startConnectionCustodyBridge } from './connection-custody-bridge.ts';
 // The pinned gateway binds wildcard sockets. Keep them inside Compose; only
 // loopback Docker publications and the private k3d relay can reach this stack.
@@ -6,7 +8,17 @@ import { createConnection, createServer, type Socket, type Server } from 'node:n
 
 const sockets = new Set<Socket>();
 const servers: Server[] = [];
-for (const name of ['MODEL_DECISION_PORT', 'MODEL_READINESS_PORT', 'MODEL_STUB_PORT']) {
+const realProvider = process.env['DEV_REAL_PROVIDER'] === '1';
+const packagedProvider = process.env['PACKAGE_PROVIDER_MODE'] === '1';
+const qualification = process.env['PACKAGE_PROVIDER_QUALIFICATION'] === '1';
+requirePackageProviderDestination(process.env);
+requireFleetStandInProvider(realProvider || (packagedProvider && !qualification));
+const localStandIn = !realProvider && !packagedProvider;
+const forwardedPorts = ['MODEL_DECISION_PORT', 'MODEL_READINESS_PORT'];
+if (localStandIn) {
+  forwardedPorts.push('MODEL_STUB_PORT');
+}
+for (const name of forwardedPorts) {
   const port = Number(process.env[name]);
   // These existing listeners bind loopback. Forward the container interfaces
   // without widening their production listeners or changing the owner stack.
@@ -32,5 +44,5 @@ const custodySocket = process.env['CONNECTION_CUSTODY_SOCKET'];
 if (custodySocket) {
   await startConnectionCustodyBridge(custodySocket, Number(process.env['CUSTODY_PROXY_PORT']));
 }
-if (process.env['DEV_REAL_PROVIDER'] !== '1') await import('./model-stub.ts');
+if (localStandIn) await import('./model-stub.ts');
 await import('../../apps/server/src/models-main.ts');

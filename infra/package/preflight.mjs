@@ -137,9 +137,25 @@ function checkPilotRestore(values) {
   }
 }
 
+function unknownModelSetting(key) {
+  return !['mode', 'qualification'].includes(key);
+}
+
+function checkModels(values) {
+  const models = values.models;
+  if (models === undefined) return;
+  if (!models || typeof models !== 'object' || Array.isArray(models) ||
+      !['stub', 'provider'].includes(models.mode) ||
+      Object.keys(models).some(unknownModelSetting) ||
+      (models.qualification !== undefined &&
+        (models.mode !== 'provider' || typeof models.qualification !== 'boolean'))) {
+    throw new Error('Unsupported models setting');
+  }
+}
+
 async function check(values, review) {
   const allowedKeys = ['chartVersion', 'images', 'secrets', 'exposure', 'postgres', 'natsCluster',
-    'scanner', 'pilotRestore'];
+    'scanner', 'pilotRestore', 'models'];
   for (const key of Object.keys(values)) {
     if (!allowedKeys.includes(key)) throw new Error('Unsupported package setting');
   }
@@ -164,6 +180,7 @@ async function check(values, review) {
     if (role in review.images) requireImage(role, values.images[role], values.images[role]);
   }
   checkPilotRestore(values);
+  checkModels(values);
   checkPostgres(values, review);
   checkNatsCluster(values, review);
   await checkScanner(values, review);

@@ -31,7 +31,7 @@ export type TaskRouting = z.infer<typeof registrySchema>['taskRouting'];
 export type ApiResult<T> = { kind: 'ok'; value: T } | { kind: 'access' | 'forbidden' | 'unpriced' }
   | { kind: 'invalid' | 'conflict' | 'not_found' } | { kind: 'failed'; status?: number };
 
-async function readJson<T>(
+export async function readJson<T>(
   url: string, schema: z.ZodType<T>, signal: AbortSignal,
 ): Promise<ApiResult<T>> {
   try {

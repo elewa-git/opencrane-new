@@ -30,7 +30,7 @@ jobs:
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Check approval refusals
         run: |
-          nice -n 10 node --test infra/package/application-approval.test.mjs
+          nice -n 10 node --test infra/package/application-approval.test.mjs infra/package/runtime-context.test.mjs
           nice -n 10 python3 infra/package/check-application.test.py
           nice -n 10 npx vitest run scripts/scanner-approval.test.mjs scripts/scanner-approval-host.test.mjs --maxWorkers=2
       - name: Build, inspect, scan and authenticate the application

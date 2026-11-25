@@ -1,0 +1,7 @@
+:host { display: block; min-width: 0; }
+section { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px;
+  border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-card); }
+h3, p, label { flex-basis: 100%; }
+label { display: grid; gap: 6px; min-width: 0; }
+select { min-height: 48px; max-width: 100%; padding: 8px; color: var(--oc-ink-strong);
+  background: var(--oc-surface-raised); border: 1px solid var(--oc-border-input); }

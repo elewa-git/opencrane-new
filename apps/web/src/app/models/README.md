@@ -9,6 +9,8 @@ This folder shows Models & providers, where owners and admins connect companies 
 - Creates connections and saves or replaces keys without reading a stored key back.
 - Separates reachability checks from a paid model-answer test. Each paid test needs fresh consent for its quoted cost; an unknown result keeps further tests locked.
 - Selects OpenAI models and shows the jobs using each model and the people, groups or assistants allowed to use it. Model selection is unavailable for Anthropic; Next continues without saving models.
+- Selects the member-chat default, pauses new calls and switches on the checked provider.
+  If the default cannot be read, setup shows how to try again.
 - Grants or removes access for one person, group or assistant at a time. A grant is explicit permission; setup uses the same editor for each selected model.
 - Reports confirmed setup changes separately from pending ones. Saved model choices and unresolved access changes keep their required checks available.
 - Warns when a shared assistant lacks its own model grant only after a complete check. Missing or still-updating information stays unchecked.
@@ -25,6 +27,7 @@ changes keep setup open so the person can still check their original requests.
 | --- | --- |
 | `model-registry.*`, `provider-setup.css` | Draw provider setup, checks, model choices and key replacement. |
 | `provider-page-state.ts`, `provider-key-changes.ts`, `provider-api.ts`, `provider-display.ts` | Read providers, keep pending changes and format saved facts. |
+| `provider-chat.*` | Select the chat default and switch on through checked provider commands. |
 | `model-access-editor.*` | Choose an audience, change one permission and check its result. |
 | `provider-setup-access.*`, `model-table.*` | Show setup outcomes and current model uses and access. |
 

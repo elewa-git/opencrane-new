@@ -96,6 +96,9 @@
               (click)="startReplacement(provider, replaceButton)">Replace key</button>
           }
         </article>
+        @if (provider.enabledModels.length > 0) {
+          <oc-provider-chat [provider]="provider" />
+        }
       }
     </section>
 

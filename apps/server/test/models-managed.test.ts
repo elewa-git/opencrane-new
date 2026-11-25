@@ -48,7 +48,7 @@ async function startModels(setup: Setup, patch: NodeJS.ProcessEnv = {}) {
   }
   onTestFinished(close);
   async function ready() {
-    expect(child.exitCode).toBeNull();
+    expect(child.exitCode, diagnostics).toBeNull();
     const response = await fetch(`http://127.0.0.1:${readinessPort}/healthz/ready`);
     expect(response.status).toBe(200);
   }
@@ -195,3 +195,49 @@ async function refusesUnreadableMode() {
   }
 }
 it('refuses startup when the recorded mode cannot be read', refusesUnreadableMode, 60_000);
+
+async function startsBeforeSwitchOn() {
+  const setup = await managedFixture('marker');
+  const process = await startModels(setup);
+  await expect.poll(process.ready, { timeout: 15_000 }).toBeUndefined();
+  const config = await process.config();
+  expect(config).toContain('/authorize/models/managed');
+  expect(config).not.toContain('backendAuth');
+  expect(config).not.toContain('.keys');
+  const before = await process.call();
+  expect(before.status).toBe(403);
+  await before.text();
+  expect(setup.received()).toBe(0);
+  await setup.append('budget-test', 'provider.managed_calls_enabled', {
+    providerId: 'primary', revision: 3, changedBy: 'alice', expectedProviderSequence: 0,
+  });
+  const after = await process.call();
+  expect(after.status).toBe(200);
+  await after.text();
+  expect(setup.received()).toBe(1);
+  await process.ready();
+  expect(process.child.exitCode).toBeNull();
+  expect(process.diagnostics()).not.toContain(credential);
+}
+it('starts with custody before switch-on and admits only the later managed turn',
+  startsBeforeSwitchOn, 60_000);
+
+async function missingKeyRefusesWithoutSpending() {
+  const setup = await managedFixture('custody');
+  const process = await startModels(setup);
+  await expect.poll(process.ready, { timeout: 15_000 }).toBeUndefined();
+  const response = await process.call();
+  expect(response.status).toBe(403);
+  const message = await response.text();
+  expect(message).not.toContain(credential);
+  expect(message).not.toContain(setup.reference);
+  expect(setup.received()).toBe(0);
+  const rows = await history(setup.nats.store, 'budget-test', 'test');
+  function reservation(row: typeof rows[number]) {
+    return row.event.type === 'budget.reserved';
+  }
+  expect(rows.filter(reservation)).toHaveLength(0);
+  expect(process.diagnostics()).not.toContain(credential);
+}
+it('a missing saved key refuses the call before provider contact or reservation',
+  missingKeyRefusesWithoutSpending, 60_000);

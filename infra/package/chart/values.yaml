@@ -42,3 +42,5 @@ natsCluster:
 pilotRestore:
   enabled: false
   backupId: ""
+models:
+  mode: stub

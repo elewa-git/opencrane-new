@@ -2,6 +2,10 @@
 
 For people, read [README.md](README.md) first.
 
+Fresh owner bootstrap seeds ownership and waits for its permission receipts before
+reporting readiness. An existing owner permission alone is not enough: commands
+also require the saved ownership changes to have reached the permissions service.
+
 `model-stub.ts` accepts `MODEL_STUB_PROXY_HOLD=1` only in a disposable computer
 fixture. A synthetic `PROXY_PROOF` prompt makes the native agent call the offered
 recall tool. The stub leaves that tool response open until the fixture stops.
@@ -36,7 +40,10 @@ for that id afterwards, including when preparation, installation or the browser 
 
 The packaged installer runs preflight and Helm from the values file's directory.
 It passes only the filename as the values argument, so an absolute private
-directory does not enter child command arguments.
+directory does not enter child command arguments. The installer reads its own fleet
+marker, including an empty marker, before Helm. A marked installer refuses ordinary
+provider mode and passes the marker directly to the models container. An unmarked
+installer refuses a runtime Secret prepared by a fleet task.
 
 ## Personal Memory response collection
 

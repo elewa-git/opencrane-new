@@ -1,0 +1,15 @@
+{
+  "source": "f7acfefaa022cdb4f44b35827c0470ff803288ce",
+  "namespace": "opencrane-package-1",
+  "namespaceUid": "0d596d81-9739-4bab-9764-623d850caa5a",
+  "createdAt": "2026-11-24T23:49:56Z",
+  "providerVolume": {
+    "name": "provider-secrets",
+    "uid": "ab3b09a0-8091-4cdd-9600-509d3fe87d8f",
+    "createdAt": "2026-11-24T23:51:36Z",
+    "volume": "pvc-ab3b09a0-8091-4cdd-9600-509d3fe87d8f",
+    "phase": "Bound"
+  },
+  "serverImage": "k3d-ocn-registry:5000/opencrane/package@sha256:3d60d3503c8fd3394a45ccdb20c522af3804409a3739a73ff2117d18b492a170",
+  "scannerImage": "k3d-ocn-registry:5000/opencrane/scanner@sha256:ab3f788880b0e788e4e7c1ad3e208346182b5f0c3209cfa325005963a7587e43"
+}

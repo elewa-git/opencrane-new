@@ -52,6 +52,11 @@ metadata:
   name: server
 spec:
   replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
+{{- if eq (toString .Values.models.mode) "provider" }}
+  {{- /* Let the old models process release the budget lock before starting its replacement. */}}
+  strategy:
+    type: Recreate
+{{- end }}
   selector:
     matchLabels: { app: server }
   template:
@@ -59,7 +64,11 @@ spec:
       labels: { app: server }
     spec:
       serviceAccountName: package-worker
+{{- if eq (toString .Values.models.mode) "provider" }}
+      securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
+{{- else }}
       securityContext: { fsGroup: 1000 }
+{{- end }}
       initContainers:
         - name: kubeconfig
           image: {{ .Values.images.server | quote }}
@@ -104,6 +113,20 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+{{- if eq (toString .Values.models.mode) "provider" }}
+        - name: private-provider-keys
+          image: {{ .Values.images.server | quote }}
+          command: [node, infra/package/provider-secrets.mjs, /var/lib/opencrane/provider-secrets]
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - { name: provider-secrets, mountPath: /var/lib/opencrane/provider-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { cpu: 50m, memory: 64Mi }
+{{- end }}
       containers:
         - name: server
           image: {{ required "server pin" .Values.images.server | quote }}
@@ -116,6 +139,9 @@ spec:
             - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
             {{- end }}
             - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
+{{- end }}
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
             {{- if .Values.exposure.public.enabled }}
@@ -133,6 +159,9 @@ spec:
             {{- if .Values.exposure.public.enabled }}
             - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap, readOnly: true }
             {{- end }}
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: provider-secrets, mountPath: /var/lib/opencrane/provider-secrets }
+{{- end }}
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
             - { name: storage-lease, mountPath: /run/storage, readOnly: true }
           ports: [{ containerPort: 8080 }]
@@ -173,10 +202,23 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.runtime | quote }}
                   key: PROJECTION_DATABASE_URL
+{{- if .Values.models.fleetTask }}
+            - { name: OPENCRANE_FLEET_TASK, value: "package-qualification" }
+{{- end }}
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: PACKAGE_PROVIDER_MODE, value: "1" }
+{{- if .Values.models.qualification }}
+            - { name: PACKAGE_PROVIDER_QUALIFICATION, value: "1" }
+{{- end }}
+            - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
+{{- end }}
             - { name: NODE_OPTIONS, value: "--max-old-space-size=256" }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+{{- if eq (toString .Values.models.mode) "provider" }}
+            - { name: provider-secrets, mountPath: /var/lib/opencrane/provider-secrets, readOnly: true }
+{{- end }}
             - { name: model-state, mountPath: /var/lib/opencrane/models }
           ports:
             - { containerPort: 43000, name: model-gateway }
@@ -205,6 +247,10 @@ spec:
           secret:
             secretName: {{ .Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
+{{- if eq (toString .Values.models.mode) "provider" }}
+        - name: provider-secrets
+          persistentVolumeClaim: { claimName: provider-secrets }
+{{- end }}
         - name: model-state
           emptyDir: {}
         - name: kubeconfig

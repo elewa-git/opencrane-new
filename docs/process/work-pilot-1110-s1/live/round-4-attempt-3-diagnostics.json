@@ -1,0 +1,80 @@
+{
+  "source": "5ad52ff2f6822f7d2f364430ce1493ce3ae4a2f9",
+  "dispatcher": {
+    "pod": "worker-dispatcher-78cd4c8d7-vnhz4",
+    "phase": "Running",
+    "containers": [
+      {
+        "name": "kubeconfig",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "wait-for-binding",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "copy-private-files",
+        "ready": true,
+        "restartCount": 0,
+        "state": [
+          "terminated"
+        ]
+      },
+      {
+        "name": "worker",
+        "ready": true,
+        "restartCount": 1,
+        "state": [
+          "running"
+        ],
+        "lastTermination": {
+          "reason": "Error",
+          "exitCode": 1,
+          "finishedAt": "2026-11-20T14:53:24Z"
+        }
+      }
+    ]
+  },
+  "failure": "Setup did not reach Key while the corrected driver followed the offered status reads for its unchanged deadline.",
+  "load1Maximum": 19.19,
+  "dispatcherRestarts": 0,
+  "poolAcquisitionErrors": 213,
+  "providerPermissionReaction": [
+    {
+      "utc": "2026-11-20T14:53:49.499000+00:00",
+      "handler": "update-openfga",
+      "outcome": "handler.started",
+      "durationMs": null
+    },
+    {
+      "utc": "2026-11-20T14:53:50.526000+00:00",
+      "handler": "update-openfga",
+      "outcome": "handler.failed",
+      "durationMs": 1027
+    },
+    {
+      "utc": "2026-11-20T14:53:53.230000+00:00",
+      "handler": "update-openfga",
+      "outcome": "handler.started",
+      "durationMs": null
+    },
+    {
+      "utc": "2026-11-20T14:53:57.241000+00:00",
+      "handler": "update-openfga",
+      "outcome": "handler.completed",
+      "durationMs": 4011
+    }
+  ],
+  "waitSnapshot": "Ten handler connections were idle and no blocking transactions were recorded at collection time. Earlier pool checkouts and a load-only cause are not established.",
+  "firstContainerLogStream": "SAVED before teardown",
+  "paidCalls": 0,
+  "paidCents": 0
+}

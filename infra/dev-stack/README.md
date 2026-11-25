@@ -29,7 +29,7 @@ flowchart LR
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
-  stack -->|checks hosts and launches| package["infra/package<br/>Helm install"]
+  stack -->|checks hosts and provider mode, then launches| package["infra/package<br/>Helm install"]
 ```
 
 ## What it is responsible for
@@ -43,7 +43,8 @@ flowchart LR
 - Apply safe background subscription changes while services are stopped.
 - Run browser journeys and keep screenshots and original results.
 - Check the claimed stack and protected target before private memory collection.
-- Check package hosts, record any explicit local risk exception and remove only owned resources.
+- Check package hosts and require the free stand-in for fleet tasks. Record any explicit
+  local host-risk exception and remove only owned resources.
 - Provide guarded demo checks and a daily fresh-stack check.
 
 Not built yet:
@@ -57,8 +58,8 @@ Not built yet:
    Each copy has its own ports, data and private keys. Cleanup removes only that copy.
 
 1. **A fresh stack starts.** Startup prepares services, sign-in and the free AI
-   provider, then starts the apps. It waits for the website and dispatcher before
-   running the core browser journey by default. A focused approval run can start
+   provider, then starts the apps. It checks owner permissions, the website and
+   dispatcher before running the core browser journey by default. A focused approval run can start
    the services first and run its browser checks after the demo is ready. The status
    command shows recovery attempts for event delivery, acknowledgements and computer
    watcher reads.

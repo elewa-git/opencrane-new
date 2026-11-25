@@ -59,6 +59,8 @@ Not built yet:
    access and spending rules allow it. The process sets money aside, records the
    cost and releases unused money. Tool approvals use saved event positions so earlier
    chat messages do not need to be replayed.
+   With a connected provider, the process reads its private key for an admitted call.
+   An admin can finish setup before switching on model calls.
 4. **A person uses a tool.** A reviewed tool may need their approval before it runs.
    The server saves the decision and checks access again before allowing work.
 5. **An admin changes settings.** The server checks their rights and saves the change.

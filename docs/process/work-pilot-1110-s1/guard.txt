@@ -1,0 +1,6 @@
+2026-11-19 UTC
+Fleet marker present: true
+Command: requireAutomatedJourney with a secondary id and real-provider mode
+Exit: 1
+Fleet tasks require the stand-in model
+No slot claimed. No provider key read. No paid request sent.

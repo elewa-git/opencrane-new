@@ -23,7 +23,7 @@ rules:
   - apiGroups: [apps]
     resources: [deployments]
     resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
-      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit{{ if $restore }},
+      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit{{ if eq (toString $root.Values.models.mode) "provider" }}, worker-routines{{ end }}{{ if $restore }},
       backup-catalogue{{ end }}]
     verbs: [get, list, watch]
   - apiGroups: [apps]
@@ -32,7 +32,7 @@ rules:
     resourceNames: [server, openfga]
     {{- else }}
     resourceNames: [server, openfga, worker-dispatcher, worker-members, worker-mcp-catalogue,
-      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit]
+      worker-computers, worker-conversations, worker-files, worker-budgets, worker-audit{{ if eq (toString $root.Values.models.mode) "provider" }}, worker-routines{{ end }}]
     {{- end }}
     verbs: [get, patch, update]
   {{- if $restore }}
@@ -139,6 +139,9 @@ spec:
                     fieldRef: { fieldPath: metadata.namespace }
                 - { name: KUBECONFIG, value: /run/kubeconfig/config.json }
                 - { name: BACKUP_IMAGES, value: {{ toJson $root.Values.images | quote }} }
+{{- if eq (toString $root.Values.models.mode) "provider" }}
+                - { name: BACKUP_PROVIDER_MODE, value: "true" }
+{{- end }}
               securityContext:
                 runAsNonRoot: true
                 runAsUser: 1000

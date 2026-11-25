@@ -1,0 +1,684 @@
+[
+  {
+    "utc": "2026-11-24T10:34:40Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 14.85,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:35:12Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 15.96,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:35:40Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 14.8,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:36:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 12.7,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:36:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 11.42,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:37:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 12.52,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:37:39Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 11.29,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:38:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 13.34,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:38:39Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 13.84,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:39:12Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 14.14,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:39:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 14.72,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:40:12Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 15.34,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:40:40Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 14.17,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:41:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 13.57,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:41:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 11.31,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:42:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 10.07,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:42:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 8.37,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:43:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.81,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:43:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.67,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:44:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.37,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:44:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.06,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:45:11Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.06,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:45:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 6.81,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:46:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 8.23,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:46:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.16,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:47:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 6.91,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:47:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 6.95,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:48:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.07,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:48:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.14,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:49:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.39,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:49:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 7.9,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:50:10Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 8.59,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:50:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 8.09,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:51:09Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 6.6,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:51:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 4.9,
+    "clearSeconds": 0,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:52:07Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 4.02,
+    "clearSeconds": 30,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:52:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 3.28,
+    "clearSeconds": 60,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:53:07Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 2.99,
+    "clearSeconds": 90,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:53:36Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 3.17,
+    "clearSeconds": 119,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:54:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 3.0,
+    "clearSeconds": 151,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:54:36Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 2.25,
+    "clearSeconds": 179,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:55:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 2.07,
+    "clearSeconds": 211,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:55:38Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.8,
+    "clearSeconds": 240,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:56:10Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.21,
+    "clearSeconds": 272,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:56:36Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.83,
+    "clearSeconds": 299,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:57:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.9,
+    "clearSeconds": 330,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:57:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.76,
+    "clearSeconds": 360,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:58:07Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.4,
+    "clearSeconds": 390,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:58:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.2,
+    "clearSeconds": 420,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:59:07Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.48,
+    "clearSeconds": 450,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T10:59:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.48,
+    "clearSeconds": 479,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:00:10Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.97,
+    "clearSeconds": 513,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:00:39Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 2.12,
+    "clearSeconds": 541,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:01:10Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 2.35,
+    "clearSeconds": 573,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:01:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.77,
+    "clearSeconds": 600,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:02:07Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.78,
+    "clearSeconds": 630,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:02:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.3,
+    "clearSeconds": 659,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:03:08Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.14,
+    "clearSeconds": 690,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:03:36Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.19,
+    "clearSeconds": 719,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:04:07Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.06,
+    "clearSeconds": 750,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:04:37Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 1.29,
+    "clearSeconds": 780,
+    "packageNamespaces": [],
+    "otherJourney": false
+  },
+  {
+    "utc": "2026-11-24T11:05:10Z",
+    "slots": [
+      "free",
+      "free"
+    ],
+    "load": 2.24,
+    "clearSeconds": 812,
+    "packageNamespaces": [],
+    "otherJourney": false
+  }
+]
