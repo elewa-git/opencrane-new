@@ -15,7 +15,8 @@ import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrow
   watchBrowserReplies } from './provider-navigation.ts';
 import { assertNoBrowserDisclosure, checkProviderArtifacts } from './provider-disclosure.ts';
 import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
-import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
+import { providerEventDisclosureScript, qualificationRequestCountScript, withBudgetQualification,
+  wrongKeyStatusScript }
   from './provider-probe.ts';
 import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
   selectChatDefault, verifyProvider } from './provider-settings.ts';
@@ -293,18 +294,6 @@ function inspectBeforeNavigation(page) {
   return waitForBrowserReplies(page, responses);
 }
 
-async function requireBudgetQualification() {
-  const script = `
-import { requirePackageProviderDestination } from './infra/package/model-settings.ts';
-if (process.env.PACKAGE_PROVIDER_QUALIFICATION !== '1') {
-  throw new Error('The running package has qualification disabled');
-}
-requirePackageProviderDestination(process.env);`;
-  await kube(['exec', 'deployment/server', '-c', 'models', '--', 'node',
-    '--experimental-strip-types', '--input-type=module', '-e', script]);
-  await readRequestCount();
-}
-
 async function runMemberJourney(ownerPage, admin, member) {
   if (budget) {
     const pages = { owner: ownerPage, admin: admin.page, member: member.page };
@@ -339,12 +328,7 @@ async function checkDisclosure() {
     result: 'PASS', checkedEvents: inspected.checkedEvents });
 }
 
-try {
-  await mkdir(output, { recursive: true });
-  if (budget) {
-    step('verify qualification', 'The separate free stand-in must be reachable before setup.');
-    await requireBudgetQualification();
-  }
+async function runProviderJourney() {
   // Save the wrong key privately so the collector can remove it from failure logs.
   const privateFileOptions = { mode: 0o600 };
   await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
@@ -373,6 +357,16 @@ try {
   const completion = budget ? 'provider setup, charged turns and budget refusals'
     : 'provider Settings, refusal, private restart and member chats';
   console.log(`PASS packaged ${completion} at 1280/390`);
+}
+
+try {
+  await mkdir(output, { recursive: true });
+  if (budget) {
+    step('verify qualification', 'The separate free stand-in must be reachable before setup.');
+    await withBudgetQualification(kube, readRequestCount, runProviderJourney);
+  } else {
+    await runProviderJourney();
+  }
 } catch (error) {
   const failure = providerFailure(stage, error);
   outcomes.push(failure);

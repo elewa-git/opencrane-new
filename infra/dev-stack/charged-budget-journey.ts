@@ -26,7 +26,9 @@ async function waitForCharge(admin: Page, origin: string, groupId: string, previ
   while (Date.now() < deadline) {
     const budget = await readBudgetSummary(admin, origin);
     const group = scopedBudget(budget, 'paying_group', groupId);
-    if (group.monthCents > previousCents && group.reservedCents === 0) return group.monthCents;
+    if (budgetChargeSettled(group, previousCents)) {
+      return group.monthCents;
+    }
     await delay(100);
   }
   assert.fail('Spending records a charge and clears its reservation');
@@ -83,10 +85,10 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   const spentCents = await waitForCharge(admin, origin, groupId, previousCents);
   const { row } = await readSuccessfulTurnAudit(member, origin, prompt);
   const { reservedCents, chargedCents } = await assertAuditMoney(admin, origin, row);
-  assert(reservedCents > 0 && chargedCents > 0, 'The call has a positive reservation and charge');
-  assert.equal(spentCents - previousCents, chargedCents, 'Spending shows this turn’s charge');
   const requestsAfterReply = await readRequestCount();
-  assert.equal(requestsAfterReply, requestsBefore + 1, 'One member call reached the stand-in');
+  const observation = { reservedCents, chargedCents, spentCents, previousCents,
+    requestsBefore, requestsAfterReply };
+  assertChargedTurn(observation);
   await capture(member, 'charged-reply', width);
   await showSettledCost(admin, origin, groupId, spentCents, beforeNavigate);
   await capture(admin, 'settled-spending', width);
@@ -95,14 +97,15 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   const loweredCents = spentCents - 1;
   const lowered = await saveBudgetCeiling(admin, origin, { scope, scopeId: groupId,
     cents: loweredCents }, beforeNavigate);
-  assert(scopedBudget(lowered, scope, groupId).monthCents > loweredCents);
+  const loweredGroup = scopedBudget(lowered, scope, groupId);
+  assertBelowRecordedSpending(loweredGroup.monthCents, loweredCents);
   await capture(admin, 'lowered-ceiling', width);
 
   step(`refuse next turn at ${width}px`,
     'Chat must explain the group limit and the stand-in request count must stay the same.');
   await refuseNextTurn(member, `Try another answer at ${width}px.`);
   const requestsAfterRefusal = await readRequestCount();
-  assert.equal(requestsAfterRefusal, requestsAfterReply, 'The refused call did not reach the stand-in');
+  assertRefusedRequestCount(requestsAfterRefusal, requestsAfterReply);
   await capture(member, 'budget-refused', width);
   return { check: `monthly spending and chat refusal at ${width}px`, result: 'PASS', width,
     ceilingCents, reservedCents, chargedCents, spentCents, loweredCents,
@@ -122,4 +125,35 @@ export async function chargedBudgetJourney(journey: ChargedBudgetJourney) {
       `${outcome.requestsAfterRefusal} stand-in requests before and after refusal`);
   }
   return outcomes;
+}
+
+type GroupSpend = { monthCents: number; reservedCents: number };
+
+export function budgetChargeSettled(group: GroupSpend, previousCents: number): boolean {
+  return group.monthCents > previousCents && group.reservedCents === 0;
+}
+
+type TurnChargeObservation = {
+  reservedCents: number;
+  chargedCents: number;
+  spentCents: number;
+  previousCents: number;
+  requestsBefore: number;
+  requestsAfterReply: number;
+};
+
+export function assertChargedTurn(observation: TurnChargeObservation): void {
+  const { reservedCents, chargedCents, spentCents, previousCents,
+    requestsBefore, requestsAfterReply } = observation;
+  assert(reservedCents > 0 && chargedCents > 0, 'The call has a positive reservation and charge');
+  assert.equal(spentCents - previousCents, chargedCents, 'Spending shows this turn’s charge');
+  assert.equal(requestsAfterReply, requestsBefore + 1, 'One member call reached the stand-in');
+}
+
+export function assertBelowRecordedSpending(spentCents: number, loweredCents: number): void {
+  assert(spentCents > loweredCents, 'The saved ceiling is below recorded spending');
+}
+
+export function assertRefusedRequestCount(after: number, before: number): void {
+  assert.equal(after, before, 'The refused call did not reach the stand-in');
 }

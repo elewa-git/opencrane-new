@@ -56,8 +56,10 @@ async function waitForChange(page: Page, origin: string, path: string) {
     // An accepted command can be absent until its read table first sees the receipt.
     if (response.status() !== 404) {
       assert.equal(response.status(), 200);
-      const body = await response.json() as { projection: { content: string; iam: string } };
-      if (body.projection.content === 'current' && body.projection.iam === 'current') return;
+      const body = await response.json() as { projection: BudgetProjection };
+      if (budgetChangeIsReady(body.projection)) {
+        return;
+      }
     }
     await delay(100);
   }
@@ -70,13 +72,27 @@ async function waitForAssistant(member: Page, origin: string, assistantId: strin
     const response = await readJourneyApi(member, `${origin}/api/assistants/${assistantId}`);
     assert.equal(response.status(), 200);
     const body = await response.json() as {
-      rows: Array<{ assistantId: string; status: string; canStartSession: boolean }>;
+      rows: BudgetAssistantStatus[];
     };
-    function isReady(row: typeof body.rows[number]) {
-      return row.assistantId === assistantId && row.status === 'ready' && row.canStartSession;
+    function isReady(row: BudgetAssistantStatus) {
+      return budgetAssistantIsReady(row, assistantId);
     }
-    if (body.rows.some(isReady)) return;
+    if (body.rows.some(isReady)) {
+      return;
+    }
     await delay(100);
   }
   assert.fail('Budget journey shared assistant is ready and available to the member');
+}
+
+type BudgetProjection = { content: string; iam: string };
+
+export function budgetChangeIsReady(projection: BudgetProjection): boolean {
+  return projection.content === 'current' && projection.iam === 'current';
+}
+
+type BudgetAssistantStatus = { assistantId: string; status: string; canStartSession: boolean };
+
+export function budgetAssistantIsReady(row: BudgetAssistantStatus, assistantId: string): boolean {
+  return row.assistantId === assistantId && row.status === 'ready' && row.canStartSession;
 }

@@ -46,3 +46,22 @@ try {
 } finally {
   await events.close();
 }`;
+
+const budgetQualificationScript = `
+import { requirePackageProviderDestination } from './infra/package/model-settings.ts';
+if (process.env.PACKAGE_PROVIDER_QUALIFICATION !== '1') {
+  throw new Error('The running package has qualification disabled');
+}
+requirePackageProviderDestination(process.env);`;
+
+export async function withBudgetQualification(
+  kube: (args: string[]) => Promise<string>,
+  readRequestCount: () => Promise<number>,
+  start: () => Promise<void>,
+): Promise<void> {
+  const args = ['exec', 'deployment/server', '-c', 'models', '--', 'node',
+    '--experimental-strip-types', '--input-type=module', '-e', budgetQualificationScript];
+  await kube(args);
+  await readRequestCount();
+  await start();
+}

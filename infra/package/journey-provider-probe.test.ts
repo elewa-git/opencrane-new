@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { qualificationRequestCountScript, wrongKeyStatusScript } from './provider-probe.ts';
+import { qualificationRequestCountScript, withBudgetQualification, wrongKeyStatusScript } from './provider-probe.ts';
 
 const execute = promisify(execFile);
 
@@ -48,3 +48,31 @@ async function readsOnlyQualificationCount() {
 }
 test('the packaged qualification probe returns only a valid stand-in request count',
   readsOnlyQualificationCount);
+
+async function refusesBeforeProviderSetup(): Promise<void> {
+  const env = { ...process.env, PACKAGE_PROVIDER_MODE: '1',
+    PACKAGE_PROVIDER_QUALIFICATION: '0', MODEL_UPSTREAM: 'model-qualification:43003' };
+  async function runInModels(args: string[]): Promise<string> {
+    const node = args.indexOf('node');
+    assert(node > 0);
+    const command = args.slice(node + 1);
+    const result = await execute(process.execPath, command, { env });
+    return result.stdout;
+  }
+  let readCounter = false;
+  async function readCount(): Promise<number> {
+    readCounter = true;
+    return 0;
+  }
+  let started = false;
+  async function start(): Promise<void> {
+    started = true;
+  }
+  const run = withBudgetQualification(runInModels, readCount, start);
+  await assert.rejects(run, /running package has qualification disabled/u);
+  assert.equal(readCounter, false);
+  assert.equal(started, false);
+}
+
+test('disabled qualification refuses before probing or setting up the provider',
+  refusesBeforeProviderSetup);
