@@ -9,7 +9,7 @@ import { postJourneyCommand, readJourneyApi } from '../dev-stack/browser-api.ts'
 import { assertNoBrowserDisclosure } from './provider-disclosure.ts';
 import { answer } from '../dev-stack/real-model-journey.ts';
 import { providerFailure } from './provider-failure.ts';
-import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
+import { finishBrowserReplies, navigateWithReplies, waitForBrowserReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 import type { ExpectedReply } from './provider-reply-coverage.ts';
 
@@ -567,7 +567,11 @@ test('a direct command checks for disclosure before returning the reply', testDi
 async function missingDirectOperation(fixture: ReplyFixture): Promise<void> {
   const { page, browser, origin, replies } = fixture;
   await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  const pageReply = page.waitForResponse(`${origin}/api/check`);
   await page.goto(origin);
+  await pageReply;
+  await waitForBrowserReplies(page, replies);
+  assert.equal(replies.length, 1, 'The fixture has one inspected page reply');
   const operation: ExpectedReply = { transport: 'direct', method: 'GET', path: /^\/api\/check$/u,
     label: 'fixture status read' };
   const coverage = new Map([[page, [operation]]]);
