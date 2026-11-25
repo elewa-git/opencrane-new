@@ -97,7 +97,7 @@ async function prepareCollector(home: string) {
   await copyPackagedFixture(worktree);
   symlinkSync(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   const files = ['nats-placement.ts', 'nats-placement-collect.ts', 'fresh-twice.ts',
-    'fresh-twice-entry.ts', 'browser-capture.ts', 'forward.ts'];
+    'fresh-twice-entry.ts', 'browser-capture.ts', 'forward.ts', 'package-forwarder.ts'];
   mkdirSync(join(worktree, 'infra/package'), { recursive: true });
   mkdirSync(join(worktree, 'infra/nats'), { recursive: true });
   for (const file of files) cpSync(`infra/package/${file}`, join(worktree, 'infra/package', file));
