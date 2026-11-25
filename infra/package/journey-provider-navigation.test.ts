@@ -1,8 +1,10 @@
+/// <reference lib="dom" />
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { test } from 'node:test';
 import { chromium, type Response } from 'playwright';
+import { answer } from '../dev-stack/real-model-journey.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 
@@ -24,6 +26,23 @@ function serve(request: IncomingMessage, response: ServerResponse): void {
       }
       go();
     </script>`);
+  } else if (request.url === '/charged-reply') {
+    response.end(`<section class="transcript" aria-busy="false"></section>
+      <textarea aria-label="Message your agent"></textarea>
+      <script>
+        function showReply() {
+          document.querySelector('.transcript').innerHTML =
+            '<article aria-label="Agent reply"><div class="prose">Recorded fixture reply.</div>' +
+            '<p class="turn-status">Done</p></article>';
+        }
+        if (sessionStorage.getItem('answered')) showReply();
+        document.querySelector('textarea').addEventListener('keydown', event => {
+          if (event.key === 'Enter') {
+            sessionStorage.setItem('answered', 'true');
+            showReply();
+          }
+        });
+      </script>`);
   } else {
     response.end('<p>Next page</p>');
   }
@@ -73,6 +92,37 @@ async function keepsResponseBodies(): Promise<void> {
 
 test('navigation waits for API disclosure inspection before discarding the old response body',
   keepsResponseBodies);
+
+async function waitsBeforeReloadingReply() {
+  const server = createServer(serve);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${origin}/charged-reply`);
+    await page.evaluate(() => { document.body.dataset['beforeReload'] = 'yes'; });
+    let inspections = 0;
+    async function inspect() {
+      const beforeReload = await page.locator('body').getAttribute('data-before-reload');
+      assert.equal(beforeReload, 'yes', 'The original document must still be open');
+      await page.getByRole('article', { name: 'Agent reply' }).waitFor();
+      inspections++;
+    }
+    await answer(page, 'Show the charged reply.', [/Recorded fixture reply/u], inspect);
+    assert.equal(inspections, 1, 'The browser must inspect its responses before reloading');
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('the charged reply waits for disclosure inspection before reloading', waitsBeforeReloadingReply);
 
 async function scansReplyBeforePageNavigation(): Promise<void> {
   const server = createServer(serve);
