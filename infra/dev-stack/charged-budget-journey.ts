@@ -39,7 +39,7 @@ async function showSettledCost(admin: Page, origin: string, groupId: string, cen
   await amount.filter({ hasText: `(${cents} cents)` }).waitFor({ state: 'visible' });
 }
 
-async function chooseMemoryFreeTurn(member: Page) {
+export async function chooseMemoryFreeTurn(member: Page) {
   const choice = { name: 'Start a fresh memory-free turn', exact: true };
   await member.getByRole('button', choice).click();
 }
