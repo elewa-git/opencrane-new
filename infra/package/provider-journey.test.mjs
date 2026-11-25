@@ -13,7 +13,7 @@ import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrowserReplies,
   watchBrowserReplies } from './provider-navigation.ts';
-import { assertNoBrowserDisclosure } from './provider-disclosure.ts';
+import { assertNoBrowserDisclosure, checkProviderArtifacts } from './provider-disclosure.ts';
 import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
   from './provider-probe.ts';
@@ -321,13 +321,18 @@ async function runMemberJourney(ownerPage, admin, member) {
 }
 
 async function checkDisclosure() {
-  const values = await readFile(`${directory}/package-values.json`, 'utf8');
-  const manifests = await kube(['get', 'deployment,statefulset,cronjob,job,configmap', '-o', 'json']);
-  const logs = await kube(['logs', '-l', 'app=server', '--all-containers=true',
-    '--prefix=true', '--tail=-1']);
-  for (const content of [values, manifests, logs]) {
-    for (const secret of secrets) assert(!content.includes(secret), 'A public artifact disclosed a key');
+  function readLocalValues() {
+    return readFile(`${directory}/package-values.json`, 'utf8');
   }
+  async function readInstalledValues() {
+    const args = ['get', 'values', owner.release, '--all', '-o', 'json',
+      '--kube-context', owner.context, '-n', owner.namespace];
+    const result = await execute('helm', args, { env: connection.environment, timeout: 30_000,
+      maxBuffer: 4 * 1024 * 1024 });
+    return result.stdout;
+  }
+  const reader = { kube, readLocalValues, readInstalledValues };
+  await checkProviderArtifacts(reader, secrets, budget);
   const inspected = await privateScript(providerEventDisclosureScript, secrets);
   assert(inspected.checkedEvents > 0);
   outcomes.push({ check: 'keys absent from values, manifests, environment values, logs and events',

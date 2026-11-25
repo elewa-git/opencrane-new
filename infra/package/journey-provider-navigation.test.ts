@@ -514,9 +514,8 @@ async function assertMarkedPageRefused(fixture: ReplyFixture, omitted: boolean):
   await assert.rejects(finishBrowserReplies(browser, replies), expected);
 }
 
-const absentNotification = assertMarkedPageRefused.bind(undefined);
 async function missingPageReply(fixture: ReplyFixture): Promise<void> {
-  await absentNotification(fixture, true);
+  await assertMarkedPageRefused(fixture, true);
 }
 
 async function disclosedPageReply(fixture: ReplyFixture): Promise<void> {
@@ -546,3 +545,34 @@ async function disclosedDirectCommand({ page, origin, replies }: ReplyFixture): 
 
 const testDisclosedDirectCommand = withMarkedReply.bind(undefined, disclosedDirectCommand);
 test('a direct command checks for disclosure before returning the reply', testDisclosedDirectCommand);
+
+async function missingDirectOperation(fixture: ReplyFixture): Promise<void> {
+  const { page, browser, origin, replies } = fixture;
+  await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  await page.goto(origin);
+  const operation = { transport: 'direct', method: 'GET', path: /^\/api\/check$/u,
+    label: 'fixture status read' };
+  const coverage = new Map([[page, [operation]]]);
+  const shutdown: Promise<void> = Reflect.apply(finishBrowserReplies, undefined,
+    [browser, replies, undefined, coverage]);
+  await assert.rejects(shutdown, /Missing inspected replies for fixture status read/u);
+}
+
+const testMissingDirectOperation = withMarkedReply.bind(undefined, missingDirectOperation);
+test('an inspected page reply cannot stand in for a required direct read', testMissingDirectOperation);
+
+async function missingPageOperation(fixture: ReplyFixture): Promise<void> {
+  const { page, browser, origin, replies } = fixture;
+  await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  const direct = await readJourneyApi(page, `${origin}/api/check`);
+  assert.equal(direct.status(), 200);
+  const operation = { transport: 'page', method: 'GET', path: /^\/api\/check$/u,
+    label: 'fixture page' };
+  const coverage = new Map([[page, [operation]]]);
+  const shutdown: Promise<void> = Reflect.apply(finishBrowserReplies, undefined,
+    [browser, replies, undefined, coverage]);
+  await assert.rejects(shutdown, /Missing inspected replies for fixture page/u);
+}
+
+const testMissingPageOperation = withMarkedReply.bind(undefined, missingPageOperation);
+test('an inspected direct read cannot stand in for a required page reply', testMissingPageOperation);
