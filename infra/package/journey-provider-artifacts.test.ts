@@ -7,13 +7,14 @@ const sources = ['local values', 'installed values', 'manifests', 'server log', 
   'previous server log', 'previous stand-in log'] as const;
 type Source = typeof sources[number];
 type Fault = 'marked' | 'missing';
+type QuietLog = 'models' | 'storage-credentials';
 
 function fixturePod(app: string, name: string, containers: string[]) {
   function spec(container: string) {
     return { name: container };
   }
   function status(container: string) {
-    const restartCount = container === 'models' ? 0 : 1;
+    const restartCount = container === 'server' || container === 'stand-in' ? 1 : 0;
     return { name: container, restartCount };
   }
   const podSpec = { containers: containers.map(spec) };
@@ -21,7 +22,7 @@ function fixturePod(app: string, name: string, containers: string[]) {
   return { metadata: { name, labels: { app } }, spec: podSpec, status: podStatus };
 }
 
-async function scanFixture(source?: Source, fault?: Fault) {
+async function scanFixture(source?: Source, fault?: Fault, unavailable?: QuietLog) {
   function content(label: Source, safe: string): string {
     if (label === source && fault === 'marked') {
       return safe.replace('safe', marker);
@@ -39,7 +40,8 @@ async function scanFixture(source?: Source, fault?: Fault) {
   }
   async function kube(args: string[]): Promise<string> {
     if (args[0] === 'get' && args[1] === 'pods') {
-      const server = fixturePod('server', 'server-fixture', ['server', 'models']);
+      const containers = ['server', 'storage-credentials', 'models'];
+      const server = fixturePod('server', 'server-fixture', containers);
       const standIn = fixturePod('model-qualification', 'stand-in-fixture', ['stand-in']);
       return JSON.stringify({ items: [server, standIn] });
     }
@@ -53,8 +55,12 @@ async function scanFixture(source?: Source, fault?: Fault) {
       const label = previous ? 'previous stand-in log' : 'stand-in log';
       return content(label, 'safe stand-in log');
     }
-    if (container === 'models') {
+    if (container === 'models' || container === 'storage-credentials') {
       assert.equal(previous, false, 'Collect previous logs only when the container restarted');
+      if (container === unavailable) {
+        throw new Error('The log request failed');
+      }
+      return '';
     }
     const label = previous ? 'previous server log' : 'server log';
     return content(label, 'safe server log');
@@ -79,7 +85,15 @@ for (const source of sources) {
 
 async function acceptsCleanEvidence(): Promise<void> {
   const checked = await scanFixture();
-  assert.deepEqual(checked, { checkedCurrentLogs: 3, checkedPreviousLogs: 2 });
+  assert.deepEqual(checked, { checkedCurrentLogs: 4, checkedPreviousLogs: 2 });
 }
 
-test('the packaged scan accepts all credential-free evidence', acceptsCleanEvidence);
+test('the packaged scan accepts a successful empty log read from a quiet sidecar',
+  acceptsCleanEvidence);
+
+async function refusesUnavailableSidecarLog(): Promise<void> {
+  const scan = scanFixture(undefined, undefined, 'storage-credentials');
+  await assert.rejects(scan, /The log request failed/u);
+}
+
+test('a failed log read from a quiet sidecar still fails the scan', refusesUnavailableSidecarLog);
