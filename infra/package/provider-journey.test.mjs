@@ -358,7 +358,8 @@ try {
     'All response inspections must pass through browser shutdown.');
   await finishBrowserReplies(browser, responses);
   browser = undefined;
-  const browserDisclosure = { check: stage.check, result: 'PASS' };
+  const browserDisclosure = { check: stage.check, result: 'PASS',
+    checkedReplies: responses.length };
   outcomes.push(browserDisclosure);
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'PASS', source: git.stdout.trim(),

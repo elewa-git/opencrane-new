@@ -1,17 +1,18 @@
 /// <reference lib="dom" />
 import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { EventEmitter, once } from 'node:events';
+import { once } from 'node:events';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium, type CDPSession, type Page, type Response } from 'playwright';
+import { chromium, type CDPSession, type Page } from 'playwright';
 import { answer } from '../dev-stack/real-model-journey.ts';
 import { providerFailure } from './provider-failure.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 
 function serve(request: IncomingMessage, response: ServerResponse): void {
-  if (request.url === '/api/check') {
+  if (request.url === '/api/check' ||
+      request.url === '/api/conversations/fixture/approvals?key=private-query') {
     response.writeHead(200, { 'content-type': 'application/json' });
     response.end('{"result":"safe"}');
     return;
@@ -175,49 +176,6 @@ async function waitsForRequestsStartedAfterLoad() {
 test('navigation waits for API requests started after the page had finished loading',
   waitsForRequestsStartedAfterLoad);
 
-async function scansReplyBeforePageNavigation(): Promise<void> {
-  const server = createServer(serve);
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert(address && typeof address !== 'string');
-  const origin = `http://127.0.0.1:${address.port}`;
-  const browser = await chromium.launch({ headless: true });
-  try {
-    const page = await browser.newPage();
-    const moved = page.waitForURL(`${origin}/next`);
-    const replies: Promise<void>[] = [];
-    const bodies: string[] = [];
-    function delayPassiveRead(response: Response): void {
-      if (response.url() !== `${origin}/api/check`) return;
-      const read = response.text.bind(response);
-      // Let the page leave before the passive inspector tries to read Chromium's old handle.
-      async function readAfterNavigation(): Promise<string> {
-        await moved;
-        return read();
-      }
-      response.text = readAfterNavigation;
-    }
-    function inspect(body: string): void {
-      bodies.push(body);
-    }
-    page.on('response', delayPassiveRead);
-    await watchBrowserReplies(page, origin, replies, inspect);
-    await page.goto(`${origin}/redirect-after-check`);
-    await moved;
-    await finishBrowserReplies(browser, replies);
-    assert.deepEqual(bodies, ['{"result":"safe"}']);
-  } finally {
-    await browser.close();
-    server.closeAllConnections();
-    server.close();
-    await once(server, 'close');
-  }
-}
-
-test('the browser collector scans API replies when the application immediately navigates',
-  scansReplyBeforePageNavigation);
-
 async function preservesInspectionFailures(): Promise<void> {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -260,7 +218,7 @@ function startApprovalPoll(path: string): void {
 }
 
 async function drainsBeforeClosingWithAPoll(): Promise<void> {
-  const pausedPoll = Promise.withResolvers<void>();
+  const reachedServer = Promise.withResolvers<void>();
   const pollPath = '/api/conversations/fixture/approvals';
   let polls = 0;
   function respond(request: IncomingMessage, response: ServerResponse): void {
@@ -269,9 +227,8 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
       return;
     }
     polls++;
-    // Hold the reply open so closing Chromium during the inspection loses its body.
-    response.writeHead(200, { 'content-type': 'application/json' });
-    response.flushHeaders();
+    reachedServer.resolve();
+    response.end('late approval poll');
   }
   const server = createServer(respond);
   server.listen(0, '127.0.0.1');
@@ -283,18 +240,7 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
   const close = browser.close.bind(browser);
   try {
     const page = await browser.newPage();
-    const context = page.context();
-    const openSession = context.newCDPSession.bind(context);
     const pollUrl = `${origin}${pollPath}`;
-    async function observeSession(target: Parameters<typeof openSession>[0]) {
-      const session = await openSession(target);
-      function responsePaused(event: { request: { url: string }; responseStatusCode?: number }) {
-        if (event.request.url === pollUrl && event.responseStatusCode === 200) pausedPoll.resolve();
-      }
-      session.on('Fetch.requestPaused', responsePaused);
-      return session;
-    }
-    context.newCDPSession = observeSession;
     const replies: Promise<void>[] = [];
     const bodies: string[] = [];
     function inspect(body: string) { bodies.push(body); }
@@ -308,7 +254,7 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
       }
       const rejected = page.waitForEvent('requestfailed', isApprovalPoll);
       await page.evaluate(startApprovalPoll, pollPath);
-      await Promise.race([pausedPoll.promise, rejected]);
+      await Promise.race([reachedServer.promise, rejected]);
       await close();
     }
     browser.close = closeWithPoll;
@@ -326,82 +272,15 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
 test('shutdown drains inspected replies before a new approval poll can reach the server',
   drainsBeforeClosingWithAPoll);
 
-const cancelledResponse = new Error(
-  'cdpSession.send: Protocol error (Fetch.continueResponse): Invalid InterceptionId.');
-
-async function pausedResponse(inspect: (body: string) => void, bodyError?: Error,
-  continueError = cancelledResponse) {
-  const events = new EventEmitter();
-  async function send(method: string) {
-    if (method === 'Fetch.enable') return;
-    if (method === 'Fetch.getResponseBody') {
-      if (bodyError) throw bodyError;
-      return { body: 'inspection fixture', base64Encoded: false };
-    }
-    assert.equal(method, 'Fetch.continueResponse');
-    throw continueError;
-  }
-  const session = { on: events.on.bind(events), send };
-  async function newCDPSession() { return session; }
-  function context() { return { newCDPSession }; }
-  function on() {}
-  const page = { on, context } as unknown as Page;
-  const replies: Promise<void>[] = [];
-  await watchBrowserReplies(page, 'http://fixture.invalid', replies, inspect);
-  const request = { method: 'GET',
-    url: 'http://fixture.invalid/api/conversations/private-id/approvals?key=private-query' };
-  events.emit('Fetch.requestPaused', { requestId: 'response', responseStatusCode: 200, request });
-  assert.equal(replies.length, 1);
-  await Promise.all(replies);
-}
-
-async function keepsInspectionWhenBrowserCancels() {
-  const inspected: string[] = [];
-  function record(body: string) { inspected.push(body); }
-  await pausedResponse(record);
-  assert.deepEqual(inspected, ['inspection fixture']);
-  const missingBody = new Error('The browser could not supply the response body');
-  const bodyFailure = { cause: missingBody };
-  await assert.rejects(pausedResponse(record, missingBody), bodyFailure);
-  const failedInspection = new Error('A response failed inspection');
-  function refuse() { throw failedInspection; }
-  await assert.rejects(pausedResponse(refuse), failedInspection);
-  const unexpectedContinuation = new Error('Unexpected continuation failure');
-  const expectedFailure = { cause: unexpectedContinuation };
-  await assert.rejects(pausedResponse(record, undefined, unexpectedContinuation), expectedFailure);
-}
-
-test('a cancelled continuation preserves completed and failed inspections',
-  keepsInspectionWhenBrowserCancels);
-
-async function reportsMissingResponseBody(): Promise<void> {
-  const step = { check: 'finish API disclosure inspections', detail: 'All inspections must pass.' };
-  const bodyError = new Error('Browser session closed with private exception content');
-  function unexpectedBody(): never { throw new Error('There is no body to inspect'); }
-  function checkDiagnostic(error: unknown): boolean {
-    assert(error instanceof Error);
-    assert.equal(error.cause, bodyError);
-    const result = providerFailure(step, error);
-    assert.equal(result.result, 'FAIL');
-    assert.equal(result.detail, 'Chromium could not read the body of the chat approvals GET '
-      + 'response (HTTP 200). All inspections must pass.');
-    assert.doesNotMatch(JSON.stringify(result), /private/u);
-    return true;
-  }
-  await assert.rejects(pausedResponse(unexpectedBody, bodyError), checkDiagnostic);
-}
-
-test('a missing response body reports the failed operation and safe response details',
-  reportsMissingResponseBody);
-
-function losePausedBodyReads(page: Page, error: Error): void {
+function loseBodyReads(page: Page, command: 'Fetch.getResponseBody' | 'Network.getResponseBody',
+  error: Error): void {
   const context = page.context();
   const openSession = context.newCDPSession.bind(context);
-  async function openSessionWithBodyLoss(target: Page | Parameters<typeof openSession>[0]) {
+  async function openSessionWithBodyLoss(target: Parameters<typeof openSession>[0]) {
     const session = await openSession(target);
     const send = session.send.bind(session);
     const sendWithBodyLoss: CDPSession['send'] = async function (method, parameters) {
-      if (method === 'Fetch.getResponseBody') throw error;
+      if (method === command) throw error;
       return send(method, parameters);
     };
     session.send = sendWithBodyLoss;
@@ -420,8 +299,8 @@ async function collectsBodyWithoutHoldingTheReply(): Promise<void> {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    const lostBody = new Error('Protocol error (Fetch.getResponseBody): No resource with given identifier');
-    losePausedBodyReads(page, lostBody);
+    const lostBody = new Error('Fetch.getResponseBody lost the response while Chromium held it');
+    loseBodyReads(page, 'Fetch.getResponseBody', lostBody);
     const replies: Promise<void>[] = [];
     const bodies: string[] = [];
     function inspect(body: string): void {
@@ -456,28 +335,31 @@ async function refusesUnreadableDeliveredBody(): Promise<void> {
     const page = await browser.newPage();
     const bodyError = new Error('Chromium lost the body with private exception content');
     const replies: Promise<void>[] = [];
-    function failBodyRead(response: Response): void {
-      if (response.url() !== `${origin}/api/check`) return;
-      async function read(): Promise<string> {
-        throw bodyError;
-      }
-      response.text = read;
+    const approvalPath = '/api/conversations/fixture/approvals?key=private-query';
+    loseBodyReads(page, 'Network.getResponseBody', bodyError);
+    function inspect(): never {
+      throw new Error('There is no body to inspect');
     }
-    function inspect(): void {}
-    page.on('response', failBodyRead);
     await watchBrowserReplies(page, origin, replies, inspect);
-    const moved = page.waitForURL(`${origin}/next`);
-    await page.goto(`${origin}/redirect-after-check`);
-    await moved;
+    await page.goto(`${origin}/idle`);
+    async function readApproval(path: string): Promise<string> {
+      const response = await fetch(path);
+      return response.text();
+    }
+    const displayedBody = await page.evaluate(readApproval, approvalPath);
+    assert.equal(displayedBody, '{"result":"safe"}');
     function recordedFailure(error: unknown): boolean {
       assert(error instanceof Error);
       assert.equal(error.cause, bodyError);
-      const step = { check: 'finish API disclosure inspections', detail: 'Every reply must be checked.' };
+      const step = {
+        check: 'finish API disclosure inspections',
+        detail: 'Every reply must be checked.',
+      };
       const result = providerFailure(step, error);
       assert.equal(result.result, 'FAIL');
-      assert.equal(result.detail, 'Chromium could not read the body of an API response (HTTP 200). '
-        + 'Every reply must be checked.');
-      assert.doesNotMatch(JSON.stringify(result), /private/u);
+      assert.equal(result.detail, 'Chromium could not read the body of the chat approvals GET '
+        + 'response (HTTP 200). Every reply must be checked.');
+      assert.doesNotMatch(JSON.stringify(result), /private|fixture/u);
       return true;
     }
     await assert.rejects(finishBrowserReplies(browser, replies), recordedFailure);

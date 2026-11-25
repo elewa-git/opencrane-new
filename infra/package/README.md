@@ -87,7 +87,8 @@ Not built yet:
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
    Provider journey results name the failed step and its expected condition.
-   They check replies for keys while the browser closes.
+   The driver listens for browser API replies and checks their bodies for keys.
+   A reply it cannot read fails the check.
 
 ## How to run or test it
 
