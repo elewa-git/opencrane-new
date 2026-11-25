@@ -754,10 +754,12 @@ single-line environment settings. Keep the file outside the repository with mode
 | `OIDC_REDIRECT_URI` | Exactly `https://<host>/auth/callback` |
 | `OIDC_EXTRA_IDENTITIES` | Absent, including no empty value |
 | `DEV_OWNER_EMAIL` | Absent, including no empty value |
+| `DEV_OIDC_CLIENT_SECRET`, `OIDC_CLIENT_SECRET_ENV_VAR`, `OIDC_CLIENT_SECRET_FILE` | Absent. Only the server reads the sign-in Secret. |
 
 Preparation reads the existing secondary development sign-in setup in read-only
 mode. It generates local credentials, removes the development identity exception
-and applies these checked settings. This is still a spare-slot development package;
+and applies these checked settings. The public app credential lives in
+`package-sign-in` and only the server container receives it. This is still a spare-slot development package;
 it is not a hosted identity provisioner. No sign-in organisation or instance setting
 is changed by this preparation mode. The installer checks the saved runtime Secret
 and the bootstrap Secret's overrides against the same rule before any Helm command.
@@ -791,23 +793,22 @@ Source tests do not qualify this journey. Keep screenshots and safe logs before
 ## Pilot switch-over
 
 Use the [pilot operator guide](PILOT.md) for the checklist. These commands are
-for the owner or orchestrator. Run from the retained checkout of the merged,
-CI-approved revision. Record the original Serve route, demo revision, data
-location and start command privately before changing anything.
+for the owner or orchestrator. Run from the retained checkout of the CI-approved
+revision chosen for the rehearsal. Keep the demo revision, data
+location and start command in a mode-0700 `PRIVATE_DIR` outside the checkout.
+Put its restart command in `$PRIVATE_DIR/restart-demo.sh`. It uses the saved
+data and revision without a fresh reset. Read the current mapping with
+`tailscale serve status` and set `PILOT_DEMO_TARGET` to the demo’s expected
+loopback URL. The switch command saves that URL once in
+`$PRIVATE_DIR/demo-serve-target`. It checks the URL against the live Serve
+configuration.
 
 ```sh
 TAILNET_HOST=$(tailscale status --json | jq -er '.Self.DNSName | rtrimstr(".")')
-case "$TAILNET_HOST" in
-  *.*.ts.net) ;;
-  *) echo 'The pilot requires this device’s tailnet DNS name' >&2; exit 1 ;;
-esac
-tailscale serve status --json > "$PRIVATE_DIR/demo-serve-before.json"
-jq -e '(.AllowFunnel // {} | to_entries | all(.value == false))' \
-  "$PRIVATE_DIR/demo-serve-before.json"
+export PRIVATE_DIR PILOT_DEMO_TARGET DEV_STACK_ID
 ```
 
-Use a mode-0700 `PRIVATE_DIR` outside the checkout. Confirm the recorded route
-contains only changes you intend to make. Create a separate Zitadel web app
+Create a separate Zitadel web app
 in the approved organisation with authorization code flow and client secret
 POST authentication. Enable verified email claims. Register exactly
 `https://<tailnet-host>/auth/callback` and `https://<tailnet-host>/` for the
@@ -866,10 +867,12 @@ hostname and path:
 ```
 
 `PACKAGE_OIDC_CLIENT_SECRET_FILE` is a preparation-only key in that JSON. It
-requires an absolute path and the matching `OIDC_CLIENT_ID`. Preparation uses
-the existing private credential files and named Kubernetes Secrets for the
-value and omits the host path from runtime settings. If the key is absent,
-preparation uses the secondary app credential as before.
+requires an absolute path and the matching `OIDC_CLIENT_ID`. The credential
+file must be a regular file, with mode 0600 and owned by the operator.
+Preparation refuses a symbolic link and checks the file it opened. Only the
+server’s sign-in process reads the credential from the `package-sign-in`
+Secret. If the path setting is absent, preparation uses the secondary app
+credential for public sign-in.
 
 Export `PACKAGE_PUBLIC_SETTINGS_FILE` as the path to the JSON. Set `values`
 to the private values path. Use the positional path with `prepare.ts` and
@@ -885,49 +888,89 @@ If the disk check refuses, follow [Host disk protection](#host-disk-protection).
 Record the documented local exception if authorised for this box. Do not
 change swap or crash-dump settings as part of the route switch.
 
-Use the existing host service supervisor to keep `infra/package/forward.sh`
-running from this checkout with the claimed `DEV_STACK_ID`. Use a service that
-restarts it on failure and after reboot. The loopback port is 25106 for slot 1
-or 25206 for slot 2. Confirm the forwarder's `/auth/me` responds locally and
-that the root HTTPS mapping still matches the recorded demo. Then set the
-pilot mapping, with `port` set to the checked loopback port:
+Use systemd to keep `infra/package/forward.sh` running from this checkout with
+the claimed `DEV_STACK_ID`. The unit restarts on failure and after reboot.
+Set `PILOT_FORWARD_UNIT` to its name. The loopback port is 25106 for slot 1
+or 25206 for slot 2.
+
+The switch command checks the configured host against this device’s tailnet
+name. It also checks the installed sign-in and sign-out redirects, confirms
+Funnel is off, compares the current root HTTPS mapping to the expected demo,
+and reads `/auth/me` through the claimed slot’s forwarder. A failed check
+leaves the demo mapped. A repeat after a successful switch keeps the saved
+demo target.
 
 ```sh
-curl --fail --silent --output /dev/null "http://127.0.0.1:$port/auth/me"
-sudo tailscale serve --bg --https=443 "http://127.0.0.1:$port"
-tailscale serve status
-tailscale serve status --json | jq -e '(.AllowFunnel // {} | to_entries | all(.value == false))'
+sudo -v &&
+  node --experimental-strip-types infra/package/pilot-route.ts switch "$values"
 ```
 
-See [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
-for the HTTPS command. Check the actual certificate and route from a connected
-device, and check that a device off the tailnet cannot open it. Never enable
-Funnel. Keep the first-owner token out of the browser address and evidence.
-If the cut-over fails, point the same Serve handler at the recorded demo
-target. If the demo needs restarting, remove the pilot's root HTTPS handler
-first and start the previous demo with its saved data. Do not reset Serve,
-delete the package or run a fresh demo start as part of rollback.
+Check the actual certificate and route from a connected device. A device off
+the tailnet should be unable to open it. The pilot uses
+[Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve)
+without Funnel. The first-owner token goes in the claim form.
+
+### Roll back the pilot route
+
+When the demo is still running, restore the saved root HTTPS handler and
+stop the pilot forwarder after the mapping is back. Run these commands from
+the same checkout with the same `PRIVATE_DIR` and `DEV_STACK_ID`.
+
+```sh
+sudo -v &&
+  node --experimental-strip-types infra/package/pilot-route.ts restore &&
+  sudo systemctl stop "${PILOT_FORWARD_UNIT:?Set the pilot forwarder unit}" &&
+  node --experimental-strip-types infra/package/pilot-route.ts check-demo
+```
+
+When the demo has stopped, remove only the pilot’s root HTTPS handler,
+start the previous demo from its saved data, and then restore the mapping.
+
+```sh
+sudo -v &&
+  node --experimental-strip-types infra/package/pilot-route.ts pause &&
+  sh "$PRIVATE_DIR/restart-demo.sh" &&
+  node --experimental-strip-types infra/package/pilot-route.ts restore &&
+  sudo systemctl stop "${PILOT_FORWARD_UNIT:?Set the pilot forwarder unit}" &&
+  node --experimental-strip-types infra/package/pilot-route.ts check-demo
+```
+
+The last command checks that Serve reports the original demo URL. Check
+sign-in and a reply from the tailnet. The saved pilot data stays in its own
+installation.
 
 ## Pilot backup and recovery commands
 
-Set `namespace="opencrane-package-$DEV_STACK_ID"` and use only the recorded
-cluster context and connection file. Check `pilot-backup` reports schedule
+The latest backup rehearsal recorded scheduled backup FAIL at verify, zero completed sets,
+restore NOT RUN. The commands below apply once a later rehearsal has a
+complete backup.
+
+Set `source_namespace="opencrane-package-$DEV_STACK_ID"` and
+`SOURCE_CONTEXT` to the source context. Set `SOURCE_KUBECONFIG` to the
+source connection file for the export. Check `pilot-backup` reports schedule
 `0 2 * * *`, time zone `Etc/UTC` and `suspend=false`. Check the controller
 created a successful Job after the latest scheduled time. The
 [scheduled backup instructions](#scheduled-pilot-backup) show the Job checks,
 manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
-before using it. Archive the verified set to private storage:
+before using it. Save the verified archive with its source cluster ID and
+namespace so an import can refuse the original installation.
 
 ```sh
-archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
-partial=$(mktemp "$PRIVATE_DIR/pilot-backup.XXXXXX")
-if kubectl -n "$namespace" exec deployment/backup-catalogue -- \
-  tar -C /backups/sets -cf - "$BACKUP_ID" > "$partial"; then
+(
+  set -eu
+  umask 077
+  archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
+  source_cluster=$(kubectl --kubeconfig "${SOURCE_KUBECONFIG:?Set the source connection file}" \
+    --context "${SOURCE_CONTEXT:?Set the source context}" \
+    get namespace kube-system -o 'jsonpath={.metadata.uid}')
+  test -n "$source_cluster"
+  partial=$(mktemp "$PRIVATE_DIR/pilot-backup.XXXXXX")
+  trap 'rm -f -- "$partial"' EXIT
+  kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" -n "$source_namespace" \
+    exec deployment/backup-catalogue -- tar -C /backups/sets -cf - "$BACKUP_ID" > "$partial"
+  printf '%s %s\n' "$source_cluster" "$source_namespace" > "$archive.source"
   mv -- "$partial" "$archive"
-else
-  rm -- "$partial"
-  exit 1
-fi
+)
 ```
 
 For a recovery drill, prepare an empty package with the same approved images,
@@ -936,13 +979,16 @@ keep the recovery listener on loopback until checked. For an HTTPS sign-in
 drill use a private test origin with its own registered callback and the same
 issuer and account subjects. Set `pilotRestore` to
 `{"enabled": true, "backupId": "BACKUP_ID"}` with the real ID. After
-`package-up`, import the archive as the catalogue's unprivileged user:
+`package-up`, set `DEV_STACK_ID` to the recovery slot. The import uses the
+connection and namespace recorded for that slot for both the rollout check
+and extraction. It refuses a source cluster and namespace match, even when
+the context names differ.
 
 ```sh
-kubectl -n "$namespace" rollout status deployment/backup-catalogue --timeout=60s
-kubectl -n "$namespace" exec -i deployment/backup-catalogue -- \
-  sh -ec 'mkdir -m 700 -p /backups/sets && tar -xpf - -C /backups/sets' \
-  < "$archive"
+archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
+read -r source_cluster source_namespace < "$archive.source" &&
+  node --experimental-strip-types infra/package/pilot-archive-import.ts \
+    "$archive" "$source_cluster" "$source_namespace"
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
@@ -2504,15 +2550,24 @@ In the destination, copy that directory to `/backups/sets/BACKUP_ID` through the
 restore-mode catalogue. Preserve directory mode 0700 and file mode 0600, owned by
 uid 1000. Then stop the catalogue and wait for its Pod to disappear. Do not run
 Helm, change workloads, edit restored data or write to the stores during recovery.
-Use the destination slot's recorded Kubernetes context for these commands:
+After the [checked archive import](#pilot-backup-and-recovery-commands),
+set `RECOVERY_CONTEXT` and `RECOVERY_KUBECONFIG` to the context and connection
+file recorded for the recovery slot. `DEV_STACK_ID` is the recovery slot.
 
 ```sh
-namespace="opencrane-package-$DEV_STACK_ID"
-kubectl -n "$namespace" scale deployment/backup-catalogue --replicas=0
-kubectl -n "$namespace" wait --for=delete pod -l app=backup-catalogue --timeout=60s
-kubectl -n "$namespace" create job --from=cronjob/pilot-restore restore-manual
-kubectl -n "$namespace" wait --for=condition=complete job/restore-manual --timeout=600s
-kubectl -n "$namespace" logs job/restore-manual -c backup
+(
+  set -eu
+  recovery_namespace="opencrane-package-${DEV_STACK_ID:?Set the recovery slot}"
+  recovery_kubectl() {
+    kubectl --kubeconfig "${RECOVERY_KUBECONFIG:?Set the recovery connection file}" \
+      --context "${RECOVERY_CONTEXT:?Set the recovery context}" -n "$recovery_namespace" "$@"
+  }
+  recovery_kubectl scale deployment/backup-catalogue --replicas=0
+  recovery_kubectl wait --for=delete pod -l app=backup-catalogue --timeout=60s
+  recovery_kubectl create job --from=cronjob/pilot-restore restore-manual
+  recovery_kubectl wait --for=condition=complete job/restore-manual --timeout=600s
+  recovery_kubectl logs job/restore-manual -c backup
+)
 ```
 
 The Job reads the set through a read-only mount and validates private regular files,

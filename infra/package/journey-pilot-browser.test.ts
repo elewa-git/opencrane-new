@@ -41,7 +41,7 @@ async function signInWithOpenRequest(): Promise<void> {
     const background = page.waitForRequest(`${origin}/background`);
     await page.goto(`${origin}/auth/login`);
     await background;
-    await completeProviderSignIn(page, 'pilot-member', 'fixture-password', origin);
+    await completeProviderSignIn(page, 'pilot-member', 'fixture-password', origin, origin);
     const heading = page.getByRole('heading', { name: 'Member workspace', exact: true });
     await heading.waitFor();
   } finally {

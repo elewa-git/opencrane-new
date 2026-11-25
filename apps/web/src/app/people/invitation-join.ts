@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { SignOut } from '../sign-in/sign-out';
 
 type InvitationLink = { memberId: string; invitationId: string };
-type JoinState = 'loading' | 'signin' | 'ready' | 'joined' | 'wrong-account' | 'unavailable';
+type JoinState = 'loading' | 'signin' | 'fresh-signin' | 'ready' | 'joined' |
+  'wrong-account' | 'unavailable';
 type JoinAttempt = { displayName: string; commandId: string };
 
 const sessionSchema = z.object({ authenticated: z.boolean() });
@@ -12,6 +13,7 @@ const replySchema = z.object({
   status: z.enum(['joined', 'already_joined', 'refused', 'unavailable']),
   reason: z.string().optional(),
 });
+const requestDeadlineMs = 10_000;
 const uncertain = 'We could not confirm your request. Try again with the same display name.';
 
 export function invitationLink(pathname: string): InvitationLink | undefined {
@@ -39,15 +41,21 @@ export class InvitationJoin implements OnInit {
     void this.checkSession();
   }
 
-  protected signInLink(): string {
+  protected signInLink(fresh = false): string {
     const { memberId, invitationId } = this.invitation();
     const path = `/join/${memberId}/${invitationId}`;
-    return `/auth/login?returnTo=${encodeURIComponent(path)}`;
+    const query = new URLSearchParams({ returnTo: path });
+    if (fresh) {
+      query.set('fresh', '1');
+    }
+    return `/auth/login?${query}`;
   }
 
   protected async accept(event: Event, name: string): Promise<void> {
     event.preventDefault();
-    if (this.state() !== 'ready' || this.sending()) return;
+    if (this.state() !== 'ready' || this.sending()) {
+      return;
+    }
     const displayName = name.trim();
     if (!displayName || displayName.length > 200) {
       this.message.set('Enter a display name of up to 200 characters.');
@@ -65,6 +73,7 @@ export class InvitationJoin implements OnInit {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(command),
+        signal: AbortSignal.timeout(requestDeadlineMs),
       });
       const reply = replySchema.parse(await response.json());
       if (response.ok && (reply.status === 'joined' || reply.status === 'already_joined')) {
@@ -83,7 +92,10 @@ export class InvitationJoin implements OnInit {
 
   private async checkSession(): Promise<void> {
     try {
-      const response = await fetch('/auth/me', { cache: 'no-store' });
+      const response = await fetch('/auth/me', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(requestDeadlineMs),
+      });
       if (!response.ok) {
         this.state.set('unavailable');
         return;
@@ -96,8 +108,10 @@ export class InvitationJoin implements OnInit {
   }
 
   private refuse(reason: string | undefined): void {
-    if (reason === 'no_session' || reason === 'sign_in_again') {
+    if (reason === 'no_session') {
       this.state.set('signin');
+    } else if (reason === 'sign_in_again') {
+      this.state.set('fresh-signin');
     } else if (reason === 'wrong_identity' || reason === 'wrong_silo') {
       this.state.set('wrong-account');
     } else if (reason === 'expired_invitation') {

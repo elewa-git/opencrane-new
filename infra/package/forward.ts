@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process';
 import { root } from '../dev-stack/config.ts';
-import { stackId } from '../dev-stack/identity.ts';
+import { localOrigin } from '../dev-stack/identity.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
 async function main() {
   const owner = await verifyPackageOwner();
   const connection = await packageConnectionArgs(owner);
-  const port = 25000 + Number(stackId) * 100 + 6;
+  const port = new URL(localOrigin).port;
   const args = [...connection.args, '-n', owner.namespace,
     'port-forward', '--address', '127.0.0.1', 'service/web', `${port}:80`];
   const child = spawn('kubectl', args, {

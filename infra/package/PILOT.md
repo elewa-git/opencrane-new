@@ -5,13 +5,15 @@ installation becomes the demo at the existing Tailscale address. It starts with
 its own data. Keep the old demo available until you have checked the pilot and
 can switch the address back.
 
+The rehearsal result is scheduled backup FAIL at verify, zero completed sets,
+restore NOT RUN. Switch-over is allowed for testing with disposable data.
+Real data waits for slice 2 to pass backup and restore.
+
 ```mermaid
 flowchart LR
   people["People on the tailnet"] --> serve["Tailscale Serve<br/>HTTPS"]
   serve -->|pilot| package["Loopback forwarder<br/>packaged OpenCrane"]
   serve -.->|rollback| demo["Previous demo"]
-  package --> backup["Nightly backup"]
-  backup --> restore["Empty install<br/>verified reads"]
 ```
 
 ## Prepare and install
@@ -19,16 +21,17 @@ flowchart LR
 1. Record the demo's current Serve target and how to bring it back. Confirm
    that the pilot name is the box's own `.ts.net` name and that HTTPS and access
    to this device are enabled for the invited people on the tailnet.
-2. Choose the merged revision. Check that CI has approved the app and scanner
-   images for that revision. Use a separate claimed slot and keep its
+2. Choose the revision for the rehearsal. Check that CI has approved its app
+   and scanner images. Use a separate claimed slot and keep its
    installation and backups out of routine development cleanup.
 3. Prepare the [private values and sign-in files](README.robot.md#pilot-switch-over).
    Select provider mode, use the tailnet name for sign-in and keep the nightly
    02:00 UTC backup. Prepare the empty recovery install later, when you have a
    complete backup to restore.
 4. Run the existing package commands. Check the installation and start the
-   loopback forwarder before pointing Tailscale Serve at it. Serve is the only
-   way in. **Never use Tailscale Funnel.**
+   loopback forwarder. The checked switch command confirms the package
+   address, both sign-in redirects and the old demo route before it changes
+   Tailscale Serve. Serve is the only way in. **Never use Tailscale Funnel.**
 5. From a tailnet client, open the pilot in a clean browser. Check that HTTPS
    is trusted and that another client off the tailnet cannot reach the site.
    Open `/claim`, sign in with the first owner's account and enter the
@@ -58,24 +61,19 @@ flowchart LR
 
 ## Back up and restore
 
-Check that the nightly job completes and the backup catalogue lists its
-verified set. Writes pause during the backup. Copy the complete set to private
-storage away from this box. Use the [backup and recovery commands](README.robot.md#pilot-backup-and-recovery-commands).
-
-Restore into an empty installation with separate storage and the same model
-mode as the source. Sign in as the same member and open the saved chat at
-both widths. Check that writes are refused. The restored site is for reading.
-The backup excludes provider credentials and assistant computer homes.
+The next slice covers recording a completed nightly backup, saving it off the
+box and restoring it into an empty installation. The
+[backup and recovery commands](README.robot.md#pilot-backup-and-recovery-commands)
+show how to identify the separate recovery installation. The backup excludes
+provider credentials and assistant computer homes.
 
 ## Roll back to the demo
 
-If sign-in, access, a reply or the backup check fails, stop sending invitations
-and restore the saved demo Serve target. If the old demo was stopped, remove
-only the pilot's Serve mapping and restart the demo from its saved revision
-and data without a fresh reset. Confirm that the demo signs in and answers
-from the tailnet. Stop the pilot forwarder after the route is back. Keep the
-pilot data and latest verified backup for follow-up. The two installations
-have separate histories. Record the last pilot backup time before rolling back.
+If sign-in, access or a reply fails, stop sending invitations and follow the
+[rollback commands](README.robot.md#roll-back-the-pilot-route). Keep the
+pilot available for testing after the known backup failure. After rollback,
+confirm that the demo signs in and answers from the tailnet. The two installations have
+separate histories. Keep the pilot test data for follow-up.
 
 ## Known gaps
 

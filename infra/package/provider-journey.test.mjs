@@ -74,7 +74,7 @@ async function login(role) {
   await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
   const password = await readFile(user.passwordFile, 'utf8');
   secrets.push(password.trim());
-  await completeProviderSignIn(page, user.login, password, origin);
+  await completeProviderSignIn(page, user.login, password, origin, setup.issuer);
   return page;
 }
 

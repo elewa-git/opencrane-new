@@ -150,7 +150,7 @@ async function signIn(page, user, path = '/') {
     await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
   }
   const password = await readFile(user.passwordFile, 'utf8');
-  await signin.completeProviderSignIn(page, user.login, password, input.origin);
+  await signin.completeProviderSignIn(page, user.login, password, input.origin, setup.issuer);
 }
 
 async function session(page, user) {

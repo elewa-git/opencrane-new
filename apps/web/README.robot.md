@@ -337,10 +337,12 @@ offers GET-only Check status on the Invitations tab. The tab's list remains unav
 The operator sends the link. `/join/:memberId/:invitationId` checks the session
 via `GET /auth/me` and returns to the same path after single sign-on. It posts
 the two IDs, display name and a command ID to `POST /members/join` only when the
-person presses Accept invitation. An uncertain reply keeps the command ID for
-the same display name. A wrong account sees a sign-out action and no workspace
-link. `invitation-join.spec.ts` checks the route, return path, accepted request
-and wrong-account refusal. Closing the invite drawer discards its draft.
+person presses Accept invitation. Both requests have a ten-second deadline.
+After an uncertain reply the person can retry with the same display name and
+command ID. When the provider session is old, **Sign in again to accept**
+asks the provider for fresh authentication and returns to the invitation.
+A wrong account sees a sign-out action. `invitation-join.spec.ts` covers
+these paths. Closing the invite drawer discards its draft.
 Access refusal clears it before reading the response body and late replies
 cannot restore it.
 `?tab=groups` opens the existing Groups tab, including from group detail pages.

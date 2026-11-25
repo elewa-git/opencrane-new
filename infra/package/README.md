@@ -18,16 +18,13 @@ in the recorded Kubernetes cluster.
 
 ```mermaid
 flowchart LR
-  stack["infra/dev-stack<br/>stack ownership"] -->|checks hosts and provider mode, then launches| package["infra/package<br/>local Helm install"]
-  packaging["GitHub packaging job<br/>image approval"] -->|supplies approved images| package
-  package -->|reads host settings on every node| hosts["Target hosts<br/>swap and crash dumps"]
-  browser["Browser<br/>chat and desktop"] -->|connects through website proxy| apps
-  tailnet["Pilot users<br/>Tailscale Serve"] -->|uses the loopback forwarder| browser
-  package -->|checks settings and installs apps| apps["Server, website, workers and computer<br/>first owner token claim"]
-  package -->|installs private services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
-  apps -->|uses the stand-in or a connected provider| models["Model gateway"]
-  package -->|installs upload services| files["MinIO and ClamAV<br/>files and scanning"]
-  package -->|restores one pilot set| restore["Empty install<br/>checked events, tables and files"]
+  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>local Helm install"]
+  ci["GitHub packaging job<br/>approved images"] --> package
+  package --> apps["Website, server and workers"]
+  tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
+  package --> services["Private databases, event log,<br/>file store and scanner"]
+  apps --> models["Model gateway"]
+  package --> recovery["Empty recovery install"]
 ```
 
 ## What it is responsible for
@@ -35,8 +32,8 @@ flowchart LR
 - Install the apps, core services, file store and private upload scanner together.
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
-- Keep private settings in named Secrets and check production sign-in before installation.
-- Keep package listeners private and let Tailscale Serve carry pilot HTTPS.
+- Check production sign-in before installation. Only the server reads its credential.
+- Keep package listeners private and check the demo route before switching pilot HTTPS.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log and development sign-in.
 - Let the first person claim ownership with a one-time token in public-address mode.

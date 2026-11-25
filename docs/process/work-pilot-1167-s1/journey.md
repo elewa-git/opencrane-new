@@ -1,6 +1,10 @@
 # Tailnet pilot rehearsal
 
-Journey on a fresh dev stack: FAIL
+Journey on a fresh dev stack: NOT RUN on the review fixes.
+
+The rehearsal result is scheduled backup FAIL at verify, zero completed sets,
+restore NOT RUN. Switch-over is allowed for testing with disposable data.
+Real data waits for slice 2 to pass backup and restore.
 
 ## Fix round 2 packaged rehearsal
 

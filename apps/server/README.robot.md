@@ -1374,8 +1374,10 @@ to `isIdentityAllowed` outside `auth/routes.ts` and requires an
 so imports, comments and strings do not count as calls. The first-owner claim is
 an explicit exception; `/healthz` is public and outside `/api`.
 
-`GET /auth/login` redirects to the provider; `GET /auth/me` reports the session,
-including the optional signed-in profile `user.name` for display.
+`GET /auth/login` redirects to the provider. For an invitation with an old
+session, `fresh=1` asks the provider to authenticate again before returning
+to the same local invitation. `GET /auth/me` reports the session and the
+optional signed-in profile `user.name` for display.
 `POST /auth/logout` requires the exact configured Origin and a valid session for
 the pinned organisation. Refusals clear no cookies or sockets. Success closes every
 `/ws` connection on this server that used the exact cookie, with code 1008, before
@@ -2491,6 +2493,8 @@ The [API contract](../../docs/api/members.md) defines member header/directory ac
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
 `test/invitations.test.ts` checks that a directory read after acceptance keeps the
 joined row and invitation permission if the event position for counts is unavailable.
+The same outage still requires a valid session, the matching organisation and silo,
+a known caller, a manager role and active membership in OpenFGA.
 
 The [invitation email API](../../docs/api/members.md#invitation-email) accepts an
 Admin's email input after checking the signed-in session, Origin, organisation,

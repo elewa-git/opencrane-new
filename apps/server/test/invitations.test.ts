@@ -681,13 +681,7 @@ async function readsMembersAfterAcceptance(countsAvailable: boolean) {
   await runner.run(groups);
 
   if (!countsAvailable) {
-    // Expire only the global position lookup used by the optional counts.
-    const head = nats.store.head.bind(nats.store);
-    function readPosition(subject?: string, deadline?: number) {
-      if (subject === undefined) return head(undefined, performance.now() - 1);
-      return head(subject, deadline);
-    }
-    vi.spyOn(nats.store, 'head').mockImplementation(readPosition);
+    expireMemberCounts();
   }
   const identity = { sub: 'owner', orgId: 'org-acme', roles: [], authTime: 1, exp: 2000000000 };
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, identity)}` };
@@ -1462,7 +1456,7 @@ const directoryRefusals = [
   { guard: 'caller presence', expected: 403 },
   { guard: 'manager role', expected: 403 },
   { guard: 'active membership in IAM', expected: 403 },
-];
+] as const;
 
 it.each(directoryRefusals)('keeps the directory $guard check when counts are offline',
   refusesDirectoryWithoutCounts);
@@ -1485,26 +1479,19 @@ async function refusesDirectoryWithoutCounts(
   if (guard === 'silo binding') {
     checkedBinding.silo = 'other-silo';
   }
-  async function resolveCaller() {
+  function resolveCaller() {
     if (guard === 'caller presence') {
-      return undefined;
+      return Promise.resolve(undefined);
     }
-    return caller.sub;
+    return Promise.resolve(caller.sub);
   }
   const feed = { memberId: vi.fn(resolveCaller) };
   const db = pgDb(dbs.queue);
   const directoryApp = buildServer(config, { memberReads: {
-    silo: 'acme', store: nats.store, binding: checkedBinding, db, now, feed,
+    silo: 'acme', store: nats.store, binding: checkedBinding, db, feed,
   } });
   const readStream = vi.spyOn(nats.store, 'readStream');
-  const head = nats.store.head.bind(nats.store);
-  function position(subject?: string, deadline?: number) {
-    if (subject === undefined) {
-      return head(undefined, performance.now() - 1);
-    }
-    return head(subject, deadline);
-  }
-  const readPosition = vi.spyOn(nats.store, 'head').mockImplementation(position);
+  const readPosition = expireMemberCounts();
 
   try {
     const headers: Record<string, string> = {};
@@ -1536,4 +1523,16 @@ function directoryCaller(guard: string) {
     session.sub = 'iam-pending';
   }
   return session;
+}
+
+function expireMemberCounts() {
+  // Expire only the global position used for the optional totals.
+  const head = nats.store.head.bind(nats.store);
+  function position(subject?: string, deadline?: number) {
+    if (subject === undefined) {
+      return head(undefined, performance.now() - 1);
+    }
+    return head(subject, deadline);
+  }
+  return vi.spyOn(nats.store, 'head').mockImplementation(position);
 }

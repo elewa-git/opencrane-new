@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync,
   writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { createRequire } from 'node:module';
@@ -343,8 +343,8 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       'prepareSettings', replacements);
     const provisionSecrets = loadPrivateFunction('infra/package/prepare.ts',
       'provisionSecrets', replacements);
-    await prepareSettings({ ...packageValues, scanner: values.scanner });
-    await provisionSecrets(values.secrets, owner, tokenBootstrap, packageValues.models);
+    const credential = await prepareSettings({ ...packageValues, scanner: values.scanner });
+    await provisionSecrets(values.secrets, owner, credential, packageValues.models);
     return { key, settings, secrets, tokenRecord, files: readdirSync(directory) };
   } finally {
     const remainingFiles = readdirSync(directory);
@@ -1050,6 +1050,13 @@ function assertPilotSignInSecretUse(rendered) {
     }
     const containers = [...pod.containers, ...(pod.initContainers ?? [])];
     for (const container of containers) {
+      for (const mount of container.volumeMounts ?? []) {
+        function mountedVolume(volume) {
+          return volume.name === mount.name;
+        }
+        const mounted = pod.volumes.find(mountedVolume);
+        assert.notEqual(mounted?.secret?.secretName, 'package-sign-in');
+      }
       for (const source of container.envFrom ?? []) {
         assert.notEqual(source.secretRef?.name, 'package-sign-in');
       }
@@ -1094,7 +1101,7 @@ for (const [unsafe, error] of unsafePilotCredentials) {
         };
         const fixtureProcess = { getuid: process.getuid };
         if (unsafe === 'relative path') {
-          settings.PACKAGE_OIDC_CLIENT_SECRET_FILE = 'relative-client-secret';
+          settings.PACKAGE_OIDC_CLIENT_SECRET_FILE = relative(process.cwd(), source);
         } else if (unsafe === 'missing client ID') {
           delete settings.OIDC_CLIENT_ID;
         }

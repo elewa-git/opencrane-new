@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { switchPilot, type PilotRouteControls, type PilotRouteSettings } from './pilot-route.ts';
+import { rollbackPilotRoute, switchPilot,
+  type PilotRouteControls, type PilotRouteSettings } from './pilot-route.ts';
 
 const host = 'node.tailnet.ts.net';
 const demoTarget = 'http://127.0.0.1:44200';
@@ -12,7 +13,7 @@ const pilotTarget = 'http://127.0.0.1:25106';
 function routeFixture(savedRoute: string) {
   const settings: PilotRouteSettings = { host, demoTarget, pilotTarget, savedRoute,
     redirect: `https://${host}/auth/callback`, logoutRedirect: `https://${host}/` };
-  let target = demoTarget;
+  let target: string | undefined = demoTarget;
   let writes = 0;
   const tailscale = { dnsName: `${host}.`, funnel: {} as Record<string, boolean> };
   let forwarder = true;
@@ -20,8 +21,8 @@ function routeFixture(savedRoute: string) {
     return tailscale.dnsName;
   }
   async function serveStatus() {
-    return { AllowFunnel: tailscale.funnel,
-      Web: { [`${host}:443`]: { Handlers: { '/': { Proxy: target } } } } };
+    const Handlers = target ? { '/': { Proxy: target } } : {};
+    return { AllowFunnel: tailscale.funnel, Web: { [`${host}:443`]: { Handlers } } };
   }
   async function healthyForwarder(origin: string) {
     assert.equal(origin, pilotTarget);
@@ -29,7 +30,7 @@ function routeFixture(savedRoute: string) {
   }
   async function serve(origin: string) {
     writes++;
-    target = origin;
+    target = origin === 'off' ? undefined : origin;
   }
   const controls: PilotRouteControls = { deviceName, serveStatus, healthyForwarder, serve };
   return {
@@ -130,3 +131,28 @@ test('the pilot mapping is not treated as the demo when the saved route is absen
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+test('rollback restores a running demo or resumes after pausing a stopped demo', checksRollback);
+
+async function checksRollback() {
+  const directory = await mkdtemp(join(tmpdir(), 'pilot-serve-'));
+  const savedRoute = join(directory, 'demo-target');
+  try {
+    const fixture = routeFixture(savedRoute);
+    const { settings, controls } = fixture;
+    await switchPilot(settings, controls);
+    await rollbackPilotRoute('restore', settings, controls);
+    await rollbackPilotRoute('check-demo', settings, controls);
+    assert.equal(fixture.current(), demoTarget);
+
+    await switchPilot(settings, controls);
+    await rollbackPilotRoute('pause', settings, controls);
+    assert.equal(fixture.current(), undefined);
+    await rollbackPilotRoute('restore', settings, controls);
+    await rollbackPilotRoute('check-demo', settings, controls);
+    assert.equal(fixture.current(), demoTarget);
+    assert.equal(await readFile(savedRoute, 'utf8'), `${demoTarget}\n`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}

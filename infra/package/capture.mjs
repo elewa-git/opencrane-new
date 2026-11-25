@@ -3,7 +3,7 @@ import { requireStandInJourney } from '../dev-stack/journey-guard.ts';
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { enterLoginName } from '../dev-stack/browser-signin.ts';
+import { completeProviderSignIn } from '../dev-stack/browser-signin.ts';
 import { directory, readEnv } from '../dev-stack/config.ts';
 import { verifyPackageOwner } from '../dev-stack/packaged.ts';
 import { checkCollectorOwner, checkHistoryRefusal } from './journey-check.ts';
@@ -26,10 +26,6 @@ const owner = setup.users.owner;
 const signIns = [];
 let stage = 'browser launch';
 let browser;
-
-function atApp(url) {
-  return url.origin === origin && !url.pathname.startsWith('/auth/');
-}
 
 async function completeChatTurn(page, width) {
   await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
@@ -61,18 +57,9 @@ try {
     await page.goto(origin);
     stage = `${width}px SSO button`;
     await page.getByRole('button', { name: 'Continue with single sign-on' }).click();
-    stage = `${width}px login name`;
-    const login = page.locator('input[name=loginName]');
-    await login.waitFor();
-    await page.waitForLoadState('networkidle');
-    await enterLoginName(page, owner.login);
-    stage = `${width}px password`;
-    const password = page.locator('input[type=password]');
-    await password.waitFor();
-    await password.fill(await readFile(owner.passwordFile, 'utf8'));
-    await page.getByRole('button', { name: 'Continue', exact: true }).click();
-    stage = `${width}px return`;
-    await page.waitForURL(atApp);
+    stage = `${width}px provider sign-in`;
+    const password = await readFile(owner.passwordFile, 'utf8');
+    await completeProviderSignIn(page, owner.login, password, origin, setup.issuer);
     stage = `${width}px session`;
     const response = await page.request.get(`${origin}/auth/me`);
     const session = await response.json();

@@ -56,6 +56,11 @@ function rejectLogin(request: FastifyRequest, reply: FastifyReply, config: AuthC
   return reply.code(400).send({ error: reason });
 }
 
+const loginQuery = z.object({
+  approval: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
+  fresh: z.literal('1').optional(),
+});
+
 export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): void {
   app.get('/auth/login', async (request, reply) => {
     const query = request.query;
@@ -64,15 +69,24 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
         ? query.returnTo : undefined,
     );
 
-    const approval = z.object({ approval: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).safeParse(query);
-    if (!approval.success) return reply.code(400).send({ error: 'Invalid sign-in request' });
+    const login = loginQuery.safeParse(query);
+    if (!login.success) {
+      return reply.code(400).send({ error: 'Invalid sign-in request' });
+    }
     const session = sessionFor(request, config, new Date());
-    if (approval.data.approval && !session) return reply.code(401).send({ error: 'No session' });
-    const stepUp = approval.data.approval && session ? { approvalId: approval.data.approval, sub: session.sub,
+    const { approval, fresh } = login.data;
+    if (approval && !session) {
+      return reply.code(401).send({ error: 'No session' });
+    }
+    const stepUp = approval && session ? { approvalId: approval, sub: session.sub,
       sessionDigest: sha256Hex(readCookie(request, config.cookieName) ?? '') } : undefined;
+    const requireFreshAuthentication = stepUp !== undefined || fresh === '1';
     let redirect;
-    try { redirect = await buildLoginRedirect(config, !!stepUp); }
-    catch { return rejectLogin(request, reply, config, 'identity provider unavailable'); }
+    try {
+      redirect = await buildLoginRedirect(config, requireFreshAuthentication);
+    } catch {
+      return rejectLogin(request, reply, config, 'identity provider unavailable');
+    }
     const flowCookie = encodeFlow(config, {
       ...(stepUp ? { stepUp } : {}),
       state: redirect.state,

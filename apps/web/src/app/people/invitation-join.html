@@ -17,6 +17,10 @@
           <p>Use the account that received this invitation.</p>
           <a class="button" [href]="signInLink()">Sign in to accept</a>
         }
+        @case ('fresh-signin') {
+          <p>Confirm your sign-in with the account that received this invitation.</p>
+          <a class="button" [href]="signInLink(true)">Sign in again to accept</a>
+        }
         @case ('wrong-account') {
           <p class="message" role="alert">Sign in with the account this invitation was sent to.</p>
           <p>Sign out, then open the invitation link again.</p>

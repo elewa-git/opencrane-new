@@ -146,6 +146,10 @@ spec:
             - { name: PORT, value: "8080" }
             {{- if .Values.exposure.public.enabled }}
             - { name: BOOTSTRAP_TOKEN_FILE, value: /var/lib/opencrane/bootstrap/token.json }
+            - { name: OIDC_CLIENT_SECRET_ENV_VAR, value: DEV_OIDC_CLIENT_SECRET }
+            - name: DEV_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: package-sign-in, key: credential }
             {{- end }}
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
             - name: KUBE_NAMESPACE
