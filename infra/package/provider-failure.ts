@@ -25,6 +25,9 @@ function httpFailureDetail(step: ProviderJourneyStep, error: unknown): string | 
 }
 
 function failureDetail(step: ProviderJourneyStep, error: unknown): string {
+  if (error instanceof Error && /^apiRequestContext\.[a-z]+: socket hang up\b/u.test(error.message)) {
+    return `The browser request lost its connection. ${step.detail}`;
+  }
   if (error instanceof Error && error.message.includes('strict mode violation:')) {
     return `More than one control matched the current operation. ${step.detail}`;
   }

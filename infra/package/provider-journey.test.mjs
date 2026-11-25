@@ -371,11 +371,6 @@ try {
   const result = { status: 'FAIL', source: git.stdout.trim(), outcomes, paidCalls: 0, paidCents: 0 };
   const serialisedResult = JSON.stringify(result, null, 2) + '\n';
   await writeFile(`${output}/result.json`, serialisedResult);
-  let diagnostic = String(error?.stack ?? error);
-  for (const secret of secrets) diagnostic = diagnostic.replaceAll(secret, '[redacted]');
-  diagnostic = diagnostic.replaceAll(root, '[worktree]').replaceAll(directory, '[slot]');
-  diagnostic = diagnostic.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[address]');
-  await writeFile(`${directory}/provider-journey-failure.txt`, diagnostic, { mode: 0o600 });
   // Keep page content, credentials and local paths out of diagnostics.
   console.error(`FAIL packaged provider journey during ${failure.check}: ${failure.detail}`);
   process.exitCode = 1;
