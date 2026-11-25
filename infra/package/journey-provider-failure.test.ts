@@ -71,3 +71,18 @@ function refusesNonHttpValues(): void {
 }
 
 test('non-HTTP assertion values never enter the public failure reason', refusesNonHttpValues);
+
+function recordsDisconnectedRequest(): void {
+  const step = { check: 'read spending', detail: 'Read the projected budget.' };
+  const error = new Error([
+    'apiRequestContext.get: socket hang up',
+    'Call log:',
+    '  - cookie: synthetic-session=private',
+  ].join('\n'));
+  const failure = providerFailure(step, error);
+  assert.equal(failure.detail, 'The browser request lost its connection. Read the projected budget.');
+  assert.doesNotMatch(JSON.stringify(failure), /cookie|synthetic-session/u);
+}
+
+test('a disconnected request keeps the cause without copying its HTTP headers',
+  recordsDisconnectedRequest);
