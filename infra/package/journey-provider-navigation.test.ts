@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { EventEmitter, once } from 'node:events';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium, type Page, type Response } from 'playwright';
+import { chromium, type CDPSession, type Page, type Response } from 'playwright';
 import { answer } from '../dev-stack/real-model-journey.ts';
 import { providerFailure } from './provider-failure.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
@@ -393,3 +393,101 @@ async function reportsMissingResponseBody(): Promise<void> {
 
 test('a missing response body reports the failed operation and safe response details',
   reportsMissingResponseBody);
+
+function losePausedBodyReads(page: Page, error: Error): void {
+  const context = page.context();
+  const openSession = context.newCDPSession.bind(context);
+  async function openSessionWithBodyLoss(target: Page | Parameters<typeof openSession>[0]) {
+    const session = await openSession(target);
+    const send = session.send.bind(session);
+    const sendWithBodyLoss: CDPSession['send'] = async function (method, parameters) {
+      if (method === 'Fetch.getResponseBody') throw error;
+      return send(method, parameters);
+    };
+    session.send = sendWithBodyLoss;
+    return session;
+  }
+  context.newCDPSession = openSessionWithBodyLoss;
+}
+
+async function collectsBodyWithoutHoldingTheReply(): Promise<void> {
+  const server = createServer(serve);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const lostBody = new Error('Protocol error (Fetch.getResponseBody): No resource with given identifier');
+    losePausedBodyReads(page, lostBody);
+    const replies: Promise<void>[] = [];
+    const bodies: string[] = [];
+    function inspect(body: string): void {
+      bodies.push(body);
+    }
+    await watchBrowserReplies(page, origin, replies, inspect);
+    const moved = page.waitForURL(`${origin}/next`);
+    await page.goto(`${origin}/redirect-after-check`);
+    await moved;
+    await finishBrowserReplies(browser, replies);
+    assert.deepEqual(bodies, ['{"result":"safe"}']);
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('the page receives its reply and the collector checks it when a paused read would lose it',
+  collectsBodyWithoutHoldingTheReply);
+
+async function refusesUnreadableDeliveredBody(): Promise<void> {
+  const server = createServer(serve);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const bodyError = new Error('Chromium lost the body with private exception content');
+    const replies: Promise<void>[] = [];
+    function failBodyRead(response: Response): void {
+      if (response.url() !== `${origin}/api/check`) return;
+      async function read(): Promise<string> {
+        throw bodyError;
+      }
+      response.text = read;
+    }
+    function inspect(): void {}
+    page.on('response', failBodyRead);
+    await watchBrowserReplies(page, origin, replies, inspect);
+    const moved = page.waitForURL(`${origin}/next`);
+    await page.goto(`${origin}/redirect-after-check`);
+    await moved;
+    function recordedFailure(error: unknown): boolean {
+      assert(error instanceof Error);
+      assert.equal(error.cause, bodyError);
+      const step = { check: 'finish API disclosure inspections', detail: 'Every reply must be checked.' };
+      const result = providerFailure(step, error);
+      assert.equal(result.result, 'FAIL');
+      assert.equal(result.detail, 'Chromium could not read the body of an API response (HTTP 200). '
+        + 'Every reply must be checked.');
+      assert.doesNotMatch(JSON.stringify(result), /private/u);
+      return true;
+    }
+    await assert.rejects(finishBrowserReplies(browser, replies), recordedFailure);
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    server.close();
+    await once(server, 'close');
+  }
+}
+
+test('an unreadable browser reply fails the disclosure check even when the page received it',
+  refusesUnreadableDeliveredBody);
