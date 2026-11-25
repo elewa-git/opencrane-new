@@ -24,7 +24,7 @@ flowchart LR
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
   package --> services["Private databases, event log,<br/>file store and scanner"]
   apps --> models["Model gateway"]
-  package --> recovery["Empty recovery install"]
+  package -->|verified backup| recovery["Empty recovery install"]
 ```
 
 ## What it is responsible for
@@ -33,7 +33,7 @@ flowchart LR
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
 - Check production sign-in before installation. Only the server reads its credential.
-- Keep package listeners private and check the demo route before switching pilot HTTPS.
+- Keep package listeners private and check the demo route and listening process before switching pilot HTTPS.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log and development sign-in.
 - Let the first person claim ownership with a one-time token in public-address mode.
@@ -79,7 +79,8 @@ Not built yet:
 6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
 7. **A backup runs.** The job stops writes, drains read tables and saves matching
-   events, databases and files. It publishes a complete backup only after the stopped
+   events, databases and files. It checks that writers stayed stopped before the
+   services restart. It publishes a complete backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
 8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only

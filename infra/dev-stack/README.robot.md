@@ -669,6 +669,8 @@ denial and an already approved request refused after Stop, using the free model.
 
 Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
+`claim.sh --id 1` or `claim.sh --id 2` tries only the named secondary slot.
+Without an id, `claim.sh` looks for an available secondary slot.
 
 Secondary Zitadel setup verifies the fixed OpenCrane 2 Dev organisation and project
 before retaining a supplied `ZITADEL_KEY_FILE` path in the slot's mode-0700

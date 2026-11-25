@@ -2,13 +2,12 @@ import { spawn } from 'node:child_process';
 import { root } from '../dev-stack/config.ts';
 import { localOrigin } from '../dev-stack/identity.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
+import { packageForwardArgs } from './package-forwarder.ts';
 
 async function main() {
   const owner = await verifyPackageOwner();
   const connection = await packageConnectionArgs(owner);
-  const port = new URL(localOrigin).port;
-  const args = [...connection.args, '-n', owner.namespace,
-    'port-forward', '--address', '127.0.0.1', 'service/web', `${port}:80`];
+  const args = packageForwardArgs(connection.args, owner.namespace, localOrigin);
   const child = spawn('kubectl', args, {
     cwd: root, env: connection.environment, stdio: 'ignore' });
   function stop() {

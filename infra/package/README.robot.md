@@ -908,15 +908,21 @@ change swap or crash-dump settings as part of the route switch.
 
 Use systemd to keep `infra/package/forward.sh` running from this checkout with
 the claimed `DEV_STACK_ID`. The unit restarts on failure and after reboot.
-Set `PILOT_FORWARD_UNIT` to its name. The loopback port is 25106 for slot 1
-or 25206 for slot 2.
+The unit runs as the account that runs the switch, so the switch can check its
+listening process. `PILOT_FORWARD_UNIT` holds the unit name for rollback.
+The loopback port is 25106 for slot 1 or 25206 for slot 2.
 
 The switch command checks the configured host against this device’s tailnet
-name. It also checks the installed sign-in and sign-out redirects, confirms
-Funnel is off, compares the current root HTTPS mapping to the expected demo,
-and reads `/auth/me` through the claimed slot’s forwarder. A failed check
-leaves the demo mapped. A repeat after a successful switch keeps the saved
-demo target.
+name. It checks both installed sign-in redirects and checks foreground and
+background sessions for Funnel. It accepts only the expected root HTTPS
+proxy. It reads `/auth/me` and checks that `kubectl` owns the listening socket,
+uses the claimed namespace and was started by the forwarder in this checkout.
+A failed check leaves the demo mapped. A repeat after a successful switch
+keeps the saved demo target.
+
+On this box `sudo -v` needs a terminal. The switch uses `sudo -n`, which
+refuses a password prompt. The operator can skip `sudo -v` when sudo needs
+no password for the Serve command.
 
 ```sh
 sudo -v &&
@@ -933,6 +939,7 @@ without Funnel. The first-owner token goes in the claim form.
 When the demo is still running, restore the saved root HTTPS handler and
 stop the pilot forwarder after the mapping is back. Run these commands from
 the same checkout with the same `PRIVATE_DIR` and `DEV_STACK_ID`.
+Rollback treats `localhost` and `127.0.0.1` on the same port as one address.
 
 ```sh
 sudo -v &&
@@ -959,10 +966,6 @@ installation.
 
 ## Pilot backup and recovery commands
 
-The latest backup rehearsal recorded scheduled backup FAIL at verify, zero completed sets,
-restore NOT RUN. The commands below apply once a later rehearsal has a
-complete backup.
-
 Set `source_namespace="opencrane-package-$DEV_STACK_ID"` and
 `SOURCE_CONTEXT` to the source context. Set `SOURCE_KUBECONFIG` to the
 source connection file for the export. Check `pilot-backup` reports schedule
@@ -970,8 +973,8 @@ source connection file for the export. Check `pilot-backup` reports schedule
 created a successful Job after the latest scheduled time. The
 [scheduled backup instructions](#scheduled-pilot-backup) show the Job checks,
 manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
-before using it. Save the verified archive with its source cluster ID and
-namespace so an import can refuse the original installation.
+before using it. The archive's companion file records the source cluster ID,
+namespace name and namespace ID so import can refuse the source installation.
 
 ```sh
 (
@@ -982,31 +985,36 @@ namespace so an import can refuse the original installation.
     --context "${SOURCE_CONTEXT:?Set the source context}" \
     get namespace kube-system -o 'jsonpath={.metadata.uid}')
   test -n "$source_cluster"
+  source_namespace_uid=$(kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" \
+    get namespace "$source_namespace" -o 'jsonpath={.metadata.uid}')
+  test -n "$source_namespace_uid"
   partial=$(mktemp "$PRIVATE_DIR/pilot-backup.XXXXXX")
   trap 'rm -f -- "$partial"' EXIT
   kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" -n "$source_namespace" \
     exec deployment/backup-catalogue -- tar -C /backups/sets -cf - "$BACKUP_ID" > "$partial"
-  printf '%s %s\n' "$source_cluster" "$source_namespace" > "$archive.source"
+  printf '%s %s %s\n' "$source_cluster" "$source_namespace" "$source_namespace_uid" > "$archive.source"
   mv -- "$partial" "$archive"
 )
 ```
 
 For a recovery drill, prepare an empty package with the same approved images,
-`models.mode`, silo and sign-in identity settings. Use a separate slot and
-keep the recovery listener on loopback until checked. For an HTTPS sign-in
+`models.mode`, silo and sign-in identity settings. The recovery listener stays
+on loopback. For an HTTPS sign-in
 drill use a private test origin with its own registered callback and the same
 issuer and account subjects. Set `pilotRestore` to
 `{"enabled": true, "backupId": "BACKUP_ID"}` with the real ID. After
 `package-up`, set `DEV_STACK_ID` to the recovery slot. The import uses the
 connection and namespace recorded for that slot for both the rollout check
-and extraction. It refuses a source cluster and namespace match, even when
-the context names differ.
+and extraction. It refuses the original namespace, even when context names
+differ. A drill can reuse a disposable slot after teardown gives the new
+namespace a different ID and new volumes. An older export without a namespace
+ID still needs a separate slot or cluster.
 
 ```sh
 archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
-read -r source_cluster source_namespace < "$archive.source" &&
+read -r source_cluster source_namespace source_namespace_uid < "$archive.source" &&
   node --experimental-strip-types infra/package/pilot-archive-import.ts \
-    "$archive" "$source_cluster" "$source_namespace"
+    "$archive" "$source_cluster" "$source_namespace" "$source_namespace_uid"
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
@@ -2493,7 +2501,8 @@ The CNPG and three-peer previews do not emit this pilot schedule.
 The Job stops the server (including the model gateway) and dispatcher and waits
 for their Pods to disappear. Computers can reach only that stopped gateway. It
 lets all installed primary and secondary projections reach the recorded event sequence, then
-stops them and OpenFGA. It refuses remaining database clients or restarted writers.
+stops them and OpenFGA. It closes its own checkpoint connections before it checks
+for other database clients. It refuses any remaining client or restarted writer.
 The manifest records the dispatcher checkpoint; queued effects remain held while
 the dispatcher is stopped. Operators must not change workloads, write directly to
 stores or run Helm concurrently with this maintenance window.
@@ -2586,8 +2595,8 @@ Conversation reads require no chat key. Computer homes are outside this backup.
 Checksums detect changed bytes; manifests are unsigned. Keep the entire set in
 trusted private operator storage. Older package versions require their own software.
 
-Prepare a second claimed secondary slot with `package-prepare`. Before `package-up`,
-add `pilotRestore: { enabled: true, backupId: BACKUP_ID }` to its private values.
+The target starts with `package-prepare` in a claimed secondary slot. Its private
+values use `pilotRestore: { enabled: true, backupId: BACKUP_ID }` for `package-up`.
 Restore mode omits bootstrap, holds server, OpenFGA and workers at zero replicas,
 suspends scheduled backup and omits the model gateway. Storage services start on
 fresh volumes. Do not run ordinary fresh-install checks before recovery completes.

@@ -5,9 +5,8 @@ installation becomes the demo at the existing Tailscale address. It starts with
 its own data. Keep the old demo available until you have checked the pilot and
 can switch the address back.
 
-The rehearsal result is scheduled backup FAIL at verify, zero completed sets,
-restore NOT RUN. Switch-over is allowed for testing with disposable data.
-Real data waits for slice 2 to pass backup and restore.
+The pilot holds disposable data until the running installation has a verified
+scheduled backup and an empty recovery installation can show the saved chat.
 
 ```mermaid
 flowchart LR
@@ -30,8 +29,11 @@ flowchart LR
    complete backup to restore.
 4. Run the existing package commands. Check the installation and start the
    loopback forwarder. The checked switch command confirms the package
-   address, both sign-in redirects and the old demo route before it changes
-   Tailscale Serve. Serve is the only way in. **Never use Tailscale Funnel.**
+   address, both sign-in redirects, who owns the listening port and whether
+   Serve has only the expected demo route. It checks both foreground and
+   background sessions for Funnel. Serve is the only way in. **Never use
+   Tailscale Funnel.** On this box `sudo -v` needs a terminal. The script uses
+   `sudo -n`, so `sudo -v` can be skipped when sudo needs no password.
 5. From a tailnet client, open the pilot in a clean browser. Check that HTTPS
    is trusted and that another client off the tailnet cannot reach the site.
    Open `/claim`, sign in with the first owner's account and enter the
@@ -61,8 +63,10 @@ flowchart LR
 
 ## Back up and restore
 
-The next slice covers recording a completed nightly backup, saving it off the
-box and restoring it into an empty installation. The
+The operator checks the nightly backup in the catalogue and keeps a verified
+copy away from this box. A recovery drill uses an empty installation and
+checks that a signed-in member can read the original chat on desktop and
+phone while writes are refused. The
 [backup and recovery commands](README.robot.md#pilot-backup-and-recovery-commands)
 show how to identify the separate recovery installation. The backup excludes
 provider credentials and assistant computer homes.
@@ -70,10 +74,9 @@ provider credentials and assistant computer homes.
 ## Roll back to the demo
 
 If sign-in, access or a reply fails, stop sending invitations and follow the
-[rollback commands](README.robot.md#roll-back-the-pilot-route). Keep the
-pilot available for testing after the known backup failure. After rollback,
-confirm that the demo signs in and answers from the tailnet. The two installations have
-separate histories. Keep the pilot test data for follow-up.
+[rollback commands](README.robot.md#roll-back-the-pilot-route). After rollback,
+confirm that the demo signs in and answers from the tailnet. The two
+installations have separate histories. Keep the pilot data for follow-up.
 
 ## Known gaps
 

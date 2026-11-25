@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
-type BackupSource = { clusterUid: string; namespace: string };
+type BackupSource = { clusterUid: string; namespace: string; namespaceUid?: string | undefined };
 
 export interface ArchiveDestination {
   namespace: string;
+  namespaceUid: string;
   run(args: string[], archive?: string): Promise<string>;
 }
 
@@ -19,14 +20,15 @@ class ImportRefused extends Error {}
 export async function importPilotArchive(
   source: BackupSource, destination: ArchiveDestination, archive: string,
 ): Promise<void> {
-  const { namespace, run } = destination;
+  const { namespace, namespaceUid, run } = destination;
   const clusterId = await run(['get', 'namespace', 'kube-system', '-o', 'jsonpath={.metadata.uid}']);
   const clusterUid = clusterId.trim();
-  if (!source.clusterUid || !source.namespace || !clusterUid) {
+  if (!source.clusterUid || !source.namespace || !clusterUid || !namespaceUid) {
     throw new ImportRefused('The source and destination identities are required');
   }
-  // Compare the cluster’s own ID so context aliases cannot hide a source match.
-  if (source.namespace === namespace && source.clusterUid === clusterUid) {
+  const sameName = source.namespace === namespace && source.clusterUid === clusterUid;
+  // Keep refusing an older export with no ID if its cluster and namespace name match.
+  if (sameName && (!source.namespaceUid || source.namespaceUid === namespaceUid)) {
     throw new ImportRefused('The destination matches the source cluster and namespace');
   }
   await run(['-n', namespace, 'rollout', 'status', 'deployment/backup-catalogue', '--timeout=60s']);
@@ -49,9 +51,9 @@ async function extractArchive(args: string[], archive: string, env: NodeJS.Proce
 }
 
 async function main() {
-  const [archive, clusterUid, namespace] = process.argv.slice(2);
-  if (!archive || !clusterUid || !namespace || process.argv.length !== 5) {
-    throw new ImportRefused('Pass the archive, source cluster ID and source namespace');
+  const [archive, clusterUid, namespace, namespaceUid, extra] = process.argv.slice(2);
+  if (!archive || !clusterUid || !namespace || extra !== undefined) {
+    throw new ImportRefused('Pass the archive, source cluster ID, namespace and namespace ID');
   }
   const owner = await verifyPackageOwner();
   async function run(args: string[], archiveFile?: string): Promise<string> {
@@ -66,7 +68,9 @@ async function main() {
       timeout: 70_000 });
     return result.stdout;
   }
-  await importPilotArchive({ clusterUid, namespace }, { namespace: owner.namespace, run }, archive);
+  const source = { clusterUid, namespace, namespaceUid };
+  const destination = { namespace: owner.namespace, namespaceUid: owner.namespaceUid, run };
+  await importPilotArchive(source, destination, archive);
   console.log('PASS archive imported into the checked recovery namespace');
 }
 

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { ownsPackageForwarder, packageForwardArgs } from './package-forwarder.ts';
 import { rollbackPilotRoute, switchPilot, type PilotRouteSettings } from './pilot-route.ts';
 
 const host = 'node.tailnet.ts.net';
@@ -175,6 +178,23 @@ test('rollback restores a running demo or resumes after pausing a stopped demo',
 
 test('rollback refuses a saved demo address that reaches the pilot listener', refusesSharedPort);
 
+test('rollback accepts the saved demo when Serve spells its loopback address differently',
+  acceptsDemoAlias);
+
+async function acceptsDemoAlias() {
+  const directory = await mkdtemp(join(tmpdir(), 'pilot-serve-'));
+  const savedRoute = join(directory, 'demo-target');
+  try {
+    const fixture = routeFixture(savedRoute);
+    await writeFile(savedRoute, 'http://localhost:44200\n', { mode: 0o600 });
+    const { settings, controls } = fixture;
+    await rollbackPilotRoute('check-demo', settings, controls);
+    assert.equal(fixture.changes(), 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 async function refusesSharedPort() {
   const directory = await mkdtemp(join(tmpdir(), 'pilot-serve-'));
   const savedRoute = join(directory, 'demo-target');
@@ -212,5 +232,29 @@ async function checksRollback() {
     assert.equal(await readFile(savedRoute, 'utf8'), `${demoTarget}\n`);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+}
+
+test('an OpenCrane sign-in response on the loopback port does not prove listener ownership',
+  refusesStaleListener);
+
+async function refusesStaleListener() {
+  function anonymous(_request: unknown, reply: import('node:http').ServerResponse) {
+    reply.setHeader('Content-Type', 'application/json');
+    reply.end('{"authenticated":false}');
+  }
+  const stale = createServer(anonymous);
+  stale.listen(0, '127.0.0.1');
+  try {
+    await once(stale, 'listening');
+    const address = stale.address();
+    assert(address && typeof address !== 'string');
+    const origin = `http://127.0.0.1:${address.port}`;
+    const answer = await fetch(`${origin}/auth/me`);
+    assert.deepEqual(await answer.json(), { authenticated: false });
+    const args = packageForwardArgs(['--context=disposable'], 'test-package', origin);
+    assert.equal(await ownsPackageForwarder(origin, args), false);
+  } finally {
+    await new Promise<void>(function closeStale(resolve) { stale.close(() => resolve()); });
   }
 }
