@@ -2489,6 +2489,8 @@ Email invitations have no account binding until the join route accepts them.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
+`test/invitations.test.ts` checks that a directory read after acceptance keeps the
+joined row and invitation permission if the event position for counts is unavailable.
 
 The [invitation email API](../../docs/api/members.md#invitation-email) accepts an
 Admin's email input after checking the signed-in session, Origin, organisation,

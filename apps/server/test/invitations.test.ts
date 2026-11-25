@@ -703,6 +703,7 @@ async function readsMembersAfterAcceptance(countsAvailable: boolean) {
     const unavailable = { status: 'unavailable', value: null };
     expect(directory.counts).toEqual({ members: unavailable, groups: unavailable,
       pendingInvitations: unavailable, acceptedInvitations: unavailable });
+    expect(directory.projection.content).toBe('applying');
   }
 }
 it.each([true, false])('lists the new member immediately after accepting (counts available: %s)',

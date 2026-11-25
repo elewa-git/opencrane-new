@@ -31,6 +31,9 @@ Behind member/group checkpoints mean null/applying. Invitation counts read at mo
 within five seconds; either limit means null/unavailable. Pending means latest, unaccepted, unexpired
 and inactive. Accepted counts distinct recorded invitation acceptances, including departed people.
 Essential errors or the ten-second route deadline return 503. Unavailable counts preserve authorised rows.
+If the event store cannot provide the latest position for the totals, the read
+returns authorised rows and invitations stay available. All counts are unavailable
+and `projection.content` is `applying` until the position can be checked.
 
 The socket checks current Owner/Admin events and IAM on every drain and every 250 ms while content waits.
 A 1.5-second watchdog and delivery expiry stop late delivery. Members, demoted Admins and removed people

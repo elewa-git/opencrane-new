@@ -1,14 +1,28 @@
 import { memberInvitedDataSchema, memberJoinedDataSchema, legacyMemberRole } from '@opencrane/events';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
+import type { FastifyBaseLogger } from 'fastify';
 import type { GroupOptions } from './group-routes.ts';
 
 function count(value: number | null, status: 'current' | 'applying' | 'unavailable' = 'current') {
   return { value, status };
 }
 
-export async function memberCounts(options: GroupOptions, checkedAt: string) {
+export async function memberCounts(options: GroupOptions, checkedAt: string,
+  logger: FastifyBaseLogger) {
   const deadline = performance.now() + 5000;
-  const head = await options.store.head(undefined, deadline);
+  let head: number;
+  try {
+    head = await options.store.head(undefined, deadline);
+  } catch (error) {
+    if (!isEventStoreUnavailable(error)) throw error;
+    // The directory already checked access and collected rows. Without the
+    // event position, it cannot say how current the totals are.
+    logger.warn({ reason: 'event_store_unavailable' }, 'Member count position unavailable');
+    const unavailable = count(null, 'unavailable');
+    const counts = { members: unavailable, groups: unavailable,
+      pendingInvitations: unavailable, acceptedInvitations: unavailable };
+    return { counts, projection: { content: 'applying' as const } };
+  }
   const checkpoints = await options.db.query<{ name: string; sequence: string }>(
     "SELECT name, sequence FROM projection_checkpoints WHERE name IN ('members', 'groups')");
   const positions = new Map<string, number>();
