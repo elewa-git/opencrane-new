@@ -29,6 +29,24 @@ export async function enterLoginName(page: Page, name: string) {
     }
   }
 }
+
+export async function completeProviderSignIn(
+  page: Page, loginName: string, password: string, origin: string,
+): Promise<void> {
+  const login = page.locator('input[name=loginName]');
+  await login.waitFor();
+  await page.waitForLoadState('networkidle');
+  await enterLoginName(page, loginName);
+  const passwordField = page.locator('input[type=password]');
+  await passwordField.fill(password);
+  const submit = page.getByRole('button', { name: 'Continue', exact: true });
+  await submit.click();
+  function returnedToApplication(url: URL): boolean {
+    return url.origin === origin && !url.pathname.startsWith('/auth/');
+  }
+  await page.waitForURL(returnedToApplication);
+}
+
 async function login(page: Page, origin: string, user: User, selectRememberedAccount = false, attempt = 0): Promise<void> {
   let step = 'home', transport = '';
   const pageErrors: string[] = [];

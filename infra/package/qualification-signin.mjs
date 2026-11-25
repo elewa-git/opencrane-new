@@ -142,10 +142,6 @@ const proxy = httpServer();
 proxy.on('connect', tunnel);
 proxy.on('connection', trackSocket);
 
-function atApplication(url) {
-  return url.origin === input.origin && !url.pathname.startsWith('/auth/');
-}
-
 async function signIn(page, user, path = '/') {
   await page.goto(`${input.origin}${path}`);
   if (path === '/claim') {
@@ -153,14 +149,8 @@ async function signIn(page, user, path = '/') {
   } else {
     await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
   }
-  await page.locator('input[name=loginName]').waitFor();
-  await page.waitForLoadState('networkidle');
-  await signin.enterLoginName(page, user.login);
-  const password = page.locator('input[type=password]');
-  await password.waitFor();
-  await password.fill(await readFile(user.passwordFile, 'utf8'));
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.waitForURL(atApplication);
+  const password = await readFile(user.passwordFile, 'utf8');
+  await signin.completeProviderSignIn(page, user.login, password, input.origin);
 }
 
 async function session(page, user) {

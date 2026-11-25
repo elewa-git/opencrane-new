@@ -1,4 +1,18 @@
+import assert from 'node:assert/strict';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { Locator, Page } from 'playwright';
+import { z } from 'zod';
+
+const verificationFacts = {
+  'Check provider reachability': 'reachable',
+  'Run priced test': 'modelAnswer',
+} as const;
+type VerificationAction = keyof typeof verificationFacts;
+type VerificationOutcome = 'pass' | 'fail';
+const factSchema = z.object({ outcome: z.string() });
+const verificationStatus = z.object({
+  rows: z.array(z.object({ reachable: factSchema.optional(), modelAnswer: factSchema.optional() })),
+});
 
 export function providerSetup(page: Page): Locator {
   return page.getByRole('dialog', { name: 'Connect a provider', exact: true });
@@ -10,6 +24,30 @@ export async function checkProviderStatus(page: Page): Promise<void> {
   if (await check.isVisible()) {
     await check.click();
   }
+}
+
+export async function verifyProvider(
+  page: Page, providerUrl: string, action: VerificationAction, outcome: VerificationOutcome,
+): Promise<void> {
+  const setup = providerSetup(page);
+  const submit = setup.getByRole('button', { name: action, exact: true });
+  await submit.click();
+  await waitForVerificationFact(page, providerUrl, verificationFacts[action], outcome);
+  await checkProviderStatus(page);
+}
+
+async function waitForVerificationFact(
+  page: Page, providerUrl: string, fact: 'reachable' | 'modelAnswer', outcome: VerificationOutcome,
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const response = await page.request.get(providerUrl);
+    assert.equal(response.status(), 200, 'Provider status read failed');
+    const result = verificationStatus.parse(await response.json());
+    if (result.rows[0]?.[fact]?.outcome === outcome) return;
+    await delay(100);
+  }
+  throw new Error('Provider verification did not reach the expected terminal outcome');
 }
 
 export async function finishSelectingProviderModels(page: Page): Promise<void> {

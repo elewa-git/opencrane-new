@@ -194,12 +194,13 @@ jobs:
       - name: Check application approval and signed-index refusals
         run: nice -n 10 python3 infra/package/check-application.test.py
 
-      - name: Check the budget editor and ownership controls in Chromium
+      - name: Check browser drivers in Chromium
         if: needs.select.outputs.mode != 'docs'
         run: >-
           nice -n 10 node --experimental-strip-types --test --test-concurrency=1
           infra/dev-stack/browser-budget-editor.test.ts
           infra/dev-stack/browser-ownership.test.ts
+          infra/package/journey-pilot-browser.test.ts
 
       # apps/web builds and tests through the Angular CLI, so it needs its own steps.
       - name: Build apps/web

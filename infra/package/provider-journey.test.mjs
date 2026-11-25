@@ -13,9 +13,9 @@ import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, wrongKeyStatusScript } from './provider-probe.ts';
-import { checkProviderStatus, createProviderConnection, finishSelectingProviderModels, providerSetup,
-  saveProviderKey } from './provider-settings.ts';
-import { enterLoginName } from '../dev-stack/browser-signin.ts';
+import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
+  verifyProvider } from './provider-settings.ts';
+import { completeProviderSignIn } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
 assert(['1', '2'].includes(stackId), 'A provider journey needs a claimed secondary stack');
@@ -72,15 +72,9 @@ async function login(role) {
   assert(user, 'The claimed slot must have this separate test identity');
   await navigateWithReplies(page, origin, responses);
   await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
-  await page.locator('input[name=loginName]').waitFor();
-  await page.waitForLoadState('networkidle');
-  await enterLoginName(page, user.login);
   const password = await readFile(user.passwordFile, 'utf8');
   secrets.push(password.trim());
-  await page.locator('input[type=password]').fill(password);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  function returned(url) { return url.origin === origin && !url.pathname.startsWith('/auth/'); }
-  await page.waitForURL(returned);
+  await completeProviderSignIn(page, user.login, password, origin);
   return page;
 }
 
@@ -128,21 +122,6 @@ async function invite(ownerPage, role, membershipRole) {
   return page;
 }
 
-async function waitForFact(page, providerId, fact, outcome) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const response = await page.request.get(`${origin}/api/org/providers/${providerId}`);
-    assert.equal(response.status(), 200);
-    const result = await response.json();
-    if (result.rows[0]?.[fact]?.outcome === outcome) {
-      await checkProviderStatus(page);
-      return;
-    }
-    await delay(100);
-  }
-  throw new Error('Provider verification did not reach the expected terminal outcome');
-}
-
 async function waitForModels(page, providerId) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -182,9 +161,9 @@ async function connect(admin) {
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).waitFor();
   const inventory = await admin.request.get(`${origin}/api/org/providers`);
   const providerId = (await inventory.json()).rows[0].providerId;
-  await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).click();
+  const providerUrl = `${origin}/api/org/providers/${providerId}`;
   step('wrong-key reachability', 'Verification must report failed reachability for the wrong key.');
-  await waitForFact(admin, providerId, 'reachable', 'fail');
+  await verifyProvider(admin, providerUrl, 'Check provider reachability', 'fail');
   const facts = setup.getByRole('region', { name: 'Provider verification facts', exact: true });
   await facts.getByText('The test failed. Nothing else changed.', { exact: true }).waitFor();
   await screenshots(admin, 'wrong-key-refused');
@@ -194,15 +173,13 @@ async function connect(admin) {
   await setup.locator('footer').getByRole('button', { name: 'Back', exact: true }).click();
   step('save right synthetic key', 'Saving the replacement must advance to the Verify step.');
   await saveProviderKey(admin, credential);
-  await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).click();
   step('right-key reachability', 'Verification must report successful provider reachability.');
-  await waitForFact(admin, providerId, 'reachable', 'pass');
+  await verifyProvider(admin, providerUrl, 'Check provider reachability', 'pass');
   step('quoted model test', 'The agreed quoted test must produce a successful model answer.');
   await admin.getByRole('button', { name: 'Read current price', exact: true }).click();
   await admin.getByRole('checkbox', { name: /I agree to one priced test request/ }).check();
   await screenshots(admin, 'quoted-test');
-  await admin.getByRole('button', { name: 'Run priced test', exact: true }).click();
-  await waitForFact(admin, providerId, 'modelAnswer', 'pass');
+  await verifyProvider(admin, providerUrl, 'Run priced test', 'pass');
   await facts.getByText(/ answered$/u).waitFor();
   await screenshots(admin, 'model-test-passed');
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
