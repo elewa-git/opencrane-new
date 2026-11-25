@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page } from 'playwright';
 import { modelForTask } from '@opencrane/models';
+import type { BeforePageNavigation } from './browser-signin.ts';
 
 export async function prepareBudgetAssistant(owner: Page, members: Page[],
   origin: string, memberId: string) {
@@ -29,7 +30,7 @@ export async function prepareBudgetAssistant(owner: Page, members: Page[],
 export type BudgetAssistant = { groupId: string; assistantId: string };
 
 export async function openBudgetConversation(member: Page, origin: string,
-  { groupId, assistantId }: BudgetAssistant) {
+  { groupId, assistantId }: BudgetAssistant, beforeNavigate?: BeforePageNavigation) {
   await waitForAssistant(member, origin, assistantId);
   const conversationId = randomUUID();
   const session = { id: randomUUID(), conversationId, assistantId, payingGroupId: groupId };
@@ -37,6 +38,7 @@ export async function openBudgetConversation(member: Page, origin: string,
   const change = `/api/conversations/${conversationId}/changes/${session.id}`;
   // The workspace can only open the session after its read table and access are ready.
   await waitForChange(member, origin, change);
+  await beforeNavigate?.(member);
   await member.goto(`${origin}/workspace?conversation=${conversationId}`);
   await member.getByRole('textbox', { name: 'Message your agent' }).waitFor();
 }

@@ -10,7 +10,7 @@ import { chromium } from 'playwright';
 import { chargedBudgetJourney } from '../dev-stack/charged-budget-journey.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
-import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
+import { finishBrowserReplies, navigateWithReplies, waitForBrowserReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
@@ -288,6 +288,10 @@ function readRequestCount() {
   return privateScript(qualificationRequestCountScript, null);
 }
 
+function inspectBeforeNavigation(page) {
+  return waitForBrowserReplies(page, responses);
+}
+
 async function requireBudgetQualification() {
   const script = `
 import { requirePackageProviderDestination } from './infra/package/model-settings.ts';
@@ -303,7 +307,8 @@ requirePackageProviderDestination(process.env);`;
 async function runMemberJourney(ownerPage, admin, member) {
   if (budget) {
     const pages = { owner: ownerPage, admin: admin.page, member: member.page };
-    const journey = { ...pages, memberId: member.memberId, origin, readRequestCount, capture, step };
+    const journey = { ...pages, memberId: member.memberId, origin, readRequestCount, capture, step,
+      beforeNavigate: inspectBeforeNavigation };
     const results = await chargedBudgetJourney(journey);
     outcomes.push(...results);
   } else {

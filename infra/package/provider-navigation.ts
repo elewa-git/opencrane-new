@@ -1,6 +1,23 @@
-import type { Browser, CDPSession, Page } from 'playwright';
+import type { Browser, CDPSession, Page, Request } from 'playwright';
 
 type PausedReply = { requestId: string; responseStatusCode?: number };
+const apiRequests = new WeakMap<Page, Map<Request, PromiseWithResolvers<void>>>();
+
+function watchApiRequests(page: Page, apiRoot: string): void {
+  const pending = new Map<Request, PromiseWithResolvers<void>>();
+  apiRequests.set(page, pending);
+  function started(request: Request) {
+    if (request.url().startsWith(apiRoot)) pending.set(request, Promise.withResolvers<void>());
+  }
+  function finished(request: Request) {
+    const completion = pending.get(request);
+    pending.delete(request);
+    completion?.resolve();
+  }
+  page.on('request', started);
+  page.on('requestfinished', finished);
+  page.on('requestfailed', finished);
+}
 
 async function inspectPausedReply(session: CDPSession, reply: PausedReply,
   inspect: (body: string) => void): Promise<void> {
@@ -23,6 +40,8 @@ async function inspectPausedReply(session: CDPSession, reply: PausedReply,
 
 export async function watchBrowserReplies(page: Page, origin: string, replies: Promise<void>[],
   inspect: (body: string) => void): Promise<void> {
+  const apiRoot = `${origin}/api/`;
+  watchApiRequests(page, apiRoot);
   const context = page.context();
   const session = await context.newCDPSession(page);
   function onReply(reply: PausedReply): void {
@@ -32,20 +51,53 @@ export async function watchBrowserReplies(page: Page, origin: string, replies: P
   }
   // Read the original server response before the page can use it and leave the document.
   session.on('Fetch.requestPaused', onReply);
-  const apiResponse = { urlPattern: `${origin}/api/*`, requestStage: 'Response' as const };
+  const apiResponse = { urlPattern: `${apiRoot}*`, requestStage: 'Response' as const };
   await session.send('Fetch.enable', { patterns: [apiResponse] });
 }
 
 export async function navigateWithReplies(page: Page, url: string,
   replies: Promise<void>[]): Promise<void> {
-  // Report any failed inspection before starting the next journey step.
-  await page.waitForLoadState('networkidle');
-  await Promise.all(replies);
+  await waitForBrowserReplies(page, replies);
   await page.goto(url);
+}
+
+function requestFinished(completion: PromiseWithResolvers<void>) {
+  return completion.promise;
+}
+
+async function waitForIdle(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle');
+  // A settled page can start API requests after the browser first reports it idle.
+  const pending = apiRequests.get(page);
+  if (!pending?.size) return;
+  const limit = Promise.withResolvers<void>();
+  function timedOut() {
+    limit.reject(new Error('Browser API requests did not finish before navigation'));
+  }
+  const timer = setTimeout(timedOut, 30_000);
+  try {
+    while (pending.size > 0) {
+      const replies = Array.from(pending.values(), requestFinished);
+      await Promise.race([Promise.all(replies), limit.promise]);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function waitForBrowserReplies(page: Page, replies: Promise<void>[]): Promise<void> {
+  // Report any failed inspection before starting the next journey step.
+  await waitForIdle(page);
+  await Promise.all(replies);
 }
 
 export async function finishBrowserReplies(browser: Browser,
   replies: Promise<void>[]): Promise<void> {
+  const idlePages = [];
+  for (const context of browser.contexts()) {
+    for (const page of context.pages()) idlePages.push(waitForIdle(page));
+  }
+  await Promise.all(idlePages);
   // Check pending inspections and any that arrive during shutdown before recording PASS.
   await Promise.all(replies);
   await browser.close();

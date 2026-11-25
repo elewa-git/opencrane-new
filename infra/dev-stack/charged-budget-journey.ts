@@ -7,6 +7,7 @@ import { findBudgetNoticeForPrompt, loadBudgetEditor, readBudgetSummary, saveBud
 import { openBudgetConversation, prepareBudgetAssistant, type BudgetAssistant }
   from './budget-fixture.ts';
 import { answer, sendForReply } from './real-model-journey.ts';
+import type { BeforePageNavigation } from './browser-signin.ts';
 
 export type ChargedBudgetJourney = {
   owner: Page;
@@ -17,6 +18,7 @@ export type ChargedBudgetJourney = {
   readRequestCount: () => Promise<number>;
   capture: (page: Page, name: string, width: number) => Promise<void>;
   step: (check: string, detail: string) => void;
+  beforeNavigate?: BeforePageNavigation;
 };
 
 async function waitForCharge(admin: Page, origin: string, groupId: string, previousCents: number) {
@@ -30,8 +32,9 @@ async function waitForCharge(admin: Page, origin: string, groupId: string, previ
   assert.fail('Spending records a charge and clears its reservation');
 }
 
-async function showSettledCost(admin: Page, origin: string, groupId: string, cents: number) {
-  await loadBudgetEditor(admin, origin);
+async function showSettledCost(admin: Page, origin: string, groupId: string, cents: number,
+  beforeNavigate?: BeforePageNavigation) {
+  await loadBudgetEditor(admin, origin, undefined, beforeNavigate);
   const heading = admin.getByRole('heading', { name: `Paying group · ${groupId}`, exact: true });
   const card = admin.getByRole('article').filter({ has: heading });
   const settled = card.locator('dt').filter({ hasText: /^Settled$/u });
@@ -55,7 +58,7 @@ async function refuseNextTurn(member: Page, prompt: string) {
 
 async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssistant,
   width: number) {
-  const { admin, member, origin, readRequestCount, capture, step } = journey;
+  const { admin, member, origin, readRequestCount, capture, step, beforeNavigate } = journey;
   const { groupId } = assistant;
   const viewport = { width, height: width === 390 ? 844 : 900 };
   await admin.setViewportSize(viewport);
@@ -64,19 +67,19 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   const scope = 'paying_group';
   const ceilingCents = 500;
   const starting = await saveBudgetCeiling(admin, origin, { scope, scopeId: groupId,
-    cents: ceilingCents });
+    cents: ceilingCents }, beforeNavigate);
   const previousCents = scopedBudget(starting, scope, groupId).monthCents;
   await capture(admin, 'monthly-ceiling', width);
 
   step(`open member chat at ${width}px`, 'The shared assistant session must open for the member.');
-  await openBudgetConversation(member, origin, assistant);
+  await openBudgetConversation(member, origin, assistant, beforeNavigate);
   step(`charge member turn at ${width}px`,
     'The member must receive a reply and Spending must show its charge in whole euro cents.');
   const requestsBefore = await readRequestCount();
   // Exercise a saved reply without depending on private-memory deployment settings.
   await chooseMemoryFreeTurn(member);
   const prompt = `Say hello briefly at ${width}px.`;
-  await answer(member, prompt, [/^Hello from your computer\.$/u]);
+  await answer(member, prompt, [/^Hello from your computer\.$/u], beforeNavigate);
   const spentCents = await waitForCharge(admin, origin, groupId, previousCents);
   const { row } = await readSuccessfulTurnAudit(member, origin, prompt);
   const { reservedCents, chargedCents } = await assertAuditMoney(admin, origin, row);
@@ -85,13 +88,13 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   const requestsAfterReply = await readRequestCount();
   assert.equal(requestsAfterReply, requestsBefore + 1, 'One member call reached the stand-in');
   await capture(member, 'charged-reply', width);
-  await showSettledCost(admin, origin, groupId, spentCents);
+  await showSettledCost(admin, origin, groupId, spentCents, beforeNavigate);
   await capture(admin, 'settled-spending', width);
 
   step(`lower monthly ceiling at ${width}px`, 'The saved ceiling must be below recorded spending.');
   const loweredCents = spentCents - 1;
   const lowered = await saveBudgetCeiling(admin, origin, { scope, scopeId: groupId,
-    cents: loweredCents });
+    cents: loweredCents }, beforeNavigate);
   assert(scopedBudget(lowered, scope, groupId).monthCents > loweredCents);
   await capture(admin, 'lowered-ceiling', width);
 

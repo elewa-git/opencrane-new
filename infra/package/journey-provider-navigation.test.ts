@@ -155,7 +155,8 @@ async function waitsForRequestsStartedAfterLoad() {
     await page.evaluate(() => { void fetch('/api/held'); });
     await received.promise;
     const navigation = navigateWithReplies(page, `${origin}/next`, replies);
-    const finishedFirst = await Promise.race([navigation.then(() => 'navigation'),
+    function navigated() { return 'navigation'; }
+    const finishedFirst = await Promise.race([navigation.then(navigated),
       delay(250, 'still waiting')]);
     release.resolve();
     await navigation;

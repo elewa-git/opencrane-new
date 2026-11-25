@@ -297,10 +297,11 @@ Chromium deliver the same response to the page. The page can navigate as soon as
 it receives a reply, so a collector that reads afterwards can lose the body.
 `journey-provider-navigation.test.ts` reproduces that loss as the page navigates
 and verifies that a failed disclosure inspection still refuses navigation.
-Before the driver navigates, it waits for current network activity and pending
-inspections. An inspection failure still fails the journey and is recorded.
-Before recording PASS, the driver closes the browser and checks again for any
-inspection failure received during shutdown.
+Before a driver navigation, reload or shutdown, it waits for active API requests
+and their response inspections. This includes requests that start after the page
+first reports idle. The navigation tests hold a late request and check that the
+driver waits for it. After closing the browser, the driver checks again for any
+inspection failure before recording PASS.
 The event-disclosure command reads the saved events inside the server Pod and
 returns only the number checked. Its fixture runs the same command against a
 disposable event store and requires a matching event to be refused.

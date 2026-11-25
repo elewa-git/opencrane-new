@@ -10,6 +10,7 @@ import { history, migrateBudgetDefault } from '@opencrane/models';
 import { budgetSummarySchema, type BudgetSummary } from '@opencrane/protocol';
 import { readEvents } from '@opencrane/projections';
 import { directory, root } from './config.ts';
+import type { BeforePageNavigation } from './browser-signin.ts';
 
 /** Real owner edits and member refusals against the secondary stack's stub provider. */
 export async function browserBudgetJourney(owner: Page, members: Page[], origin: string,
@@ -122,8 +123,9 @@ export function scopedBudget(budget: BudgetSummary,
   return ceiling;
 }
 
-export async function saveBudgetCeiling(owner: Page, origin: string, limit: JourneyBudgetCeiling) {
-  const budgetScope = await loadBudgetEditor(owner, origin);
+export async function saveBudgetCeiling(owner: Page, origin: string, limit: JourneyBudgetCeiling,
+  beforeNavigate?: BeforePageNavigation) {
+  const budgetScope = await loadBudgetEditor(owner, origin, undefined, beforeNavigate);
   await budgetScope.selectOption(limit.scope);
   if (limit.scope === 'global') {
     const daily = owner.getByLabel('Daily safety cap (euro cents)', { exact: true });
@@ -177,7 +179,8 @@ async function readEditorState(owner: Page) {
 }
 
 export async function loadBudgetEditor(owner: Page, origin: string,
-  captureDirectory = directory): Promise<Locator> {
+  captureDirectory = directory, beforeNavigate?: BeforePageNavigation): Promise<Locator> {
+  await beforeNavigate?.(owner);
   const budgetReadStatuses: number[] = [];
   const effectReadStatuses: number[] = [];
   function recordResponse(response: Response) {
