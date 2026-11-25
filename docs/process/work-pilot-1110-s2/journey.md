@@ -1,17 +1,72 @@
 # Packaged monthly budget journey
 
-## Fresh packaged run after the shutdown fix
+## Fresh packaged run for the review fixes
 
-Packaged qualification **PASS** on 25 November 2026, using approved
+Packaged qualification **FAIL** on 25 November 2026 with approved source
+`f22b076e26b4c16316517997cf44c0a046ab5cb6`. The package was installed once in a
+fresh Helm namespace on secondary slot 1. The application and scanner approval
+artifacts were present for this commit. Both secondary slots were free, no other
+package was running, and the one-minute load stayed under 6 for more than five
+minutes before the claim. [Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45665250404),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45665257685)
+
+Package preparation, installation and the package ownership check **PASS**.
+The install recorded the development host exception
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366`. The wrong synthetic key
+received HTTP 401. The owner saved the correct key, ran the quoted test against
+the free stand-in and switched on member chats. [Browser result](fix5-result.json)
+
+At both widths, the admin set a 500-cent monthly group ceiling and the member
+received a reply. Member action history kept both amounts private. The admin
+opened the matching turn in Change history and saw its 16-cent reservation and
+1-cent charge. Spending showed the new group total. After the admin lowered the
+ceiling, chat explained the group limit and the next turn sent no request to the
+stand-in. These browser steps **PASS**.
+
+| Width | Reserved cents | Charged cents | Group spent cents | Lowered ceiling cents | Arrivals before and after refusal |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1280 px | 16 | 1 | 1 | 0 | 5 → 5 |
+| 390 px | 16 | 1 | 2 | 1 | 6 → 6 |
+
+- 1280 px [Turn spending](screenshots/fix5-turn-spending-1280.png),
+  [group spending](screenshots/fix5-settled-spending-1280.png) and
+  [chat refusal](screenshots/fix5-budget-refused-1280.png)
+- 390 px [Turn spending](screenshots/fix5-turn-spending-390.png),
+  [group spending](screenshots/fix5-settled-spending-390.png) and
+  [chat refusal](screenshots/fix5-budget-refused-390.png)
+
+The server disclosure step returned a generic failure. The retained pod logs
+showed output from the server and stand-in. The other running containers in the
+server pod were quiet. A fixture reproduced the failure when a successful log
+command returned no lines for those containers. The follow-up accepts successful
+empty reads from quiet containers. It still checks their contents and fails on
+failed reads or missing expected output. The fixture passed with that change.
+
+The final browser reply reconciliation was **NOT RUN** after the server check
+failed. The follow-up's fresh packaged qualification is **NOT RUN**. The run
+made zero paid calls and spent zero paid euro cents.
+
+The runner saved `package-up.log`, `browser.log` and the service logs before
+teardown. `package-down` and `down.sh` both exited with status 0, and slot 1
+reported free.
+
+The 83 focused Node tests, 26 Change history tests and two saved-event tests
+passed twice. The tests caught all 23 deliberate breaks in the guards before
+the source was restored.
+
+## Earlier packaged run after the shutdown fix
+
+Packaged qualification **PARTIAL** on 25 November 2026, using approved
 `f9117476e9b7bcb37034ff8a562e12133af563e3`.
 The stand-in returned HTTP 401 for the wrong key. Settings refused it without
 showing the key. The owner connected, tested and switched on the stand-in with
 the correct key. [Browser result](fix4-result.json)
 
-The admin saved a 500-cent monthly ceiling at both widths. Change history
-showed the reservation and charge for each member reply. Spending showed the
-settled total. After the admin lowered the ceiling, chat explained the limit
-and the stand-in received no new request.
+The admin saved a 500-cent monthly ceiling at both widths. The Change history
+API returned each reply's reservation and charge. The screen showed the group
+total in Spending. The check for both amounts on screen was **NOT RUN**. After
+the admin lowered the ceiling, chat explained the limit and the stand-in received
+no new request.
 
 | Width | Reserved cents | Charged cents | Group spent cents | Lowered ceiling cents | Requests before and after refusal |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -46,8 +101,8 @@ In the single run, the stand-in returned HTTP 401 for the wrong key. Settings
 refused it without showing the key. The owner connected, tested and switched on
 the stand-in with the correct key. [Browser result](fix3-result.json)
 
-The admin saved a 500-cent monthly ceiling at each width. Change history showed
-the reservation and charge for the member's reply. Spending showed the settled
+The admin saved a 500-cent monthly ceiling at each width. The Change history
+API returned the reservation and charge for the member's reply. Spending showed the settled
 amount. When the admin lowered the ceiling below that amount, chat explained
 the monthly limit and the stand-in received no new request.
 
@@ -115,8 +170,8 @@ API received.
    test and switch on the stand-in from Models & providers.
 3. Sign in as the admin. In Spending, save a 500-cent monthly ceiling for
    the paying group. As the member, send a turn to the shared assistant and
-   see its reply. Read the same turn's reservation and charge from admin
-   Change history and verify settled euro cents in Spending.
+   see its reply. Open the same turn in admin Change history, check both
+   labelled amounts on screen and verify settled euro cents in Spending.
 4. Lower the ceiling to one cent below the settled amount. Send another turn.
    Chat shows “Group monthly limit reached” and asks the member to contact an
    admin. Compare the stand-in request counter immediately before and after
