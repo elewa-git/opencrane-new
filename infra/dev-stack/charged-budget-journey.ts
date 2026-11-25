@@ -40,8 +40,9 @@ async function showSettledCost(admin: Page, origin: string, groupId: string, cen
 }
 
 export async function chooseMemoryFreeTurn(member: Page) {
+  const mode = member.getByRole('group', { name: 'Turn memory mode', exact: true });
   const choice = { name: 'Start a fresh memory-free turn', exact: true };
-  await member.getByRole('button', choice).click();
+  await mode.getByRole('button', choice).click();
 }
 
 async function refuseNextTurn(member: Page, prompt: string) {
