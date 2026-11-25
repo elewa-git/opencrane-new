@@ -81,15 +81,12 @@ async function readAfterVerification(): Promise<void> {
   function verificationAddress(): string {
     return verificationUrl;
   }
-  function accepted(): boolean {
-    return true;
-  }
   async function waitForResponse(matches: (response: Response) => boolean): Promise<Response> {
     watchingResponse.resolve();
     await reply.promise;
     assert(posted, 'The verification button sent a POST');
     const response = { request: verificationRequest, url: verificationAddress,
-      ok: accepted, status: successStatus } as unknown as Response;
+      status: successStatus } as unknown as Response;
     assert(matches(response), 'The driver observes the selected provider verification');
     completed = true;
     return response;

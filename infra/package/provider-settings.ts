@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page, Response } from 'playwright';
 import { z } from 'zod';
 
 const verificationFacts = {
@@ -31,7 +31,14 @@ export async function verifyProvider(
 ): Promise<void> {
   const setup = providerSetup(page);
   const submit = setup.getByRole('button', { name: action, exact: true });
-  await submit.click();
+  const verificationUrl = `${providerUrl}/verify`;
+  function isSubmission(response: Response): boolean {
+    return response.url() === verificationUrl && response.request().method() === 'POST';
+  }
+  // Clicking starts the command. Wait for its reply before checking the saved outcome.
+  const submitted = page.waitForResponse(isSubmission);
+  const [response] = await Promise.all([submitted, submit.click()]);
+  assert.equal(response.status(), 200, 'Provider verification submission failed');
   await waitForVerificationFact(page, providerUrl, verificationFacts[action], outcome);
   await checkProviderStatus(page);
 }

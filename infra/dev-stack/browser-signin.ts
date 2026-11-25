@@ -35,7 +35,7 @@ export async function completeProviderSignIn(
 ): Promise<void> {
   const login = page.locator('input[name=loginName]');
   await login.waitFor();
-  await page.waitForLoadState('networkidle');
+  // A usable form can appear while the sign-in provider still has background requests open.
   await enterLoginName(page, loginName);
   const passwordField = page.locator('input[type=password]');
   await passwordField.fill(password);

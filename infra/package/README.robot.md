@@ -179,6 +179,8 @@ enter the runner log. No extra browser retries are added.
 JSON input on stdin. It requires a claimed secondary slot and stand-in provider
 settings. Its receipt directory comes from `JOURNEY_RECEIPT_DIR`. The coordinator
 prepares joined membership access before the first protected workspace read.
+The packaged browser drivers enter credentials when the sign-in fields are ready,
+even if the sign-in service has unrelated background requests open.
 `qualification-failure.mjs` keeps only a fixed step name and an allowlisted error
 code. Failed chat checks also record the operation and numeric HTTP status,
 without request addresses or response text. Each role and width captures its failure
@@ -269,14 +271,17 @@ and actions to the open, named dialog, waits for the named step and uses an enab
 status control while the original change is applying. A disabled control does not
 stop the runner from following automatic advancement to the next step. Closed replacement dialogs are not
 key-entry targets. Verification and model-selection status reads use that same
-open dialog even when a background provider row also offers Check status. Model
-selection follows the Access heading when the saved models advance automatically.
+open dialog even when a background provider row also offers Check status.
+The verification driver waits for the selected provider's command response before
+reading the saved outcome. Both requests must succeed and the outcome must match.
+Model selection follows the Access heading when the saved models advance automatically.
 The setup driver keeps the expected next heading in its click target too. If
 automatic advancement removes Check status while the pointer moves, Playwright
 can finish on that heading instead of waiting for the old button. The next-step
 and visible-key assertions still apply at both widths.
-`journey-provider-settings.test.ts` reproduces that pending
-creation and key-save path in Chromium at 1280 and 390 px. The live journey saves
+`journey-provider-settings.test.ts` reproduces that pending creation and key-save
+path in Chromium at 1280 and 390 px. `journey-pilot-browser.test.ts` checks mobile
+sign-in with an open request and provider status reads after submission. The live journey saves
 both new-key form screenshots before typing, checks the browser refusal, and
 confirms HTTP 401 for that same synthetic wrong credential from the server Pod.
 The private probe passes the credential through stdin and records only its status.
