@@ -1,10 +1,49 @@
 # Tailnet pilot rehearsal
 
-Journey on a fresh dev stack: FAIL on the review fixes.
+Journey on a fresh dev stack: PASS
 
-The rehearsal result is scheduled backup FAIL at verify, zero completed sets,
-restore NOT RUN. Switch-over is allowed for testing with disposable data.
-Real data waits for slice 2 to pass backup and restore.
+**NOT RUN** Backup verification and restore. Accepted for slice 1 by the owner
+on 25 November 2026. Slice 2 covers both checks. Pilot testing uses disposable
+data until backup and restore pass.
+
+## Slice 1 packaged journey
+
+On 25 November 2026, the fixed browser driver ran once against a fresh
+package at approved product commit `3eb2569216beff0920447f86cf9d8c5f1e403093`.
+The run and teardown took about seven minutes, from 13:30 to 13:37 UTC.
+[Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45605739273),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45605739538)
+and [hosted CI](https://github.com/elewa-git/opencrane-new/actions/runs/45605678590).
+
+- **PASS** Both secondary slots were free, no other package was running and
+  one-minute load stayed below six for five minutes before the claim. The
+  last sample was 0.96. Both approval runs still had their image and approval
+  artifacts for the tested commit.
+- **PASS** Installed in a fresh namespace with new volumes and passed the
+  package check. The installer recorded the local `accepted-dev-box-366`
+  exception for the F1 swap and F2 crash-dump checks.
+- **PASS** Signed in to the development organisation over the loopback TLS
+  fixture, claimed the installation, confirmed first-owner permissions,
+  connected the qualification provider, ran the quoted model test and
+  enabled member chats. [Provider connected](screenshots/slice-1/provider-connected.png).
+- **PASS** The wrong account was refused at 390 px. Two separate invited
+  accounts signed in and accepted their invitations. The owner returned to
+  People to send the second invitation after the first acceptance.
+  [Wrong account refused](screenshots/slice-1/wrong-account-390.png).
+- **PASS** The Owners page confirmed the appointment and listed both owners.
+  The newly appointed owner opened the Owners page in their own session and
+  could see the **Appoint an owner** control.
+  [Appointment confirmation](screenshots/slice-1/separate-owners.png).
+- **PASS** The member sent two distinct prompts in separate chats and
+  received a completed reply at each width.
+  [1280 px](screenshots/slice-1/member-chat-1280.png) and
+  [390 px](screenshots/slice-1/member-chat-390.png).
+- **PASS** Removed the package and temporary sign-in app, and confirmed the
+  slot was free.
+
+The first launcher invocation stopped before package preparation because it
+had created the driver's output directory in advance. The launcher was
+corrected, and the slot passed admission again before the packaged run.
 
 ## Review fixes packaged rehearsal
 
