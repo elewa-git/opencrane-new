@@ -2,12 +2,42 @@
 
 Journey on a fresh dev stack: FAIL
 
-Run date: 25 November 2026. The final product revision is
-`931a8819d1288d4c79957d286282181bd5ae1f02`. Its
-[CI](https://github.com/elewa-git/opencrane-new/actions/runs/45555352321) passed.
-Its [application](https://github.com/elewa-git/opencrane-new/actions/runs/45555379310)
-and [scanner](https://github.com/elewa-git/opencrane-new/actions/runs/45555379303)
-approvals had unexpired artifacts when checked.
+## Fix-round packaged rehearsal
+
+On 25 November 2026, one fresh run used
+`fbf6ed4566355031857ca5d86c8cf31ef1ebd6bb`. Both image approval runs had
+unexpired artifacts for that exact revision.
+[Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45568219689)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45568223596).
+[Hosted CI for the tested revision](https://github.com/elewa-git/opencrane-new/actions/runs/45568226777).
+
+- **PASS** Installed the package in provider qualification mode after both
+  secondary slots were free and the one-minute load was under six for five minutes.
+  Package startup recorded the `accepted-dev-box-366` F1 swap and F2 crash-dump exception.
+- **PASS** Signed in through the browser, claimed the silo and confirmed the
+  owner could open Settings. Reachability and the quoted model test each
+  returned HTTP 200 before the driver read the saved result. The owner enabled
+  member chats. [Provider connected](screenshots/fix-round-1/provider-connected.png).
+- **PASS** The wrong account signed in at 390 px and was refused with
+  `wrong_identity`. The invited member signed in and accepted the link.
+- **FAIL** The owner's next visit to People & groups returned HTTP 503 from
+  `GET /api/members`. The page showed “Members are unavailable right now”
+  and the second invitation button was absent. The service logs confirm
+  the HTTP 503 and do not identify its underlying exception.
+  [Members page at failure](screenshots/fix-round-1/members-unavailable.png).
+- **NOT RUN** Separate owner appointment, member replies at 1280 and 390 px,
+  scheduled backup verification, a new restore namespace, and reading the same
+  chat and checking write refusal after restore.
+- **PASS** Retained startup and service logs and the masked failure screenshot
+  before teardown. Released the package and slot and removed the temporary sign-in app.
+
+The regression tests failed first on the network-idle wait with a usable sign-in form
+and on the premature provider status read returning HTTP 503. The driver now
+follows the credential fields and waits for the selected provider's verification
+response. The focused Node tests (45), restore tests (28) and invitation tests (3)
+passed twice. Typecheck, the event catalogue check, Knip, changelog lint, Markdown
+lint and ESLint for the changed web files passed. The repository's ESLint config
+excludes infrastructure files, which passed the package and dev-stack typechecks.
 
 ## Earlier packaged rehearsal
 
@@ -43,7 +73,13 @@ The earlier source screenshots were retained before teardown.
 - [Member chat at 1280 px](screenshots/member-chat-1280.png)
 - [Member chat at 390 px](screenshots/member-chat-390.png)
 
-## Exact-head repeat
+## Earlier exact-head repeats
+
+These repeats used `931a8819d1288d4c79957d286282181bd5ae1f02`. Its
+[CI](https://github.com/elewa-git/opencrane-new/actions/runs/45555352321) passed.
+Its [application](https://github.com/elewa-git/opencrane-new/actions/runs/45555379310)
+and [scanner](https://github.com/elewa-git/opencrane-new/actions/runs/45555379303)
+approvals had unexpired artifacts when checked.
 
 - **PASS** Two fresh packages installed with the final approved images.
   The browser signed in, claimed the silo and confirmed the first owner's
@@ -58,8 +94,7 @@ The earlier source screenshots were retained before teardown.
 - **NOT RUN** A final repeat was queued with the browser waiting for the
   verification submission to complete. The two-hour admission allowance
   expired before both slots were free with a full five-minute load window
-  below six. The corrected packaged restore and restored-chat write refusal
-  still need a live check.
+  below six.
 
 Startup and service logs and the masked failure screenshots were saved
 privately before tearing down each claimed slot. Each package and its slot
