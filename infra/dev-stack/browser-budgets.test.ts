@@ -79,15 +79,35 @@ test('restores every changed ceiling using the chosen group, not the personal de
 
 async function waitsForSharedAccess() {
   const receipts = new Map<string, number>();
+  const sessionChanges = new Map<string, string>();
   let sessions = 0;
-  function handle(incoming: import('node:http').IncomingMessage,
+  async function handle(incoming: import('node:http').IncomingMessage,
     response: import('node:http').ServerResponse) {
-    incoming.resume();
     response.setHeader('content-type', 'application/json');
     const path = incoming.url!;
+    if (path === '/api/conversations') {
+      let input = '';
+      for await (const chunk of incoming) input += String(chunk);
+      const session = JSON.parse(input) as { conversationId: string; id: string };
+      const change = `${path}/${session.conversationId}/changes/${session.id}`;
+      sessionChanges.set(session.conversationId, change);
+      sessions++;
+    } else {
+      incoming.resume();
+    }
     if (path.includes('/changes/')) {
       const reads = (receipts.get(path) ?? 0) + 1;
       receipts.set(path, reads);
+      if (path.startsWith('/api/conversations/')) {
+        if (reads === 1) {
+          response.writeHead(404);
+          response.end(JSON.stringify({ status: 'not_found' }));
+          return;
+        }
+        const iam = reads >= 3 ? 'current' : 'applying';
+        response.end(JSON.stringify({ projection: { content: 'current', iam } }));
+        return;
+      }
       const iam = reads >= 2 ? 'current' : 'applying';
       response.end(JSON.stringify({ projection: { content: 'current', iam } }));
       return;
@@ -105,7 +125,6 @@ async function waitsForSharedAccess() {
       response.end(JSON.stringify({ rows: [row] }));
       return;
     }
-    if (path === '/api/conversations') sessions++;
     response.end(JSON.stringify({ status: 'appended' }));
   }
   const server = createServer(handle);
@@ -116,7 +135,11 @@ async function waitsForSharedAccess() {
   const origin = `http://127.0.0.1:${address.port}`;
   const client = await request.newContext();
   async function goto(url: string) {
-    assert(new URL(url).searchParams.has('conversation'));
+    const conversation = new URL(url).searchParams.get('conversation');
+    assert(conversation);
+    const change = sessionChanges.get(conversation);
+    assert(change);
+    assert.equal(receipts.get(change), 3, 'Open chat after its own change is fully applied');
   }
   async function waitFor() {}
   function getByRole() {
@@ -135,7 +158,7 @@ async function waitsForSharedAccess() {
     await closed;
   }
 }
-test('waits for saved membership and assistant access before opening both budget sessions',
+test('waits for membership, assistant access and applied conversation receipts before opening chat',
   waitsForSharedAccess);
 
 async function refusesPersonalAssistant() {
