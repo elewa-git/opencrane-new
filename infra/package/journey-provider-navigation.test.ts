@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type Page, type Response } from 'playwright';
 import { answer } from '../dev-stack/real-model-journey.ts';
+import { providerFailure } from './provider-failure.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 
@@ -343,7 +344,9 @@ async function pausedResponse(inspect: (body: string) => void, bodyError?: Error
   const page = { on, context } as unknown as Page;
   const replies: Promise<void>[] = [];
   await watchBrowserReplies(page, 'http://fixture.invalid', replies, inspect);
-  events.emit('Fetch.requestPaused', { requestId: 'response', responseStatusCode: 200 });
+  const request = { method: 'GET',
+    url: 'http://fixture.invalid/api/conversations/private-id/approvals?key=private-query' };
+  events.emit('Fetch.requestPaused', { requestId: 'response', responseStatusCode: 200, request });
   assert.equal(replies.length, 1);
   await Promise.all(replies);
 }
@@ -365,3 +368,23 @@ async function keepsInspectionWhenBrowserCancels() {
 
 test('a cancelled continuation preserves completed and failed inspections',
   keepsInspectionWhenBrowserCancels);
+
+async function reportsMissingResponseBody(): Promise<void> {
+  const step = { check: 'finish API disclosure inspections', detail: 'All inspections must pass.' };
+  const bodyError = new Error('Browser session closed with private exception content');
+  function unexpectedBody(): never { throw new Error('There is no body to inspect'); }
+  function checkDiagnostic(error: unknown): boolean {
+    assert(error instanceof Error);
+    assert.equal(error.cause, bodyError);
+    const result = providerFailure(step, error);
+    assert.equal(result.result, 'FAIL');
+    assert.equal(result.detail, 'Chromium could not read the body of the chat approvals GET '
+      + 'response (HTTP 200). All inspections must pass.');
+    assert.doesNotMatch(JSON.stringify(result), /private/u);
+    return true;
+  }
+  await assert.rejects(pausedResponse(unexpectedBody, bodyError), checkDiagnostic);
+}
+
+test('a missing response body reports the failed operation and safe response details',
+  reportsMissingResponseBody);
