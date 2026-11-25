@@ -1,0 +1,58 @@
+{
+  "status": "FAIL",
+  "source": "f3ac73819f7533d5af6f02087756909169fc30ae",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "Settings connects, tests, selects and switches on",
+      "result": "PASS"
+    },
+    {
+      "check": "monthly spending and chat refusal at 1280px",
+      "result": "PASS",
+      "width": 1280,
+      "ceilingCents": 500,
+      "reservedCents": 16,
+      "chargedCents": 1,
+      "spentCents": 1,
+      "loweredCents": 0,
+      "requestsBefore": 1,
+      "requestsAfterReply": 2,
+      "requestsAfterRefusal": 2
+    },
+    {
+      "check": "monthly spending and chat refusal at 390px",
+      "result": "PASS",
+      "width": 390,
+      "ceilingCents": 500,
+      "reservedCents": 16,
+      "chargedCents": 1,
+      "spentCents": 2,
+      "loweredCents": 1,
+      "requestsBefore": 2,
+      "requestsAfterReply": 3,
+      "requestsAfterRefusal": 3
+    },
+    {
+      "check": "keys absent from values, manifests, environment values, logs and events",
+      "result": "PASS",
+      "checkedEvents": 166
+    },
+    {
+      "check": "finish API disclosure inspections",
+      "result": "FAIL",
+      "errorType": "Error",
+      "detail": "All response inspections must pass through browser shutdown."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

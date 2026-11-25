@@ -1,5 +1,46 @@
 # Packaged monthly budget journey
 
+## Fresh packaged run on 25 November 2026
+
+Packaged qualification **FAIL** on `f3ac73819f7533d5af6f02087756909169fc30ae`.
+In the single run, the stand-in returned HTTP 401 for the wrong key. Settings
+refused it without showing the key. The owner connected, tested and switched on
+the stand-in with the correct key. [Browser result](fix3-result.json)
+
+The admin saved a 500-cent monthly ceiling at each width. Change history showed
+the reservation and charge for the member's reply. Spending showed the settled
+amount. When the admin lowered the ceiling below that amount, chat explained
+the monthly limit and the stand-in received no new request.
+
+| Width | Reserved cents | Charged cents | Group spent cents | Lowered ceiling cents | Requests before and after refusal |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1280 px | 16 | 1 | 1 | 0 | 2 → 2 |
+| 390 px | 16 | 1 | 2 | 1 | 3 → 3 |
+
+- 1280 px [Spending](screenshots/fix3-spending-1280.png) and
+  [chat refusal](screenshots/fix3-refusal-1280.png)
+- 390 px [Spending](screenshots/fix3-spending-390.png) and
+  [chat refusal](screenshots/fix3-refusal-390.png)
+
+The disclosure check passed for the package values, manifests, environment
+values, server logs and 166 saved events. The browser's final disclosure check
+failed during shutdown. The result records a generic error. The last approval
+requests in the retained server log returned HTTP 200. The underlying browser
+error remains unknown. Zero paid calls and zero paid euro cents.
+
+Both secondary slots were free and no secondary package was up. The one-minute
+load stayed under 6 for six minutes before slot 1 was claimed. The application
+and scanner approvals matched the checked-out commit, and their artifacts were
+available before preparation. [Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45633533223),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45633533161)
+
+The fresh Helm install and `package-check` passed. The package install recorded
+`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366`. The runner saved
+`browser.log`, `package-up.log` and the service logs before teardown.
+`package-down` and `down.sh` exited with status 0. Slot 1 reported free.
+
+## Previous fresh run
+
 Packaged qualification **FAIL** on `cc3e462305ab415252ac9e1d8594dfdd29b97ef9`.
 The wrong key received HTTP 401 from the stand-in, and Settings refused it
 without showing the key. Connecting and switching on the correct key passed.
@@ -63,7 +104,7 @@ events. The final browser response inspection failed, so that run also had a
 - 390 px [Spending](screenshots/spending-390.png) and
   [chat refusal](screenshots/fix1-package-refusal-390.png)
 
-## Browser response inspection
+## Browser response inspection before the listening collector
 
 The earlier build's private `provider-journey-failure.txt` recorded
 `Fetch.continueResponse: Invalid InterceptionId` at the final inspection step.
@@ -104,6 +145,13 @@ each HTTP connection. The test checks that both GETs reach the API once and
 carry the same session.
 
 ## Source checks
+
+On `f3ac73819`, 45 focused tests and two saved-event disclosure tests passed
+twice. Typecheck, the event catalogue, Knip, changelog, Markdown and both
+privacy scans passed. The ESLint configuration excluded all three changed
+infrastructure code files. [Source CI](https://github.com/elewa-git/opencrane-new/actions/runs/45633509419)
+
+### Earlier source checks
 
 All 46 changed tests and two event disclosure tests passed twice. Typecheck,
 the event catalogue, Knip, changelog and Markdown checks passed. ESLint

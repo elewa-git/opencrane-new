@@ -20,7 +20,7 @@ in the recorded Kubernetes cluster.
 flowchart LR
   stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>local Helm install"]
   ci["GitHub packaging job<br/>approved images"] --> package
-  package --> apps["Website, server and workers"]
+  package --> apps["Website, server and workers<br/>sign-in, chat and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
   package --> services["Private databases, event log,<br/>file store and scanner"]
   apps --> models["Model gateway"]
