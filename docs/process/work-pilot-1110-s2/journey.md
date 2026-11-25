@@ -1,6 +1,43 @@
 # Packaged monthly budget journey
 
-## Fresh packaged run for the review fixes
+## Fresh run after the quiet-container log fix
+
+Packaged qualification **FAIL** on 25 November 2026. One fresh Helm install on
+secondary slot 1 used source `285e5cc28948f853195440ae23047656cf407a80`. CI
+passed and both image approvals and their artifacts matched that revision. Both
+secondary slots were free, no other package was running, and the one-minute
+load stayed below 6 for five minutes before the claim.
+[CI](https://github.com/elewa-git/opencrane-new/actions/runs/45669555038),
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45673729280),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45673729037)
+
+Package preparation, installation and ownership check **PASS**. The install
+recorded `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` for this
+development host. The owner signed in, invited a separate admin and member,
+and connected the free stand-in. The wrong key received HTTP 401. The quoted
+test and switch to member chats passed.
+[Stand-in test at 1280 px](screenshots/qualification-model-test-passed-1280.png),
+[stand-in test at 390 px](screenshots/qualification-model-test-passed-390.png)
+
+The first Spending step stalled before the admin could save the 1280 px
+ceiling. The browser driver was waiting for an earlier Settings reply on
+another page. Chromium recorded HTTP 503 and still had no completed body more
+than ten minutes later. The run was stopped there. The reason the reply did
+not finish is unresolved.
+
+The spending, member history and refusal checks at both widths were
+**NOT RUN**. Server disclosure and the final browser reply check were
+**NOT RUN**. The run made zero paid calls and spent zero paid euro cents.
+
+The runner saved `package-up.log`, `browser.log`, the service logs and
+`browser-wait-operations.json` before teardown. Both cleanup commands
+exited with status 0, and slot 1 reported free.
+
+On the tested revision, the focused checks passed 154 tests twice. Typecheck,
+the event catalogue, Knip and the changelog check passed. ESLint passed on the web files.
+Its configuration excludes the infrastructure files.
+
+## Earlier packaged run for the review fixes
 
 Packaged qualification **FAIL** on 25 November 2026 with approved source
 `f22b076e26b4c16316517997cf44c0a046ab5cb6`. The package was installed once in a
@@ -43,8 +80,8 @@ empty reads from quiet containers. It still checks their contents and fails on
 failed reads or missing expected output. The fixture passed with that change.
 
 The final browser reply reconciliation was **NOT RUN** after the server check
-failed. The follow-up's fresh packaged qualification is **NOT RUN**. The run
-made zero paid calls and spent zero paid euro cents.
+failed. At that point, the follow-up had only run in fixtures. The run made
+zero paid calls and spent zero paid euro cents.
 
 The runner saved `package-up.log`, `browser.log` and the service logs before
 teardown. `package-down` and `down.sh` both exited with status 0, and slot 1
