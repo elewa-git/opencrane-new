@@ -1,4 +1,5 @@
 import { AssertionError } from 'node:assert';
+import { BrowserReplyFailure } from './provider-navigation.ts';
 
 export type ProviderJourneyStep = {
   check: string;
@@ -25,6 +26,9 @@ function httpFailureDetail(step: ProviderJourneyStep, error: unknown): string | 
 }
 
 function failureDetail(step: ProviderJourneyStep, error: unknown): string {
+  if (error instanceof BrowserReplyFailure) {
+    return `${error.message} ${step.detail}`;
+  }
   if (error instanceof Error && /^apiRequestContext\.[a-z]+: socket hang up\b/u.test(error.message)) {
     return `The browser request lost its connection. ${step.detail}`;
   }

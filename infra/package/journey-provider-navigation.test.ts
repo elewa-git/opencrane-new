@@ -253,6 +253,12 @@ async function preservesLateInspectionFailures(): Promise<void> {
 test('an inspection failure arriving during browser shutdown still refuses a journey PASS',
   preservesLateInspectionFailures);
 
+function startApprovalPoll(path: string): void {
+  function pollStopped(): void {}
+  const poll = fetch(path);
+  void poll.catch(pollStopped);
+}
+
 async function drainsBeforeClosingWithAPoll(): Promise<void> {
   const pausedPoll = Promise.withResolvers<void>();
   const pollPath = '/api/conversations/fixture/approvals';
@@ -301,9 +307,7 @@ async function drainsBeforeClosingWithAPoll(): Promise<void> {
         return request.url() === pollUrl;
       }
       const rejected = page.waitForEvent('requestfailed', isApprovalPoll);
-      await page.evaluate(path => {
-        void fetch(path).catch(() => undefined);
-      }, pollPath);
+      await page.evaluate(startApprovalPoll, pollPath);
       await Promise.race([pausedPoll.promise, rejected]);
       await close();
     }
@@ -357,13 +361,14 @@ async function keepsInspectionWhenBrowserCancels() {
   await pausedResponse(record);
   assert.deepEqual(inspected, ['inspection fixture']);
   const missingBody = new Error('The browser could not supply the response body');
-  await assert.rejects(pausedResponse(record, missingBody), missingBody);
+  const bodyFailure = { cause: missingBody };
+  await assert.rejects(pausedResponse(record, missingBody), bodyFailure);
   const failedInspection = new Error('A response failed inspection');
   function refuse() { throw failedInspection; }
   await assert.rejects(pausedResponse(refuse), failedInspection);
   const unexpectedContinuation = new Error('Unexpected continuation failure');
-  await assert.rejects(pausedResponse(record, undefined, unexpectedContinuation),
-    unexpectedContinuation);
+  const expectedFailure = { cause: unexpectedContinuation };
+  await assert.rejects(pausedResponse(record, undefined, unexpectedContinuation), expectedFailure);
 }
 
 test('a cancelled continuation preserves completed and failed inspections',

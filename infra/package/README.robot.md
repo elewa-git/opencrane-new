@@ -301,11 +301,13 @@ Chromium deliver the same response to the page. The page can navigate as soon as
 it receives a reply, so a collector that reads afterwards can lose the body.
 `journey-provider-navigation.test.ts` reproduces that loss as the page navigates
 and verifies that a failed disclosure inspection still refuses navigation.
-Before a driver navigation, reload or shutdown, it waits for active API requests
-and their response inspections. This includes requests that start after the page
-first reports idle. The navigation tests hold a late request and check that the
-driver waits for it. After closing the browser, the driver checks again for any
-inspection failure before recording PASS.
+Before a driver navigation or reload, it waits for active API requests and their
+response inspections. This includes requests that start after the page first
+reports idle. At shutdown it stops new API requests before they reach the server,
+then waits for requests already in progress and inspects their replies. The tests
+hold a late request during navigation and start a new chat approval poll just as
+Chromium closes. The driver checks again for inspection failures after closing
+the browser before recording PASS.
 Chromium may cancel a paused response after its body has been checked. An invalid
 continuation handle then leaves the completed inspection valid. A missing body
 or an inspection failure still fails the run and keeps its original cause.
@@ -313,9 +315,10 @@ The event-disclosure command reads the saved events inside the server Pod and
 returns only the number checked. Its fixture runs the same command against a
 disposable event store and requires a matching event to be refused.
 The result records the current operation, a fixed expected condition and a bounded
-error category on failure. It never copies exception messages, names or page content
-into the public result. Detailed failures remain in the private slot for collection
-before teardown. `journey-provider-failure.test.ts` checks the safe result contract.
+error category on failure. If Chromium fails to read or resume an API response,
+the result includes the operation and HTTP status. It identifies the chat approval
+read without its conversation ID or query. It never copies upstream exception
+messages or page content. `journey-provider-failure.test.ts` checks the safe result.
 
 The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
 packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2
