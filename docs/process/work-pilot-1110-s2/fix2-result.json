@@ -1,0 +1,27 @@
+{
+  "status": "FAIL",
+  "source": "cc3e462305ab415252ac9e1d8594dfdd29b97ef9",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "Settings connects, tests, selects and switches on",
+      "result": "PASS"
+    },
+    {
+      "check": "save monthly ceiling at 1280px",
+      "result": "FAIL",
+      "errorType": "Error",
+      "detail": "Chromium could not read the body of an API response (HTTP 200). Spending must confirm the saved group ceiling."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

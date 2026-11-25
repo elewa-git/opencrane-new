@@ -1,23 +1,27 @@
 # Packaged monthly budget journey
 
-Packaged qualification **FAIL** on `0dfcb403ee112d85b4e9eb386b929c55f49c39cf`.
-The budget scenario passed at both widths. The credential checks for values,
-manifests, environment, logs and 166 saved events also passed. The final browser
-API response inspection failed. It recorded the failed step and a generic
-error, leaving the browser operation unidentified. The single fresh run made
-zero paid calls and spent zero paid euro cents.
+Packaged qualification **FAIL** on `cc3e462305ab415252ac9e1d8594dfdd29b97ef9`.
+The wrong key received HTTP 401 from the stand-in, and Settings refused it
+without showing the key. Connecting and switching on the correct key passed.
+While the driver checked outstanding API replies before opening Spending,
+Chromium could not read the body of an HTTP 200 response. The 1280 px save step
+failed before the browser sent a budget save. The 390 px scenario, artifact and
+event checks, and final browser inspection were **NOT RUN**. The single fresh
+run made zero paid calls and spent zero paid euro cents. [Browser result](fix2-result.json)
 
 Slot 1 was claimed after both secondary slots were free, no secondary package
-was up, and the one-minute load stayed under 6 for five minutes. The job then
+was up, and the one-minute load stayed under 6 for nine minutes. The job then
 created a fresh namespace and installed the approved images for the exact
 checked-out revision. Both image and approval artifacts were available before
-preparation. [CI](https://github.com/elewa-git/opencrane-new/actions/runs/45588254273),
-[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45588329106),
-[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45588329074)
+preparation. [CI](https://github.com/elewa-git/opencrane-new/actions/runs/45599131149),
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45599158366),
+[scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45599158295)
 
 Package installation and `package-check` **PASS**. Startup, service and browser
 evidence was saved before teardown. `package-down` and `down.sh` exited with
-status 0, and the slot reported free.
+status 0, and the slot reported free. The private `browser.log` records the
+operation and HTTP status, and the private service logs show the requests the
+API received.
 
 ## Packaged steps and observations
 
@@ -42,8 +46,12 @@ status 0, and the slot reported free.
    Save the browser, startup and service evidence before `package-down` and
    `down.sh` on the same slot.
 
-Both width checks below came from this single run. Spending screenshots matched
-the existing copies byte for byte. The refusal screenshots are from this run.
+## Earlier budget results
+
+On `0dfcb403ee112d85b4e9eb386b929c55f49c39cf`, both widths passed and the
+credential checks passed for values, manifests, environment, logs and 166 saved
+events. The final browser response inspection failed, so that run also had a
+**FAIL** verdict. The numbers and screenshots below came from that earlier run.
 
 | Width | Reserved cents | Charged cents | Group spent cents | Lowered ceiling cents | Requests before and after refusal |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -54,6 +62,27 @@ the existing copies byte for byte. The refusal screenshots are from this run.
   [chat refusal](screenshots/fix1-package-refusal-1280.png)
 - 390 px [Spending](screenshots/spending-390.png) and
   [chat refusal](screenshots/fix1-package-refusal-390.png)
+
+## Browser response inspection
+
+The earlier build's private `provider-journey-failure.txt` recorded
+`Fetch.continueResponse: Invalid InterceptionId` at the final inspection step.
+The next run recorded only a generic error at the same step. Both service logs
+end with successful chat approval reads. The evidence leaves the exact failed
+response and the second exception unknown.
+
+The regression in `49edceede` caused a chat approval GET to reach the server
+after the final check for active requests. Chromium then closed its session
+while `Fetch.getResponseBody` was reading that HTTP 200 reply. The fix stops
+new API requests at shutdown and checks replies from requests already in
+progress. A missing body or a failed inspection still fails the journey. The
+test in `2d8eb3094` checks that the failure report includes the operation and
+HTTP status without private response details.
+
+The fresh run on `cc3e46230` reached a different point in the browser. A body
+read failed during the check before Spending opened, so the new shutdown path
+was **NOT RUN**. The browser result identifies the operation and status but
+leaves the exact request and the underlying Chromium exception unknown.
 
 ## Browser connection failure
 
@@ -74,17 +103,15 @@ The proxy advertises its own timeout and keeps connection headers local to
 each HTTP connection. The test checks that both GETs reach the API once and
 carry the same session.
 
-The earlier run on `e1b725e4138b48bf83a0e45ec8d90a880d81874a` passed the
-budget scenario at both widths. Its final browser response inspection failed
-when Chromium cancelled continuation of an already inspected response.
-
 ## Source checks
 
-All 44 changed tests passed twice. Four related browser-editor and package-page
-tests passed. Typecheck, the event catalogue, Knip, changelog and Markdown checks
-passed. ESLint exited successfully and reported the repository's infrastructure
-ignore rules. The public privacy and secret scans passed before the fix was
-pushed.
+All 46 changed tests and two event disclosure tests passed twice. Typecheck,
+the event catalogue, Knip, changelog and Markdown checks passed. ESLint
+reported that its configuration excludes the four changed infrastructure
+files. The public privacy and secret scans passed before the fix was pushed.
+
+Source CI **FAIL**. The setup for a routine-session test timed out in shard 3.
+That test passed when run on its own. [Failed CI job](https://github.com/elewa-git/opencrane-new/actions/runs/45599131149/job/139153459274)
 
 ## Fresh Compose stack
 
