@@ -11,6 +11,7 @@ import { answer } from '../dev-stack/real-model-journey.ts';
 import { providerFailure } from './provider-failure.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
+import type { ExpectedReply } from './provider-reply-coverage.ts';
 
 function serve(request: IncomingMessage, response: ServerResponse): void {
   if (request.url === '/api/check' ||
@@ -472,19 +473,23 @@ async function withMarkedReply(run: (fixture: ReplyFixture) => Promise<void>): P
   }
 }
 
-function omitReplyNotification(page: Page, url: string): void {
+function omitReplyNotification(page: Page, url: string, omitStart: boolean): void {
   const context = page.context();
   const newSession = context.newCDPSession.bind(context);
   async function openSession(target: Parameters<typeof newSession>[0]) {
     const session = await newSession(target);
     const subscribe = session.on.bind(session);
-    function on(event: string, listener: (value: { response: { url: string } }) => void) {
-      function deliver(value: { response: { url: string } }): void {
-        if (value.response.url !== url) {
-          listener(value);
+    type Notification = { request?: { url: string }; response?: { url: string } };
+    function on(event: string | symbol, listener: (value: never) => void) {
+      function deliver(value: Notification): void {
+        const missingStart = omitStart && value.request?.url === url;
+        if (!missingStart && value.response?.url !== url) {
+          Reflect.apply(listener, undefined, [value]);
         }
       }
-      return subscribe(event, event === 'Network.responseReceived' ? deliver : listener);
+      const filtering = event === 'Network.responseReceived' || event === 'Network.requestWillBeSent';
+      Reflect.apply(subscribe, session, [event, filtering ? deliver : listener]);
+      return session;
     }
     session.on = on;
     return session;
@@ -501,29 +506,42 @@ async function readMarkedBody() {
   return marked.text();
 }
 
-async function assertMarkedPageRefused(fixture: ReplyFixture, omitted: boolean): Promise<void> {
+type ReplyFault = 'marked' | 'omitted response' | 'omitted request and response';
+
+async function assertMarkedPageRefused(fixture: ReplyFixture, fault: ReplyFault): Promise<void> {
   const { page, browser, origin, replies } = fixture;
-  if (omitted) {
-    omitReplyNotification(page, `${origin}/api/marked`);
+  if (fault !== 'marked') {
+    omitReplyNotification(page, `${origin}/api/marked`, fault === 'omitted request and response');
   }
   await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
   await page.goto(`${origin}/idle`);
   const body = await page.evaluate(readMarkedBody);
   assert(body.includes(disclosureMarker), 'The page received the marked body');
-  const expected = omitted ? /delivered API reply was not inspected/u : /API reply disclosed a key/u;
+  const expected = fault === 'marked' ? /API reply disclosed a key/u
+    : /delivered API reply was not inspected/u;
   await assert.rejects(finishBrowserReplies(browser, replies), expected);
 }
 
 async function missingPageReply(fixture: ReplyFixture): Promise<void> {
-  await assertMarkedPageRefused(fixture, true);
+  await assertMarkedPageRefused(fixture, 'omitted response');
 }
 
 async function disclosedPageReply(fixture: ReplyFixture): Promise<void> {
-  await assertMarkedPageRefused(fixture, false);
+  await assertMarkedPageRefused(fixture, 'marked');
 }
 
 const testMissingPageReply = withMarkedReply.bind(undefined, missingPageReply);
-test('shutdown refuses a delivered page reply missing from Chromium inspection', testMissingPageReply);
+test('shutdown refuses a delivered page reply missing from Chromium inspection',
+  testMissingPageReply);
+
+async function missingPageRequestAndReply(fixture: ReplyFixture): Promise<void> {
+  await assertMarkedPageRefused(fixture, 'omitted request and response');
+}
+
+const testMissingPageRequestAndReply = withMarkedReply.bind(undefined, missingPageRequestAndReply);
+test('Playwright delivery still counts when Chromium misses the request and its response',
+  testMissingPageRequestAndReply);
+
 
 const testDisclosedPageReply = withMarkedReply.bind(undefined, disclosedPageReply);
 test('the disclosure check refuses a marked page reply', testDisclosedPageReply);
@@ -550,29 +568,48 @@ async function missingDirectOperation(fixture: ReplyFixture): Promise<void> {
   const { page, browser, origin, replies } = fixture;
   await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
   await page.goto(origin);
-  const operation = { transport: 'direct', method: 'GET', path: /^\/api\/check$/u,
+  const operation: ExpectedReply = { transport: 'direct', method: 'GET', path: /^\/api\/check$/u,
     label: 'fixture status read' };
   const coverage = new Map([[page, [operation]]]);
-  const shutdown: Promise<void> = Reflect.apply(finishBrowserReplies, undefined,
-    [browser, replies, undefined, coverage]);
+  const shutdown = finishBrowserReplies(browser, replies, undefined, coverage);
   await assert.rejects(shutdown, /Missing inspected replies for fixture status read/u);
 }
 
 const testMissingDirectOperation = withMarkedReply.bind(undefined, missingDirectOperation);
-test('an inspected page reply cannot stand in for a required direct read', testMissingDirectOperation);
+test('an inspected page reply cannot stand in for a required direct read',
+  testMissingDirectOperation);
 
 async function missingPageOperation(fixture: ReplyFixture): Promise<void> {
   const { page, browser, origin, replies } = fixture;
   await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
   const direct = await readJourneyApi(page, `${origin}/api/check`);
   assert.equal(direct.status(), 200);
-  const operation = { transport: 'page', method: 'GET', path: /^\/api\/check$/u,
+  const operation: ExpectedReply = { transport: 'page', method: 'GET', path: /^\/api\/check$/u,
     label: 'fixture page' };
   const coverage = new Map([[page, [operation]]]);
-  const shutdown: Promise<void> = Reflect.apply(finishBrowserReplies, undefined,
-    [browser, replies, undefined, coverage]);
+  const shutdown = finishBrowserReplies(browser, replies, undefined, coverage);
   await assert.rejects(shutdown, /Missing inspected replies for fixture page/u);
 }
 
 const testMissingPageOperation = withMarkedReply.bind(undefined, missingPageOperation);
 test('an inspected direct read cannot stand in for a required page reply', testMissingPageOperation);
+
+async function coversPageAndDirectReplies(fixture: ReplyFixture): Promise<void> {
+  const { page, browser, origin, replies } = fixture;
+  await watchBrowserReplies(page, origin, replies, inspectMarkedBody);
+  const pageReply = page.waitForResponse(`${origin}/api/check`);
+  await page.goto(origin);
+  await pageReply;
+  const directReply = await readJourneyApi(page, `${origin}/api/check`);
+  assert.equal(directReply.status(), 200);
+  const pageOperation: ExpectedReply = { transport: 'page', method: 'GET',
+    path: /^\/api\/check$/u, label: 'fixture page' };
+  const directOperation: ExpectedReply = { ...pageOperation, transport: 'direct',
+    label: 'fixture status read' };
+  const coverage = new Map([[page, [pageOperation, directOperation]]]);
+  await finishBrowserReplies(browser, replies, undefined, coverage);
+}
+
+const testCoveredOperations = withMarkedReply.bind(undefined, coversPageAndDirectReplies);
+test('shutdown accepts the expected page and direct replies after both inspections',
+  testCoveredOperations);

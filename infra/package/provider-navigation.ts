@@ -1,4 +1,7 @@
-import type { Browser, BrowserContext, CDPSession, Page, Request } from 'playwright';
+import type { APIResponse, Browser, BrowserContext, CDPSession, Page, Request } from 'playwright';
+import { inspectDirectJourneyReplies } from '../dev-stack/browser-api.ts';
+import { ReplyCoverage, ReplyCoverageFailure, type ExpectedBrowserReplies,
+  type ReplyOperation } from './provider-reply-coverage.ts';
 
 type HttpReply = { url: string; status: number };
 
@@ -20,6 +23,7 @@ type WatchedPage = {
   closed: boolean;
   pending: Map<string, ApiRequest>;
   pageRequests: Map<Request, PromiseWithResolvers<void>>;
+  coverage: ReplyCoverage;
 };
 
 const watchedPages = new WeakMap<Page, WatchedPage>();
@@ -34,7 +38,11 @@ export async function runShutdownStep(step: ShutdownStep, action: () => Promise<
   try {
     await action();
   } catch (error) {
-    await recordFailure?.(step, error);
+    try {
+      await recordFailure?.(step, error);
+    } catch {
+      console.error('Could not write the private browser shutdown log.');
+    }
     throw error;
   }
 }
@@ -79,7 +87,13 @@ function stopRequest(request: ApiRequest, cause: Error): void {
   request.completion.resolve();
 }
 
-function trackPageRequests(page: Page, apiRoot: string): WatchedPage['pageRequests'] {
+function trackInspection(replies: Promise<void>[], inspection: Promise<void>): void {
+  void Promise.allSettled([inspection]);
+  replies.push(inspection);
+}
+
+function trackPageRequests(page: Page, apiRoot: string, coverage: ReplyCoverage,
+  replies: Promise<void>[]): WatchedPage['pageRequests'] {
   const pending = new Map<Request, PromiseWithResolvers<void>>();
   function started(request: Request): void {
     if (request.url().startsWith(apiRoot)) {
@@ -91,12 +105,26 @@ function trackPageRequests(page: Page, apiRoot: string): WatchedPage['pageReques
     pending.delete(request);
     completion?.resolve();
   }
+  function delivered(request: Request): void {
+    if (request.url().startsWith(apiRoot)) {
+      const response = request.existingResponse();
+      if (response) {
+        const reply: ReplyOperation = { url: request.url(), status: response.status(),
+          method: request.method() };
+        coverage.recordDelivery(reply);
+      } else {
+        const error = new ReplyCoverageFailure('A delivered API reply was not inspected.');
+        trackInspection(replies, Promise.reject(error));
+      }
+    }
+    finished(request);
+  }
   function closed(): void {
     for (const completion of pending.values()) completion.resolve();
     pending.clear();
   }
   page.on('request', started);
-  page.on('requestfinished', finished);
+  page.on('requestfinished', delivered);
   page.on('requestfailed', finished);
   page.on('close', closed);
   return pending;
@@ -104,13 +132,17 @@ function trackPageRequests(page: Page, apiRoot: string): WatchedPage['pageReques
 
 function listenForReplies(watcher: WatchedPage, replies: Promise<void>[],
   inspect: (body: string) => void): void {
-  const { apiRoot, session, pending } = watcher;
+  const { apiRoot, session, pending, coverage } = watcher;
   function recordReply(request: ApiRequest, response: HttpReply): void {
     const body = Promise.withResolvers<string>();
     request.body = body;
-    const inspection = inspectResponseBody(request.method, response, body.promise, inspect);
-    void Promise.allSettled([inspection]);
-    replies.push(inspection);
+    async function inspectAndCount(): Promise<void> {
+      await inspectResponseBody(request.method, response, body.promise, inspect);
+      const reply = { ...response, method: request.method };
+      coverage.recordInspection(reply, 'page');
+    }
+    // Keep a rejection for shutdown even if the page carries on after receiving the reply.
+    trackInspection(replies, inspectAndCount());
   }
   function requestStarted(event: RequestStarted): void {
     const previous = pending.get(event.requestId);
@@ -140,7 +172,12 @@ function listenForReplies(watcher: WatchedPage, replies: Promise<void>[],
     if (!request) return;
     pending.delete(event.requestId);
     request.completion.resolve();
-    if (request.body) request.body.resolve(readBody(session, event.requestId));
+    if (request.body) {
+      request.body.resolve(readBody(session, event.requestId));
+    } else {
+      const error = new ReplyCoverageFailure('A delivered API reply was not inspected.');
+      trackInspection(replies, Promise.reject(error));
+    }
   }
   function requestFailed(event: { requestId: string; errorText: string }): void {
     const request = pending.get(event.requestId);
@@ -169,8 +206,9 @@ export async function watchBrowserReplies(page: Page, origin: string, replies: P
   const pending = new Map<string, ApiRequest>();
   // Observe page requests in Playwright too. Its actions can return before the other session
   // that reads the body reports the request, even after the server has received it.
-  const pageRequests = trackPageRequests(page, apiRoot);
-  const watcher = { apiRoot, session, pending, pageRequests, closed: false };
+  const coverage = new ReplyCoverage();
+  const pageRequests = trackPageRequests(page, apiRoot, coverage, replies);
+  const watcher = { apiRoot, session, pending, pageRequests, coverage, closed: false };
   listenForReplies(watcher, replies, inspect);
   // Keep bodies available when the page immediately navigates after a reply.
   await session.send('Network.configureDurableMessages', {
@@ -179,6 +217,18 @@ export async function watchBrowserReplies(page: Page, origin: string, replies: P
   });
   await session.send('Network.enable');
   watchedPages.set(page, watcher);
+
+  async function inspectDirectReply(method: string, response: APIResponse): Promise<void> {
+    const reply = { method, url: response.url(), status: response.status() };
+    async function inspectAndCount(): Promise<void> {
+      await inspectResponseBody(method, reply, response.text(), inspect);
+      coverage.recordInspection(reply, 'direct');
+    }
+    const inspection = inspectAndCount();
+    trackInspection(replies, inspection);
+    await inspection;
+  }
+  inspectDirectJourneyReplies(page, inspectDirectReply);
 }
 
 export async function navigateWithReplies(page: Page, url: string,
@@ -258,7 +308,8 @@ async function closeWatchedPage(page: Page): Promise<void> {
 }
 
 export async function finishBrowserReplies(browser: Browser,
-  replies: Promise<void>[], recordFailure?: ShutdownFailure): Promise<void> {
+  replies: Promise<void>[], recordFailure?: ShutdownFailure,
+  expected: ExpectedBrowserReplies = new Map()): Promise<void> {
   const contexts = browser.contexts();
   const pages = contexts.flatMap(browserContextPages);
   async function drainBeforeClose(): Promise<void> {
@@ -276,6 +327,22 @@ export async function finishBrowserReplies(browser: Browser,
       }
     }
     await inspectReplies(replies);
+    for (const page of pages) {
+      const coverage = watchedPages.get(page)?.coverage;
+      coverage?.checkDeliveries();
+      const operations = expected.get(page);
+      if (operations && !coverage) {
+        throw new ReplyCoverageFailure('A required page was not watched for API replies.');
+      }
+      if (operations) {
+        coverage?.checkOperations(operations);
+      }
+    }
+    for (const page of expected.keys()) {
+      if (!pages.includes(page)) {
+        throw new ReplyCoverageFailure('A required page closed before API replies were checked.');
+      }
+    }
   }
   await runShutdownStep('draining the collector', drainBeforeClose, recordFailure);
   for (const page of pages) {

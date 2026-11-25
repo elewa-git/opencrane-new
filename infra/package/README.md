@@ -20,7 +20,7 @@ in the recorded Kubernetes cluster.
 flowchart LR
   stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>local Helm install"]
   ci["GitHub packaging job<br/>approved images"] --> package
-  package --> apps["Website, server and workers<br/>sign-in, chat and spending"]
+  package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
   package --> services["Private databases, event log,<br/>file store and scanner"]
   apps --> models["Model gateway"]
@@ -69,7 +69,8 @@ Not built yet:
    When the provider-mode server is updated, it stops before its replacement starts.
 4. **An admin sets a monthly ceiling.** In Spending, they choose the paying group
    and enter the limit in whole euro cents. A member's reply uses that group's budget.
-   Spending shows the charge. If the admin lowers the ceiling below current spending,
+   Change history shows that turn's reservation and charge. Spending shows the total.
+   If the admin lowers the ceiling below current spending,
    chat explains the limit and stops the next turn before it reaches the provider.
 5. **A developer opens the website.** A local port forward connects their browser
    to the private website. The website proxy tells clients how long it keeps idle
@@ -87,9 +88,10 @@ Not built yet:
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
    Provider journey results name the failed step and its expected condition.
-   The driver checks browser API replies for keys through shutdown.
-   A reply the browser receives but cannot read fails the check.
-   The private stack log gives the details if shutdown fails.
+   The driver checks the installed settings, service logs and saved events for
+   keys. It also checks API replies from the pages and its own API calls. A
+   missing reply or a body it cannot read fails the check. The private stack
+   log gives the details if shutdown fails.
 
 ## How to run or test it
 

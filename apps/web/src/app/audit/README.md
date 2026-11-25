@@ -14,7 +14,7 @@ each reply.
 flowchart LR
   website[Website] --> history[Change history]
   website --> organisation[Organisation pages]
-  history -->|family and reference| server[Server history read]
+  history -->|reads changes and turn spending| server[Server history read]
   server --> records[Saved event records]
 ```
 
@@ -23,7 +23,8 @@ flowchart LR
 - Shows a decision beside what was later observed.
 - Filters and loads older records without repeating a change.
 - Groups related changes so each family shows all of its saved event types.
-- Opens one record's evidence at a time.
+- Opens one record's evidence at a time. An admin can see the reservation and charge
+  for that turn in Change history. A member's action history keeps both amounts private.
 - Keeps focus in the open detail and returns it to the selected row when closed.
 - Shows membership, publication and delegation facts that the server permits.
 - Shows memory work as metadata without fact text.

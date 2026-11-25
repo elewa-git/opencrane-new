@@ -21,7 +21,7 @@ function fixturePod(app: string, name: string, containers: string[]) {
   return { metadata: { name, labels: { app } }, spec: podSpec, status: podStatus };
 }
 
-async function scanFixture(source?: Source, fault?: Fault): Promise<void> {
+async function scanFixture(source?: Source, fault?: Fault) {
   function content(label: Source, safe: string): string {
     if (label === source && fault === 'marked') {
       return safe.replace('safe', marker);
@@ -44,12 +44,9 @@ async function scanFixture(source?: Source, fault?: Fault): Promise<void> {
       return JSON.stringify({ items: [server, standIn] });
     }
     if (args[0] === 'get') {
-      return content('manifests', '{"items":[],"note":"safe"}');
+      return content('manifests', '{"items":[{"note":"safe"}]}');
     }
     assert.equal(args[0], 'logs');
-    if (args.includes('--all-containers=true')) {
-      return content('server log', 'safe combined server log');
-    }
     const container = args[args.indexOf('-c') + 1];
     const previous = args.includes('--previous');
     if (container === 'stand-in') {
@@ -63,7 +60,7 @@ async function scanFixture(source?: Source, fault?: Fault): Promise<void> {
     return content(label, 'safe server log');
   }
   const reader = { readLocalValues, readInstalledValues, kube };
-  await checkProviderArtifacts(reader, [marker], true);
+  return checkProviderArtifacts(reader, [marker]);
 }
 
 for (const source of sources) {
@@ -81,7 +78,8 @@ for (const source of sources) {
 }
 
 async function acceptsCleanEvidence(): Promise<void> {
-  await scanFixture();
+  const checked = await scanFixture();
+  assert.deepEqual(checked, { checkedCurrentLogs: 3, checkedPreviousLogs: 2 });
 }
 
 test('the packaged scan accepts all credential-free evidence', acceptsCleanEvidence);

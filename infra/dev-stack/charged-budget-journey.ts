@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Page } from 'playwright';
-import { assertAuditMoney, readSuccessfulTurnAudit } from './browser-audit.ts';
+import type { Locator, Page } from 'playwright';
+import { assertAuditMoney, openTurnSpending, readSuccessfulTurnAudit } from './browser-audit.ts';
 import { findBudgetNoticeForPrompt, loadBudgetEditor, readBudgetSummary, saveBudgetCeiling,
   scopedBudget } from './browser-budgets.ts';
 import { openBudgetConversation, prepareBudgetAssistant, type BudgetAssistant }
   from './budget-fixture.ts';
 import { answer, sendForReply } from './real-model-journey.ts';
 import type { BeforePageNavigation } from './browser-signin.ts';
+
+const qualificationTariff = { reservedCents: 16, chargedCents: 1 };
 
 export type ChargedBudgetJourney = {
   owner: Page;
@@ -58,6 +60,25 @@ async function refuseNextTurn(member: Page, prompt: string) {
   await notice.getByText(/Ask an admin to review the limit/u).waitFor({ state: 'visible' });
 }
 
+async function showTurnCost(journey: ChargedBudgetJourney, auditId: string, width: number) {
+  const { admin, origin, beforeNavigate, capture } = journey;
+  await beforeNavigate?.(admin);
+  const spending = await openTurnSpending(admin, origin, auditId);
+  const { reservedCents, chargedCents } = qualificationTariff;
+  await expectVisibleCents(spending, 'Reservation', reservedCents);
+  await expectVisibleCents(spending, 'Charge', chargedCents);
+  await capture(admin, 'turn-spending', width);
+}
+
+async function expectVisibleCents(spending: Locator, label: string, cents: number) {
+  const unit = cents === 1 ? 'cent' : 'cents';
+  const term = spending.getByText(label, { exact: true });
+  const value = term.locator('xpath=following-sibling::dd[1]');
+  await value.waitFor({ state: 'visible' });
+  const text = await value.innerText();
+  assert.equal(text, `${cents} ${unit}`, `Change history shows the matching turn's ${label}`);
+}
+
 async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssistant,
   width: number) {
   const { admin, member, origin, readRequestCount, capture, step, beforeNavigate } = journey;
@@ -84,12 +105,16 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   await answer(member, prompt, [/^Hello from your computer\.$/u], beforeNavigate);
   const spentCents = await waitForCharge(admin, origin, groupId, previousCents);
   const { row } = await readSuccessfulTurnAudit(member, origin, prompt);
-  const { reservedCents, chargedCents } = await assertAuditMoney(admin, origin, row);
+  assert.equal(row.requesterId, journey.memberId, 'History shows the member who sent the turn');
+  const { auditId, reservedCents, chargedCents } = await assertAuditMoney(admin, origin, row);
   const requestsAfterReply = await readRequestCount();
   const observation = { reservedCents, chargedCents, spentCents, previousCents,
     requestsBefore, requestsAfterReply };
   assertChargedTurn(observation);
   await capture(member, 'charged-reply', width);
+  step(`read turn spending at ${width}px`,
+    'Change history must show a 16-cent reservation and a 1-cent charge for this turn.');
+  await showTurnCost(journey, auditId, width);
   await showSettledCost(admin, origin, groupId, spentCents, beforeNavigate);
   await capture(admin, 'settled-spending', width);
 
@@ -130,6 +155,7 @@ export async function chargedBudgetJourney(journey: ChargedBudgetJourney) {
 type GroupSpend = { monthCents: number; reservedCents: number };
 
 export function budgetChargeSettled(group: GroupSpend, previousCents: number): boolean {
+  // Wait for settlement to release the reservation before measuring the cost of this reply.
   return group.monthCents > previousCents && group.reservedCents === 0;
 }
 
@@ -145,7 +171,11 @@ type TurnChargeObservation = {
 export function assertChargedTurn(observation: TurnChargeObservation): void {
   const { reservedCents, chargedCents, spentCents, previousCents,
     requestsBefore, requestsAfterReply } = observation;
-  assert(reservedCents > 0 && chargedCents > 0, 'The call has a positive reservation and charge');
+  const expected = qualificationTariff;
+  assert.equal(reservedCents, expected.reservedCents,
+    `The qualification tariff must reserve ${expected.reservedCents} cents`);
+  assert.equal(chargedCents, expected.chargedCents,
+    `The qualification tariff must charge ${expected.chargedCents} cent`);
   assert.equal(spentCents - previousCents, chargedCents, 'Spending shows this turn’s charge');
   assert.equal(requestsAfterReply, requestsBefore + 1, 'One member call reached the stand-in');
 }

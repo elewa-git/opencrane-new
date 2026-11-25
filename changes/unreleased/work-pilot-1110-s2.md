@@ -1,9 +1,10 @@
-Check monthly spending on a fresh packaged install. An admin sets a ceiling in
-whole euro cents, sees a member's charge in Spending, and can lower the ceiling
-to stop the next turn before it reaches the provider. The free qualification
-checks the recorded reservation and charge and verifies both paths at desktop
-and mobile widths. The packaged website advertises its own idle connection
-timeout so spending reads can open a new connection after the old one expires.
-The driver checks browser API replies for keys through shutdown and fails if it
-cannot read a reply that reached the page. A shutdown failure records the
-exception in the private stack log.
+Show each turn's reservation and charge in admin Change history. Member action
+history keeps those amounts private. In Spending, an admin sets a monthly group
+ceiling and sees the settled total. Lowering the ceiling below that total stops
+the next turn before it reaches the provider.
+
+The free Helm journey checks the matching turn on screen at desktop and phone
+widths. It checks replies from the browser and driver, installed values and
+service logs for keys. A missing reply or missing evidence fails the check.
+The packaged website advertises its idle connection timeout so the driver can
+open a fresh connection for each direct API request.

@@ -48,7 +48,8 @@ async function checksAdminMoney() {
       if (example.passes) {
         const amounts = await check();
         assert.deepEqual(amounts, {
-          reservedCents: example.row.reservedCents, chargedCents: example.row.settledCents,
+          auditId: example.row.id, reservedCents: example.row.reservedCents,
+          chargedCents: example.row.settledCents,
         });
       } else await assert.rejects(check);
     }
@@ -134,7 +135,7 @@ async function checksMemberMoneyPrivacy() {
     return `${origin}/workspace?conversation=conversation`;
   }
   const page: Pick<Page, 'request' | 'url'> = { request: client, url: workspaceUrl };
-  const readTurn = readSuccessfulTurnAudit.bind(undefined, page as Page, origin, prompt);
+  const readTurn = readSuccessfulTurnAudit.bind(undefined, page, origin, prompt);
   try {
     const visible = await readTurn();
     assert.equal(visible.row.id, memberRow.id);

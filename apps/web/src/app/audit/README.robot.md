@@ -7,7 +7,9 @@ The family filter sends `members`, `tools`, `spending`, `memory` or `routines`.
 The server maps each key to the event prefixes in that family before paging.
 
 The selected row reads `GET /api/org/history/:auditId`. Its `before` field
-pages bounded evidence. A link is drawn only from `taskHref` returned by
+pages bounded evidence. Once the detail loads, it shows the selected list row's
+`reservedCents` and `settledCents` in whole euro cents when present. The member
+conversation route omits both amounts. A link is drawn only from `taskHref` returned by
 the server. The browser never builds a chat or child link from an event id.
 The server checks publication and delegation chat rights for each read.
 Memory details show only the allowed metadata.

@@ -1585,7 +1585,8 @@ The server and models share `PROVIDER_SECRETS_DIR`. Startup creates it as the ho
 user with mode 0700 before either process starts. Secondary models mounts it read-only. Startup copies the pinned gateway binary into
 the stack directory and mounts that file alone, so a host tool symlink can point outside the worktree.
 The stub reads a separate mode-0600 file and exposes only credential-match counts at
-`/provider-counts`: `managed` and `other`. `/journey-counts` keeps its existing response.
+`/provider-counts`: `managed` and `other`. `/journey-counts` reports arrivals at
+any `/v1/` route, even if the stand-in refuses the route or key.
 The stub supports model-list and non-streaming verification as well as streamed chat.
 Provider rows contain no address; the existing `MODEL_UPSTREAM` selects the local stub.
 

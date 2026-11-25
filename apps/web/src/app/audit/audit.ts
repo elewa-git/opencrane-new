@@ -173,6 +173,11 @@ export class AuditScreen implements OnInit {
     }
   }
 
+  protected centsLabel(cents: number): string {
+    const unit = cents === 1 ? 'cent' : 'cents';
+    return `${cents} ${unit}`;
+  }
+
   protected closeDetail(restoreFocus = true): void {
     this.detailGeneration++;
     this.detailId.set(undefined);

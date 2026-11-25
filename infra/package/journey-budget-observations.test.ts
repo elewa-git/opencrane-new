@@ -45,20 +45,25 @@ function acceptsExpectedTurn(): void {
 test('accepts the stand-in tariff, spending increase and one arrival', acceptsExpectedTurn);
 
 const contradictions = [
-  { observation: { ...charge, reservedCents: 0 }, reason: /^.*reservation/iu },
-  { observation: { ...charge, chargedCents: 0, spentCents: 1 }, reason: /^.*charge/iu },
-  { observation: { ...charge, reservedCents: 15 }, reason: /reserve 16 cents/u },
-  { observation: { ...charge, chargedCents: 2, spentCents: 3 }, reason: /charge 1 cent/u },
-  { observation: { ...charge, spentCents: 3 }, reason: /Spending shows this turn/u },
-  { observation: { ...charge, requestsAfterReply: 7 }, reason: /One member call/u },
+  { observation: { ...charge, reservedCents: 0 },
+    reason: /reserve 16 cents/u, label: 'zero reservation' },
+  { observation: { ...charge, chargedCents: 0, spentCents: 1 },
+    reason: /charge 1 cent/u, label: 'zero charge' },
+  { observation: { ...charge, reservedCents: 15 },
+    reason: /reserve 16 cents/u, label: 'wrong reservation' },
+  { observation: { ...charge, chargedCents: 2, spentCents: 3 },
+    reason: /charge 1 cent/u, label: 'wrong charge' },
+  { observation: { ...charge, spentCents: 3 },
+    reason: /Spending shows this turn/u, label: 'wrong spending increase' },
+  { observation: { ...charge, requestsAfterReply: 7 },
+    reason: /One member call/u, label: 'two provider arrivals' },
 ];
-for (let index = 0; index < contradictions.length; index++) {
-  const { observation, reason } = contradictions[index]!;
+for (const { observation, reason, label } of contradictions) {
   function refusesContradiction(): void {
     const check = assertChargedTurn.bind(undefined, observation);
     assert.throws(check, reason);
   }
-  test(`refuses a charge observation that contradicts ${reason.source}`, refusesContradiction);
+  test(`refuses a charge observation with ${label}`, refusesContradiction);
 }
 
 function refusesIncorrectCeilingAndCount(): void {

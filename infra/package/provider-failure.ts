@@ -1,5 +1,6 @@
 import { AssertionError } from 'node:assert';
 import { appendFile } from 'node:fs/promises';
+import { ReplyCoverageFailure } from './provider-reply-coverage.ts';
 import { BrowserReplyFailure, type ShutdownStep } from './provider-navigation.ts';
 
 export type ProviderJourneyStep = {
@@ -27,7 +28,7 @@ function httpFailureDetail(step: ProviderJourneyStep, error: unknown): string | 
 }
 
 function failureDetail(step: ProviderJourneyStep, error: unknown): string {
-  if (error instanceof BrowserReplyFailure) {
+  if (error instanceof BrowserReplyFailure || error instanceof ReplyCoverageFailure) {
     return `${error.message} ${step.detail}`;
   }
   if (error instanceof Error && /^apiRequestContext\.[a-z]+: socket hang up\b/u.test(error.message)) {

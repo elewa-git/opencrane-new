@@ -23,8 +23,6 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     const { conversation, row, history } = await readSuccessfulTurnAudit(page, origin, auditPrompt);
     const path = `/api/conversations/${conversation}/history`;
     assert.equal(row.requesterId, requesterId);
-    assert(!('reservedCents' in row) && !('settledCents' in row),
-      'Member action history does not expose money amounts');
     await assertAuditMoney(owner, origin, row);
     assert(!JSON.stringify(history).includes('canary'));
     assert.equal((await fetch(`${origin}${path}`, { headers: { cookie: otherCookie } })).status, 403,
@@ -68,7 +66,8 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
   }
 }
 
-export async function readSuccessfulTurnAudit(page: Page, origin: string, prompt: string) {
+export async function readSuccessfulTurnAudit(page: Pick<Page, 'request' | 'url'>, origin: string,
+  prompt: string) {
   const conversation = new URL(page.url()).searchParams.get('conversation');
   assert(conversation, 'The member has a saved conversation');
   const path = `${origin}/api/conversations/${conversation}`;
@@ -87,6 +86,10 @@ export async function readSuccessfulTurnAudit(page: Page, origin: string, prompt
     if (response.status() !== 503) {
       assert.equal(response.status(), 200);
       const history = auditResponseSchema.parse(await response.json());
+      for (const entry of history.rows) {
+        assert(!('reservedCents' in entry) && !('settledCents' in entry),
+          'Member action history does not expose money amounts');
+      }
       const row = history.rows.find(successfulCall);
       if (row) {
         assert.equal(row.conversationId, conversation);
@@ -118,7 +121,31 @@ export async function assertAuditMoney(owner: Pick<Page, 'request'>, origin: str
   assert(reservedCents !== undefined && settledCents !== undefined,
     'Admin Change history keeps integer reserved and settled euro cents');
   assert(!JSON.stringify(changes).includes('canary'));
-  return { reservedCents, chargedCents: settledCents };
+  return { auditId: row.id, reservedCents, chargedCents: settledCents };
+}
+
+export async function openTurnSpending(admin: Page, origin: string, auditId: string) {
+  await openChangeHistory(admin, `${origin}/org/history`);
+  const search = admin.getByRole('searchbox', { name: 'Safe reference', exact: true });
+  await search.fill(auditId);
+  function searched(response: Response): boolean {
+    const url = new URL(response.url());
+    return url.pathname === '/api/org/history' && url.searchParams.get('reference') === auditId;
+  }
+  const searchReply = admin.waitForResponse(searched);
+  await search.press('Enter');
+  const found = await searchReply;
+  assert.equal(found.status(), 200);
+  const loaded = admin.getByText('History loaded', { exact: true });
+  await loaded.waitFor();
+  const row = admin.locator('oc-audit article .row-button');
+  const detailUrl = `${origin}/api/org/history/${encodeURIComponent(auditId)}`;
+  const detailReply = admin.waitForResponse(detailUrl);
+  await row.click();
+  const reply = await detailReply;
+  assert.equal(reply.status(), 200, 'Change history opens the matching call');
+  const detail = admin.getByRole('dialog');
+  return detail.locator('dl[aria-label="Turn spending"]');
 }
 
 export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin: string) {

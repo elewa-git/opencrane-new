@@ -37,7 +37,10 @@ function refusesProviderKey(authorization: string | undefined) {
   return !value || authorization !== `Bearer ${value}`;
 }
 const server = createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/v1/responses') modelRequests += 1;
+  // Count arrivals even when the route or credential is refused.
+  if (req.url?.startsWith('/v1/')) {
+    modelRequests += 1;
+  }
   if ((req.url === '/v1/models' || req.url === '/v1/responses') &&
       refusesProviderKey(req.headers.authorization)) {
     req.resume();

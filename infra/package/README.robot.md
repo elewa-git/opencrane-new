@@ -2185,16 +2185,23 @@ checkout's approved images and private values using the
 loopback forward before running the browser check. The runner requires the claimed
 namespace and the separate qualification stand-in before it begins provider setup.
 Direct Playwright API requests keep the browser's session and use a fresh HTTP
-connection for each read or command through the forward.
+connection for each read or command through the forward. The driver checks
+those replies before it reads their JSON. Before reporting success, the driver
+checks that each required page and API operation supplied inspected replies.
 
 The owner connects the provider in Settings. A separate admin sets the paying
 group's monthly ceiling to 500 cents in Spending. At 1280 and 390 px a member
 opens a shared assistant session once its saved change is applied and gets a
-completed reply using the memory-free option. Admin Change history supplies the reservation and charge
-for that exact turn, and Spending shows the new settled total in whole euro cents.
+completed reply using the memory-free option. The driver checks that member
+action history keeps the amounts private. It opens admin Change history for the
+same turn and captures its 16-cent reservation and 1-cent charge. Spending shows
+the new settled total in whole euro cents.
 The admin saves a ceiling one cent below the total. Chat shows the monthly limit
 for the next turn, and the stand-in's `/journey-counts` counter stays the same.
-It counts requests as soon as they reach `/v1/responses`, including wrong keys.
+It counts every request to a `/v1/` route before checking the route or key.
+The disclosure check includes values read from the installed Helm release and
+logs from the server and stand-in pods. It reads the previous log from every
+container that restarted, and fails if expected evidence is missing.
 
 Copy the masked screenshots and `result.json` from the slot's
 `package-budget-journey` directory before `package-down` and `down.sh`. On failure,

@@ -14,6 +14,7 @@ import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrowserReplies,
   watchBrowserReplies } from './provider-navigation.ts';
 import { assertNoBrowserDisclosure, checkProviderArtifacts } from './provider-disclosure.ts';
+import { providerJourneyCoverage } from './provider-journey-coverage.ts';
 import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
 import { providerEventDisclosureScript, qualificationRequestCountScript, withBudgetQualification,
   wrongKeyStatusScript }
@@ -31,13 +32,13 @@ const origin = `http://127.0.0.1:${25000 + Number(stackId) * 100 + 6}`;
 const budget = process.argv[2] === '--budget';
 const output = budget ? `${directory}/package-budget-journey`
   : `${root}/docs/process/work-pilot-1110-s1/live`;
-const setup = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'));
-const credential = (await readFile(`${directory}/model-qualification-key`, 'utf8')).trim();
 const wrongCredential = randomUUID();
-const secrets = [credential, wrongCredential];
+const secrets = [wrongCredential];
 const inspectBrowserBody = assertNoBrowserDisclosure.bind(undefined, secrets);
 const responses = [];
 const outcomes = [];
+let setup;
+let credential;
 let browser;
 let stage = { check: 'browser launch', detail: 'Chromium must launch for the packaged journey.' };
 
@@ -321,17 +322,26 @@ async function checkDisclosure() {
     return result.stdout;
   }
   const reader = { kube, readLocalValues, readInstalledValues };
-  await checkProviderArtifacts(reader, secrets, budget);
+  const logs = await checkProviderArtifacts(reader, secrets);
   const inspected = await privateScript(providerEventDisclosureScript, secrets);
   assert(inspected.checkedEvents > 0);
-  outcomes.push({ check: 'keys absent from values, manifests, environment values, logs and events',
-    result: 'PASS', checkedEvents: inspected.checkedEvents });
+  outcomes.push({ check: 'keys absent from local and installed values, manifests, logs and events',
+    result: 'PASS', ...logs, checkedEvents: inspected.checkedEvents });
 }
 
 async function runProviderJourney() {
+  step('read qualification settings', 'The claimed slot must have its free test accounts and key.');
+  const savedSetup = await readFile(`${directory}/zitadel.json`, 'utf8');
+  setup = JSON.parse(savedSetup);
+  const savedCredential = await readFile(`${directory}/model-qualification-key`, 'utf8');
+  credential = savedCredential.trim();
+  assert(credential, 'The qualification key must be present');
+  secrets.push(credential);
+
   // Save the wrong key privately so the collector can remove it from failure logs.
   const privateFileOptions = { mode: 0o600 };
   await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
+  step('browser launch', 'Chromium must launch for the packaged journey.');
   browser = await chromium.launch({ headless: true, channel: 'chromium' });
   step('owner sign-in', 'The owner must finish single sign-on into the fresh installation.');
   const ownerPage = await login('owner');
@@ -346,7 +356,8 @@ async function runProviderJourney() {
   await checkDisclosure();
   step('finish API disclosure inspections',
     'All response inspections must pass through browser shutdown.');
-  await finishBrowserReplies(browser, responses, recordShutdownFailure);
+  const expectedReplies = providerJourneyCoverage(ownerPage, admin.page, member.page, budget);
+  await finishBrowserReplies(browser, responses, recordShutdownFailure, expectedReplies);
   browser = undefined;
   const browserDisclosure = { check: stage.check, result: 'PASS',
     checkedReplies: responses.length };
