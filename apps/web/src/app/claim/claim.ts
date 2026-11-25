@@ -16,7 +16,7 @@ const messages: Record<string, string> = {
 };
 
 @Component({
-  selector: 'oc-claim', templateUrl: './claim.html', styleUrl: './claim.css',
+  selector: 'oc-claim', templateUrl: './claim.html', styleUrl: '../sign-in/entry-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Claim implements OnInit {

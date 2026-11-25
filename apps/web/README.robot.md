@@ -334,8 +334,14 @@ Invite people. The drawer checks the email with `/api/invitations/identity`, cre
 one invitation command and reads `/api/invitations/:memberId/command-changes/:commandId`
 for the link and exact expiry. A lost create reply keeps both random ids in memory and
 offers GET-only Check status on the Invitations tab. The tab's list remains unavailable.
-No email is sent. The link's join page is separate work. Closing the drawer discards
-its draft; access refusal clears it before reading the response body. Late replies
+The operator sends the link. `/join/:memberId/:invitationId` checks the session
+via `GET /auth/me` and returns to the same path after single sign-on. It posts
+the two IDs, display name and a command ID to `POST /members/join` only when the
+person presses Accept invitation. An uncertain reply keeps the command ID for
+the same display name. A wrong account sees a sign-out action and no workspace
+link. `invitation-join.spec.ts` checks the route, return path, accepted request
+and wrong-account refusal. Closing the invite drawer discards its draft.
+Access refusal clears it before reading the response body and late replies
 cannot restore it.
 `?tab=groups` opens the existing Groups tab, including from group detail pages.
 Group details link to a shared assistant draft at

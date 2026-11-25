@@ -14,7 +14,7 @@ This folder shows the page where someone becomes the first owner of a new OpenCr
 | File | What it does |
 | --- | --- |
 | `claim.ts` | Checks sign-in and sends the first-owner request. |
-| `claim.html`, `claim.css` | Draw the setup form and its result. |
+| `claim.html`, `../sign-in/entry-form.css` | Draw the setup form and its result. |
 
 ## How it connects
 

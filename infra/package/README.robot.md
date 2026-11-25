@@ -914,8 +914,15 @@ manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
 before using it. Archive the verified set to private storage:
 
 ```sh
-(umask 077; kubectl -n "$namespace" exec deployment/backup-catalogue -- \
-  tar -C /backups/sets -cf - "$BACKUP_ID" > "$PRIVATE_DIR/pilot-backup.tar")
+archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
+partial=$(mktemp "$PRIVATE_DIR/pilot-backup.XXXXXX")
+if kubectl -n "$namespace" exec deployment/backup-catalogue -- \
+  tar -C /backups/sets -cf - "$BACKUP_ID" > "$partial"; then
+  mv -- "$partial" "$archive"
+else
+  rm -- "$partial"
+  exit 1
+fi
 ```
 
 For a recovery drill, prepare an empty package with the same approved images
@@ -930,7 +937,7 @@ issuer and account subjects. Set `pilotRestore` to
 kubectl -n "$namespace" rollout status deployment/backup-catalogue --timeout=60s
 kubectl -n "$namespace" exec -i deployment/backup-catalogue -- \
   sh -ec 'mkdir -m 700 -p /backups/sets && tar -xpf - -C /backups/sets' \
-  < "$PRIVATE_DIR/pilot-backup.tar"
+  < "$archive"
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the

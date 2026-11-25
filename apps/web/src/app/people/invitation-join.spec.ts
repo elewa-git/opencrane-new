@@ -57,10 +57,15 @@ it('accepts the invitation as the signed-in person', async function acceptInvita
   const request = fetchSpy.mock.calls[1];
   expect(request?.[0]).toBe('/members/join');
   expect(request?.[1]?.method).toBe('POST');
-  expect(request?.[1]?.body).toBeTypeOf('string');
-  expect(JSON.parse(String(request?.[1]?.body))).toEqual({
-    memberId: 'a-member', invitationId: 'an-invitation', commandId: expect.any(String),
-    displayName: 'Pilot member',
+  const body = request?.[1]?.body;
+  if (typeof body !== 'string') throw new Error('Missing invitation command');
+  const command: unknown = JSON.parse(body);
+  if (typeof command !== 'object' || !command || !('commandId' in command)) {
+    throw new Error('Missing invitation command ID');
+  }
+  expect(command.commandId).toMatch(/^[a-f0-9-]{36}$/u);
+  expect(command).toMatchObject({
+    memberId: 'a-member', invitationId: 'an-invitation', displayName: 'Pilot member',
   });
 });
 

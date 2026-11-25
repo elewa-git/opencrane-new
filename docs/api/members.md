@@ -296,8 +296,10 @@ who lost admin access gets a minimal receipt; removed people get 403.
 A saved invitation returns `status: recorded`, `commandId`, `changeId`, `type`,
 `sequence` and `recordedAt`. An Owner/Admin creator also gets `result` with the
 original receipt, email, role, assistant choice, `delivery: link_only` and a link
-at `/join/:memberId/:invitationId`. The link grants no access; the join page is
-not implemented yet. `projection.content` is `current|applying`, while
+at `/join/:memberId/:invitationId`. The page returns the person to the link after
+sign-in and submits `POST /members/join` when they accept. The server still
+checks whether the signed-in person can use the invitation.
+`projection.content` is `current|applying`, while
 `iam: not_required` means creating an invitation grants no access.
 Exact create retries return the original receipt even after acceptance.
 Changed arguments return `command_id_reused` and append nothing.

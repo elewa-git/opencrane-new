@@ -1,5 +1,7 @@
 @if (claimPage) {
   <oc-claim />
+} @else if (invitation; as link) {
+  <oc-invitation-join [invitation]="link" />
 } @else if (directChatPage) {
   <oc-direct-chat />
 } @else if (conversationsPage) {
