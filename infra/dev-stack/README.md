@@ -95,6 +95,7 @@ infra/dev-stack/down.sh
 
 A fresh start replaces that stack's data and credentials. Always stop the claimed
 stack when finished, including after a failure.
+`claim.sh --id 1` reserves only slot 1 when the other slot is in use.
 [README.robot.md](README.robot.md#starting-and-stopping-the-stack) explains readiness,
 restart behaviour and focused tests. Type checks run with
 `nice -n 10 npm run typecheck:dev-stack`.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { createServer, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -239,7 +239,7 @@ test('an OpenCrane sign-in response on the loopback port does not prove listener
   refusesStaleListener);
 
 async function refusesStaleListener() {
-  function anonymous(_request: unknown, reply: import('node:http').ServerResponse) {
+  function anonymous(_request: unknown, reply: ServerResponse) {
     reply.setHeader('Content-Type', 'application/json');
     reply.end('{"authenticated":false}');
   }
@@ -255,6 +255,9 @@ async function refusesStaleListener() {
     const args = packageForwardArgs(['--context=disposable'], 'test-package', origin);
     assert.equal(await ownsPackageForwarder(origin, args), false);
   } finally {
-    await new Promise<void>(function closeStale(resolve) { stale.close(() => resolve()); });
+    await new Promise<void>(function closeStale(resolve) {
+      function closed() { resolve(); }
+      stale.close(closed);
+    });
   }
 }

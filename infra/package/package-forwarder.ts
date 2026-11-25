@@ -7,14 +7,15 @@ const execute = promisify(execFile);
 const launcherArgs = ['node', '--experimental-strip-types', 'infra/package/forward.ts'];
 
 export function packageForwardArgs(connectionArgs: string[], namespace: string, origin: string) {
-  const port = new URL(origin).port;
+  const { port } = new URL(origin);
   return [...connectionArgs, '-n', namespace,
     'port-forward', '--address', '127.0.0.1', 'service/web', `${port}:80`];
 }
 
 async function listeningPid(port: string) {
   const result = await execute('ss', ['-H', '-ltnp', `sport = :${port}`], { timeout: 5000 });
-  const listeners = result.stdout.trim().split('\n');
+  const output = result.stdout.trim();
+  const listeners = output.split('\n');
   if (listeners.length !== 1) {
     return undefined;
   }
@@ -28,7 +29,8 @@ async function listeningPid(port: string) {
 
 async function processArgs(pid: string) {
   const argumentsFile = await readFile(`/proc/${pid}/cmdline`, 'utf8');
-  return argumentsFile.split('\0').slice(0, -1);
+  const args = argumentsFile.split('\0');
+  return args.slice(0, -1);
 }
 
 async function launchedFromPackage(pid: string, args: string[]) {

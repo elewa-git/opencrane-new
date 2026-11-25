@@ -30,7 +30,7 @@ export interface PilotRouteControls extends ServeControls {
 
 const execute = promisify(execFile);
 const tailnetName = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.){2,}ts\.net$/u;
-const loopbackTarget = /^http:\/\/(?:127\.0\.0\.1|localhost):[1-9][0-9]{0,4}$/u;
+const loopbackTarget = /^http:\/\/(?:127\.0\.0\.1|localhost):([1-9][0-9]{0,4})$/u;
 const serveSessionSchema = z.object({
   AllowFunnel: z.record(z.string(), z.boolean()).nullish(),
   Web: z.record(z.string(), z.object({
@@ -69,12 +69,14 @@ function hasFunnel(session: ServeSession) {
 }
 
 function hasServices(session: ServeSession) {
-  return Object.keys(session.Services ?? {}).length > 0;
+  const services = Object.keys(session.Services ?? {});
+  return services.length > 0;
 }
 
 function hasServeHandlers(session: ServeSession) {
-  return hasServices(session) || Object.keys(session.TCP ?? {}).length > 0 ||
-    Object.keys(session.Web ?? {}).length > 0;
+  const ports = Object.keys(session.TCP ?? {});
+  const sites = Object.keys(session.Web ?? {});
+  return hasServices(session) || ports.length > 0 || sites.length > 0;
 }
 
 function unexpectedHandler() {
@@ -132,10 +134,14 @@ async function readSavedRoute(path: string): Promise<string | undefined> {
 }
 
 function loopbackPort(origin: string | undefined) {
-  if (!origin || !loopbackTarget.test(origin)) {
+  if (!origin) {
     return undefined;
   }
-  const port = Number(origin.slice(origin.lastIndexOf(':') + 1));
+  const match = loopbackTarget.exec(origin);
+  if (!match) {
+    return undefined;
+  }
+  const port = Number(match[1]);
   if (port <= 65535) {
     return port;
   }
@@ -170,13 +176,13 @@ export async function switchPilot(settings: PilotRouteSettings, controls: PilotR
   if (saved !== undefined && !sameLoopbackAddress(saved, settings.demoTarget)) {
     throw new RouteRefused('The saved Serve target differs from the expected demo target');
   }
-  const current = await currentTarget(host, controls);
   if (!await controls.healthyForwarder(settings.pilotTarget)) {
     throw new RouteRefused('The claimed slot’s pilot forwarder did not pass its sign-in check');
   }
   if (!await controls.ownsForwarder(settings.pilotTarget)) {
     throw new RouteRefused('The claimed slot’s pilot forwarder is not listening on its port');
   }
+  const current = await currentTarget(host, controls);
   if (sameLoopbackAddress(current, settings.pilotTarget) && saved !== undefined) {
     return;
   }
@@ -306,8 +312,12 @@ async function main() {
     throw new RouteRefused('For a switch, set PILOT_DEMO_TARGET and pass the package values file');
   }
   const { forwardArgs, ...installed } = await packageSettings(valuesFile);
-  function ownsForwarder(origin: string) {
-    return ownsPackageForwarder(origin, forwardArgs);
+  async function ownsForwarder(origin: string) {
+    try {
+      return await ownsPackageForwarder(origin, forwardArgs);
+    } catch (cause) {
+      throw new RouteRefused('Could not check which process owns the pilot port', { cause });
+    }
   }
   const settings = { ...installed, demoTarget, pilotTarget: localOrigin, savedRoute };
   await switchPilot(settings, { ...controls, ownsForwarder, healthyForwarder });
