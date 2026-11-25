@@ -21,14 +21,21 @@ export async function prepareBudgetAssistant(owner: Page, members: Page[],
   const assistantChange = `/api/assistants/${assistantId}/changes/${assistant.commandId}`;
   await waitForChange(owner, origin, assistantChange);
   for (const member of members) {
-    await waitForAssistant(member, origin, assistantId);
-    const conversationId = randomUUID();
-    const session = { id: randomUUID(), conversationId, assistantId, payingGroupId: groupId };
-    await save(member, origin, '/api/conversations', session);
-    await member.goto(`${origin}/workspace?conversation=${conversationId}`);
-    await member.getByRole('textbox', { name: 'Message your agent' }).waitFor();
+    await openBudgetConversation(member, origin, { groupId, assistantId });
   }
   return { groupId, assistantId };
+}
+
+export type BudgetAssistant = { groupId: string; assistantId: string };
+
+export async function openBudgetConversation(member: Page, origin: string,
+  { groupId, assistantId }: BudgetAssistant) {
+  await waitForAssistant(member, origin, assistantId);
+  const conversationId = randomUUID();
+  const session = { id: randomUUID(), conversationId, assistantId, payingGroupId: groupId };
+  await save(member, origin, '/api/conversations', session);
+  await member.goto(`${origin}/workspace?conversation=${conversationId}`);
+  await member.getByRole('textbox', { name: 'Message your agent' }).waitFor();
 }
 
 async function save(page: Page, origin: string, path: string, data: unknown) {

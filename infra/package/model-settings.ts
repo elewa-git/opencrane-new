@@ -4,7 +4,7 @@ export function backupProviderMode(environment: NodeJS.ProcessEnv) {
   return environment['BACKUP_PROVIDER_MODE'] === 'true';
 }
 
-const qualificationUpstream = 'model-qualification:43003';
+export const qualificationUpstream = 'model-qualification:43003';
 
 type SecretData = { data?: Record<string, string> };
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { wrongKeyStatusScript } from './provider-probe.ts';
+import { qualificationRequestCountScript, wrongKeyStatusScript } from './provider-probe.ts';
 
 const execute = promisify(execFile);
 
@@ -26,3 +26,23 @@ globalThis.fetch = refuseCredential;`;
 
 test('the private wrong-key probe reads HTTP 401 from a native Fetch response',
   readsNativeFetchStatus);
+
+function countReply(status: number, body: string) {
+  const script = `
+globalThis.fetch = async function qualificationCount(url) {
+  if (url !== 'http://model-qualification:43003/journey-counts') throw new Error('Wrong counter');
+  return new Response(${JSON.stringify(body)}, { status: ${status} });
+};
+` + qualificationRequestCountScript;
+  return execute(process.execPath, ['--input-type=module', '-e', script]);
+}
+
+async function readsOnlyQualificationCount() {
+  const result = await countReply(200, '{"modelRequests":5,"other":"private-fixture-value"}');
+  assert.equal(result.stdout, '5\n');
+  await assert.rejects(countReply(503, '{"modelRequests":5}'), /request count unavailable/u);
+  await assert.rejects(countReply(200, '{"modelRequests":0.5}'),
+    /Invalid qualification request count/u);
+}
+test('the packaged qualification probe returns only a valid stand-in request count',
+  readsOnlyQualificationCount);

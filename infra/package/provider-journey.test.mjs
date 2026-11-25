@@ -7,12 +7,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { chargedBudgetJourney } from '../dev-stack/charged-budget-journey.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
 import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
   from './provider-navigation.ts';
 import { providerFailure } from './provider-failure.ts';
-import { providerEventDisclosureScript, wrongKeyStatusScript } from './provider-probe.ts';
+import { providerEventDisclosureScript, qualificationRequestCountScript, wrongKeyStatusScript }
+  from './provider-probe.ts';
 import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
   verifyProvider } from './provider-settings.ts';
 import { completeProviderSignIn } from '../dev-stack/browser-signin.ts';
@@ -23,7 +25,9 @@ const owner = await verifyPackageOwner();
 const connection = await packageConnectionArgs(owner);
 const execute = promisify(execFile);
 const origin = `http://127.0.0.1:${25000 + Number(stackId) * 100 + 6}`;
-const output = `${root}/docs/process/work-pilot-1110-s1/live`;
+const budget = process.argv[2] === '--budget';
+const output = budget ? `${directory}/package-budget-journey`
+  : `${root}/docs/process/work-pilot-1110-s1/live`;
 const setup = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'));
 const credential = (await readFile(`${directory}/model-qualification-key`, 'utf8')).trim();
 const wrongCredential = randomUUID();
@@ -119,7 +123,7 @@ async function invite(ownerPage, role, membershipRole) {
       displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' } });
   assert.equal(joined.status(), 200, 'The separately signed-in person can accept');
   assert.equal((await joined.json()).status, 'joined');
-  return page;
+  return { page, memberId };
 }
 
 async function waitForModels(page, providerId) {
@@ -138,12 +142,12 @@ async function waitForModels(page, providerId) {
 }
 
 async function connect(admin) {
-  step('open Settings', 'The admin must reach Models & providers through Settings.');
+  step('open Settings', 'The person setting up the provider must reach Models & providers.');
   await navigateWithReplies(admin, `${origin}/workspace`, responses);
   await admin.getByRole('link', { name: 'Settings', exact: true }).click();
   await admin.getByRole('link', { name: /Models/ }).click();
   await admin.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
-  await screenshots(admin, 'admin-settings');
+  await screenshots(admin, budget ? 'owner-settings' : 'admin-settings');
   step('create provider connection', 'The saved connection must advance to its Key step.');
   await createProviderConnection(admin, 'Package free provider');
   const setup = providerSetup(admin);
@@ -201,7 +205,7 @@ async function connect(admin) {
   await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();
   await chat.getByText('Member chats switched on', { exact: true }).waitFor();
   await screenshots(admin, 'provider-switched-on');
-  outcomes.push({ check: 'admin Settings connects, tests, selects and switches on', result: 'PASS' });
+  outcomes.push({ check: 'Settings connects, tests, selects and switches on', result: 'PASS' });
 }
 
 const modeScript = `
@@ -284,6 +288,36 @@ async function memberChats(member) {
   }
 }
 
+function readRequestCount() {
+  return privateScript(qualificationRequestCountScript, null);
+}
+
+async function requireBudgetQualification() {
+  const script = `
+import { requirePackageProviderDestination } from './infra/package/model-settings.ts';
+if (process.env.PACKAGE_PROVIDER_QUALIFICATION !== '1') {
+  throw new Error('The running package has qualification disabled');
+}
+requirePackageProviderDestination(process.env);`;
+  await kube(['exec', 'deployment/server', '-c', 'models', '--', 'node',
+    '--experimental-strip-types', '--input-type=module', '-e', script]);
+  await readRequestCount();
+}
+
+async function runMemberJourney(ownerPage, admin, member) {
+  if (budget) {
+    const pages = { owner: ownerPage, admin: admin.page, member: member.page };
+    const journey = { ...pages, memberId: member.memberId, origin, readRequestCount, capture, step };
+    const results = await chargedBudgetJourney(journey);
+    outcomes.push(...results);
+  } else {
+    step('provider Pod recreation', 'Private custody must survive server Pod recreation.');
+    await recreateProviderPod();
+    step('member chat', 'Member chats must receive replies at both viewport widths.');
+    await memberChats(member.page);
+  }
+}
+
 async function checkDisclosure() {
   const values = await readFile(`${directory}/package-values.json`, 'utf8');
   const manifests = await kube(['get', 'deployment,statefulset,cronjob,job,configmap', '-o', 'json']);
@@ -300,6 +334,10 @@ async function checkDisclosure() {
 
 try {
   await mkdir(output, { recursive: true });
+  if (budget) {
+    step('verify qualification', 'The separate free stand-in must be reachable before setup.');
+    await requireBudgetQualification();
+  }
   // Save the wrong key privately so the collector can remove it from failure logs.
   const privateFileOptions = { mode: 0o600 };
   await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
@@ -310,12 +348,9 @@ try {
   const admin = await invite(ownerPage, 'without-assistant', 'admin');
   step('member invitation and sign-in', 'The separate member must accept the owner invitation.');
   const member = await invite(ownerPage, 'member', 'member');
-  step('Settings setup', 'The admin must complete provider setup.');
-  await connect(admin);
-  step('provider Pod recreation', 'Private custody must survive server Pod recreation.');
-  await recreateProviderPod();
-  step('member chat', 'Member chats must receive replies at both viewport widths.');
-  await memberChats(member);
+  step('Settings setup', 'Provider setup must finish before starting member chats.');
+  await connect(budget ? ownerPage : admin.page);
+  await runMemberJourney(ownerPage, admin, member);
   step('credential disclosure checks', 'No inspected artifact or event may disclose a credential.');
   await checkDisclosure();
   step('finish API disclosure inspections',
@@ -325,7 +360,9 @@ try {
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'PASS', source: git.stdout.trim(),
     outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
-  console.log('PASS packaged provider Settings, refusal, private restart and member chats at 1280/390');
+  const completion = budget ? 'provider setup, charged turns and budget refusals'
+    : 'provider Settings, refusal, private restart and member chats';
+  console.log(`PASS packaged ${completion} at 1280/390`);
 } catch (error) {
   const failure = providerFailure(stage, error);
   outcomes.push(failure);

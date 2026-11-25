@@ -67,19 +67,23 @@ Not built yet:
    Members can then get real replies. The default install keeps the stand-in.
    Fleet tasks can use provider mode with the restricted free stand-in.
    When the provider-mode server is updated, it stops before its replacement starts.
-4. **A developer opens the website.** A local port forward connects their browser
+4. **An admin sets a monthly ceiling.** In Spending, they choose the paying group
+   and enter the limit in whole euro cents. A member's reply uses that group's budget.
+   Spending shows the charge. If the admin lowers the ceiling below current spending,
+   chat explains the limit and stops the next turn before it reaches the provider.
+5. **A developer opens the website.** A local port forward connects their browser
    to the private website. A closed desktop connection leaves other requests available.
    A missing or changed cluster target stops forwarding.
-5. **A person uploads a file.** The server scans it before saving and sending it
+6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
-6. **A backup runs.** The job stops writes, drains read tables and saves matching
+7. **A backup runs.** The job stops writes, drains read tables and saves matching
    events, databases and files. It publishes a complete backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-7. **A developer restores a pilot.** A separate empty installation checks the matching
+8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-8. **A developer checks or removes an install.** Fresh-install checks use new storage
-   and verify chat and unauthenticated refusal. Cleanup checks ownership before
+9. **A developer checks or removes an install.** Fresh-install checks use new storage
+   and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
    Provider journey results name the failed step and its expected condition safely.
 

@@ -2161,6 +2161,26 @@ The [receipt](../../docs/process/p5-11-pr1/receipt.md) gives the later claim-bas
 command, source checks and live blockers. Fixtures and Stage B captures cannot
 replace live packaged checks. Full inherited product acceptance remains NOT RUN.
 
+`journey-entry.ts --budget` checks a single fresh installation with
+`models: { mode: provider, qualification: true }`. Prepare it with the exact
+checkout's approved images and private values using the
+[operator commands](#local-operator-guide). Run `package-check` and start the
+loopback forward before running the browser check. The runner requires the claimed
+namespace and the separate qualification stand-in before it begins provider setup.
+
+The owner connects the provider in Settings. A separate admin sets the paying
+group's monthly ceiling to 500 cents in Spending. At 1280 and 390 px a member
+gets a completed reply. Admin Change history supplies the reservation and charge
+for that exact turn, and Spending shows the new settled total in whole euro cents.
+The admin saves a ceiling one cent below the total. Chat shows the monthly limit
+for the next turn, and the stand-in's `/journey-counts` counter stays the same.
+It counts requests as soon as they reach `/v1/responses`, including wrong keys.
+
+Copy the masked screenshots and `result.json` from the slot's
+`package-budget-journey` directory before `package-down` and `down.sh`. On failure,
+keep the private step diagnostics and sanitised startup and service logs before
+teardown. Qualification makes zero paid calls.
+
 ## Company acceptance checklist
 
 The [company checklist](../../docs/process/p5-13-pr1/checklist.md) maps every

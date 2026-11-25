@@ -15,7 +15,7 @@ async function draft(page: Page, origin: string) {
   await page.getByText('Draft', { exact: true }).waitFor();
 }
 
-async function sendForReply(page: Page, prompt: string) {
+export async function sendForReply(page: Page, prompt: string) {
   const loadedHistory = page.locator('.transcript[aria-busy="false"]');
   await loadedHistory.waitFor({ state: 'attached' });
   const replies = page.getByRole('article', { name: 'Agent reply', exact: true });

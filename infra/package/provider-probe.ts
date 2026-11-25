@@ -1,3 +1,5 @@
+import { qualificationUpstream } from './model-settings.ts';
+
 export const wrongKeyStatusScript = `
 let input = '';
 for await (const chunk of process.stdin) {
@@ -5,12 +7,21 @@ for await (const chunk of process.stdin) {
 }
 const key = JSON.parse(input);
 const headers = { authorization: 'Bearer ' + key };
-const response = await fetch('http://model-qualification:43003/v1/models', { headers });
+const response = await fetch('http://${qualificationUpstream}/v1/models', { headers });
 const body = await response.text();
 if (body.includes(key)) {
   throw new Error('Credential disclosed by upstream');
 }
 console.log(JSON.stringify({ status: response.status }));`;
+
+export const qualificationRequestCountScript = `
+const response = await fetch('http://${qualificationUpstream}/journey-counts');
+if (!response.ok) throw new Error('Qualification request count unavailable');
+const counts = await response.json();
+if (!Number.isSafeInteger(counts.modelRequests) || counts.modelRequests < 0) {
+  throw new Error('Invalid qualification request count');
+}
+console.log(JSON.stringify(counts.modelRequests));`;
 
 export const providerEventDisclosureScript = `
 import { connectEventStore } from '@opencrane/event-store';

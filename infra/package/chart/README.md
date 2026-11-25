@@ -16,6 +16,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Schedules one nightly pilot backup on a separate volume with a read-only catalogue.
 - Includes persistent file storage and a private virus scanner for chat attachments.
 - Keeps the stand-in model by default or uses a provider connected through Settings.
+- Can use a restricted free stand-in in provider mode to check the same spending limits.
 
 ## Main files
 
@@ -48,6 +49,9 @@ to them by name. With `models.mode: provider`, the owner saves the model key in
 Settings. The startup permission check and the server and models containers mount its private volume;
 the models mount is read-only. The server Pod stops before an update starts its replacement,
 so the new models process can take the budget lock. No provider key belongs in Helm values.
+Admins set monthly ceilings in Spending, in whole euro cents. The same limits apply
+in `models: { mode: provider, qualification: true }`, where a local stand-in reports
+token usage so Spending records a charge without an external provider request.
 The optional database standby needs separately prepared credentials and a
 CloudNativePG controller. It has been checked by rendering the chart, which does
 not prove a running standby. An optional render also describes three private NATS
