@@ -175,6 +175,9 @@ async function checkSuccessfulInstall(directory, fixture, calls, result) {
     }
   }
   assert.deepEqual(helmCommands, ['template', 'install']);
+  if (fixture.expectModelFleetMarker) {
+    await checkModelFleetMarker(directory, calls);
+  }
   checkBootstrapOrder(calls, fixture.values.pilotRestore?.enabled === true);
   if (fixture.values.pilotRestore?.enabled) {
     for (const name of ['nats', 'postgres']) {
@@ -185,6 +188,41 @@ async function checkSuccessfulInstall(directory, fixture, calls, result) {
     }
   }
   assert.equal(result.stderr, '');
+}
+
+function renderCall(call) {
+  return call.program === 'helm' && call.args[0] === 'template';
+}
+
+function installCall(call) {
+  return call.program === 'helm' && call.args[0] === 'install';
+}
+
+function modelsContainer(container) {
+  return container.name === 'models';
+}
+
+function fleetMarker(entry) {
+  return entry.name === 'OPENCRANE_FLEET_TASK';
+}
+
+async function checkModelFleetMarker(directory, calls) {
+  const render = calls.find(renderCall);
+  const install = calls.find(installCall);
+  const renderSettings = render.args.slice(render.args.indexOf('--values') + 2);
+  const installSettings = install.args.slice(install.args.indexOf('--wait=false') + 1);
+  assert.deepEqual(renderSettings, installSettings, 'Check the same Helm settings that are applied');
+  const rendered = await readFile(`${directory}/rendered.yaml`, 'utf8');
+  for (const document of parseAllDocuments(rendered)) {
+    const resource = document.toJS();
+    if (resource?.kind !== 'Deployment' || resource.metadata.name !== 'server') continue;
+    const models = resource.spec.template.spec.containers.find(modelsContainer);
+    assert.ok(models, 'The server Pod runs the models container');
+    const marker = models.env.find(fleetMarker);
+    assert.equal(marker?.value, 'package-qualification', 'Models receives the fleet marker directly');
+    return;
+  }
+  assert.fail('The package renders a server Deployment');
 }
 
 function isPostgresResource(resource) {
@@ -244,6 +282,10 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1',
       PACKAGE_VALUES_FILE: undefined, PACKAGE_PUBLIC_SETTINGS_FILE: undefined };
+    if (fixture.values.models?.mode === 'provider') {
+      // Set the environment of the simulated installer, which has no live cluster.
+      env.OPENCRANE_FLEET_TASK = fixture.fleetTask;
+    }
     if (fixture.publicSettings) env.PACKAGE_PUBLIC_SETTINGS_FILE = `${directory}/public-settings.json`;
     if (environmentValues) {
       env.PACKAGE_VALUES_FILE = valuesFile;
@@ -879,6 +921,50 @@ async function providerReachesHelm() {
   await runFixture(fixture, undefined, true);
 }
 test('provider install reaches Helm without any stand-in key or upstream', providerReachesHelm);
+
+async function fleetRefusesOrdinaryProvider() {
+  const fixture = providerFixture();
+  fixture.fleetTask = '';
+  fixture.install = true;
+  await runFixture(fixture, 'Fleet tasks require the stand-in model');
+}
+test('fleet installer refuses ordinary provider prepared without a marker before Helm',
+  fleetRefusesOrdinaryProvider);
+
+async function unmarkedRefusesFleetPreparation() {
+  const fixture = providerFixture();
+  fixture.secrets.runtime.data.OPENCRANE_FLEET_TASK = encoded('package-qualification');
+  fixture.install = true;
+  await runFixture(fixture, 'Package prepared by a fleet task requires a fleet installer');
+}
+test('unmarked installer refuses ordinary provider prepared by a fleet task before Helm',
+  unmarkedRefusesFleetPreparation);
+
+function fleetQualificationFixture() {
+  const fixture = providerFixture();
+  fixture.fleetTask = 'offline-install-fixture';
+  fixture.values.models.qualification = true;
+  fixture.secrets.runtime.data.MODEL_UPSTREAM = encoded('model-qualification:43003');
+  fixture.secrets['model-qualification'] = secret({ credential: 'a'.repeat(64) });
+  fixture.install = true;
+  return fixture;
+}
+
+async function fleetQualificationWithoutUpstream() {
+  const fixture = fleetQualificationFixture();
+  delete fixture.secrets.runtime.data.MODEL_UPSTREAM;
+  await runFixture(fixture, 'Package qualification requires its separate stand-in');
+}
+test('fleet installer refuses qualification without its stand-in upstream before Helm',
+  fleetQualificationWithoutUpstream);
+
+async function fleetQualificationWithoutSavedMarker() {
+  const fixture = fleetQualificationFixture();
+  fixture.expectModelFleetMarker = true;
+  await runFixture(fixture, undefined, true);
+}
+test('fleet installer supplies the models marker when qualification was prepared without one',
+  fleetQualificationWithoutSavedMarker);
 
 for (const name of ['MODEL_KEY_FILE', 'MODEL_UPSTREAM', 'MODEL_STUB_PORT']) {
   async function refusesInheritedStandIn() {
