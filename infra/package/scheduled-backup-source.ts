@@ -208,9 +208,19 @@ class PilotBackupSource implements BackupSource {
       modelId: process.env['OPENFGA_MODEL_ID'] };
     return pilotDatabaseDetailsSchema.parse({ databases: names, lsn: this.point.lsn, access });
   }
-  async files(destination: string) {
+  private async fileReferences() {
     // Read the event-backed table after its worker has caught up and all writers have stopped.
-    const expected = await readPilotFileReferences(this.db, this.options.silo);
+    const projection = new Client(databaseConnection('PROJECTION_DATABASE_URL'));
+    try {
+      await projection.connect();
+      return await readPilotFileReferences(projection, this.options.silo);
+    } finally {
+      await projection.end();
+    }
+  }
+
+  async files(destination: string) {
+    const expected = await this.fileReferences();
     const client = await pilotStorage(this.deadline);
     const objects: { key: string; byteCount: number; sha256: string }[] = [];
     const lines: string[] = [];

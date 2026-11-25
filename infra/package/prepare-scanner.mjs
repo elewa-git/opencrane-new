@@ -22,4 +22,3 @@ const values = { chartVersion: review.chartVersion, images: review.images, secre
 await writeFile(join(directory, 'package-values.json'), JSON.stringify(values), { mode: 0o600 });
 process.stdout.write(`PASS scanner approval fetched from GitHub run ${approved.runId}\n`);
 process.stdout.write(`PASS application approval fetched from GitHub run ${application.runId}\n`);
-

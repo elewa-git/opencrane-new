@@ -27,8 +27,12 @@ it('lists and shows checked backup bytes without loading the capture runtime',
       await writeFile(destination, 'saved bytes', { mode: 0o600 });
       return { position: 1 };
     }
+    async function emptyFiles(destination: string) {
+      await writeFile(destination, '', { mode: 0o600 });
+      return { bucket: 'files', objects: [] };
+    }
     const source = { pause: position, verify: position, resume,
-      parts: { events: capture, database: capture, files: capture } };
+      parts: { events: capture, database: capture, files: emptyFiles } };
     const options = { directory, id: 'saved-backup', silo: 'test', images: { server: 'test' } };
     const manifest = await captureScheduledBackup(options, source);
     const writes: string[] = [];
