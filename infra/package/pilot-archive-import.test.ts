@@ -17,8 +17,7 @@ function destinationFixture(clusterUid: string, namespace: string, namespaceUid 
     }
     return '';
   }
-  const recorded = { namespace, namespaceUid, run };
-  const destination: ArchiveDestination = recorded;
+  const destination: ArchiveDestination = { namespace, namespaceUid, run };
   return { calls, destination };
 }
 
@@ -36,7 +35,8 @@ test('the archive may go into a fresh namespace that reuses the old name',
     const fixture = destinationFixture(source.clusterUid, source.namespace);
     const exported = { ...source, namespaceUid: 'original-id' };
     await importPilotArchive(exported, fixture.destination, 'archive.tar');
-    assert.equal(fixture.calls.at(-1)?.at(-1), 'archive.tar');
+    const extraction = fixture.calls.at(-1);
+    assert.equal(extraction?.at(-1), 'archive.tar');
   });
 
 test('the archive cannot go back into the namespace that produced it',
@@ -61,3 +61,31 @@ test('rollout and extraction both use the checked destination namespace',
       ['-n', namespace, 'exec', '-i', 'deployment/backup-catalogue', '--', 'sh']);
     assert.equal(extraction?.at(-1), 'archive.tar');
   });
+
+for (const missing of ['source cluster', 'source namespace', 'source namespace ID',
+  'destination cluster', 'destination namespace', 'destination namespace ID']) {
+  async function refusesIncompleteIdentity() {
+    const exported = { ...source, namespaceUid: 'original-id' };
+    const fixture = destinationFixture('recovery-cluster', 'recovery-namespace');
+    if (missing === 'source cluster') exported.clusterUid = '';
+    if (missing === 'source namespace') exported.namespace = '';
+    if (missing === 'source namespace ID') exported.namespaceUid = '';
+    if (missing === 'destination namespace') fixture.destination.namespace = '';
+    if (missing === 'destination namespace ID') fixture.destination.namespaceUid = '';
+    const destination = missing === 'destination cluster'
+      ? destinationFixture('', 'recovery-namespace') : fixture;
+    await assert.rejects(importPilotArchive(exported, destination.destination, 'archive.tar'),
+      /source and destination identities/u);
+    assert.equal(destination.calls.length, 1);
+  }
+  test(`archive import requires the ${missing}`, refusesIncompleteIdentity);
+}
+
+async function permitsIndependentCluster() {
+  const fixture = destinationFixture('recovery-cluster', source.namespace, 'original-id');
+  const exported = { ...source, namespaceUid: 'original-id' };
+  await importPilotArchive(exported, fixture.destination, 'archive.tar');
+  assert.equal(fixture.calls.length, 3);
+}
+
+test('matching namespace names and IDs can belong to separate clusters', permitsIndependentCluster);

@@ -144,12 +144,47 @@ async function refusesSelectedBusySlot() {
   try {
     const owner = await writeDeadOwner(fixture.slotDirectory, 1);
     await assert.rejects(exec('infra/dev-stack/claim.sh', ['--id', '1'], { env: fixture.env }));
+    assert.ok((await stat(`${fixture.home}/stack-1.lock`)).isFile());
     await assert.rejects(stat(`${fixture.home}/stack-2.lock`), { code: 'ENOENT' });
     assert.equal(await readFile(`${fixture.slotDirectory}/stack-owner`, 'utf8'), owner);
   } finally {
     await rm(fixture.home, { recursive: true, force: true });
   }
 }
+
+for (const slot of ['1', '2']) {
+  async function claimsSelectedFreeSlot() {
+    const fixture = await createClaimFixture();
+    try {
+      const claim = await exec('infra/dev-stack/claim.sh', ['--id', slot], { env: fixture.env });
+      assert.equal(claim.stdout.trim(), slot);
+      const selected = `${fixture.home}/.config/opencrane/dev-stack-${slot}/stack-owner`;
+      const owner = await readFile(selected, 'utf8');
+      assert.ok(owner.startsWith(`worktree=${process.cwd()}\n`));
+      const other = slot === '1' ? '2' : '1';
+      await assert.rejects(stat(`${fixture.home}/stack-${other}.lock`), { code: 'ENOENT' });
+    } finally {
+      await rm(fixture.home, { recursive: true, force: true });
+    }
+  }
+  test(`claim can select free slot ${slot} explicitly`, claimsSelectedFreeSlot);
+}
+
+async function refusesInvalidSlotArguments() {
+  const fixture = await createClaimFixture();
+  try {
+    for (const args of [['--id'], ['--id', 'owner'], ['--id', '3'], ['--id', '1', 'extra']]) {
+      await assert.rejects(exec('infra/dev-stack/claim.sh', args, { env: fixture.env }),
+        { code: 2, stderr: /Usage: claim.sh/u });
+    }
+    await assert.rejects(stat(`${fixture.home}/stack-1.lock`), { code: 'ENOENT' });
+    await assert.rejects(stat(`${fixture.home}/stack-2.lock`), { code: 'ENOENT' });
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+
+test('bad explicit slot arguments fail before taking a slot lock', refusesInvalidSlotArguments);
 
 async function freshClaimIsReserved() {
   const fixture = await createClaimFixture();
