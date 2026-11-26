@@ -17,10 +17,13 @@ export type RoleResult<T> = ReadResult<T> | { kind: 'invalid' }
 
 async function read(url: string, signal: AbortSignal,
   joinMayBeApplying = false): Promise<ReadResult<unknown>> {
+  function readUrl() {
+    return url;
+  }
   try {
     let response: Response;
     if (joinMayBeApplying) {
-      response = await fetchMemberRead(url, signal);
+      response = await fetchMemberRead(readUrl, signal);
     } else {
       response = await fetch(url, { headers: { accept: 'application/json' }, signal });
     }

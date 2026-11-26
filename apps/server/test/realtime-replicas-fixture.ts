@@ -21,17 +21,19 @@ interface ReplicaOptions {
 }
 
 export async function closeReplicas(cleanup: (() => Promise<unknown>)[]) {
-  let failed = false;
+  const failures: unknown[] = [];
   const remaining = cleanup.splice(0);
   remaining.reverse();
   for (const stop of remaining) {
     try {
       await stop();
-    } catch {
-      failed = true;
+    } catch (error) {
+      failures.push(error);
     }
   }
-  if (failed) throw new Error('Replica fixture cleanup failed');
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Replica fixture cleanup failed');
+  }
 }
 
 export async function startReplica(settings: NodeJS.ProcessEnv) {
@@ -43,9 +45,9 @@ export async function startReplica(settings: NodeJS.ProcessEnv) {
   }
   async function stop() {
     try {
-      await server.stop();
-    } catch {
-      throw new Error('Replica shutdown failed');
+      await server.stop('exit-only');
+    } catch (cause) {
+      throw new Error('Replica shutdown failed', { cause });
     }
   }
   return { ...server, stop };

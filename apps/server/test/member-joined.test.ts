@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, permissionStore } from '@opencrane/authz/testing';
 import { encodeSession, type SessionData } from '@opencrane/auth';
-import { connectEventStore, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { connectMemberFeed, groups, members, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -104,7 +104,6 @@ async function stopPermissions() {
 type ReaderOptions = {
   identity?: SessionData;
   feed?: GroupOptions['feed'];
-  store?: EventStore;
 };
 
 async function memberReader(options: ReaderOptions = {}) {
@@ -112,7 +111,7 @@ async function memberReader(options: ReaderOptions = {}) {
   const { binding, auth } = await permissionStore(fga, 'acme');
   const db = pgDb(dbs.queue);
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const memberReads = { silo: 'acme', store: options.store ?? nats.store, binding, db,
+  const memberReads = { silo: 'acme', store: nats.store, binding, db,
     feed: options.feed ?? feed };
   const logs: string[] = [];
   function write(line: string) {
@@ -235,9 +234,10 @@ async function refusesAmbiguousMembership(partialTable: boolean) {
   try {
     await reader.applyMember();
     const duplicate = { memberId: 'duplicate', email: session.email, displayName: 'Duplicate',
-      role: 'member', invitationId: 'duplicate-invite',
+      role: 'admin', invitationId: 'duplicate-invite',
       identity: { issuer: config.issuerUrl, sub: session.sub } };
-    await saveMemberEvent('duplicate', 'member.joined', duplicate);
+    const saved = await saveMemberEvent('duplicate', 'member.joined', duplicate);
+    await reader.apply(saved);
     if (!partialTable) {
       await runner.run(members);
     }
@@ -301,11 +301,13 @@ async function refusesBacklog() {
   const subject = 'member-other';
   const example = event('other-invitation', subject, 'member.invited');
   const unrelated = { ...example, silo: 'acme' };
+  const readHead = nats.store.head.bind(nats.store);
+  const readEvents = nats.store.readStream.bind(nats.store);
   async function head(filter?: string, deadline?: number) {
     if (filter === 'member-*') {
       return 10_002;
     }
-    return nats.store.head(filter, deadline);
+    return readHead(filter, deadline);
   }
   async function* readStream(filter: string, from = 1, deadline?: number) {
     if (filter === 'member-*') {
@@ -314,10 +316,11 @@ async function refusesBacklog() {
       }
       return;
     }
-    yield* nats.store.readStream(filter, from, deadline);
+    yield* readEvents(filter, from, deadline);
   }
-  const store = { ...nats.store, head, readStream } satisfies EventStore;
-  const reader = await memberReader({ store });
+  vi.spyOn(nats.store, 'head').mockImplementation(head);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(readStream);
+  const reader = await memberReader();
   try {
     const refused = await reader.read('/api/members');
     expect(refused.statusCode).toBe(403);
@@ -393,8 +396,9 @@ async function saveReadGuardCase(guard: GuardCase) {
 async function refusesUnconfirmedJoin(guard: GuardCase) {
   clock = new Date();
   const saved = await saveReadGuardCase(guard);
+  const readEvents = nats.store.readStream.bind(nats.store);
   async function* readStream(filter: string, from?: number, deadline?: number) {
-    for await (const row of nats.store.readStream(filter, from, deadline)) {
+    for await (const row of readEvents(filter, from, deadline)) {
       if (guard === 'wrong stream' && filter === 'member-alice'
         && row.event.id === saved?.id) {
         const wrongSubject = { ...row.event, subject: 'member-other' };
@@ -404,9 +408,8 @@ async function refusesUnconfirmedJoin(guard: GuardCase) {
       }
     }
   }
-  const store = { ...nats.store, head: nats.store.head.bind(nats.store),
-    readStream } satisfies EventStore;
-  const reader = await memberReader({ store });
+  vi.spyOn(nats.store, 'readStream').mockImplementation(readStream);
+  const reader = await memberReader();
   try {
     const refused = await reader.read('/api/members');
     const expected = guard === 'wrong stream' ? 503 : 403;
@@ -473,8 +476,12 @@ async function saveOwnershipSeed(ownerId: string) {
 async function checksIndependentOwnershipReceipt() {
   const reader = await joinedReader('admin');
   try {
-    await reader.applyMember();
+    await runner.run(members);
     await saveOwnershipSeed('admin');
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+    await reader.applyMember();
     const directory = await reader.read('/api/members');
     expect(directory.statusCode).toBe(503);
     expect(directory.json()).toEqual({ status: 'unavailable' });

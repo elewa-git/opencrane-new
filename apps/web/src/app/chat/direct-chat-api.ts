@@ -1,3 +1,4 @@
+import { retryRead } from '../core/read-retry';
 import {
   chatChangeSchema, chatColleaguesSchema, chatContextSchema, chatFeedSchema,
   chatListSchema, chatParticipantCommandSchema, chatParticipantsSchema, chatStateCommandSchema,
@@ -160,34 +161,20 @@ export async function changeParticipant(conversationId: string,
 
 // Retry only conversation reads whose saved rows or permissions are still being applied.
 // Keep POSTs and access refusals outside this retry loop.
-export async function fetchConversationRead(url: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const timeout = AbortSignal.timeout(10_000);
-  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
-  const request = { ...init, signal };
-  for (let attempt = 0; ; attempt += 1) {
-    signal.throwIfAborted();
-    const response = await fetch(url, request);
-    if ((response.status !== 425 && response.status !== 409) || attempt === 49) return response;
-    await response.body?.cancel();
-    await waitForConversationRead(signal);
+export function fetchConversationRead(url: RequestInfo | URL, init?: RequestInit) {
+  function readAttempt(signal: AbortSignal) {
+    const request = { ...init, signal };
+    return fetch(url, request);
   }
+  return retryRead(readAttempt, init?.signal, conversationReadRetry);
 }
 
-function waitForConversationRead(signal: AbortSignal): Promise<void> {
-  return new Promise<void>(scheduleRetry);
-
-  function scheduleRetry(resolve: () => void): void {
-    const timer = globalThis.setTimeout(finish, 100);
-    signal.addEventListener('abort', finish, { once: true });
-    if (signal.aborted) finish();
-
-    function finish(): void {
-      globalThis.clearTimeout(timer);
-      signal.removeEventListener('abort', finish);
-      resolve();
-    }
-  }
+function conversationStillApplying(response: Response) {
+  return response.status === 425 || response.status === 409;
 }
+
+const conversationReadRetry = { attempts: 50, delayMs: 100,
+  shouldRetry: conversationStillApplying };
 
 async function read<T>(url: string, signal: AbortSignal, schema: z.ZodType<T>,
   fetcher: typeof fetch = fetch)

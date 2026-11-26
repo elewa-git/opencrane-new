@@ -1,7 +1,7 @@
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { legacyMemberRole, memberJoinedDataSchema, type MemberJoinedData } from '@opencrane/events';
+import { legacyMemberRole } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import type { Query } from '@opencrane/projections';
 
@@ -12,24 +12,22 @@ const fields = z.object({
   expiresAt: z.string().optional(),
 });
 
-export function invitationJoin(row: StoredEvent | undefined) {
-  if (row?.event.type !== 'member.joined') return undefined;
-  const joined = memberJoinedDataSchema.parse(row.event.data);
-  if (!joined.invitationId) return undefined;
-  return joined;
+export type MemberAccount = z.infer<typeof identityFields>;
+
+function sameAccount(identity: MemberAccount, account: MemberAccount) {
+  return identity.issuer === account.issuer && identity.sub === account.sub;
 }
 
-function admission(rows: StoredEvent[], issuer: string, subject: string, now: Date) {
+function admission(rows: StoredEvent[], account: MemberAccount, now: Date) {
   let bound = false;
   let conflicting = false;
   let role: string | undefined;
-  let latestMembership: StoredEvent | undefined;
   let pending = false;
   for (const row of rows) {
     const data = fields.parse(row.event.data);
     const identity = data.invitedIdentity ?? data.identity;
     if (identity) {
-      if (identity.issuer === issuer && identity.sub === subject) {
+      if (sameAccount(identity, account)) {
         bound = true;
       } else {
         conflicting = true;
@@ -38,7 +36,6 @@ function admission(rows: StoredEvent[], issuer: string, subject: string, now: Da
     const nextRole = legacyMemberRole(row.event);
     if (nextRole !== undefined) {
       role = nextRole;
-      latestMembership = row;
       pending = false;
     }
     if (row.event.type === 'member.invited' && role === undefined) {
@@ -53,7 +50,7 @@ function admission(rows: StoredEvent[], issuer: string, subject: string, now: Da
   } else if (pending) {
     membership = 'pending';
   }
-  return { membership, bound, conflicting, latestMembership };
+  return { membership, bound, conflicting };
 }
 
 function memberSequence(rows: StoredEvent[]) {
@@ -76,12 +73,12 @@ async function memberStreams(store: Pick<EventStore, 'readStream'>, silo: string
   return streams;
 }
 
-export async function deriveAdmission(store: EventStore, silo: string, issuer: string,
-  subject: string, now: Date, deadline: number) {
+export async function deriveAdmission(store: EventStore, silo: string, account: MemberAccount,
+  now: Date, deadline: number) {
   const streams = await memberStreams(store, silo, deadline);
   const existing = [];
   for (const [stream, rows] of streams) {
-    const state = admission(rows, issuer, subject, now);
+    const state = admission(rows, account, now);
     if (state.bound && ['joined', 'pending'].includes(state.membership)) {
       if (state.conflicting) return { status: 'identity_mismatch' as const };
       const candidate = {
@@ -95,9 +92,9 @@ export async function deriveAdmission(store: EventStore, silo: string, issuer: s
   if (existing.length > 1) return { status: 'ambiguous' as const };
   if (existing[0]) return existing[0];
   for (let number = 0; number < 20; number++) {
-    const memberId = `admission-${sha256HexOfJson([silo, issuer, subject, number])}`;
+    const memberId = `admission-${sha256HexOfJson([silo, account.issuer, account.sub, number])}`;
     const rows = await history(store, `member-${memberId}`, silo, deadline);
-    const state = admission(rows, issuer, subject, now);
+    const state = admission(rows, account, now);
     if (state.membership === 'removed') continue;
     if (state.conflicting) return { status: 'identity_mismatch' as const };
     return { memberId, memberSequence: memberSequence(rows), membership: state.membership };
@@ -108,60 +105,73 @@ export async function deriveAdmission(store: EventStore, silo: string, issuer: s
 interface IdentityCandidate extends Record<string, unknown> {
   sequence: string | number;
   member_id: string | null;
+  status: string | null;
 }
 
 type IdentityStore = Pick<EventStore, 'readStream' | 'head'>;
 
-async function projectedIdentity(db: Query, silo: string, issuer: string, subject: string) {
+async function projectedIdentity(db: Query, silo: string, account: MemberAccount) {
   // Read the ids and checkpoint together so a rebuild cannot mix two versions of the table.
   const result = await db.query<IdentityCandidate>(
-    `SELECT checkpoint.sequence, candidate.member_id
+    `SELECT checkpoint.sequence, candidate.member_id, candidate.status
       FROM projection_checkpoints AS checkpoint
       LEFT JOIN (
-        SELECT members.member_id FROM members
+        SELECT members.member_id, members.status FROM members
         JOIN member_identities AS identity USING (silo, member_id)
         WHERE members.silo = $1 AND identity.issuer = $2 AND identity.sub = $3
       ) AS candidate ON true
-      WHERE checkpoint.name = 'members' LIMIT 101`, [silo, issuer, subject]);
+      WHERE checkpoint.name = 'members' LIMIT 101`, [silo, account.issuer, account.sub]);
   const sequence = Number(result.rows[0]?.sequence);
   if (!Number.isSafeInteger(sequence) || sequence < 0 || result.rows.length > 100) {
     throw new Error('Identity projection unavailable');
   }
-  const candidates = new Set<string>();
+  const candidates = new Map<string, boolean>();
   for (const row of result.rows) {
     if (row.member_id !== null) {
-      candidates.add(`member-${row.member_id}`);
+      candidates.set(`member-${row.member_id}`, row.status === 'joined');
     }
   }
   return { sequence, candidates };
 }
 
-async function includeUnprojectedIdentities(store: IdentityStore, silo: string, issuer: string,
-  subject: string, sequence: number, memberHead: number, candidates: Set<string>,
-  deadline: number) {
-  if (sequence >= memberHead) return;
-  let read = 0;
+type IdentityProjection = Awaited<ReturnType<typeof projectedIdentity>>;
+type IdentityRead = { silo: string; memberSequence: number; deadline: number };
+
+async function includeUnprojectedIdentities(store: IdentityStore, account: MemberAccount,
+  projected: IdentityProjection, read: IdentityRead) {
+  const { sequence, candidates } = projected;
+  const { memberSequence, silo, deadline } = read;
+  if (sequence >= memberSequence) {
+    return true;
+  }
+  let count = 0;
   let lastSequence = sequence;
-  // Read only the unapplied events. A delayed projection must not hide a recent join.
+  // Read only what the table has yet to apply so it cannot hide a newer admission.
   for await (const row of store.readStream('member-*', sequence + 1, deadline)) {
-    if (row.sequence > memberHead) break;
-    read += 1;
-    if (row.event.silo !== silo || read > 10_000) {
+    if (row.sequence > memberSequence) {
+      break;
+    }
+    if (row.event.silo !== silo) {
       throw new Error('Identity history unavailable');
+    }
+    count += 1;
+    if (count > 10_000) {
+      return false;
     }
     lastSequence = row.sequence;
     const data = fields.parse(row.event.data);
     const identity = data.invitedIdentity ?? data.identity;
-    if (identity?.issuer === issuer && identity.sub === subject) {
-      candidates.add(row.event.subject);
+    if (identity && sameAccount(identity, account) && !candidates.has(row.event.subject)) {
+      candidates.set(row.event.subject, false);
     }
     if (candidates.size > 100) {
       throw new Error('Too many matching members');
     }
   }
-  if (lastSequence !== memberHead) {
+  if (lastSequence !== memberSequence) {
     throw new Error('Identity history incomplete');
   }
+  return true;
 }
 
 async function identityHistory(store: IdentityStore, memberSubject: string, silo: string,
@@ -177,30 +187,45 @@ async function identityHistory(store: IdentityStore, memberSubject: string, silo
   return rows;
 }
 
+type ActiveIdentity = {
+  status: 'active';
+  memberId: string;
+  memberSequence: number;
+  projectedSequence: number;
+  projectedJoined: boolean;
+};
+
+type IdentityResult = ActiveIdentity | {
+  status: 'none' | 'ambiguous' | 'backlog';
+  memberSequence: number;
+};
+
 export async function readActiveIdentity(store: IdentityStore, db: Query, silo: string,
-  issuer: string, subject: string, now: Date) {
+  account: MemberAccount, now: Date): Promise<IdentityResult> {
   const deadline = performance.now() + 10_000;
-  const memberHead = await store.head('member-*', deadline);
-  const projected = await projectedIdentity(db, silo, issuer, subject);
-  await includeUnprojectedIdentities(store, silo, issuer, subject, projected.sequence,
-    memberHead, projected.candidates, deadline);
-  let active = false;
-  let joiningRole: MemberJoinedData['role'] | undefined;
-  for (const candidate of projected.candidates) {
-    const rows = await identityHistory(store, candidate, silo, memberHead, deadline);
-    const state = admission(rows, issuer, subject, now);
+  const projected = await projectedIdentity(db, silo, account);
+  const memberSequence = await store.head('member-*', deadline);
+  const read = { silo, memberSequence, deadline };
+  const complete = await includeUnprojectedIdentities(store, account, projected, read);
+  if (!complete) {
+    return { status: 'backlog', memberSequence };
+  }
+  let active: ActiveIdentity | undefined;
+  for (const [candidate, projectedJoined] of projected.candidates) {
+    const rows = await identityHistory(store, candidate, silo, memberSequence, deadline);
+    const state = admission(rows, account, now);
     if (state.conflicting && state.bound) {
       throw new Error('Identity history mismatch');
     }
-    if (state.bound && state.membership === 'joined') {
-      // Keep admission blocked for an ambiguous account and never label its access as applying.
-      if (active) return { active, memberSequence: memberHead, joiningRole: undefined };
-      active = true;
-      const latest = state.latestMembership;
-      if (latest && latest.sequence > projected.sequence) {
-        joiningRole = invitationJoin(latest)?.role;
-      }
+    if (!state.bound || state.membership !== 'joined') {
+      continue;
     }
+    // Refuse a known conflict even if a later table lookup would return one member.
+    if (active) {
+      return { status: 'ambiguous', memberSequence };
+    }
+    active = { status: 'active', memberId: candidate.slice('member-'.length), memberSequence,
+      projectedSequence: projected.sequence, projectedJoined };
   }
-  return { active, memberSequence: memberHead, joiningRole };
+  return active ?? { status: 'none', memberSequence };
 }

@@ -1,17 +1,30 @@
 import { memberDirectorySchema } from '@opencrane/protocol';
-import { classifyStatus, waitForNextRead, type FailureKind } from './groups-api';
+import { z } from 'zod';
+import { retryRead } from '../core/read-retry';
+import { classifyStatus, type FailureKind } from './groups-api';
 
 export type MemberDirectory = ReturnType<typeof memberDirectorySchema.parse>;
+const accessApplying = z.strictObject({ status: z.literal('access_applying') });
+
 type DirectoryResult = { kind: 'ok'; value: MemberDirectory }
   | { kind: FailureKind; status: number } | { kind: 'unavailable' };
 
 export async function searchMembers(
-  query: string, after: string, signal: AbortSignal,
+  query: string, after: string, signal: AbortSignal, onApplying?: () => void,
 ): Promise<DirectoryResult> {
   const parameters = new URLSearchParams({ q: query.slice(0, 100), after, limit: '20' });
-  const url = `/api/members?${parameters.toString()}`;
+  function url() {
+    return `/api/members?${parameters.toString()}`;
+  }
+  function discardCursor() {
+    // Start over because the cursor may be from the previous account.
+    if (onApplying) {
+      parameters.set('after', '');
+      onApplying();
+    }
+  }
   try {
-    const response = await fetchMemberRead(url, signal);
+    const response = await fetchMemberRead(url, signal, discardCursor);
     if (!response.ok) {
       return { kind: classifyStatus(response.status, 'GET'), status: response.status };
     }
@@ -24,16 +37,38 @@ export async function searchMembers(
   }
 }
 
-export async function fetchMemberRead(url: string, signal: AbortSignal): Promise<Response> {
-  const deadline = AbortSignal.timeout(10_000);
-  const readSignal = AbortSignal.any([signal, deadline]);
-  const request = { headers: { accept: 'application/json' }, signal: readSignal };
-  // Read again only while the server confirms the signed-in person's join is still applying.
-  for (let attempt = 0; ; attempt += 1) {
-    readSignal.throwIfAborted();
-    const response = await fetch(url, request);
-    if (response.status !== 425 || attempt === 10) return response;
-    await response.body?.cancel();
-    await waitForNextRead(readSignal);
+export function fetchMemberRead(url: () => string, signal: AbortSignal,
+  onApplying?: () => void) {
+  function readAttempt(readSignal: AbortSignal) {
+    const request = { headers: { accept: 'application/json' }, signal: readSignal };
+    return fetch(url(), request);
   }
+
+  function shouldRetry(response: Response) {
+    if (response.status !== 425) {
+      return false;
+    }
+    return readApplyingReply(response);
+  }
+
+  async function readApplyingReply(response: Response) {
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch (error) {
+      // Ignore non-JSON intermediary replies and let cancellation or transport errors end the read.
+      if (error instanceof SyntaxError) {
+        return false;
+      }
+      throw error;
+    }
+    if (!accessApplying.safeParse(body).success) {
+      return false;
+    }
+    onApplying?.();
+    return true;
+  }
+
+  const retry = { attempts: 11, delayMs: 500, shouldRetry };
+  return retryRead(readAttempt, signal, retry);
 }

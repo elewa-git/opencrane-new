@@ -440,8 +440,8 @@ async function refusesWhenOpenFgaDeniesAnEventAdmin() {
 it('refuses an event Admin when OpenFGA denies the admin relation',
   refusesWhenOpenFgaDeniesAnEventAdmin);
 function admissionForInvitee() {
-  return deriveAdmission(nats.store, 'acme', config.issuerUrl, 'invitee',
-    new Date(), performance.now() + 10_000);
+  const account = { issuer: config.issuerUrl, sub: 'invitee' };
+  return deriveAdmission(nats.store, 'acme', account, new Date(), performance.now() + 10_000);
 }
 async function keepsAdmissionsSeparate() {
   const firstResult = await admissionForInvitee();
@@ -575,16 +575,17 @@ it('removal refuses the email check while the identity mapping and IAM still gra
   deniesRemovedManager);
 
 async function refusesAdmissionLimits() {
+  const account = { issuer: config.issuerUrl, sub: 'limited-invitee' };
   for (let number = 0; number < 20; number++) {
-    const result = await deriveAdmission(nats.store, 'acme', config.issuerUrl, 'limited-invitee',
-      new Date(), performance.now() + 10_000);
+    const result = await deriveAdmission(nats.store, 'acme', account, new Date(),
+    performance.now() + 10_000);
     if (!('memberId' in result)) throw new Error('Expected an unused admission');
     await appendIdentity(result.memberId, 'member.removed',
       { memberId: result.memberId, removedBy: 'owner' });
   }
   const before = await nats.store.head();
-  const result = await deriveAdmission(nats.store, 'acme', config.issuerUrl, 'limited-invitee',
-    new Date(), performance.now() + 10_000);
+  const result = await deriveAdmission(nats.store, 'acme', account, new Date(),
+    performance.now() + 10_000);
   expect(result).toEqual({ status: 'admission_limit' });
   expect(await nats.store.head()).toBe(before);
 }

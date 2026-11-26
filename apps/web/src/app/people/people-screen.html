@@ -154,6 +154,8 @@
       (click)="create()">{{ sending() ? 'Creating…' : 'Create group' }}</button>
   </div>
 </oc-hinge-drawer>
-<oc-invite-panel [allowed]="inviteAllowed()" [selectedTab]="selectedTab()"
-  (accessLost)="clearForAccessChange($event)"
-  (showInvitations)="select('invitations')" />
+@if (inviteAllowed()) {
+  <oc-invite-panel [allowed]="inviteAllowed()" [selectedTab]="selectedTab()"
+    (accessLost)="clearForAccessChange($event)"
+    (showInvitations)="select('invitations')" />
+}

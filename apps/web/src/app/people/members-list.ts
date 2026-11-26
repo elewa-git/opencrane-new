@@ -43,10 +43,7 @@ export class MembersList implements OnInit, OnDestroy {
     this.search.set(query);
     this.generation += 1;
     this.readInFlight = false;
-    this.rows.set([]);
-    this.next.set(null);
-    this.count.set(undefined);
-    this.loadedAt.set(undefined);
+    this.clearRows();
     void this.load('');
   }
 
@@ -87,9 +84,26 @@ export class MembersList implements OnInit, OnDestroy {
     if (this.readInFlight || this.request.signal.aborted || this.state() === 'access') return;
     this.readInFlight = true;
     const generation = this.generation;
-    if (after) this.loadingMore.set(true);
-    else this.state.set('loading');
-    const result = await searchMembers(this.search(), after, this.request.signal);
+    let replaceRows = !after;
+    const query = this.search();
+    const request = this.request.signal;
+    function applying(this: MembersList) {
+      if (request.aborted || generation !== this.generation) {
+        return;
+      }
+      // Clear the previous directory before waiting for the current account.
+      replaceRows = true;
+      this.clearRows();
+      this.loadingMore.set(false);
+      this.invitePermission.emit(false);
+      this.state.set('loading');
+    }
+    if (after) {
+      this.loadingMore.set(true);
+    } else {
+      this.state.set('loading');
+    }
+    const result = await searchMembers(query, after, request, applying.bind(this));
     if (this.request.signal.aborted) return;
     if (result.kind === 'access_changed') {
       this.clearForAccessChange(result.status);
@@ -105,15 +119,15 @@ export class MembersList implements OnInit, OnDestroy {
     }
     const directory = result.value;
     this.invitePermission.emit(directory.permissions.invite);
-    if (after) {
+    if (replaceRows) {
+      this.rows.set(directory.rows);
+    } else {
       const known = new Set(this.rows().map(memberId));
       const additional: Member[] = [];
       for (const member of directory.rows) {
         if (!known.has(member.memberId)) additional.push(member);
       }
       this.rows.set([...this.rows(), ...additional]);
-    } else {
-      this.rows.set(directory.rows);
     }
     this.next.set(directory.next);
     this.count.set(directory.counts.members.status === 'current'
@@ -128,14 +142,18 @@ export class MembersList implements OnInit, OnDestroy {
     this.request.abort();
     this.readInFlight = false;
     this.loadingMore.set(false);
-    this.rows.set([]);
     this.search.set('');
-    this.next.set(null);
-    this.count.set(undefined);
-    this.loadedAt.set(undefined);
+    this.clearRows();
     this.invitePermission.emit(false);
     this.state.set('access');
     this.accessLost.emit(status);
+  }
+
+  private clearRows(): void {
+    this.rows.set([]);
+    this.next.set(null);
+    this.count.set(undefined);
+    this.loadedAt.set(undefined);
   }
 }
 

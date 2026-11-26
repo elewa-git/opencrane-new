@@ -298,11 +298,6 @@
       "count": 2
     }
   },
-  "apps/server/src/members/admission.ts": {
-    "max-params": {
-      "count": 3
-    }
-  },
   "apps/server/src/members/bootstrap.ts": {
     "max-params": {
       "count": 1

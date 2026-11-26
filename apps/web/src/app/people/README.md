@@ -2,9 +2,23 @@
 
 This folder shows People & groups and its member, group and owner pages. Owners and admins can manage membership, review access, create shared assistants and check the outcome of changes.
 
+## Where it fits
+
+```mermaid
+flowchart LR
+  web["Website"] --> organisation["Organisation navigation"]
+  web --> people["People & groups"]
+  web --> chat["Chat"]
+  organisation -->|opens| people
+  people -->|reads member details| server["Server"]
+```
+
 ## What it is responsible for
 
-- Searches and pages through current members, lists groups and creates local groups. It reads again for a few seconds while a new member's access is being set up. Temporary failures keep earlier rows. Access refusals clear both lists.
+- Searches and pages through current members, lists groups and creates local groups.
+  While the server sets up the signed-in person's access, the page clears earlier
+  member rows and hides **Invite people**. It reads again for a few seconds.
+  Ordinary temporary failures keep earlier rows. Access refusals clear both lists.
 - Shows a member's role, groups, assistant and granted access. Phone layouts use labelled cards. Restricted readers see only the permitted name and role.
 - Changes Member and Admin roles, and reviews departures before removal. The review names lost access, affected personal [computers](../../../../../GLOSSARY.md#computer), shared work needing a decision and retained history. Pending role and removal requests cannot overlap.
 - Adds active members to local groups and reviews removals. Changes wait for both saved data and permissions to catch up. Groups managed by a company sign-in service keep their membership controls separate.
