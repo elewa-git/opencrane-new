@@ -195,7 +195,10 @@ async function sanitisesShutdown() {
     process.once('SIGTERM', () => process.exit(2));`);
   const server = await startReplica(settings);
   onTestFinished(server.stop);
-  await expect(server.stop()).rejects.toEqual(new Error('Replica shutdown failed'));
+  const failed = server.stop();
+  const expected = { message: 'Replica shutdown failed',
+    cause: { message: 'Server did not stop cleanly (exit code 2, signal none)' } };
+  await expect(failed).rejects.toMatchObject(expected);
   expect((await server.exited).code).toBe(2);
 }
 

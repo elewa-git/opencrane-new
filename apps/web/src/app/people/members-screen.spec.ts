@@ -95,7 +95,7 @@ it('loads the directory and invite button when the new admin’s access is ready
   showsPeopleAfterJoinApplies);
 
 function inviteButton(fixture: ComponentFixture<PeopleScreen>) {
-  return root(fixture).querySelector<HTMLButtonElement>('.page-actions button.primary');
+  return root(fixture).querySelector<HTMLButtonElement>('.page-actions button.primary:not([hidden])');
 }
 
 async function clearsDirectoryWhenNewSessionIsApplying(succeeds: boolean) {

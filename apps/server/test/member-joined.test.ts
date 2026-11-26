@@ -60,6 +60,9 @@ afterEach(async () => {
 function server(store: JoinStore) {
   return buildServer(config, { membership: { silo: 'acme', store, db: pgDb(dbs.queue), now: () => clock } });
 }
+function currentTestSession() {
+  return { ...session, authTime: Math.floor(clock.getTime() / 1_000) };
+}
 function sessionHeaders(identity: SessionData) {
   return {
     'content-type': 'application/json', origin: 'https://app.example.test',
@@ -153,7 +156,7 @@ async function joinedReader(role: 'admin' | 'member', recent = true) {
   }
   const tomorrow = new Date(clock.getTime() + 86_400_000);
   await invite({ role, invitedIdentity: undefined, expiresAt: tomorrow.toISOString() });
-  const signedIn = { ...session, authTime: Math.floor(clock.getTime() / 1_000) };
+  const signedIn = currentTestSession();
   const joined = await accept(input, signedIn);
   expect(joined.statusCode, joined.body).toBe(200);
   expect(joined.json()).toMatchObject({ status: 'joined' });
@@ -221,13 +224,14 @@ async function refusesAmbiguousMembership(partialTable: boolean) {
   clock = new Date();
   const expiresAt = new Date(clock.getTime() + 86_400_000).toISOString();
   await invite({ expiresAt });
-  const join = await accept();
-  expect(join.statusCode).toBe(200);
+  const signedIn = currentTestSession();
+  const join = await accept(input, signedIn);
+  expect(join.statusCode, join.body).toBe(200);
   const memberId = vi.fn().mockResolvedValue('alice');
   if (!partialTable) {
     memberId.mockResolvedValueOnce(undefined);
   }
-  const reader = await memberReader({ feed: { memberId } });
+  const reader = await memberReader({ identity: signedIn, feed: { memberId } });
   try {
     await reader.applyMember();
     const duplicate = { memberId: 'duplicate', email: session.email, displayName: 'Duplicate',
@@ -257,7 +261,7 @@ async function readsAsReturningAdmin() {
     const { data } = invitation({ memberId: returning.memberId, invitationId: returning.invitationId,
       invitedIdentity: undefined, expiresAt });
     await saveMemberEvent('returning', 'member.invited', data);
-    const signedIn = { ...session, authTime: Math.floor(clock.getTime() / 1_000) };
+    const signedIn = currentTestSession();
     const joined = await accept(returning, signedIn);
     expect(joined.statusCode, joined.body).toBe(200);
     const applying = await reader.read('/api/members');
@@ -419,7 +423,7 @@ async function refusesMissingProjectedJoin() {
   const expiresAt = new Date(clock.getTime() + 86_400_000).toISOString();
   await invite({ expiresAt });
   await runner.run(members);
-  const joined = await accept();
+  const joined = await accept(input, currentTestSession());
   expect(joined.statusCode, joined.body).toBe(200);
   const sequence = await nats.store.head('member-alice');
   // Simulate a broken rebuild that advanced past the join but left only the invitation.
