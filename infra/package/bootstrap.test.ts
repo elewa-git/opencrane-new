@@ -299,6 +299,10 @@ async function bootstrapClusterFixture() {
   }
 }
 
+function setupSubject(request: { subject: string }) {
+  return request.subject;
+}
+
 async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
   const cluster = await bootstrapClusterFixture();
   try {
@@ -316,6 +320,8 @@ async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
     const bootstrap = await bootstrapFixture({ ...clusterSettings(cluster),
       NATS_REPLICAS: '3', COMMAND_NATS_REPLICAS: '3' }, readiness);
     await bootstrap.provisionEvents();
+    const setupSubjects = bootstrap.requests.map(setupSubject);
+    expect(setupSubjects).not.toContain('$JS.API.STREAM.CREATE.EVENTS');
     const connection = await cluster.client(cluster.peers[0]!);
     const stream = await streamInfo(connection);
     expect(stream.config.num_replicas).toBe(3);

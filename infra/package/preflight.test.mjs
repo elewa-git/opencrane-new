@@ -86,6 +86,21 @@ for (const [name, change, expected] of refusals) {
   test(`${name} fails before installation`, verifyRefusal);
 }
 
+function refusesImageReviewedOnlyForAnotherRole() {
+  const { directory, values, review } = fixture();
+  review.images.computer = `registry.local/computer@sha256:${'b'.repeat(64)}`;
+  values.images.computer = review.images.server;
+  try {
+    const result = check(values, review, directory);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Image is absent from the reviewed list: computer/u);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+}
+test('a digest reviewed for a different role cannot be used for the computer',
+  refusesImageReviewedOnlyForAnotherRole);
+
 function cnpgFixture() {
   const setup = fixture();
   setup.values.images.postgres = `registry.local/cnpg-postgres:17.6@${digest}`;

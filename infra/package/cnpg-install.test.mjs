@@ -253,6 +253,16 @@ async function checkRenderedDatabase(directory, fixture, callText) {
   }
 }
 
+function fixtureInstallScript(valuesArgument, publicError) {
+  const installer = JSON.stringify(`${source}/infra/dev-stack/packaged.ts`);
+  const errors = JSON.stringify(`${source}/infra/dev-stack/package-error.ts`);
+  const message = publicError ? "'Error: ' + packageCommandMessage(error)" : 'error';
+  return `import { installPackage } from ${installer};
+    import { packageCommandMessage } from ${errors};
+    try { await installPackage(${valuesArgument}); }
+    catch (error) { console.error(${message}); process.exitCode = 1; }`;
+}
+
 async function runFixture(fixture, expected, renders = false, environmentValues = false) {
   const directory = await mkdtemp(`${tmpdir()}/cnpg-install-`);
   try {
@@ -275,18 +285,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     if (environmentValues) {
       valuesArgument = 'process.env.PACKAGE_VALUES_FILE';
     }
-    const packageError = JSON.stringify(`${source}/infra/dev-stack/package-error.ts`);
-    const script = `import { installPackage } from ${JSON.stringify(`${source}/infra/dev-stack/packaged.ts`)};
-      import { packageCommandMessage } from ${packageError};
-      try { await installPackage(${valuesArgument}); }
-      catch (error) {
-        if (${fixture.failComputerPull === true}) {
-          console.error('Error: ' + packageCommandMessage(error));
-        } else {
-          console.error(error);
-        }
-        process.exitCode = 1;
-      }`;
+    const script = fixtureInstallScript(valuesArgument, Boolean(fixture.publicError));
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1',
@@ -319,7 +318,12 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     } else {
       assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
     }
-    if (fixture.failComputerPull) await checkComputerPullRefusal(directory, calls);
+    if (fixture.helmStderr) {
+      await checkComputerPullRefusal(directory, calls);
+    }
+    if (fixture.pullNodes) {
+      checkPlannedComputerPulls(calls, fixture.pullNodes);
+    }
     if (renders) await checkRenderedDatabase(directory, fixture, callText);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -332,21 +336,111 @@ async function checkComputerPullRefusal(directory, calls) {
   assert.equal(installer.args.includes('--no-hooks'), false);
   assert.equal(calls.some(patchesComputerGateway), false);
   assert.equal(calls.some(usesBootstrapJob), false);
-  for (const call of calls) assert.equal(call.args.includes('rollout'), false);
+  for (const call of calls) {
+    assert.equal(call.args.includes('rollout'), false);
+  }
   const owner = JSON.parse(await readFile(`${directory}/package-owner.json`, 'utf8'));
   assert.equal(owner.releaseSecretUid, 'installed', 'Cleanup can remove the failed release');
 }
 
-async function refusesFailedComputerPull() {
+function computerPullFixture() {
   const fixture = validFixture();
   fixture.values.postgres = { mode: 'standalone' };
   fixture.install = true;
-  fixture.failComputerPull = true;
-  await runFixture(fixture, 'Computer image pre-pull failed. Check the Job and its Pod events.', true);
+  fixture.publicError = true;
+  return fixture;
 }
 
-test('a failed computer image pull stops the install before it checks readiness',
-  refusesFailedComputerPull);
+const pullJob = 'computer-image-prepull-0123456789ab';
+const genericPackageRefusal = 'Package command refused; check pins, named secrets and slot ownership';
+const noComputerNodes = 'Computer image pre-pull needs a node that accepts computer Pods';
+
+function helm3Failure(name, reason) {
+  return 'Error: INSTALLATION FAILED: failed pre-install: 1 error occurred:\n' +
+    `\t* job ${name} failed: ${reason}\n`;
+}
+
+const pullFailures = [
+  ['Helm 3 deadline', helm3Failure(pullJob, 'DeadlineExceeded'), 'DeadlineExceeded'],
+  ['Helm 3 backoff', helm3Failure(pullJob, 'BackoffLimitExceeded'), 'BackoffLimitExceeded'],
+  ['Helm 4 failure', 'Error: INSTALLATION FAILED: failed pre-install: resource ' +
+    `Job/opencrane-package-1/${pullJob} not ready. status: Failed, message: Job Failed. failed: 1/1\n`,
+  'JobFailed'],
+  ['unrelated Job', helm3Failure('bootstrap', 'DeadlineExceeded')],
+  ['malformed pull Job', helm3Failure('computer-image-prepull-wrong', 'DeadlineExceeded')],
+  ['unrecognised reason', helm3Failure(pullJob, 'UnexpectedReason')],
+  ['extra text in the failure line', helm3Failure(pullJob, `DeadlineExceeded ${canary}`)],
+  ['unrelated Helm 4 namespace', 'Error: INSTALLATION FAILED: failed pre-install: resource ' +
+    `Job/other/${pullJob} not ready. status: Failed, message: Job Failed. failed: 1/1\n`],
+];
+
+for (const [name, output, reason] of pullFailures) {
+  async function refusesPull() {
+    const fixture = computerPullFixture();
+    fixture.helmStderr = `${canary}\n${output}${canary}\n`;
+    let message = genericPackageRefusal;
+    if (reason) {
+      message = `Computer image pre-pull failed for Job ${pullJob} (${reason}). Check its Pod events.`;
+    }
+    await runFixture(fixture, message, true);
+  }
+  test(`${name} stops installation and shows only checked details`, refusesPull);
+}
+
+for (const version of ['Helm 3', 'Helm 4']) {
+  async function showsNoComputerNodes() {
+    const fixture = computerPullFixture();
+    const location = 'opencrane-local/templates/computer-image-pull.yaml:17:8';
+    const prefix = 'Error: INSTALLATION FAILED: execution error at';
+    fixture.helmStderr = `${prefix} (${location}): ${noComputerNodes}\n`;
+    await runFixture(fixture, noComputerNodes, true);
+  }
+  test(`${version} shows the all-cordoned chart refusal`, showsNoComputerNodes);
+}
+
+function computerNode(name, spec = {}) {
+  return { metadata: { name, uid: `${name}-uid` }, spec };
+}
+
+function checkPlannedComputerPulls(calls, expectedNodes) {
+  const install = calls.find(installCall);
+  assert.ok(install);
+  const setting = install.args.indexOf('--set-json');
+  assert.notEqual(setting, -1, 'Helm receives the exact list counted by the installer');
+  assert.equal(install.args[setting + 1], `computerImagePullNodes=${JSON.stringify(expectedNodes)}`);
+}
+
+async function allowsFourSerialPulls() {
+  const fixture = computerPullFixture();
+  fixture.pullNodes = ['node-a', 'node-b', 'node-c', 'node-d'];
+  const items = fixture.pullNodes.map(computerNodeFromName);
+  items.push(computerNode('cordoned', { unschedulable: true }));
+  items.push(computerNode('dedicated', { taints: [{ effect: 'NoSchedule' }] }));
+  items.push(computerNode('evicted', { taints: [{ effect: 'NoExecute' }] }));
+  fixture.nodes = { items };
+  fixture.pullElapsedMs = 4 * 110_000;
+  await runFixture(fixture, undefined, true);
+}
+
+function computerNodeFromName(name) {
+  return computerNode(name);
+}
+
+test('the install command allows four serial 110-second image pulls', allowsFourSerialPulls);
+
+async function refusesUncordonedNodeAtReadiness() {
+  const fixture = computerPullFixture();
+  fixture.pullNodes = ['node-a'];
+  const first = computerNode('node-a');
+  const cordoned = computerNode('node-b', { unschedulable: true });
+  fixture.nodes = { items: [first, cordoned] };
+  fixture.nodesAtReadiness = { items: [first, computerNode('node-b')] };
+  const message = 'A node began accepting computer Pods during installation. Start a fresh install.';
+  await runFixture(fixture, message, true);
+}
+
+test('a node that becomes schedulable before readiness stops installation',
+  refusesUncordonedNodeAtReadiness);
 
 const cases = [
   ['missing API', ['api'], {}],

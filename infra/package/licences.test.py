@@ -1585,6 +1585,22 @@ else:
         self.assertEqual(result.returncode, 1)
         self.assertIn("Debian main", result.stderr)
 
+    def test_computer_inventory_must_match_the_reviewed_image_pin(self):
+        reviewed_path = source.with_name("reviewed-images.json")
+        reviewed = checker.read_json(reviewed_path)
+        reviewed["images"]["computer"] = reviewed["images"]["nats"]
+        read_json = checker.read_json
+
+        def read_with_wrong_role(path):
+            if path == reviewed_path:
+                return reviewed
+            return read_json(path)
+
+        with patch.object(checker, "read_json", side_effect=read_with_wrong_role):
+            with self.assertRaisesRegex(
+                    ValueError, "computer licence inventory does not match its image pin"):
+                checker.main({})
+
     def test_real_inventory_passes(self):
         result = subprocess.run(
             [sys.executable, str(source)], capture_output=True, text=True, check=False)

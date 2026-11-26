@@ -123,36 +123,58 @@ function renderedResources(values, flags = []) {
   return resources;
 }
 
-function checkComputerImagePull(values, flags, hook) {
-  const resources = renderedResources(values, flags);
-  const computer = resources.get('SandboxTemplate/computer').spec.podTemplate.spec;
-  const job = resources.get('Job/computer-image-prepull');
-  assert.ok(job, 'Render a Job that pulls the computer image before applying workloads');
-  const hooks = job.metadata.annotations['helm.sh/hook'].split(',');
-  assert.ok(hooks.includes(hook), `Helm must wait for the Job during ${hook}`);
-  const puller = job.spec.template.spec;
-  assert.equal(puller.containers[0].image, values.images.computer);
-  assert.equal(puller.containers[0].image, computer.containers[0].image);
-  assert.equal(puller.containers[0].imagePullPolicy, computer.containers[0].imagePullPolicy);
-  assert.equal(puller.runtimeClassName, computer.runtimeClassName);
-  assert.equal(puller.automountServiceAccountToken, false);
-  assert.equal(puller.restartPolicy, 'Never');
+function checkPullJob(job, image) {
+  const annotations = job.metadata.annotations;
+  assert.equal(annotations['helm.sh/hook'], 'pre-install');
+  assert.equal(annotations['helm.sh/hook-delete-policy'], 'before-hook-creation,hook-succeeded');
   assert.equal(job.spec.backoffLimit, 0);
-  assert.ok(job.spec.activeDeadlineSeconds > 0, 'An unavailable image must fail the Job');
+  assert.equal(job.spec.activeDeadlineSeconds, 120);
+  assert.equal(job.spec.ttlSecondsAfterFinished, 120);
+  const pod = job.spec.template.spec;
+  assert.equal(pod.runtimeClassName, 'gvisor');
+  assert.equal(pod.automountServiceAccountToken, false);
+  assert.equal(pod.serviceAccountName, undefined);
+  assert.equal(pod.volumes, undefined);
+  assert.equal(pod.restartPolicy, 'Never');
+  const [puller] = pod.containers;
+  assert.equal(puller.image, image);
+  assert.equal(puller.imagePullPolicy, 'IfNotPresent');
+  assert.deepEqual(puller.command, ['/bin/true']);
+  const security = puller.securityContext;
+  assert.equal(security.runAsUser, 65534);
+  assert.equal(security.runAsNonRoot, true);
+  assert.equal(security.allowPrivilegeEscalation, false);
+  assert.equal(security.readOnlyRootFilesystem, true);
+  assert.deepEqual(security.capabilities, { drop: ['ALL'] });
+  assert.equal(puller.volumeMounts, undefined);
 }
 
 function pullsOnInstall() {
-  checkComputerImagePull(chartValues(), [], 'pre-install');
+  const values = chartValues();
+  const resources = renderedResources(values);
+  const computer = resources.get('SandboxTemplate/computer').spec.podTemplate.spec;
+  assert.equal(computer.runtimeClassName, 'gvisor');
+  assert.equal(computer.containers[0].image, values.images.computer);
+  assert.equal(computer.containers[0].imagePullPolicy, 'IfNotPresent');
+  const job = resources.get('Job/computer-image-prepull');
+  assert.ok(job, 'Offline approval checks must see the Job image');
+  checkPullJob(job, values.images.computer);
 }
 
-function pullsOnUpgrade() {
+function skipsPullOnUpgrade() {
   const values = chartValues();
-  values.images.computer = `example.invalid/computer@sha256:${'b'.repeat(64)}`;
-  checkComputerImagePull(values, ['--is-upgrade'], 'pre-upgrade');
+  const flags = ['--is-upgrade'];
+  const resources = renderedResources(values, flags);
+  for (const [name, resource] of resources) {
+    if (name.startsWith('Job/computer-image-prepull')) {
+      assert.notEqual(resource.metadata.annotations['helm.sh/hook'], 'pre-install,pre-upgrade');
+      assert.fail('The install-only image pull Job must be absent on upgrade');
+    }
+  }
 }
 
 test('the chart pulls the pinned computer image before install', pullsOnInstall);
-test('the chart pulls the new pinned computer image before upgrade', pullsOnUpgrade);
+test('the chart omits the install-only pull Jobs on upgrade', skipsPullOnUpgrade);
 
 function nodeApi(nodes) {
   const resources = [{ name: 'nodes', kind: 'Node', namespaced: false, verbs: ['list'] }];
@@ -215,6 +237,7 @@ async function pullsOnAllComputerNodes() {
     { metadata: { name: 'node-b' }, spec: {} },
     { metadata: { name: 'cordoned' }, spec: { unschedulable: true } },
     { metadata: { name: 'dedicated' }, spec: { taints: [taint] } },
+    { metadata: { name: 'evicted' }, spec: { taints: [{ ...taint, effect: 'NoExecute' }] } },
   ];
   const rendered = await renderForNodes(nodes);
   const pulledNodes = [];
@@ -224,6 +247,8 @@ async function pullsOnAllComputerNodes() {
     if (resource?.kind !== 'Job' || !resource.metadata.name.startsWith('computer-image-prepull')) {
       continue;
     }
+    const values = chartValues();
+    checkPullJob(resource, values.images.computer);
     const affinity = resource.spec.template.spec.affinity.nodeAffinity;
     const [term] = affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms;
     const [field] = term.matchFields;

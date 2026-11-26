@@ -21,12 +21,18 @@ const hooks = { load };
 registerHooks(hooks);
 const original = childProcess.execFile;
 let installed = false;
+let checkedRollout = false;
 function kubernetes(args) {
   const context = fixture.cluster ? 'k3d-opencrane-target-1' : 'k3d-ocn';
   assert(args.includes(`--context=${context}`) || args[args.indexOf('--context') + 1] === context);
-  if (args.includes('nodes')) return fixture.nodes ?? { items: [
-    { metadata: { name: 'fixture-node', uid: 'fixture-node-uid' } },
-  ] };
+  if (args.includes('nodes')) {
+    if (checkedRollout && fixture.nodesAtReadiness) {
+      return fixture.nodesAtReadiness;
+    }
+    return fixture.nodes ?? { items: [
+      { metadata: { name: 'fixture-node', uid: 'fixture-node-uid' } },
+    ] };
+  }
   if (args.includes('run') || args.includes('wait') || args.includes('delete')) return '';
   if (args.includes('logs')) return { swaps: 'Filename Type Size Used Priority\n',
     corePattern: '\n', coreUsesPid: '0\n', crypttab: '', mappings: [] };
@@ -47,7 +53,11 @@ function kubernetes(args) {
   }
   assert.equal(args[args.indexOf('-n') + 1], 'opencrane-package-1');
   if (fixture.install) {
-    if (args.includes('configmap') || args.includes('rollout')) {
+    if (args.includes('rollout')) {
+      checkedRollout = true;
+      return '';
+    }
+    if (args.includes('configmap')) {
       return '';
     }
     if (args.includes('job')) {
@@ -78,6 +88,12 @@ function kubernetes(args) {
   if (fixture.invalidJson === name) return fixture.canary;
   return fixture.secrets[name] ?? '';
 }
+function failHelmInstall(callback) {
+  const error = new Error(fixture.canary);
+  error.stderr = fixture.helmStderr;
+  callback(error, '', error.stderr);
+}
+
 function execute(program, args, options, callback) {
   appendFileSync('calls.jsonl', JSON.stringify({ program, args }) + '\n');
   if (program === 'node' || program === process.execPath || program === 'openssl') return original(program, args, options, callback);
@@ -105,12 +121,12 @@ function execute(program, args, options, callback) {
       assert.deepEqual(JSON.parse(readFileSync(valuesPath, 'utf8')), fixture.values);
       if (args[0] === 'install') {
         installed = true;
-        if (fixture.failComputerPull) {
-          const failure = 'Error: INSTALLATION FAILED: failed pre-install: 1 error occurred:\n' +
-            '\t* job computer-image-prepull-0123456789ab failed: DeadlineExceeded\n';
-          const error = new Error(fixture.canary);
-          error.stderr = failure;
-          callback(error, '', failure);
+        if (fixture.pullElapsedMs > options.timeout) {
+          callback(new Error('The installer stopped before all pull Jobs could finish'), '', '');
+          return;
+        }
+        if (fixture.helmStderr) {
+          failHelmInstall(callback);
           return;
         }
         callback(null, '', '');
