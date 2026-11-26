@@ -1,6 +1,37 @@
 # Watch the computer and save a screenshot
 
-## Corrected build on 26 November 2026
+## Fresh journey run 2 on 26 November 2026
+
+**PARTIAL** on commit `845ac02c1`. One fresh slot 1 stack ran Chromium
+with the free stand-in provider from 20:34 to 21:02 UTC. Fresh startup, stack
+health, the core browser journey and teardown all passed.
+
+| Expected result | 1280 px | 390 px |
+| --- | --- | --- |
+| A member watches their personal computer, saves a PNG and reopens it | PASS · [Viewer](run-2/fresh-personal-viewer-1280.png) · [Saved PNG](run-2/fresh-personal-reloaded-preview-1280.png) | PASS · [Viewer](run-2/fresh-personal-viewer-390.png) · [Saved PNG](run-2/fresh-personal-reloaded-preview-390.png) |
+| A shared-chat reader watches the computer and saves a PNG | FAIL · viewer timed out | FAIL · browser timed out |
+| An active member outside the shared chat is refused with zero pixels | PASS · [Browser](run-2/fresh-shared-non-participant-1280.png) | PASS · [Browser](run-2/fresh-shared-non-participant-390.png) |
+| A signed-in outsider without silo membership is refused with zero pixels | PASS · [Browser](run-2/fresh-shared-outsider-1280.png) | PASS · [Browser](run-2/fresh-shared-outsider-390.png) |
+| Removal closes the socket and clears the picture within 2 s in the core journey | PASS · [181 ms](run-2/core-removal-1280.png) | PASS · [470 ms](run-2/core-removal-390.png) |
+| Removal closes an open view in the shared chat | NOT RUN | NOT RUN |
+
+The personal screenshots reopened from the chat and the session panel after
+reload. Both downloads matched their saved digests. Both refusal identities
+received HTTP 403 for view and capture at both widths. Each browser opened
+zero desktop sockets and showed zero desktop canvases. Refused access to a
+saved shared PNG was **NOT RUN** because shared capture timed out.
+
+At 1280 px the shared reader could read the chat and the server issued a view
+ticket. The viewer waited 20 seconds for **Viewing**, and the server recorded
+no WebSocket upgrade for that ticket. The reader saw the access-lost screen
+after reopening the chat for the removal check. The shared viewer never
+opened during the removal checks. [Reader after reopening](run-2/shared-reader-reopen-1280.png)
+
+The first browser command ended after the 390 px shared capture timeout.
+The remaining checks continued on the same stack. Startup and service logs
+were saved before teardown. [Measured results](run-2/results.json)
+
+## Fresh journey run 1 on 26 November 2026
 
 **NOT RUN** on source commit `f71ef74e82d36ee61df277ca21a6b98edc027854`.
 The planned environment was a fresh slot 1 dev stack, Chromium and the free
