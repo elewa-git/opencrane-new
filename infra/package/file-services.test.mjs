@@ -62,6 +62,44 @@ function isEvidenceVolume(volume) {
   return volume.name === 'evidence';
 }
 
+function packageAllowsScannerOnlyRollouts() {
+  const resources = renderFileServices();
+  const scanner = resources.get('Deployment/scanner');
+  assert.deepEqual(scanner.spec.strategy, {
+    type: 'RollingUpdate', rollingUpdate: { maxUnavailable: 0, maxSurge: 1 },
+  });
+  const config = resources.get('ConfigMap/scanner-config');
+  assert.equal(config.data['approved-manifests'].trim(), `sha256:${'c'.repeat(64)}`);
+  const server = resources.get('Deployment/server').spec.template.spec;
+  const application = server.containers.find(isServer);
+  assert.ok(application.env.some(isApprovalFile));
+  assert.ok(application.volumeMounts.some(isApprovalMount));
+  const source = scanner.spec.template.spec.volumes.find(isEvidenceSource);
+  assert.equal(source.projected.sources[0].secret.name, 'test-scanner');
+  assert.equal(source.projected.sources[1].secret.name, 'test-scanner');
+}
+
+function isServer(container) {
+  return container.name === 'server';
+}
+
+function isApprovalFile(variable) {
+  return variable.name === 'SCANNER_APPROVED_MANIFEST_FILE' &&
+    variable.value === '/run/scanner-approval/approved-manifests';
+}
+
+function isApprovalMount(mount) {
+  return mount.name === 'scanner-approval' && mount.readOnly &&
+    mount.mountPath === '/run/scanner-approval' && !mount.subPath;
+}
+
+function isEvidenceSource(volume) {
+  return volume.name === 'evidence-source';
+}
+
+test('a scanner rollout keeps a ready replica and shares the checked manifest file',
+  packageAllowsScannerOnlyRollouts);
+
 function isEvidenceCopy(container) {
   return container.name === 'copy-evidence';
 }

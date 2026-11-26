@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -153,6 +153,29 @@ async function exactUpload() {
   expect(requests).toHaveLength(1);
 }
 test('stores exact clean bytes once and preserves the hash upload identity', exactUpload);
+
+async function readsApprovedManifestsPerUpload() {
+  const previousDigest = settings.manifestDigest;
+  const nextDigest = `sha256:${'c'.repeat(64)}`;
+  settings.approvedManifestFile = join(directory, 'approved-manifests');
+  await writeFile(settings.approvedManifestFile, `${previousDigest}\n${nextDigest}\n`);
+  await upload();
+  function useNewManifest(result) {
+    result.manifestDigest = nextDigest;
+  }
+  mode = useNewManifest;
+  await upload();
+  vi.clearAllMocks();
+  await writeFile(settings.approvedManifestFile, `${nextDigest}\n`);
+  mode = '';
+  await refused();
+  await writeFile(settings.approvedManifestFile, `${previousDigest}\ninvalid\n`);
+  await refused();
+  await rm(settings.approvedManifestFile);
+  await refused();
+}
+test('accepts either approved manifest during a rollout and fails closed without the file',
+  readsApprovedManifestsPerUpload);
 const invalid = [
   ['request', { requestId: randomUUID() }], ['silo', { silo: 'other' }],
   ['purpose', { purpose: 'image' }], ['file', { fileId: randomUUID() }],
