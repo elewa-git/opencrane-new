@@ -189,6 +189,25 @@ function drainReply(draining = false, enabled = false): Response {
   return new Response(JSON.stringify(status));
 }
 
+async function hidesPauseAfterStatusRead() {
+  function fetchReply(input: RequestInfo | URL) {
+    const path = requestPath(input);
+    expect(path).toBe('/api/org/providers/primary/drain');
+    return Promise.resolve(drainReply());
+  }
+  vi.stubGlobal('fetch', fetchReply);
+  const fixture = TestBed.createComponent(ProviderChat);
+  const untested = { ...provider, status: 'connected_not_tested' };
+  fixture.componentRef.setInput('provider', untested);
+  fixture.detectChanges();
+  await fixture.componentInstance.checkStatus();
+  fixture.detectChanges();
+  const element = fixtureElement(fixture);
+  expect(findButton(element, 'Pause new calls')).toBeUndefined();
+}
+it('hides Pause new calls for an unready connection after checking chat setup',
+  hidesPauseAfterStatusRead);
+
 function bindingPositions(): Response {
   const status = { expectedProviderSequence: 7, chatDefault: null };
   return new Response(JSON.stringify(status));
