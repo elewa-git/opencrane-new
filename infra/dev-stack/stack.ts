@@ -956,7 +956,7 @@ try {
         !process.stdin.isTTY || process.env['OPENCRANE_FLEET_TASK'] !== undefined)) {
       requireOwnerRun(ownerRun);
     }
-  } else if (flags.length > 0 ||
+  } else if (flags.length > 1 ||
       (flag && action !== 'package-up' && action !== 'package-rollback')) {
     throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   }
@@ -1007,6 +1007,7 @@ try {
     process.exit(0);
   }
   if (action?.startsWith('package-')) {
+    prepared = secondary && directoryPresent && (await readStackOwner())?.worktree === root;
     if (action === 'package-prepare') {
       if (await stackProcessIsRunning()) {
         throw new Error('A Compose stack already uses this secondary slot');
