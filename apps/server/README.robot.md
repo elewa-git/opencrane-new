@@ -6456,7 +6456,9 @@ Without it, upload scans return the typed 503 before sending bytes.
 It must carry strict clean/infected status, image/manifest digests and all three
 database files with valid hashes, versions and build dates. The upstream update
 check must be within 24 hours; expiry is capped by that check, the pass and two minutes.
-After the access recheck, the caller checks expiry and unchanged bytes before storage.
+The packaged server reads `SCANNER_APPROVED_MANIFEST_FILE` instead. It accepts up to
+two hashes while the scanner is being replaced. After the access recheck, it reads
+the approval again and checks expiry and unchanged bytes before storage.
 Unknown responses produce a fixed scanner 503; verified infection retains rejection.
 There is no browser proof, result cache or TCP fallback. Direct daemon tests keep
 their adapter under test support; they do not qualify the authenticated deployment.

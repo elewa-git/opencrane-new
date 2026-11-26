@@ -31,7 +31,7 @@ import { fileListApplying } from './list.ts';
 export interface FileOptions extends Omit<ChatOptions, 'keys'> {
   objects: Client;
   scan(bytes: Buffer, binding: { silo: string; fileId: string }):
-    Promise<() => 'clean' | 'infected'>;
+    Promise<() => 'clean' | 'infected' | Promise<'clean' | 'infected'>>;
 }
 
 const id = recordIdSchema;
@@ -386,7 +386,7 @@ export async function uploadFile(
   const binding = { silo: options.silo, fileId };
   const validate = await options.scan(bytes, binding);
   await fresh?.();
-  const verdict = validate();
+  const verdict = await validate();
   if (sha256Digest(bytes) !== sha256) {
     throw new FileUnavailable('scanner');
   }

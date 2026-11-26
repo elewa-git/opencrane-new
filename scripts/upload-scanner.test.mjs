@@ -412,7 +412,7 @@ async function twoSilos() {
   const second = { silo: 'other', fileId: 'b'.repeat(64) };
   const results = await Promise.all([scanFile(settings, bytes, first),
     scanFile(other, Buffer.from('Other silo'), second)]);
-  expect(results[0]()).toBe('clean');
-  expect(results[1]()).toBe('clean');
+  expect(await results[0]()).toBe('clean');
+  expect(await results[1]()).toBe('clean');
 }
 test('interleaves two trusted silos through the real wrapper with hash file ids', twoSilos);

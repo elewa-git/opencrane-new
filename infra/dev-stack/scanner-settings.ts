@@ -94,7 +94,7 @@ export async function scannerReady(settings: { SCANNER_URL: string; SCANNER_CA_F
       manifestDigest: settings.SCANNER_MANIFEST_DIGEST, ...identity };
     const checked = await scanFile(scanSettings, sample, binding);
     // Require the same reply checks that an upload uses before accepting this scanner.
-    return checked() === 'clean';
+    return await checked() === 'clean';
   } catch {
     return false;
   }

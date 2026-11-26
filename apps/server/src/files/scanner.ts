@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { FileUnavailable } from './refusals.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
+// Allow one serving scanner and its replacement during a rolling update.
 const approvedDigests = z.array(digest).min(1).max(2);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/u);
 const date = z.iso.datetime();
@@ -43,12 +44,17 @@ function requireFreshDatabase(now: number, updated: number, expires: number) {
 }
 
 async function approvedManifests(settings: ScannerSettings) {
-  if (settings.approvedManifestFile === undefined) {
-    return [digest.parse(settings.manifestDigest)];
+  try {
+    if (settings.approvedManifestFile === undefined) {
+      return [digest.parse(settings.manifestDigest)];
+    }
+    const contents = await readFile(settings.approvedManifestFile, 'utf8');
+    const text = contents.trimEnd();
+    return approvedDigests.parse(text.split('\n'));
+  } catch {
+    // Keep file paths and parser details out of upload refusals.
+    throw new FileUnavailable('scanner');
   }
-  const contents = await readFile(settings.approvedManifestFile, 'utf8');
-  const text = contents.trimEnd();
-  return approvedDigests.parse(text.split('\n'));
 }
 
 export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding: UploadBinding) {
@@ -63,7 +69,7 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
     sha256: hash(bytes), byteCount: bytes.length };
   async function prepare() {
     requireScan(settings.url && settings.caFile && settings.privateKeyPath && settings.issuer);
-    const manifests = await approvedManifests(settings);
+    await approvedManifests(settings);
     requireScan(binding.silo === settings.silo && bytes.length <= 20 * 1024 * 1024);
     const url = new URL(settings.url);
     requireScan(url.protocol === 'https:' && !url.username && !url.password &&
@@ -87,7 +93,9 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
     const value = await exchange(url, options, bytes);
     requireScan(performance.now() - elapsedStart < 60000 && Date.now() - started < 60000);
     const result = resultSchema.parse(value);
-    function validate() {
+    async function validate() {
+      // Read the mounted file again after the reply and at final admission.
+      const manifests = await approvedManifests(settings);
       const now = Date.now();
       const checked = Date.parse(result.checkedAt);
       const expires = Date.parse(result.expiresAt);
@@ -110,7 +118,7 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
         bytes.length === input.byteCount && hash(bytes) === input.sha256);
       return result.verdict;
     }
-    validate();
+    await validate();
     return validate;
   }
   function aborted(_resolve: unknown, reject: (error: Error) => void) {
