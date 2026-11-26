@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { sharedCertificates, certificates, issueCertificate }
   from '../../libs/event-store/test/certificates.ts';
 import { parseAllDocuments } from 'yaml';
+import { assertScannerFiles, isEvidenceSource, isServer } from './file-services-fixture.mjs';
 
 function chartValues() {
   const digest = 'a'.repeat(64);
@@ -941,19 +942,16 @@ async function stubMatchesDefaultAndKeepsOtherSettings() {
   assert.equal(original.status, 0, original.stderr);
   const baseline = await originalChartRender(values);
   const currentResources = resourceMap(original.stdout);
-  removeScannerRefreshSettings(currentResources);
+  removeScannerRefreshSettings(currentResources, values.secrets.scanner);
   assert.deepEqual(currentResources, resourceMap(baseline));
   values.models = { mode: 'stub' };
   assert.equal(renderChart(values).stdout, original.stdout);
 }
 
-function removeScannerRefreshSettings(resources) {
+function removeScannerRefreshSettings(resources, scannerSecret) {
   // Compare everything outside scanner refresh with the original install.
   delete resources.get('ConfigMap/scanner-config').data['approved-manifests'];
   const server = resources.get('Deployment/server').spec.template.spec;
-  function isServer(container) {
-    return container.name === 'server';
-  }
   const application = server.containers.find(isServer);
   function keepVariable(variable) {
     return variable.name !== 'SCANNER_APPROVED_MANIFEST_FILE';
@@ -967,10 +965,8 @@ function removeScannerRefreshSettings(resources) {
 
   const scanner = resources.get('Deployment/scanner').spec;
   delete scanner.strategy;
-  function isEvidenceSource(volume) {
-    return volume.name === 'evidence-source';
-  }
   const volume = scanner.template.spec.volumes.find(isEvidenceSource);
+  assertScannerFiles(volume, scannerSecret);
   volume.secret = { secretName: volume.projected.sources[0].secret.name };
   delete volume.projected;
 }

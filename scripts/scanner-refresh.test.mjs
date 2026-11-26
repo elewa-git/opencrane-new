@@ -17,6 +17,14 @@ function mockPublisher() {
   return { publishPackageImage: vi.fn() };
 }
 
+function mockDelay() {
+  async function advanceOnProjection() {
+    vi.setSystemTime(Date.now() + 2000);
+  }
+  return { setTimeout: advanceOnProjection };
+}
+vi.mock('node:timers/promises', mockDelay);
+
 function clearTestState() {
   vi.useRealTimers();
   vi.resetAllMocks();
@@ -173,14 +181,15 @@ function scannerRollout(fixture, args) {
     throw new Error('Scanner did not become ready');
   }
   scanner.status = readyStatus(scanner.metadata.generation);
+  clusterState.afterRollout?.(fixture);
   return '';
 }
 
 function projectApproval(fixture, args) {
   expect(args).toEqual(['--request-timeout=10s', 'exec', 'deployment/server', '-c', 'server',
     '--', 'cat', approvedFile]);
-  fixture.clusterState.onProject?.(fixture);
-  return fixture.config.data['approved-manifests'];
+  const actual = fixture.clusterState.onProject?.(fixture);
+  return actual ?? fixture.config.data['approved-manifests'];
 }
 
 function cluster() {
@@ -377,3 +386,180 @@ async function repeatReportsReadinessFailure() {
 }
 test('a repeat refresh reports readiness failure with the approval still in place',
   repeatReportsReadinessFailure);
+
+const installDrift = [
+  ['server container', 'server.spec.template.spec.containers.0.name', 'other'],
+  ['server approval variable', 'server.spec.template.spec.containers.0.env.0.name', 'other'],
+  ['server approval path', 'server.spec.template.spec.containers.0.env.0.value', '/wrong/file'],
+  ['server mount name', 'server.spec.template.spec.containers.0.volumeMounts.0.name', 'other'],
+  ['server mount path', 'server.spec.template.spec.containers.0.volumeMounts.0.mountPath', '/wrong'],
+  ['server read-only mount', 'server.spec.template.spec.containers.0.volumeMounts.0.readOnly', false],
+  ['server mount subPath', 'server.spec.template.spec.containers.0.volumeMounts.0.subPath', 'file'],
+  ['server mount subPathExpr', 'server.spec.template.spec.containers.0.volumeMounts.0.subPathExpr', 'file'],
+  ['server volume name', 'server.spec.template.spec.volumes.0.name', 'other'],
+  ['server ConfigMap name', 'server.spec.template.spec.volumes.0.configMap.name', 'other'],
+  ['server replica count', 'server.spec.replicas', 2],
+  ['scanner replica count', 'scanner.spec.replicas', 2],
+  ['scanner rollout strategy', 'scanner.spec.strategy.type', 'Recreate'],
+  ['scanner maximum unavailable', 'scanner.spec.strategy.rollingUpdate.maxUnavailable', 1],
+  ['scanner maximum surge', 'scanner.spec.strategy.rollingUpdate.maxSurge', 2],
+  ['scanner engine name', 'scanner.spec.template.spec.containers.0.name', 'other'],
+  ['scanner engine image', 'scanner.spec.template.spec.containers.0.image', newRelease.image],
+  ['scanner wrapper name', 'scanner.spec.template.spec.containers.1.name', 'other'],
+  ['scanner wrapper image variable', 'scanner.spec.template.spec.containers.1.env.0.name', 'other'],
+  ['scanner wrapper image pin', 'scanner.spec.template.spec.containers.1.env.0.value', newRelease.image],
+  ['manifest hash variable', 'scanner.spec.template.spec.containers.1.env.1.name', 'other'],
+  ['database copy name', 'scanner.spec.template.spec.initContainers.1.name', 'other'],
+  ['database copy image', 'scanner.spec.template.spec.initContainers.1.image', newRelease.image],
+  ['scanner evidence volume', 'scanner.spec.template.spec.volumes.0.name', 'other'],
+  ['scanner evidence source count', 'scanner.spec.template.spec.volumes.0.projected.sources', []],
+  ['scanner trust source', 'scanner.spec.template.spec.volumes.0.projected.sources.0.secret', {}],
+  ['scanner evidence source', 'scanner.spec.template.spec.volumes.0.projected.sources.1.secret.name', 'other'],
+  ['installed image binding', 'runningRelease.imageDigest', `sha256:${'a'.repeat(64)}`],
+  ['installed manifest binding', 'runningRelease.manifestDigest', `sha256:${'a'.repeat(64)}`],
+  ['installed check time', 'runningRelease.databaseUpdatedAt', 'no date'],
+  ['installed future check time', 'runningRelease.databaseUpdatedAt', '2100-01-01T00:00:00Z'],
+  ['previous approval membership', 'config.data.approved-manifests', `sha256:${'a'.repeat(64)}\n`],
+];
+
+function changeField(object, path, value) {
+  const names = path.split('.');
+  const field = names.pop();
+  let parent = object;
+  for (const name of names) {
+    parent = parent[name];
+  }
+  parent[field] = value;
+}
+
+function expectInstallUnchanged(fixture, previous) {
+  expect(fixture.scanner).toEqual(previous.scanner);
+  expect(fixture.server).toEqual(previous.server);
+  expect(fixture.config.data).toEqual(previous.approval);
+  expect(publishPackageImage).not.toHaveBeenCalled();
+  expect(fixture.patches).toEqual([]);
+}
+
+function snapshotInstall(fixture) {
+  const { scanner, server, config } = fixture;
+  return structuredClone({ scanner, server, approval: config.data });
+}
+
+async function refusesChangedSettings(_description, path, value) {
+  const fixture = cluster();
+  changeField(fixture, path, value);
+  const previous = snapshotInstall(fixture);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'install' });
+  expectInstallUnchanged(fixture, previous);
+}
+test.each(installDrift)('refuses changed %s before touching the installed package', refusesChangedSettings);
+
+async function refusesMalformedInstalledPin(field) {
+  const fixture = cluster();
+  const pod = fixture.scanner.spec.template.spec;
+  if (field === 'image') {
+    const badDigest = `sha256:${'g'.repeat(64)}`;
+    const badImage = `registry.invalid/scanner@${badDigest}`;
+    pod.containers[0].image = badImage;
+    pod.initContainers[1].image = badImage;
+    pod.containers[1].env[0].value = badImage;
+    fixture.runningRelease.imageDigest = badDigest;
+  } else {
+    const badHash = 'g'.repeat(64);
+    pod.containers[1].env[1].value = badHash;
+    fixture.runningRelease.manifestDigest = `sha256:${badHash}`;
+    fixture.config.data['approved-manifests'] = `sha256:${badHash}\n`;
+  }
+  const previous = snapshotInstall(fixture);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'install' });
+  expectInstallUnchanged(fixture, previous);
+}
+test.each(['image', 'manifest hash'])('refuses malformed %s even when all installed pins match',
+  refusesMalformedInstalledPin);
+
+const busyScannerStates = [
+  ['unobserved generation', 'scanner.status.observedGeneration', 0],
+  ['outstanding replica', 'scanner.status.replicas', 2],
+  ['old replica in service', 'scanner.status.updatedReplicas', 0],
+];
+async function refusesUnsettledScanner(_description, path, value) {
+  const fixture = cluster();
+  changeField(fixture, path, value);
+  const previous = snapshotInstall(fixture);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'busy' });
+  expectInstallUnchanged(fixture, previous);
+}
+test.each(busyScannerStates)('leaves an unrelated rollout with %s in place', refusesUnsettledScanner);
+
+async function leavesTheNewerReadyScanner() {
+  const fixture = cluster();
+  vi.setSystemTime(Date.now() - 60_000);
+  const installedTime = Date.now();
+  vi.setSystemTime(installedTime + 60_000);
+  fixture.runningRelease.databaseUpdatedAt = new Date(Date.now());
+  const previous = snapshotInstall(fixture);
+  const result = await refreshScanner(fixture.kubectl);
+  expect(result).toMatchObject({ status: 'newer-installed', image: runningImage, sha: runningSha });
+  expectInstallUnchanged(fixture, previous);
+}
+test('keeps a ready installed scanner when the available approval cannot advance its check time',
+  leavesTheNewerReadyScanner);
+
+async function refusesFileThatNeverArrives() {
+  const fixture = cluster();
+  function missingFile() {
+    return fixture.initialApproval['approved-manifests'];
+  }
+  fixture.clusterState.onProject = missingFile;
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'projection' });
+  expect(fixture.patches).toEqual(['configmap/scanner-config', 'configmap/scanner-config']);
+  expect(fixture.scanner.spec.template).toEqual(fixture.initialTemplate);
+  expect(fixture.config.data).toEqual(fixture.initialApproval);
+}
+test('keeps the old approval when the server never sees the staged file', refusesFileThatNeverArrives);
+
+async function refusesExpiredBeforePatch() {
+  const fixture = cluster();
+  function reachExpiry() {
+    vi.setSystemTime(Date.now() + 86_400_000);
+  }
+  fixture.clusterState.onProject = reachExpiry;
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'expired' });
+  expect(fixture.patches).toEqual(['configmap/scanner-config', 'configmap/scanner-config']);
+  expect(fixture.scanner.spec.template).toEqual(fixture.initialTemplate);
+  expect(fixture.config.data).toEqual(fixture.initialApproval);
+}
+test('refuses a release that expires while waiting for the server file', refusesExpiredBeforePatch);
+
+const competingChanges = [
+  ['deployment identity', 'scanner.metadata.uid', 'new-uid'],
+  ['generation with the same template', 'scanner.metadata.generation', 3],
+  ['template with the same identity and generation', 'scanner.spec.template.metadata', { labels: { other: 'change' } }],
+];
+async function failedRolloutDoesNotOverwriteChanges(_description, path, value) {
+  const fixture = cluster();
+  fixture.clusterState.failedImage = newRelease.image;
+  function changeDeployment() {
+    changeField(fixture, path, value);
+  }
+  fixture.clusterState.onRollout = changeDeployment;
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'changed' });
+  expect(fixture.patches).toEqual(['configmap/scanner-config', 'deployment/scanner']);
+  expect(fixture.config.data['approved-manifests']).toContain(`sha256:${runningSha}\n`);
+}
+test.each(competingChanges)('keeps both checked approvals when rollback finds a different %s',
+  failedRolloutDoesNotOverwriteChanges);
+
+async function refusedPatchKeepsExistingApproval() {
+  const fixture = cluster();
+  fixture.clusterState.refusePatch = true;
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'patch' });
+  expect(fixture.patches).toEqual([
+    'configmap/scanner-config', 'deployment/scanner', 'configmap/scanner-config',
+  ]);
+  expect(fixture.scanner.spec.template).toEqual(fixture.initialTemplate);
+  expect(fixture.scanner.status).toEqual(readyStatus(1));
+  expect(fixture.config.data).toEqual(fixture.initialApproval);
+}
+test('restores the exact approval when Kubernetes refuses the template patch',
+  refusedPatchKeepsExistingApproval);
