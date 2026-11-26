@@ -1,71 +1,11 @@
 {
-  "journey": "PASS",
-  "source": "bda841ca866b7988797906aff48e99f41c7fc995",
+  "source": "7acb49a90b2146381a0bc98ae2641ccf7cd473d0",
   "slot": 1,
-  "steps": {
-    "installation": "PASS",
-    "uploadBefore1280": "PASS",
-    "uploadBefore390": "PASS",
-    "approvedRefresh": "PASS",
-    "uploadAfter1280": "PASS",
-    "uploadAfter390": "PASS",
-    "mismatchedImage": "PASS",
-    "cleanup": "PASS"
-  },
-  "namespaceUid": "67db27a3-4ad8-4f3c-a864-522ad8785260",
-  "installId": "b7278f0c-f40c-494e-a732-00171d2aa71a",
-  "freshVolumeClaims": [
-    {
-      "name": "backups",
-      "uid": "8d163f66-33bc-41a5-b21f-5addc4e570b0",
-      "createdAt": "2026-11-26T19:44:58Z"
-    },
-    {
-      "name": "data-nats-0",
-      "uid": "22694a3b-b7b3-41a4-8740-37f08a3326ed",
-      "createdAt": "2026-11-26T19:44:58Z"
-    },
-    {
-      "name": "data-objects-0",
-      "uid": "ad9a368d-00dd-4daf-b872-277da21dff52",
-      "createdAt": "2026-11-26T19:44:58Z"
-    },
-    {
-      "name": "data-postgres-0",
-      "uid": "cab96cf3-059a-43c3-9454-70c6831d43ba",
-      "createdAt": "2026-11-26T19:44:58Z"
-    },
-    {
-      "name": "home-computer-8758be48bf6edde9f441c77886319c13",
-      "uid": "328639d4-d107-421b-abe2-1237c1ec7e63",
-      "createdAt": "2026-11-26T19:46:12Z"
-    },
-    {
-      "name": "pilot-restore",
-      "uid": "2aac1ebd-c67a-4fcf-867b-623edb4b4557",
-      "createdAt": "2026-11-26T19:44:58Z"
-    }
-  ],
-  "applicationApproval": {
-    "revision": "bda841ca866b7988797906aff48e99f41c7fc995",
-    "runId": 45882914633,
-    "imageDigest": "sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731"
-  },
-  "initialScannerApproval": {
-    "revision": "bda841ca866b7988797906aff48e99f41c7fc995",
-    "runId": 45882919803,
-    "imageDigest": "sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
-    "manifestDigest": "sha256:e8d7c2b30319733a0eef0b3757b9d39fa8f4f771059f5231cacc01d960a01050",
-    "databaseUpdatedAt": "2026-11-26T19:21:16.712Z"
-  },
-  "newerScannerApproval": {
-    "revision": "b51b587aa531d8702aae53c49608a2d4d5efe5ef",
-    "runId": 45883138189,
-    "imageDigest": "sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-    "manifestDigest": "sha256:7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336",
-    "databaseUpdatedAt": "2026-11-26T19:23:01.378Z"
-  },
-  "uploadsBeforeRefresh": [
+  "journey": "PARTIAL",
+  "applicationRunId": 45904823967,
+  "initialScannerRunId": 45904824008,
+  "candidateRunId": 45904989776,
+  "uploadsBefore": [
     {
       "width": 1280,
       "httpStatus": 201,
@@ -79,138 +19,12 @@
       "picture": "upload-before-390.png"
     }
   ],
-  "uploadsAfterSwap": [
-    {
-      "width": 1280,
-      "httpStatus": 201,
-      "attachment": "Ready",
-      "picture": "upload-after-1280.png"
-    },
-    {
-      "width": 390,
-      "httpStatus": 201,
-      "attachment": "Ready",
-      "picture": "upload-after-390.png"
-    }
-  ],
-  "beforeRefresh": {
-    "deploymentUid": "77ef5661-5f02-414b-b715-582afed333fa",
-    "generation": 1,
-    "configVersion": "5178755",
-    "engine": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
-    "copy": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
-    "wrapper": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-    "manifest": "e8d7c2b30319733a0eef0b3757b9d39fa8f4f771059f5231cacc01d960a01050",
-    "approved": [
-      "sha256:e8d7c2b30319733a0eef0b3757b9d39fa8f4f771059f5231cacc01d960a01050"
-    ],
-    "pods": [
-      {
-        "uid": "0805ac53-2b3a-4e39-b4ec-28b0c22ce79d",
-        "createdAt": "2026-11-26T19:44:58Z",
-        "ready": true,
-        "containers": [
-          {
-            "name": "engine",
-            "image": "sha256:593208c50cd2371018032441534a3f4c6e289e275e04e397d48458c2f8b5ead7",
-            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
-            "restartCount": 0
-          },
-          {
-            "name": "https",
-            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
-            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-            "restartCount": 0
-          }
-        ]
-      }
-    ]
-  },
-  "afterRefresh": {
-    "deploymentUid": "77ef5661-5f02-414b-b715-582afed333fa",
-    "generation": 2,
-    "configVersion": "5180341",
-    "engine": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-    "copy": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-    "wrapper": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-    "manifest": "7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336",
-    "approved": [
-      "sha256:7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336"
-    ],
-    "pods": [
-      {
-        "uid": "0805ac53-2b3a-4e39-b4ec-28b0c22ce79d",
-        "createdAt": "2026-11-26T19:44:58Z",
-        "ready": false,
-        "containers": [
-          {
-            "name": "engine",
-            "image": "sha256:593208c50cd2371018032441534a3f4c6e289e275e04e397d48458c2f8b5ead7",
-            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
-            "restartCount": 0
-          },
-          {
-            "name": "https",
-            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
-            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-            "restartCount": 0
-          }
-        ]
-      },
-      {
-        "uid": "cba5bb1b-a41d-4627-b1ff-19aeef488f10",
-        "createdAt": "2026-11-26T19:49:49Z",
-        "ready": true,
-        "containers": [
-          {
-            "name": "engine",
-            "image": "sha256:c4d56b9d2612fb8b29830a96a0c1e78583f7a15b87947ba6cdd06b4f364081ea",
-            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-            "restartCount": 0
-          },
-          {
-            "name": "https",
-            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
-            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-            "restartCount": 0
-          }
-        ]
-      }
-    ]
-  },
-  "afterMismatchedImageRefusal": {
-    "deploymentUid": "77ef5661-5f02-414b-b715-582afed333fa",
-    "generation": 2,
-    "configVersion": "5180341",
-    "engine": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-    "copy": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-    "wrapper": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-    "manifest": "7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336",
-    "approved": [
-      "sha256:7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336"
-    ],
-    "pods": [
-      {
-        "uid": "cba5bb1b-a41d-4627-b1ff-19aeef488f10",
-        "createdAt": "2026-11-26T19:49:49Z",
-        "ready": true,
-        "containers": [
-          {
-            "name": "engine",
-            "image": "sha256:c4d56b9d2612fb8b29830a96a0c1e78583f7a15b87947ba6cdd06b4f364081ea",
-            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
-            "restartCount": 0
-          },
-          {
-            "name": "https",
-            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
-            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
-            "restartCount": 0
-          }
-        ]
-      }
-    ]
-  },
-  "replacementApprovalRunId": 45883138189,
-  "serverPodUnchanged": true
+  "mismatch": "PASS",
+  "replacementReachedRolloutWait": true,
+  "interruptionRecovery": "NOT RUN",
+  "scheduledRefresh": "NOT RUN",
+  "uploadsAfter": "NOT RUN",
+  "uploadRefusalDuringOutage": "NOT RUN",
+  "supersedingRollout": "NOT RUN",
+  "teardown": "slot free"
 }

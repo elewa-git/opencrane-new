@@ -181,7 +181,7 @@ Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1
 
 | Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
 | --- | --- | --- | --- | --- |
-| Refresh the scanner in a running package | [#1198](https://github.com/elewa-git/opencrane-new/issues/1198) | No | PASS (26 November 2026, `bda841ca8`) | [Receipt](work-scan-1198-s1/journey.md#fresh-packaged-run-on-26-november-2026) |
+| Refresh the scanner in a running package | [#1198](https://github.com/elewa-git/opencrane-new/issues/1198) | No | PARTIAL (26 November 2026, `7acb49a90`) | [Receipt](work-scan-1198-s1/journey.md#fresh-packaged-run-on-26-november-2026) |
 
 ## Still NOT RUN
 
