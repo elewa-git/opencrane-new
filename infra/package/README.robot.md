@@ -144,10 +144,9 @@ every node that can run computers had a Job. If a new node became available,
 the installer reports a failure so the operator can remove the failed install
 and start again.
 
-A failed Job and its Pod stay available for two minutes after the failure.
-Kubernetes then removes them. The installer reports the checked Job name and
-reason. Helm 4 reports only that the Job failed. The Pod events give more
-detail. This image download happens during fresh installation. The pilot
+Two minutes after a Job finishes, Kubernetes can remove it and any
+remaining Pods. The installer reports the checked Job name and reason.
+Helm 4 reports only that the Job failed. The Pod events give more detail. This image download happens during fresh installation. The pilot
 application update uses its own approval check and retains the installed
 computer image.
 

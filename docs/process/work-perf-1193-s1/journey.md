@@ -1,112 +1,105 @@
 # First computer start on a fresh package
 
-## Quiet-host rerun on 26 November 2026
+## Fresh-install check on 26 November 2026
 
-**NOT RUN at 1280 px and 390 px.** Between 13:02 and 14:13 UTC, the
-one-minute load ranged from 1.98 to 20.33 over 144 admission checks.
-Slot 1 was busy on 41 checks. The longest sampled period with slot 1
-free and load below 4 was 3 minutes 45 seconds. The ten-minute window
-did not open in time for two fresh installs within the 90-minute limit.
+**FAIL at 1280 px. NOT RUN at 390 px.** The desktop member got a
+reply, but Send to turn start took 20.339 seconds against the 20-second
+limit. The mobile run made no claim. Its longest stretch with slot 1
+free and the load below six was 4 minutes 30 seconds.
 
-There are no new send-to-turn-start measurements or observations of the
-workspace read after invitation acceptance. The original timing result
-below still fails the 20-second Send limit at 390 px.
+The package ran product commit `f08ac1f92bd32346e4eb863c0f88a62e05348161`.
+[Hosted CI](https://github.com/elewa-git/opencrane-new/actions/runs/45880520903),
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45880546506)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45880546557)
+passed for that commit. Both image approvals still had their artifacts.
 
-**NOT RUN for the live installer refusal.** Slot 1 became free at 14:20 UTC. The
-load was at least 8.45 for all later samples, so the five-minute window
-below 6 did not open before the last safe start.
+### Desktop steps and measurements
 
-The private admission samples are in `admission-load.log`,
-`390-admission.log` and `refusal-admission.log`.
+The packaged journey starts an empty Helm namespace with
+`package-prepare` and `package-up`. The separate `up.sh --fresh` command
+starts the Compose stack.
 
-## Original timing run
+1. Waited for five minutes under six with slot 1 free. Claimed slot 1.
+   Created an empty namespace with `package-prepare` and prepared its
+   named secrets. Used the recorded `accepted-dev-box-366` host exception.
+2. Checked that no running container used the approved computer image.
+   Removed only the exact image reference from the slot's node and
+   confirmed its absence. The digest was
+   `sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0`.
+3. Ran `package-up`. Kubernetes recorded a pull at 19:33:33 UTC.
+   The Job finished at 19:33:37 UTC and the installer returned ready
+   at 19:35:15 UTC. Kubelet reported 119 ms for the pull. Shared image
+   layers could still be present on the node.
+4. Invited and signed in a separate ordinary member at 1280 px. The
+   first workspace read returned HTTP 200. The member sent their first
+   message and got a reply from the free stand-in. Their computer used
+   the local image. A signed-out history read returned HTTP 401.
+5. Saved the logs and removed the package. `down.sh` released slot 1.
 
-**FAIL.** Neither width met the 20-second limit from package readiness.
-The desktop message reached the computer within 20 seconds of Send.
-The mobile message took 42.1 seconds after Send. Both first replies used
-the image already on the node, with zero time spent downloading it.
+| Measurement at 1280 px | Result |
+| --- | ---: |
+| Send to turn start | 20.339 s |
+| Send to first visible reply | 23.413 s |
+| Package ready to turn start | 53.991 s |
+| Claim to computer ready | 11.0 s |
+| First computer image download | 0 s |
+| One-minute host load during the run | 3.69–12.84 |
 
-The tested commit was `16a820345e9e12a29244fe7236429be3d48d0f10`.
-[CI](https://github.com/elewa-git/opencrane-new/actions/runs/45786771180),
-[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45786776284)
-and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45786777128)
-passed for that commit. Both approvals had their artifacts when the run started.
+[Desktop reply](first-reply-after-pull-1280.png) and
+[desktop measurements](timings-after-pull-1280.json). The private logs include
+`cold-cache.log`, `run-load.log`, `package-up.log` and `events.log`.
 
-## Browser steps
+### Mobile admission
 
-1. Waited for slot 1 to be free and for the one-minute load to stay below six
-   for five minutes before each claim.
-2. Prepared an empty package, used the recorded `accepted-dev-box-366` host
-   exception and ran the installer. Kubernetes recorded the image Job
-   completing before the installer reported ready.
-3. Signed in as the test owner and invited a separate ordinary member through
-   People & groups. The member signed in, accepted the invitation and opened
-   the workspace at the chosen width.
-4. Sent the member's first message and waited for the free stand-in reply.
-   The package recorded the moment the computer reported that it started
-   the turn. An unsigned read of the chat history returned HTTP 401.
-
-The first 390 px attempt reached invitation acceptance. The workspace read
-then returned HTTP 403, 0.6 seconds after acceptance, and showed
-“You no longer have access.” That attempt produced no message timing.
-[First mobile attempt](browser-failure-390.png).
-
-A new 390 px install opened the workspace on the first read and completed the
-reply. During this run the one-minute load rose above 30, after the five-minute
-load check passed and the slot was claimed.
-
-## Timings
-
-| Step | 1280 px | 390 px |
-| --- | ---: | ---: |
-| Package ready to turn start | 55.1 s | 108.0 s |
-| Send to turn start | 18.4 s | 42.1 s |
-| Send to first visible reply | 22.3 s | 48.1 s |
-| Accept invitation to computer claim | 1.9 s | 2.8 s |
-| Claim to disk bound | 5.0 s | 6.0 s |
-| Disk bound to image available | 1.0 s | 3.0 s |
-| Image download | 0 s | 0 s |
-| Image available to container started | 0.0 s | 1.0 s |
-| Container started to computer ready | 4.0 s | 20.0 s |
-
-- [Desktop reply](first-reply-1280.png) and [desktop timings](timings-1280.json).
-- [Mobile reply](first-reply-390.png) and [mobile timings](timings-390.json).
-
-## What the timings measure
-
-The install-ready clock starts when `package-up` returns successfully. It
-includes opening the browser, signing in and joining the installation.
-The Send clock starts at the button click. Both stop at the saved report
-from the computer that the turn started. Kubernetes reports some startup
-steps to the nearest second.
-
-The node already had the reviewed image during the install and again when
-the member's computer needed it. The package used the free stand-in, with zero
-paid calls. This receipt covers fresh installation.
+Slot 1 was busy in 20 checks. The one-minute load ranged from 2.82 to
+13.87. The five-minute requirement was unmet when the hour ended. The
+load was already below six at that point. The check continued through
+that stretch until the load rose again. The mobile run then ended
+without a stack claim or new timing. Samples are in `admission-load.log`.
 
 ## Installer refusal and cleanup
 
-- **PASS in the installer test.** The simulated pull Job failed. The installer
-  reported the computer image pull failure and stopped before gateway setup
-  and readiness checks. It recorded ownership so cleanup could remove the
-  failed release.
-- **NOT RUN live.** Other work held slot 1 and the host did not provide five
-  minutes below the load limit before the admission wait ended. The refusal
-  check made no claim.
-- **PASS cleanup.** The three browser installations were removed and slot 1
-  was released after each. The screenshots and startup and service logs were
-  saved before teardown. The private logs include `package-up.log`,
-  `events.log`, `deployment-server.log` and `deployment-worker-computers.log`.
+**PASS in the installer tests.** Helm 3 and Helm 4 failure output reported
+the checked Job name and reason. A real Helm render reported that no
+node could run computers when all nodes were cordoned. The chart set
+a two-minute limit for keeping finished Jobs. The failure fixture
+stopped before readiness checks and kept the release identity for
+cleanup.
+
+**NOT RUN live.** The refusal missed its five-minute admission check
+before the two-hour journey limit. Slot 1 became free at 21:02 UTC with
+a one-minute load of 12.02. The last sample was 7.01. The refusal check
+made no claim. Samples are in `admission-load.log`.
 
 ## Local checks
 
-The first test commit, `05537ac66`, failed for the missing install and
-upgrade Jobs and the generic install error. The local chart and installer
-suite passed twice with 609 tests. All 276 chart tests passed with Helm 4.
-The 19 NATS route tests passed when run on a quieter host after eight
-fixtures hit their existing deadlines in the first supplementary run.
+The tests in `f4413853b` reproduced the install failures and showed
+that the bootstrap readiness test also created a replicated stream.
+The fixed readiness test uses an existing replicated stream and still
+checks dispatcher setup. A separate test checks fresh stream creation.
 
-Typecheck, the event catalogue, Knip, package licences, changelog,
-README checks, Markdown lint, privacy and secret scans passed. Scoped
-ESLint reported that the repository excludes the changed infrastructure
-files.
+- **PASS twice** for 660 chart, installer and preflight tests, 39
+  bootstrap tests, 83 licence tests and 109 package fixture tests.
+- **PASS** for 17 focused Helm 4 checks. The wrong-role image tests
+  failed when the corresponding pin comparisons were removed in a test
+  copy.
+- **PASS** for typecheck, the event catalogue, Knip, changelog and
+  Markdown checks. ESLint's configuration excludes the changed
+  infrastructure files.
+- **FAIL** for three supplemental NATS route fixtures that reached
+  their existing deadlines during a parallel local run. The product
+  commit passed hosted CI.
+
+## Earlier runs
+
+The previous fresh installs used images already on the node. Send to
+turn start took 18.4 seconds at 1280 px and 42.1 seconds at 390 px.
+The first mobile attempt returned HTTP 403 immediately after joining.
+A separate mobile attempt reached the reply. An earlier wait for a
+quieter host produced no new measurements.
+
+- [Earlier desktop reply](first-reply-1280.png) and
+  [measurements](timings-1280.json).
+- [Earlier mobile reply](first-reply-390.png) and
+  [measurements](timings-390.json).
+- [Earlier mobile workspace refusal](browser-failure-390.png).
