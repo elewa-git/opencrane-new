@@ -204,7 +204,8 @@ it.each(['reader parent join', 'creator parent join', 'creator membership'] as c
 async function verifiesExplicitChildJoin() {
   const open = vi.fn(openDesktop);
   const fixture = await viewFixture(open);
-  const { append, binding, config, runner } = fixture;
+  const { app, append, binding, config, runner } = fixture;
+  let socket: WebSocket | undefined;
   try {
     await sharedChildChat(fixture);
     const conversationId = 'child';
@@ -231,16 +232,26 @@ async function verifiesExplicitChildJoin() {
     const receipt = { user: objectId('silo', 'test'), relation: 'applied',
       object: objectId('projection_event', 'test', addition.id) };
     const client = new TupleClient(binding);
-    await client.write([], [receipt]);
     await runner.run(conversations);
+    const live = await ticket(fixture, 'child', headers);
+    const pending = await ticket(fixture, 'child', headers);
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    socket = connect(address, 'child', live, headers);
+    expect(await nextBinaryMessage(socket)).toEqual(greeting);
+    const at = performance.now();
+    const closed = observeClose(socket);
+    await client.write([], [receipt]);
     expect((await auth.conversation('bob', 'child', 'read')).allowed).toBe(true);
     await expectReaderStatus(fixture, 'child', headers, 425);
+    await expectUpgradeRefusal(connect(address, 'child', pending, headers));
+    await expectAccessClose(closed, at);
     await client.write([receipt], []);
     await removeInheritedAccess(fixture, 'reader parent join');
     expect((await messages(fixture, 'child', headers)).statusCode).toBe(200);
     await ticket(fixture, 'child', headers);
-    expect(open).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
   } finally {
+    socket?.terminate();
     await fixture.close();
   }
 }
