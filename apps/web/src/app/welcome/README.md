@@ -13,7 +13,7 @@ persona versions and approval results.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>sign-in and invitations"] -->|opens next step| welcome["welcome<br/>survey, persona edit and chat"]
+  web["apps/web<br/>sign-in, invitations and workspace links"] -->|opens next step| welcome["welcome<br/>survey, persona edit and chat"]
   welcome -->|reads and saves| server["apps/server<br/>private onboarding"]
   chat["chat<br/>Recent and Archived"] -->|opens saved welcome| welcome
   welcome -.->|uses| state["shared-state<br/>status messages"]
@@ -42,7 +42,7 @@ flowchart LR
 
 1. **Survey.** A person saves each answer. The screen reads progress again before
    moving on. The completed survey links to persona review. Skip welcome setup
-   saves that choice so sign-in goes straight to the workspace next time.
+   saves that choice so workspace links open the page the person asked for.
 2. **Persona review.** The screen reads progress, the current version list and that
    version's text. If there is no version yet, it asks the server to create one
    from the saved answers. It checks an uncertain creation without sending it again.

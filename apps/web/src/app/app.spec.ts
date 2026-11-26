@@ -79,16 +79,18 @@ describe('opening a workspace address directly', function workspaceRoutes() {
 
   async function opensNextWelcomeStep(path: string, next: string, destination: string) {
     globalThis.history.replaceState({}, '', path);
-    const progress = Response.json({ next });
+    const savedProgress = { next };
+    const progress = Response.json(savedProgress);
     const request = vi.spyOn(globalThis, 'fetch');
     request.mockResolvedValue(progress);
     const fixture = await renderApp();
     const navigate = TestBed.inject(NAVIGATE);
     const page = root(fixture);
+    const workspacePages = 'oc-workspace, oc-conversations, oc-direct-chat, '
+      + 'oc-shared-assistant-picker';
     function redirectsBeforeOpeningWorkspace() {
       expect(navigate).toHaveBeenCalledWith(destination);
-      expect(page.querySelector('oc-workspace, oc-conversations, oc-direct-chat, '
-        + 'oc-shared-assistant-picker')).toBeNull();
+      expect(page.querySelector(workspacePages)).toBeNull();
     }
     await vi.waitFor(redirectsBeforeOpeningWorkspace);
     expect(request).toHaveBeenCalledExactlyOnceWith('/api/onboarding/entry', expect.anything());
@@ -133,7 +135,8 @@ describe('opening a workspace address directly', function workspaceRoutes() {
 
   async function keepsPageAfterSetup() {
     // Finished and skipped members receive the same destination from the server.
-    const progress = Response.json({ next: 'workspace' });
+    const savedProgress = { next: 'workspace' };
+    const progress = Response.json(savedProgress);
     await keepsRequestedPage(progress);
   }
   it('keeps the requested page after finishing or skipping welcome setup', keepsPageAfterSetup);
@@ -143,6 +146,40 @@ describe('opening a workspace address directly', function workspaceRoutes() {
     await keepsRequestedPage(progress);
   }
   it('keeps the requested page when welcome setup is off', keepsPageWhenWelcomeIsOff);
+
+  async function checksAgainAfterFailure() {
+    globalThis.history.replaceState({}, '', '/workspace/conversations');
+    const unavailable = new Response(null, { status: 503 });
+    const savedProgress = { next: 'survey' };
+    const survey = Response.json(savedProgress);
+    const request = vi.spyOn(globalThis, 'fetch');
+    const pending = Promise.withResolvers<Response>();
+    request.mockReturnValueOnce(pending.promise);
+    request.mockResolvedValueOnce(survey);
+    const fixture = await renderApp();
+    const navigate = TestBed.inject(NAVIGATE);
+    const page = root(fixture);
+    expect(page.textContent).toContain('Checking your welcome progress');
+    expect(page.querySelector('oc-conversations')).toBeNull();
+    pending.resolve(unavailable);
+
+    function showsFailure() {
+      expect(page.textContent).toContain('We could not check your welcome progress.');
+    }
+    await vi.waitFor(showsFailure);
+    expect(page.querySelector('oc-conversations')).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    const retry = button(page, 'Try again');
+    retry.click();
+
+    function opensSurvey() {
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/welcome/survey');
+    }
+    await vi.waitFor(opensSurvey);
+    expect(page.querySelector('oc-conversations')).toBeNull();
+    expect(request).toHaveBeenCalledTimes(2);
+  }
+  it('keeps the workspace closed until the progress check succeeds', checksAgainAfterFailure);
 });
 
 async function showsInstallationName(name: string, expected: string): Promise<void> {

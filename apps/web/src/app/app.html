@@ -1,4 +1,14 @@
-@if (claimPage) {
+@if (workspaceEntry() === 'checking') {
+  <main>
+    <oc-shared-state kind="checking" message="Checking your welcome progress…"
+      [announce]="true" [showAction]="false" />
+  </main>
+} @else if (workspaceEntry() === 'failed') {
+  <main>
+    <oc-shared-state kind="failed" message="We could not check your welcome progress."
+      [announce]="true" [safeToRetry]="true" (action)="checkWorkspaceEntry()" />
+  </main>
+} @else if (claimPage) {
   <oc-claim />
 } @else if (invitation; as link) {
   <oc-invitation-join [invitation]="link" />

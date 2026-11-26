@@ -102,12 +102,17 @@ transcript both as the failure arrives and after loading the saved rows again.
 The Node test configuration includes the Node 22 promise types used by the report writer.
 
 This Angular app provides the organisation settings shell, MCP register and Memory panel.
-`/api/onboarding/entry` chooses the next page after ordinary sign-in or a
-confirmed invitation. It returns only a destination. An invitation can finish
-before its membership read is ready, so the page waits for the workers without
-resending acceptance. It gives the membership worker up to ten seconds to apply the change.
-Sign-in started from a workspace link uses the same saved progress. Once setup is
-done or skipped, the link opens its original workspace page.
+`/api/onboarding/entry` chooses the next page after ordinary sign-in, a
+confirmed invitation or a direct workspace visit. It returns only a destination.
+An invitation can finish before its membership read is ready, so the page waits
+for the workers without resending acceptance. It gives the membership worker up
+to ten seconds to apply the change.
+The app checks progress before drawing `/workspace` or any page under it, including
+on reload. A saved completion or skip keeps the address and its query as requested.
+A 204 also keeps the page when welcome setup is off. On a 401 or 403, each page
+handles sign-in or access from its own requests. If the check fails, the app
+offers to check again before opening the workspace page. `app.spec.ts` covers
+direct workspace visits.
 If the session expires, sign-in is offered again. If membership is refused, the page
 explains the lost access. `/welcome/survey` is a separate page without a chat composer. It reads
 `/api/onboarding` and opens the first unsaved step. The name and optional pronouns

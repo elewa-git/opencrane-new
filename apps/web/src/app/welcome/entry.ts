@@ -80,7 +80,7 @@ function waitForMembership(signal: AbortSignal) {
   return new Promise<void>(wait);
 }
 
-export function reportEntryFailure(error: unknown, page: 'sign-in' | 'invitation') {
+export function reportEntryFailure(error: unknown, page: 'sign-in' | 'invitation' | 'workspace') {
   let cause: string | number = 'unexpected';
   if (error instanceof EntryRequestError) {
     cause = error.status;

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal,
+  type OnDestroy, type OnInit } from '@angular/core';
 import { Claim } from './claim/claim';
 import { AuditScreen } from './audit/audit';
 import { McpInstall } from './mcp-install/mcp-install';
@@ -34,6 +35,8 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
 import { SurveyScreen } from './welcome/survey';
 import { PersonaReview } from './welcome/persona-review';
 import { WelcomeChat } from './welcome/welcome-chat';
+import { onboardingEntry, reportEntryFailure } from './welcome/entry';
+import { NAVIGATE } from './core/navigate';
 import { organisationName } from './core/organisation-name';
 
 @Component({
@@ -55,10 +58,17 @@ import { organisationName } from './core/organisation-name';
     '[class.settings-root]': 'accountPath',
   },
 })
-export class App {
+export class App implements OnInit, OnDestroy {
   protected readonly overviewAccessLost = signal(false);
   protected readonly overviewPages = signal<readonly OrganisationPage[]>([]);
+  private readonly navigate = inject(NAVIGATE);
+  private readonly entryRequest = new AbortController();
   private readonly pathname = normalisePathname(globalThis.location.pathname);
+  private readonly workspacePath = this.pathname === '/workspace'
+    || this.pathname.startsWith('/workspace/');
+  protected readonly workspaceEntry = signal<'checking' | 'failed' | 'open'>(
+    this.workspacePath ? 'checking' : 'open',
+  );
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly invitation = invitationLink(this.pathname);
   protected readonly workspacePage = this.pathname === '/workspace';
@@ -91,6 +101,33 @@ export class App {
   protected readonly statesPage = this.pathname === '/org/states';
   protected readonly organisation = organisationName() || 'Your organisation';
   protected readonly personalSettingsPageLabel = personalSettingsPageLabel;
+
+  ngOnInit(): void {
+    if (this.workspacePath) void this.checkWorkspaceEntry();
+  }
+
+  ngOnDestroy(): void {
+    this.entryRequest.abort();
+  }
+
+  protected async checkWorkspaceEntry(): Promise<void> {
+    this.workspaceEntry.set('checking');
+    const signal = this.entryRequest.signal;
+    try {
+      const entry = await onboardingEntry(signal);
+      if (signal.aborted) return;
+      if (entry.kind === 'destination' && entry.path !== '/workspace') {
+        this.navigate(entry.path);
+        return;
+      }
+      // Let each page handle sign-in and access refusals from its own requests.
+      this.workspaceEntry.set('open');
+    } catch (error) {
+      if (signal.aborted) return;
+      reportEntryFailure(error, 'workspace');
+      this.workspaceEntry.set('failed');
+    }
+  }
 
   protected unavailableTitle(): string {
     return organisationPageLabel(this.activePage) ?? 'Page not found';
