@@ -1,16 +1,16 @@
-import { ChatRefused } from '../chat/access.ts';
-import { isComputerLifecycle } from '@opencrane/auth';
-import { z } from 'zod';
-import type { Query } from '@opencrane/projections';
 import {
-  participation,
-  participationChanges,
-  legacyParticipation,
-  conversationClosed,
-  chatMembership,
-} from '../chat/participation.ts';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
+  chatAccess, ChatAccessApplying, ChatRefused, isChatRefused,
+} from '../chat/access.ts';
+import { isPublicChatId } from '../chat/public-id.ts';
+import { conversationClosed, participationChanges } from '../chat/participation.ts';
+import { computerSummary, type ComputerSummary } from '@opencrane/auth';
+import { AuthorisationUnavailable, type Binding } from '@opencrane/authz';
+import { AuthorityApplying } from '@opencrane/models';
+import {
+  isEventStoreUnavailable, readStreamSummary, WrongSiloError, type EventStore,
+} from '@opencrane/event-store';
+import type { Query } from '@opencrane/projections';
+import { z } from 'zod';
 
 export interface ViewAccessOptions {
   silo: string;
@@ -24,189 +24,110 @@ export type ViewCheckBoundary = 'event_store' | 'authorisation' | 'deadline';
 export class ViewCheckUnavailable extends Error {
   readonly boundary: ViewCheckBoundary;
 
-  constructor(
-    boundary: ViewCheckBoundary,
-    options?: ErrorOptions,
-  ) {
+  constructor(boundary: ViewCheckBoundary, options?: ErrorOptions) {
     super('View authority unavailable', options);
     this.boundary = boundary;
   }
 }
+
+export class ViewAccessRefused extends ChatRefused {}
+
 // Leave time within the 1,500 ms viewer lease to act on a completed check.
 export const viewCheckMs = 1200;
 
-const identity = z.object({ assistantId: z.string() });
-const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
-const histories = new WeakMap<EventStore, Map<string, StoredEvent[]>>();
+const computerIdentity = z.object({
+  assistantId: z.string(), computerId: z.string(), generation: z.int().positive(),
+});
+const ready = computerIdentity.extend({ podUid: z.string().optional() });
+type ViewComputer = z.infer<typeof ready>;
 
-function saveHistory(cache: Map<string, StoredEvent[]>, key: string, rows: StoredEvent[]) {
-  // Concurrent replies must not move the saved checkpoint backwards.
-  if ((rows.at(-1)?.sequence ?? 0) < (cache.get(key)?.at(-1)?.sequence ?? 0)) return;
-  // Keep only the 64 most recently added stream histories.
-  if (!cache.has(key) && cache.size >= 64) cache.delete(cache.keys().next().value!);
-  cache.set(key, rows);
+export function sameViewComputer(first: ViewComputer, second: ViewComputer) {
+  return first.assistantId === second.assistantId && first.computerId === second.computerId
+    && first.generation === second.generation && first.podUid === second.podUid;
 }
 
-export async function accessHistory(
-  store: EventStore, subject: string, silo: string, deadline = Infinity,
-) {
-  let cache = histories.get(store);
-  if (!cache) {
-    cache = new Map();
-    histories.set(store, cache);
-  }
-  const key = JSON.stringify([silo, subject]);
-  const rows = [...(cache.get(key) ?? [])];
-  const previous = rows.at(-1);
-  let confirmed = !previous;
-  // Confirm the saved checkpoint before reading its live tail.
-  for await (const row of store.readStream(subject, previous?.sequence ?? 1, deadline)) {
-    if (row.event.silo !== silo) {
-      throw new Error('Wrong silo');
-    }
-    if (!confirmed) {
-      if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) {
-        break;
-      }
-      rows[rows.length - 1] = row;
-      confirmed = true;
-    } else {
-      rows.push(row);
-    }
-  }
-  if (!confirmed) {
-    cache.delete(key);
-    throw new Error('Authority history changed');
-  }
-  saveHistory(cache, key, rows);
-  return rows;
-}
-
-/** Check authority as well as its projection: delayed revocations must fail closed. */
-export async function viewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
-  // Retries share the existing check deadline, rather than starting a new budget per history.
+export async function viewAccess(options: ViewAccessOptions, memberId: string,
+  conversationId: string) {
   const deadline = Math.min(options.deadline ?? Infinity, performance.now() + viewCheckMs);
-  const boundedOptions = { ...options, deadline };
   try {
-    const computer = await checkViewAccess(boundedOptions, memberId, conversationId);
-    // Handling a successful reply late must not renew an expired authority snapshot.
+    const computer = await checkViewAccess(options, memberId, conversationId, deadline);
+    // Do not renew a view with a reply that arrived after the check expired.
     if (performance.now() >= deadline) {
       throw new ViewCheckUnavailable('deadline');
     }
     return computer;
   } catch (error) {
-    // Late checks and outages cannot revoke a lease renewed by another check.
-    const errorOptions = { cause: error };
+    const cause = { cause: error };
+    if (isChatRefused(error) || error instanceof ChatAccessApplying ||
+        error instanceof AuthorityApplying || error instanceof WrongSiloError) {
+      throw new ViewAccessRefused('Chat access refused', cause);
+    }
     if (performance.now() >= deadline) {
-      throw new ViewCheckUnavailable('deadline', errorOptions);
+      throw new ViewCheckUnavailable('deadline', cause);
     }
     if (isEventStoreUnavailable(error)) {
-      throw new ViewCheckUnavailable('event_store', errorOptions);
+      throw new ViewCheckUnavailable('event_store', cause);
+    }
+    if (error instanceof AuthorisationUnavailable) {
+      throw new ViewCheckUnavailable('authorisation', cause);
     }
     throw error;
   }
 }
 
-function ignoreRemovalFailure(): void {}
-
-async function checkViewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
-  const { store, silo } = options;
-  if (options.binding.silo !== silo) throw new Error('Wrong silo');
-  const auth = memberAuthorisation(options.binding);
-  const denied = Promise.withResolvers<never>();
-  function refuseRemovedMember(active: boolean) {
-    if (!active) {
-      denied.reject(new ChatRefused('Access changed'));
-    }
-    return active;
+async function checkViewAccess(options: ViewAccessOptions, memberId: string,
+  conversationId: string, deadline: number) {
+  if (options.silo !== options.binding.silo || !isPublicChatId(conversationId)) {
+    throw new ChatRefused('Conversation refused');
   }
-  function refuseConversationRead(permission: Awaited<ReturnType<typeof auth.conversation>>) {
-    if (permission.status === 'ok' && !permission.allowed) {
-      denied.reject(new ChatRefused('Access changed'));
-    }
-    return permission;
+  // Let a saved closure or removal stop delivery while another check is still waiting.
+  const open = requireOpenConversation(options, conversationId, deadline);
+  const current = requireNoRemoval(options, memberId, conversationId, deadline);
+  const access = { memberId, conversationId, deadline };
+  const chat = chatAccess(options, access);
+  const [reader] = await Promise.all([chat, open, current]);
+  if (reader.conversation?.mode !== 'agent_session') {
+    throw new ChatRefused('Conversation has no computer');
   }
-  const memberRead = chatMembership(store, silo, memberId, options.deadline);
-  const permissionRead = auth.conversation(memberId, conversationId, 'read');
-  async function refuseRemovedParticipant() {
-    const changes = await participationChanges(store, silo, conversationId, options.deadline);
-    if (changes.get(memberId)?.row.event.type === 'participant.removed') {
-      denied.reject(new ChatRefused('Access changed'));
-    }
-  }
-  const removalRead = refuseRemovedParticipant();
-  void removalRead.catch(ignoreRemovalFailure);
-  const authorityReads = [
-    memberRead.then(refuseRemovedMember),
-    conversationDesktop(options, memberId, conversationId, auth),
-    permissionRead.then(refuseConversationRead),
-  ] as const;
-  // Stop on a known denial without waiting for slower reads. Keep their error handlers attached.
-  const settledReads = Promise.allSettled(authorityReads);
-  const results = await Promise.race([denied.promise, settledReads]);
-  const [memberResult, computerResult, permissionResult] = results;
-  for (const result of results) {
-    if (result.status !== 'rejected') {
-      continue;
-    }
-    const error: unknown = result.reason;
-    if (!(error instanceof ViewCheckUnavailable) && !isEventStoreUnavailable(error)) {
-      throw error;
-    }
-  }
-  // Failed reads grant no authority, even when the remaining reads allow access.
-  settledRead(memberResult);
-  const computer = settledRead(computerResult);
-  const permission = settledRead(permissionResult);
-  if (permission.status === 'unavailable') {
-    throw new ViewCheckUnavailable('authorisation');
-  }
-  return computer;
+  return currentComputer(options, reader.conversation.assistantId, deadline);
 }
 
-function settledRead<Value>(result: PromiseSettledResult<Value>): Value {
-  if (result.status === 'rejected') {
-    const error: unknown = result.reason;
-    throw error;
+async function requireOpenConversation({ store, db, silo }: ViewAccessOptions,
+  conversationId: string, deadline: number) {
+  if (await conversationClosed(store, db, silo, conversationId, deadline)) {
+    throw new ChatRefused('Conversation closed');
   }
-  return result.value;
 }
 
-async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,
-  auth: ReturnType<typeof memberAuthorisation>) {
-  const { store, silo } = options;
-  const legacy = await legacyParticipation(store, options.db, silo, conversationId,
-    options.deadline ?? Infinity);
-  const access = await participation(store, silo, conversationId, memberId, legacy,
-    options.deadline);
-  if (access.created.mode !== 'agent_session') throw new ChatRefused('Access changed');
-  const closed = await conversationClosed(store, options.db, silo, conversationId,
-    options.deadline ?? Infinity);
-  if (closed) throw new ChatRefused('Access changed');
-  const reads = [
-    auth.applied(access.joinEventId),
-    currentComputer(options, access.created.assistantId),
-  ] as const;
-  const [applied, computer] = await Promise.all(reads);
-  if (!applied) throw new ViewCheckUnavailable('authorisation');
-  return computer;
+async function requireNoRemoval({ store, silo }: ViewAccessOptions, memberId: string,
+  conversationId: string, deadline: number) {
+  const changes = await participationChanges(store, silo, conversationId, deadline);
+  if (changes.get(memberId)?.row.event.type === 'participant.removed') {
+    throw new ChatRefused('Conversation participation ended');
+  }
 }
 
-function isLifecycleRow(row: StoredEvent) {
-  return isComputerLifecycle(row.event.type);
+function takeLifecycle(summary: ComputerSummary) {
+  return { latest: summary.lifecycle, claim: summary.claim?.event };
 }
 
-function isClaimedRow(row: StoredEvent) {
-  return row.event.type === 'computer.claimed';
-}
-
-async function currentComputer({ store, silo, deadline }: ViewAccessOptions, assistantId: string) {
-  const lifecycle = await accessHistory(store, `computer-${assistantId}`, silo, deadline);
-  const latest = lifecycle.findLast(isLifecycleRow)?.event;
-  if (latest?.type !== 'computer.ready') throw new Error('Computer unavailable');
-  const computer = ready.parse(latest.data);
-  const claimedRow = lifecycle.findLast(isClaimedRow);
-  const claimed = ready.parse(claimedRow?.event.data);
+async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: string,
+  deadline: number) {
+  const subject = `computer-${assistantId}`;
+  const lifecycle = await readStreamSummary(store, silo, subject, computerSummary, deadline,
+    takeLifecycle);
+  const latest = lifecycle.latest;
+  if (latest?.event.type !== 'computer.ready') {
+    throw new Error('Computer unavailable');
+  }
+  // Confirm the saved ready event in one read before using the cached lifecycle.
+  const { event } = await store.readEvent(latest.sequence, deadline);
+  if (event.id !== latest.event.id || event.subject !== subject || event.silo !== silo ||
+      event.type !== 'computer.ready') {
+    throw new Error('Computer history changed');
+  }
+  const computer = ready.parse(event.data);
+  const claimed = computerIdentity.parse(lifecycle.claim?.data);
   if (computer.assistantId !== assistantId || computer.computerId !== claimed.computerId ||
       computer.generation !== claimed.generation) {
     throw new Error('Computer changed');

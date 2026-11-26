@@ -1,4 +1,5 @@
 export {
+  AuthorisationUnavailable,
   createStore,
   deleteStoreById,
   listRebuildStores,

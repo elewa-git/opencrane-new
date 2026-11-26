@@ -1470,8 +1470,8 @@ async function removedParticipantReaders() {
       name: 'notes.txt', size: 5, sha256: 'a'.repeat(64), mime: 'text/plain',
       objectKey: 'test/agent/not-saved' };
     const before = await context.nats.store.head('conversation-agent');
-    const writing = fileCommand(context.nats.store, 'test', 'alice', 'file-command',
-      'file.uploaded', file);
+    const writing = fileCommand(context.nats.store, { silo: 'test', memberId: 'alice', eventId: 'file-command',
+    type: 'file.uploaded', value: file });
     await expect(writing).rejects.toMatchObject({ kind: 'conversation_refused' });
     expect(await context.nats.store.head('conversation-agent')).toBe(before);
     await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();

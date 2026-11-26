@@ -107,24 +107,33 @@ function findEventOfType(rows: StoredEvent[], type: string) {
   return undefined;
 }
 
+export interface FileCommand {
+  silo: string;
+  memberId: string;
+  eventId: string;
+  type: 'file.uploaded' | 'file.rejected' | 'file.delivered' | 'agent.file_changed'
+    | 'agent.file_publication_started';
+  value: unknown;
+  checkAccess?: () => Promise<void>;
+}
+
 /** Only writes one conditional append. Storage and delivery are IO reactions. */
 export async function fileCommand(
   store: Pick<EventStore, 'readStream' | 'append' | 'clock'>,
-  silo: string,
-  memberId: string,
-  eventId: string,
-  type: 'file.uploaded' | 'file.rejected' | 'file.delivered' | 'agent.file_changed'
-    | 'agent.file_publication_started',
-  value: unknown,
-  fresh?: () => Promise<void>,
+  command: FileCommand,
 ) {
+  const { silo, memberId, eventId, type, value, checkAccess } = command;
   const definition = getEventDefinition(type)!;
   const data = parseFileInput(definition.dataSchema, value);
   const context = fileContext.parse(data);
-  const allowParticipant = type === 'file.delivered' || context.screenshot !== undefined;
-  const rows = await ownConversation(
-    store, silo, context.conversationId, memberId, allowParticipant, true,
-  );
+  const { conversationId, screenshot } = context;
+  if (screenshot !== undefined && !checkAccess) {
+    throw new FileRefusal('conversation_refused');
+  }
+  const rows = screenshot !== undefined
+    ? await chatHistory(store, silo, conversationId)
+    : await ownConversation(store, silo, conversationId, memberId, type === 'file.delivered',
+      true);
   if (type === 'file.delivered') {
     verifyDelivery(rows, data, memberId);
   }
@@ -133,7 +142,6 @@ export async function fileCommand(
     verifyRetry(previous, type, data, memberId);
     return { status: 'appended' as const, sequence: previous.sequence };
   }
-  await fresh?.();
   const event = serverEvent({
     id: eventId,
     commandId: eventId,
@@ -143,8 +151,13 @@ export async function fileCommand(
     data,
     principal: { kind: 'human' as const, id: memberId },
   });
-  const append = { expectedSequence: rows.at(-1)?.sequence ?? 0, event };
-  const result = await store.append(append);
+  const expectedSequence = rows.at(-1)?.sequence ?? 0;
+  const append = { expectedSequence, event };
+  // Recheck after loading history. The store also binds this check to the publish.
+  const result = checkAccess
+    ? await store.append({ ...append, checkAccess, historyChecked: true,
+      deadline: store.clock.now() + 2000 })
+    : await store.append(append);
   if (result.status === 'appended') {
     const savedRows = await chatHistory(store, silo, context.conversationId);
     const saved = findEventById(savedRows, eventId);

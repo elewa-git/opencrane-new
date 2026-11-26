@@ -1,45 +1,79 @@
-import { z } from 'zod';
+import { grantGivenDataSchema, grantRevokedDataSchema } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { readStreamSummary, type EventStore, type StoredEvent, type SummaryKind }
+  from '@opencrane/event-store';
 import {
   authorityFence, payingGroupAuthority, PayingGroupRefused, AuthorityApplying,
 } from '@opencrane/models';
 import { ChatRefused } from '../chat/access.ts';
-import { accessHistory, ViewCheckUnavailable, type ViewAccessOptions } from './view-access.ts';
+import { hasSavedGroupMember } from '../chat/groups.ts';
+import { ViewCheckUnavailable, type ViewAccessOptions } from './view-access.ts';
 
 // Refuse a removed member even if the permissions service still has its old record.
 const activeSiloMembershipRequiredMessage = 'Active silo membership required';
-const grant = z.object({ resourceType: z.string(), resourceId: z.string(), granteeId: z.string() });
+type Grant = ReturnType<typeof grantGivenDataSchema.parse>;
+type Grants = Map<Grant['granteeKind'], Map<string, string>>;
 
-async function desktopGrants(store: EventStore, silo: string, resource: string, deadline?: number) {
-  const grants = await accessHistory(store, resource, silo, deadline);
-  const current = new Map<string, { id: string; kind: string; eventId: string }>();
-  for (const { event } of grants) {
-    const data = grant.parse(event.data);
-    if (event.type === 'grant.revoked') {
-      const revoked = z.object({ granteeKind: z.string().optional() }).parse(event.data);
-      const kinds = revoked.granteeKind ? [revoked.granteeKind] : ['member', 'team', 'assistant'];
-      for (const kind of kinds) {
-        current.delete(`${kind}:${data.granteeId}`);
-      }
-    } else {
-      const grantee = z.object({ granteeKind: z.string() }).parse(event.data);
-      const recorded = { id: data.granteeId, kind: grantee.granteeKind, eventId: event.id };
-      current.set(`${grantee.granteeKind}:${data.granteeId}`, recorded);
+function emptyGrants(): Grants {
+  return new Map();
+}
+
+function desktopGrantSize(grants: Grants) {
+  let count = 0;
+  for (const identities of grants.values()) {
+    count += identities.size;
+  }
+  return count;
+}
+
+function addDesktopGrant(grants: Grants, row: StoredEvent) {
+  const { event } = row;
+  if (event.type === 'grant.given') {
+    const data = grantGivenDataSchema.parse(event.data);
+    requireGrantSubject(event.subject, data);
+    let identities = grants.get(data.granteeKind);
+    if (!identities) {
+      identities = new Map();
+      grants.set(data.granteeKind, identities);
+    }
+    identities.set(data.granteeId, event.id);
+  } else if (event.type === 'grant.revoked') {
+    const data = grantRevokedDataSchema.parse(event.data);
+    requireGrantSubject(event.subject, data);
+    if (data.granteeKind) {
+      grants.get(data.granteeKind)?.delete(data.granteeId);
+      return;
+    }
+    // Old revocations did not name an identity kind. Revoke it in every kind.
+    for (const identities of grants.values()) {
+      identities.delete(data.granteeId);
     }
   }
-  return current;
 }
-async function belongsToGroup(options: ViewAccessOptions, groupId: string, memberId: string) {
-  const rows = await accessHistory(options.store, `team-${groupId}`, options.silo, options.deadline);
-  function matchesMember(row: StoredEvent) {
-    if (!row.event.type.startsWith('team.member_')) return false;
-    const data = z.object({ memberId: z.string() }).parse(row.event.data);
-    return data.memberId === memberId;
+
+function requireGrantSubject(subject: string, data: { resourceType: string; resourceId: string }) {
+  if (data.resourceType !== 'shared_desktop' || subject !== grantStream(data.resourceType,
+    data.resourceId)) {
+    throw new ChatRefused('Desktop grant refused');
   }
-  const membership = rows.findLast(matchesMember);
-  return membership?.event.type === 'team.member_added';
 }
+
+// Keep only current grants. Limit how many grants all cached computers can hold.
+const desktopGrantSummary: SummaryKind<Grants> = {
+  name: 'desktop-grants', keep: 64, empty: emptyGrants, add: addDesktopGrant,
+  budget: { limit: 8192, size: desktopGrantSize },
+};
+
+function desktopGrants(store: EventStore, silo: string, resource: string, memberId: string,
+  deadline = Infinity) {
+  function relevantGrants(grants: Grants) {
+    const direct = grants.get('member')?.get(memberId);
+    const teams = new Map(grants.get('team'));
+    return { direct, teams };
+  }
+  return readStreamSummary(store, silo, resource, desktopGrantSummary, deadline, relevantGrants);
+}
+
 async function confirmTeamAuthority(options: ViewAccessOptions, memberId: string,
   groupId: string) {
   try {
@@ -65,26 +99,27 @@ export async function controlDesktopAccess(options: ViewAccessOptions, memberId:
   const resource = grantStream('shared_desktop', computerId);
   const subjects = [`member-${memberId}`, `participation-${conversationId}`, resource];
   const fresh = await authorityFence(store, performance.now(), subjects, options.deadline);
-  const current = await desktopGrants(store, silo, resource, options.deadline);
-  const direct = current.get(`member:${memberId}`);
-  if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
+  const { direct, teams } = await desktopGrants(store, silo, resource, memberId, options.deadline);
+  if (direct) {
+    return { receipts: [direct], fresh };
+  }
   const groupFences: (() => Promise<void>)[] = [];
   const receipts: string[] = [];
   let unconfirmedTeam: ViewCheckUnavailable | undefined;
-  for (const source of current.values()) {
-    const groupId = source.id;
-    if (source.kind !== 'team') continue;
-    // Check saved membership even if the permissions service has yet to apply a removal.
-    if (!await belongsToGroup(options, groupId, memberId)) continue;
+  for (const [groupId, eventId] of teams) {
+    // Check saved membership even if OpenFGA still has the old record.
+    if (!await hasSavedGroupMember(options, groupId, memberId, options.deadline)) {
+      continue;
+    }
     try {
       const groupFence = await confirmTeamAuthority(options, memberId, groupId);
       groupFences.push(groupFence);
-      receipts.push(source.eventId);
+      receipts.push(eventId);
     } catch (error) {
       if (!(error instanceof ViewCheckUnavailable)) {
         throw error;
       }
-      // Try any other team with a grant while the permissions service catches up.
+      // Keep checking other teams. One current team can grant control on its own.
       unconfirmedTeam = error;
     }
   }
@@ -96,7 +131,9 @@ export async function controlDesktopAccess(options: ViewAccessOptions, memberId:
   }
   async function checkFresh() {
     await fresh();
-    for (const groupFence of groupFences) await groupFence();
+    for (const groupFence of groupFences) {
+      await groupFence();
+    }
   }
   return { receipts, fresh: checkFresh };
 }

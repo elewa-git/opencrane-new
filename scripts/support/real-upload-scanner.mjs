@@ -194,8 +194,9 @@ export async function startRealUploadFixture(inputs) {
       }
       Date.now = fixtureNow;
       try {
+        const input = { key, name: cleanName, bytes, checkAccess: fresh };
         return await uploadFile(selected, selected.names.member, selected.names.conversation,
-          key, cleanName, bytes, undefined, fresh);
+          input);
       } finally {
         Date.now = originalNow;
       }

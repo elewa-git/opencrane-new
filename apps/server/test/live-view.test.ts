@@ -33,13 +33,17 @@ it('admits chat participants without a desktop grant and closes on removal', asy
     const response = await app.inject({ method: 'POST', url, headers });
     expect(response.statusCode).toBe(200);
     const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
-    const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const bobHeaders = viewHeaders(config, 'bob');
     const refused = await app.inject({ method: 'POST', url, headers: bobHeaders });
     expect(refused.statusCode).toBe(403);
     const refusalId = refused.json<{ attemptId: string }>().attemptId;
     const refusal = await history(nats.store, `view-${refusalId}`, 'test');
-    expect(refusal.map(row => row.event.type)).toEqual(['computer.view_refused']);
-    const join = await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });
+    function eventType(row: (typeof refusal)[number]) {
+      return row.event.type;
+    }
+    expect(refusal.map(eventType)).toEqual(['computer.view_refused']);
+    const data = { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' };
+    const join = await append('conversation-chat', 'participant.added', data);
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
     await fixture.runner.run(conversations);
     const auth = memberAuthorisation(fixture.binding);
@@ -367,9 +371,14 @@ it('refuses access when its previously checked authority history disappears', as
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
     expect((await app.inject(request)).statusCode).toBe(200);
-    const read = nats.store.readStream.bind(nats.store);
-    vi.spyOn(nats.store, 'readStream').mockImplementation(async function* (...args) {
-      if (args[0] !== 'computer-assistant') yield* read(...args);
+    const readySequence = await nats.store.head('computer-assistant');
+    const read = nats.store.readEvent.bind(nats.store);
+    const checkpoint = vi.spyOn(nats.store, 'readEvent');
+    checkpoint.mockImplementation(function readMissingReady(sequence, deadline) {
+      if (sequence === readySequence) {
+        return Promise.reject(new Error('Event position missing'));
+      }
+      return read(sequence, deadline);
     });
     expect((await app.inject(request)).statusCode).toBe(403);
   } finally { vi.restoreAllMocks(); await fixture.close(); }

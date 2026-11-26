@@ -17,7 +17,8 @@ async function malformedCommand() {
     },
   } satisfies Pick<EventStore, 'readStream' | 'append' | 'clock'>;
   const malformed = { conversationId: 'conversation' };
-  const command = fileCommand(store, 'test', 'alice', 'malformed', 'file.uploaded', malformed);
+  const command = fileCommand(store, { silo: 'test', memberId: 'alice', eventId: 'malformed',
+    type: 'file.uploaded', value: malformed });
   await expect(command).rejects.toBeInstanceOf(FileRefusal);
   await expect(command).rejects.toMatchObject({ kind: 'invalid_request', statusCode: 400 });
 }
@@ -68,10 +69,10 @@ it('returns a typed 403 refusal for delivery without a matching upload', async (
 
   let refusal: unknown;
   try {
-    await fileCommand(store, 'test', 'alice', 'delivery-event', 'file.delivered', {
-      conversationId: 'conversation', fileId: 'missing-file', computerId: 'computer',
-      sha256: 'a'.repeat(64),
-    });
+    const value = { conversationId: 'conversation', fileId: 'missing-file',
+      computerId: 'computer', sha256: 'a'.repeat(64) };
+    await fileCommand(store, { silo: 'test', memberId: 'alice', eventId: 'delivery-event',
+      type: 'file.delivered', value });
   } catch (error) {
     refusal = error;
   }

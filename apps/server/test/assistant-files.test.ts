@@ -131,8 +131,8 @@ async function publishesAssistantFiles() {
     }
     function cleanVerdict() { return 'clean' as const; }
     const racingOptions = { ...options, scan: scanDuringClose };
-    const racingUpload = uploadFile(racingOptions, 'alice', 'chat', 'racing-upload',
-      'race.txt', Buffer.from('Race file'));
+    const input = { key: 'racing-upload', name: 'race.txt', bytes: Buffer.from('Race file') };
+    const racingUpload = uploadFile(racingOptions, 'alice', 'chat', input);
     await scanned.promise;
     await fixture.append('conversation-chat', 'conversation.closed', {
       conversationId: 'chat', closedBy: 'alice',

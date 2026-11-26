@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { recordLeaseNotices } from './support/rfb-viewer.ts';
-import { viewAccess } from '../src/computers/view-access.ts';
+import { viewAccess, ViewAccessRefused } from '../src/computers/view-access.ts';
 import { conversations } from '@opencrane/projections';
 
 type Fixture = Awaited<ReturnType<typeof viewFixture>>;
@@ -192,7 +192,8 @@ function armInjection(current: Fixture, point: InjectionPoint, injection: Inject
     yield* readStream(...args);
   }
 
-  vi.spyOn(current.nats.store, 'readStream').mockImplementation(readWithEvent);
+  const read = vi.spyOn(current.nats.store, 'readStream');
+  read.mockImplementation(readWithEvent);
   return { state, injected: injected.promise };
 }
 async function stopReason(current: Fixture) {
@@ -212,13 +213,14 @@ async function expectNoRefusal(current: Fixture) {
   expect(records.some(refused)).toBe(false);
 }
 async function expectStaysOpen(current: Fixture, observed: ObservedViewer, appendedAt: number) {
-  const remaining = Math.max(0, appendedAt + 2500 - performance.now());
-  await delay(remaining);
-  expect(observed.viewer.readyState).toBe(WebSocket.OPEN);
   function validAfterAppend(entry: (typeof observed.notices)[number]) {
-    return entry.at > appendedAt && entry.notice.lease === 'valid';
+    return entry.at >= appendedAt + 2500 && entry.notice.lease === 'valid';
   }
-  expect(observed.notices.some(validAfterAppend)).toBe(true);
+  function renewed() {
+    return observed.notices.some(validAfterAppend);
+  }
+  await until(renewed, 5000);
+  expect(observed.viewer.readyState).toBe(WebSocket.OPEN);
   expect(observed.result()).toBeUndefined();
   expect(await stopReason(current)).toBeUndefined();
 }
@@ -509,7 +511,7 @@ async function checksUnprojectedActivityOnce() {
   }
   await appendInjection(current, revocation('conversation.closed'));
   await appendInjection(current, conversationEvent('agent.turn_completed'));
-  await expect(viewAccess(options, 'alice', 'chat')).rejects.toThrow('Access changed');
+  await expect(viewAccess(options, 'alice', 'chat')).rejects.toBeInstanceOf(ViewAccessRefused);
 }
 it('skips unprojected chat activity and still finds a later close',
   checksUnprojectedActivityOnce, 30_000);

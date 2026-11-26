@@ -49,6 +49,7 @@ async function expectUpgradeRefusal(socket: WebSocket) {
   }, 2000);
   socket.once('unexpected-response', function response(_request, reply) {
     refused.resolve(reply.statusCode);
+    reply.resume();
   });
   socket.once('error', refused.reject);
   try {
@@ -310,6 +311,7 @@ it.each(['state', 'assistant', 'computer', 'generation'] as const)(
 async function refusesNonAssistantChat() {
   const open = vi.fn(openDesktop);
   const fixture = await viewFixture(open);
+  const read = vi.spyOn(fixture.nats.store, 'readStream');
   try {
     await fixture.append('conversation-direct', 'conversation.created', {
       conversationId: 'direct', mode: 'direct', createdBy: 'alice',
@@ -319,8 +321,13 @@ async function refusesNonAssistantChat() {
     const headers = viewHeaders(fixture.config);
     expect((await messages(fixture, 'direct', headers)).statusCode).toBe(200);
     expect((await view(fixture, 'direct', headers)).statusCode).toBe(403);
+    function readsComputer([subject]: Parameters<typeof fixture.nats.store.readStream>) {
+      return subject.startsWith('computer-');
+    }
+    expect(read.mock.calls.some(readsComputer)).toBe(false);
     expect(open).not.toHaveBeenCalled();
   } finally {
+    read.mockRestore();
     await fixture.close();
   }
 }

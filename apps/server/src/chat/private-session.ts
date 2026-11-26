@@ -21,9 +21,10 @@ export async function creationEvent(store: Pick<EventStore, 'readStream'>, silo:
 
 // Keep saved conversations readable after the member loses permission to spend.
 export async function readPrivateSession(options: SessionAuthorityOptions,
-  memberId: string, conversationId: string) {
-  const read = privateSessionReader(options, memberId);
-  await read(conversationId);
+  memberId: string, conversationId: string, creation: Awaited<ReturnType<typeof creationEvent>>,
+  deadline: number) {
+  const session = await privateSessionCreation(options, conversationId, creation, deadline);
+  await requirePrivateReader(options, memberId, session, deadline);
 }
 
 export function privateSessionReader(options: SessionAuthorityOptions, memberId: string) {
@@ -43,9 +44,7 @@ export function privateSessionReader(options: SessionAuthorityOptions, memberId:
     const assistantEvent = await assistantRead;
     const assistant = sessionAssistantSchema.parse(assistantEvent.data);
     if (assistant.kind !== 'team') return;
-    if (created.createdBy !== memberId) {
-      throw new GroupRefused('Private session belongs to another requester');
-    }
+    requirePrivateRequester(memberId, created.createdBy);
     let permission = permissions.get(created.assistantId);
     if (!permission) {
       permission = sharedAssistantRead(options, memberId, created.assistantId, assistantEvent);
@@ -57,25 +56,30 @@ export function privateSessionReader(options: SessionAuthorityOptions, memberId:
 }
 
 export async function privateSessionCreation(options: SessionAuthorityOptions,
-  conversationId: string, creation?: Awaited<ReturnType<typeof creationEvent>>) {
+  conversationId: string, creation?: Awaited<ReturnType<typeof creationEvent>>, deadline?: number) {
   const event = creation ?? await creationEvent(options.store, options.silo,
-    `conversation-${conversationId}`, 'conversation.created');
+    `conversation-${conversationId}`, 'conversation.created', deadline);
   const created = sessionSchema.parse(event.data);
   const assistantEvent = await creationEvent(options.store, options.silo,
-    `assistant-${created.assistantId}`, 'assistant.created');
+    `assistant-${created.assistantId}`, 'assistant.created', deadline);
   const assistant = sessionAssistantSchema.parse(assistantEvent.data);
   return { created, assistantEvent, assistant };
 }
 
 type PrivateSession = Awaited<ReturnType<typeof privateSessionCreation>>;
 
-export async function requirePrivateReader(options: SessionAuthorityOptions,
-  memberId: string, session: PrivateSession) {
-  if (session.assistant.kind !== 'team') return;
-  if (session.created.createdBy !== memberId) {
+function requirePrivateRequester(memberId: string, requesterId: string) {
+  if (requesterId !== memberId) {
     throw new GroupRefused('Private session belongs to another requester');
   }
-  await sharedAssistantRead(options, memberId, session.created.assistantId, session.assistantEvent);
+}
+
+export async function requirePrivateReader(options: SessionAuthorityOptions,
+  memberId: string, session: PrivateSession, deadline?: number) {
+  if (session.assistant.kind !== 'team') return;
+  requirePrivateRequester(memberId, session.created.createdBy);
+  await sharedAssistantRead(options, memberId, session.created.assistantId, session.assistantEvent,
+    deadline);
 }
 
 // Recheck only team access before writing. Stopping a turn does not spend money.
@@ -107,19 +111,29 @@ export async function writePrivateSession(options: SessionAuthorityOptions,
 }
 
 export async function sharedAssistantRead(options: SessionAuthorityOptions, memberId: string,
-  assistantId: string, event?: Awaited<ReturnType<typeof creationEvent>>) {
-  const created = event ?? await creationEvent(options.store, options.silo,
-    `assistant-${assistantId}`, 'assistant.created');
+  assistantId: string, event?: Awaited<ReturnType<typeof creationEvent>>, deadline?: number) {
+  const { store, silo, binding } = options;
+  const created = event ?? await creationEvent(store, silo,
+    `assistant-${assistantId}`, 'assistant.created', deadline);
   const assistant = sessionAssistantSchema.parse(created.data);
-  await groupMembership(options.store, options.silo, memberId, assistant.ownerId, options.binding);
-  const auth = memberAuthorisation(options.binding);
-  if (!await auth.applied(created.id)) {
+  const auth = memberAuthorisation(binding);
+  const teamSubject = `team-${assistant.ownerId}`;
+  const position = await store.head(teamSubject, deadline);
+  const membership = groupMembership(store, silo, memberId, assistant.ownerId, binding, deadline);
+  const receiptCheck = auth.checkApplied(created.id);
+  const permissionCheck = auth.actsFor(memberId, assistantId);
+  const [, receipt, permission] = await Promise.all([membership, receiptCheck, permissionCheck]);
+  if (receipt.status === 'unavailable') throw receipt.error;
+  if (permission.status === 'unavailable') throw permission.error;
+  if (!receipt.allowed) {
     throw new AuthorityApplying('Assistant is still being applied');
   }
-  const permission = await auth.actsFor(memberId, assistantId);
-  if (permission.status === 'unavailable') throw permission.error;
   if (!permission.allowed) {
     throw new GroupRefused('Assistant authority unavailable');
+  }
+  // Check the saved membership again if it changed while OpenFGA was replying.
+  if (await store.head(teamSubject, deadline) !== position) {
+    await groupMembership(store, silo, memberId, assistant.ownerId, binding, deadline);
   }
 }
 

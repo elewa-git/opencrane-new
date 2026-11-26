@@ -5,6 +5,7 @@ import { PassThrough, Duplex } from 'node:stream';
 import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { files, conversations } from '@opencrane/projections';
+import { Client } from 'minio';
 import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
@@ -67,10 +68,11 @@ it('captures without a desktop grant and stores a PNG whose file and preview sur
     expect((await app.inject({ url: '/api/conversations/chat/files', headers })).json()).toEqual(list.json());
     expect((await app.inject({ url: preview, headers })).rawPayload).toEqual(image.rawPayload);
     expect((await app.inject({ url: '/api/conversations/chat/messages', headers })).body).toContain('file.uploaded');
-    const bob = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}` };
+    const bob = { ...headers, ...viewHeaders(config, 'bob') };
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers: bob })).statusCode).toBe(403);
-    await fixture.append('participation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' }, true);
+    const bobJoin = { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' };
+    await fixture.append('participation-chat', 'participant.added', bobJoin, true);
     await runner.run(conversations);
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     const oldDownload = preview.replace('&preview=true', '');
@@ -87,7 +89,8 @@ it('captures without a desktop grant and stores a PNG whose file and preview sur
     expect((await app.inject({ url: laterDownload, headers: bob })).statusCode).toBe(200);
     expect((await app.inject({ url: `${laterDownload}&preview=true`, headers: bob })).statusCode)
       .toBe(200);
-    await fixture.append('participation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' });
+    const bobRemoval = { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' };
+    await fixture.append('participation-chat', 'participant.removed', bobRemoval);
     const afterRemoval = { ...bob, 'idempotency-key': 'post-removal-capture' };
     expect((await app.inject({ method: 'POST', url, headers: afterRemoval })).statusCode).toBe(403);
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
@@ -176,6 +179,9 @@ async function savesTeamScreenshot() {
     const request = { method: 'POST' as const, url: `${chat}/screenshots`, headers };
     const response = await app.inject(request);
     expect(response.statusCode, response.body).toBe(201);
+    expect(response.json()).toEqual({
+      status: 'appended', fileId: expect.any(String), sequence: expect.any(Number),
+    });
     const repeated = await app.inject(request);
     expect(repeated.statusCode).toBe(201);
     expect(repeated.json()).toEqual(response.json());
@@ -262,10 +268,13 @@ async function refusesMismatchedCaptureResources(mismatch: CaptureBinding) {
     return desktop();
   });
   const fixture = await viewFixture(open);
-  const services = await uploadServices();
   const { config, nats, binding, feed, db } = fixture;
   const chat = { silo: 'test', store: nats.store, binding, feed, db };
-  const fileOptions: FileOptions = { ...chat, ...services };
+  const objects = new Client({ endPoint: '127.0.0.1' });
+  function scan(): Promise<never> {
+    throw new Error('A refused capture must not reach the scanner');
+  }
+  const fileOptions: FileOptions = { ...chat, objects, scan };
   const view = { ...chat, open };
   if (mismatch === 'silo') {
     fileOptions.silo = 'another';
@@ -292,7 +301,6 @@ async function refusesMismatchedCaptureResources(mismatch: CaptureBinding) {
   } finally {
     await app.close();
     await fixture.close();
-    await services.close();
   }
 }
 it.each(['silo', 'store', 'file binding'] as const)(

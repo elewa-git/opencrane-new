@@ -11,10 +11,11 @@ import type {
 import type { Client } from 'minio/dist/esm/minio.mjs';
 import { z } from 'zod';
 import { fileUploadedDataSchema } from '@opencrane/events';
-import type { StoredEvent } from '@opencrane/event-store';
+import type { AppendResult, StoredEvent } from '@opencrane/event-store';
 import type { AuthConfig } from '@opencrane/auth';
 import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
+import { chatHistory } from '../chat/commands.ts';
 import { sessionFor } from '../members/routes.ts';
 import { requireMember, MemberRefusal } from '../members/guard.ts';
 import { fileCommand, ownConversation } from './commands.ts';
@@ -207,7 +208,8 @@ async function handleFileRequest(
     if (!Buffer.isBuffer(request.body)) {
       throw new FileRefusal('invalid_request');
     }
-    const result = await uploadFile(options, memberId, conversationId, key, name, request.body);
+    const input = { key, name, bytes: request.body };
+    const result = await uploadFile(options, memberId, conversationId, input);
     const status = uploadStatus(result.status);
     reply.code(status);
     return reply.send(result);
@@ -310,7 +312,7 @@ async function inspectUpload(name: string, bytes: Buffer) {
   }
 }
 
-function findPreviousUpload(rows: StoredEvent[], fileId: string) {
+export function findPreviousUpload(rows: StoredEvent[], fileId: string) {
   for (const row of rows) {
     if (row.event.id === `file-upload-${fileId}`) {
       return row;
@@ -345,19 +347,28 @@ export function uploadIdentity(silo: string, conversationId: string, memberId: s
   return sha256Digest(identity);
 }
 
+export interface UploadInput {
+  key: string;
+  name: string;
+  bytes: Buffer;
+  turnId?: string;
+  screenshot?: NonNullable<UploadedFile['screenshot']>;
+  checkAccess?: () => Promise<void>;
+}
+
 export async function uploadFile(
   options: FileOptions,
   memberId: string,
   conversationId: string,
-  key: string,
-  name: string,
-  bytes: Buffer,
-  screenshot?: UploadedFile['screenshot'],
-  fresh?: () => Promise<void>,
-  turnId?: string,
+  input: UploadInput,
 ) {
+  const { key, name, bytes, screenshot, turnId, checkAccess } = input;
+  const { store, silo } = options;
   if (!bytes.length) {
     throw new FileRefusal('invalid_request');
+  }
+  if (screenshot && !checkAccess) {
+    throw new FileRefusal('conversation_refused');
   }
   if (bytes.length > limit) {
     throw new FileRefusal('file_too_large');
@@ -369,51 +380,66 @@ export async function uploadFile(
     conversationId,
     fileId,
     uploadedBy: memberId,
-    turnId,
+    ...(turnId ? { turnId } : {}),
     name,
     size: bytes.length,
     sha256,
     ...(screenshot ? { screenshot } : {}),
   };
-  const rows = await ownConversation(
-    options.store, options.silo, conversationId, memberId, Boolean(screenshot), true,
-  );
+  const rows = screenshot
+    ? await chatHistory(store, silo, conversationId)
+    : await ownConversation(store, silo, conversationId, memberId, false, true);
   const previous = findPreviousUpload(rows, fileId);
   if (previous) {
     return acknowledgePreviousUpload(previous, fileId, name, sha256, bytes.length);
   }
   const objectKey = `${options.silo}/${conversationId}/${fileId}/${sha256}`;
-  const binding = { silo: options.silo, fileId };
+  const verdict = await scanUpload(options, bytes, { fileId, sha256 }, checkAccess);
+  const scanned = await saveCleanObject(options, { verdict, objectKey, bytes, mime });
+  const { type, details } = scanned;
+  const eventData = { ...data, ...details };
+  const command = { silo, memberId, eventId: `file-upload-${fileId}`, type, value: eventData,
+    ...(checkAccess ? { checkAccess } : {}) };
+  const result = await fileCommand(store, command);
+  return uploadedResult(result, fileId, verdict);
+}
+
+type ScanVerdict = 'clean' | 'infected';
+
+async function scanUpload(options: FileOptions, bytes: Buffer,
+  identity: { fileId: string; sha256: string }, checkAccess?: () => Promise<void>) {
+  const binding = { silo: options.silo, fileId: identity.fileId };
   const validate = await options.scan(bytes, binding);
-  await fresh?.();
+  await checkAccess?.();
   const verdict = validate();
-  if (sha256Digest(bytes) !== sha256) {
+  if (sha256Digest(bytes) !== identity.sha256) {
     throw new FileUnavailable('scanner');
   }
-  let type: 'file.uploaded' | 'file.rejected';
-  let eventData: object;
-  if (verdict === 'clean') {
-    const metadata = { 'Content-Type': mime };
-    try {
-      await options.objects.putObject('files', objectKey, bytes, bytes.length, metadata);
-    } catch (error) {
-      if (isDependencyOutage(error)) {
-        const cause = { cause: error };
-        throw new FileUnavailable('object_store', cause);
-      }
-      throw error;
-    }
-    type = 'file.uploaded';
-    eventData = { ...data, mime, objectKey };
-  } else {
-    type = 'file.rejected';
-    eventData = { ...data, reason: 'infected' };
+  return verdict;
+}
+
+async function saveCleanObject(options: FileOptions,
+  input: { verdict: ScanVerdict; objectKey: string; bytes: Buffer; mime: string }) {
+  const { verdict, objectKey, bytes, mime } = input;
+  if (verdict === 'infected') {
+    return { type: 'file.rejected' as const, details: { reason: 'infected' } };
   }
-  await fresh?.();
-  const result = await fileCommand(
-    options.store, options.silo, memberId, `file-upload-${fileId}`, type, eventData, fresh,
-  );
+  const metadata = { 'Content-Type': mime };
+  try {
+    await options.objects.putObject('files', objectKey, bytes, bytes.length, metadata);
+  } catch (error) {
+    if (isDependencyOutage(error)) {
+      const cause = { cause: error };
+      throw new FileUnavailable('object_store', cause);
+    }
+    throw error;
+  }
+  return { type: 'file.uploaded' as const, details: { mime, objectKey } };
+}
+
+function uploadedResult(result: AppendResult, fileId: string, verdict: ScanVerdict) {
   if (result.status === 'unavailable') {
+    if (result.cause instanceof FileRefusal) throw result.cause;
     throw new FileUnavailable('event_store', { cause: result.cause });
   }
   if (result.status === 'rejected') {

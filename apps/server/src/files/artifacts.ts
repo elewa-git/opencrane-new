@@ -40,8 +40,9 @@ export async function publishArtifacts(context: ArtifactPublication, memberId: s
     const { path, reason } = resultData;
     const data = { conversationId, turnId, path,
       changeType: reason ? 'deleted' : 'created', ...(reason ? { reason } : {}) };
-    const result = await fileCommand(files.store, files.silo, memberId, key,
-      'agent.file_changed', data);
+    const command = { silo: files.silo, memberId, eventId: key,
+      type: 'agent.file_changed' as const, value: data };
+    const result = await fileCommand(files.store, command);
     if (result.status !== 'appended') throw new Error('Artifact record unavailable');
   }
 }
@@ -51,8 +52,9 @@ async function bindPublication(files: FileOptions, memberId: string,
   const key = `artifact-set-${sha256HexOfJson([conversationId, turnId])}`;
   const data = { conversationId, turnId, digest: sha256HexOfJson(artifacts) };
   // Save the set before any upload, so an interrupted report cannot replace its allowance.
-  const result = await fileCommand(files.store, files.silo, memberId, key,
-    'agent.file_publication_started', data);
+  const command = { silo: files.silo, memberId, eventId: key,
+    type: 'agent.file_publication_started' as const, value: data };
+  const result = await fileCommand(files.store, command);
   if (result.status !== 'appended') throw new Error('Artifact set unavailable');
 }
 
@@ -67,8 +69,8 @@ async function publishArtifact(files: FileOptions, readArtifact: NonNullable<Art
     if (bytes.length !== artifact.size || sha256Hex(bytes) !== artifact.sha256) {
       return { ...refused, reason: 'invalid_file' };
     }
-    const result = await uploadFile(files, memberId, conversationId, key,
-      artifact.name, bytes, undefined, undefined, turnId);
+    const input = { key, name: artifact.name, bytes, turnId };
+    const result = await uploadFile(files, memberId, conversationId, input);
     if (result.status === 'infected') return { ...refused, reason: 'infected' };
     if (result.status !== 'appended') throw new Error('Artifact upload unavailable');
     return { path: `uploads/${conversationId}/${result.fileId}/${artifact.name}`, reason: undefined };

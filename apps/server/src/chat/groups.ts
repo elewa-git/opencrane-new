@@ -32,9 +32,22 @@ function addGroup(facts: GroupFacts, row: StoredEvent) {
   }
   if (row.event.type === 'team.member_removed' && data.memberId) facts.joins.delete(data.memberId);
 }
+function groupSize(facts: GroupFacts) {
+  return facts.joins.size;
+}
 const groupKind: SummaryKind<GroupFacts> = {
   name: 'chat-group', keep: 64, empty: emptyGroup, add: addGroup,
+  budget: { limit: 8192, size: groupSize },
 };
+
+export function hasSavedGroupMember(options: Pick<ChatOptions, 'store' | 'silo'>,
+  groupId: string, memberId: string, deadline = Infinity) {
+  function includesMember(facts: GroupFacts) {
+    return facts.joins.has(memberId);
+  }
+  return readStreamSummary(options.store, options.silo, `team-${groupId}`, groupKind, deadline,
+    includesMember);
+}
 async function groupFacts(options: ChatOptions, groupId: string) {
   function take(facts: GroupFacts, position: number) {
     if (facts.groupId && facts.groupId !== groupId) throw new Error('Group history mismatch');

@@ -56,9 +56,8 @@ async function requireApplied(binding: Binding, silo: string, requesterId: strin
   }
   const memberPermission = await auth.check(requesterId, 'member');
   const groupPermission = await auth.team(requesterId, groupId);
-  if (memberPermission.status === 'unavailable' || groupPermission.status === 'unavailable') {
-    throw new Error('IAM unavailable');
-  }
+  if (memberPermission.status === 'unavailable') throw memberPermission.error;
+  if (groupPermission.status === 'unavailable') throw groupPermission.error;
   if (!memberPermission.allowed || !groupPermission.allowed) {
     throw new PayingGroupRefused('Paying group unavailable or spending permission refused');
   }

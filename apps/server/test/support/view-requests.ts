@@ -11,7 +11,7 @@ export function viewHeaders(config: AuthConfig, sub = 'alice') {
     cookie: `${config.cookieName}=${cookie}` };
 }
 
-export async function teamViewChat({ append }: Fixture, applyAssistant = true) {
+export async function teamViewChat({ append }: Fixture) {
   await append('team-sales', 'team.created', {
     teamId: 'sales', name: 'Sales', createdBy: 'alice',
   }, true);
@@ -21,9 +21,9 @@ export async function teamViewChat({ append }: Fixture, applyAssistant = true) {
   await append('team-sales', 'team.member_added', {
     teamId: 'sales', memberId: 'bob', addedBy: 'alice',
   }, true);
-  const assistant = await append('assistant-team-sales', 'assistant.created', {
+  await append('assistant-team-sales', 'assistant.created', {
     assistantId: 'team-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
-  }, applyAssistant);
+  }, true);
   const computer = { assistantId: 'team-sales', computerId: 'team-desktop', generation: 1 };
   await append('computer-team-sales', 'computer.claimed', {
     ...computer, sandboxUid: 'sandbox', tokenId: 'token:test',
@@ -33,7 +33,6 @@ export async function teamViewChat({ append }: Fixture, applyAssistant = true) {
     conversationId: 'team-session', assistantId: 'team-sales', createdBy: 'alice',
     mode: 'agent_session', payingGroupId: 'sales',
   }, true);
-  return assistant;
 }
 
 export async function sharedChildChat(fixture: Fixture) {

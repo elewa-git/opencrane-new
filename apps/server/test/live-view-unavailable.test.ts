@@ -3,7 +3,6 @@ import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex, PassThrough } from 'node:stream';
-import { setTimeout as delay } from 'node:timers/promises';
 import { encodeSession } from '@opencrane/auth';
 import { history } from '@opencrane/models';
 import { until } from '@opencrane/authz/testing';
@@ -67,38 +66,55 @@ async function authorisationProxy(apiUrl: string) {
   let failure: Failure = 'none';
   let failures = 0;
 
-  async function sendFailure(request: IncomingMessage, response: ServerResponse) {
-    let body = '';
-    for await (const chunk of request) body += String(chunk);
-    const parsed = checkRequest.parse(JSON.parse(body));
-    failures++;
-    if (failure === 'conversation denied' && parsed.tuple_key.relation === 'read') {
-      const permission = { allowed: false };
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify(permission));
-      return;
-    }
-    response.writeHead(503);
-    response.end();
-  }
-
-  function handleRequest(request: IncomingMessage, response: ServerResponse) {
+  function forward(request: IncomingMessage, response: ServerResponse, body?: string) {
     function failResponse() {
       response.writeHead(502);
       response.end();
     }
-    if (failure !== 'none' && request.url?.endsWith('/check')) {
-      void sendFailure(request, response).catch(failResponse);
-      return;
-    }
-    function forwardResponse(incoming: IncomingMessage) {
+    function reply(incoming: IncomingMessage) {
       response.writeHead(incoming.statusCode ?? 502, incoming.headers);
       incoming.pipe(response);
     }
     const options = { method: request.method, headers: request.headers };
-    const upstream = httpRequest(`${apiUrl}${request.url}`, options, forwardResponse);
+    const upstream = httpRequest(`${apiUrl}${request.url}`, options, reply);
     upstream.on('error', failResponse);
-    request.pipe(upstream);
+    if (body !== undefined) {
+      upstream.end(body);
+    } else {
+      request.pipe(upstream);
+    }
+  }
+
+  async function denyConversation(request: IncomingMessage, response: ServerResponse) {
+    let body = '';
+    for await (const chunk of request) body += String(chunk);
+    const parsed = checkRequest.parse(JSON.parse(body));
+    if (parsed.tuple_key.relation !== 'read') {
+      forward(request, response, body);
+      return;
+    }
+    failures++;
+    const permission = { allowed: false };
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(permission));
+  }
+
+  function handleRequest(request: IncomingMessage, response: ServerResponse) {
+    if (!request.url?.endsWith('/check') || failure === 'none') {
+      forward(request, response);
+      return;
+    }
+    if (failure === 'unavailable') {
+      failures++;
+      response.writeHead(503);
+      response.end();
+      return;
+    }
+    function failResponse() {
+      response.writeHead(502);
+      response.end();
+    }
+    void denyConversation(request, response).catch(failResponse);
   }
 
   const server = createServer(handleRequest);
@@ -142,15 +158,19 @@ async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
 
   try {
     socket = await startViewer(fixture);
-    vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(read);
+    const readSpy = vi.spyOn(fixture.nats.store, 'readStream');
+    readSpy.mockImplementation(read);
     const notices = recordLeaseNotices(socket);
     const failedAt = performance.now();
     unavailable = true;
-    if (boundary === 'OpenFGA') proxy.setFailure('unavailable');
+    if (boundary === 'OpenFGA') {
+      proxy.setFailure('unavailable');
+    }
     const closed = once(socket, 'close');
-    await delay(650);
-    const observedFailures = failures + proxy.failureCount();
-    expect(observedFailures).toBeGreaterThan(0);
+    function sawFailure() {
+      return failures + proxy.failureCount() > 0;
+    }
+    await until(sawFailure);
     // A failed check cannot revoke authority while its successful snapshot is still valid.
     expect(socket.readyState).toBe(WebSocket.OPEN);
     if (!recovers) {
@@ -170,7 +190,14 @@ async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
     }
     unavailable = false;
     proxy.setFailure('none');
-    await delay(1700);
+    const recoverAt = failedAt + 1700;
+    function validRenewal(entry: (typeof notices)[number]) {
+      return entry.at >= recoverAt && entry.notice.lease === 'valid';
+    }
+    function recovered() {
+      return notices.some(validRenewal);
+    }
+    await until(recovered, 3500);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     const revokedAt = performance.now();
     const removal = { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' };
@@ -201,28 +228,37 @@ async function refusesConversationBesideSlowComputerRead() {
   const fixture = await viewFixture(openDesktop);
   const proxy = await authorisationProxy(fixture.fga.apiUrl);
   fixture.binding.apiUrl = proxy.apiUrl;
-  const readStream = fixture.nats.store.readStream.bind(fixture.nats.store);
+  const store = fixture.nats.store;
+  const readStream = store.readStream.bind(store);
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const readSpy = vi.spyOn(store, 'readStream');
   let socket: WebSocket | undefined;
 
   async function* read(...args: Parameters<typeof readStream>) {
-    if (args[0] === 'computer-assistant') await delay(1400);
+    if (args[0] === 'computer-assistant') {
+      started.resolve();
+      await release.promise;
+    }
     yield* readStream(...args);
   }
 
   try {
     socket = await startViewer(fixture);
     const closed = once(socket, 'close');
-    vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(read);
+    readSpy.mockImplementation(read);
+    await started.promise;
     const deniedAt = performance.now();
     proxy.setFailure('conversation denied');
     const closeResult = await closed;
     expect(closeResult[0]).toBe(4003);
     expect(String(closeResult[1])).toBe('access_changed');
-    // Stop as soon as OpenFGA refuses chat access, even if another read is still running.
+    // Stop as soon as OpenFGA refuses chat access, even while the computer read waits.
     expect(performance.now() - deniedAt).toBeLessThan(1000);
   } finally {
+    release.resolve();
     socket?.terminate();
-    vi.restoreAllMocks();
+    readSpy.mockRestore();
     await proxy.close();
     await fixture.close();
   }
@@ -238,11 +274,14 @@ async function keepsLeaseAfterLateRead(millisecondsAfterDeadline: number) {
   vi.stubEnv('LOG_LEVEL', 'info');
   const destination = { write };
   const fixture = await viewFixture(openDesktop, undefined, destination);
-  const readStream = fixture.nats.store.readStream.bind(fixture.nats.store);
+  const store = fixture.nats.store;
+  const readStream = store.readStream.bind(store);
+  const head = store.head.bind(store);
   const realNow = performance.now.bind(performance);
   const crossed = Promise.withResolvers<void>();
   let handledAt: number | undefined;
   let late = false;
+  let queryDeadline: number | undefined;
   let socket: WebSocket | undefined;
 
   function clockNow() {
@@ -255,17 +294,22 @@ async function keepsLeaseAfterLateRead(millisecondsAfterDeadline: number) {
     handledAt = undefined;
     crossed.resolve();
   }
+  function observeCheck(...args: Parameters<typeof head>) {
+    const [subject, deadline] = args;
+    if (!late && subject === 'participation-chat') {
+      queryDeadline = deadline;
+    }
+    return head(...args);
+  }
   async function* replyAfterDeadline(...args: Parameters<typeof readStream>) {
-    const [subject, , deadline] = args;
-    const lateComputer = !late && subject === 'computer-assistant' && deadline !== undefined;
+    const deadline = queryDeadline;
+    const lateComputer = !late && args[0] === 'computer-assistant' && deadline !== undefined;
     if (lateComputer) {
       late = true;
-      // Let the sibling permission checks finish before delivering the late computer reply.
-      await delay(20);
     }
     yield* readStream(...args);
     if (lateComputer) {
-      // Model an I/O reply handled at or after 1,200 ms, before the overdue timer runs.
+      // Handle a reply after the access deadline while the outer timer is still waiting.
       handledAt = deadline + millisecondsAfterDeadline;
       setImmediate(resumeClock);
     }
@@ -273,10 +317,22 @@ async function keepsLeaseAfterLateRead(millisecondsAfterDeadline: number) {
 
   try {
     socket = await startViewer(fixture);
-    vi.spyOn(performance, 'now').mockImplementation(clockNow);
-    vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(replyAfterDeadline);
+    const notices = recordLeaseNotices(socket);
+    const clockSpy = vi.spyOn(performance, 'now');
+    const headSpy = vi.spyOn(store, 'head');
+    const readSpy = vi.spyOn(store, 'readStream');
+    clockSpy.mockImplementation(clockNow);
+    headSpy.mockImplementation(observeCheck);
+    readSpy.mockImplementation(replyAfterDeadline);
     await crossed.promise;
-    await delay(500);
+    const resumedAt = realNow();
+    function validLater(entry: (typeof notices)[number]) {
+      return entry.at >= resumedAt && entry.notice.lease === 'valid';
+    }
+    function sawValidLease() {
+      return notices.some(validLater);
+    }
+    await until(sawValidLease);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     const deadlineTiming = z.object({
       operation: z.literal('view.timing'),

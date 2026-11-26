@@ -1930,8 +1930,8 @@ outlives its sign-in. `ViewLease.watchAuthority` owns each in-flight check from 
 increment through its `finally` decrement. `ViewDelivery` still gates every send.
 
 Live-view access checks run every 250 ms with a 1,200 ms deadline. An explicit
-`member.removed` result or conversation-read denial ends the check immediately,
-without waiting for sibling reads. These denials close the viewer with 4003 and
+chat access refusal or closure ends the check as soon as the server confirms it,
+even if another read is still waiting. These denials close the viewer with 4003 and
 `access_changed`. Remaining reads keep error handlers attached after the check ends.
 An unavailable read or a timeout still grants no new lease. An existing lease
 allows desktop bytes for at most 1,500 ms from its successful check's start.
@@ -2066,7 +2066,7 @@ cover real-service tests and the pending fresh-install journey.
 `POST /api/conversations/:conversationId/screenshots` takes no body. Supply the
 session cookie, exact configured Origin, `x-opencrane-view: 1` and a stable
 `idempotency-key`. The server checks the same chat access and computer as the
-live viewer before capture and again before saving. The
+live viewer before capture and again at the file append. The
 existing namespace-scoped authenticated desktop proxy supplies one framebuffer;
 there is no caller-selected URL, path or encoding. Dimensions are at most 4096
 per axis and at most 4 MiB of raw pixels, with a ten-second framebuffer deadline
@@ -2830,7 +2830,7 @@ participation position reads. A changed position reloads those facts before retu
 content, so an old OpenFGA answer cannot hide a newly saved removal.
 Fresh-install browser qualification remains NOT RUN.
 
-Current participants with read access can capture screenshots in personal agent sessions. A late participant can list and download screenshots saved after their
+Current readers can capture screenshots in open assistant sessions. A late participant can list and download screenshots saved after their
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 

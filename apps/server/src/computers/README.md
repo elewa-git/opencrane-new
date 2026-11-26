@@ -15,7 +15,7 @@ This folder lets people watch an assistant's desktop, take a screenshot and see 
 
 Each [computer](../../../../GLOSSARY.md#computer) belongs to one assistant. A personal assistant has its own; a group's assistant uses one shared computer. Viewing holds one place while the connection opens and until it ends. Losing chat access ends the view within two seconds, even while another access check is slow. A later invitation alone does not restore desktop or file access. Starting a turn or receiving a file does not remove viewing access.
 
-A screenshot checks the same chat access and opens a temporary connection to the assistant's desktop, then passes the picture through the normal [file checks](../files/README.md). No open viewer is needed. People who join a conversation later can see only files and screenshots from their latest join onwards.
+A screenshot uses the same access check as reading the chat. The server opens a temporary connection to the computer, scans the picture and checks access again when it saves the [file](../files/README.md). This works in personal and shared assistant chats with a ready computer. People who join a conversation later can see only files and screenshots from their latest join onwards.
 
 When enabled, a control request must name the current requester's message and current computer. Pending intent prevents new work and new AI passes. Authorised viewing, an explicit request to stop a reply and denying an approval remain available. Reading control status does not touch the computer or grant control.
 

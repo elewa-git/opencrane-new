@@ -132,6 +132,8 @@ export async function deleteStore(binding: Binding): Promise<void> {
   await sdk(binding.apiUrl, binding).deleteStore();
 }
 
+export class AuthorisationUnavailable extends Error {}
+
 export class TupleClient {
   private readonly client: OpenFgaClient;
   constructor(binding: Binding) {
@@ -161,7 +163,7 @@ export class TupleClient {
       return {
         allowed: false as const,
         status: "unavailable" as const,
-        error: new Error("Authorisation check unavailable", { cause }),
+        error: new AuthorisationUnavailable("Authorisation check unavailable", { cause }),
       };
     }
   }
@@ -192,7 +194,7 @@ export class TupleClient {
       }
       return { allowed, status: 'ok' as const };
     } catch (cause) {
-      return { allowed: false as const, status: 'unavailable' as const, error: new Error('Authorisation checks unavailable', { cause }) };
+      return { allowed: false as const, status: 'unavailable' as const, error: new AuthorisationUnavailable('Authorisation checks unavailable', { cause }) };
     }
   }
 

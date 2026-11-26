@@ -32,7 +32,8 @@ async function refusesQueuedFileAfterRemoval() {
   const file = { conversationId: 'chat', fileId: 'queued-file', name: 'notes.txt',
     mime: 'text/plain', size: bytes.length, sha256: hash.digest('hex'),
     objectKey: 'test/chat/queued-file', uploadedBy: 'alice' };
-  await fileCommand(nats.store, 'test', 'alice', 'upload', 'file.uploaded', file);
+  await fileCommand(nats.store, { silo: 'test', memberId: 'alice', eventId: 'upload',
+    type: 'file.uploaded', value: file });
   const removed: EventEnvelope = event('removed', 'member-alice', 'member.removed');
   removed.data = { memberId: 'alice', removedBy: 'owner' };
   const invited = event('later-invitation', 'member-alice', 'member.invited');
