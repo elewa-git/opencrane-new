@@ -1,6 +1,8 @@
-# Packaged onboarding and Memory
+# Onboarding and Memory
 
-Journey on a fresh dev stack: PASS
+## Earlier Helm journey
+
+**PASS on a fresh Helm install.**
 
 On 26 November 2026, a fresh Helm install on slot 1 used commit
 `464989640d2ae317c63d9d5cba3bd58c4380374f`. The ownership check passed. Ordinary
@@ -46,8 +48,34 @@ was denied. Both runs saved startup and service logs before cleanup.
 
 ## Direct workspace visits
 
-Fresh slot-1 routing journey was NOT RUN. The browser setup failed before the
-first direct workspace visit.
+**PARTIAL on a fresh slot-1 Compose stack.** On 26 November 2026, the stack
+started from `13c6ea3e1` with the free model stand-in. The slot's own test owner
+claimed the installation through the browser and had access to the computer list.
+The browser used the normal invitation flow for members.
+
+| Check | 1280 × 900 | 390 × 844 |
+| --- | --- | --- |
+| Signed-out survey request returns 401 | PASS | PASS |
+| Owner creates the invitation and the member joins and opens the survey | FAIL | [PASS](routing-survey-390.png) |
+| Member saves the first answer while the personal computer runs | NOT RUN | PASS |
+| Signed-in unfinished member opens the Conversations bookmark and returns to survey step two | NOT RUN | PARTIAL |
+| Reload of Conversations returns the unfinished member to survey step two | NOT RUN | NOT RUN |
+| Member saves all survey answers, approves the persona and completes welcome | NOT RUN | NOT RUN |
+| Finished member keeps Conversations on a direct visit and reload | NOT RUN | NOT RUN |
+| First ordinary chat replies on the computer that was running during the survey | NOT RUN | NOT RUN |
+| A saved Memory fact remains visible after reload | NOT RUN | NOT RUN |
+
+At 1280 px, the People page returned HTTP 503 with `membership_applying`, so
+the Invite people button did not appear. The later People request for the 390 px
+case returned 200 and the member joined. At 390 px, the bookmark loaded and the
+welcome progress request returned HTTP 200. The browser driver could not read
+the response body and stopped before it checked the final page.
+
+The runner saved `up.log`, `browser.log`, `service-server.log` and the other
+service logs before teardown. `down.sh --id 1` passed and slot 1 reported free.
+[Latest browser checks](workspace-routing.json)
+
+### Previous routing attempt
 
 On 26 November 2026, slot 1 started fresh from `40f775d3e` with the free
 stand-in. The stack and website reported healthy. The test account signed in
