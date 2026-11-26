@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { budgets } from '@opencrane/models';
@@ -10,28 +11,95 @@ import { members, mcpCatalogue, computers, conversations, files, auditTrail,
 import { packageBackupSource } from './scheduled-backup-source.ts';
 import { captureScheduledBackup, listBackups } from './scheduled-backup.ts';
 
+type CheckpointReader = 'projection' | 'handler';
+
+type HeldDisconnect = {
+  reader: CheckpointReader;
+  started(): void;
+  released: Promise<void>;
+};
+
+const storage = vi.hoisted(function storageState() {
+  return new Map<string, Buffer>();
+});
+vi.mock('./pilot-storage.ts', function objectStoreBoundary() {
+  async function* listObjectsV2() {
+    for (const name of storage.keys()) yield { name };
+  }
+  async function getObject(_bucket: string, key: string) {
+    return Readable.from([storage.get(key)!]);
+  }
+  async function pilotStorage() {
+    return { listObjectsV2, getObject };
+  }
+  return { pilotStorage };
+});
+
 const database = vi.hoisted(function databaseState() {
-  return { behind: '', clients: '0', names: [] as string[] };
+  return { behind: '', clients: '0', names: [] as string[],
+    activeReaders: new Set<object>(), heldDisconnect: undefined as HeldDisconnect | undefined,
+    countedWhileHeld: false, fileReferences: [] as unknown[] };
 });
 vi.mock('pg', function databaseBoundary() {
-  class Pool {
+  class Client {
+    protected readonly reader: CheckpointReader | undefined;
+
+    constructor(options: { connectionString?: string }) {
+      if (options.connectionString?.endsWith('/projection')) this.reader = 'projection';
+      if (options.connectionString?.endsWith('/handler')) this.reader = 'handler';
+    }
+
+    async connect() {
+      if (this.reader) database.activeReaders.add(this);
+    }
+
     query(sql: string) {
-      if (sql.includes('pg_stat_activity')) return { rows: [{ count: database.clients }] };
-      if (sql.includes('pg_current_wal_lsn')) return { rows: [{ lsn: '0/123' }] };
+      if (sql.includes('conversation_files')) {
+        this.requireReader('projection');
+        function asRow(data: unknown) { return { data }; }
+        return { rows: database.fileReferences.map(asRow) };
+      }
+      if (sql.includes('pg_stat_activity')) {
+        const count = Number(database.clients) + database.activeReaders.size;
+        if (database.heldDisconnect && database.activeReaders.size > 0) {
+          database.countedWhileHeld = true;
+        }
+        return { rows: [{ count: String(count) }] };
+      }
+      if (sql.includes('pg_current_wal_lsn')) {
+        return { rows: [{ lsn: '0/123' }] };
+      }
       if (sql.includes('projection_checkpoints')) {
+        this.requireReader('projection');
         const rows = [];
         for (const name of database.names) {
-          const sequence = database.behind === name ? '0' : '1';
+          let sequence = '1';
+          if (database.behind === name) sequence = '0';
           rows.push({ name, sequence });
         }
         return { rows };
       }
-      if (sql.includes('handler_dispatcher')) return { rows: [{ sequence: '1' }] };
+      if (sql.includes('handler_dispatcher')) {
+        this.requireReader('handler');
+        return { rows: [{ sequence: '1' }] };
+      }
       throw new Error('Unexpected database query');
     }
-    end() { return Promise.resolve(); }
+    private requireReader(reader: CheckpointReader) {
+      expect(this.reader).toBe(reader);
+      expect(database.activeReaders.has(this)).toBe(true);
+    }
+
+    async end() {
+      const held = database.heldDisconnect;
+      if (held && held.reader === this.reader) {
+        held.started();
+        await held.released;
+      }
+      database.activeReaders.delete(this);
+    }
   }
-  return { Pool };
+  return { Client, Pool: Client };
 });
 vi.mock('node:timers/promises', async function pollingClock(importOriginal) {
   const actual = await importOriginal<typeof import('node:timers/promises')>();
@@ -53,9 +121,14 @@ afterEach(function reset() {
   vi.unstubAllEnvs();
   database.behind = '';
   database.clients = '0';
+  database.activeReaders.clear();
+  database.heldDisconnect = undefined;
+  database.countedWhileHeld = false;
+  database.fileReferences = [];
+  storage.clear();
 });
 
-async function fixture(ready = true, providerMode = false) {
+async function backupFixture(ready = true, providerMode = false, captureFiles = false) {
   database.names = projectionNames;
   const directory = await mkdtemp(join(tmpdir(), 'backup-adapter-'));
   const nats = await natsFixture();
@@ -74,6 +147,8 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   vi.stubEnv('PATH', `${directory}:${process.env['PATH']}`);
   vi.stubEnv('BACKUP_TEST_CALLS', calls);
   vi.stubEnv('BACKUP_TEST_READY', ready ? 'yes' : 'no');
+  vi.stubEnv('PROJECTION_DATABASE_URL', 'postgres://fixture/projection');
+  vi.stubEnv('HANDLER_DATABASE_URL', 'postgres://fixture/handler');
   const backupDirectory = join(directory, 'sets');
   await mkdir(backupDirectory, { mode: 0o700 });
   const options = { directory: backupDirectory, id: 'adapter-backup',
@@ -100,7 +175,7 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   }
   vi.spyOn(runtime.source, 'kube').mockImplementation(kube);
   runtime.source.parts.database = databasePart;
-  runtime.source.parts.files = filesPart;
+  if (!captureFiles) runtime.source.parts.files = filesPart;
   async function close() {
     await runtime.close();
     await nats.close();
@@ -110,8 +185,44 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   return { directory: backupDirectory, options, source: runtime.source, calls, kube, nats };
 }
 
-it('captures through the real pause, verify, event and restart adapter', async function valid() {
-  const test = await fixture();
+const upload = {
+  conversationId: 'conv_1', fileId: 'file_1', uploadedBy: 'mem_1', name: 'notes.txt',
+  size: 3, sha256: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  mime: 'text/plain', objectKey: 'test/conv_1/file_1',
+};
+
+async function publishesMatchingUpload() {
+  const test = await backupFixture(true, false, true);
+  database.fileReferences.push(upload);
+  storage.set(upload.objectKey, Buffer.from('abc'));
+  const manifest = await captureScheduledBackup(test.options, test.source);
+  const archived = await readFile(join(test.directory, test.options.id, 'files'), 'utf8');
+  const file = { key: upload.objectKey, byteCount: 3, sha256: upload.sha256, data: 'YWJj' };
+  expect(JSON.parse(archived)).toEqual(file);
+  expect(await listBackups(test.directory)).toEqual([manifest]);
+}
+
+it('copies a stored upload that matches its event in the projection database',
+  publishesMatchingUpload);
+
+for (const mismatch of ['object without event', 'event without object', 'wrong object bytes']) {
+  it(`refuses publication with ${mismatch}`, async function refusesFilesMismatch() {
+    const test = await backupFixture(true, false, true);
+    if (mismatch !== 'object without event') database.fileReferences.push(upload);
+    if (mismatch === 'object without event') storage.set(upload.objectKey, Buffer.from('abc'));
+    if (mismatch === 'wrong object bytes') storage.set(upload.objectKey, Buffer.from('abd'));
+    await expect(captureScheduledBackup(test.options, test.source)).rejects.toMatchObject({
+      cause: { kind: 'scheduled_backup', reason: 'parts' },
+    });
+    expect(await listBackups(test.directory)).toEqual([]);
+    expect(await readdir(test.directory)).toEqual([]);
+    const calls = await readFile(test.calls, 'utf8');
+    expect(calls).toContain('scale deployment/server --replicas=1');
+  });
+}
+
+async function capturesAndRestarts() {
+  const test = await backupFixture();
   await captureScheduledBackup(test.options, test.source);
   expect(await listBackups(test.directory)).toHaveLength(1);
   const calls = await readFile(test.calls, 'utf8');
@@ -119,13 +230,49 @@ it('captures through the real pause, verify, event and restart adapter', async f
     expect(calls).toContain(`scale deployment/${name} --replicas=1`);
     expect(calls).toContain(`rollout status deployment/${name} --timeout=60s`);
   }
-});
+}
+it('captures through the real pause, verify, event and restart adapter', capturesAndRestarts);
+
+for (const reader of ['projection', 'handler'] as const) {
+  async function waitsForReader() {
+    const test = await backupFixture();
+    const started = Promise.withResolvers<void>();
+    const released = Promise.withResolvers<void>();
+    const filesPart = test.source.parts.files;
+    async function captureFiles(destination: string) {
+      const details = await filesPart(destination);
+      // Hold this checkpoint reader open during the final verification.
+      database.heldDisconnect = { reader, started: started.resolve, released: released.promise };
+      return details;
+    }
+    test.source.parts.files = captureFiles;
+    const pending = captureScheduledBackup(test.options, test.source);
+    async function finishedBeforeDisconnect() {
+      await pending;
+      throw new Error('The backup finished before starting the checkpoint disconnect');
+    }
+    const finished = finishedBeforeDisconnect();
+    await Promise.race([started.promise, finished]);
+    await new Promise<void>(function allowDatabaseRead(resolve) {
+      setImmediate(resolve);
+    });
+    const countedWhileHeld = database.countedWhileHeld;
+    released.resolve();
+    const manifest = await pending;
+    expect(countedWhileHeld).toBe(false);
+    expect(database.activeReaders.size).toBe(0);
+    expect(await listBackups(test.directory)).toEqual([manifest]);
+  }
+  it(`waits for the ${reader} checkpoint reader to disconnect before counting clients`, waitsForReader);
+}
 
 for (const brokenPart of [false, true]) {
   it(`retains maintenance after accepted scales with unavailable replacements (part=${brokenPart})`,
     async function unavailableReplacements() {
-      const test = await fixture(false);
-      function failPart() { return Promise.reject(new Error('broken part')); }
+      const test = await backupFixture(false);
+      function failPart() {
+        return Promise.reject(new Error('broken part'));
+      }
       if (brokenPart) test.source.parts.files = failPart;
       await expect(captureScheduledBackup(test.options, test.source))
         .rejects.toThrow('Maintenance remains active; services could not restart');
@@ -144,7 +291,7 @@ const violations = ['replicas', 'pods', 'deployment', 'created', 'first_seq', 'l
 for (const violation of violations) {
   it(`refuses an otherwise valid capture with ${violation} changed and recovers`,
     async function refusesViolation() {
-      const test = await fixture();
+      const test = await backupFixture();
       const originalInfo = test.source.eventInfo.bind(test.source);
       let infoReads = 0;
       async function eventInfo() {
@@ -197,7 +344,7 @@ for (const violation of violations) {
 }
 
 async function pausesProviderSelectionProjection() {
-  const test = await fixture(true, true);
+  const test = await backupFixture(true, true);
   database.names = [...projectionNames, routines.name];
   const command = vi.mocked(test.source.kube);
   await test.source.pause();
@@ -212,7 +359,7 @@ it('provider backups pause and resume the model-selection projection',
   pausesProviderSelectionProjection);
 
 async function refusesLaggingProviderProjection() {
-  const test = await fixture(true, true);
+  const test = await backupFixture(true, true);
   database.names = [...projectionNames, routines.name];
   database.behind = routines.name;
   await expect(test.source.pause()).rejects.toThrow('Backup deadline');

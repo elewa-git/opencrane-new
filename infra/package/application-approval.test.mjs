@@ -112,6 +112,37 @@ process.stdout.write(JSON.stringify(approved));`;
 }
 test('preparation fetches only successful exact-source application output', preparationUsesCiOnly);
 
+function canPublishAgainAfterRollback() {
+  const directory = mkdtempSync(join(tmpdir(), 'application-republish-'));
+  try {
+    const fixture = applicationApprovalFixture(directory, image, { refuseOverwrite: true });
+    const registry = [{ NetworkSettings: { Networks: { 'k3d-ocn': { IPAddress: '127.0.0.1' } } } }];
+    const docker = `#!/usr/bin/env node\nprocess.stdout.write(${JSON.stringify(JSON.stringify(registry))});\n`;
+    writeFileSync(join(fixture.bin, 'docker'), docker, { mode: 0o700 });
+    writeFileSync(join(fixture.bin, 'python3'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const program = `import { publishApprovedApplication } from './infra/package/publish-approved-images.mjs';
+const first = await publishApprovedApplication(process.argv[1]);
+const second = await publishApprovedApplication(process.argv[1]);
+process.stdout.write(JSON.stringify([first, second]));`;
+    const result = spawnSync('node', ['--input-type=module', '-e', program, directory],
+      { env: fixture.env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const [first, second] = JSON.parse(result.stdout);
+    assert.equal(first.image, image);
+    assert.equal(second.image, image);
+    assert.notEqual(first.destination, second.destination);
+    for (const approval of [first, second]) {
+      const file = join(approval.destination, 'approval.json');
+      assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), fixture.approval);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test('another publication of the same approval preserves the earlier record',
+  canPublishAgainAfterRollback);
+
 function refusesForkDispatch() {
   const workflow = parse(readFileSync('.github/workflows/application-package.yml', 'utf8'));
   assert.ok('workflow_dispatch' in workflow.on);

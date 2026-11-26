@@ -176,6 +176,7 @@ class ImageLayerTests(unittest.TestCase):
     def test_missing_backup_import_refuses_even_with_entry_point_present(self):
         required = ("infra/package/scheduled-backup.ts",
                     "infra/package/scheduled-backup-source.ts", "infra/package/event-backup.ts",
+                    "infra/package/pilot-file-inventory.ts",
                     "infra/package/object-credentials.mjs", "infra/package/backup-bytes.ts")
         for module in required:
             with self.subTest(module=module):
@@ -188,6 +189,7 @@ class ImageLayerTests(unittest.TestCase):
 
     def test_missing_restore_import_refuses_even_with_entry_point_present(self):
         required = ("pilot-restore.ts", "pilot-backup-contract.ts", "pilot-projections.ts",
+                    "pilot-file-inventory.ts",
                     "pilot-restore-database.ts", "pilot-restore-target.ts", "pilot-storage.ts",
                     "pilot-restore-kube.ts", "package-database.ts", "event-restore.ts")
         for name in required:
@@ -209,7 +211,8 @@ class ImageLayerTests(unittest.TestCase):
                          "scheduled-backup-run.ts", "scheduled-backup.ts",
                          "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts",
                          "event-restore.ts", "package-database.ts", "pilot-projections.ts",
-                         "pilot-backup-contract.ts", "pilot-storage.ts", "pilot-restore.ts",
+                         "pilot-backup-contract.ts", "pilot-file-inventory.ts", "pilot-storage.ts",
+                         "pilot-restore.ts",
                          "pilot-restore-database.ts", "pilot-restore-kube.ts",
                          "pilot-restore-target.ts", "pilot-restore-run.ts"}
         self.assertIn("app/infra/package/web-page.mjs", self.paths)

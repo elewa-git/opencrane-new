@@ -41,7 +41,14 @@ if (args[0] === 'api') {
 } else {
   if (!args.includes('https://github.com/elewa-git/opencrane-new')) process.exit(2);
   const destination = args[args.indexOf('--dir') + 1];
-  fs.writeFileSync(destination + '/approval.json', ${JSON.stringify(JSON.stringify(approval))});
+  const artifact = args[args.indexOf('--name') + 1];
+  const flags = { flag: ${JSON.stringify(options.refuseOverwrite ? 'wx' : 'w')} };
+  if (artifact === 'application-image') {
+    fs.writeFileSync(destination + '/application.tar', 'fixture image', flags);
+  } else {
+    fs.writeFileSync(destination + '/approval.json',
+      ${JSON.stringify(JSON.stringify(approval))}, flags);
+  }
 }
 `;
   writeFileSync(join(bin, 'gh'), github, { mode: 0o700 });

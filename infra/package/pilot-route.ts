@@ -2,10 +2,11 @@ import { execFile } from 'node:child_process';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 import { z } from 'zod';
 import { localOrigin, secondary } from '../dev-stack/identity.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
+import { ownsPackageForwarder, packageForwardArgs, readForwardTarget } from './package-forwarder.ts';
 
 export interface PilotRouteSettings {
   host: string;
@@ -16,22 +17,34 @@ export interface PilotRouteSettings {
   logoutRedirect: string;
 }
 
-export interface PilotRouteControls {
+interface ServeControls {
   deviceName(): Promise<string>;
-  serveStatus(): Promise<unknown>;
+  serveStatus(): Promise<ServeSnapshot>;
+  serve(origin: string, checked: CheckedRoute): Promise<void>;
+}
+
+type ServeSnapshot = { configuration: unknown; etag: string };
+
+export interface PilotRouteControls extends ServeControls {
+  ownsForwarder(origin: string): Promise<boolean>;
   healthyForwarder(origin: string): Promise<boolean>;
-  serve(origin: string): Promise<void>;
 }
 
 const execute = promisify(execFile);
 const tailnetName = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.){2,}ts\.net$/u;
-const loopbackTarget = /^http:\/\/(?:127\.0\.0\.1|localhost):[1-9][0-9]{0,4}$/u;
-const serveStatusSchema = z.object({
+const loopbackTarget = /^http:\/\/(?:127\.0\.0\.1|localhost):([1-9][0-9]{0,4})$/u;
+const serveSessionSchema = z.object({
   AllowFunnel: z.record(z.string(), z.boolean()).nullish(),
   Web: z.record(z.string(), z.object({
-    Handlers: z.record(z.string(), z.object({ Proxy: z.string().optional() }).passthrough()),
-  })).nullish(),
+    Handlers: z.record(z.string(), z.unknown()),
+  }).strict()).nullish(),
+  TCP: z.record(z.string(), z.unknown()).nullish(),
+  Services: z.record(z.string(), z.unknown()).nullish(),
+}).strict();
+const serveStatusSchema = serveSessionSchema.extend({
+  Foreground: z.record(z.string(), serveSessionSchema).nullish(),
 });
+const rootProxySchema = z.object({ Proxy: z.string().min(1) }).strict();
 const deviceSchema = z.object({ Self: z.object({ DNSName: z.string().max(254) }) });
 const valuesSchema = z.object({
   exposure: z.object({ public: z.object({ enabled: z.literal(true), host: z.string() }) }),
@@ -41,7 +54,7 @@ const healthSchema = z.object({ authenticated: z.literal(false) });
 
 class RouteRefused extends Error {}
 
-async function checkedDeviceName(controls: PilotRouteControls): Promise<string> {
+async function checkedDeviceName(controls: ServeControls): Promise<string> {
   const dnsName = await controls.deviceName();
   const hostname = dnsName.replace(/\.$/u, '');
   if (!tailnetName.test(hostname)) {
@@ -50,17 +63,70 @@ async function checkedDeviceName(controls: PilotRouteControls): Promise<string> 
   return hostname;
 }
 
-async function currentTarget(host: string, controls: PilotRouteControls) {
-  const config = serveStatusSchema.parse(await controls.serveStatus());
-  const funnel = Object.values(config.AllowFunnel ?? {});
-  if (funnel.includes(true)) {
+type ServeSession = z.infer<typeof serveSessionSchema>;
+type CheckedRoute = {
+  configuration: z.infer<typeof serveStatusSchema>; etag: string;
+  host: string; target: string | undefined;
+};
+
+function hasFunnel(session: ServeSession) {
+  const funnel = Object.values(session.AllowFunnel ?? {});
+  return funnel.includes(true);
+}
+
+function hasServices(session: ServeSession) {
+  const services = Object.keys(session.Services ?? {});
+  return services.length > 0;
+}
+
+function hasServeHandlers(session: ServeSession) {
+  const ports = Object.keys(session.TCP ?? {});
+  const sites = Object.keys(session.Web ?? {});
+  return hasServices(session) || ports.length > 0 || sites.length > 0;
+}
+
+function unexpectedHandler() {
+  return new RouteRefused('Tailscale Serve must have only the expected root HTTPS proxy');
+}
+
+function rootTarget(host: string, config: ServeSession) {
+  for (const [port, handler] of Object.entries(config.TCP ?? {})) {
+    if (port !== '443' || !isDeepStrictEqual(handler, { HTTPS: true })) {
+      throw unexpectedHandler();
+    }
+  }
+  const web = Object.entries(config.Web ?? {});
+  const [site] = web;
+  if (!site) {
+    return undefined;
+  }
+  const [address, { Handlers }] = site;
+  if (web.length !== 1 || address !== `${host}:443`) {
+    throw unexpectedHandler();
+  }
+  const paths = Object.keys(Handlers);
+  if (paths.length === 0) {
+    return undefined;
+  }
+  const handler = rootProxySchema.safeParse(Handlers['/']);
+  // An empty route can be restored. An active root must already have its HTTPS listener.
+  if (paths.length !== 1 || !handler.success || !config.TCP?.['443']) {
+    throw unexpectedHandler();
+  }
+  return handler.data.Proxy;
+}
+
+async function checkedRoute(host: string, controls: ServeControls): Promise<CheckedRoute> {
+  const snapshot = await controls.serveStatus();
+  const config = serveStatusSchema.parse(snapshot.configuration ?? {});
+  const foreground = Object.values(config.Foreground ?? {});
+  if (hasFunnel(config) || foreground.some(hasFunnel)) {
     throw new RouteRefused('Turn off Tailscale Funnel before changing the pilot route');
   }
-  const handler = config.Web?.[`${host}:443`]?.Handlers['/'];
-  if (handler && (!handler.Proxy || Object.keys(handler).length !== 1)) {
-    throw new RouteRefused('The current Serve target is not a single proxy');
+  if (hasServices(config) || foreground.some(hasServeHandlers)) {
+    throw unexpectedHandler();
   }
-  return handler?.Proxy;
+  return { configuration: config, etag: snapshot.etag, target: rootTarget(host, config), host };
 }
 
 async function readSavedRoute(path: string): Promise<string | undefined> {
@@ -75,6 +141,27 @@ async function readSavedRoute(path: string): Promise<string | undefined> {
   }
 }
 
+function loopbackPort(origin: string | undefined) {
+  if (!origin) {
+    return undefined;
+  }
+  const match = loopbackTarget.exec(origin);
+  if (!match) {
+    return undefined;
+  }
+  const port = Number(match[1]);
+  if (port <= 65535) {
+    return port;
+  }
+  return undefined;
+}
+
+function sameLoopbackAddress(first: string | undefined, second: string) {
+  // Treat the two local names as the same route only when both ports are valid and equal.
+  const port = loopbackPort(first);
+  return port !== undefined && port === loopbackPort(second);
+}
+
 function checkPilotAddress(host: string, settings: PilotRouteSettings) {
   if (settings.host !== host) {
     throw new RouteRefused('The configured host differs from this device’s tailnet DNS name');
@@ -85,7 +172,9 @@ function checkPilotAddress(host: string, settings: PilotRouteSettings) {
   if (settings.logoutRedirect !== `https://${host}/`) {
     throw new RouteRefused('The sign-out redirect differs from this device’s tailnet address');
   }
-  if (settings.demoTarget === settings.pilotTarget || !loopbackTarget.test(settings.demoTarget)) {
+  if (!loopbackPort(settings.demoTarget) ||
+      !loopbackPort(settings.pilotTarget) ||
+      sameLoopbackAddress(settings.demoTarget, settings.pilotTarget)) {
     throw new RouteRefused('The expected demo Serve target must be a separate loopback address');
   }
 }
@@ -94,28 +183,38 @@ export async function switchPilot(settings: PilotRouteSettings, controls: PilotR
   const host = await checkedDeviceName(controls);
   checkPilotAddress(host, settings);
   const saved = await readSavedRoute(settings.savedRoute);
-  if (saved !== undefined && saved !== settings.demoTarget) {
+  if (saved !== undefined && !sameLoopbackAddress(saved, settings.demoTarget)) {
     throw new RouteRefused('The saved Serve target differs from the expected demo target');
   }
   if (!await controls.healthyForwarder(settings.pilotTarget)) {
     throw new RouteRefused('The claimed slot’s pilot forwarder did not pass its sign-in check');
   }
-
-  const current = await currentTarget(host, controls);
-  if (current === settings.pilotTarget && saved === settings.demoTarget) {
+  if (!await controls.ownsForwarder(settings.pilotTarget)) {
+    throw new RouteRefused('The claimed slot’s pilot forwarder is not listening on its port');
+  }
+  const current = await checkedRoute(host, controls);
+  if (sameLoopbackAddress(current.target, settings.pilotTarget) && saved !== undefined) {
     return;
   }
-  if (current !== settings.demoTarget) {
+  if (!current.target || !sameLoopbackAddress(current.target, settings.demoTarget)) {
     throw new RouteRefused('The current Serve target differs from the expected demo target');
   }
   if (saved === undefined) {
     // Keep the first demo route through a repeat or an interrupted switch.
-    await writeFile(settings.savedRoute, `${current}\n`, { flag: 'wx', mode: 0o600 });
+    await writeFile(settings.savedRoute, `${current.target}\n`, { flag: 'wx', mode: 0o600 });
   }
-  await controls.serve(settings.pilotTarget);
-  const switched = await currentTarget(host, controls);
-  if (switched !== settings.pilotTarget) {
-    throw new RouteRefused('Tailscale Serve did not report the pilot target after switching');
+  // Check the listener after the file and network reads, just before the conditional write.
+  if (!await controls.ownsForwarder(settings.pilotTarget)) {
+    throw new RouteRefused('The claimed slot’s pilot forwarder changed before switching');
+  }
+  await controls.serve(settings.pilotTarget, current);
+  try {
+    const switched = await checkedRoute(host, controls);
+    if (sameLoopbackAddress(switched.target, settings.pilotTarget)) return;
+    throw new Error('Tailscale Serve reported a different target');
+  } catch (cause) {
+    throw new RouteRefused('Tailscale Serve switch unconfirmed. Stop and run the saved demo recovery',
+      { cause });
   }
 }
 
@@ -125,12 +224,32 @@ async function deviceName() {
   return status.Self.DNSName;
 }
 
-async function serveStatus(): Promise<unknown> {
-  const response = await execute('tailscale', ['serve', 'status', '--json'], { timeout: 5000 });
-  return JSON.parse(response.stdout) as unknown;
+const serveEndpoint = ['--silent', '--show-error', '--include', '--noproxy', '*',
+  '--unix-socket', '/var/run/tailscale/tailscaled.sock',
+  'http://local-tailscaled.sock/localapi/v0/serve-config'];
+const responseHeader = /\r?\n\r?\n/u;
+
+async function serveRequest(args: string[]) {
+  const result = await execute('sudo', ['-n', 'curl', '--disable', ...serveEndpoint, ...args],
+    { timeout: 5000, maxBuffer: 1024 * 1024 });
+  const split = responseHeader.exec(result.stdout);
+  if (!split) throw new RouteRefused('Tailscale did not return a Serve response');
+  const headers = result.stdout.slice(0, split.index);
+  const body = result.stdout.slice(split.index + split[0].length);
+  const status = /^HTTP\/1\.[01] (\d{3})(?: |\r?$)/mu.exec(headers)?.[1];
+  return { status, headers, body };
 }
 
-async function healthyForwarder(origin: string) {
+async function serveStatus(): Promise<ServeSnapshot> {
+  const response = await serveRequest([]);
+  const etag = /^etag: ([a-f0-9]{64})\r?$/imu.exec(response.headers)?.[1];
+  if (response.status !== '200' || !etag) {
+    throw new RouteRefused('Tailscale did not return a checked Serve configuration');
+  }
+  return { configuration: JSON.parse(response.body) as unknown, etag };
+}
+
+export async function healthyForwarder(origin: string) {
   try {
     const response = await fetch(`${origin}/auth/me`, {
       redirect: 'error', signal: AbortSignal.timeout(5000),
@@ -141,12 +260,29 @@ async function healthyForwarder(origin: string) {
   }
 }
 
-async function serve(origin: string) {
-  const args = ['-n', 'tailscale', 'serve', '--bg', '--https=443', '--set-path=/', origin];
+async function serve(origin: string, checked: CheckedRoute) {
+  const configuration = { ...checked.configuration };
+  if (origin === 'off') {
+    delete configuration.TCP;
+    delete configuration.Web;
+  } else {
+    configuration.TCP = { '443': { HTTPS: true } };
+    configuration.Web = { [`${checked.host}:443`]: { Handlers: { '/': { Proxy: origin } } } };
+  }
+  const args = ['--request', 'POST', '--header', `If-Match: ${checked.etag}`,
+    '--header', 'Content-Type: application/json', '--data-binary', JSON.stringify(configuration)];
+  let response: Awaited<ReturnType<typeof serveRequest>>;
   try {
-    await execute('sudo', args, { timeout: 30_000 });
+    response = await serveRequest(args);
   } catch (cause) {
-    throw new RouteRefused('Tailscale Serve could not change the route', { cause });
+    throw new RouteRefused('Tailscale Serve write unconfirmed. Check the saved demo recovery',
+      { cause });
+  }
+  if (response.status === '412') {
+    throw new RouteRefused('Tailscale Serve configuration changed after it was checked');
+  }
+  if (response.status !== '200') {
+    throw new RouteRefused('Tailscale Serve could not confirm the change. Check the saved demo recovery');
   }
 }
 
@@ -174,36 +310,41 @@ async function packageSettings(valuesFile: string) {
   const [encodedSignIn, encodedSignOut] = result.stdout.split('\n');
   const redirect = Buffer.from(encodedSignIn ?? '', 'base64').toString('utf8');
   const logoutRedirect = Buffer.from(encodedSignOut ?? '', 'base64').toString('utf8');
-  return { host: values.exposure.public.host, redirect, logoutRedirect };
+  const forwardArgs = packageForwardArgs(connection.args, owner.namespace, localOrigin);
+  return { host: values.exposure.public.host, redirect, logoutRedirect, forwardArgs, owner };
 }
 
 type RollbackAction = 'pause' | 'restore' | 'check-demo';
 
 export async function rollbackPilotRoute(action: RollbackAction,
-  route: { savedRoute: string; pilotTarget: string }, controls: PilotRouteControls) {
+  route: { savedRoute: string; pilotTarget: string }, controls: ServeControls) {
   const { pilotTarget, savedRoute } = route;
   const demoTarget = await readSavedRoute(savedRoute);
-  if (!demoTarget || !loopbackTarget.test(demoTarget) || demoTarget === pilotTarget) {
+  if (!demoTarget || !loopbackPort(demoTarget) || sameLoopbackAddress(demoTarget, pilotTarget)) {
     throw new RouteRefused('The saved demo Serve target is missing or invalid');
   }
   const host = await checkedDeviceName(controls);
-  const current = await currentTarget(host, controls);
-  if (current !== undefined && current !== demoTarget && current !== pilotTarget) {
+  const current = await checkedRoute(host, controls);
+  const showingDemo = sameLoopbackAddress(current.target, demoTarget);
+  const showingPilot = sameLoopbackAddress(current.target, pilotTarget);
+  if (current.target !== undefined && !showingDemo && !showingPilot) {
     throw new RouteRefused('The current Serve target differs from the saved demo and the pilot');
   }
   if (action === 'pause') {
-    if (current === pilotTarget) {
-      await controls.serve('off');
-      if (await currentTarget(host, controls) !== undefined) {
+    if (showingPilot) {
+      await controls.serve('off', current);
+      const paused = await checkedRoute(host, controls);
+      if (paused.target !== undefined) {
         throw new RouteRefused('Tailscale Serve did not remove the pilot route');
       }
     }
     return;
   }
-  if (action === 'restore' && current !== demoTarget) {
-    await controls.serve(demoTarget);
+  if (action === 'restore' && !showingDemo) {
+    await controls.serve(demoTarget, current);
   }
-  if (await currentTarget(host, controls) !== demoTarget) {
+  const restored = await checkedRoute(host, controls);
+  if (!sameLoopbackAddress(restored.target, demoTarget)) {
     throw new RouteRefused('Tailscale Serve does not report the saved demo target');
   }
 }
@@ -214,7 +355,7 @@ async function main() {
     throw new RouteRefused('Set DEV_STACK_ID to the secondary pilot slot');
   }
   const savedRoute = await savedRoutePath();
-  const controls = { deviceName, serveStatus, healthyForwarder, serve };
+  const controls = { deviceName, serveStatus, serve };
   if ((action === 'pause' || action === 'restore' || action === 'check-demo') && !valuesFile) {
     await rollbackPilotRoute(action, { savedRoute, pilotTarget: localOrigin }, controls);
     if (action !== 'pause') {
@@ -226,8 +367,18 @@ async function main() {
   if (action !== 'switch' || !valuesFile || !demoTarget || process.argv.length !== 4) {
     throw new RouteRefused('For a switch, set PILOT_DEMO_TARGET and pass the package values file');
   }
-  const installed = await packageSettings(valuesFile);
-  await switchPilot({ ...installed, demoTarget, pilotTarget: localOrigin, savedRoute }, controls);
+  const { forwardArgs, owner, ...installed } = await packageSettings(valuesFile);
+  async function ownsForwarder(origin: string) {
+    try {
+      const connection = await packageConnectionArgs(owner);
+      const target = await readForwardTarget(connection, owner.namespace, owner.namespaceUid);
+      return await ownsPackageForwarder(origin, forwardArgs, target);
+    } catch (cause) {
+      throw new RouteRefused('Could not check which process owns the pilot port', { cause });
+    }
+  }
+  const settings = { ...installed, demoTarget, pilotTarget: localOrigin, savedRoute };
+  await switchPilot(settings, { ...controls, ownsForwarder, healthyForwarder });
   console.log('PASS pilot route is active and the demo target is saved');
 }
 

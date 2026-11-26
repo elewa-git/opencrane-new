@@ -908,15 +908,27 @@ change swap or crash-dump settings as part of the route switch.
 
 Use systemd to keep `infra/package/forward.sh` running from this checkout with
 the claimed `DEV_STACK_ID`. The unit restarts on failure and after reboot.
-Set `PILOT_FORWARD_UNIT` to its name. The loopback port is 25106 for slot 1
-or 25206 for slot 2.
+The unit runs as the account that runs the switch, so the switch can check its
+listening process. `PILOT_FORWARD_UNIT` holds the unit name for rollback.
+The loopback port is 25106 for slot 1 or 25206 for slot 2.
 
 The switch command checks the configured host against this device’s tailnet
-name. It also checks the installed sign-in and sign-out redirects, confirms
-Funnel is off, compares the current root HTTPS mapping to the expected demo,
-and reads `/auth/me` through the claimed slot’s forwarder. A failed check
-leaves the demo mapped. A repeat after a successful switch keeps the saved
-demo target.
+name. It checks both installed sign-in redirects and checks foreground and
+background sessions for Funnel. It accepts only the expected root HTTPS
+proxy with a TCP HTTPS listener on port 443. It reads `/auth/me` and checks
+that `kubectl` owns the listening socket, was started from this checkout and
+uses the checked cluster and namespace. The forwarder uses a private copy
+of the connection settings for its identity check and listening process.
+
+The command checks the listener again just before it writes. Tailscale's
+local API applies the write only if the configuration still matches the
+version the command checked. A repeat after a successful switch keeps the
+saved demo target. If a write or confirmation is uncertain, the saved demo
+recovery below returns the route to the demo.
+
+On this box `sudo -v` needs a terminal. The switch uses `sudo -n`, which
+refuses a password prompt. The operator can skip `sudo -v` when sudo needs
+no password for the local API request through `curl`.
 
 ```sh
 sudo -v &&
@@ -930,9 +942,29 @@ without Funnel. The first-owner token goes in the claim form.
 
 ### Roll back the pilot route
 
+If a switch reports that it could not confirm the write or the new mapping,
+stop inviting people and keep the saved route file. Run the first recovery
+block below if the demo is running. If the guarded command reports a changed
+or unexpected Serve configuration, keep the forwarder running and inspect
+`tailscale serve status --json` with the operator who owns the current routes.
+If the only entry is the expected pilot root and its HTTPS listener is
+missing, the operator can restore the saved HTTPS root from a terminal after
+other operators have stopped changing Serve:
+
+```sh
+saved_demo=$(cat "$PRIVATE_DIR/demo-serve-target") &&
+  sudo tailscale serve --bg --https=443 --set-path=/ "$saved_demo" &&
+  node --experimental-strip-types infra/package/pilot-route.ts check-demo
+```
+
+An unrelated route or Funnel needs the operator who owns it to resolve the
+conflict. Start the first recovery block again after checking the demo.
+A refused recovery leaves the current configuration in place.
+
 When the demo is still running, restore the saved root HTTPS handler and
 stop the pilot forwarder after the mapping is back. Run these commands from
 the same checkout with the same `PRIVATE_DIR` and `DEV_STACK_ID`.
+Rollback treats `localhost` and `127.0.0.1` on the same port as one address.
 
 ```sh
 sudo -v &&
@@ -959,10 +991,6 @@ installation.
 
 ## Pilot backup and recovery commands
 
-The latest backup rehearsal recorded scheduled backup FAIL at verify, zero completed sets,
-restore NOT RUN. The commands below apply once a later rehearsal has a
-complete backup.
-
 Set `source_namespace="opencrane-package-$DEV_STACK_ID"` and
 `SOURCE_CONTEXT` to the source context. Set `SOURCE_KUBECONFIG` to the
 source connection file for the export. Check `pilot-backup` reports schedule
@@ -970,8 +998,8 @@ source connection file for the export. Check `pilot-backup` reports schedule
 created a successful Job after the latest scheduled time. The
 [scheduled backup instructions](#scheduled-pilot-backup) show the Job checks,
 manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
-before using it. Save the verified archive with its source cluster ID and
-namespace so an import can refuse the original installation.
+before using it. The archive's companion file records the source cluster ID,
+namespace name and namespace ID so import can refuse the source installation.
 
 ```sh
 (
@@ -982,31 +1010,36 @@ namespace so an import can refuse the original installation.
     --context "${SOURCE_CONTEXT:?Set the source context}" \
     get namespace kube-system -o 'jsonpath={.metadata.uid}')
   test -n "$source_cluster"
+  source_namespace_uid=$(kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" \
+    get namespace "$source_namespace" -o 'jsonpath={.metadata.uid}')
+  test -n "$source_namespace_uid"
   partial=$(mktemp "$PRIVATE_DIR/pilot-backup.XXXXXX")
   trap 'rm -f -- "$partial"' EXIT
   kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" -n "$source_namespace" \
     exec deployment/backup-catalogue -- tar -C /backups/sets -cf - "$BACKUP_ID" > "$partial"
-  printf '%s %s\n' "$source_cluster" "$source_namespace" > "$archive.source"
+  printf '%s %s %s\n' "$source_cluster" "$source_namespace" "$source_namespace_uid" > "$archive.source"
   mv -- "$partial" "$archive"
 )
 ```
 
 For a recovery drill, prepare an empty package with the same approved images,
-`models.mode`, silo and sign-in identity settings. Use a separate slot and
-keep the recovery listener on loopback until checked. For an HTTPS sign-in
+`models.mode`, silo and sign-in identity settings. The recovery listener stays
+on loopback. For an HTTPS sign-in
 drill use a private test origin with its own registered callback and the same
 issuer and account subjects. Set `pilotRestore` to
 `{"enabled": true, "backupId": "BACKUP_ID"}` with the real ID. After
 `package-up`, set `DEV_STACK_ID` to the recovery slot. The import uses the
 connection and namespace recorded for that slot for both the rollout check
-and extraction. It refuses a source cluster and namespace match, even when
-the context names differ.
+and extraction. It refuses the original namespace, even when context names
+differ. A drill can reuse a disposable slot after teardown gives the new
+namespace a different ID and new volumes. An older export without a namespace
+ID still needs a separate slot or cluster.
 
 ```sh
 archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
-read -r source_cluster source_namespace < "$archive.source" &&
+read -r source_cluster source_namespace source_namespace_uid < "$archive.source" &&
   node --experimental-strip-types infra/package/pilot-archive-import.ts \
-    "$archive" "$source_cluster" "$source_namespace"
+    "$archive" "$source_cluster" "$source_namespace" "$source_namespace_uid"
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
@@ -1014,6 +1047,65 @@ catalogue and run the restore Job. Confirm the saved chat is readable and
 `restore_read_only` refuses writes. Never point the live pilot route at a
 drill install. Clear the drill through the guarded package cleanup after
 retaining its evidence.
+
+## Update the running pilot
+
+Not yet safe for a live installation. Reinstall instead; the open checks are
+tracked as slice 3 of the pilot ticket. Use these steps for rehearsal only.
+
+`package-upgrade` is for a running packaged pilot on the same chart version.
+It keeps the existing Helm values for storage, sign-in and site address. It
+changes the application images, including the image for the next scheduled
+backup, and the scanner image and its signed database records. The completed
+bootstrap Job keeps its original image because Kubernetes fixes the Job's
+template once it has run. Each scanner record has its own Secret. Older
+releases still refer to their original Secret for rollback. Each download
+keeps its approval records in a new directory, so applying the same update
+again after rollback also works.
+
+Use the worktree recorded when the pilot was installed. Keep an exported
+backup that has passed the catalogue check. Record the current deployed
+revision from `helm history` for the recorded context, namespace and release.
+Also record the namespace and volume claim IDs and the server, web and scanner
+image digests. Keep the saved route file in its private directory. Schedule
+the update away from the backup window and keep other operators out of
+Helm until the update and checks finish.
+
+Check out the approved branch and exact revision in that worktree. Both image
+approvals for that revision must still have their artifacts. Use the existing
+slot number. This path leaves the namespace, volumes and Serve configuration
+in place.
+
+```sh
+infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID" &&
+  infra/dev-stack/run.sh package-upgrade --id "$DEV_STACK_ID"
+```
+
+Compare the namespace and volume claim IDs with the values recorded before
+the update. Check that the deployment and backup Job template use the new
+approved digests. After the website pods restart, check the forwarder and
+the saved route. Sign in with an existing member and open their chat and
+upload. Check the next scheduled backup in the catalogue and restore it
+on an empty recovery installation using its exact image pins. Keep the
+earlier verified backup until recovery has passed.
+
+The update command checks the workloads that serve the pilot. The recovery
+volume claim stays unbound until a recovery Job uses it. If the update or
+its readiness checks fail, the command attempts to restore the previous Helm
+revision. Check `helm history` before taking further action. If
+the new application still runs but a sign-in, upload or backup check fails,
+return to the recorded working revision with the guarded rollback command.
+The old scanner record must still be within its approved lifetime.
+
+```sh
+infra/dev-stack/run.sh package-rollback --id "$DEV_STACK_ID" --revision "$PREVIOUS_REVISION"
+```
+
+Check the deployed revision's image digests, the saved route and the member's
+chat and upload again. If the release cannot return to service, preserve the
+volumes and use the separate recovery installation. The
+[demo route rollback](#roll-back-the-pilot-route) can take the pilot out of
+the way without deleting its data.
 
 ## Private owner email
 
@@ -2493,7 +2585,8 @@ The CNPG and three-peer previews do not emit this pilot schedule.
 The Job stops the server (including the model gateway) and dispatcher and waits
 for their Pods to disappear. Computers can reach only that stopped gateway. It
 lets all installed primary and secondary projections reach the recorded event sequence, then
-stops them and OpenFGA. It refuses remaining database clients or restarted writers.
+stops them and OpenFGA. It closes its own checkpoint connections before it checks
+for other database clients. It refuses any remaining client or restarted writer.
 The manifest records the dispatcher checkpoint; queued effects remain held while
 the dispatcher is stopped. Operators must not change workloads, write directly to
 stores or run Helm concurrently with this maintenance window.
@@ -2501,7 +2594,10 @@ stores or run Helm concurrently with this maintenance window.
 While writers stay stopped, the Job calls `collectEventBackup`, dumps databases
 without role passwords, and copies every object in `files` through the existing
 short-lived storage lease. It checks the stream identity, retained range and
-checkpoints again before resuming through normal service startup. PostgreSQL's
+checkpoints again before resuming through normal service startup. The file read
+table lists the objects named by the events. The Job checks it while writers
+are stopped. Every saved object must have a matching reference, byte count and
+SHA-256. A reference without its object also fails the backup. PostgreSQL's
 LSN identifies the start of this stopped interval; background WAL maintenance can
 continue, so it is not a promise that the physical WAL bytes remain unchanged.
 `backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
@@ -2513,7 +2609,8 @@ inventory with each key, size and checksum. The `files` part is UTF-8 JSON lines
 each line adds base64 `data` to that object's inventory entry.
 
 Only after all parts succeed and every restored deployment is ready does an atomic
-directory rename publish the set. The catalogue ignores hidden interrupted sets
+directory rename publish the set. Publication and the catalogue both enforce a
+1 MiB manifest limit and at most 10,000 objects. The catalogue ignores hidden interrupted sets
 and verifies every saved part against the manifest before listing or showing it.
 A failure publishes nothing, removes only this run's temporary output and restores
 saved replica counts. It attempts every saved restart even if one fails. Scaling each
@@ -2586,8 +2683,8 @@ Conversation reads require no chat key. Computer homes are outside this backup.
 Checksums detect changed bytes; manifests are unsigned. Keep the entire set in
 trusted private operator storage. Older package versions require their own software.
 
-Prepare a second claimed secondary slot with `package-prepare`. Before `package-up`,
-add `pilotRestore: { enabled: true, backupId: BACKUP_ID }` to its private values.
+The target starts with `package-prepare` in a claimed secondary slot. Its private
+values use `pilotRestore: { enabled: true, backupId: BACKUP_ID }` for `package-up`.
 Restore mode omits bootstrap, holds server, OpenFGA and workers at zero replicas,
 suspends scheduled backup and omits the model gateway. Storage services start on
 fresh volumes. Do not run ordinary fresh-install checks before recovery completes.

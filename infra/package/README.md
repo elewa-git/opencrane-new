@@ -18,13 +18,13 @@ in the recorded Kubernetes cluster.
 
 ```mermaid
 flowchart LR
-  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>local Helm install"]
+  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install and update"]
   ci["GitHub packaging job<br/>approved images"] --> package
   package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
   package --> services["Private databases, event log,<br/>file store and scanner"]
   apps --> models["Model gateway"]
-  package --> recovery["Empty recovery install"]
+  package -->|verified backup| recovery["Empty recovery install"]
 ```
 
 ## What it is responsible for
@@ -33,7 +33,7 @@ flowchart LR
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
 - Check production sign-in before installation. Only the server reads its credential.
-- Keep package listeners private and check the demo route before switching pilot HTTPS.
+- Keep package listeners private and check the demo route and listening process before switching pilot HTTPS.
 - Check ownership and the recorded cluster before installation, forwarding or cleanup.
 - Prepare databases, the event log and development sign-in.
 - Let the first person claim ownership with a one-time token in public-address mode.
@@ -43,6 +43,7 @@ flowchart LR
 - Save scheduled backups of events, databases and uploaded files together.
 - Restore one complete pilot backup into empty storage, then open authenticated reading.
   Recovery uses the same model mode as the source so it rebuilds the same tables.
+- Update an owned pilot release and keep its storage and sign-in.
 - Remove only the install owned by the claimed stack, including after interruption.
 
 Not built yet:
@@ -79,12 +80,16 @@ Not built yet:
 6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
 7. **A backup runs.** The job stops writes, drains read tables and saves matching
-   events, databases and files. It publishes a complete backup only after the stopped
+   events, databases and files. It waits for the read tables to catch up and checks
+   that saved events account for every stored file. It checks that writers stayed
+   stopped before services restart. It publishes the backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
 8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-9. **A developer checks or removes an install.** Fresh-install checks use new storage
+9. **An operator updates a pilot.** The new approved images replace the running
+   images. The pilot keeps the same storage and sign-in.
+10. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
    Provider journey results name the failed step and its expected condition.

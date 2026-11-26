@@ -6,6 +6,16 @@ worktree=$(CDPATH='' cd "$script_directory/../.." && pwd -P)
 DEV_STACK_CLAIM_PID=${DEV_STACK_CLAIM_PID:-$$}
 export DEV_STACK_CLAIM_PID
 
+if [ "$#" -ne 0 ]; then
+  if [ "$#" -eq 2 ] && [ "$1" = '--id' ]; then
+    case "$2" in
+      1|2) exec "$script_directory/run.sh" claim --id "$2" ;;
+    esac
+  fi
+  echo 'Usage: claim.sh [--id 1|2]' >&2
+  exit 2
+fi
+
 for stack_id in 1 2; do
   owner_file="$HOME/.config/opencrane/dev-stack-$stack_id/stack-owner"
   if [ ! -f "$owner_file" ]; then

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { watch } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -136,6 +136,56 @@ async function writeDeadOwner(slotDirectory: string, ageMinutes: number) {
   await writeFile(`${slotDirectory}/stack-owner`, owner);
   return owner;
 }
+
+test('a request for a busy slot leaves the other slot unclaimed', refusesSelectedBusySlot);
+
+async function refusesSelectedBusySlot() {
+  const fixture = await createClaimFixture();
+  try {
+    const owner = await writeDeadOwner(fixture.slotDirectory, 1);
+    await assert.rejects(exec('infra/dev-stack/claim.sh', ['--id', '1'], { env: fixture.env }));
+    assert.ok((await stat(`${fixture.home}/stack-1.lock`)).isFile());
+    await assert.rejects(stat(`${fixture.home}/stack-2.lock`), { code: 'ENOENT' });
+    assert.equal(await readFile(`${fixture.slotDirectory}/stack-owner`, 'utf8'), owner);
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+
+for (const slot of ['1', '2']) {
+  async function claimsSelectedFreeSlot() {
+    const fixture = await createClaimFixture();
+    try {
+      await rmdir(fixture.slotDirectory);
+      const claim = await exec('infra/dev-stack/claim.sh', ['--id', slot], { env: fixture.env });
+      assert.equal(claim.stdout.trim(), slot);
+      const selected = `${fixture.home}/.config/opencrane/dev-stack-${slot}/stack-owner`;
+      const owner = await readFile(selected, 'utf8');
+      assert.ok(owner.startsWith(`worktree=${process.cwd()}\n`));
+      const other = slot === '1' ? '2' : '1';
+      await assert.rejects(stat(`${fixture.home}/stack-${other}.lock`), { code: 'ENOENT' });
+    } finally {
+      await rm(fixture.home, { recursive: true, force: true });
+    }
+  }
+  test(`claim can select free slot ${slot} explicitly`, claimsSelectedFreeSlot);
+}
+
+async function refusesInvalidSlotArguments() {
+  const fixture = await createClaimFixture();
+  try {
+    for (const args of [['--id'], ['--id', 'owner'], ['--id', '3'], ['--id', '1', 'extra']]) {
+      await assert.rejects(exec('infra/dev-stack/claim.sh', args, { env: fixture.env }),
+        { code: 2, stderr: /Usage: claim.sh/u });
+    }
+    await assert.rejects(stat(`${fixture.home}/stack-1.lock`), { code: 'ENOENT' });
+    await assert.rejects(stat(`${fixture.home}/stack-2.lock`), { code: 'ENOENT' });
+  } finally {
+    await rm(fixture.home, { recursive: true, force: true });
+  }
+}
+
+test('bad explicit slot arguments fail before taking a slot lock', refusesInvalidSlotArguments);
 
 async function freshClaimIsReserved() {
   const fixture = await createClaimFixture();
@@ -633,8 +683,25 @@ if (program === 'helm' && args.includes('list')) {
     fs.rmSync(home + '/.config/opencrane/dev-stack-1/package-owner.json');
   }
 }
+if (program === 'helm' && args[0] === 'rollback' && state.pilot) {
+  // The source pilot keeps a recovery claim that no running workload mounts.
+  if (args.includes('--wait')) { save(); process.exit(1); }
+}
+if (program === 'helm' && args[0] === 'get' && args[1] === 'values' && state.pilot) {
+  output({ models: { mode: 'provider', qualification: true } });
+}
+if (program === 'kubectl' && state.pilot) {
+  if (args.includes('sh.helm.release.v1.opencrane-package-1.v1')) output(state.pilot.release);
+  if (args.includes('services,ingresses')) output({ items: [] });
+}
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
-if (program === 'kubectl' && args.includes('namespace') && state.namespace) {
+if (program === 'kubectl' && args.includes('config') && args.includes('view')) {
+  process.stdout.write('PRIVATE-FORWARD-CONNECTION');
+}
+if (program === 'kubectl' && args.includes('kube-system') && state.namespace) {
+  output({ items: [{ metadata: { name: 'kube-system', uid: 'test-cluster' } },
+    { metadata: { name: 'opencrane-package-1', uid: state.namespace.metadata.uid } }] });
+} else if (program === 'kubectl' && args.includes('namespace') && state.namespace) {
   output(state.namespace);
   if (state.loseTarget) fs.rmSync(ownerFile, { force: true });
 }
@@ -655,6 +722,7 @@ type TargetState = {
   holdForward?: boolean;
   loseAfterHelm?: boolean;
   retain?: boolean;
+  pilot?: { release: { metadata: { uid: string; labels: Record<string, string> } } };
   recordBeforeCreate?: { id: string };
 };
 async function targetFixture() {
@@ -672,8 +740,8 @@ async function targetFixture() {
   async function loadState() {
     Object.assign(state, JSON.parse(await readFile(`${fixture.home}/target-state.json`, 'utf8')));
   }
-  async function run(action: string) {
-    return exec('infra/dev-stack/run.sh', [action, '--id', '1'], { env: fixture.env });
+  async function run(action: string, args: string[] = []) {
+    return exec('infra/dev-stack/run.sh', [action, '--id', '1', ...args], { env: fixture.env });
   }
   async function close() {
     await rm(fixture.home, { recursive: true, force: true });
@@ -681,6 +749,50 @@ async function targetFixture() {
   await saveState();
   return { ...fixture, state, saveState, loadState, run, close };
 }
+
+async function rollsBackWithUnusedRecoveryClaim() {
+  const fixture = await targetFixture();
+  try {
+    const namespace = 'opencrane-package-1';
+    const namespaceUid = 'owned-namespace';
+    const installId = 'original-install';
+    const releaseSecretUid = 'original-release';
+    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-ocn', namespace, namespaceUid,
+      release: namespace, installId, releaseSecretUid };
+    const annotations = { 'opencrane.dev/worktree': owner.worktree, 'opencrane.dev/slot': '1' };
+    fixture.state.namespace = { metadata: { uid: namespaceUid, annotations } };
+    const labels = { 'opencrane.dev/install-id': installId };
+    fixture.state.pilot = { release: { metadata: { uid: releaseSecretUid, labels } } };
+    await fixture.saveState();
+    await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(owner));
+    try {
+      await fixture.run('package-rollback', ['--revision', '1']);
+    } catch (cause) {
+      const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
+      throw new Error(failure, { cause });
+    }
+    await fixture.loadState();
+    function isRollback(call: string[]) { return call[0] === 'helm' && call[1] === 'rollback'; }
+    const rollback = fixture.state.calls.find(isRollback);
+    assert.ok(rollback?.includes('--wait=false'));
+    function waitedForServer(call: string[]) {
+      return call.includes('rollout') && call.includes('deployment/server');
+    }
+    assert.ok(fixture.state.calls.some(waitedForServer));
+    fixture.state.fail = 'helm';
+    await fixture.saveState();
+    await assert.rejects(fixture.run('package-rollback', ['--revision', '1']), {
+      stderr: /Package command refused/u,
+    });
+    const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
+    assert.equal(failure, 'Error: Package command failed');
+  } finally {
+    await fixture.close();
+  }
+}
+
+test('pilot rollback waits for the server and leaves the unused recovery claim alone',
+  rollsBackWithUnusedRecoveryClaim);
 
 async function targetLifecycle() {
   const fixture = await targetFixture();
@@ -894,8 +1006,13 @@ async function packageConnectionLifecycle(isolated: boolean) {
     await fixture.loadState();
     for (const [index, call] of fixture.state.calls.entries()) {
       if (call[0] !== 'kubectl' && call[0] !== 'helm') continue;
+      const kubeconfig = fixture.state.kubeconfigs[index];
       assert.equal(call.includes('--kubeconfig'), false);
-      if (isolated) {
+      if (call.includes('kube-system') || call.includes('port-forward')) {
+        assert.ok(kubeconfig?.startsWith(`${fixture.slotDirectory}/forward-`));
+        assert.ok(kubeconfig?.endsWith('/connection.yaml'));
+        assert.equal(call.includes(kubeconfig!), false);
+      } else if (isolated) {
         assert.equal(fixture.state.kubeconfigs[index], `${fixture.slotDirectory}/target.kubeconfig`);
         assert.equal(call.includes(`${fixture.slotDirectory}/target.kubeconfig`), false);
       }

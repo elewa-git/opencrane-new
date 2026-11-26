@@ -2,10 +2,10 @@ import type { PackageReview } from './package-review.ts';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 import { directory, root } from './config.ts';
 import { readBoundedJson, readBoundedText } from './bounded-input.ts';
 import { commandTimeout, type CommandLimits } from './command-limits.ts';
@@ -480,6 +480,196 @@ function requireOwnedRelease(secret: ReleaseSecret | undefined, owner: PackageOw
   }
 }
 
+async function checkedRelease() {
+  const owner = await verifyPackageOwner();
+  const uid = await ownedReleaseSecretUid(owner);
+  if (!uid || uid !== owner.releaseSecretUid) {
+    throw new Error('Helm release belongs to another install');
+  }
+  return owner;
+}
+
+async function releaseCommand(owner: PackageOwner, args: string[], timeoutMs?: number) {
+  await packageConnectionArgs(owner);
+  return command('helm', [...args, '--kube-context', owner.context, '--namespace', owner.namespace],
+    timeoutMs);
+}
+
+type PilotUpgradeValues = {
+  chartVersion?: string;
+  exposure?: { public?: { enabled?: boolean } };
+  pilotRestore?: { enabled?: boolean };
+  images?: { server?: string };
+  secrets?: { scanner?: string };
+  models?: PackageModels;
+};
+
+async function installedValues(owner: PackageOwner) {
+  const current = await releaseCommand(owner, ['get', 'values', owner.release, '-o', 'json']);
+  return JSON.parse(current) as PilotUpgradeValues;
+}
+
+async function pilotUpgradeValues(owner: PackageOwner) {
+  const values = await installedValues(owner);
+  const reviewFile = resolve(root, 'infra/package/reviewed-images.json');
+  const review = await readBoundedJson(reviewFile) as PackageReview;
+  if (values.chartVersion !== review.chartVersion ||
+      !values.exposure?.public?.enabled || values.pilotRestore?.enabled) {
+    throw new Error('Application updates need an installed pilot with the same chart version');
+  }
+  const original = await releaseCommand(owner, ['get', 'values', owner.release, '--revision', '1',
+    '-o', 'json']);
+  const first = JSON.parse(original) as PilotUpgradeValues;
+  const bootstrapImage = first.images?.server;
+  if (!bootstrapImage || !/@sha256:[a-f0-9]{64}$/u.test(bootstrapImage)) {
+    throw new Error('The original bootstrap image is not pinned');
+  }
+  const scannerSecret = values.secrets?.scanner;
+  if (!scannerSecret || !/^[a-z0-9][a-z0-9.-]*$/u.test(scannerSecret)) {
+    throw new Error('The pilot scanner Secret is missing');
+  }
+  return { bootstrapImage, scannerSecret, serverImage: values.images?.server };
+}
+
+async function deployedRevision(owner: PackageOwner) {
+  const output = await releaseCommand(owner, ['history', owner.release, '-o', 'json']);
+  const history = JSON.parse(output) as Array<{ revision: number; status: string }>;
+  function deployed(entry: { status: string }) {
+    return entry.status === 'deployed';
+  }
+  function pending(entry: { status: string }) {
+    return entry.status.startsWith('pending-');
+  }
+  const revisions = history.filter(deployed);
+  const revision = revisions[0]?.revision;
+  if (revisions.length !== 1 || !revision || !Number.isSafeInteger(revision) ||
+      revision < 1 || history.some(pending)) {
+    throw new Error('Helm needs one deployed revision and no change already in progress');
+  }
+  return String(revision);
+}
+
+async function checkBackupIsIdle(owner: PackageOwner) {
+  const active = await ownedKubectl(owner, ['-n', namespace, 'get', 'cronjob', 'pilot-backup',
+    '-o', 'jsonpath={.status.active[*].uid}']);
+  if (active) throw new Error('Wait for the scheduled backup to finish before changing the release');
+}
+
+async function recordHostPreflight(owner: PackageOwner, image: string) {
+  function checkOnTarget(args: string[]) {
+    return ownedKubectl(owner, args);
+  }
+  const options: HostCheckOptions = { command: checkOnTarget, namespace, image, localCommand: command };
+  const override = process.env['OPENCRANE_ACCEPT_DEV_HOST_RISK'];
+  if (override !== undefined) options.override = override;
+  owner.hostPreflight = await checkPackageHosts(options);
+  await saveOwner(owner);
+}
+
+async function prepareUpgradeScanner(owner: PackageOwner, previousName: string, approvals: string) {
+  const { publishApprovedScanner } = await import('../package/publish-approved-images.mjs');
+  const approval = await publishApprovedScanner(approvals);
+  const name = `package-scanner-${approval.approvedSha}`;
+  const previousText = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret', previousName,
+    '-o', 'json']);
+  const previous = JSON.parse(previousText) as SecretData;
+  checkSecretFields('scanner', previous);
+  const data = { ...previous.data };
+  for (const file of ['signatures.json', 'release.json']) {
+    const contents = await readBoundedText(resolve(approval.destination, file));
+    data[file] = Buffer.from(contents).toString('base64');
+  }
+  const secret = { apiVersion: 'v1', kind: 'Secret', metadata: { name }, immutable: true, data };
+  const foundText = await ownedKubectl(owner, ['-n', namespace, 'get', 'secret', name,
+    '--ignore-not-found', '-o', 'json']);
+  if (foundText) {
+    const found = JSON.parse(foundText) as SecretData & { immutable?: boolean };
+    if (!found.immutable || !isDeepStrictEqual(found.data, data)) {
+      throw new Error('The new scanner Secret already exists with different settings');
+    }
+  } else {
+    await createUpgradeSecret(owner, secret);
+  }
+  return { ...approval, name };
+}
+
+async function createUpgradeSecret(owner: PackageOwner, secret: unknown) {
+  const temporary = await mkdtemp(`${directory}/scanner-upgrade-`);
+  try {
+    await writeFile(resolve(temporary, 'secret.json'), JSON.stringify(secret), { mode: 0o600 });
+    await packageConnectionArgs(owner);
+    const connection = await connectionArgs(owner.context);
+    await command('kubectl', [...connection, '-n', namespace, 'create', '-f', 'secret.json'],
+      30_000, temporary);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+export async function upgradePackage() {
+  const { publishApprovedApplication } = await import('../package/publish-approved-images.mjs');
+  const owner = await checkedRelease();
+  const { bootstrapImage, scannerSecret, serverImage } = await pilotUpgradeValues(owner);
+  const conditions = await bootstrapConditions(owner);
+  if (!conditions.some(completed)) throw new Error('The original setup Job must be complete');
+  await command('git', ['diff', '--quiet', 'HEAD', '--', 'infra/package/chart']);
+  const revision = await command('git', ['rev-parse', 'HEAD']);
+  const approvals = resolve(directory, 'release-approvals', revision);
+  const approval = await publishApprovedApplication(approvals);
+  if (approval.image === serverImage) throw new Error('This application image is already installed');
+  await recordHostPreflight(owner, approval.image);
+  await checkLiveExposure(owner);
+  await checkBackupIsIdle(owner);
+  const scanner = await prepareUpgradeScanner(owner, scannerSecret, approvals);
+  await checkBackupIsIdle(owner);
+  const previous = await deployedRevision(owner);
+  await applyPilotUpdate(owner, previous, [`images.server=${approval.image}`,
+    `images.web=${approval.image}`, `images.scanner=${scanner.image}`,
+    `scanner.approvedSha=${scanner.approvedSha}`, `secrets.scanner=${scanner.name}`,
+    `bootstrapImage=${bootstrapImage}`]);
+  console.log(`PASS applied application approval from GitHub run ${approval.runId}`);
+}
+
+async function applyPilotUpdate(owner: PackageOwner, previous: string, settings: string[]) {
+  // Keep the original release Secret for ownership checks and leave the finished Job intact.
+  const args = ['upgrade', owner.release, chartDirectory, '--reuse-values',
+    '--history-max', '0', '--wait=false'];
+  for (const setting of settings) args.push('--set-string', setting);
+  try {
+    await releaseCommand(owner, args, 180_000);
+    await waitForPilot(owner);
+  } catch (cause) {
+    try {
+      await restorePilotRelease(owner, previous);
+    } catch (rollback) {
+      throw new AggregateError([cause, rollback], 'Pilot update and rollback could not be confirmed');
+    }
+    throw new Error(`Pilot update failed. Helm revision ${previous} was restored`, { cause });
+  }
+}
+
+export async function rollbackPackage(revision: string) {
+  if (!/^[1-9][0-9]*$/u.test(revision)) throw new Error('Select a recorded Helm revision');
+  const owner = await checkedRelease();
+  await restorePilotRelease(owner, revision);
+}
+
+async function restorePilotRelease(owner: PackageOwner, revision: string) {
+  await checkBackupIsIdle(owner);
+  await releaseCommand(owner, ['rollback', owner.release, revision, '--history-max', '0',
+    '--wait=false'], 180_000);
+  await waitForPilot(owner);
+}
+
+async function waitForPilot(owner: PackageOwner) {
+  // Leave the recovery claim unbound until a recovery installation uses it.
+  const values = await installedValues(owner);
+  const deployments = ['backup-catalogue'];
+  if (values.models?.qualification) deployments.push('model-qualification');
+  await waitForPackageDeployments(owner, values.models?.mode === 'provider', deployments);
+  await checkLiveExposure(owner);
+}
+
 async function ownedReleaseSecretUid(owner: PackageOwner) {
   const secret = await releaseSecret(owner);
   if (!secret) return undefined;
@@ -495,14 +685,18 @@ function failed(condition: { type: string; status: string }) {
   return condition.type === 'Failed' && condition.status === 'True';
 }
 
+async function bootstrapConditions(owner: PackageOwner) {
+  const output = await ownedKubectl(owner, ['-n', namespace, 'get', 'job', 'bootstrap', '-o', 'json']);
+  const job = JSON.parse(output) as {
+    status?: { conditions?: Array<{ type: string; status: string }> };
+  };
+  return job.status?.conditions ?? [];
+}
+
 async function waitForBootstrap(owner: PackageOwner) {
   const deadline = Date.now() + 600_000;
   while (Date.now() < deadline) {
-    const output = await ownedKubectl(owner, ['-n', namespace, 'get', 'job', 'bootstrap', '-o', 'json']);
-    const job = JSON.parse(output) as {
-      status?: { conditions?: Array<{ type: string; status: string }> };
-    };
-    const conditions = job.status?.conditions ?? [];
+    const conditions = await bootstrapConditions(owner);
     if (conditions.some(completed)) return;
     if (conditions.some(failed)) {
       throw new Error('Package bootstrap Job failed');
@@ -535,13 +729,7 @@ export async function installPackage(valuesFile: string) {
   requireFleetStandInProvider(values.models?.mode === 'provider' && !values.models.qualification);
   // Give the models container the same restriction even if preparation had no marker.
   const fleetSetting = `models.fleetTask=${fleetTask}`;
-  const hostOptions: HostCheckOptions = {
-    command: checkedKubectl, namespace, image: values.images['server']!,
-    localCommand: command };
-  const override = process.env['OPENCRANE_ACCEPT_DEV_HOST_RISK'];
-  if (override !== undefined) hostOptions.override = override;
-  owner.hostPreflight = await checkPackageHosts(hostOptions);
-  await saveOwner(owner);
+  await recordHostPreflight(owner, values.images['server']!);
   await checkCnpgInstallation(values, namespace, checkedKubectl);
   const secrets = await checkNamedSecrets(values, review, owner, fleetTask);
   if (values.natsCluster?.enabled) {
@@ -582,16 +770,21 @@ export async function installPackage(valuesFile: string) {
     await checkedKubectl(['-n', namespace, 'rollout', 'status', `statefulset/${service}`,
       '--timeout=120s'], 150_000);
   }
+  await waitForPackageDeployments(owner, values.models?.mode === 'provider');
+  await checkLiveExposure(owner);
+}
+
+async function waitForPackageDeployments(owner: PackageOwner, providerMode: boolean,
+  extra: string[] = []) {
   const deployments = [
     'scanner', 'server', 'web', 'worker-members', 'worker-mcp-catalogue', 'worker-computers',
     'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
-    'worker-dispatcher', ...(values.models?.mode === 'provider' ? ['worker-routines'] : []),
+    'worker-dispatcher', ...(providerMode ? ['worker-routines'] : []), ...extra,
   ];
   for (const deployment of deployments) {
-    await checkedKubectl(['-n', namespace, 'rollout', 'status', `deployment/${deployment}`,
+    await ownedKubectl(owner, ['-n', namespace, 'rollout', 'status', `deployment/${deployment}`,
       '--timeout=180s'], 240_000);
   }
-  await checkLiveExposure(owner);
 }
 
 export async function removePackage(checkUnrecordedNamespace = true) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
   statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,6 +22,8 @@ if [ "$program" = docker ]; then
 else
   case " $* " in
     *' get nodes '*) cat "$HOME/nodes.json" ;;
+    *' config view '*) cat "$HOME/forward-config.yaml" ;;
+    *' get namespace kube-system '*) cat "$HOME/forward-namespaces.json" ;;
     *' get namespace '*) cat "$HOME/namespace.json" ;;
     *' get pods '*) cat "$HOME/pods.json" ;;
     *' get pvc '*) cat "$HOME/claims.json" ;;
@@ -97,7 +99,7 @@ async function prepareCollector(home: string) {
   await copyPackagedFixture(worktree);
   symlinkSync(join(process.cwd(), 'node_modules'), join(worktree, 'node_modules'));
   const files = ['nats-placement.ts', 'nats-placement-collect.ts', 'fresh-twice.ts',
-    'fresh-twice-entry.ts', 'browser-capture.ts', 'forward.ts'];
+    'fresh-twice-entry.ts', 'browser-capture.ts', 'forward.ts', 'package-forwarder.ts'];
   mkdirSync(join(worktree, 'infra/package'), { recursive: true });
   mkdirSync(join(worktree, 'infra/nats'), { recursive: true });
   for (const file of files) cpSync(`infra/package/${file}`, join(worktree, 'infra/package', file));
@@ -133,6 +135,10 @@ async function prepareCollector(home: string) {
   writeFileSync(join(slot, 'target-owner.json'), JSON.stringify(target));
   writeFileSync(join(slot, 'package-owner.json'), JSON.stringify(owner));
   writeFileSync(join(slot, 'target.kubeconfig'), 'PRIVATE-CREDENTIAL-CANARY');
+  writeFileSync(join(home, 'forward-config.yaml'), 'PRIVATE-CONNECTION-COPY');
+  const items = [{ metadata: { name: 'kube-system', uid: 'test-cluster' } },
+    { metadata: { name: expected.namespace, uid: expected.namespaceUid } }];
+  writeFileSync(join(home, 'forward-namespaces.json'), JSON.stringify({ items }));
   writeFileSync(join(worktree, 'infra/package/reviewed-images.json'),
     JSON.stringify({ images: { nats: expected.image } }));
   writeFileSync(join(home, 'fresh.json'), JSON.stringify(evidence.fresh));
@@ -202,7 +208,9 @@ async function forwardKeepsPrivatePathOutOfArgv() {
     const forwardedCall = calls.trimEnd().split('\n').at(-1)!;
     const fields = forwardedCall.split('\0');
     assert.equal(fields[0], 'kubectl');
-    assert.equal(fields[1], join(slot, 'target.kubeconfig'));
+    assert.ok(fields[1]?.startsWith(join(slot, 'forward-')));
+    assert.ok(fields[1]?.endsWith('/connection.yaml'));
+    assert.equal(existsSync(fields[1]!), false, 'The private connection copy is removed');
     for (const argument of fields.slice(2)) {
       assert.equal(argument.includes(home), false);
     }

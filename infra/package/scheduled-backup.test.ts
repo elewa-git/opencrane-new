@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { captureScheduledBackup, listBackups, showBackup } from './scheduled-backup.ts';
-import type { BackupPoint } from './scheduled-backup.ts';
+import type { BackupPoint, BackupSource } from './scheduled-backup.ts';
 
 const directories: string[] = [];
 type MaintenanceHandle = Pick<FileHandle, 'writeFile' | 'sync'>;
@@ -41,6 +41,7 @@ async function fixture() {
     const name = destination.split('/').at(-1)!;
     observations.push(name);
     await writeFile(destination, `${name} at sequence 42`, { mode: 0o600 });
+    if (name === 'files') return { bucket: 'files', objects: [] };
     return { position: 42 };
   }
   function resume() {
@@ -50,7 +51,7 @@ async function fixture() {
   }
   function wasResumed() { return resumed; }
   const parts = { events: capture, database: capture, files: capture };
-  const source = { pause, verify, resume, parts };
+  const source: BackupSource = { pause, verify, resume, parts };
   const options = { directory, id: 'backup-one', silo: 'test', images: { server: 'test-image' } };
   return { directory, options, source, observations, point, wasResumed };
 }
@@ -115,6 +116,32 @@ it('does not report corrupted saved bytes as a complete backup', async function 
   await writeFile(join(test.directory, 'backup-one', 'files'), 'changed bytes');
   await expect(listBackups(test.directory)).rejects.toThrow('Backup bytes differ');
 });
+
+for (const [count, keyLength, reason] of [
+  [7_500, 70, 'manifest_size'], [10_001, 5, 'manifest_inventory'],
+] as const) {
+  it(`leaves no published set for an inventory with ${count} objects`,
+    async function refusesOversizedInventory() {
+      const test = await fixture();
+      async function captureInventory(destination: string) {
+        const objects = [];
+        for (let index = 0; index < count; index += 1) {
+          const key = String(index).padStart(keyLength, '0');
+          objects.push({ key, byteCount: 1, sha256: 'a'.repeat(64) });
+        }
+        await writeFile(destination, 'fixture objects', { mode: 0o600 });
+        return { bucket: 'files', objects };
+      }
+      test.source.parts.files = captureInventory;
+      await expect(captureScheduledBackup(test.options, test.source)).rejects.toMatchObject({
+        message: 'Scheduled backup failed',
+        cause: { kind: 'scheduled_backup', reason },
+      });
+      expect(test.wasResumed()).toBe(true);
+      expect(await listBackups(test.directory)).toEqual([]);
+      expect(await readdir(test.directory)).toEqual([]);
+    });
+}
 
 it('leaves an interrupted capture alone and refuses overlapping work', async function overlap() {
   const test = await fixture();

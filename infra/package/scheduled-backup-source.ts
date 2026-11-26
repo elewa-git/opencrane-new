@@ -4,13 +4,16 @@ import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { connectNats } from '@opencrane/event-store';
 import { pilotProjectionNames } from './pilot-projections.ts';
 import { hashBackupBytes } from './backup-bytes.ts';
 import { z } from 'zod';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
 import { pilotStorage } from './pilot-storage.ts';
+import {
+  checkPilotFileInventory, maximumPilotObjects, readPilotFileReferences,
+} from './pilot-file-inventory.ts';
 import type { BackupPoint, BackupSource, ScheduledBackupOptions } from './scheduled-backup.ts';
 
 const execute = promisify(execFile);
@@ -19,6 +22,11 @@ const podsSchema = z.object({ items: z.array(z.unknown()) });
 const admission = ['server', 'worker-dispatcher'];
 const readers = ['worker-members', 'worker-mcp-catalogue', 'worker-computers',
   'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit', 'openfga'];
+
+function databaseConnection(variable: string) {
+  return { connectionString: process.env[variable],
+    connectionTimeoutMillis: 2000, query_timeout: 5000 };
+}
 
 export async function packageBackupSource(options: ScheduledBackupOptions) {
   const connection = await connectNats();
@@ -30,8 +38,7 @@ export async function packageBackupSource(options: ScheduledBackupOptions) {
 }
 
 class PilotBackupSource implements BackupSource {
-  private readonly db = new Pool({ connectionString: process.env['POSTGRES_ADMIN_URL'],
-    connectionTimeoutMillis: 2000, query_timeout: 5000 });
+  private readonly db = new Pool(databaseConnection('POSTGRES_ADMIN_URL'));
   private readonly saved = new Map<string, number>();
   private readonly deadline = Date.now() + 240_000;
   private point!: BackupPoint;
@@ -84,22 +91,24 @@ class PilotBackupSource implements BackupSource {
     return infoSchema.parse(reply.json());
   }
   async checkpoints() {
-    const projection = new Pool({ connectionString: process.env['PROJECTION_DATABASE_URL'],
-      connectionTimeoutMillis: 2000, query_timeout: 5000 });
-    const handler = new Pool({ connectionString: process.env['HANDLER_DATABASE_URL'],
-      connectionTimeoutMillis: 2000, query_timeout: 5000 });
+    const projection = new Client(databaseConnection('PROJECTION_DATABASE_URL'));
+    const handler = new Client(databaseConnection('HANDLER_DATABASE_URL'));
     try {
+      await projection.connect();
       const rows = await projection.query<{ name: string; sequence: string }>(
         'SELECT name, sequence::text FROM projection_checkpoints');
       const result: Record<string, number> = {};
-      for (const row of rows.rows) result[row.name] = Number(row.sequence);
+      for (const row of rows.rows) {
+        result[row.name] = Number(row.sequence);
+      }
+      await handler.connect();
       const dispatch = await handler.query<{ sequence: string }>(
         'SELECT sequence::text FROM handler_dispatcher WHERE id=1');
       result['dispatcher'] = Number(dispatch.rows[0]?.sequence);
       return result;
     } finally {
-      await projection.end();
-      await handler.end();
+      // Wait for both clients to disconnect before verification counts other connections.
+      await Promise.all([projection.end(), handler.end()]);
     }
   }
   async pause() {
@@ -199,15 +208,29 @@ class PilotBackupSource implements BackupSource {
       modelId: process.env['OPENFGA_MODEL_ID'] };
     return pilotDatabaseDetailsSchema.parse({ databases: names, lsn: this.point.lsn, access });
   }
+  private async fileReferences() {
+    // Read the event-backed table after its worker has caught up and all writers have stopped.
+    const projection = new Client(databaseConnection('PROJECTION_DATABASE_URL'));
+    try {
+      await projection.connect();
+      return await readPilotFileReferences(projection, this.options.silo);
+    } finally {
+      await projection.end();
+    }
+  }
+
   async files(destination: string) {
+    const expected = await this.fileReferences();
     const client = await pilotStorage(this.deadline);
     const objects: { key: string; byteCount: number; sha256: string }[] = [];
     const lines: string[] = [];
     let total = 0;
     for await (const object of client.listObjectsV2('files', '', true)) {
       this.remaining();
+      if (objects.length === maximumPilotObjects) throw new Error('Too many stored objects');
       const entrySchema = z.object({ name: z.string().min(1) });
       const objectEntry = entrySchema.parse(object);
+      if (!expected.has(objectEntry.name)) throw new Error('Stored object has no event');
       const stream = await client.getObject('files', objectEntry.name);
       const chunks: Buffer[] = [];
       for await (const chunk of stream) {
@@ -226,6 +249,7 @@ class PilotBackupSource implements BackupSource {
       const serialisedObject = JSON.stringify(archivedObject);
       lines.push(serialisedObject);
     }
+    checkPilotFileInventory(expected, objects);
     await writeFile(destination, lines.join('\n'), { mode: 0o600, flag: 'wx', flush: true });
     return { bucket: 'files', objects };
   }

@@ -59,6 +59,26 @@ function rendersOnlyManifests() {
 
 test('the real package chart renders only Kubernetes manifests', rendersOnlyManifests);
 
+function upgradeKeepsTheFinishedBootstrapImage() {
+  const values = chartValues();
+  const priorImage = `example.invalid/server@sha256:${'b'.repeat(64)}`;
+  values.bootstrapImage = priorImage;
+  const resources = renderedResources(values, ['--is-upgrade']);
+  const bootstrap = resources.get('Job/bootstrap').spec.template.spec;
+  assert.equal(bootstrap.initContainers[0].image, priorImage);
+  assert.equal(bootstrap.containers[0].image, priorImage);
+  const backup = resources.get('CronJob/pilot-backup').spec.jobTemplate.spec.template.spec;
+  assert.equal(backup.containers[0].image, values.images.server);
+  const server = resources.get('Deployment/server').spec.template.spec.containers[0];
+  const scannerDigest = server.env.find(function scannerBinding(setting) {
+    return setting.name === 'SCANNER_MANIFEST_DIGEST';
+  });
+  assert.equal(scannerDigest?.value, `sha256:${values.scanner.approvedSha}`);
+}
+
+test('an application update keeps the finished bootstrap Job on its original image',
+  upgradeKeepsTheFinishedBootstrapImage);
+
 function cnpgValues() {
   const values = chartValues();
   values.postgres = {
@@ -78,17 +98,17 @@ function clusterValues() {
   return values;
 }
 
-function renderChart(values, chart = 'infra/package/chart') {
+function renderChart(values, chart = 'infra/package/chart', flags = []) {
   const options = { encoding: 'utf8', input: JSON.stringify(values) };
   const args = ['template', 'chart-test', chart,
-    '--namespace', 'cluster-test', '--values', '-'];
+    '--namespace', 'cluster-test', '--values', '-', ...flags];
   const result = spawnSync('helm', args, options);
   assert.equal(result.error, undefined);
   return result;
 }
 
-function renderedResources(values) {
-  const result = renderChart(values);
+function renderedResources(values, flags = []) {
+  const result = renderChart(values, 'infra/package/chart', flags);
   assert.equal(result.status, 0, result.stderr);
   const resources = new Map();
   for (const document of parseAllDocuments(result.stdout)) {

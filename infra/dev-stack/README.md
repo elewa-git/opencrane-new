@@ -29,7 +29,7 @@ flowchart LR
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
-  stack -->|checks hosts and provider mode, then launches| package["infra/package<br/>Helm install"]
+  stack -->|installs and updates owned releases| package["infra/package<br/>Helm install"]
 ```
 
 ## What it is responsible for
@@ -44,7 +44,7 @@ flowchart LR
 - Run browser journeys and keep screenshots and original results.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
-  local host-risk exception and remove only owned resources.
+  local host-risk exception. Update and remove only owned releases.
 - Provide guarded demo checks and a daily fresh-stack check.
 
 Not built yet:
@@ -95,6 +95,7 @@ infra/dev-stack/down.sh
 
 A fresh start replaces that stack's data and credentials. Always stop the claimed
 stack when finished, including after a failure.
+`claim.sh --id 1` reserves only slot 1 when the other slot is in use.
 [README.robot.md](README.robot.md#starting-and-stopping-the-stack) explains readiness,
 restart behaviour and focused tests. Type checks run with
 `nice -n 10 npm run typecheck:dev-stack`.

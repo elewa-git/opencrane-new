@@ -132,6 +132,10 @@ spec:
           image: {{ required "server pin" .Values.images.server | quote }}
           command: [node, --experimental-strip-types, apps/server/src/main.ts]
           env:
+            {{- if .Release.IsUpgrade }}
+            - name: SCANNER_MANIFEST_DIGEST
+              value: {{ printf "sha256:%s" .Values.scanner.approvedSha | quote }}
+            {{- end }}
             {{- if .Values.pilotRestore.enabled }}
             - { name: NATS_CERT_FILE, value: /run/opencrane/files/projection.crt }
             - { name: NATS_KEY_FILE, value: /run/opencrane/files/projection.key }
