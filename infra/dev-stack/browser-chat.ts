@@ -6,6 +6,20 @@ import { secondary } from './identity.ts';
 import { mkdir } from 'node:fs/promises';
 import type { Page } from 'playwright';
 
+async function openFixtureChat(page: Page, origin: string) {
+  const navigation = { waitUntil: 'commit' } as const;
+  await page.goto(`${origin}/workspace`, navigation);
+  const composer = page.getByRole('textbox', { name: 'Message your agent' });
+  const skip = page.getByRole('button', { name: 'Skip welcome setup', exact: true });
+  const available = composer.or(skip);
+  const first = available.first();
+  await first.waitFor();
+  // Let the ordinary chat journey start with a new fixture member on an empty stack.
+  if (await skip.isVisible()) await skip.click();
+  await composer.waitFor();
+  return composer;
+}
+
 /** The real signed-in member uses the shipped UI, HTTP commands and realtime bridge. */
 export async function browserChatJourney(
   page: Page,
@@ -18,13 +32,11 @@ export async function browserChatJourney(
   const me = await (await page.request.get(`${origin}/auth/me`)).json() as { user: { name?: string } };
   const name = me.user.name?.trim();
   assert(name, 'Real sign-in supplies the profile name');
-  await page.goto(`${origin}/workspace`);
-  await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
+  const composer = await openFixtureChat(page, origin);
   await page.waitForFunction(() => !globalThis.document.querySelector('.skeleton'));
   if (width === 1280) assert.equal(await page.locator('.current-user strong').innerText(), name);
   await page.keyboard.press('Control+n');
   await page.getByText('Draft', { exact: true }).waitFor();
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
   const rendered = () => page.evaluate(() => new Promise<void>(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(() => resolve()))));
   await composer.fill(prompt); await rendered();
   const sentAt = performance.now();

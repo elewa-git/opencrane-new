@@ -99,6 +99,10 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
     const fulfil = body => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname === '/api/onboarding/entry') {
+      const completedWelcome = { next: 'workspace' };
+      return fulfil(completedWelcome);
+    }
     if (url.pathname.includes('/changes/')) {
       const commandId = url.pathname.split('/').at(-1);
       function hasCommand(row) {

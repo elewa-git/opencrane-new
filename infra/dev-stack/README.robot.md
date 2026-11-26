@@ -482,10 +482,12 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
-By default, `up` runs the core journey. CORE completes its browser logout and token
-exposure checks, then closes the browser before its final members and MCP catalogue
-replay checks. Completed pages therefore stop polling during replay. The replay
-commands retain their 60-second limits and verification assertions.
+By default, `up` runs the core journey. If the browser opens the welcome survey,
+the ordinary chat check saves a skip for its test member before sending a message.
+CORE completes its browser logout and token exposure checks, then closes the
+browser before its final members and MCP catalogue replay checks. Completed pages
+therefore stop polling during replay. The replay commands retain their 60-second
+limits and verification assertions.
 The stack status includes the latest JetStream retry, recovery or exhaustion for
 dispatcher pulls, dispatcher acknowledgements and computer watcher reads.
 Starting the dispatcher clears its previous report.
