@@ -48,6 +48,8 @@ was denied. Both runs saved startup and service logs before cleanup.
 
 ## Direct workspace visits
 
+### Run 1
+
 **PARTIAL on a fresh slot-1 Compose stack.** On 26 November 2026, the stack
 started from `13c6ea3e1` with the free model stand-in. The slot's own test owner
 claimed the installation through the browser and had access to the computer list.
@@ -73,7 +75,38 @@ the response body and stopped before it checked the final page.
 
 The runner saved `up.log`, `browser.log`, `service-server.log` and the other
 service logs before teardown. `down.sh --id 1` passed and slot 1 reported free.
-[Latest browser checks](workspace-routing.json)
+[Run 1 browser checks](workspace-routing.json)
+
+### Run 2
+
+**PARTIAL on a fresh slot-1 Compose stack.** On 26 November 2026 the stack
+started from `c16625816` with the free model stand-in. The test owner claimed
+the installation through the bootstrap API. Both invitation links came from
+the saved invitation commands. Chromium retained the entry response bodies
+across navigation.
+
+| Check | 1280 × 900 | 390 × 844 |
+| --- | --- | --- |
+| Signed-out survey request returns 401 | PASS | PASS |
+| Member joins through a saved invitation link and opens the survey | PASS | PASS |
+| Member saves the first answer while the personal computer runs | PASS | PASS |
+| Signed-in unfinished member opens Conversations and returns to survey step two | [PASS](routing-run-2/workspace-unfinished-1280.png) | [PASS](routing-run-2/workspace-unfinished-390.png) |
+| Reload of Conversations returns the unfinished member to survey step two | PARTIAL | [PASS](routing-run-2/workspace-unfinished-reload-390.png) |
+| Member saves four survey answers, approves the persona and completes welcome | NOT RUN | PASS ([persona](routing-run-2/routing-persona-390.png), [welcome](routing-run-2/routing-welcome-390.png)) |
+| Finished member keeps Conversations on a direct visit and reload | NOT RUN | [PASS](routing-run-2/workspace-finished-390.png) |
+| First ordinary chat replies on the computer that was running during the survey | NOT RUN | [PASS](routing-run-2/routing-first-chat-390.png) |
+| A saved Memory fact remains visible after reload | NOT RUN | [PASS](routing-run-2/routing-memory-390.png) |
+
+The desktop driver stopped at the reload step before it could establish the
+landing page. At 390 px, the computer and pod kept the same identity, start time
+and restart count from the survey through the first chat. The runner saved
+`up.log`, `browser.log` and the service logs before teardown. Slot 1 reported
+free afterwards. [Initial browser checks](workspace-routing-run-2-initial.json)
+
+The revised driver passed a local Chromium fixture at both widths. It interrupts
+the initial Conversations entry request before reloading the real document. A
+fresh live retry was **NOT RUN** because the host did not stay below load 6 for
+five minutes in time to start the journey and leave time for teardown.
 
 ### Previous routing attempt
 
