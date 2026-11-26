@@ -128,22 +128,24 @@ function readResource(fixture, args) {
 }
 
 function patchApproval(config, operations) {
-  expect(operations).toEqual([
+  const expected = [
     { op: 'test', path: '/metadata/resourceVersion', value: config.metadata.resourceVersion },
     { op: 'replace', path: '/data', value: expect.any(Object) },
-  ]);
+  ];
+  expect(operations).toEqual(expected);
   config.data = operations[1].value;
   config.metadata.resourceVersion = String(Number(config.metadata.resourceVersion) + 1);
 }
 
 function patchTemplate(fixture, operations) {
   const { scanner, clusterState } = fixture;
-  expect(operations).toEqual([
+  const expected = [
     { op: 'test', path: '/metadata/uid', value: scanner.metadata.uid },
     { op: 'test', path: '/metadata/generation', value: scanner.metadata.generation },
     { op: 'test', path: '/spec/template', value: scanner.spec.template },
     { op: 'replace', path: '/spec/template', value: expect.any(Object) },
-  ]);
+  ];
+  expect(operations).toEqual(expected);
   if (clusterState.refusePatch) {
     throw new Error('Kubernetes refused the patch');
   }
@@ -217,10 +219,14 @@ function cluster() {
       throw new Error('Kubernetes is unavailable');
     }
     switch (args[0]) {
-      case 'get': return readResource(fixture, args);
-      case 'patch': return patchResource(fixture, args);
-      case 'rollout': return scannerRollout(fixture, args);
-      default: return projectApproval(fixture, args);
+      case 'get':
+        return readResource(fixture, args);
+      case 'patch':
+        return patchResource(fixture, args);
+      case 'rollout':
+        return scannerRollout(fixture, args);
+      default:
+        return projectApproval(fixture, args);
     }
   }
   async function approved(directory) {
@@ -244,7 +250,8 @@ async function updatedOnlyScanner() {
   const [approvalDirectory] = vi.mocked(fetchLatestScannerApproval).mock.calls[0];
   expect(publishPackageImage).toHaveBeenCalledWith(join(approvalDirectory, 'scanner.tar'),
     newRelease.image);
-  expect(result).toMatchObject({ status: 'updated', image: newRelease.image, runId: 42 });
+  const expected = { status: 'updated', image: newRelease.image, runId: 42 };
+  expect(result).toMatchObject(expected);
   expect(fixture.patches).toEqual([
     'configmap/scanner-config', 'deployment/scanner', 'configmap/scanner-config',
   ]);
