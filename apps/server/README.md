@@ -24,7 +24,6 @@ flowchart LR
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
   server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
   server -->|checks chat and other permissions| openfga["OpenFGA<br/>permissions service"]
-  restore["Verified pilot restore"] -->|opens reads with writes held| server
   server -.->|checks calls, approvals and chat default choices| models["libs/models<br/>AI access rules"]
 ```
 
@@ -35,8 +34,8 @@ flowchart LR
 - Serve verified pilot restores with writes and assistant work held.
 - Carry personal assistant assignments, chat messages, live replies, stops and tool approvals.
 - Check and scan files before storing them or passing them to a computer.
-- Serve desktop views and screenshots to people who can read the chat. Refuse signed-out view
-  requests without adding events, and audit signed-in refusals.
+- Check chat access before opening a desktop view or saving a screenshot.
+  Refuse signed-out view requests without adding events, and audit signed-in refusals.
 - Manage members, groups, ownership, providers, tool servers and spending settings.
 - Return permitted history, saved results, memory facts and routine details.
 - Check AI calls and record their costs through the separate models process.

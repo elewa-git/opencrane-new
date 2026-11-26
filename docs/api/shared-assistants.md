@@ -152,9 +152,9 @@ include computer generation, thread, conversation, requester and assistant right
 grants, approvals and budget. Swapped tokens and changed requester claims are
 refused before dispatch. The budget actor reserves and settles integer euro cents.
 
-Anyone who can read an open assistant chat can watch its ready computer and save
-a screenshot in the chat. A team assistant's computer shows the shared desktop,
-including browser activity. Taking control needs separate permission.
+Desktop view and screenshot requests require current read access to the open
+assistant chat and a ready computer. A team assistant uses a shared desktop,
+including its browser activity. Taking control needs separate permission.
 
 ## Private turns and memory-free turns
 
