@@ -867,8 +867,8 @@ These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
 wrap the members projection; [authz](../../libs/authz/README.md) implements
 `update-openfga` for routine, provider, member, assistant, conversation, team and resource-grant
-events. Desktop admission additionally requires an explicit member
-`shared_desktop` grant. Scope promotion remains deferred.
+events. Watching a ready computer and taking a screenshot use the same access
+check as reading the chat. Taking control has its own permission check.
 
 | Handler | Subscribed events |
 | --- | --- |

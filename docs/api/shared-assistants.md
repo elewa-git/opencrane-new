@@ -152,9 +152,9 @@ include computer generation, thread, conversation, requester and assistant right
 grants, approvals and budget. Swapped tokens and changed requester claims are
 refused before dispatch. The budget actor reserves and settles integer euro cents.
 
-Desktop access needs a separate `shared_desktop` grant. That grant shows the
-computer's shared desktop, including every member's browser activity. It does not
-provide a private browser profile.
+Anyone who can read an open assistant chat can watch its ready computer and save
+a screenshot in the chat. A team assistant's computer shows the shared desktop,
+including browser activity. Taking control needs separate permission.
 
 ## Private turns and memory-free turns
 

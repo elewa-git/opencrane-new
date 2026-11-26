@@ -1,1 +1,3 @@
-You can watch your assistant's computer and take a screenshot from a personal assistant chat you can read. The viewer closes within two seconds if you lose chat access.
+People who can read an open assistant chat can watch its ready computer and save
+a screenshot, including in shared chats. The view closes within two seconds when
+chat access ends.

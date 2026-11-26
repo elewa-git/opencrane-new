@@ -71,9 +71,9 @@ streams fail closed without disclosing their contents.
 Writes check exact member, assistant, resource and relevant team subjects.
 The fence starts before permission reads and retains the original two-second
 request budget. Standalone destination-authority checks create and verify their
-own fence. Lagging or unavailable IAM cannot authorise a call. Group-derived desktop sockets
-use the existing bounded lease and close within two seconds of removal. A direct
-grant remains independent of group membership.
+own fence. Lagging or unavailable IAM cannot authorise a call. When a group
+change ends someone's chat access, their computer view closes within two
+seconds.
 
 [Source qualification and remaining live work](../process/p4-1-backend-evidence.md)
 record the test seams and limits. Screens remain outside this backend change.

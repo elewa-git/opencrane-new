@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
-import type { Page } from 'playwright';
-import { browserViewTimings } from './live-view-timings.ts';
+import { browserViewTimings, type BrowserObservation } from './live-view-timings.ts';
 import { measureFirstReplyDelta } from './live-view-reply-timing.ts';
 
 function endpoint(chat: string, suffix: string) {
@@ -21,12 +20,12 @@ function admission(chat: string, sessionId: string) {
 
 function opensBothChatsAndTimesTheSecondReply() {
   const events = new EventEmitter();
-  const subscribe: Pick<Page, 'on' | 'off'> = {
+  const subscribe: BrowserObservation = {
     on: events.on.bind(events),
     off: events.off.bind(events),
   };
-  const stopViews = browserViewTimings(subscribe, 'first-chat');
-  const stopReplies = measureFirstReplyDelta(subscribe, 'first-chat');
+  const stopViews = browserViewTimings(subscribe);
+  const stopReplies = measureFirstReplyDelta(subscribe);
 
   async function observe() {
     const first = viewerSocket('first-chat');
@@ -54,7 +53,10 @@ function opensBothChatsAndTimesTheSecondReply() {
     }
     const admissions = views.filter(isAdmission);
     assert.deepEqual(admissions.map(sessionId), ['first-session', 'second-session']);
-    assert.match(JSON.stringify(stopReplies()), /"firstDeltaMs":\d+/u);
+    const replies = stopReplies();
+    const secondReply = replies.get('second-chat');
+    assert(secondReply && typeof secondReply.firstDeltaMs === 'number');
+    assert.equal(replies.has('first-chat'), false);
   }
   return observe();
 }

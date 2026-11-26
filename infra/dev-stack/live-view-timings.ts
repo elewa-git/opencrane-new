@@ -1,4 +1,4 @@
-import type { Page, Response, WebSocket } from 'playwright';
+import type { Request, Response, WebSocket } from 'playwright';
 import { readFile, writeFile } from 'node:fs/promises';
 import { directory } from './config.ts';
 
@@ -40,28 +40,38 @@ export async function collectViewTimings(sessionId: string, output: string) {
 }
 
 
-export function browserViewTimings(page: Page, conversationId: string) {
+type Listen = {
+  (event: 'request', listener: (request: Request) => void): void;
+  (event: 'response', listener: (response: Response) => void): void;
+  (event: 'websocket', listener: (socket: WebSocket) => void): void;
+};
+
+export interface BrowserObservation {
+  on: Listen;
+  off: Listen;
+}
+
+export interface BrowserViewTiming {
+  conversationId: string;
+  stage: string;
+  elapsedMs: number;
+  status?: number;
+  sessionId?: string;
+}
+
+export function browserViewTimings(page: BrowserObservation) {
   const began = performance.now();
-  const records: { stage: string; elapsedMs: number; status?: number; sessionId?: string }[] = [];
+  const records: BrowserViewTiming[] = [];
   const cleanups: (() => void)[] = [];
-  function record(stage: string, status?: number) {
-    const entry = {
-      stage, elapsedMs: Math.round(performance.now() - began),
-      ...(status === undefined ? {} : { status }),
-    };
-    records.push(entry);
-  }
   function response(reply: Response) {
     const path = new URL(reply.url()).pathname;
-    if (path === `/api/conversations/${conversationId}/view`) {
-      void recordAdmission(reply);
-    }
+    const conversationId = /^\/api\/conversations\/([\w-]+)\/view$/u.exec(path)?.[1];
+    if (conversationId) void recordAdmission(reply, conversationId);
   }
-  async function recordAdmission(reply: Response) {
+  async function recordAdmission(reply: Response, conversationId: string) {
     const entry = {
-      stage: 'admission_response',
-      elapsedMs: Math.round(performance.now() - began),
-      status: reply.status(),
+      conversationId, stage: 'admission_response',
+      elapsedMs: Math.round(performance.now() - began), status: reply.status(),
     };
     try {
       const value: unknown = await reply.json();
@@ -70,12 +80,19 @@ export function browserViewTimings(page: Page, conversationId: string) {
         return;
       }
     } catch {
-      // Refused admissions do not return an admitted session identifier.
+      // Keep the HTTP status when a refusal has no JSON body.
     }
     records.push(entry);
   }
   function socketOpened(socket: WebSocket) {
-    if (new URL(socket.url()).pathname !== `/ws/conversations/${conversationId}/view`) return;
+    const path = new URL(socket.url()).pathname;
+    const conversationId = /^\/ws\/conversations\/([\w-]+)\/view$/u.exec(path)?.[1];
+    if (!conversationId) return;
+    const chat = conversationId;
+    function record(stage: string) {
+      const elapsedMs = Math.round(performance.now() - began);
+      records.push({ conversationId: chat, stage, elapsedMs });
+    }
     record('browser_socket_created');
     function firstBytes() {
       record('browser_first_bytes');
