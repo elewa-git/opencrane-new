@@ -44,6 +44,7 @@ async function mount(handler: (url: string) => Promise<Response> | Response) {
 }
 beforeEach(() => history.replaceState(null, '', '/org/people'));
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   history.replaceState(null, '', '/org/people');
 });
@@ -79,17 +80,77 @@ async function showsPeopleAfterJoinApplies() {
   const urls: string[] = [];
   function read(url: string) {
     urls.push(url);
-    if (urls.length === 1) return response({ status: 'access_applying' }, 425);
+    if (urls.length === 1) {
+      return response({ status: 'access_applying' }, 425);
+    }
     return response(page([alice], null));
   }
   const fixture = await mount(read);
   await waitForText(fixture, 'Alice');
-  expect(root(fixture).querySelector('.page-actions button.primary')?.textContent)
-    .toBe('Invite people');
+  const invite = inviteButton(fixture);
+  expect(invite?.textContent).toBe('Invite people');
   expect(urls).toEqual(['/api/members?q=&after=&limit=20', '/api/members?q=&after=&limit=20']);
 }
 it('loads the directory and invite button when the new admin’s access is ready',
   showsPeopleAfterJoinApplies);
+
+function inviteButton(fixture: ComponentFixture<PeopleScreen>) {
+  return root(fixture).querySelector<HTMLButtonElement>('.page-actions button.primary');
+}
+
+async function clearsDirectoryWhenNewSessionIsApplying(succeeds: boolean) {
+  let reads = 0;
+  function read() {
+    reads += 1;
+    if (reads === 1) {
+      return response(page([alice], 'alice'));
+    }
+    if (succeeds && reads === 3) {
+      return response(page([bob], null));
+    }
+    return response({ status: 'access_applying' }, 425);
+  }
+  const fixture = await mount(read);
+  await waitForText(fixture, 'alice@example.test');
+  const originalInvite = inviteButton(fixture);
+  expect(originalInvite?.disabled).toBe(false);
+  const refresh = root(fixture).querySelector<HTMLButtonElement>('.member-toolbar button');
+  if (!refresh) {
+    throw new Error('Expected Refresh in the loaded directory');
+  }
+  vi.useFakeTimers();
+  refresh.click();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(reads).toBe(2);
+  expectEmptyDirectory(fixture);
+  expect(root(fixture).textContent).toContain('Loading members…');
+
+  await vi.advanceTimersByTimeAsync(5_000);
+  fixture.detectChanges();
+  if (succeeds) {
+    expect(reads).toBe(3);
+    expect(root(fixture).textContent).toContain('bob@example.test');
+    expect(root(fixture).textContent).not.toContain('alice@example.test');
+    expect(inviteButton(fixture)?.disabled).toBe(false);
+  } else {
+    expect(reads).toBe(12);
+    expectEmptyDirectory(fixture);
+    expect(root(fixture).textContent).toContain('Members are unavailable right now');
+  }
+}
+
+function expectEmptyDirectory(fixture: ComponentFixture<PeopleScreen>) {
+  const screen = root(fixture);
+  expect(screen.querySelector('[data-member-row]')).toBeNull();
+  expect(screen.querySelector('.member-count')).toBeNull();
+  expect(screen.querySelector('[data-load-more]')).toBeNull();
+  expect(screen.textContent).not.toContain('alice@example.test');
+  expect(inviteButton(fixture)).toBeNull();
+}
+
+it.each([true, false])('clears a previous session as soon as access is applying (success: %s)',
+  clearsDirectoryWhenNewSessionIsApplying);
 
 it('keeps loaded rows and focus after a failed Refresh', async () => {
   let reads = 0;

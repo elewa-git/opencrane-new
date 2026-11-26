@@ -197,17 +197,24 @@ async function sanitisesShutdown() {
   onTestFinished(server.stop);
   await expect(server.stop()).rejects.toEqual(new Error('Replica shutdown failed'));
   expect((await server.exited).code).toBe(2);
+}
+
+it('sanitises child shutdown errors', sanitisesShutdown, 60_000);
+
+async function keepsCleanupError() {
   let cleaned = false;
+  const original = new Error('Fixture database connection closed unexpectedly');
   function remainingResource() {
     cleaned = true;
     return Promise.resolve();
   }
   function failedResource() {
-    return Promise.reject(new Error(canary));
+    return Promise.reject(original);
   }
-  await expect(closeReplicas([remainingResource, failedResource])).rejects.toEqual(
-    new Error('Replica fixture cleanup failed'));
+  const cleanup = [remainingResource, failedResource];
+  const failure = closeReplicas(cleanup);
+  const expected = { message: 'Replica fixture cleanup failed', errors: [original] };
+  await expect(failure).rejects.toMatchObject(expected);
   expect(cleaned).toBe(true);
 }
-it('sanitises child shutdown and cleanup errors while releasing remaining resources',
-  sanitisesShutdown, 60_000);
+it('keeps the original cleanup failure and releases the remaining resources', keepsCleanupError);
