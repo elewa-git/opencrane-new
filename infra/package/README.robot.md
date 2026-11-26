@@ -1050,6 +1050,9 @@ retaining its evidence.
 
 ## Update the running pilot
 
+Not yet safe for a live installation. Reinstall instead; the open checks are
+tracked as slice 3 of the pilot ticket. Use these steps for rehearsal only.
+
 `package-upgrade` is for a running packaged pilot on the same chart version.
 It keeps the existing Helm values for storage, sign-in and site address. It
 changes the application images, including the image for the next scheduled

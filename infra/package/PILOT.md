@@ -73,6 +73,9 @@ provider credentials and assistant computer homes.
 
 ## Update the running pilot
 
+Not yet safe for a live installation. Reinstall instead; the open checks are
+tracked as slice 3 of the pilot ticket. Use these steps for rehearsal only.
+
 An update applies the approved application and scanner images to the existing
 Helm release. The pilot keeps its volumes, sign-in settings, chat history and
 saved demo route. Plan a maintenance window away from the nightly backup, and
