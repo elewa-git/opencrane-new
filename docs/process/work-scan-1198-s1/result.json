@@ -1,131 +1,216 @@
 {
-  "journey": "FAIL",
-  "source": "ac8f8861abf77d60602ecded19ba79ff145016c0",
+  "journey": "PASS",
+  "source": "bda841ca866b7988797906aff48e99f41c7fc995",
   "slot": 1,
-  "namespaceUid": "92c8ab0a-3e20-4aa9-915a-35c152a28cf5",
-  "installId": "c1777513-f910-4e38-a6f5-54a9cf4fed69",
+  "steps": {
+    "installation": "PASS",
+    "uploadBefore1280": "PASS",
+    "uploadBefore390": "PASS",
+    "approvedRefresh": "PASS",
+    "uploadAfter1280": "PASS",
+    "uploadAfter390": "PASS",
+    "mismatchedImage": "PASS",
+    "cleanup": "PASS"
+  },
+  "namespaceUid": "67db27a3-4ad8-4f3c-a864-522ad8785260",
+  "installId": "b7278f0c-f40c-494e-a732-00171d2aa71a",
   "freshVolumeClaims": [
     {
       "name": "backups",
-      "uid": "a92aa70f-41ca-400f-943b-e570d54d0df3",
-      "createdAt": "2026-11-26T17:31:40Z"
+      "uid": "8d163f66-33bc-41a5-b21f-5addc4e570b0",
+      "createdAt": "2026-11-26T19:44:58Z"
     },
     {
       "name": "data-nats-0",
-      "uid": "412c1848-95ac-48f1-9418-2ae0b503cbd3",
-      "createdAt": "2026-11-26T17:31:41Z"
+      "uid": "22694a3b-b7b3-41a4-8740-37f08a3326ed",
+      "createdAt": "2026-11-26T19:44:58Z"
     },
     {
       "name": "data-objects-0",
-      "uid": "d74df8f7-340d-4429-8e89-c3850e4de152",
-      "createdAt": "2026-11-26T17:31:41Z"
+      "uid": "ad9a368d-00dd-4daf-b872-277da21dff52",
+      "createdAt": "2026-11-26T19:44:58Z"
     },
     {
       "name": "data-postgres-0",
-      "uid": "54f8fb87-9ad4-4b74-9615-9a169a1398b8",
-      "createdAt": "2026-11-26T17:31:41Z"
+      "uid": "cab96cf3-059a-43c3-9454-70c6831d43ba",
+      "createdAt": "2026-11-26T19:44:58Z"
     },
     {
       "name": "home-computer-8758be48bf6edde9f441c77886319c13",
-      "uid": "b91a10fb-94e4-400f-a22b-7e33389bdf61",
-      "createdAt": "2026-11-26T17:32:36Z"
+      "uid": "328639d4-d107-421b-abe2-1237c1ec7e63",
+      "createdAt": "2026-11-26T19:46:12Z"
     },
     {
       "name": "pilot-restore",
-      "uid": "dedfa2d6-40b4-4e6d-b1be-a6a39b3d8a1f",
-      "createdAt": "2026-11-26T17:31:40Z"
+      "uid": "2aac1ebd-c67a-4fcf-867b-623edb4b4557",
+      "createdAt": "2026-11-26T19:44:58Z"
     }
   ],
   "applicationApproval": {
-    "runId": 45807429814,
-    "imageDigest": "sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4"
+    "revision": "bda841ca866b7988797906aff48e99f41c7fc995",
+    "runId": 45882914633,
+    "imageDigest": "sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731"
   },
   "initialScannerApproval": {
-    "runId": 45807430276,
-    "formatVersion": 1,
-    "imageDigest": "sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "manifestDigest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
-    "databaseUpdatedAt": "2026-11-26T11:06:49.250Z",
-    "inspectedAt": "2026-11-26T11:07:32.564Z"
+    "revision": "bda841ca866b7988797906aff48e99f41c7fc995",
+    "runId": 45882919803,
+    "imageDigest": "sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
+    "manifestDigest": "sha256:e8d7c2b30319733a0eef0b3757b9d39fa8f4f771059f5231cacc01d960a01050",
+    "databaseUpdatedAt": "2026-11-26T19:21:16.712Z"
   },
   "newerScannerApproval": {
-    "runId": 45820515076,
-    "formatVersion": 1,
-    "imageDigest": "sha256:f2388c376c91a9d6996de249c8e937a2bf0b75ba3e6c40b2bf086cb257cea98d",
-    "manifestDigest": "sha256:f2a98e1425042d1d1ccc3cf5674e7297fb9a8a297b3cf3789d4fa2da02a14962",
-    "databaseUpdatedAt": "2026-11-26T12:32:48.787Z",
-    "inspectedAt": "2026-11-26T12:33:23.473Z"
+    "revision": "b51b587aa531d8702aae53c49608a2d4d5efe5ef",
+    "runId": 45883138189,
+    "imageDigest": "sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+    "manifestDigest": "sha256:7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336",
+    "databaseUpdatedAt": "2026-11-26T19:23:01.378Z"
   },
   "uploadsBeforeRefresh": [
     {
       "width": 1280,
       "httpStatus": 201,
       "attachment": "Ready",
-      "picture": "screenshots/upload-before-1280.png"
+      "picture": "upload-before-1280.png"
     },
     {
       "width": 390,
       "httpStatus": 201,
       "attachment": "Ready",
-      "picture": "screenshots/upload-before-390.png"
+      "picture": "upload-before-390.png"
+    }
+  ],
+  "uploadsAfterSwap": [
+    {
+      "width": 1280,
+      "httpStatus": 201,
+      "attachment": "Ready",
+      "picture": "upload-after-1280.png"
+    },
+    {
+      "width": 390,
+      "httpStatus": 201,
+      "attachment": "Ready",
+      "picture": "upload-after-390.png"
     }
   ],
   "beforeRefresh": {
-    "observedAt": "2026-11-26T17:33:29.069Z",
-    "enginePin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "copyDatabasesPin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "httpsWrapperPin": "k3d-ocn-registry:5000/opencrane/package@sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4",
-    "manifest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
-    "approvedManifests": [
-      "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627"
+    "deploymentUid": "77ef5661-5f02-414b-b715-582afed333fa",
+    "generation": 1,
+    "configVersion": "5178755",
+    "engine": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
+    "copy": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
+    "wrapper": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+    "manifest": "e8d7c2b30319733a0eef0b3757b9d39fa8f4f771059f5231cacc01d960a01050",
+    "approved": [
+      "sha256:e8d7c2b30319733a0eef0b3757b9d39fa8f4f771059f5231cacc01d960a01050"
     ],
-    "deploymentUid": "5f5312bb-adf6-41fa-94a2-845f88b5e641",
-    "deploymentGeneration": 1,
-    "configMapResourceVersion": "5162315",
-    "readyScannerPodUid": "e93bccb2-835d-43fe-9e46-1369b8667886",
-    "readyServerPodUid": "dbdd0936-7f70-4837-b392-ebdd20f74ea6"
+    "pods": [
+      {
+        "uid": "0805ac53-2b3a-4e39-b4ec-28b0c22ce79d",
+        "createdAt": "2026-11-26T19:44:58Z",
+        "ready": true,
+        "containers": [
+          {
+            "name": "engine",
+            "image": "sha256:593208c50cd2371018032441534a3f4c6e289e275e04e397d48458c2f8b5ead7",
+            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
+            "restartCount": 0
+          },
+          {
+            "name": "https",
+            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
+            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+            "restartCount": 0
+          }
+        ]
+      }
+    ]
   },
-  "afterRefreshRefusal": {
-    "observedAt": "2026-11-26T17:34:48.038Z",
-    "enginePin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "copyDatabasesPin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "httpsWrapperPin": "k3d-ocn-registry:5000/opencrane/package@sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4",
-    "manifest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
-    "approvedManifests": [
-      "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627"
+  "afterRefresh": {
+    "deploymentUid": "77ef5661-5f02-414b-b715-582afed333fa",
+    "generation": 2,
+    "configVersion": "5180341",
+    "engine": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+    "copy": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+    "wrapper": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+    "manifest": "7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336",
+    "approved": [
+      "sha256:7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336"
     ],
-    "deploymentUid": "5f5312bb-adf6-41fa-94a2-845f88b5e641",
-    "deploymentGeneration": 1,
-    "configMapResourceVersion": "5162315",
-    "readyScannerPodUid": "e93bccb2-835d-43fe-9e46-1369b8667886",
-    "readyServerPodUid": "dbdd0936-7f70-4837-b392-ebdd20f74ea6"
+    "pods": [
+      {
+        "uid": "0805ac53-2b3a-4e39-b4ec-28b0c22ce79d",
+        "createdAt": "2026-11-26T19:44:58Z",
+        "ready": false,
+        "containers": [
+          {
+            "name": "engine",
+            "image": "sha256:593208c50cd2371018032441534a3f4c6e289e275e04e397d48458c2f8b5ead7",
+            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:d2f55efd942505425afb474757693a4d56e2ef51ab4153ce8577639e60f4e549",
+            "restartCount": 0
+          },
+          {
+            "name": "https",
+            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
+            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+            "restartCount": 0
+          }
+        ]
+      },
+      {
+        "uid": "cba5bb1b-a41d-4627-b1ff-19aeef488f10",
+        "createdAt": "2026-11-26T19:49:49Z",
+        "ready": true,
+        "containers": [
+          {
+            "name": "engine",
+            "image": "sha256:c4d56b9d2612fb8b29830a96a0c1e78583f7a15b87947ba6cdd06b4f364081ea",
+            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+            "restartCount": 0
+          },
+          {
+            "name": "https",
+            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
+            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+            "restartCount": 0
+          }
+        ]
+      }
+    ]
   },
   "afterMismatchedImageRefusal": {
-    "observedAt": "2026-11-26T17:35:10.149Z",
-    "enginePin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "copyDatabasesPin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
-    "httpsWrapperPin": "k3d-ocn-registry:5000/opencrane/package@sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4",
-    "manifest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
-    "approvedManifests": [
-      "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627"
+    "deploymentUid": "77ef5661-5f02-414b-b715-582afed333fa",
+    "generation": 2,
+    "configVersion": "5180341",
+    "engine": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+    "copy": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+    "wrapper": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+    "manifest": "7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336",
+    "approved": [
+      "sha256:7eacaeb556e9cd274fd83c2bab9dd73816b80d8352cf8c3428ffe39c7bd8e336"
     ],
-    "deploymentUid": "5f5312bb-adf6-41fa-94a2-845f88b5e641",
-    "deploymentGeneration": 1,
-    "configMapResourceVersion": "5162315",
-    "readyScannerPodUid": "e93bccb2-835d-43fe-9e46-1369b8667886",
-    "readyServerPodUid": "dbdd0936-7f70-4837-b392-ebdd20f74ea6"
+    "pods": [
+      {
+        "uid": "cba5bb1b-a41d-4627-b1ff-19aeef488f10",
+        "createdAt": "2026-11-26T19:49:49Z",
+        "ready": true,
+        "containers": [
+          {
+            "name": "engine",
+            "image": "sha256:c4d56b9d2612fb8b29830a96a0c1e78583f7a15b87947ba6cdd06b4f364081ea",
+            "imageID": "k3d-ocn-registry:5000/opencrane/scanner@sha256:a4443b3ab9158e14c538120f4e14f0edb6200fed6d2bc7698ab6f268e36f4ffd",
+            "restartCount": 0
+          },
+          {
+            "name": "https",
+            "image": "sha256:872785717313628a5edc7cd3c310802038c8e1633f447ad1c972433ef8db11cb",
+            "imageID": "k3d-ocn-registry:5000/opencrane/package@sha256:f2ef8c025f91604dd7ca93325581ed9a58a3cd2fb0852d3206c8862065ed0731",
+            "restartCount": 0
+          }
+        ]
+      }
+    ]
   },
-  "approvedRefresh": {
-    "verdict": "FAIL",
-    "exit": 1,
-    "reason": "install",
-    "releaseLookupBytes": 0,
-    "escapedReleaseLookupDecodedBytes": 308
-  },
-  "uploadsAfterSwap": "NOT RUN",
-  "mismatchedImage": {
-    "verdict": "PASS",
-    "exit": 1,
-    "reason": "image"
-  }
+  "replacementApprovalRunId": 45883138189,
+  "serverPodUnchanged": true
 }
