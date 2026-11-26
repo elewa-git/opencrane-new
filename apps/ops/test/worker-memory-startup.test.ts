@@ -14,8 +14,8 @@ async function refusesMalformedDatabaseUrlSafely() {
   }
   child.stderr.on('data', collect);
   child.stdout.on('data', collect);
-  const [status] = await once(child, 'close') as [number | null, NodeJS.Signals | null];
-  expect(status).toBe(1);
+  await once(child, 'close');
+  expect(child.exitCode).toBe(1);
   expect(output.includes(marker)).toBe(false);
   expect(output).toContain('Invalid Memory database address');
 }

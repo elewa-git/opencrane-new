@@ -11,6 +11,7 @@ import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing'
 import { createLogger } from '@opencrane/observability';
 import { seedOwnership } from '@opencrane/models';
 import { members, memoryScopeId, pgDb, ProjectionRunner, groups, computers, conversations } from '@opencrane/projections';
+import { objectId, TupleClient } from '../../../libs/authz/src/client.ts';
 import { grantPackageReads } from '../../../infra/package/package-database.ts';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
@@ -96,7 +97,7 @@ async function setup(applyOwnershipSeed = true, isolatedMemory = false) {
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
     origin: 'https://app.example.test', 'content-type': 'application/json' };
   const origin = `http://127.0.0.1:${server.port}`;
-  return { headers, origin, env, assistant, auth, db, applyOwnership, runner };
+  return { headers, origin, env, assistant, auth, db, binding, applyOwnership, runner };
 }
 
 async function databaseRoles(isolatedMemory: boolean) {
@@ -326,7 +327,7 @@ function memoryFacts(origin: string, kind: 'person' | 'group' | 'assistant_notes
 
 function postFact(path: string, headers: HeadersInit, commandId: string,
   sources: { conversationId: string; messageId: string }[] = []) {
-  const input = { commandId, text: 'I prefer jasmine tea', kind: 'preference',
+  const input = { commandId, text: 'I prefer jasmine tea', kind: 'fact',
     pinned: false, expiresAt: null, sources, dependsOn: [] };
   return fetch(path, { method: 'POST', headers, body: JSON.stringify(input) });
 }
@@ -342,9 +343,15 @@ async function checksGroupAndForeignMemoryAcrossSchemas() {
   expect((await postFact(privateFacts, bob, 'foreign-write')).status).toBe(404);
   expect((await fetch(shared, { headers: fixture.headers })).status).toBe(404);
   expect((await postFact(shared, fixture.headers, 'foreign-group-write')).status).toBe(404);
+  expect((await postFact(shared, bob, 'group-fact')).status).toBe(200);
+  const personal = memoryFacts(origin, 'person', 'bob');
   const missing = { ...source, messageId: 'missing-message' };
-  expect((await postFact(shared, bob, 'missing-source', [missing])).status).toBe(404);
-  expect((await postFact(shared, bob, 'group-fact', [source])).status).toBe(200);
+  expect((await postFact(personal, bob, 'missing-source', [missing])).status).toBe(404);
+  expect((await postFact(personal, bob, 'personal-fact', [source])).status).toBe(200);
+  // Simulate a stale read table that points at a different saved message.
+  await fixture.db.query('UPDATE conversation_feed SET event_id=$1 WHERE event_id=$2',
+    [missing.messageId, source.messageId]);
+  expect((await postFact(personal, bob, 'wrong-source', [missing])).status).toBe(404);
   function projected() {
     return memoryReady(true);
   }
@@ -366,6 +373,15 @@ async function checksNotesPermissionsAcrossSchemas() {
   await addGroupAndSource(fixture);
   expect((await fetch(path, { headers })).status).toBe(404);
   expect((await postFact(path, headers, 'no-write-grant')).status).toBe(404);
+  const scopeGrant = { resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'bootstrap-owner' };
+  const writeSubject = grantStream('memory_write', scopeId);
+  const allowWrite = { ...scopeGrant, grantedBy: 'bootstrap-owner' };
+  await saveFixtureEvent(fixture, { subject: writeSubject, type: 'grant.given', data: allowWrite });
+  expect((await fetch(path, { headers })).status).toBe(404);
+  expect((await postFact(path, headers, 'notes-write')).status).toBe(200);
+  const revokeWrite = { ...scopeGrant, revokedBy: 'bootstrap-owner' };
+  await saveFixtureEvent(fixture, { subject: writeSubject, type: 'grant.revoked', data: revokeWrite });
   for (const granteeId of ['bootstrap-owner', 'bob']) {
     const data = { resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
       granteeId, grantedBy: 'bootstrap-owner' };
@@ -374,12 +390,13 @@ async function checksNotesPermissionsAcrossSchemas() {
   }
   expect((await fetch(path, { headers })).status).toBe(200);
   expect((await postFact(path, headers, 'read-only-grant')).status).toBe(404);
+  // Make the permission service report access so this checks the saved assistant owner.
+  const client = new TupleClient(fixture.binding);
+  const delegated = { user: objectId('person', 'acme', 'bob'), relation: 'acts_for',
+    object: objectId('assistant', 'acme', 'personal') };
+  await client.write([delegated], []);
+  expect((await fixture.auth.actsFor('bob', 'personal')).allowed).toBe(true);
   expect((await fetch(path, { headers: bob })).status).toBe(404);
-  const write = { resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
-    granteeId: 'bootstrap-owner', grantedBy: 'bootstrap-owner' };
-  await saveFixtureEvent(fixture, { subject: grantStream('memory_write', scopeId),
-    type: 'grant.given', data: write });
-  expect((await postFact(path, headers, 'notes-write')).status).toBe(200);
 }
 it('requires the personal assistant owner and independent note grants with packaged database roles',
   checksNotesPermissionsAcrossSchemas, 60_000);
