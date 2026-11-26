@@ -110,8 +110,12 @@ function renderChart(values, chart = 'infra/package/chart', flags = []) {
 function renderedResources(values, flags = []) {
   const result = renderChart(values, 'infra/package/chart', flags);
   assert.equal(result.status, 0, result.stderr);
+  return resourceMap(result.stdout);
+}
+
+function resourceMap(output) {
   const resources = new Map();
-  for (const document of parseAllDocuments(result.stdout)) {
+  for (const document of parseAllDocuments(output)) {
     assert.deepEqual(document.errors, []);
     const resource = document.toJS();
     resources.set(`${resource.kind}/${resource.metadata.name}`, resource);
@@ -931,17 +935,48 @@ async function originalChartRender(values) {
   }
 }
 
-async function defaultModelBytesStayTheSame() {
+async function stubMatchesDefaultAndKeepsOtherSettings() {
   const values = chartValues();
   const original = renderChart(values);
   assert.equal(original.status, 0, original.stderr);
-  // Compare immutable source with the same renderer; Helm versions format YAML differently.
   const baseline = await originalChartRender(values);
-  assert.equal(original.stdout, baseline);
+  const currentResources = resourceMap(original.stdout);
+  removeScannerRefreshSettings(currentResources);
+  assert.deepEqual(currentResources, resourceMap(baseline));
   values.models = { mode: 'stub' };
   assert.equal(renderChart(values).stdout, original.stdout);
 }
-test('default and explicit stub mode preserve the original chart bytes', defaultModelBytesStayTheSame);
+
+function removeScannerRefreshSettings(resources) {
+  // Compare everything outside scanner refresh with the original install.
+  delete resources.get('ConfigMap/scanner-config').data['approved-manifests'];
+  const server = resources.get('Deployment/server').spec.template.spec;
+  function isServer(container) {
+    return container.name === 'server';
+  }
+  const application = server.containers.find(isServer);
+  function keepVariable(variable) {
+    return variable.name !== 'SCANNER_APPROVED_MANIFEST_FILE';
+  }
+  function keepVolume(volume) {
+    return volume.name !== 'scanner-approval';
+  }
+  application.env = application.env.filter(keepVariable);
+  application.volumeMounts = application.volumeMounts.filter(keepVolume);
+  server.volumes = server.volumes.filter(keepVolume);
+
+  const scanner = resources.get('Deployment/scanner').spec;
+  delete scanner.strategy;
+  function isEvidenceSource(volume) {
+    return volume.name === 'evidence-source';
+  }
+  const volume = scanner.template.spec.volumes.find(isEvidenceSource);
+  volume.secret = { secretName: volume.projected.sources[0].secret.name };
+  delete volume.projected;
+}
+
+test('stub renders the default chart and scanner refresh leaves the other settings intact',
+  stubMatchesDefaultAndKeepsOtherSettings);
 
 function protectsProviderRemounts() {
   const values = chartValues();
