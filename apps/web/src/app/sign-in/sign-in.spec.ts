@@ -158,9 +158,9 @@ describe('sign-in handoff', () => {
   });
   it('uses the shared native sign-out form', async () => {
     globalThis.history.replaceState({}, '', '/');
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(Response.json({ authenticated: true }))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce(Response.json({ authenticated: true }));
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }));
     try {
       const { fixture, element } = create();
       await vi.waitFor(() => {
@@ -198,13 +198,35 @@ describe('where a signed-in member lands', function entryRules() {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     fetchSpy.mockResolvedValueOnce(Response.json({ authenticated: true }));
     fetchSpy.mockResolvedValueOnce(Response.json({ next }));
-    TestBed.createComponent(SignIn).detectChanges();
+    const fixture = TestBed.createComponent(SignIn);
+    fixture.detectChanges();
     function wentToDestination() {
       expect(navigate).toHaveBeenCalledExactlyOnceWith(path);
     }
     await vi.waitFor(wentToDestination);
     expect(fetchSpy.mock.calls[1]?.[0]).toBe('/api/onboarding/entry');
   }
+
+  async function explainsRefusal(status: number, message: string) {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockResolvedValueOnce(Response.json({ authenticated: true }));
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status }));
+    const fixture = TestBed.createComponent(SignIn);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    function seesRefusal() {
+      fixture.detectChanges();
+      expect(element.textContent).toContain(message);
+      expect(element.textContent).not.toContain('You are signed in');
+    }
+    await vi.waitFor(seesRefusal);
+    expect(navigate).not.toHaveBeenCalled();
+  }
+
+  it.each([
+    [401, 'Your session has expired'],
+    [403, 'You do not have access to this workspace'],
+  ])('shows the correct message when entry returns HTTP %i', explainsRefusal);
 
   it.each([
     ['survey', '/welcome/survey'],

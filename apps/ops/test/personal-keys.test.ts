@@ -36,6 +36,9 @@ async function preparesOnce() {
     await restartedHandler.handle(joined, storage.db);
     expect(await readFile(filename)).toEqual(originalKey);
     expect(reopened.decrypt('test', 'personal:alice', encrypted)).toBe('private answer');
+    await rm(filename);
+    await restartedHandler.handle(joined, storage.db);
+    expect(await readFile(filename)).not.toEqual(originalKey);
     const createAssistant = lifecycleHandlers(nats.store)[0];
     await createAssistant.handle(joined, storage.db);
     expect(await nats.store.head()).toBe(1);

@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, it } from 'vitest';
+import { afterEach, it, vi } from 'vitest';
+import * as fileSystem from 'node:fs';
 import { sha256Hex } from '@opencrane/events/digest';
 import { conversationKeys } from '../src/keys.ts';
 
 const directories: string[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -76,3 +78,38 @@ function recoversAfterPublication() {
 }
 it('cleans a key left by an interrupted write before publication', recoversBeforePublication);
 it('keeps the published key and clears its extra name after interruption', recoversAfterPublication);
+
+function syncFailureLeavesRecoverableKey(failDirectory: boolean) {
+  const { directory } = keyStore();
+  const keyDirectory = join(directory, 'conversations');
+  mkdirSync(keyDirectory, { mode: 0o700 });
+  const keys = conversationKeys(keyDirectory);
+  const sync = fileSystem.fsyncSync;
+  function failCheckedSync(descriptor: number) {
+    if (fileSystem.fstatSync(descriptor).isDirectory() === failDirectory) {
+      throw new Error('Synthetic sync failure');
+    }
+    sync(descriptor);
+  }
+  const syncSpy = vi.spyOn(fileSystem, 'fsyncSync');
+  syncSpy.mockImplementation(failCheckedSync);
+  try {
+    assert.throws(() => keys.provision('dev', 'chat'), /Synthetic sync failure/u);
+  } finally {
+    syncSpy.mockRestore();
+  }
+  const files = readdirSync(keyDirectory);
+  assert.equal(files.length, failDirectory ? 1 : 0);
+  keys.provision('dev', 'chat');
+  assert.equal(readdirSync(keyDirectory).length, 1);
+  const answer = keys.encrypt('dev', 'chat', 'saved after sync');
+  assert.equal(keys.decrypt('dev', 'chat', answer), 'saved after sync');
+}
+function requiresFileSync() {
+  syncFailureLeavesRecoverableKey(false);
+}
+function requiresDirectorySync() {
+  syncFailureLeavesRecoverableKey(true);
+}
+it('refuses to publish a key if its file cannot be synced', requiresFileSync);
+it('refuses to acknowledge a key if its directory cannot be synced', requiresDirectorySync);
