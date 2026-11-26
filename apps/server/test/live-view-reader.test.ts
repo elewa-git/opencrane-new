@@ -7,6 +7,7 @@ import { conversations } from '@opencrane/projections';
 import { objectId, TupleClient } from '../../../libs/authz/src/client.ts';
 import { buildServer } from '../src/server.ts';
 import { nextBinaryMessage } from './support/rfb-viewer.ts';
+import { holdOpenFgaReply } from './support/view-read-permission.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { sharedChildChat, teamViewChat, viewHeaders } from './support/view-requests.ts';
 
@@ -346,3 +347,43 @@ async function refusesForeignViewerBinding() {
   }
 }
 it('refuses a viewer configured with another silo binding', refusesForeignViewerBinding, 30_000);
+
+type Removal = 'member' | 'participant';
+
+async function refusesLatePrivatePermission(removal: Removal) {
+  const open = vi.fn(openDesktop);
+  const fixture = await viewFixture(open);
+  const { binding, config, runner, append } = fixture;
+  const assistant = objectId('assistant', 'test', 'team-sales');
+  const proxy = await holdOpenFgaReply(binding.apiUrl, assistant, 'acts_for');
+  try {
+    await teamViewChat(fixture);
+    await runner.run(conversations);
+    const headers = viewHeaders(config);
+    const chat = 'team-session';
+    expect((await messages(fixture, chat, headers)).statusCode).toBe(200);
+    binding.apiUrl = proxy.apiUrl;
+    const requests = [messages(fixture, chat, headers), view(fixture, chat, headers)];
+    await proxy.observed;
+    if (removal === 'member') {
+      await append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'bob' });
+    } else {
+      await append('participation-team-session', 'participant.removed', {
+        conversationId: chat, participantId: 'alice', removedBy: 'bob',
+      });
+    }
+    proxy.release();
+    const [history, admission] = await Promise.all(requests);
+    expect(history?.statusCode).toBe(403);
+    expect(admission?.statusCode).toBe(403);
+    expect(admission?.json()).not.toHaveProperty('ticket');
+    expect(open).not.toHaveBeenCalled();
+  } finally {
+    await proxy.close();
+    await fixture.close();
+  }
+}
+it.each(['member', 'participant'] as const)(
+  'rechecks %s removal after the private assistant permission replies',
+  refusesLatePrivatePermission, 30_000,
+);
