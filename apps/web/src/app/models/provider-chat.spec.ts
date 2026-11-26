@@ -21,9 +21,14 @@ async function switchesOnThroughCheckedCommands(historyChanges: boolean) {
       z.record(z.string(), z.unknown()).parse(JSON.parse(options.body)) : undefined;
     if (body) {
       requests.push({ path, body });
-      if (path.endsWith('/drain')) draining = true;
-      if (path.endsWith('/switch-on')) enabled = true;
-      return new Response(JSON.stringify({ status: 'appended', revision: 2, sequence: 8 }));
+      if (path.endsWith('/drain')) {
+        draining = true;
+      }
+      if (path.endsWith('/switch-on')) {
+        enabled = true;
+      }
+      const receipt = { status: 'appended', revision: 2, sequence: 8 };
+      return new Response(JSON.stringify(receipt));
     }
     if (path.endsWith('/bindings')) {
       bindingReads++;
@@ -32,11 +37,12 @@ async function switchesOnThroughCheckedCommands(historyChanges: boolean) {
       }
       const position = historyChanges ? 8 : 6;
       const chatDefault = historyChanges ? { position, sourceRevision: 4 } : { position };
-      return new Response(JSON.stringify({ expectedProviderSequence: position + 1,
-        chatDefault }));
+      const bindings = { expectedProviderSequence: position + 1, chatDefault };
+      return new Response(JSON.stringify(bindings));
     }
-    return new Response(JSON.stringify({ revision: 2, sequence: 8,
-      expectedProviderSequence: 7, draining, enabled }));
+    const status = { revision: 2, sequence: 8,
+      expectedProviderSequence: 7, draining, enabled };
+    return new Response(JSON.stringify(status));
   }
   vi.stubGlobal('fetch', fetchReply);
   const fixture = TestBed.createComponent(ProviderChat);
