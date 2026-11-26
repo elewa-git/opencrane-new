@@ -67,7 +67,8 @@ try {
     assert.equal(session.user?.sub, owner.id);
     stage = `${width}px signed-in page`;
     await page.goto(`${origin}/workspace`);
-    await page.locator('oc-workspace').waitFor();
+    const workspace = page.locator('oc-workspace');
+    await workspace.waitFor();
     await page.screenshot({ path: `${output}/${prefix}signed-in-${width}.png`, fullPage: true });
     stage = `${width}px chat turn`;
     const conversation = await completeChatTurn(page, width);

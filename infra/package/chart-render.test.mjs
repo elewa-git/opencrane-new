@@ -1164,7 +1164,8 @@ function assertKeySetup(pod, name, paths) {
 }
 
 function assertKeyDirectory(pod, name, variable, root, readOnly = false) {
-  const volumeName = root.split('/').at(-1);
+  const pathParts = root.split('/');
+  const volumeName = pathParts.at(-1);
   function namedContainer(container) {
     return container.name === name;
   }
@@ -1199,7 +1200,10 @@ function keyMounts(resources, claimName) {
       resource.spec?.jobTemplate?.spec?.template?.spec ?? resource.spec?.template?.spec;
     const claims = new Set();
     for (const volume of pod?.volumes ?? []) {
-      if (volume.persistentVolumeClaim?.claimName === claimName) claims.add(volume.name);
+      const claim = volume.persistentVolumeClaim;
+      if (claim?.claimName === claimName) {
+        claims.add(volume.name);
+      }
     }
     const containers = [...(pod?.initContainers ?? []), ...(pod?.containers ?? []),
       ...(pod?.ephemeralContainers ?? [])];

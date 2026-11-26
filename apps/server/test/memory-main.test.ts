@@ -187,10 +187,14 @@ async function memoryReady(isolatedMemory = false) {
   const table = isolatedMemory ? 'opencrane_memory.projection_checkpoints' : 'projection_checkpoints';
   const relation = await storage.queue.query<{ name: string | null }>(
     'SELECT to_regclass($1) AS name', [table]);
-  if (!relation.rows[0]?.name) return false;
+  if (!relation.rows[0]?.name) {
+    return false;
+  }
   const result = await storage.queue.query<{ sequence: string }>(
     `SELECT sequence FROM ${table} WHERE name='memory'`);
-  return Number(result.rows[0]?.sequence) === await nats.store.head();
+  const projectedPosition = Number(result.rows[0]?.sequence);
+  const savedPosition = await nats.store.head();
+  return projectedPosition === savedPosition;
 }
 
 function isolatedMemoryIsCurrent() {
