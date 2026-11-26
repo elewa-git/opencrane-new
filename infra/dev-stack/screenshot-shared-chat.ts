@@ -9,6 +9,7 @@ import type { BudgetAssistant } from './budget-fixture.ts';
 
 export interface SharedScreenshotChat {
   requester: Page;
+  reader: Page;
   origin: string;
   assistant: BudgetAssistant;
   requesterId: string;
@@ -18,7 +19,7 @@ export interface SharedScreenshotChat {
 }
 
 export async function createSharedScreenshotChat(options: SharedScreenshotChat) {
-  const { requester, origin, assistant, requesterId, readerId, authorisation, until } = options;
+  const { requester, reader, origin, assistant, requesterId, readerId, authorisation, until } = options;
   const parentId = randomUUID();
   const audience = [requesterId, readerId];
   const parent = { id: randomUUID(), conversationId: parentId, mode: 'group',
@@ -45,7 +46,7 @@ export async function createSharedScreenshotChat(options: SharedScreenshotChat) 
   const { review } = z.object({ review: z.string() }).parse(await reviewed.json());
   const started = await postJourneyCommand(requester, origin, `${basePath}/children`,
     { requestId, sourceMessageId, review });
-  assert.equal(started.status(), 200, 'Start the shared assistant chat');
+  assert.equal(started.status(), 202, 'Start the shared assistant chat');
 
   let conversationId: string | undefined;
   async function sharedChatCreated() {
@@ -56,8 +57,11 @@ export async function createSharedScreenshotChat(options: SharedScreenshotChat) 
     assert.notEqual(child.state, 'failed', 'The shared assistant chat opens');
     if (child.state !== 'queued' || !child.childConversationId) return false;
     conversationId = child.childConversationId;
-    const readers = await authorisation.conversation(readerId, conversationId, 'read');
-    return readers.allowed;
+    const permission = await authorisation.conversation(readerId, conversationId, 'read');
+    if (!permission.allowed) return false;
+    const messages = `${origin}/api/conversations/${conversationId}/messages`;
+    const history = await readJourneyApi(reader, messages);
+    return history.status() === 200;
   }
   await until(sharedChatCreated);
   assert(conversationId);

@@ -9,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import type { Page, Response, WebSocket } from 'playwright';
 import { z } from 'zod';
-import { loadAuthConfig } from '@opencrane/auth';
+import { isComputerLifecycle, loadAuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { fileUploadedDataSchema } from '@opencrane/events';
@@ -68,16 +68,16 @@ async function readIdentity(page: Page) {
   return identity.parse(await response.json());
 }
 
-function isReady(row: StoredEvent) {
-  return row.event.type === 'computer.ready';
+function isLifecycle(row: StoredEvent) {
+  return isComputerLifecycle(row.event.type);
 }
 
 async function waitForComputer(assistantId: string) {
   let computer: Computer | undefined;
   async function isComputerReady() {
     const rows = await history(events.store, `computer-${assistantId}`, silo);
-    const ready = rows.findLast(isReady);
-    if (!ready) return false;
+    const ready = rows.findLast(isLifecycle);
+    if (ready?.event.type !== 'computer.ready') return false;
     computer = desktop.parse(ready.event.data);
     return true;
   }
@@ -289,8 +289,8 @@ async function runScreenshots(browser: Awaited<ReturnType<typeof browserSessions
     const personal: ScreenshotChat = { page, conversationId: personalId, memberId: member.memberId,
       computer: personalComputer, kind: 'personal' };
     await qualifyScreenshot(personal, width, ownerPage);
-    const child = { requester: page, origin, assistant: shared, requesterId: member.memberId,
-      readerId: reader.memberId, authorisation, until };
+    const child = { requester: page, reader: ownerPage, origin, assistant: shared,
+      requesterId: member.memberId, readerId: reader.memberId, authorisation, until };
     const sharedId = await createSharedScreenshotChat(child);
     const sharedChat: ScreenshotChat = { page: ownerPage, conversationId: sharedId,
       memberId: reader.memberId, computer: sharedComputer, kind: 'shared' };
