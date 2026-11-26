@@ -1671,6 +1671,8 @@ widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.
 Models & providers shows how to finish setting up each OpenAI connection. The
 list points to Check status for an unfinished check, the Models step when no
 models are enabled, and Test again for a settled model test that did not pass.
+A recorded reachability result that did not confirm access lets the owner run
+a new free check. An unfinished check still uses its original request id.
 When a connection is reachable, a model has answered, and a model is enabled,
 the owner can choose it as the default even after member chats are switched on.
 Only ready connections offer Pause new calls. `provider-chat.ts` reads the

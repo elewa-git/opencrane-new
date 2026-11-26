@@ -449,7 +449,7 @@ function replaceProvider(rows: ProviderRow[], updated: ProviderRow): ProviderRow
 
 function unfinishedCheck(fact: ProviderRow['modelAnswer'], revision: number,
   operation: 'test' | 'reachability'): PendingChange | undefined {
-  if (!fact || fact.revision !== revision || isSettledOutcome(fact.outcome)) {
+  if (!fact || fact.revision !== revision || isSettledOutcome(fact.outcome, operation)) {
     return undefined;
   }
   return { commandId: fact.attemptId ?? fact.changeId, expectedRevision: revision, operation };

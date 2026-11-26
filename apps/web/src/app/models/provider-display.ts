@@ -30,8 +30,11 @@ export function formatTime(value: string | undefined): string {
   return date.toLocaleString('en-GB', options) + ' UTC';
 }
 
-export function isSettledOutcome(outcome: string): boolean {
-  // Keep uncertain attempts locked because their money may still be held.
+export function isSettledOutcome(outcome: string, operation?: string): boolean {
+  // Keep uncertain paid tests locked because their cost may still be held.
+  if (operation === 'reachability' && outcome === 'unknown') {
+    return true;
+  }
   return ['pass', 'fail', 'skipped', 'budget_refused'].includes(outcome);
 }
 
@@ -67,6 +70,9 @@ export function outcomeText(outcome: string, action: string): string {
   if (action === 'test') {
     return 'We could not tell whether the test ran. The cost may be held. '
       + 'Check status before sending another test.';
+  }
+  if (action === 'reachability' && isSettledOutcome(outcome, action)) {
+    return 'The free check finished without confirming reachability. Check provider reachability again.';
   }
   return 'We could not tell whether this check finished. '
     + 'Check status before sending another check.';

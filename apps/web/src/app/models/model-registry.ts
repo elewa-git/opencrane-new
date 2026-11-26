@@ -44,9 +44,10 @@ export class ModelsScreen extends ProviderKeyChanges {
       this.resultKind.set('refused');
       return;
     }
-    const outcome = result.kind === 'ok' ? result.value.outcome : undefined;
-    this.applyCheckOutcome(providerIdValue, pending, outcome ?? 'outcome_unknown');
-    if (isSettledOutcome(outcome ?? '')) {
+    const outcome = result.kind === 'ok'
+      ? result.value.outcome ?? 'outcome_unknown' : 'outcome_unknown';
+    this.applyCheckOutcome(providerIdValue, pending, outcome);
+    if (isSettledOutcome(outcome, pending.operation)) {
       await this.refreshOne(providerIdValue);
     }
   }
@@ -115,6 +116,7 @@ export class ModelsScreen extends ProviderKeyChanges {
     }
     this.pendingChecks.set(without(this.pendingChecks(), providerIdValue));
     this.clearActionMessage();
+    this.liveStatus.set('You can check this connection again.');
     if (this.setupOpen()) {
       this.focusStepHeadingAfterRender();
     } else {
@@ -454,7 +456,7 @@ export class ModelsScreen extends ProviderKeyChanges {
 
 
   private applyCheckOutcome(id: string, pending: PendingChange, outcome: string): void {
-    if (isSettledOutcome(outcome)) {
+    if (isSettledOutcome(outcome, pending.operation)) {
       this.pendingChecks.set(without(this.pendingChecks(), id));
     }
     this.modelTestConsent.set(undefined);
