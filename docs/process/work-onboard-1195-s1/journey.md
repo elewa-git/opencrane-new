@@ -2,26 +2,41 @@
 
 Journey on a fresh dev stack: PASS
 
-A fresh Helm install on slot 1 used source commit
-`9f31b2a9414e0bcb885a68d93f9f1d3a3ef00fe7` after hosted CI and both image
-approvals passed. The package started and passed its ownership check. It used
-qualification mode with the free stand-in. The welcome used its saved script
-and made no model call. The installer logged the documented
-`OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` exception for swap and
-crash dumps.
+On 26 November 2026, a fresh Helm install on slot 1 used commit
+`6b980827f5afe912e193356ea407c833fd42398d`. The ownership check passed. Ordinary
+chats used the free stand-in. The welcome ran from its saved script. The installer
+logged the documented `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366`
+exception for swap and crash dumps.
 
-| Step | Result | Screenshots |
+The run used `claim.sh --id 1`, `run.sh package-prepare --id 1`, the package
+preparation script, `run.sh package-up --id 1` and `run.sh package-check --id 1`.
+The package forwarder connected the browser to the new installation.
+
+| What passed | 1280 × 900 | 390 × 844 |
 | --- | --- | --- |
-| Each invited member signed in, accepted the invitation and opened the survey | PASS | [1280 px](survey-1280.png), [390 px](survey-390.png) |
-| The member on a phone signed in again and resumed at the second survey step | PASS | [390 px](survey-resumed-390.png) |
-| Both members saved the survey and approved the persona | PASS | [1280 px](persona-1280.png), [390 px](persona-390.png) |
-| Both members opened the welcome chat, sent an answer and saw completion | PASS | [1280 px](welcome-1280.png), [390 px](welcome-390.png) |
-| Both finished members signed in again and went straight to the workspace | PASS | [1280 px](return-1280.png), [390 px](return-390.png) |
-| Both members saved a fact in Memory and saw it listed after reloading | PASS | [1280 px](memory-1280.png), [390 px](memory-390.png) |
-| The owner skipped setup and signed in again to the workspace | PASS | |
-| A signed-out visitor saw a sign-in prompt and no survey answers. The request returned 401. | PASS | [390 px](signed-out-390.png) |
+| An invited member accepted the invitation and a sign-in from a workspace link opened the survey. | [Survey](survey-1280.png) | [Survey](survey-390.png) |
+| The member saved one answer and signed in again from a workspace link. The survey reopened at the second step. | [Resumed survey](survey-resumed-1280.png) | [Resumed survey](survey-resumed-390.png) |
+| The member saved all four answers and approved the persona. | [Persona](persona-1280.png) | [Persona](persona-390.png) |
+| The member answered the welcome question and reached its completed state. | [Completed welcome](welcome-1280.png) | [Completed welcome](welcome-390.png) |
+| A workspace link took the finished member to the workspace. The first ordinary chat used the computer that was already running during the survey and returned a reply. | [Before sending](before-chat-1280.png), [Completed chat](first-chat-1280.png) | [Before sending](before-chat-390.png), [Completed chat](first-chat-390.png) |
+| The member saved a separate fact in Memory and saw it after reloading. | [Saved fact](memory-1280.png) | [Saved fact](memory-390.png) |
+| A signed-out browser saw a sign-in prompt. The survey request returned 401. | [Sign-in prompt](signed-out-1280.png) | [Sign-in prompt](signed-out-390.png) |
 
-The screenshots were saved before teardown. Both cleanup commands passed and
-slot 1 reported free.
+The owner skipped setup and returned to the workspace from a sign-in link at both
+widths. The browser checks recorded the computer and pod identity, start time
+and restart count during the survey, before sending, and after the reply. All
+matched for each member. [Browser checks](result.json)
 
-The packaged backup does not yet include the survey, persona or Memory keys.
+Controlled time tests covered the hour limit, survey saves and the end of the
+extra time when the member sends their first chat.
+
+Kubernetes denied the file worker permission to create a pod or open an exec
+session in the server pod. [Permission checks](worker-authorisation.json)
+
+Two earlier attempts stopped in the browser driver. The first used the previous
+provider dialog title. The second checked readiness while the computer was still
+starting. Both attempts saved their logs before cleanup. The results above come
+from one later fresh install. `run.sh package-down --id 1` and `down.sh --id 1`
+both passed. Slot 1 reported free.
+
+The next slice covers backup and restore for the survey, persona and Memory keys.

@@ -1,0 +1,100 @@
+{
+  "sourceCommit": "6b980827f5afe912e193356ea407c833fd42398d",
+  "steps": [
+    "signed-out visitor is asked to sign in before seeing survey answers at 1280 px",
+    "signed-out visitor is asked to sign in before seeing survey answers at 390 px",
+    "owner saves skip by choice",
+    "skipped owner signs in and goes straight to the workspace at both widths",
+    "connects the free stand-in in Models and switches on member chat",
+    "accepts an invitation and opens the survey on first sign-in at 1280 px",
+    "opens the fresh survey from a workspace sign-in at 1280 px",
+    "resumes the half-finished survey from a workspace sign-in at 1280 px",
+    "saves the remaining survey answers at 1280 px",
+    "reviews and approves the saved persona at 1280 px",
+    "reaches and completes the welcome chat at 1280 px",
+    "signs in again and goes straight to the workspace at 1280 px",
+    "sends the first ordinary chat at 1280 px on an already running computer",
+    "saves and lists a personal fact at 1280 px",
+    "saves and lists a personal fact at 1280 px",
+    "accepts an invitation and opens the survey on first sign-in at 390 px",
+    "opens the fresh survey from a workspace sign-in at 390 px",
+    "resumes the half-finished survey from a workspace sign-in at 390 px",
+    "saves the remaining survey answers at 390 px",
+    "reviews and approves the saved persona at 390 px",
+    "reaches and completes the welcome chat at 390 px",
+    "signs in again and goes straight to the workspace at 390 px",
+    "sends the first ordinary chat at 390 px on an already running computer",
+    "saves and lists a personal fact at 390 px",
+    "saves and lists a personal fact at 390 px"
+  ],
+  "results": [
+    {
+      "width": 1280,
+      "surveySteps": 4,
+      "welcome": "completed",
+      "ordinaryChat": {
+        "reply": "Hello from your computer.",
+        "duringSurvey": {
+          "computerId": "computer-9ba9cd30cdc067f5193aa9332d52898c",
+          "generation": 1,
+          "pod": "27cecec6d45e3c9f",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-26T14:17:25Z"
+        },
+        "before": {
+          "computerId": "computer-9ba9cd30cdc067f5193aa9332d52898c",
+          "generation": 1,
+          "pod": "27cecec6d45e3c9f",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-26T14:17:25Z"
+        },
+        "after": {
+          "computerId": "computer-9ba9cd30cdc067f5193aa9332d52898c",
+          "generation": 1,
+          "pod": "27cecec6d45e3c9f",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-26T14:17:25Z"
+        }
+      },
+      "signedOutStatus": 401,
+      "savedFacts": 1
+    },
+    {
+      "width": 390,
+      "surveySteps": 4,
+      "welcome": "completed",
+      "ordinaryChat": {
+        "reply": "Hello from your computer.",
+        "duringSurvey": {
+          "computerId": "computer-b29cb1a54ce5f44460ce83bfded01037",
+          "generation": 1,
+          "pod": "378bf7058a40de82",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-26T14:18:17Z"
+        },
+        "before": {
+          "computerId": "computer-b29cb1a54ce5f44460ce83bfded01037",
+          "generation": 1,
+          "pod": "378bf7058a40de82",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-26T14:18:17Z"
+        },
+        "after": {
+          "computerId": "computer-b29cb1a54ce5f44460ce83bfded01037",
+          "generation": 1,
+          "pod": "378bf7058a40de82",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-26T14:18:17Z"
+        }
+      },
+      "signedOutStatus": 401,
+      "savedFacts": 1
+    }
+  ]
+}
