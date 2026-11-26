@@ -184,8 +184,11 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   assert.equal(watchingAudit[0]?.event.type, 'computer.view_started');
   await canvas.waitFor({ state: 'visible' });
   // Watch the socket and picture because losing chat access can remove the entire dialog.
-  const socketClosed = viewerSocket.waitForEvent('close', { timeout: 2000 });
-  const pictureCleared = canvas.waitFor({ state: 'detached', timeout: 2000 });
+  const removalDeadlineMs = 2000;
+  const closeOptions = { timeout: removalDeadlineMs };
+  const clearOptions = { state: 'detached' as const, timeout: removalDeadlineMs };
+  const socketClosed = viewerSocket.waitForEvent('close', closeOptions);
+  const pictureCleared = canvas.waitFor(clearOptions);
   const revokedAt = performance.now();
   const revokedAtTime = new Date().toISOString();
   const removal = { conversationId: secondConversation, participantId: member, removedBy: admin };
@@ -193,12 +196,20 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const checks = [removed, socketClosed, pictureCleared];
   await Promise.all(checks);
   const revokedMs = Math.round(performance.now() - revokedAt);
-  assert(revokedMs < 2000, 'The view closes within two seconds of participant removal');
+  assert(revokedMs < removalDeadlineMs, 'The view closes within two seconds of participant removal');
   const duringTurnStoppedAt = performance.now();
   assert.equal(await viewer.locator('canvas').count(), 0, 'Revocation clears protected pixels');
   await until(async () => (await history(store, `view-${watching.sessionId}`, silo)).length === 2, 'view stop audit');
   const stopped = await history(store, `view-${watching.sessionId}`, silo);
-  assert.equal((stopped[1]?.event.data as { reason: string }).reason, 'access_changed');
+  const stopEvent = stopped[1]?.event;
+  assert.equal(stopEvent?.type, 'computer.view_stopped');
+  const stopReason = (stopEvent?.data as { reason: string }).reason;
+  // Accept a browser disconnect when the chat disappears before the server closes the socket.
+  assert(stopReason === 'access_changed' || stopReason === 'disconnected');
+  const headers = { origin, 'x-opencrane-view': '1' };
+  const refused = await page.request.post(`${origin}/api/conversations/${secondConversation}/view`,
+    { headers });
+  assert.equal(refused.status(), 403, 'A removed participant cannot reopen the viewer');
   await page.screenshot({ path: `${receipt}/conversation-revoked-${width}.png` });
   const transitions = await page.evaluate(function readStates() {
     return (window as unknown as { liveViewStates: { state: string; at: number }[] })
