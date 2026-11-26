@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { providerChoiceRefusalSchema, type ProviderChoiceRefusal } from '@opencrane/protocol';
 
 const id = z.string().min(1);
 const factSchema = z.object({ changeId: id, time: z.string(), revision: z.number(),
@@ -28,7 +29,8 @@ export type ProviderRow = z.infer<typeof providerSchema>;
 export type ModelQuote = z.infer<typeof quoteSchema>;
 export type ProviderReceipt = z.infer<typeof receiptSchema>;
 export type TaskRouting = z.infer<typeof registrySchema>['taskRouting'];
-export type ApiResult<T> = { kind: 'ok'; value: T } | { kind: 'access' | 'forbidden' | 'unpriced' }
+export type ApiResult<T> = { kind: 'ok'; value: T } | { kind: 'access' | 'unpriced' }
+  | { kind: 'forbidden'; reason?: ProviderChoiceRefusal }
   | { kind: 'invalid' | 'conflict' | 'not_found' } | { kind: 'failed'; status?: number };
 
 export async function readJson<T>(
@@ -134,9 +136,14 @@ Promise<ApiResult<ProviderReceipt>> {
 async function classifyForbidden(response: Response): Promise<ApiResult<never>> {
   try {
     const body: unknown = await response.json();
-    if (typeof body === 'object' && body !== null && 'reason' in body
-      && body.reason === 'unknown_price') {
-      return { kind: 'unpriced' };
+    if (typeof body === 'object' && body !== null && 'reason' in body) {
+      if (body.reason === 'unknown_price') {
+        return { kind: 'unpriced' };
+      }
+      const reason = providerChoiceRefusalSchema.safeParse(body.reason);
+      if (reason.success) {
+        return { kind: 'forbidden', reason: reason.data };
+      }
     }
   } catch {
     return { kind: 'forbidden' };

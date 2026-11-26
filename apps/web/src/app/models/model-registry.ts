@@ -40,6 +40,7 @@ export class ModelsScreen extends ProviderKeyChanges {
       this.pendingChecks.set({ ...this.pendingChecks(), [providerIdValue]: notRecorded });
       this.commandReference.set(pending.commandId);
       this.resultText.set('This free check was not recorded. Start over to try again.');
+      this.liveStatus.set(this.resultText());
       this.resultKind.set('refused');
       return;
     }
@@ -103,15 +104,22 @@ export class ModelsScreen extends ProviderKeyChanges {
     await this.runCheck('skip');
   }
 
-  protected startOverCheck(): void {
-    const providerIdValue = this.providerIdDraft();
-    const pending = this.pendingChecks()[providerIdValue];
-    if (!pending?.notRecorded || pending.operation === 'test' || this.busy()) {
+  protected canStartOverCheck(providerId: string): boolean {
+    const pending = this.pendingChecks()[providerId];
+    return !!pending?.notRecorded && pending.operation !== 'test';
+  }
+
+  protected startOverCheck(providerIdValue = this.providerIdDraft()): void {
+    if (!this.canStartOverCheck(providerIdValue) || this.busy()) {
       return;
     }
     this.pendingChecks.set(without(this.pendingChecks(), providerIdValue));
     this.clearActionMessage();
-    this.focusStepHeadingAfterRender();
+    if (this.setupOpen()) {
+      this.focusStepHeadingAfterRender();
+    } else {
+      focusProviderRowAfterRender(providerIdValue);
+    }
   }
 
   private async runCheck(
@@ -425,8 +433,7 @@ export class ModelsScreen extends ProviderKeyChanges {
         await this.checkVerificationStatus(provider.providerId);
       }
       if (restoreRowFocus) {
-        const focusChangedRow = focusProviderRow.bind(null, provider.providerId);
-        globalThis.setTimeout(focusChangedRow, 0);
+        focusProviderRowAfterRender(provider.providerId);
       }
       return;
     }
@@ -496,6 +503,11 @@ function verificationBody(action: 'reachability' | 'test' | 'skip', pending: Pen
     body['consent'] = true;
   }
   return body;
+}
+
+function focusProviderRowAfterRender(id: string): void {
+  const focus = focusProviderRow.bind(null, id);
+  globalThis.setTimeout(focus, 0);
 }
 
 function focusProviderRow(id: string): void {

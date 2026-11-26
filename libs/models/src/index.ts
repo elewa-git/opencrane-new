@@ -43,7 +43,8 @@ export { providerVerificationSchema, requestProviderVerification, providerTestQu
   type ProviderVerificationOptions } from './provider-verification.ts';
 
 export { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
-export { providerBindingCommand, providerDependencies, providerDefaultHandler } from './provider-bindings.ts';
+export { providerBindingCommand, providerDependencies, providerDefaultHandler,
+  ProviderChoiceRefused } from './provider-bindings.ts';
 export { providerRetirementPreview } from './provider-retirement-preview.ts';
 
 export { parseMemoryRequest } from './mcp.ts';

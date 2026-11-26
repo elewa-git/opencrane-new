@@ -6,9 +6,9 @@ with an empty installation. Paid provider calls were zero.
 
 ## Steps and results
 
-1. Started slot 1 with `up.sh --fresh --id 1` in the documented token bootstrap
-   mode. `status.sh --id 1` passed. The owner signed in, claimed the installation
-   and waited for the ownership checks to finish.
+1. Claimed slot 1 and started it with `up.sh --fresh --id 1`.
+   `status.sh --id 1` passed. The owner signed in, claimed the installation
+   with a one-time token and waited for the ownership checks to finish.
 2. In Models & providers, the owner created two connections and checked that
    both were reachable. The first kept zero enabled models. The owner enabled
    `gpt-6.1-sol` on the second.

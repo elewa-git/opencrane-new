@@ -234,18 +234,16 @@ export class ProviderPageState implements OnInit, OnDestroy {
   protected restoreUnfinishedChecks(rows: ProviderRow[]): void {
     const pending = { ...this.pendingChecks() };
     for (const row of rows) {
-      const fact = row.modelAnswer;
-      if (!fact || fact.revision !== row.revision || isSettledOutcome(fact.outcome)
-        || pending[row.providerId]) {
+      if (pending[row.providerId]) {
         continue;
       }
-      // Keep an unknown paid attempt locked when a new visit reads its recorded fact.
-      const originalCommand = {
-        commandId: fact.attemptId ?? fact.changeId,
-        expectedRevision: fact.revision,
-        operation: 'test',
-      };
-      pending[row.providerId] = originalCommand;
+      const modelAnswer = unfinishedCheck(row.modelAnswer, row.revision, 'test');
+      const reachability = unfinishedCheck(row.reachable, row.revision, 'reachability');
+      // Recover the paid test first if both attempts are still being checked.
+      const original = modelAnswer ?? reachability;
+      if (original) {
+        pending[row.providerId] = original;
+      }
     }
     this.pendingChecks.set(pending);
   }
@@ -447,4 +445,12 @@ function replaceProvider(rows: ProviderRow[], updated: ProviderRow): ProviderRow
     next.push(updated);
   }
   return next;
+}
+
+function unfinishedCheck(fact: ProviderRow['modelAnswer'], revision: number,
+  operation: 'test' | 'reachability'): PendingChange | undefined {
+  if (!fact || fact.revision !== revision || isSettledOutcome(fact.outcome)) {
+    return undefined;
+  }
+  return { commandId: fact.attemptId ?? fact.changeId, expectedRevision: revision, operation };
 }

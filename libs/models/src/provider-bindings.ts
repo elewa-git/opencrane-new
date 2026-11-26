@@ -6,6 +6,7 @@ import {
   providerModelIdSchema, type EventEnvelope,
 } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
+import type { ProviderChoiceRefusal } from '@opencrane/protocol';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { applyProvider, retirementBinding, type ProviderState, type Query } from '@opencrane/projections';
 import { history } from './actor.ts';
@@ -19,6 +20,7 @@ import {
 } from './providers.ts';
 
 const sequence = z.int().nonnegative();
+const automaticDefaultCommandId = 'system:seed-provider-default';
 const positions = {
   commandId: providerIdSchema,
   expectedProviderSequence: sequence,
@@ -40,7 +42,8 @@ const commandSchema = z.discriminatedUnion('action', [
   z.object(select).strict(), z.object(pause).strict(), z.object(selectChatDefault).strict(),
 ]);
 type Inventory = Awaited<ReturnType<typeof inventory>>;
-export type Choice = z.infer<typeof providerBindingSchema> & { position: number };
+type BindingPayload = z.infer<typeof providerBindingSchema>;
+export type Choice = BindingPayload & { position: number };
 type BindingIdentity = Pick<Choice, 'kind' | 'dependantId' | 'task'>;
 type BindingInput = z.infer<typeof commandSchema> & BindingIdentity;
 
@@ -90,18 +93,28 @@ function connectionRows(rows: StoredEvent[], providerId: string) {
   return rows.filter(belongs);
 }
 
-function requireSelectable(state: ProviderState | undefined, model: string) {
+export class ProviderChoiceRefused extends ProviderRefused {
+  readonly reason: ProviderChoiceRefusal;
+  constructor(reason: ProviderChoiceRefusal) {
+    super(reason);
+    this.reason = reason;
+  }
+}
+
+function requireSelectable(target: ProviderState, model: string, needsAnswer: boolean) {
   function supported(candidate: (typeof models)[number]) {
     return candidate.id === model && !candidate.retired;
   }
-  if (!state || state.retired || state.provider !== 'openai' || !state.secretRef ||
-    !state.lastReachable || !state.enabledModels.includes(model) || !models.some(supported)) {
-    throw new ProviderRefused();
+  if (target.provider !== 'openai') {
+    throw new ProviderChoiceRefused('connection_not_ready');
   }
-}
-function requireOpenTarget(state: ProviderState | undefined) {
-  if (state?.retired) {
-    throw new ProviderRefused();
+  const ready = needsAnswer ? providerStatus(target) === 'ready'
+    : !target.retired && !!target.lastReachable;
+  if (!ready) {
+    throw new ProviderChoiceRefused('connection_not_ready');
+  }
+  if (!target.enabledModels.includes(model) || !models.some(supported)) {
+    throw new ProviderChoiceRefused('model_not_enabled');
   }
 }
 
@@ -109,6 +122,7 @@ export async function providerBindingCommand(store: EventStore, binding: Binding
   memberId: string, providerId: string, raw: unknown) {
   providerIdSchema.parse(providerId);
   const command = commandSchema.parse(raw);
+  // Use this installation so the request cannot name a default in another one.
   const input = command.action === 'select_chat_default'
     ? { ...command, ...chatDefaultIdentity(binding.silo) }
     : command;
@@ -139,14 +153,17 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
       row.event.commandId === input.commandId;
   }
   const original = current.rows.find(matches);
-  const previous = original ? bindingChoice(current, input)
-    : await checkBinding(current, input, providerId, binding, memberId);
-  const payload = bindingPayload(input, providerId, memberId, previous, original);
   if (original) {
-    reconcileBinding(original, binding.silo, providerId, input.commandId, memberId, payload);
+    // Use the saved choice to check a retry even if the default has since moved.
+    const recorded = parseBinding(original);
+    const payload = bindingPayload(input, providerId, memberId, recorded, !!recorded.sourceRevision);
+    reconcileBinding(original, binding.silo, input.commandId, recorded, payload);
     await fresh();
     return providerReceipt(original);
   }
+  const previous = await checkBinding(current, input, providerId, binding, memberId);
+  const moved = previous !== undefined && previous.providerId !== providerId;
+  const payload = bindingPayload(input, providerId, memberId, previous, moved);
   const event: EventEnvelope = serverEvent({
     commandId: input.commandId, subject: `provider-${providerId}`,
     silo: binding.silo, type: 'provider.model_binding_set', data: payload,
@@ -169,35 +186,52 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
   if (!saved) {
     throw new Error('Saved binding unavailable');
   }
-  reconcileBinding(saved, binding.silo, providerId, input.commandId, memberId, payload);
+  const recorded = parseBinding(saved);
+  reconcileBinding(saved, binding.silo, input.commandId, recorded, payload);
   return providerReceipt(saved);
 }
 
-function reconcileBinding(saved: StoredEvent, silo: string, providerId: string,
-  commandId: string, memberId: string, payload: z.infer<typeof providerBindingSchema>) {
+function parseBinding(row: StoredEvent): BindingPayload {
+  if (row.event.type !== 'provider.model_binding_set') {
+    throw new ProviderConflict();
+  }
+  const parsed = providerBindingSchema.safeParse(row.event.data);
+  if (!parsed.success) {
+    throw new ProviderConflict();
+  }
+  return parsed.data;
+}
+
+function sameBinding(left: BindingPayload, right: BindingPayload): boolean {
+  return left.providerId === right.providerId && left.revision === right.revision &&
+    left.kind === right.kind &&
+    left.dependantId === right.dependantId && left.task === right.task &&
+    left.expectedProviderSequence === right.expectedProviderSequence &&
+    left.previousBindingSequence === right.previousBindingSequence &&
+    left.sourceRevision === right.sourceRevision && left.state === right.state &&
+    left.model === right.model && left.reason === right.reason;
+}
+
+function reconcileBinding(saved: StoredEvent, silo: string, commandId: string,
+  recorded: BindingPayload, payload: BindingPayload) {
   const event = saved.event;
-  if (event.silo !== silo || event.subject !== `provider-${providerId}` ||
+  if (event.silo !== silo || event.subject !== `provider-${payload.providerId}` ||
     event.commandId !== commandId || event.principal?.kind !== 'human' ||
-    event.principal.id !== memberId || event.type !== 'provider.model_binding_set' ||
-    JSON.stringify(event.data) !== JSON.stringify(payload)) {
+    recorded.changedBy !== event.principal.id || event.principal.id !== payload.changedBy ||
+    !sameBinding(recorded, payload)) {
     throw new ProviderConflict();
   }
 }
 
 function bindingPayload(input: BindingInput, providerId: string, memberId: string,
-  previous: Choice | undefined, original: StoredEvent | undefined) {
-  let model = previous?.model;
-  if (input.action !== 'pause') {
-    model = input.model;
-  } else if (original?.event.type === 'provider.model_binding_set') {
-    model = providerBindingSchema.parse(original.event.data).model;
-  }
+  previous: BindingPayload | undefined, hasSourceRevision: boolean) {
+  const model = input.action === 'pause' ? previous?.model : input.model;
   const payload = {
     providerId, revision: input.expectedRevision, changedBy: memberId,
     kind: input.kind, dependantId: input.dependantId, task: input.task,
     previousBindingSequence: input.expectedBindingSequence,
     expectedProviderSequence: input.expectedProviderSequence,
-    ...(input.expectedSourceRevision ? { sourceRevision: input.expectedSourceRevision } : {}),
+    ...(hasSourceRevision ? { sourceRevision: input.expectedSourceRevision } : {}),
     state: input.action === 'pause' ? 'paused' : 'active', model,
     ...(input.action === 'pause' ? { reason: 'Paused by an administrator' } : {}),
   };
@@ -213,18 +247,23 @@ async function checkBinding(current: Inventory, input: BindingInput, providerId:
     (previous?.position ?? 0) !== input.expectedBindingSequence) {
     throw new ProviderConflict();
   }
-  requireOpenTarget(target);
   if (previous && previous.providerId !== providerId) {
+    // Check permission on the old connection as well because the move takes its default away.
     await checkSource(current, previous, input.expectedSourceRevision, binding, memberId);
   }
-  if (input.action !== 'pause') {
-    checkSelection(current, providerId, binding.silo);
-    requireSelectable(target, input.model);
-    if (input.action === 'select_chat_default' && providerStatus(target) !== 'ready') {
+  if (input.action === 'pause') {
+    if (target.retired) {
       throw new ProviderRefused();
     }
-  } else if (!previous || previous.providerId !== providerId) {
-    throw new ProviderConflict();
+    if (!previous || previous.providerId !== providerId) {
+      throw new ProviderConflict();
+    }
+  } else {
+    requireOwnedKey(current, providerId, binding.silo);
+    // Let automatic setup keep using the first reachable connection without a paid test.
+    const needsAnswer = input.kind === 'silo_default' &&
+      input.commandId !== automaticDefaultCommandId;
+    requireSelectable(target, input.model, needsAnswer);
   }
   return previous;
 }
@@ -239,7 +278,7 @@ async function checkSource(current: Inventory, previous: Choice, revision: numbe
   }
 }
 
-function checkSelection(current: Inventory, providerId: string, silo: string) {
+function requireOwnedKey(current: Inventory, providerId: string, silo: string) {
   function isKey(row: StoredEvent) {
     return row.event.type === 'provider.key_saved';
   }
@@ -248,7 +287,7 @@ function checkSelection(current: Inventory, providerId: string, silo: string) {
   // Keep provider keys in the silo that owns this choice.
   if (!key?.event.commandId || current.providers.get(providerId)?.secretRef !==
     providerSecretRef(silo, providerId, key.event.commandId)) {
-    throw new ProviderRefused();
+    throw new ProviderChoiceRefused('connection_not_ready');
   }
 }
 
@@ -366,6 +405,7 @@ export function providerDefaultHandler(store: EventStore, binding: Binding) {
       }
     }
     const choice = chatDefaultIdentity(binding.silo);
+    // Keep any recorded choice, including a pause, when the setup event arrives again.
     if (bindingChoice(current, choice) || !current.firstVerified) {
       return;
     }
@@ -378,7 +418,7 @@ export function providerDefaultHandler(store: EventStore, binding: Binding) {
     const changedBy = actorSchema.parse(trigger.data).changedBy;
     // Reserve an id containing a colon, which user provider commands cannot supply.
     const command: BindingInput = {
-      ...choice, commandId: 'system:seed-provider-default',
+      ...choice, commandId: automaticDefaultCommandId,
       expectedProviderSequence: current.position, expectedRevision: target.revision,
       expectedBindingSequence: 0, action: 'select', model,
     };

@@ -8,7 +8,8 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 - Stores keys in the secret store and saves only references in the event log.
 - Offers a price estimate for a connection test and requests the chosen checks.
 - Reports connection and model-test results without returning keys.
-- Sets or moves the chat default to a ready connection and returns the saved result.
+- Sets or moves the chat default to a reachable connection with a passing model test.
+  A move also needs permission to manage the old connection.
 - Shows saved assistant bindings, counts affected assistants and lists unresolved routines
   before a provider can retire. It checks the payer and spending limits. A
   proposed choice changes nothing.

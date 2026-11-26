@@ -192,6 +192,10 @@ existence, verification or organisation claims.
 [member API](../../docs/api/members.md#create-and-renew-email-invitations).
 `apps/server/test/invitations.test.ts` tests both routes.
 
+Provider binding refusals use `providerChoiceRefusalSchema` to distinguish
+permission, connection readiness and model eligibility. The browser checks
+the reason before showing its message.
+
 Model access reads use `modelAccessResponseSchema` and
 `modelAccessCandidatesResponseSchema`. A grant response carries at most 100 rows
 and an exact `grantTotal`; it does not repeat the grant rows inside explanations.

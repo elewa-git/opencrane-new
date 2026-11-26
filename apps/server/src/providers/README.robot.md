@@ -12,10 +12,15 @@ list still describes only the requested connection.
 `POST /api/org/providers/:providerId/bindings` accepts `select_chat_default` with
 `commandId`, `model`, `expectedRevision`, `expectedProviderSequence` and
 `expectedBindingSequence`. The last field is zero for a first choice. A move
-also supplies `expectedSourceRevision`. The server takes the silo from the
-signed-in session's installation. It checks admin access, permission on the
-connections, current positions, the saved key, reachability, a model answer and
-the enabled model before it appends `provider.model_binding_set`.
+also supplies `expectedSourceRevision`. Only a move records this revision.
+The server takes the default's identity from the signed-in session's
+installation. Both this action and a `select` for `silo_default` need a current
+reachability pass and a passing model answer. The server checks admin access,
+permission on both connections for a move, current positions, the saved key and
+the enabled model before appending `provider.model_binding_set`. A write
+refusal can name `permission_denied`, `connection_not_ready` or
+`model_not_enabled`. HTTP 425 means membership is still being applied and
+this attempt saved nothing.
 
 ## Retirement preview
 

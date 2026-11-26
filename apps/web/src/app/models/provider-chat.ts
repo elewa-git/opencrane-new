@@ -20,34 +20,44 @@ function bindingReadMessage(kind: Exclude<ApiResult<Bindings>, { kind: 'ok' }>['
   return 'Could not read the chat default. Select chat default again.';
 }
 
-function chatSetupStep(provider: ProviderRow): string {
-  switch (provider.status) {
-    case 'ready':
-      return '';
-    case 'retired':
-      return 'Choose another connection for member chats.';
-    case 'needs_key':
-      return 'Open this connection and save a key.';
-    case 'saved_unverified':
-      return 'Open this connection and check provider reachability.';
-    case 'model_test_budget_refused':
-      return 'Review the budget in Spending, then open this connection and run the priced test.';
+function pricedTestStep(provider: ProviderRow): string {
+  const test = 'Read current price, agree to one request and select Run priced test.';
+  const answer = provider.modelAnswer;
+  if (answer?.revision !== provider.revision || !isSettledOutcome(answer.outcome)) {
+    return 'Open this connection and run the priced test on the Verify step. ' + test;
   }
-  if (provider.modelAnswer && !isSettledOutcome(provider.modelAnswer.outcome)) {
-    return 'Open this connection and select Check status on the Verify step.';
+  const repeat = 'Open this connection. Select Test again on the Verify step. ' + test;
+  if (answer.outcome === 'budget_refused') {
+    return 'Review the budget in Spending, then return here. ' + repeat;
   }
-  return 'Open this connection and run the priced test on the Verify step.';
+  return repeat;
 }
 
-function chatChangeRefusal(path: string, kind: ApiResult<unknown>['kind']): string {
+type ChatRefusal = Exclude<ApiResult<unknown>, { kind: 'ok' }>;
+
+function chatChangeRefusal(path: string, result: ChatRefusal): string {
+  if (result.kind === 'failed' && result.status === 425) {
+    return 'Your access is still being updated. Try this action again when it is ready.';
+  }
   if (path !== 'bindings') {
     return 'Change refused. Check chat setup before continuing.';
   }
-  if (kind === 'conflict') {
+  if (result.kind === 'conflict') {
     return 'Provider setup changed. Select Refresh, then select the chat default again.';
   }
-  if (kind === 'access' || kind === 'forbidden') {
-    return 'Chat default refused. Refresh Models & providers and check this connection.';
+  if (result.kind === 'forbidden') {
+    switch (result.reason) {
+      case 'connection_not_ready':
+        return 'This connection is not ready for member chats. Select Refresh for the next step.';
+      case 'model_not_enabled':
+        return 'Choose a supported model enabled on this connection. Select Refresh for the list.';
+      case 'permission_denied':
+      case undefined:
+        return 'You need permission to manage the connections for this choice.';
+    }
+  }
+  if (result.kind === 'access') {
+    return 'Sign in again to select the chat default.';
   }
   return 'Chat default could not be saved. Refresh Models & providers before trying again.';
 }
@@ -59,29 +69,38 @@ function chatChangeRefusal(path: string, kind: ApiResult<unknown>['kind']): stri
       <h3>Use this provider for member chats</h3>
       @if (nextStep(); as step) {
         <p>{{ step }}</p>
-      } @else {
+      } @else if (!status()) {
+        <p>Select a chat default or select Check chat setup to see whether member chats are on.</p>
+      } @else if (status()?.draining && !status()?.enabled) {
+        <p>Switch on member chats after existing calls finish.</p>
+      } @else if (!status()?.enabled) {
         <p>Select a default, pause new calls, then switch on after existing calls finish.</p>
       }
-      <label>Chat model
-        <select [value]="model()" (change)="chooseModel($event)" [disabled]="busy()">
-          @for (id of provider().enabledModels; track id) {
-            <option [value]="id">{{ id }}</option>
-          }
-        </select>
-      </label>
-      <p role="status">{{ message() }}</p>
-      @if (!status()?.enabled) {
-        <button class="button secondary" type="button"
-          [disabled]="busy() || !!pending() || !!nextStep()"
-          (click)="selectDefault()">Select chat default</button>
-        <button class="button secondary" type="button" [disabled]="busy() || !!pending()"
-          (click)="startDrain()">Pause new calls</button>
-        <button class="button primary" type="button"
-          [disabled]="busy() || !!pending() || !status()?.draining"
-          (click)="switchOn()">Switch on member chats</button>
+      @if (status()?.enabled) {
+        <p>Member chats switched on</p>
       }
-      <button class="button secondary" type="button" [disabled]="busy()"
-        (click)="checkStatus()">Check chat setup</button>
+      @if (provider().enabledModels.length > 0) {
+        <label>Chat model
+          <select [value]="model()" (change)="chooseModel($event)" [disabled]="changeBlocked()">
+            @for (id of provider().enabledModels; track id) {
+              <option [value]="id">{{ id }}</option>
+            }
+          </select>
+        </label>
+        <button class="button secondary" type="button" [disabled]="changeBlocked()"
+          (click)="selectDefault()">Select chat default</button>
+        @if (!nextStep() && status() && !status()?.enabled) {
+          <button class="button secondary" type="button"
+            [disabled]="changeBlocked() || status()?.draining"
+            (click)="startDrain()">Pause new calls</button>
+          <button class="button primary" type="button"
+            [disabled]="changeBlocked() || !status()?.draining"
+            (click)="switchOn()">Switch on member chats</button>
+        }
+        <button class="button secondary" type="button" [disabled]="busy()"
+          (click)="checkStatus()">Check chat setup</button>
+        <p role="status">{{ message() }}</p>
+      }
     </section>
   `,
   styleUrls: ['./model-registry.css', './provider-chat.css'],
@@ -89,6 +108,8 @@ function chatChangeRefusal(path: string, kind: ApiResult<unknown>['kind']): stri
 })
 export class ProviderChat {
   readonly provider = input.required<ProviderRow>();
+  readonly connectionLocked = input(false);
+  readonly canStartOver = input(false);
   protected readonly chosenModel = signal('');
   protected readonly busy = signal(false);
   protected readonly pending = signal<string | undefined>(undefined);
@@ -100,10 +121,35 @@ export class ProviderChat {
     return this.chosenModel() || this.provider().enabledModels[0] || '';
   }
   protected nextStep(): string {
-    return chatSetupStep(this.provider());
+    const provider = this.provider();
+    if (provider.status === 'retired') {
+      return 'Choose another connection for member chats.';
+    }
+    if (this.canStartOver()) {
+      return 'Select Start over beside this connection, then open it to try the check again.';
+    }
+    if (this.connectionLocked()) {
+      return 'Select Check status beside this connection before continuing.';
+    }
+    if (provider.status === 'needs_key') {
+      return 'Open this connection and save a key.';
+    }
+    if (provider.status === 'saved_unverified') {
+      return 'Open this connection. Select Check provider reachability on the Verify step.';
+    }
+    if (provider.enabledModels.length === 0) {
+      return 'Open this connection, select Next on Verify and enable a model on the Models step. '
+        + 'Select Next to save it.';
+    }
+    return provider.status === 'ready' ? '' : pricedTestStep(provider);
+  }
+  protected changeBlocked(): boolean {
+    return this.busy() || !!this.pending() || !!this.nextStep();
   }
   protected chooseModel(event: Event): void {
-    if (event.target instanceof HTMLSelectElement) this.chosenModel.set(event.target.value);
+    if (event.target instanceof HTMLSelectElement) {
+      this.chosenModel.set(event.target.value);
+    }
   }
   private route(): string {
     return `/api/org/providers/${encodeURIComponent(this.provider().providerId)}`;
@@ -116,7 +162,6 @@ export class ProviderChat {
       return undefined;
     }
     this.status.set(result.value);
-    if (result.value.enabled) this.message.set('Member chats switched on');
     return result.value;
   }
   private async readBindings(): Promise<ApiResult<Bindings>> {
@@ -145,16 +190,18 @@ export class ProviderChat {
       this.message.set(path === 'bindings' ? 'Chat default saved.'
         : 'Change recorded. Check chat setup to read its current status.');
       await this.readStatus();
-    } else if (result.kind === 'failed') {
+    } else if (result.kind === 'failed' && result.status !== 425) {
       this.message.set('Outcome unknown. Check chat setup before sending another change.');
     } else {
       this.pending.set(undefined);
       this.status.set(undefined);
-      this.message.set(chatChangeRefusal(path, result.kind));
+      this.message.set(chatChangeRefusal(path, result));
     }
   }
   async selectDefault(): Promise<void> {
-    if (this.busy() || this.pending() || this.nextStep()) return;
+    if (this.changeBlocked()) {
+      return;
+    }
     this.busy.set(true);
     try {
       const result = await this.readBindings();
@@ -163,6 +210,7 @@ export class ProviderChat {
         return;
       }
       const previous = result.value.chatDefault;
+      // Send zero for the first choice so the server can detect a competing save.
       const command = { action: 'select_chat_default', model: this.model(),
         expectedRevision: this.provider().revision,
         expectedProviderSequence: result.value.expectedProviderSequence,
@@ -174,7 +222,9 @@ export class ProviderChat {
     }
   }
   async startDrain(): Promise<void> {
-    if (this.busy() || this.pending()) return;
+    if (this.changeBlocked() || this.status()?.enabled) {
+      return;
+    }
     this.busy.set(true);
     try {
       const status = await this.readStatus();
@@ -187,7 +237,9 @@ export class ProviderChat {
     }
   }
   async switchOn(): Promise<void> {
-    if (this.busy() || this.pending()) return;
+    if (this.changeBlocked() || this.status()?.enabled) {
+      return;
+    }
     this.busy.set(true);
     try {
       const status = await this.readStatus();
@@ -200,14 +252,21 @@ export class ProviderChat {
     }
   }
   async checkStatus(): Promise<void> {
-    if (this.busy()) return;
+    if (this.busy()) {
+      return;
+    }
     this.busy.set(true);
     try {
       const commandId = this.pending();
       if (commandId) {
         const result = await readProviderChange(this.provider().providerId, commandId,
           this.controller.signal);
-        if (result.kind === 'ok') this.pending.set(undefined);
+        if (result.kind === 'ok') {
+          this.pending.set(undefined);
+          const message = result.value.operation === 'provider.model_binding_set'
+            ? 'Chat default saved.' : 'Change recorded.';
+          this.message.set(message);
+        }
       }
       await this.readStatus();
     } finally {

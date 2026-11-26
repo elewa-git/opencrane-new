@@ -2053,12 +2053,13 @@ are unchanged.
 Tests: `apps/server/test/provider-routine-presence.test.ts` and the existing provider suites.
 
 The chat-default command takes the silo from the checked installation. It uses
-position zero for the first choice and the saved position for a replacement, even
-when the old choice uses another connection. The same verification status drives
-the provider list and checks whether the key is reachable and a model answered.
-The selected model must also be enabled. Binding commands find saved ids across
-actors on the same provider. Actor or request
-changes return a conflict. After append, `readEventAt` checks the stored event before
+position zero for the first choice and the saved position for a replacement.
+A move checks permission on both connections and records the old connection's
+revision. Both public actions for setting the silo default use the same status
+as the provider list. They require a reachability pass and a passing model
+answer. The chosen model must also be supported and enabled. Binding commands
+find saved ids across actors on the same provider. A different actor or changed
+choice returns a conflict. After append, `readEventAt` checks the stored event before
 returning its receipt, including duplicate recovery. The automatic default calls the
 private binding command with `system:seed-provider-default`; public command schemas
 reject its colon. Only automatic selection follows the first verified provider.

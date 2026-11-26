@@ -63,6 +63,7 @@ flowchart LR
 ## What it is responsible for
 
 - Define shared reply shapes and share the record ID checks used by the browser.
+- Name why a chat default choice was refused so the browser can show what to do.
 - Choose the default chat mode from whether its assistant is personal or shared.
 - Check the optional close permission in authorised conversation list rows.
 - Check the safe assistant service readiness field on chat history and live updates.

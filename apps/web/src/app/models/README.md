@@ -10,7 +10,8 @@ This folder shows Models & providers, where owners and admins connect companies 
 - Separates reachability checks from a paid model-answer test. Each paid test needs fresh consent for its quoted cost; an unknown result keeps further tests locked.
 - Selects OpenAI models and shows the jobs using each model and the people, groups or assistants allowed to use it. Model selection is unavailable for Anthropic; Next continues without saving models.
 - Sets or moves the member-chat default on a reachable connection with a model answer
-  and an enabled chat model. It shows the next step when the connection needs a check.
+  and an enabled chat model. The list points to the right control when a check is
+  unfinished or a model needs enabling. Only ready connections offer the pause.
 - Grants or removes access for one person, group or assistant at a time. A grant is explicit permission; setup uses the same editor for each selected model.
 - Reports confirmed setup changes separately from pending ones. Saved model choices and unresolved access changes keep their required checks available.
 - Warns when a shared assistant lacks its own model grant only after a complete check. Missing or still-updating information stays unchecked.

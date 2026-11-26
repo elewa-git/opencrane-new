@@ -9,7 +9,7 @@ import { providerAuthority, providerCommand, providerReceipt,
   providerDrainCommand, providerDrainStatus, providerSwitchOn, providerSwitchOnChange,
   readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
   providerRetirementPreview,
-  ProviderRefused, ProviderUnpriced, ProviderConflict, AuthorityApplying,
+  ProviderRefused, ProviderUnpriced, ProviderConflict, ProviderChoiceRefused, AuthorityApplying,
   providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
   providerVerificationSchema, providerPermission, providerStatus } from '@opencrane/models';
@@ -295,9 +295,17 @@ async function bindings(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
   const { providerId } = providerParameters.parse(request.params);
   if (request.method === 'POST') {
-    const receipt = await providerBindingCommand(options.store, options.binding,
-      memberId, providerId, request.body);
-    return reply.send(receipt);
+    try {
+      const receipt = await providerBindingCommand(options.store, options.binding,
+        memberId, providerId, request.body);
+      return reply.send(receipt);
+    } catch (error) {
+      if (error instanceof ProviderRefused) {
+        const reason = error instanceof ProviderChoiceRefused ? error.reason : 'permission_denied';
+        return reply.code(403).send({ status: 'refused', reason });
+      }
+      throw error;
+    }
   }
   const result = await providerDependencies(options.store, options.binding,
     memberId, providerId, options.db);

@@ -33,6 +33,7 @@ flowchart LR
 ## What it is responsible for
 
 - Choose models for tasks, save the chat default and check provider choices for new turns.
+  An admin can set the default once the connection is reachable and a model has answered.
 - Check current membership, grants and permissions before allowing calls.
 - Keep spending limits and prices as integer euro cents.
 - Set money aside before a paid call, then record its cost or keep it held for review.
