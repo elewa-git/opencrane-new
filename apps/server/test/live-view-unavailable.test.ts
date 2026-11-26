@@ -215,9 +215,9 @@ async function refusesConversationBesideSlowComputerRead() {
     vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(read);
     const deniedAt = performance.now();
     proxy.setFailure('conversation denied');
-    const [code, reason]: [number, Buffer] = await closed as [number, Buffer];
-    expect(code).toBe(4003);
-    expect(String(reason)).toBe('access_changed');
+    const closeResult = await closed;
+    expect(closeResult[0]).toBe(4003);
+    expect(String(closeResult[1])).toBe('access_changed');
     // Stop as soon as OpenFGA refuses chat access, even if another read is still running.
     expect(performance.now() - deniedAt).toBeLessThan(1000);
   } finally {
