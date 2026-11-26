@@ -18,6 +18,27 @@ function startsCoreOnlyForOrdinarySecondaryStartup() {
 void test('focused startup defers browser checks until the demo is ready',
   startsCoreOnlyForOrdinarySecondaryStartup);
 
+async function claimsOnlyTheSelectedSlot() {
+  const directory = await mkdtemp(`${tmpdir()}/claim-selected-slot-`);
+  try {
+    const launcher = await readFile('infra/dev-stack/claim.sh', 'utf8');
+    const executable = { mode: 0o755 };
+    await writeFile(`${directory}/claim.sh`, launcher, executable);
+    const backend = '#!/bin/sh\nprintf "%s\\n" "$*"\nexit 1\n';
+    await writeFile(`${directory}/run.sh`, backend, executable);
+    const args = [`${directory}/claim.sh`, '--id', '1'];
+    const env = { PATH: process.env['PATH'], HOME: directory };
+    const result = spawnSync('/bin/sh', args, { env, encoding: 'utf8' });
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout.trim(), 'claim --id 1');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+void test('a refused claim for a selected slot does not try the other slot',
+  claimsOnlyTheSelectedSlot);
+
 type LauncherRun = { environment: Record<string, string> };
 
 async function launcherJourneyFixture(savedReal: boolean, fleet?: string, attempt?: string) {
