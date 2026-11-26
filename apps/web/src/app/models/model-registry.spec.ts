@@ -1419,3 +1419,31 @@ async function followsUnrecordedReachabilityAdvice() {
 }
 it('can start over from the provider list after an unrecorded free check',
   followsUnrecordedReachabilityAdvice);
+
+async function followsRecordedFreeCheck(outcome: 'outcome_unknown' | 'unknown') {
+  const state = scenario();
+  state.row.enabledModels = ['gpt-6.1-sol'];
+  state.row.reachable = verificationFact(outcome);
+  state.statusOutcome = 'unknown';
+  const serve = serveScenario(state);
+  function replyWithRecordedResult(request: RequestSeen) {
+    if (request.url.includes('/changes/')) {
+      state.row.reachable = verificationFact('unknown');
+    }
+    return serve(request);
+  }
+  const fixture = await mount(replyWithRecordedResult);
+  if (outcome === 'outcome_unknown') {
+    clickButton(fixture, 'Check status');
+  }
+  await waitForText(fixture, 'Select Check provider reachability');
+  openConnectionRow(fixture);
+  clickDialogButton(fixture, 'Check provider reachability');
+  await settle(fixture);
+  expect(state.posts).toHaveLength(1);
+  const command = readRecord(state.posts[0]!.body);
+  expect(command['action']).toBe('reachability');
+}
+it.each(['outcome_unknown', 'unknown'] as const)(
+  'can recheck reachability after reading a recorded unknown result (initial: %s)',
+  followsRecordedFreeCheck);
