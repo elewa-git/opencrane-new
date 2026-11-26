@@ -1,71 +1,99 @@
-# Pilot backup and restore
+# Pilot update, backup and recovery
 
 Journey on a fresh dev stack: PASS
 
-The rehearsal on 25 November 2026 used product revision
-`c01be8a4043ce94bb4e9f22f2d6d2ae08ed3daa1`, with green hosted CI and current
-application and scanner approvals for that revision.
-[Hosted CI](https://github.com/elewa-git/opencrane-new/actions/runs/45689862582),
-[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45689871155)
-and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45689871534).
+The 26 November 2026 rehearsal started from
+`2e24538b0e944935f9a3a613693b1b14bc41eec1`.
+It applied the package approved for
+`da087374d9af47f8752e182157313514a98ed066`. The build and both image approval
+workflows passed.
+[Hosted CI](https://github.com/elewa-git/opencrane-new/actions/runs/45734418931),
+[application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45734457724)
+and [scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45734458426).
 
 ## Rehearsal
 
-1. **PASS** Slot 1 was free and the one-minute load stayed below six for five
-   minutes before each claim. Ordinary fresh startup, status and the browser
-   journey passed, and the slot was released.
-2. **PASS** Installed a fresh source package. The owner signed in, claimed the
-   install, connected the free test provider and invited a member. The member
-   sent a prompt and got a completed reply, then opened the same chat at both
-   widths. The loopback listener matched the forwarder for the claimed slot.
-   [Provider setup](screenshots/provider-connected.png),
-   [source at 1280 px](screenshots/member-chat-1280.png) and
-   [source at 390 px](screenshots/member-chat-390.png).
-3. **PASS** Confirmed the nightly 02:00 UTC schedule. Moved only the disposable
-   CronJob to 21:13 UTC so Kubernetes would start the scheduled Job during the
-   rehearsal. It completed at 21:14 UTC. The catalogue's `list` and `show` commands
-   agreed on one verified set. It held 90 events, four databases, 16 checkpoints
-   and an empty file inventory. The verified archive was saved outside the
-   source slot. Import into the original namespace was refused before the source
-   was removed.
-4. **PASS** Reinstalled on slot 1 with a new namespace ID, volume claims and
-   backing volumes. The checked import accepted the archive. The restore Job
-   verified the contents and opened reading. The listener matched the new
-   package's forwarder.
-5. **PASS** The same member signed in to the recovery install and saw the
-   original prompt and reply in the same conversation at both widths.
-   [Restored chat at 1280 px](screenshots/restored-chat-1280.png) and
-   [restored chat at 390 px](screenshots/restored-chat-390.png).
-6. **PASS** At each width, the member tried to send a new message. The server
-   returned HTTP 503 with `restore_read_only`, and reloading showed that the
-   message had not been saved. The browser displayed its general send warning.
-   [Attempt at 1280 px](screenshots/write-refused-1280.png) and
-   [attempt at 390 px](screenshots/write-refused-390.png).
-7. **PASS** Retained the screenshots before teardown, released slot 1 and
-   removed the temporary sign-in app.
+1. **PASS** Claimed slot 1 after five minutes with the one-minute load below six.
+   Installed the prior package on empty storage. The owner connected the free test
+   provider and invited a member. After the member's access was applied, they opened
+   a chat, got a completed reply and uploaded a PDF. [Provider setup](screenshots/provider-connected.png),
+   [chat at 1280 px](screenshots/member-chat-1280.png) and
+   [chat at 390 px](screenshots/member-chat-390.png).
+2. **PASS** Applied the approved revision in the existing namespace. The volume
+   claims, backing volumes, sign-in Secret, completed setup Job and saved test
+   route matched their earlier values. The server, scanner and scheduled backup
+   Job referred to the new approved images. The same member signed in, opened
+   the saved chat and downloaded the original PDF byte-for-byte at
+   [1280 px](screenshots/upgraded-chat-1280.png) and
+   [390 px](screenshots/upgraded-chat-390.png).
+3. **PASS** Returned to Helm revision 1. The earlier image pins, storage and
+   saved test route matched the original install. The same member opened the
+   chat and downloaded the same PDF at
+   [1280 px](screenshots/rollback-chat-1280.png) and
+   [390 px](screenshots/rollback-chat-390.png). Reapplying the approved update
+   also passed.
+4. **PASS** Confirmed the 02:00 UTC nightly schedule. On this disposable
+   installation only, moved it to 01:33 UTC so the scheduler would start the
+   normal Job during the rehearsal. The catalogue verified one set with
+   95 events, four databases, 16 checkpoints and one 598-byte PDF. The source
+   package's image pins matched the manifest. Saved the archive outside the
+   installation. Import to the original namespace was refused while it was
+   still running.
+5. **PASS** Released the source and reserved slot 1 again after five minutes
+   below the load limit. The recovery installation had a new namespace,
+   volume claims and backing volumes. The import accepted the earlier
+   archive and the restore Job verified the events, databases and files.
+6. **PASS** The same member opened the original prompt and reply on the
+   recovery installation and downloaded the original 598-byte PDF
+   byte-for-byte at [1280 px](screenshots/restored-chat-1280.png) and
+   [390 px](screenshots/restored-chat-390.png).
+7. **PASS** At both widths, sending a new message returned HTTP 503 with
+   `restore_read_only`. Reload showed neither attempted message.
+   [Write refusal at 1280 px](screenshots/write-refused-1280.png) and
+   [write refusal at 390 px](screenshots/write-refused-390.png).
+8. **PASS** Saved the screenshots, released slot 1 and removed the temporary
+   sign-in app.
+9. **PASS** Claimed slot 1 again after five minutes below the load limit.
+   `up.sh --fresh --id 1` passed startup and its browser checks. The status
+   check passed. The separate `journey.sh --id 1` reported passing sign-in,
+   chat, upload and live-view checks at 1280 and 390 px. `down.sh --id 1`
+   released the slot. The separate long-chat approval check is **NOT RUN**.
 
-Both package starts recorded the documented local `accepted-dev-box-366`
-exception for the F1 swap and F2 crash-dump checks. The rehearsal used a
-private loopback HTTPS origin and synthetic chat data. Actual Tailscale
-Serve changes are **NOT RUN**. The switch and rollback rules were checked
-with fixtures.
+The package installs and updates used the documented local exception for swap
+and crash-dump settings. The browser used a private HTTPS test origin. The
+saved test route file was checked. Live Tailscale Serve is **NOT RUN**.
 
-## Regression checks
+The rehearsal script reported a cleanup error after the ordinary stack run
+when it looked up the temporary sign-in app again. A check in the dev
+organisation confirmed the app had already been removed.
 
-The earlier Job log recorded only the failed `verify` stage. Against a
-disposable PostgreSQL database, the verifier still saw a checkpoint reader
-after the pool reported shutdown in 34 of 300 trials. It saw none in 300
-trials with explicit client shutdown. A regression reproduced the failed
-`verify` stage before the fix and then published a checked set with the fix.
+## Checks
 
-The 64 route, archive and slot tests passed twice. The Vitest runs passed
-46 and 72 tests, with the same backup tests in both runs. Hosted checks first
-found that a temporary test worktree omitted the shared forwarder module.
-The corrected fixture and route tests passed twice, with 28 tests per run.
-Typecheck, the event catalogue, Knip, changelog and Markdown lint, the README
-check, the whole-stream read check, and the privacy and secret scans passed.
-Scoped ESLint reported that the infrastructure files are excluded.
+- **PASS** 114 Vitest tests passed twice. The Node suites passed with 496 and
+  387 tests. The added rollback regression passed twice. The image approval
+  tests passed twice with 29 tests each.
+- **PASS** Removing each of 18 Serve checks in a fixture caused its matching
+  test to fail. The checkpoint tests also caught both missing connections,
+  both missing disconnections and a missing wait.
+- **PASS** Typecheck, the event catalogue, Knip, changelog and Markdown lint,
+  the README and whole-stream read checks, and public privacy and secret
+  scans. Scoped ESLint reported that infrastructure files are excluded.
 
-The first local launcher exited before claiming a slot because the pilot slot
-marker had no trailing newline. The corrected launcher read the same marker
-and then followed the normal slot and load checks.
+## Earlier attempts
+
+The ordinary stack first stopped at the authenticated scanner check. Earlier
+packaged attempts stopped at a missing checkout dependency, a chat timeout
+under host load, or a workspace read before the member's access was applied.
+The final packaged run used an independent dependency install and confirmed
+member access before opening the workspace.
+
+The prior version's claim script ignored the slot argument and could read
+slot 2's claim record. Every reservation and stack operation used slot 1.
+Later runs used the script that takes an explicit slot.
+
+Helm's global readiness wait held up an earlier update and its rollback because
+the running pilot leaves its recovery volume claim unbound. The updated command
+checks the workloads that should be running. A later run returned to the earlier
+revision but could not fetch the same approval again into the same directory.
+The current command keeps each verified download in its own directory. Logs and
+failure screenshots were saved before teardown.

@@ -2591,10 +2591,10 @@ stores or run Helm concurrently with this maintenance window.
 While writers stay stopped, the Job calls `collectEventBackup`, dumps databases
 without role passwords, and copies every object in `files` through the existing
 short-lived storage lease. It checks the stream identity, retained range and
-checkpoints again before resuming through normal service startup. The stopped
-file read table lists the objects named by the events. Every saved object must
-have a matching reference, byte count and SHA-256. A reference without its
-object also fails the backup. PostgreSQL's
+checkpoints again before resuming through normal service startup. The file read
+table lists the objects named by the events. The Job checks it while writers
+are stopped. Every saved object must have a matching reference, byte count and
+SHA-256. A reference without its object also fails the backup. PostgreSQL's
 LSN identifies the start of this stopped interval; background WAL maintenance can
 continue, so it is not a promise that the physical WAL bytes remain unchanged.
 `backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
