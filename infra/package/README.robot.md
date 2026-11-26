@@ -1056,7 +1056,9 @@ changes the application images, including the image for the next scheduled
 backup, and the scanner image and its signed database records. The completed
 bootstrap Job keeps its original image because Kubernetes fixes the Job's
 template once it has run. Each scanner record has its own Secret. Older
-releases still refer to their original Secret for rollback.
+releases still refer to their original Secret for rollback. Each download
+keeps its approval records in a new directory, so applying the same update
+again after rollback also works.
 
 Use the worktree recorded when the pilot was installed. Keep an exported
 backup that has passed the catalogue check. Record the current deployed

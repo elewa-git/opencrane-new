@@ -1,5 +1,5 @@
-type PublishedApproval = { image: string; runId: number };
+type PublishedApproval = { image: string; runId: number; destination: string };
 
 export function publishApprovedApplication(directory: string): Promise<PublishedApproval>;
 export function publishApprovedScanner(directory: string):
-  Promise<PublishedApproval & { approvedSha: string; destination: string }>;
+  Promise<PublishedApproval & { approvedSha: string }>;

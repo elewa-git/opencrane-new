@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { join } from 'node:path';
 import { fetchApplicationApproval } from './application-approval.mjs';
@@ -23,18 +23,25 @@ function publishImage(source, filename, image) {
   execFileSync('python3', args, commandOptions);
 }
 
-export async function publishApprovedApplication(directory) {
-  const destination = join(directory, 'application-approval');
-  await mkdir(destination, { mode: 0o700, recursive: true });
-  const approval = await fetchApplicationApproval(destination, true);
-  publishImage(destination, 'application.tar', approval.image);
-  return approval;
+async function publishApproval(directory, name, fetchApproval) {
+  const parent = join(directory, `${name}-approval`);
+  await mkdir(parent, { mode: 0o700, recursive: true });
+  // Keep earlier approval records. GitHub refuses to extract over an existing file.
+  const destination = await mkdtemp(join(parent, 'attempt-'));
+  const archive = `${name}.tar`;
+  try {
+    const approval = await fetchApproval(destination, true);
+    publishImage(destination, archive, approval.image);
+    return { ...approval, destination };
+  } finally {
+    await rm(join(destination, archive), { force: true });
+  }
 }
 
-export async function publishApprovedScanner(directory) {
-  const destination = join(directory, 'scanner-approval');
-  await mkdir(destination, { mode: 0o700, recursive: true });
-  const approval = await fetchScannerApproval(destination, true);
-  publishImage(destination, 'scanner.tar', approval.image);
-  return { ...approval, destination };
+export function publishApprovedApplication(directory) {
+  return publishApproval(directory, 'application', fetchApplicationApproval);
+}
+
+export function publishApprovedScanner(directory) {
+  return publishApproval(directory, 'scanner', fetchScannerApproval);
 }

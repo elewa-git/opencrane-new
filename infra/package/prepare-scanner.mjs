@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import {
   publishApprovedApplication, publishApprovedScanner,
@@ -8,6 +8,9 @@ const root = resolve(import.meta.dirname, '../..');
 const directory = process.argv[2];
 const approved = await publishApprovedScanner(directory);
 const application = await publishApprovedApplication(directory);
+for (const record of ['signatures.json', 'release.json']) {
+  await copyFile(join(approved.destination, record), join(directory, 'scanner-approval', record));
+}
 const review = JSON.parse(await readFile(join(root, 'infra/package/reviewed-images.json'), 'utf8'));
 review.images.server = application.image;
 review.images.web = application.image;
