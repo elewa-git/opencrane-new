@@ -197,24 +197,29 @@ async function recoversChatDefault(definite: boolean) {
   const commands: string[] = [];
   const statusReads: string[] = [];
   let recorded = false;
-  async function fetchReply(input: RequestInfo | URL, options?: RequestInit) {
+  const command = z.object({ commandId: z.string() });
+  function fetchReply(input: RequestInfo | URL, options?: RequestInit) {
     const path = requestPath(input);
     if (options?.method === 'POST') {
-      const body = JSON.parse(String(options.body)) as { commandId: string };
+      const text = z.string().parse(options.body);
+      const body = command.parse(JSON.parse(text));
       commands.push(body.commandId);
       if (commands.length > 1) {
-        return savedChoice();
+        return Promise.resolve(savedChoice());
       }
       if (definite) {
-        return new Response('{"status":"access_applying"}', { status: 425 });
+        const response = new Response('{"status":"access_applying"}', { status: 425 });
+        return Promise.resolve(response);
       }
-      throw new TypeError('Connection lost after sending the request');
+      return Promise.reject(new TypeError('Connection lost after sending the request'));
     }
     if (path.includes('/changes/')) {
       statusReads.push(path);
-      return recorded ? savedChoice() : new Response('{}', { status: 404 });
+      const response = recorded ? savedChoice() : new Response('{}', { status: 404 });
+      return Promise.resolve(response);
     }
-    return path.endsWith('/bindings') ? bindingPositions() : drainReply();
+    const response = path.endsWith('/bindings') ? bindingPositions() : drainReply();
+    return Promise.resolve(response);
   }
   vi.stubGlobal('fetch', fetchReply);
   const fixture = TestBed.createComponent(ProviderChat);
@@ -290,9 +295,10 @@ async function readyActions(draining: boolean, enabled: boolean) {
   const backup = { ...provider, providerId: 'backup', name: 'Backup' };
   fixture.componentRef.setInput('provider', backup);
   fixture.detectChanges();
+  const element = fixtureElement(fixture);
+  expect(findButton(element, 'Pause new calls')).toBeUndefined();
   await fixture.componentInstance.checkStatus();
   fixture.detectChanges();
-  const element = fixtureElement(fixture);
   expect(requiredButton(element, 'Select chat default').disabled).toBe(false);
   if (enabled) {
     expect(findButton(element, 'Pause new calls')).toBeUndefined();

@@ -488,13 +488,18 @@ function objectId(type: string, ...ids: string[]) {
   const encoded = bytes.toString('base64url');
   return `${type}:${encoded}`;
 }
-async function removeTuple(user: string, relation: string, object: string) {
+async function changeTuple(operation: 'deletes' | 'writes', user: string,
+  relation: string, object: string) {
   const tuple = { user, relation, object };
-  const body = { deletes: { tuple_keys: [tuple] } };
+  const body = { [operation]: { tuple_keys: [tuple] } };
   const options = { method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body) };
   const response = await fetch(`${binding.apiUrl}/stores/${binding.storeId}/write`, options);
   expect(response.status).toBe(200);
+}
+
+function removeTuple(user: string, relation: string, object: string) {
+  return changeTuple('deletes', user, relation, object);
 }
 async function removeManage(providerId: string) {
   const silo = objectId('silo');
@@ -571,15 +576,21 @@ it.each(['source manage', 'source receipt', 'target manage', 'target receipt'])(
 async function ownerRoleChange(next: 'member' | 'admin') {
   const role = { memberId: 'owner', previousRole: 'owner', newRole: next, changedBy: 'admin' };
   const change = { subject: 'member-owner', type: 'member.role_changed', data: role, apply: false };
-  await appendAndAuthorise(change);
+  const recorded = await appendAndAuthorise(change);
   const manage = await auth.provider('owner', 'primary', 'manage');
   expect(manage.allowed).toBe(true);
+  return recorded;
 }
 
 async function refusesLostAdminRole() {
   await connection('primary');
   await answerChatModel('primary');
-  await ownerRoleChange('member');
+  const recorded = await ownerRoleChange('member');
+  const silo = objectId('silo');
+  const receipt = objectId('projection_event', recorded.id);
+  // Keep the other access checks satisfied to isolate the role recorded in the event log.
+  await changeTuple('writes', silo, 'applied', receipt);
+  expect(await auth.applied(recorded.id)).toBe(true);
   const command = await defaultCommand();
   const refusal = await refused('primary', command);
   expect(refusal.json()).toMatchObject({ reason: 'permission_denied' });
@@ -805,13 +816,12 @@ async function finalAuthority(expired: boolean, retry = false, chooseDefault = f
   expect(response.statusCode).toBe(503);
   expect(await nats.store.head('provider-*')).toBe(before);
   expect(await storedBindings('primary')).toHaveLength(retry ? 1 : 0);
-  if (expired || retry) {
-    function bindingAppend(call: [AppendCommand]) {
-      const parsed = parseEventByType(call[0].event);
-      return parsed.success && parsed.event.type === 'provider.model_binding_set';
-    }
-    expect(appendSpy.mock.calls.filter(bindingAppend)).toHaveLength(0);
+  function bindingAppend(call: [AppendCommand]) {
+    const parsed = parseEventByType(call[0].event);
+    return parsed.success && parsed.event.type === 'provider.model_binding_set';
   }
+  const attemptedBindings = appendSpy.mock.calls.filter(bindingAppend);
+  expect(attemptedBindings).toHaveLength(0);
 }
 async function finalExpiry() {
   await finalAuthority(true);

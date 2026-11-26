@@ -1261,7 +1261,13 @@ function openConnectionRow(fixture: ComponentFixture<ModelsScreen>): void {
 
 async function followPricedTest(fixture: ComponentFixture<ModelsScreen>) {
   clickDialogButton(fixture, 'Read current price');
-  await settle(fixture);
+  function showsConsent() {
+    fixture.detectChanges();
+    expect(screenElement(fixture).querySelector('.consent-row input')).toBeInstanceOf(
+      HTMLInputElement,
+    );
+  }
+  await vi.waitFor(showsConsent);
   giveConsent(fixture);
   expect(runControl(fixture)?.disabled).toBe(false);
   clickDialogButton(fixture, 'Run priced test');
@@ -1342,7 +1348,11 @@ async function followsPendingCheckAdvice(kind: string) {
   const request = { method: 'GET', url: changes };
   expect(state.reads).toContainEqual(expect.objectContaining(request));
   expect(state.posts).toHaveLength(0);
-  expect(page.querySelector<HTMLButtonElement>('.provider-row-main')?.disabled).toBe(false);
+  function connectionIsOpenable() {
+    fixture.detectChanges();
+    expect(page.querySelector<HTMLButtonElement>('.provider-row-main')?.disabled).toBe(false);
+  }
+  await vi.waitFor(connectionIsOpenable);
 }
 it.each(['model', 'reachability'])('can follow the list instructions for a pending %s check',
   followsPendingCheckAdvice);
@@ -1400,8 +1410,7 @@ async function followsUnrecordedReachabilityAdvice() {
   }
   const fixture = await mount(serveWithoutReceipt);
   clickButton(fixture, 'Check status');
-  await settle(fixture);
-  expect(screenElement(fixture).textContent).toContain('Select Start over beside this connection');
+  await waitForText(fixture, 'Select Start over beside this connection');
   clickButton(fixture, 'Start over');
   openConnectionRow(fixture);
   clickDialogButton(fixture, 'Check provider reachability');
