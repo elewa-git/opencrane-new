@@ -118,6 +118,8 @@ image digest), `signatures.json` and `release.json`. Its `scanner-image` artifac
 contains the matching OCI archive. Both expire after one day. The job summary
 also prints the manifest SHA-256 and image digest. Local refresh, build, release
 records, environment variables and candidate hashes cannot grant approval.
+The package uses this existing CI check at install and refresh. There is no
+separate signature on `approval.json`.
 
 `approval.mjs` uses the existing authenticated `gh` CLI to download these outputs
 from github.com. API calls select `--hostname=github.com`; artifact downloads use
@@ -128,7 +130,8 @@ reason (`outage`, `expired` or `malformed`). Raw CLI errors and output stay priv
 It checks GitHub's run metadata for this repository and source repository, the
 workflow path, a successful completion and an allowed trigger. Package preparation
 and preflight require the checkout branch and commit. The daily refresh selects
-the newest successful scanner run on `main`. Both read the run's exact commit and
+the newest successful scanner run on `main`, looking past pages of unfinished or
+failed runs. Both read the run's exact commit and
 match it and the run ID to the output. Both use `readApprovedRelease` for exact
 hashes, image binding and freshness.
 There is no local approval fallback. Missing, failed, expired or mismatched outputs

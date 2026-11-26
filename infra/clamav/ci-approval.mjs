@@ -9,6 +9,8 @@ const repository = 'elewa-git/opencrane-new';
 const root = resolve(import.meta.dirname, '../..');
 const refusal = 'CI approval refused';
 const enterpriseSettings = ['GH_HOST', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
+const commitSha = /^[a-f0-9]{40}$/u;
+const pageSize = 20;
 
 function run(program, args) {
   const env = { ...process.env };
@@ -25,36 +27,65 @@ function run(program, args) {
 }
 
 function requireApproval(condition) {
-  if (!condition) throw new Error(refusal);
+  if (!condition) {
+    throw new Error(refusal);
+  }
 }
 
-function approvedRun(revision, branch, name) {
+function matchesApprovalRun(candidate, source, workflow) {
+  if (candidate.status !== 'completed' || candidate.conclusion !== 'success') {
+    return false;
+  }
+  if (!['push', 'schedule', 'workflow_dispatch'].includes(candidate.event)) {
+    return false;
+  }
+  if (candidate.path !== workflow || candidate.head_branch !== source.branch) {
+    return false;
+  }
+  if (source.revision === undefined && !commitSha.test(candidate.head_sha)) {
+    return false;
+  }
+  if (source.revision !== undefined && candidate.head_sha !== source.revision) {
+    return false;
+  }
+  return candidate.repository?.full_name === repository &&
+    candidate.head_repository?.full_name === repository;
+}
+
+function approvedRun(source, name) {
   const workflow = `.github/workflows/${name}-package.yml`;
   // GitHub can omit a successful run when the listing uses status=success.
-  // Check each returned run's status and exact source below instead.
+  // Check the status and source on each page, from newest to oldest.
+  const { revision, branch } = source;
   const exactRevision = revision === undefined ? '' : `&head_sha=${revision}`;
   const query = `repos/${repository}/actions/workflows/${name}-package.yml/runs` +
-    `?branch=${encodeURIComponent(branch)}&per_page=20${exactRevision}`;
-  const result = JSON.parse(run('gh', ['api', '--hostname=github.com', query]));
-  for (const candidate of result.workflow_runs) {
-    if (candidate.status !== 'completed' || candidate.conclusion !== 'success') continue;
-    if (!['push', 'schedule', 'workflow_dispatch'].includes(candidate.event)) continue;
-    if (candidate.path !== workflow || candidate.head_branch !== branch) continue;
-    if (!/^[a-f0-9]{40}$/.test(candidate.head_sha) ||
-        (revision !== undefined && candidate.head_sha !== revision)) continue;
-    if (candidate.repository?.full_name !== repository ||
-        candidate.head_repository?.full_name !== repository) continue;
-    requireApproval(Number.isSafeInteger(candidate.id) && candidate.id > 0);
-    return candidate;
+    `?branch=${encodeURIComponent(branch)}&per_page=${pageSize}${exactRevision}`;
+  function matches(candidate) {
+    return matchesApprovalRun(candidate, source, workflow);
+  }
+  // GitHub caps filtered listings at 1,000 results.
+  for (let page = 1; page <= 1000 / pageSize; page++) {
+    const body = run('gh', ['api', '--hostname=github.com', `${query}&page=${page}`]);
+    const result = JSON.parse(body);
+    const candidate = result.workflow_runs.find(matches);
+    if (candidate !== undefined) {
+      requireApproval(Number.isSafeInteger(candidate.id) && candidate.id > 0);
+      return candidate;
+    }
+    if (result.workflow_runs.length < pageSize) {
+      break;
+    }
   }
   throw new Error(refusal);
 }
 
 function approvalSource(upstream) {
-  if (upstream) return { branch: 'main' };
+  if (upstream) {
+    return { branch: 'main' };
+  }
   const revision = run('git', ['rev-parse', 'HEAD']);
   const branch = run('git', ['branch', '--show-current']);
-  requireApproval(/^[a-f0-9]{40}$/.test(revision) && branch.length > 0);
+  requireApproval(commitSha.test(revision) && branch.length > 0);
   return { revision, branch };
 }
 
@@ -74,9 +105,9 @@ export async function fetchCiApproval(options) {
     // Refuse inherited enterprise routing before any credential leaves this process.
     for (const setting of enterpriseSettings) requireApproval(process.env[setting] === undefined);
     stage = 'checkout';
-    const { revision, branch } = approvalSource(options.upstream);
+    const source = approvalSource(options.upstream);
     stage = 'metadata';
-    const job = approvedRun(revision, branch, name);
+    const job = approvedRun(source, name);
     stage = 'approval_download';
     download(job.id, `${name}-approval`, directory);
     stage = 'approval';

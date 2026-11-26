@@ -14,7 +14,12 @@ async function validateScanner(approval, directory) {
 export async function fetchScannerApproval(destination, includeImage = false) {
   const approvalOptions = { name: 'scanner', destination, includeImage, validate: validateScanner,
     validationStage: 'release' };
-  return fetchCiApproval(approvalOptions);
+  const approval = await fetchCiApproval(approvalOptions);
+  if (destination !== undefined) {
+    return approval;
+  }
+  const { image, approvedSha, runId, databaseUpdatedAt } = approval;
+  return { image, approvedSha, runId, databaseUpdatedAt };
 }
 
 export async function fetchLatestScannerApproval(destination) {

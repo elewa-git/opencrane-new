@@ -116,7 +116,9 @@ A copied result grants nothing. Caller expiry and database expiry are checked ag
 before replying. Upload callers now check this response before storage. They keep
 the same file identity when retrying, with a new request each time. Deployed service
 startup and key rotation still need qualification.
-The upload server checks the approved virus list digest in each reply. It can
+The package trusts the successful GitHub run for the exact commit and checks the
+file hashes recorded by that run. There is no separate signature on the approval
+file. The upload server checks the approved virus list digest in each reply. It can
 accept both approved lists briefly while the package replaces the scanner.
 
 The upload fixture and its inputs are in
