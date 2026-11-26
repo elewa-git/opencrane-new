@@ -32,7 +32,7 @@ function desktop(width = 2, height = 2) {
   return Promise.resolve(Duplex.from({ readable, writable }));
 }
 
-it('captures once, scans and stores a PNG whose file and preview survive replay', async () => {
+it('captures without a desktop grant and stores a PNG whose file and preview survive replay', async () => {
   const fixture = await viewFixture(() => desktop()), services = await uploadServices();
   const { config, runner, nats, binding, feed, db } = fixture;
   const options = { silo: 'test', store: nats.store, binding, feed, db };
@@ -41,7 +41,6 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
     cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}` };
   const url = '/api/conversations/chat/screenshots';
   try {
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const replies = await Promise.all(Array.from({ length: 3 }, () => app.inject({ method: 'POST', url, headers })));
     const result = replies[0]!;
     expect(replies.map(reply => reply.statusCode)).toEqual([201, 201, 201]);
@@ -75,7 +74,6 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     const oldDownload = preview.replace('&preview=true', '');
     expect((await app.inject({ url: oldDownload, headers: bob })).statusCode).toBe(403);
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
     const laterHeaders = { ...bob, 'idempotency-key': 'post-join-capture' };
     const laterCapture = await app.inject({ method: 'POST', url, headers: laterHeaders });
     expect(laterCapture.statusCode, laterCapture.body).toBe(201);
@@ -89,6 +87,8 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
     expect((await app.inject({ url: `${laterDownload}&preview=true`, headers: bob })).statusCode)
       .toBe(200);
     await fixture.append('participation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' });
+    const afterRemoval = { ...bob, 'idempotency-key': 'post-removal-capture' };
+    expect((await app.inject({ method: 'POST', url, headers: afterRemoval })).statusCode).toBe(403);
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     const download = preview.replace('&preview=true', '');
     const foreign = `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'foreign', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}`;

@@ -14,7 +14,7 @@ import { history } from '@opencrane/models';
 import { parseEventByType } from '@opencrane/events';
 import * as access from '../src/computers/view-access.ts';
 
-it('requires participation and an explicit desktop grant before opening an audited view', async () => {
+it('admits chat participants without a desktop grant and closes on removal', async () => {
   const forwarded: Buffer[] = [];
   const fixture = await viewFixture(() => { const writable = new PassThrough(); writable.on('data', (b: Buffer) => forwarded.push(b)); return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable })); });
   const { app, config, append, nats } = fixture;
@@ -29,21 +29,15 @@ it('requires participation and an explicit desktop grant before opening an audit
     }
     expect((await app.inject({ method: 'POST', url: '/api/conversations/guessed/view', headers })).statusCode).toBe(403);
 
-    const refused = await app.inject({ method: 'POST', url, headers }); expect(refused.statusCode).toBe(403);
-    const refusalId = refused.json<{ attemptId: string }>().attemptId;
-    expect((await history(nats.store, `view-${refusalId}`, 'test')).map(r => r.event.type)).toEqual(['computer.view_refused']);
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'team', grantedBy: 'owner',
-    }, true);
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'team', revokedBy: 'owner',
-    }, true);
+    const response = await app.inject({ method: 'POST', url, headers });
+    expect(response.statusCode).toBe(200);
+    const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
     const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
-    expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
+    const refused = await app.inject({ method: 'POST', url, headers: bobHeaders });
+    expect(refused.statusCode).toBe(403);
+    const refusalId = refused.json<{ attemptId: string }>().attemptId;
+    const refusal = await history(nats.store, `view-${refusalId}`, 'test');
+    expect(refusal.map(row => row.event.type)).toEqual(['computer.view_refused']);
     const join = await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
     await fixture.runner.run(conversations);
@@ -51,9 +45,6 @@ it('requires participation and an explicit desktop grant before opening an audit
     await auth.handler.handle(join, fixture.db);
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, origin: 'https://wrong.test' } })).statusCode).toBe(403);
-    const response = await app.inject({ method: 'POST', url, headers });
-    expect(response.statusCode).toBe(200);
-    const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     let ws = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', ticket], { headers });
     ws.on('error', () => undefined); await once(ws, 'open');
