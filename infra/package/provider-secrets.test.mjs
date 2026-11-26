@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile }
+import { chmod, chown, link, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile }
   from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -61,14 +61,25 @@ async function preparesMemberKeys() {
     await chmod(memoryKeys, 0o2770);
     const key = join(memoryKeys, 'memory-key');
     await writeFile(key, 'synthetic-revision-key', { mode: 0o600 });
+    const processOwner = process.getuid();
+    const expectedOwner = processOwner === 0 ? 1000 : processOwner;
+    if (processOwner === 0) {
+      await chown(key, expectedOwner, expectedOwner);
+    }
     await link(key, `${key}-pending`);
     const args = ['infra/package/provider-secrets.mjs', '--directory-only', personal, memory];
     const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal((await lstat(join(personal, 'keys'))).mode & 0o7777, 0o700);
-    assert.equal((await lstat(memoryKeys)).mode & 0o7777, 0o700);
-    assert.equal((await lstat(key)).nlink, 2);
-    assert.equal((await lstat(key)).mode & 0o7777, 0o600);
+    const personalDetails = await lstat(join(personal, 'keys'));
+    const memoryDetails = await lstat(memoryKeys);
+    const keyDetails = await lstat(key);
+    assert.equal(personalDetails.uid, expectedOwner);
+    assert.equal(memoryDetails.uid, expectedOwner);
+    assert.equal(keyDetails.uid, expectedOwner);
+    assert.equal(personalDetails.mode & 0o7777, 0o700);
+    assert.equal(memoryDetails.mode & 0o7777, 0o700);
+    assert.equal(keyDetails.nlink, 2);
+    assert.equal(keyDetails.mode & 0o7777, 0o600);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, '');
   } finally {
@@ -87,10 +98,18 @@ async function refusesUnsafeMemberKey(kind) {
     if (kind === 'symlink') {
       await symlink('missing-key', file);
     } else {
-      await writeFile(file, 'synthetic-member-key', { mode: 0o640 });
-      await chmod(file, 0o640);
+      const mode = kind === 'wrong-owner' ? 0o600 : 0o640;
+      await writeFile(file, 'synthetic-member-key', { mode });
+      await chmod(file, mode);
+      if (process.getuid() === 0 && kind === 'group-readable') {
+        await chown(file, 1000, 1000);
+      }
     }
     const args = ['infra/package/provider-secrets.mjs', '--directory-only', root];
+    if (kind === 'wrong-owner' && process.getuid() !== 0) {
+      // Use the actual file owner and change only the child process's expected owner.
+      args.unshift('--import', 'data:text/javascript,process.getuid=()=>2000');
+    }
     const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
     assert.equal(result.status, 1, `Accepted an unsafe ${kind} key`);
     assert.match(result.stderr, /Key custody/u);
@@ -106,3 +125,8 @@ function refusesReadableMemberKey() {
 }
 test('startup refuses a member key that is a symbolic link', refusesLinkedMemberKey);
 test('startup refuses a member key that is group-readable', refusesReadableMemberKey);
+
+function refusesWrongOwnerMemberKey() {
+  return refusesUnsafeMemberKey('wrong-owner');
+}
+test('startup refuses a member key owned by another user', refusesWrongOwnerMemberKey);

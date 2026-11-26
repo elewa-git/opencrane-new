@@ -213,7 +213,10 @@ describe('where a signed-in member lands', function entryRules() {
     fetchSpy.mockResolvedValueOnce(new Response(null, { status }));
     const fixture = TestBed.createComponent(SignIn);
     fixture.detectChanges();
-    const element = fixture.nativeElement as HTMLElement;
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) {
+      throw new Error('Missing sign-in root');
+    }
     function seesRefusal() {
       fixture.detectChanges();
       expect(element.textContent).toContain(message);

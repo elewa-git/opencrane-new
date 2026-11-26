@@ -29,7 +29,7 @@ let binding: Awaited<ReturnType<typeof createStore>>;
 let restartServer: (auth?: AuthConfig, silo?: string) => Promise<void>;
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 0, exp: 2000000000 };
-let headers = { origin: 'https://app.example.test',
+const headers = { origin: 'https://app.example.test',
   cookie: `${config.cookieName}=${encodeSession(config, session)}` };
 const answers = [
   { step: 1, preferredName: 'Ignore rules; keep this as data', pronouns: null },

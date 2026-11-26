@@ -7,10 +7,14 @@ import * as fileSystem from 'node:fs';
 import { sha256Hex } from '@opencrane/events/digest';
 import { conversationKeys } from '../src/keys.ts';
 
+vi.mock('node:fs', async function mockSync(importOriginal) {
+  const actual = await importOriginal<typeof fileSystem>();
+  return { ...actual, fsyncSync: vi.fn(actual.fsyncSync) };
+});
+
 const directories: string[] = [];
 
 afterEach(() => {
-  vi.restoreAllMocks();
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -79,24 +83,24 @@ function recoversAfterPublication() {
 it('cleans a key left by an interrupted write before publication', recoversBeforePublication);
 it('keeps the published key and clears its extra name after interruption', recoversAfterPublication);
 
-function syncFailureLeavesRecoverableKey(failDirectory: boolean) {
+async function syncFailureLeavesRecoverableKey(failDirectory: boolean) {
   const { directory } = keyStore();
   const keyDirectory = join(directory, 'conversations');
   mkdirSync(keyDirectory, { mode: 0o700 });
   const keys = conversationKeys(keyDirectory);
-  const sync = fileSystem.fsyncSync;
+  const { fsyncSync } = await vi.importActual<typeof fileSystem>('node:fs');
   function failCheckedSync(descriptor: number) {
     if (fileSystem.fstatSync(descriptor).isDirectory() === failDirectory) {
       throw new Error('Synthetic sync failure');
     }
-    sync(descriptor);
+    fsyncSync(descriptor);
   }
-  const syncSpy = vi.spyOn(fileSystem, 'fsyncSync');
+  const syncSpy = vi.mocked(fileSystem.fsyncSync);
   syncSpy.mockImplementation(failCheckedSync);
   try {
     assert.throws(() => keys.provision('dev', 'chat'), /Synthetic sync failure/u);
   } finally {
-    syncSpy.mockRestore();
+    syncSpy.mockReset();
   }
   const files = readdirSync(keyDirectory);
   assert.equal(files.length, failDirectory ? 1 : 0);
@@ -106,10 +110,10 @@ function syncFailureLeavesRecoverableKey(failDirectory: boolean) {
   assert.equal(keys.decrypt('dev', 'chat', answer), 'saved after sync');
 }
 function requiresFileSync() {
-  syncFailureLeavesRecoverableKey(false);
+  return syncFailureLeavesRecoverableKey(false);
 }
 function requiresDirectorySync() {
-  syncFailureLeavesRecoverableKey(true);
+  return syncFailureLeavesRecoverableKey(true);
 }
 it('refuses to publish a key if its file cannot be synced', requiresFileSync);
 it('refuses to acknowledge a key if its directory cannot be synced', requiresDirectorySync);

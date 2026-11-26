@@ -3,8 +3,7 @@ import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as observability from '@opencrane/observability';
 import { until } from '@opencrane/authz/testing';
-import { envelope } from '@opencrane/models';
-import { sha256Hex } from '@opencrane/events/digest';
+import { envelope, personalAssistantId } from '@opencrane/models';
 import { event } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import { fakeKubectl } from './fake-kubectl.ts';
@@ -443,8 +442,7 @@ it('keeps an outdated running computer until its next committed suspend',
 const minute = 60_000;
 
 async function onboardingIdleLimit(firstChat: boolean) {
-  const assistantHash = sha256Hex('test' + '\0' + 'alice');
-  const assistantId = 'personal-' + assistantHash.slice(0, 32);
+  const assistantId = personalAssistantId('test', 'alice');
   const fixture = await computerFixture({ suspended: false, assistantId });
   const { nats, directory, stop, tokens, subject } = fixture;
   const joinedAt = Date.now();

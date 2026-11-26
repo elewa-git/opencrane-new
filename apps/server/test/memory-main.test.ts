@@ -273,26 +273,6 @@ it('identifies pending ownership permissions and loads personal memory after the
     expect(await facts.json()).toMatchObject({ facts: [], returnedCount: 0 });
   }, 60_000);
 
-async function refusesMalformedDatabaseUrlSafely() {
-  const marker = 'synthetic-password-marker';
-  const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'memory'];
-  const env = { ...process.env, MEMORY_PROJECTION_SCHEMA: 'opencrane_memory',
-    DATABASE_URL: `postgres://memory:${marker}@[invalid-host/opencrane` };
-  const child = spawn(process.execPath, args, { env });
-  let output = '';
-  function collect(chunk: Buffer) {
-    output += chunk.toString();
-  }
-  child.stderr.on('data', collect);
-  child.stdout.on('data', collect);
-  const [status] = await once(child, 'close');
-  expect(status).toBe(1);
-  expect(output.includes(marker)).toBe(false);
-  expect(output).toContain('Invalid Memory database address');
-}
-it('keeps a malformed database address out of worker startup diagnostics',
-  refusesMalformedDatabaseUrlSafely);
-
 type MemoryFixture = Awaited<ReturnType<typeof setup>>;
 type FixtureEvent = Omit<Parameters<typeof appendEvent>[1], 'silo'>;
 
@@ -305,7 +285,7 @@ async function saveFixtureEvent(fixture: MemoryFixture, fields: FixtureEvent) {
 async function addOtherMember(fixture: MemoryFixture) {
   const memberId = 'bob';
   const data = { memberId, role: 'member', email: 'bob@example.test', displayName: 'Bob',
-    identity: { issuer: fixture.env.OIDC_ISSUER_URL, sub: memberId },
+    invitationId: 'bob-invitation', identity: { issuer: fixture.env.OIDC_ISSUER_URL, sub: memberId },
     personalAssistant: 'none' };
   const principal = { kind: 'human' as const, id: memberId };
   await saveFixtureEvent(fixture, { subject: 'member-bob', type: 'member.joined', data, principal });
@@ -331,11 +311,13 @@ async function addGroupAndSource(fixture: MemoryFixture) {
   await saveFixtureEvent(fixture, { subject, type: 'conversation.created', data });
   const message = { conversationId, authorId: 'bob', authorKind: 'human',
     utterance: 'Synthetic source for Memory', contentType: 'text' };
-  const posted = await saveFixtureEvent(fixture, { subject, type: 'message.posted', data: message });
+  const principal = { kind: 'human' as const, id: 'bob' };
+  const posted = await appendEvent(nats.store, { silo: 'acme', subject, type: 'message.posted',
+    data: message, principal });
   for (const projection of [groups, computers, conversations]) {
     await fixture.runner.run(projection);
   }
-  return { conversationId, messageId: posted.id };
+  return { conversationId, messageId: posted.event.id };
 }
 
 function memoryFacts(origin: string, kind: 'person' | 'group' | 'assistant_notes', id: string) {

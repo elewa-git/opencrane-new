@@ -378,6 +378,8 @@ it('provider backups wait for the routines checkpoint before stopping its reader
 
 async function keepsMemorySearchTextInDatabaseBackup() {
   const test = await backupFixture();
+  vi.stubEnv('OPENFGA_STORE_ID', 'saved-store');
+  vi.stubEnv('OPENFGA_MODEL_ID', 'saved-model');
   const fact = 'synthetic text stored for Memory search';
   const dump = `COPY opencrane_memory.memory_facts (search_text) FROM stdin;\n${fact}\n\\.\n`;
   function runKube(args: string[]) {
