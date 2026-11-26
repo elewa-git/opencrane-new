@@ -1404,3 +1404,31 @@ async function completionPausesForRemovedMember() {
 }
 it('does not complete a saved welcome after membership removal',
   completionPausesForRemovedMember, 60_000);
+
+async function readsEntry(next: string) {
+  const response = await app.inject({ url: '/api/onboarding/entry', headers });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({ next });
+}
+
+async function remembersSkip() {
+  await readsEntry('survey');
+  expect((await save(1, 0)).statusCode).toBe(200);
+  const before = await progress();
+  const skip = { operation: 'skip', commandId: 'skip-welcome',
+    generation: before.survey.generation, expectedPosition: before.survey.position };
+  const saved = await post(skip);
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json()).toMatchObject({ operation: 'onboarding.survey_skipped' });
+  const retry = await post(skip);
+  expect(retry.json()).toEqual(saved.json());
+  expect((await post({ ...skip, commandId: 'stale-skip' })).statusCode).toBe(409);
+  const stored = await progress();
+  expect(stored.survey.nextStep).toBe(2);
+  await restartServer();
+  await readsEntry('workspace');
+  await runner.rebuild(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  expect(projected).toMatchObject({ skipped: true, nextStep: 2 });
+}
+it('keeps the member in the workspace after a saved skip, even after replay', remembersSkip);

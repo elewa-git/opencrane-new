@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { App } from '../app';
+import { NAVIGATE } from '../core/navigate';
 
 const path = '/join/a-member/an-invitation';
+const navigate = vi.fn();
 
 function reply(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
@@ -13,7 +15,9 @@ function applicationElement(value: unknown): HTMLElement {
 }
 
 async function openInvitation(control: string) {
-  TestBed.configureTestingModule({ imports: [App] });
+  TestBed.configureTestingModule({
+    imports: [App], providers: [{ provide: NAVIGATE, useValue: navigate }],
+  });
   await TestBed.compileComponents();
   const fixture = TestBed.createComponent(App);
   fixture.detectChanges();
@@ -35,6 +39,7 @@ function accept(element: HTMLElement): void {
 }
 
 beforeEach(function openLink() {
+  navigate.mockReset();
   globalThis.history.replaceState({}, '', path);
 });
 
@@ -57,11 +62,11 @@ it('accepts the invitation as the signed-in person', async function acceptInvita
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
   fetchSpy.mockResolvedValueOnce(reply({ status: 'joined' }));
-  const { element, fixture } = await openInvitation('input[name=displayName]');
+  fetchSpy.mockResolvedValueOnce(reply({ next: 'survey' }));
+  const { element } = await openInvitation('input[name=displayName]');
   accept(element);
-  await vi.waitFor(function showsWorkspace() {
-    fixture.detectChanges();
-    expect(element.querySelector('a[href="/workspace"]')?.textContent?.trim()).toBe('Open workspace');
+  await vi.waitFor(function opensSurvey() {
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/welcome/survey');
   });
   const request = fetchSpy.mock.calls[1];
   expect(request?.[0]).toBe('/members/join');

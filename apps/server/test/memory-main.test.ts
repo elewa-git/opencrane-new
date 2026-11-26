@@ -144,6 +144,35 @@ it('loads empty personal memory, saves a fact and recalls it through the dev-sta
       facts: [{ text: 'I prefer jasmine tea', revision: 1 }] });
   }, 60_000);
 
+it('opens onboarding alongside Memory and saves the first answer with an empty key folder',
+  async function firstOnboarding() {
+    const { origin, headers, env } = await setup();
+    const entryPath = '/api/onboarding/entry';
+    const first = await fetch(origin + entryPath, { headers });
+    expect(first.status).toBe(200);
+    expect(first.headers.get('cache-control')).toBe('no-store');
+    expect(await first.json()).toEqual({ next: 'survey' });
+
+    const scopes = await fetch(origin + '/api/memory/scopes', { headers });
+    expect(scopes.status).toBe(200);
+    const answers = { step: 1, preferredName: 'Alice', pronouns: null };
+    const input = { operation: 'save_step', commandId: 'first-step', generation: 1,
+      expectedPosition: 0, answers };
+    const saved = await fetch(origin + '/api/onboarding/survey', {
+      method: 'POST', headers, body: JSON.stringify(input),
+    });
+    expect(saved.status).toBe(200);
+
+    await server?.stop();
+    server = await startServer(env);
+    const reopenedOrigin = `http://127.0.0.1:${server.port}`;
+    const progress = await fetch(reopenedOrigin + '/api/onboarding', { headers });
+    expect(progress.status).toBe(200);
+    expect(await progress.json()).toMatchObject({
+      state: 'survey', survey: { nextStep: 2, steps: [{ answers }] },
+    });
+  }, 60_000);
+
 it('keeps granted notes unavailable until the assistant permissions are applied',
   async function pendingNotePermissions() {
     const { origin, headers, assistant, auth, db } = await setup();

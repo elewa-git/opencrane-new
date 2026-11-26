@@ -1048,6 +1048,69 @@ async function defaultModelBytesStayTheSame() {
 }
 test('default and explicit stub mode preserve the original chart bytes', defaultModelBytesStayTheSame);
 
+function rendersOnboardingAndMemoryStorage() {
+  const resources = renderedResources(chartValues());
+  const server = resources.get('Deployment/server').spec.template.spec;
+  const members = resources.get('Deployment/worker-members').spec.template.spec;
+  const dispatcher = resources.get('Deployment/worker-dispatcher').spec.template.spec;
+  const projection = members.containers.find(isMemoryProjection);
+  function isMemoryProjection(container) { return container.name === 'memory'; }
+  const personal = '/var/lib/opencrane/personal-secrets';
+  const memory = '/var/lib/opencrane/memory-secrets';
+  assert.ok(resources.has('PersistentVolumeClaim/personal-secrets'));
+  assert.ok(resources.has('PersistentVolumeClaim/memory-secrets'));
+  assert.deepEqual(server.securityContext, { fsGroup: 1000, fsGroupChangePolicy: 'OnRootMismatch' });
+  assertKeyDirectory(server, 'server', 'PERSONAL_KEY_DIRECTORY', personal);
+  assertKeyDirectory(server, 'server', 'MEMORY_KEY_DIRECTORY', memory);
+  assertKeyDirectory(dispatcher, 'worker', 'MEMORY_KEY_DIRECTORY', memory);
+  assert.ok(projection, 'Run the Memory projection with the member worker');
+  assertKeyDirectory(members, 'memory', 'MEMORY_KEY_DIRECTORY', memory, true);
+  assert.deepEqual(keyMounts(resources, 'personal-secrets'), [
+    'Deployment/server:private-member-keys', 'Deployment/server:server',
+  ]);
+  assert.deepEqual(keyMounts(resources, 'memory-secrets'), [
+    'Deployment/server:private-member-keys', 'Deployment/server:server',
+    'Deployment/worker-dispatcher:private-memory-keys', 'Deployment/worker-dispatcher:worker',
+    'Deployment/worker-members:memory', 'Deployment/worker-members:private-memory-keys',
+  ]);
+}
+
+function assertKeyDirectory(pod, name, variable, root, readOnly = false) {
+  const volumeName = root.split('/').at(-1);
+  function namedContainer(container) { return container.name === name; }
+  function namedSetting(setting) { return setting.name === variable; }
+  function namedMount(mount) { return mount.name === volumeName; }
+  const container = pod.containers.find(namedContainer);
+  assert.equal(container.env.find(namedSetting)?.value, root + '/keys');
+  const mount = container.volumeMounts.find(namedMount);
+  assert.equal(mount?.mountPath, root);
+  assert.equal(mount?.readOnly ?? false, readOnly);
+  const volume = pod.volumes.find(namedMount);
+  assert.equal(volume?.persistentVolumeClaim?.claimName, volumeName);
+}
+
+function keyMounts(resources, claimName) {
+  const mounts = [];
+  for (const resource of resources.values()) {
+    const pod = resource.kind === 'Pod' ? resource.spec :
+      resource.spec?.jobTemplate?.spec?.template?.spec ?? resource.spec?.template?.spec;
+    const claims = new Set();
+    for (const volume of pod?.volumes ?? []) {
+      if (volume.persistentVolumeClaim?.claimName === claimName) claims.add(volume.name);
+    }
+    function usesClaim(mount) { return claims.has(mount.name); }
+    const containers = [...(pod?.initContainers ?? []), ...(pod?.containers ?? []),
+      ...(pod?.ephemeralContainers ?? [])];
+    for (const container of containers) {
+      if (container.volumeMounts?.some(usesClaim)) {
+        mounts.push(resource.kind + '/' + resource.metadata.name + ':' + container.name);
+      }
+    }
+  }
+  return mounts.sort();
+}
+test('packages private persistent keys for onboarding and Memory', rendersOnboardingAndMemoryStorage);
+
 function protectsProviderRemounts() {
   const values = chartValues();
   values.models = { mode: 'provider' };
