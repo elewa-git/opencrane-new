@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { memberInvitedDataSchema, parseEventByType } from '@opencrane/events';
+import { memberInvitedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
@@ -55,13 +55,14 @@ export interface FixtureAppendOptions {
   type: string;
   data: unknown;
   apply?: boolean;
+  principal?: NonNullable<EventEnvelope['principal']>;
 }
 
 async function appendAndProject(
-  { subject, type, data, apply = false }: FixtureAppendOptions,
+  { subject, type, data, apply = false, principal }: FixtureAppendOptions,
 ) {
   const { event: record, sequence } = await appendEvent(nats.store, {
-    id: randomUUID(), subject, type, silo: 'acme', data,
+    id: randomUUID(), subject, type, silo: 'acme', data, ...(principal && { principal }),
   });
   await members.apply(pgDb(dbs.queue), record, sequence);
   if (apply) {
@@ -75,10 +76,12 @@ async function fixture() {
   nats = await natsFixture();
   binding = await createStore(fga.apiUrl, 'acme');
   for (const role of ['owner', 'admin', 'member']) {
-    const data = { memberId: role, displayName: role, email: `${role}@example.test`, role };
-    await appendAndProject({
-      subject: `member-${role}`, type: 'member.joined', data, apply: true,
-    });
+    const identity = { issuer: config.issuerUrl, sub: role };
+    const principal = { kind: 'human' as const, id: role };
+    const data = { memberId: role, displayName: role, email: `${role}@example.test`, role, identity,
+      invitationId: `original-invite-${role}` };
+    const joined = { subject: `member-${role}`, type: 'member.joined', data, principal, apply: true };
+    await appendAndProject(joined);
   }
   await prepareAcceptanceProjection();
   app = server();
@@ -692,7 +695,8 @@ async function readsMembersAfterAcceptance(countsAvailable: boolean) {
     displayName: 'Person', role: 'member' }));
   expect(directory.permissions.invite).toBe(true);
   if (countsAvailable) {
-    expect(directory.counts.acceptedInvitations).toEqual({ status: 'current', value: 1 });
+    // Include the three earlier acceptances for the fixture's signed-in accounts.
+    expect(directory.counts.acceptedInvitations).toEqual({ status: 'current', value: 4 });
   } else {
     const unavailable = { status: 'unavailable', value: null };
     expect(directory.counts).toEqual({ members: unavailable, groups: unavailable,
@@ -1469,23 +1473,19 @@ async function refusesDirectoryWithoutCounts(
   await runner.run(groups);
   const caller = directoryCaller(guard);
   if (guard === 'active membership in IAM') {
-    const memberData = { memberId: caller.sub, displayName: 'Pending member',
-      email: 'pending@example.test', role: 'admin' };
-    await appendAndProject({ subject: `member-${caller.sub}`, type: 'member.joined',
-      data: memberData });
+    const identity = { issuer: config.issuerUrl, sub: caller.sub };
+    const principal = { kind: 'human' as const, id: caller.sub };
+    const data = { memberId: caller.sub, displayName: 'Pending member',
+      email: 'pending@example.test', role: 'admin', identity, invitationId: 'invite-iam-pending' };
+    const joined = { subject: `member-${caller.sub}`, type: 'member.joined', data, principal };
+    await appendAndProject(joined);
   }
 
   const checkedBinding = { ...binding };
   if (guard === 'silo binding') {
     checkedBinding.silo = 'other-silo';
   }
-  function resolveCaller() {
-    if (guard === 'caller presence') {
-      return Promise.resolve(undefined);
-    }
-    return Promise.resolve(caller.sub);
-  }
-  const feed = { memberId: vi.fn(resolveCaller) };
+  const feed = { memberId: resolveMember };
   const db = pgDb(dbs.queue);
   const directoryApp = buildServer(config, { memberReads: {
     silo: 'acme', store: nats.store, binding: checkedBinding, db, feed,
@@ -1502,7 +1502,7 @@ async function refusesDirectoryWithoutCounts(
     expect(response.statusCode).toBe(expected);
     expect(response.json()).toEqual({ status: 'refused' });
     if (['session', 'organisation', 'silo binding'].includes(guard)) {
-      expect(feed.memberId).not.toHaveBeenCalled();
+      expect(readPosition).not.toHaveBeenCalled();
     }
     if (guard === 'caller presence') {
       expect(readStream).not.toHaveBeenCalled();
@@ -1517,6 +1517,8 @@ function directoryCaller(guard: string) {
   const session = { sub: 'owner', orgId: 'org-acme', roles: [], authTime: 1, exp: 2000000000 };
   if (guard === 'organisation') {
     session.orgId = 'other-org';
+  } else if (guard === 'caller presence') {
+    session.sub = 'nonmember';
   } else if (guard === 'manager role') {
     session.sub = 'member';
   } else if (guard === 'active membership in IAM') {
