@@ -28,7 +28,6 @@ let stage = 'browser launch';
 let browser;
 
 async function completeChatTurn(page, width) {
-  await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.waitFor({ timeout: 60_000 });
   await page.waitForFunction(() => !document.querySelector('.skeleton'));
@@ -66,7 +65,8 @@ try {
     assert.equal(session.authenticated, true);
     assert.equal(session.user?.sub, owner.id);
     stage = `${width}px signed-in page`;
-    await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+    await page.goto(`${origin}/workspace`);
+    await page.locator('oc-workspace').waitFor();
     await page.screenshot({ path: `${output}/${prefix}signed-in-${width}.png`, fullPage: true });
     stage = `${width}px chat turn`;
     const conversation = await completeChatTurn(page, width);

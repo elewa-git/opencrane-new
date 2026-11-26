@@ -18,8 +18,7 @@ export async function browserChatJourney(
   const me = await (await page.request.get(`${origin}/auth/me`)).json() as { user: { name?: string } };
   const name = me.user.name?.trim();
   assert(name, 'Real sign-in supplies the profile name');
-  await page.goto(origin);
-  await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
+  await page.goto(`${origin}/workspace`);
   await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
   await page.waitForFunction(() => !globalThis.document.querySelector('.skeleton'));
   if (width === 1280) assert.equal(await page.locator('.current-user strong').innerText(), name);

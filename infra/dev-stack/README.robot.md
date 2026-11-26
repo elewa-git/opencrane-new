@@ -1262,6 +1262,10 @@ fresh/repeat journeys, owner-stack restoration and unqualified conditions.
 
 ## Browser chat qualification
 
+The sign-in check confirms the browser session even when sign-in opens the
+welcome survey. The chat and sign-out checks open the workspace from that
+session. On a phone, the sign-out form is in the session navigation drawer.
+
 The joined member opens **Open workspace**, sends through the composer, observes
 streamed stub text, reloads and reads the saved answer. A second turn is stopped
 mid-stream and its partial text survives reload. Both 1280px and 390px use real

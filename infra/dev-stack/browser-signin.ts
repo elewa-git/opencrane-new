@@ -171,6 +171,11 @@ async function readAuthenticationState(page: Page, origin: string) {
   const body: unknown = await response.json();
   return z.object({ authenticated: z.boolean() }).parse(body);
 }
+async function requireSignedIn(page: Page, origin: string) {
+  const session = await readAuthenticationState(page, origin);
+  assert.equal(session.authenticated, true, 'Sign-in must establish a browser session');
+}
+
 async function cookie(context: BrowserContext, config: AuthConfig, origin: string) {
   const session = (await context.cookies(origin)).find((item) => item.name === config.cookieName);
   assert(session, 'Real login must issue a session');
@@ -194,8 +199,8 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       page.setDefaultTimeout(30_000);
       stage = `${role} ${width}px login`;
       await login(page, origins, users[role]);
-      stage = `${role} signed-in screen`;
-      await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+      stage = `${role} signed-in session`;
+      await requireSignedIn(page, origin);
       stage = `${role} cookie`;
       const value = await cookie(page.context(), config, origin);
       stage = `${role} session decoding`;
@@ -220,12 +225,11 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       try {
         stage = 'token exposure probes';
         await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });
-        await memberPage.goto(origin);
         stage = 'form logout';
         await formLogout(memberPage, config, origin, step => { stage = `form logout: ${step}`; });
         stage = 'credentials after logout';
         await login(memberPage, origins, users.member, true);
-        await memberPage.getByRole('heading', { name: 'You are signed in' }).waitFor();
+        await requireSignedIn(memberPage, origin);
         assert.equal(decodeSession(config, await cookie(memberPage.context(), config, origin)).sub, users.member.id);
         console.log('PASS next sign-in: remembered identity still requires credentials; successful reauthentication');
       } catch (error) {
@@ -261,7 +265,7 @@ async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin:
       const page = await context.newPage();
       stage(`login for ${transport}`);
       await login(page, signInOrigins(config, origin), user);
-      await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+      await requireSignedIn(page, origin);
       stage(`${transport} exposure`);
       const idToken = decodeSession(config, await cookie(context, config, origin)).idToken;
       assert(idToken);
@@ -304,10 +308,19 @@ async function checkLogs(idToken: string) {
     assert(!(await readFile(`${directory}/${name}.log`, 'utf8')).includes(idToken), 'Stack logs must not contain the ID token');
   }
 }
+async function workspaceLogoutForm(page: Page, origin: string) {
+  await page.goto(`${origin}/workspace`);
+  const form = page.locator('form[action="/auth/logout"]:visible');
+  const openNavigation = page.getByRole('button', { name: 'Open session navigation' });
+  await form.or(openNavigation).first().waitFor();
+  if (await openNavigation.isVisible()) await openNavigation.click();
+  return form;
+}
+
 async function formLogout(page: Page, config: AuthConfig, origin: string, stage: (step: string) => void) {
   stage('native form');
   const idToken = decodeSession(config, await cookie(page.context(), config, origin)).idToken;
-  const form = page.locator('form[action="/auth/logout"]');
+  const form = await workspaceLogoutForm(page, origin);
   assert.equal(await form.getAttribute('method'), 'post');
   const request = page.waitForRequest((request) => new URL(request.url()).origin === config.issuerUrl
     && new URL(request.url()).pathname === '/oidc/v1/end_session');
