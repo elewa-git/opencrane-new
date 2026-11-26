@@ -223,7 +223,7 @@ async function refusesPublicationAfterRemoval(removal: 'before recheck' | 'after
       conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
     });
   }
-  publication.mockImplementation(async function removeBeforePublication(input) {
+  async function removeBeforePublication(input: Parameters<typeof publish>[0]) {
     const parsed = parseEventByType(input.event);
     if (!parsed.success || parsed.event.type !== 'file.uploaded') {
       return publish(input);
@@ -239,7 +239,8 @@ async function refusesPublicationAfterRemoval(removal: 'before recheck' | 'after
       await removeParticipant();
     }
     return publish({ ...input, checkAccess: removeAfterRecheck });
-  });
+  }
+  publication.mockImplementation(removeBeforePublication);
   try {
     const headers = { ...viewHeaders(config), 'idempotency-key': 'publication' };
     const url = '/api/conversations/chat/screenshots';

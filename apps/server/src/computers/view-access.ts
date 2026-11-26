@@ -135,8 +135,11 @@ function keepComputerState(cache: Map<string, ComputerState>, key: string, state
   cache.delete(key);
   cache.set(key, state);
   if (cache.size > computersToKeep) {
-    const oldest = cache.keys().next().value;
-    if (oldest !== undefined) cache.delete(oldest);
+    const keys = cache.keys();
+    const oldest = keys.next();
+    if (!oldest.done) {
+      cache.delete(oldest.value);
+    }
   }
 }
 

@@ -1,3 +1,2 @@
-People who can read an open assistant chat can watch its ready computer and save
-a screenshot, including in shared chats. The view closes within two seconds when
-chat access ends.
+People can watch their personal assistant's ready computer and save a screenshot
+in the chat. The view closes within two seconds when chat access ends.

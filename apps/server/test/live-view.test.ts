@@ -455,9 +455,10 @@ it('admits a replacement ready computer without a desktop grant', async () => {
 }, 30_000);
 
 async function requiresPrivateTeamReader() {
-  const openDesktop = vi.fn(function openDesktop() {
+  function open() {
     return Promise.resolve(new PassThrough());
-  });
+  }
+  const openDesktop = vi.fn(open);
   const fixture = await viewFixture(openDesktop);
   const { app, append, config, runner } = fixture;
   try {
@@ -469,10 +470,12 @@ async function requiresPrivateTeamReader() {
     const chat = '/api/conversations/team-session';
     const alice = viewHeaders(config);
     const bob = viewHeaders(config, 'bob');
-    expect((await app.inject({ url: `${chat}/messages`, headers: alice })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: `${chat}/view`, headers: alice })).statusCode)
-      .toBe(200);
-    expect((await app.inject({ url: `${chat}/messages`, headers: bob })).statusCode).toBe(403);
+    const requesterMessages = await app.inject({ url: `${chat}/messages`, headers: alice });
+    expect(requesterMessages.statusCode).toBe(200);
+    const admitted = await app.inject({ method: 'POST', url: `${chat}/view`, headers: alice });
+    expect(admitted.statusCode).toBe(200);
+    const otherMessages = await app.inject({ url: `${chat}/messages`, headers: bob });
+    expect(otherMessages.statusCode).toBe(403);
     const refused = await app.inject({ method: 'POST', url: `${chat}/view`, headers: bob });
     expect(refused.statusCode).toBe(403);
     expect(refused.json()).not.toHaveProperty('ticket');

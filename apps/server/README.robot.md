@@ -1913,8 +1913,10 @@ Read-only desktop sessions use `POST /api/conversations/:id/view` and
 event, including WebSocket capacity refusals. They save exactly one
 `computer.view_refused` for a valid session, including missing or hostile Origins. Redeem the ticket
 once as WebSocket subprotocols
-`binary, <ticket>`, with the same session and Origin. The member must be active in the installation, participate in the open assistant
-chat and have OpenFGA read access. The computer must be ready. The server uses `KUBECONFIG`
+`binary, <ticket>`, with the same session and Origin. The member must be active in
+the installation, participate in the open assistant chat and have OpenFGA read access.
+The chat check reads current membership after the permission replies arrive.
+The computer must be ready. The server uses `KUBECONFIG`
 and `KUBE_NAMESPACE` for its private Pod stream. See the
 [live-view contract and evidence](../../docs/process/live-view-evidence.md).
 

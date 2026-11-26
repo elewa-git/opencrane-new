@@ -36,13 +36,23 @@ interface AccessRequest {
   allowApplying?: boolean;
 }
 
-// Check access once. Content reads have their own time limit.
+// Keep the access check separate from the time allowed for reading chat content.
 export async function chatAccess(options: ParticipationOptions, request: AccessRequest) {
   const deadline = request.deadline ?? performance.now() + 2000;
   const member = activeChatMember(options, request.memberId, undefined, deadline);
   const conversation = conversationAccess(options, request, deadline);
   const [, access] = await Promise.all([member, conversation]);
+  // Read saved membership after both permission checks have finished.
+  await requireSavedChatMember(options, request.memberId, deadline);
   return access;
+}
+
+async function requireSavedChatMember(options: ParticipationOptions, memberId: string,
+  deadline?: number) {
+  const active = await chatMembership(options.store, options.silo, memberId, deadline);
+  if (!active) {
+    throw new ChatRefused('Active silo membership required');
+  }
 }
 
 async function readChatAccessContext(options: ChatOptions, memberId: string,
@@ -173,15 +183,14 @@ export function conversationParticipation(options: ParticipationOptions,
 // Reuse membership facts within one request, then check their position after OpenFGA replies.
 function currentChatMemberReader(options: ParticipationOptions, memberId: string) {
   let checkedPosition: number | undefined;
-  let membershipRead: Promise<boolean> | undefined;
+  let membershipRead: Promise<void> | undefined;
   async function requireMember(deadline: number) {
     const position = await options.store.head(`member-${memberId}`, deadline);
     if (position !== checkedPosition || !membershipRead) {
-      membershipRead = chatMembership(options.store, options.silo, memberId, deadline);
+      membershipRead = requireSavedChatMember(options, memberId, deadline);
       checkedPosition = position;
     }
-    const active = await membershipRead;
-    if (!active) throw new ChatRefused('Active silo membership required');
+    await membershipRead;
   }
   return requireMember;
 }
@@ -242,8 +251,7 @@ export function conversationParticipationReader(options: ParticipationOptions, m
 export async function activeChatMember(options: ParticipationOptions, memberId: string,
   fresh?: Fence, deadline = fresh?.deadline) {
   fresh?.include(`member-${memberId}`);
-  const membership = await chatMembership(options.store, options.silo, memberId, deadline);
-  if (!membership) throw new ChatRefused('Active silo membership required');
+  await requireSavedChatMember(options, memberId, deadline);
   const auth = memberAuthorisation(options.binding);
   const permission = await auth.check(memberId, 'member');
   if (permission.status === 'unavailable') throw permission.error;
