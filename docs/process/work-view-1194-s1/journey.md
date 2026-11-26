@@ -1,5 +1,27 @@
 # Watch the computer and save a screenshot
 
+## Corrected build on 26 November 2026
+
+**NOT RUN** on source commit `f71ef74e82d36ee61df277ca21a6b98edc027854`.
+The planned environment was a fresh slot 1 dev stack, Chromium and the free
+stand-in provider.
+
+At 19:43 UTC the slot and load checks reached the required five-minute
+window. Another checkout claimed slot 1 before this checkout could acquire
+it. Polling continued until the startup window closed. The slot checks are
+recorded in `gate-poll.log`.
+
+| Expected result | 1280 px | 390 px |
+| --- | --- | --- |
+| The member sees their personal desktop, saves a PNG and reopens it | NOT RUN | NOT RUN |
+| The shared-chat reader sees the desktop, saves a PNG and reopens it | NOT RUN | NOT RUN |
+| A non-participant is refused and receives zero desktop pixels | NOT RUN | NOT RUN |
+| Participant removal closes the socket and clears the picture within 2 s | NOT RUN | NOT RUN |
+
+Fresh startup, the browser drivers and teardown were **NOT RUN**.
+
+## Earlier qualification
+
 **PARTIAL** on a fresh slot 1 dev stack on 26 November 2026. The stack ran
 commit `3a08929e03` with the free stand-in provider.
 
@@ -21,7 +43,5 @@ commit `3a08929e03` with the free stand-in provider.
   its original ID. The regression passed twice locally.
 - **NOT RUN** for the 1280 px personal capture and the shared captures in the
   fresh run that supplied these screenshots.
-
-A fresh run with the journey fix is pending while slot 1 is busy.
 
 The failed attempt's startup and service logs were kept before teardown.
