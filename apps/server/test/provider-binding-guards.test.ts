@@ -317,6 +317,83 @@ async function explicitInitialDefault() {
 it('allows an explicit initial default on a later verified provider with the enabled chat model',
   explicitInitialDefault);
 
+async function answerChatModel(providerId: string) {
+  const data = { providerId, changedBy: 'owner', revision: 3, kind: 'model',
+    attemptId: 'chat-test', outcome: 'pass', model: 'gpt-6.1-sol' };
+  return appendAndAuthorise({
+    subject: `provider-${providerId}`, type: 'provider.verification_recorded', data,
+  });
+}
+
+async function chatDefaultCommand(expectedBindingSequence = 0) {
+  return { action: 'select_chat_default', commandId: `chat-default-${++counter}`,
+    expectedProviderSequence: await nats.store.head('provider-*'), expectedRevision: 3,
+    expectedBindingSequence, model: 'gpt-6.1-sol' };
+}
+
+async function createsFirstChatDefault(actor: string) {
+  await connection('first', []);
+  const { trigger } = await connection('second');
+  await answerChatModel('second');
+  const handler = providerDefaultHandler(nats.store, binding);
+  await handler.handle(trigger, pgDb(dbs.queue));
+  expect(await storedBindings('first')).toHaveLength(0);
+  expect(await storedBindings('second')).toHaveLength(0);
+
+  const command = await chatDefaultCommand();
+  const saved = await request('POST', 'second', command, actor);
+  expect(saved.statusCode).toBe(200);
+  expect((await request('POST', 'second', command, actor)).json()).toEqual(saved.json());
+  const bindingSequence = saved.json<{ sequence: number }>().sequence;
+  const read = await request('GET', 'first', undefined, actor);
+  expect(read.json()).toMatchObject({ rows: [], chatDefault: {
+    position: bindingSequence, sourceRevision: 3,
+  } });
+  const position = await nats.store.head();
+  await handler.handle(trigger, pgDb(dbs.queue));
+  expect(await nats.store.head()).toBe(position);
+  const savedBindings = await storedBindings('second');
+  expect(savedBindings).toHaveLength(1);
+  expect(savedBindings[0]?.event.data).toMatchObject({ providerId: 'second',
+    kind: 'silo_default', dependantId: 'acme', changedBy: actor, previousBindingSequence: 0 });
+}
+it.each(['owner', 'admin'])('lets the %s choose the second connection as the first chat default',
+  createsFirstChatDefault);
+
+async function requiresAnAnswerAndEnabledModel() {
+  await connection('no-answer');
+  await refused('no-answer', await chatDefaultCommand());
+  await connection('no-models', []);
+  await answerChatModel('no-models');
+  await refused('no-models', await chatDefaultCommand());
+}
+it('refuses a chat default without a model answer or an enabled chat model',
+  requiresAnAnswerAndEnabledModel);
+
+async function movesAutomaticChatDefault() {
+  const { trigger } = await connection('first');
+  const handler = providerDefaultHandler(nats.store, binding);
+  await handler.handle(trigger, pgDb(dbs.queue));
+  const bindings = await storedBindings('first');
+  const first = bindings[0];
+  if (!first) throw new Error('Expected the seeded default');
+  await connection('second');
+  await answerChatModel('second');
+
+  const stale = await chatDefaultCommand();
+  await refused('second', stale, 409);
+  const command = await chatDefaultCommand(first.sequence);
+  const wrongRevision = { ...command, expectedSourceRevision: 2 };
+  await refused('second', wrongRevision, 409);
+  const move = { ...command, expectedSourceRevision: 3 };
+  expect((await request('POST', 'second', move)).statusCode).toBe(200);
+  const read = await request('GET', 'second');
+  expect(read.json()).toMatchObject({ chatDefault: { position: expect.any(Number) },
+    rows: [{ kind: 'silo_default', providerId: 'second', previousBindingSequence: first.sequence }] });
+}
+it('moves an already seeded default only with the current binding and source revision',
+  movesAutomaticChatDefault);
+
 function objectId(type: string, ...ids: string[]) {
   const identity = JSON.stringify(['acme', ...ids]);
   const bytes = Buffer.from(identity);

@@ -122,6 +122,43 @@ afterEach(() => {
   globalThis.history.replaceState({}, '', '/');
 });
 
+async function firstChatDefaultOnSecondConnection() {
+  const first = provider('first', 'First connection');
+  first.status = 'connected_not_tested';
+  const second = provider('second', 'Second connection');
+  second.status = 'ready';
+  second.enabledModels = ['gpt-6.1-sol'];
+  const providers = { ...emptyProviderRead, rows: [first, second] };
+  const bindings = { expectedProviderSequence: 12, rows: [], chatDefault: null };
+  const drain = { revision: 2, sequence: 0, expectedProviderSequence: 13,
+    draining: false, enabled: false };
+  const posts: RequestSeen[] = [];
+  function serve(request: RequestSeen): Response {
+    if (request.method === 'POST') {
+      posts.push(request);
+      return reply({ status: 'appended', revision: 2, sequence: 13 });
+    }
+    if (request.url === '/api/org/providers') return reply(providers);
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.url.endsWith('/bindings')) return reply(bindings);
+    if (request.url.endsWith('/drain')) return reply(drain);
+    throw new Error(`Unexpected request: ${request.url}`);
+  }
+  const fixture = await mount(serve);
+  expect(screenElement(fixture).querySelectorAll('.provider-row')).toHaveLength(2);
+  clickButton(fixture, 'Select chat default');
+  await settle(fixture);
+  expect(posts).toHaveLength(1);
+  const post = posts[0];
+  if (!post) throw new Error('Expected a chat default command');
+  expect(post.url).toBe('/api/org/providers/second/bindings');
+  expect(readRecord(post.body)).toMatchObject({ action: 'select_chat_default',
+    model: 'gpt-6.1-sol', expectedRevision: 2, expectedProviderSequence: 12,
+    expectedBindingSequence: 0 });
+}
+it('creates the chat default on the second connection when only it has models',
+  firstChatDefaultOnSecondConnection);
+
 it('opens overview evidence at the named provider', async () => {
   globalThis.history.replaceState({}, '', '/org/models?provider=second');
   const fixture = await mount(request => {
