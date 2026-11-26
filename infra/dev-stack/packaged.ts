@@ -33,7 +33,6 @@ const secretKeys: Record<string, string[]> = {
     'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
     'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT', 'DEV_OWNER_EMAIL',
     'MINIO_URL', 'MINIO_CREDENTIALS_FILE', 'SCANNER_URL', 'SCANNER_CA_FILE',
-    'SCANNER_MANIFEST_DIGEST',
   ],
   runtimeFiles: [
     'ca.crt', 'command.crt', 'command.key', 'command.seed',

@@ -40,7 +40,7 @@ function validFixture() {
     MODEL_UPSTREAM: '127.0.0.1:43003', OIDC_CLIENT_SECRET_ENV_VAR: 'CLIENT_SECRET',
     MINIO_URL: 'http://objects:9000', MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
     SCANNER_URL: 'https://scanner:8443/scan/upload',
-    SCANNER_CA_FILE: '/run/opencrane/files/scanner-ca.crt', SCANNER_MANIFEST_DIGEST: `sha256:${'c'.repeat(64)}`,
+    SCANNER_CA_FILE: '/run/opencrane/files/scanner-ca.crt',
   };
   const fields = `SILO_ID OIDC_ISSUER_URL OIDC_CLIENT_ID OIDC_REDIRECT_URI OIDC_COOKIE_SECRET
     OIDC_EXPECTED_ORG_ID OPENFGA_STORE_ID OPENFGA_MODEL_ID OWNER_BOOTSTRAP_READY

@@ -164,7 +164,7 @@ async function packageAuthSettings(values: PublicPackageValues) {
 }
 
 async function prepareSettings(values: PublicPackageValues & {
-  natsCluster?: unknown; models?: PackageModels; scanner: { approvedSha: string };
+  natsCluster?: unknown; models?: PackageModels;
 }) {
   const replicas = packageReplicas(values);
   const auth = await packageAuthSettings(values);
@@ -205,7 +205,6 @@ async function prepareSettings(values: PublicPackageValues & {
     MINIO_CREDENTIALS_FILE: '/run/storage/lease.json',
     SCANNER_URL: 'https://scanner:8443/scan/upload',
     SCANNER_CA_FILE: '/run/opencrane/files/scanner-ca.crt',
-    SCANNER_MANIFEST_DIGEST: `sha256:${values.scanner.approvedSha}`,
   });
   await writeEnv('package-bootstrap', {
     POSTGRES_ADMIN_URL: databaseUrl('postgres', passwords['postgres']!, 'postgres'),
