@@ -1480,6 +1480,13 @@ function checksComputerExecPolicy(resources, identity) {
   assert.deepEqual(podPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],
     apiVersions: ['v1'], operations: ['CREATE', 'UPDATE'],
     resources: ['pods', 'pods/ephemeralcontainers'] }]);
+  const controllerOnlyCreation = "request.operation != 'CREATE' || request.userInfo.username == "
+    + "'system:serviceaccount:agent-sandbox-system:agent-sandbox-controller'";
+  function checksCreator(validation) {
+    return validation.expression === controllerOnlyCreation;
+  }
+  assert.ok(podPolicy.spec.validations.some(checksCreator),
+    'Only the computer controller may create a pod with a reserved computer name');
   for (const policy of [execPolicy, podPolicy]) {
     const binding = resources.get(`ValidatingAdmissionPolicyBinding/${policy.metadata.name}`);
     assert.equal(policy.spec.failurePolicy, 'Fail');

@@ -47,6 +47,10 @@ function configureAppTestBed(): void {
 
 async function create(reply: Response = response(loaded)): Promise<ComponentFixture<App>> {
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
+  return renderApp();
+}
+
+async function renderApp(): Promise<ComponentFixture<App>> {
   configureAppTestBed();
   await TestBed.compileComponents();
   const fixture = TestBed.createComponent(App);
@@ -66,6 +70,80 @@ function button(rootElement: HTMLElement, label: string): HTMLButtonElement {
   if (!(found instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`);
   return found;
 }
+
+describe('opening a workspace address directly', function workspaceRoutes() {
+  afterEach(function restoreBrowser() {
+    vi.restoreAllMocks();
+    globalThis.history.replaceState({}, '', '/');
+  });
+
+  async function opensNextWelcomeStep(path: string, next: string, destination: string) {
+    globalThis.history.replaceState({}, '', path);
+    const progress = Response.json({ next });
+    const request = vi.spyOn(globalThis, 'fetch');
+    request.mockResolvedValue(progress);
+    const fixture = await renderApp();
+    const navigate = TestBed.inject(NAVIGATE);
+    const page = root(fixture);
+    function redirectsBeforeOpeningWorkspace() {
+      expect(navigate).toHaveBeenCalledWith(destination);
+      expect(page.querySelector('oc-workspace, oc-conversations, oc-direct-chat, '
+        + 'oc-shared-assistant-picker')).toBeNull();
+    }
+    await vi.waitFor(redirectsBeforeOpeningWorkspace);
+    expect(request).toHaveBeenCalledExactlyOnceWith('/api/onboarding/entry', expect.anything());
+  }
+
+  it.each([
+    ['/workspace/', 'survey', '/welcome/survey'],
+    ['/workspace/conversations', 'survey', '/welcome/survey'],
+    ['/workspace/direct?conversation=saved', 'survey', '/welcome/survey'],
+    ['/workspace/shared', 'survey', '/welcome/survey'],
+    ['/workspace/future-page', 'survey', '/welcome/survey'],
+    ['/workspace/conversations', 'persona', '/welcome/persona'],
+    ['/workspace/conversations', 'welcome', '/welcome'],
+  ])('sends %s to the %s step before opening the workspace', opensNextWelcomeStep);
+
+  async function keepsRequestedPage(progress: Response) {
+    const path = '/workspace/conversations?section=archived';
+    globalThis.history.replaceState({}, '', path);
+    const conversations = { rows: [], nextCursor: null };
+    function readWorkspace(input: RequestInfo | URL) {
+      if (input === '/api/onboarding/entry') return Promise.resolve(progress);
+      if (typeof input === 'string' && input.startsWith('/api/conversations?section=archived&')) {
+        return Promise.resolve(Response.json(conversations));
+      }
+      throw new Error('Unexpected request while opening archived conversations');
+    }
+    const request = vi.spyOn(globalThis, 'fetch');
+    request.mockImplementation(readWorkspace);
+    const fixture = await renderApp();
+    const navigate = TestBed.inject(NAVIGATE);
+    const page = root(fixture);
+    function showsArchivedConversations() {
+      expect(page.querySelector('oc-conversations h1')?.textContent).toBe('Conversations');
+      expect(page.querySelector('oc-conversations button[aria-current="page"]')?.textContent)
+        .toBe('Archived');
+    }
+    await vi.waitFor(showsArchivedConversations);
+    expect(request).toHaveBeenNthCalledWith(1, '/api/onboarding/entry', expect.anything());
+    expect(navigate).not.toHaveBeenCalled();
+    expect(globalThis.location.pathname + globalThis.location.search).toBe(path);
+  }
+
+  async function keepsPageAfterSetup() {
+    // Finished and skipped members receive the same destination from the server.
+    const progress = Response.json({ next: 'workspace' });
+    await keepsRequestedPage(progress);
+  }
+  it('keeps the requested page after finishing or skipping welcome setup', keepsPageAfterSetup);
+
+  async function keepsPageWhenWelcomeIsOff() {
+    const progress = new Response(null, { status: 204 });
+    await keepsRequestedPage(progress);
+  }
+  it('keeps the requested page when welcome setup is off', keepsPageWhenWelcomeIsOff);
+});
 
 async function showsInstallationName(name: string, expected: string): Promise<void> {
   const meta = document.createElement('meta');
