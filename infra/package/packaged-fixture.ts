@@ -12,6 +12,7 @@ const files = [
   'infra/package/prepare-nats-routes.ts',
   'infra/package/application-approval.mjs',
   'infra/package/publish-approved-images.mjs',
+  'infra/package/publish-package-image.mjs',
   'infra/package/check-nats-inputs.ts',
   'infra/package/public-settings.mjs',
   'infra/package/model-settings.ts',
