@@ -11,6 +11,7 @@ import { eventEnvelopeSchema, conversationCreatedDataSchema } from '@opencrane/e
 import { childRequests, conversations, members } from '@opencrane/projections';
 import type { Db } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
+import { objectId, TupleClient } from '../../../libs/authz/src/client.ts';
 import { chatHistory } from '../src/chat/commands.ts';
 import { recoverChildRequest, watchChildRequests } from '../src/chat/child-recovery.ts';
 import { recordChildStartFailure } from '../src/chat/child-failure.ts';
@@ -425,22 +426,25 @@ async function processRecoversAndStops(fault: string) {
 it.each(['recover', 'fail'])('runs configured recovery and handles process %s',
   processRecoversAndStops);
 
+async function withholdCreationReceipt(conversationId: string) {
+  const [creation] = await chatHistory(context.nats.store, 'test', conversationId);
+  expect(creation?.event.type).toBe('conversation.created');
+  const receipt = { user: objectId('silo', 'test'), relation: 'applied',
+    object: objectId('projection_event', 'test', creation!.event.id) };
+  const client = new TupleClient(context.options.binding);
+  await client.write([], [receipt]);
+  return async function restoreReceipt() {
+    await client.write([receipt], []);
+  };
+}
+
 async function keepsUncertainWorkQueued(kind: string, stage: string) {
   const { input, intent } = await savedRequest(stage);
   const row = await reference(input.conversationId);
+  let restoreReceipt: (() => Promise<void>) | undefined;
   if (kind === 'outage') await context.fga.pause();
   if (kind === 'applying' && stage === 'message.posted') {
-    const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);
-    const original = authz.memberAuthorisation;
-    function lagging(...args: Parameters<typeof original>) {
-      const auth = original(...args);
-      async function applied(eventId: string) {
-        if (eventId === child[0]!.event.id) return false;
-        return auth.applied(eventId);
-      }
-      return { ...auth, applied };
-    }
-    vi.spyOn(authz, 'memberAuthorisation').mockImplementation(lagging);
+    restoreReceipt = await withholdCreationReceipt(intent.childConversationId);
   }
   try {
     await expect(recoverChildRequest(context.options, row)).rejects.toThrow();
@@ -450,6 +454,7 @@ async function keepsUncertainWorkQueued(kind: string, stage: string) {
       .not.toContain('failed');
   } finally {
     if (kind === 'outage') await context.fga.resume();
+    await restoreReceipt?.();
     vi.restoreAllMocks();
   }
   const child = await chatHistory(context.nats.store, 'test', intent.childConversationId);

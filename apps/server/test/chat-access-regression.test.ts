@@ -28,7 +28,7 @@ import { attachWebSocketServer } from '../src/websocket.ts';
 
 import { Client } from 'minio/dist/esm/minio.mjs';
 import { ownConversation, fileCommand } from '../src/files/commands.ts';
-import { viewAccess } from '../src/computers/view-access.ts';
+import { viewAccess, ViewAccessRefused } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -2128,7 +2128,9 @@ async function requiresLegacyClosesBeforeStartup() {
     await context.runner.run(conversations);
     await expect(requireLegacyClosesProjected(context.nats.store, context.db))
       .resolves.toBeUndefined();
-    await expect(viewAccess(context.options, 'alice', 'legacy-close')).rejects.toThrow('Access changed');
+    const access = viewAccess(context.options, 'alice', 'legacy-close');
+    await expect(access).rejects.toThrow(ViewAccessRefused);
+    await expect(access).rejects.toMatchObject({ cause: { message: 'Conversation closed' } });
   } finally {
     await context.close();
   }
