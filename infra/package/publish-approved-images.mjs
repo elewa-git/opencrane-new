@@ -1,4 +1,3 @@
-import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fetchApplicationApproval } from './application-approval.mjs';

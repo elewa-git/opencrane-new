@@ -97,7 +97,8 @@ async function installedRelease(kubectl, fields, config) {
   if (source.secret) {
     requireSettings(source.secret.name === fields.sources[0].secret.name);
     const name = `secret/${source.secret.name}`;
-    const encoded = await kubectl(['get', name, '-o', 'jsonpath={.data.release\.json}']);
+    const releasePath = String.raw`jsonpath={.data.release\.json}`;
+    const encoded = await kubectl(['get', name, '-o', releasePath]);
     text = Buffer.from(encoded, 'base64').toString('utf8');
   } else {
     requireSettings(source.configMap?.name === configMapName);
