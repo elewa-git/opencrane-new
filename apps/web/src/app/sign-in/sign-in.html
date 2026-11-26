@@ -19,6 +19,12 @@
           [detail]="rejection.detail" [announce]="true" [showAction]="false" />
       </div>
       <button type="button" class="button primary" (click)="signIn()">Sign in again</button>
+    } @else if (checkingEntry()) {
+      <p role="status">Checking where to take you…</p>
+    } @else if (entryFailed()) {
+      <p role="alert">We could not open your workspace. Try again.</p>
+      <button class="button primary" type="button" (click)="openEntry()">Try again</button>
+      <oc-sign-out />
     } @else if (authenticated()) {
       <h2>You are signed in</h2>
       <oc-shared-state kind="ready" message="Your workspace session is active"

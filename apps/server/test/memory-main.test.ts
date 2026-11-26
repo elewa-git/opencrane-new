@@ -33,7 +33,7 @@ afterEach(async function cleanup() {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
-async function setup(applyOwnershipSeed = true) {
+async function setup(applyOwnershipSeed = true, isolatedMemory = false) {
   workerOutput = '';
   nats = await natsFixture();
   storage = await databases();
@@ -44,7 +44,12 @@ async function setup(applyOwnershipSeed = true) {
   const binding = await createStore(fga.apiUrl, 'acme');
   const databaseUrl = storage.queue.options.connectionString;
   const bridge = await bridgeProcessSettings(directory);
+  const memorySchema = 'opencrane_memory';
+  if (isolatedMemory) {
+    await storage.queue.query('CREATE SCHEMA opencrane_memory');
+  }
   const env = {
+    ...(isolatedMemory ? { MEMORY_PROJECTION_SCHEMA: memorySchema } : {}),
     ...bridge, ...TEST_OIDC_ENV, ...nats.env(), SILO_ID: 'acme', DATABASE_URL: databaseUrl,
     OIDC_EXPECTED_ORG_ID: 'org-acme', OPENFGA_API_URL: binding.apiUrl,
     OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId,
@@ -54,8 +59,9 @@ async function setup(applyOwnershipSeed = true) {
   const db = pgDb(storage.queue);
   const runner = new ProjectionRunner(db, nats.reader, createLogger('memory-main'));
   await runner.initialise(members);
-  startMemoryWorker(env);
-  await until(memoryReady);
+  startMemoryWorker(env, isolatedMemory);
+  function ready() { return memoryReady(isolatedMemory); }
+  await until(ready);
   expect(await nats.store.head()).toBe(0);
   server = await startServer(env);
   const owner = {
@@ -90,9 +96,16 @@ async function setup(applyOwnershipSeed = true) {
   return { headers, origin, env, assistant, auth, db, applyOwnership };
 }
 
-function startMemoryWorker(env: NodeJS.ProcessEnv) {
+function startMemoryWorker(env: NodeJS.ProcessEnv, isolatedMemory: boolean) {
   const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'memory'];
   const workerEnv = { ...process.env, ...env, ...nats.env('projection'), LOG_LEVEL: 'info' };
+  // Use the test database owner for both processes, with only the worker searching Memory first.
+  if (isolatedMemory) {
+    delete workerEnv['MEMORY_PROJECTION_SCHEMA'];
+    const database = new URL(env['DATABASE_URL']!);
+    database.searchParams.set('options', '-c search_path=opencrane_memory,public');
+    workerEnv.DATABASE_URL = database.href;
+  }
   worker = spawn(process.execPath, args, { env: workerEnv });
   function collect(chunk: Buffer) {
     workerOutput += chunk.toString();
@@ -102,18 +115,24 @@ function startMemoryWorker(env: NodeJS.ProcessEnv) {
   workerStopped = once(worker, 'exit');
 }
 
-async function memoryReady() {
+async function memoryReady(isolatedMemory = false) {
   if (!worker || worker.exitCode !== null || worker.signalCode !== null) {
     throw new Error(`Memory worker stopped: ${workerOutput}`);
   }
+  const table = isolatedMemory ? 'opencrane_memory.projection_checkpoints' : 'projection_checkpoints';
+  const relation = await storage.queue.query<{ name: string | null }>(
+    'SELECT to_regclass($1) AS name', [table]);
+  if (!relation.rows[0]?.name) return false;
   const result = await storage.queue.query<{ sequence: string }>(
-    "SELECT sequence FROM projection_checkpoints WHERE name='memory'");
+    `SELECT sequence FROM ${table} WHERE name='memory'`);
   return Number(result.rows[0]?.sequence) === await nats.store.head();
 }
 
 it('loads empty personal memory, saves a fact and recalls it through the dev-stack entrypoint',
   async function firstMemory() {
-    const { origin, headers, env } = await setup();
+    const { origin, headers, env } = await setup(true, true);
+    const ordinary = await storage.queue.query("SELECT to_regclass('public.memory_facts') AS name");
+    expect(ordinary.rows).toEqual([{ name: null }]);
     const scopes = await fetch(`${origin}/api/memory/scopes?assistantId=personal`, { headers });
     const scopesBody: unknown = await scopes.json();
     expect({ status: scopes.status, body: scopesBody }, server?.stdout()).toMatchObject({ status: 200,
@@ -129,7 +148,7 @@ it('loads empty personal memory, saves a fact and recalls it through the dev-sta
     const savedBody: unknown = await saved.json();
     expect({ status: saved.status, body: savedBody }).toMatchObject({ status: 200,
       body: { outcome: 'saved', revision: 1 } });
-    await until(memoryReady);
+    await until(function ready() { return memoryReady(true); });
     const recalled = await fetch(`${path}?q=jasmine`, { headers });
     expect(recalled.status).toBe(200);
     expect(await recalled.json()).toMatchObject({ returnedCount: 1,

@@ -236,24 +236,45 @@ Helm removes successful Jobs and keeps failed Jobs for inspection. A failed Job
 stops Helm before it applies the release. `package-up` names the failed pull and
 directs the operator to the Job and its Pod events.
 The installer reads the server Service ClusterIP and puts that IP in the computer ConfigMap. The computer policy permits only TCP
-port 43000 to the server Pod and has no DNS egress. The memory worker needs a
-private key directory and is not started by this package. Object storage and
-the scanner run inside this chart. The file worker still projects events; object
+port 43000 to the server Pod and has no DNS egress. The Memory worker runs beside
+the members worker so both stop when the members Deployment stops. Object
+storage and the scanner run inside this chart. The file worker still projects events; object
 storage is content, and the upload command remains the only business write.
+
+## Survey and Memory keys
+
+Normal installs create two 1 GiB claims, `personal-secrets` and `memory-secrets`.
+The server uses `PERSONAL_KEY_DIRECTORY=/var/lib/opencrane/personal-secrets/keys`
+and `MEMORY_KEY_DIRECTORY=/var/lib/opencrane/memory-secrets/keys`. Only the server
+mounts the personal keys. The Memory projection mounts its keys read-only. The
+dispatcher can remove retired Memory keys. The setup containers check the
+directories before these processes start. They set mode 0700 and uid 1000.
+Processes create files with mode 0600. The setup check leaves live key files
+alone because Memory can briefly give a key two names while saving it.
+`fsGroupChangePolicy: OnRootMismatch` preserves private permissions on remount.
+The server Deployment stops the old Pod before starting the new one.
+The Memory worker builds its read tables and checkpoint in `opencrane_memory`.
+The server and dispatcher use that schema for Memory and keep their ordinary
+read tables in `public`. The existing restore check can still compare and
+rebuild the public tables while Memory stays off in the read-only installation.
+
+Helm values, logs and saved events do not carry these key bytes. Backup does not
+include the key folders yet. The read-only restore mode leaves both folders
+unmounted and the Memory worker stopped.
 
 ## Default render regression
 
 `chart-render.test.mjs` extracts the original chart from commit
-`3bf5b9c1639b9bd3c56b3edf417210f3625864ba` with `git archive` and tar. It renders
-that chart and the current default chart with the same Helm executable, namespace
-and values, then compares complete output bytes. The explicit stub render must
-also match. This keeps the default contract exact when Helm versions format YAML
-differently. Keep that commit available when running the package tests.
+`3bf5b9c1639b9bd3c56b3edf417210f3625864ba` with `git archive` and tar. It compares
+rendered bytes with that chart outside the claims and Deployments used for member
+keys. Separate checks cover those claims and their mounts. The explicit stub
+render matches the current default byte for byte. Keep the original commit
+available when running the package tests.
 
 ## Connected model provider
 
 `models.mode` accepts `stub` (default) or `provider`. Preflight and Helm refuse other
-values. The default chart output stays byte-for-byte unchanged. Provider preparation
+values. Stub mode does not install the provider key volume. Provider preparation
 writes no fallback key or local stub settings. The launcher starts managed routing
 before setup; recorded switch-on is still required for admission.
 The provider-mode server Deployment uses `Recreate`. Its one models process

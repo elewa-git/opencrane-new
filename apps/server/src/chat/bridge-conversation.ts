@@ -29,7 +29,7 @@ type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
 export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'db'> &
-  Partial<Pick<ChatOptions, 'binding' | 'feed'>> & {
+  Partial<Pick<ChatOptions, 'binding' | 'feed' | 'memoryDb'>> & {
     keyDirectory?: string;
     childStartUrl?: string;
     objects?: Client;

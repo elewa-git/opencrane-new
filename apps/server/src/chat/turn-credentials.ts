@@ -25,7 +25,7 @@ const savedAssistantKind = assistantKind.extend({ kind: z.string() });
 
 type BridgeOptions = { recall?: ReturnType<typeof recallBridge> } &
   Pick<ChatOptions, 'silo' | 'store'> &
-  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string;
+  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed' | 'memoryDb'>> & { keyDirectory?: string;
     catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
     loadOAuthConfiguration?: (serverId: string) => Promise<unknown> };
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
@@ -234,7 +234,8 @@ async function initialMemoryFor(options: BridgeOptions,
   const claims = { silo: options.silo, requester: turn.requesterId,
     assistant: context.assistantId, computer: context.computerId, generation: computer.data.generation,
     conversation: turn.conversationId, turn: turn.turnId, thread: turn.threadId };
-  const memoryOptions = { ...options, db: options.db, binding: options.binding, feed: options.feed };
+  const memoryOptions = { ...options, db: options.memoryDb ?? options.db, scopeDb: options.db,
+    binding: options.binding, feed: options.feed };
   const pending = await prepareInitialMemory(memoryOptions, claims);
   await pending.load();
   return { pending };

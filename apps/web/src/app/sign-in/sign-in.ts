@@ -5,6 +5,7 @@ import {
 import { NAVIGATE } from '../core/navigate';
 import { organisationName } from '../core/organisation-name';
 import { SignOut } from './sign-out';
+import { onboardingEntry } from '../welcome/entry';
 import { DogEar, PaperSurface } from '../ui/paper';
 import { SharedState } from '../shared-state/shared-state';
 
@@ -28,6 +29,7 @@ const REJECTION_COPY = {
 })
 export class SignIn implements AfterViewInit, OnDestroy {
   private readonly navigate = inject(NAVIGATE);
+  private readonly sessionRequest = new AbortController();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly cancelButton = viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
   private readonly ssoButton = viewChild<ElementRef<HTMLButtonElement>>('ssoButton');
@@ -39,6 +41,8 @@ export class SignIn implements AfterViewInit, OnDestroy {
   protected readonly rejected = globalThis.location.pathname === '/signin/rejected';
   protected readonly rejection = this.rejectionCopy();
   protected readonly authenticated = signal(false);
+  protected readonly checkingEntry = signal(false);
+  protected readonly entryFailed = signal(false);
   protected readonly authenticatedAt = signal<string | undefined>(undefined);
   protected readonly error = signal('');
 
@@ -57,6 +61,7 @@ export class SignIn implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearTimeout(this.timer);
+    this.sessionRequest.abort();
   }
 
   protected cancel(): void {
@@ -88,15 +93,33 @@ export class SignIn implements AfterViewInit, OnDestroy {
       const body: unknown = await response.json();
       const authenticated = response.ok && typeof body === 'object' && body !== null
         && 'authenticated' in body && body.authenticated === true;
-      this.authenticated.set(authenticated);
+      if (this.sessionRequest.signal.aborted) return;
       if (authenticated) {
-        // Record when the session read confirmed this session.
         this.authenticatedAt.set(new Date().toISOString());
+        await this.openEntry();
       } else {
         this.ssoButton()?.nativeElement.focus();
       }
     } catch {
+      if (this.sessionRequest.signal.aborted) return;
       this.error.set('We could not check your session. You can try signing in again.');
+    }
+  }
+
+  protected async openEntry(): Promise<void> {
+    if (this.checkingEntry()) return;
+    this.checkingEntry.set(true);
+    this.entryFailed.set(false);
+    const signal = this.sessionRequest.signal;
+    try {
+      const path = await onboardingEntry(signal);
+      if (signal.aborted) return;
+      if (path) this.navigate(path);
+      else this.authenticated.set(true);
+    } catch {
+      if (!signal.aborted) this.entryFailed.set(true);
+    } finally {
+      this.checkingEntry.set(false);
     }
   }
 }

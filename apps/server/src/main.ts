@@ -16,7 +16,8 @@ import type { ChatOptions } from './chat/routes.ts';
 import { dispatcherReady } from './chat/dispatcher-status.ts';
 import { loadAuthConfig } from '@opencrane/auth';
 import { connectEventStore } from '@opencrane/event-store';
-import { connectComputers, connectMcpCatalogue, connectMemberFeed, connectProjectionDb } from '@opencrane/projections';
+import { connectComputers, connectMcpCatalogue, connectMemberFeed, connectProjectionDb,
+  memoryProjectionDatabaseUrl } from '@opencrane/projections';
 import { installShutdown } from './shutdown.ts';
 import type { RealtimeOptions } from './realtime.ts';
 import { createLogger, startTelemetry } from '@opencrane/observability';
@@ -63,6 +64,14 @@ if (databaseUrl) {
   computers = connectComputers(databaseUrl);
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
 }
+const memoryDatabaseUrl = databaseUrl && memoryKeysConfigured
+  ? memoryProjectionDatabaseUrl(databaseUrl) : undefined;
+const memoryDb = memoryDatabaseUrl ? connectProjectionDb(memoryDatabaseUrl, reportMemoryDbError)
+  : undefined;
+function reportMemoryDbError(error: Error) {
+  const logger = createLogger('server');
+  logger.error({ err: error }, 'Could not connect to the Memory read tables');
+}
 const personalKeyDirectory = process.env['PERSONAL_KEY_DIRECTORY']?.trim();
 let onboarding: OnboardingOptions | undefined;
 if (realtime && events && modelDb && personalKeyDirectory) {
@@ -75,7 +84,8 @@ function readDispatcherReady() {
 }
 const chat: ChatOptions | undefined = realtime && events && modelDb ? { silo: realtime.binding.silo, store: events.store,
   db: modelDb.db, feed: realtime.feed, binding: realtime.binding,
-  dispatcherReady: readDispatcherReady } : undefined;
+  dispatcherReady: readDispatcherReady,
+  ...(memoryDb ? { memoryDb: memoryDb.db } : {}) } : undefined;
 if (chat) await requireLegacyClosesProjected(chat.store, chat.db);
 if (realtime && chat) realtime.chat = chat;
 let files: FileOptions | undefined;
@@ -142,7 +152,8 @@ const app = buildProductionServer(authConfig, {
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),
   ...(realtime && events && modelDb && memoryKeysConfigured ? { memory: {
-    silo: realtime.binding.silo, store: events.store, db: modelDb.db,
+    silo: realtime.binding.silo, store: events.store, db: memoryDb?.db ?? modelDb.db,
+    scopeDb: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
     keyDirectory: process.env['MEMORY_KEY_DIRECTORY']!.trim(),
     ...(process.env['MEMORY_MCP_GENERATION'] ?
@@ -187,6 +198,7 @@ installShutdown(app, sockets, graceMs, async () => {
     catalogue?.close(),
     computers?.close(),
     modelDb?.close(),
+    memoryDb?.close(),
   ]);
   if (results.some((result) => result.status === 'rejected')) throw new Error('Resource cleanup failed');
 });

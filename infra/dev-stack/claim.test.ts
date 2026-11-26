@@ -47,7 +47,7 @@ process.exit(result.status ?? 1);
   await writeFile(`${bin}/flock`, script, { mode: 0o755 });
 }
 
-async function claimSkipsHeldPort(stackPort: number) {
+async function claimSkipsHeldPort(stackPort: number, requireFirstSlot = false) {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
   const bin = `${home}/bin`;
   await mkdir(bin);
@@ -61,9 +61,14 @@ async function claimSkipsHeldPort(stackPort: number) {
     await once(held, 'listening');
     const address = held.address();
     assert(address && typeof address !== 'string');
-    const { stdout } = await exec('infra/dev-stack/claim.sh', {
-      env: claimEnvironment(home, address.port, stackPort),
-    });
+    const options = { env: claimEnvironment(home, address.port, stackPort) };
+    if (requireFirstSlot) {
+      const attempt = exec('infra/dev-stack/claim.sh', ['--id', '1'], options);
+      await assert.rejects(attempt, { code: 1 });
+      await assert.rejects(stat(`${home}/stack-2.lock`), { code: 'ENOENT' });
+      return;
+    }
+    const { stdout } = await exec('infra/dev-stack/claim.sh', options);
     assert.equal(stdout.trim(), '2');
     assert.ok((await stat(`${home}/stack-2.lock`)).isFile());
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
@@ -78,6 +83,8 @@ async function skipsModelPort() { await claimSkipsHeldPort(25110); }
 async function skipsCustodyPort() { await claimSkipsHeldPort(25114); }
 test('claim skips a slot with a held port and leaves it unclaimed', skipsModelPort);
 test('claim checks the custody proxy port before reserving a slot', skipsCustodyPort);
+function waitsForChosenSlot() { return claimSkipsHeldPort(25110, true); }
+test('an explicit claim leaves the other slot alone when its chosen slot is busy', waitsForChosenSlot);
 
 test('status leaves a free slot alone and claim reuses this worktree slot', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-repeat-`);

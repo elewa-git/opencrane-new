@@ -93,7 +93,7 @@ export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausing
   takeoverRenewedDataSchema, takeoverReturnRequestedDataSchema,
   takeoverEndedWithProofDataSchema, takeoverClosureUnknownDataSchema,
   takeoverEndReasonSchema } from './takeover.ts';
-export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyRestartedDataSchema,
+export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyGenerationDataSchema,
   personaApprovedDataSchema,
   personaRevisedDataSchema, welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
   welcomeArchiveSetDataSchema,

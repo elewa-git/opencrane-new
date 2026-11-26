@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile }
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile }
   from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,3 +49,31 @@ async function refusesLinkedCustody() {
   }
 }
 test('startup refuses linked custody without changing its target', refusesLinkedCustody);
+
+
+async function preparesMemberKeys() {
+  const root = await mkdtemp(join(tmpdir(), 'member-key-modes-'));
+  const personal = join(root, 'personal');
+  const memory = join(root, 'memory');
+  const memoryKeys = join(memory, 'keys');
+  try {
+    await mkdir(memoryKeys, { recursive: true, mode: 0o700 });
+    await chmod(memoryKeys, 0o2770);
+    const key = join(memoryKeys, 'memory-key');
+    await writeFile(key, 'synthetic-revision-key', { mode: 0o600 });
+    await link(key, `${key}-pending`);
+    const args = ['infra/package/provider-secrets.mjs', '--directory-only', personal, memory];
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal((await lstat(join(personal, 'keys'))).mode & 0o7777, 0o700);
+    assert.equal((await lstat(memoryKeys)).mode & 0o7777, 0o700);
+    assert.equal((await lstat(key)).nlink, 2);
+    assert.equal((await lstat(key)).mode & 0o7777, 0o600);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, '');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+test('startup prepares both member key folders without interrupting live key writes',
+  preparesMemberKeys);

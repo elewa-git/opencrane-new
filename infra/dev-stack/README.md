@@ -93,6 +93,8 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
+`claim.sh --id 1` checks only slot 1 when the other slot needs to stay available.
+
 A fresh start replaces that stack's data and credentials. Always stop the claimed
 stack when finished, including after a failure.
 `claim.sh --id 1` reserves only slot 1 when the other slot is in use.

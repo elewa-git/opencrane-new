@@ -738,6 +738,14 @@ Edits invalidate later current answers; restart requires the next generation.
 `ProjectionRunner.rebuild(personalSettings)` restores the same progress offline with
 readers/workers stopped. It needs no keys and performs no outside actions.
 
+On a packaged install, the Memory worker builds its tables in the
+`opencrane_memory` schema. Its checkpoint and generation stay with those tables.
+The server and cleanup worker use the same schema for Memory. Sign-in and chat
+read their own tables separately.
+
+`onboarding.survey_skipped` keeps a member's skip choice in the saved progress.
+A later survey edit or restart keeps that choice.
+
 `onboarding.persona_revised` requires four current steps, the current survey
 generation and the next revision number. `personal_settings.survey` holds the
 current candidate's number and event id. `persona_revisions` keeps encrypted records by

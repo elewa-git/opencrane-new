@@ -1,4 +1,4 @@
-import { parseEventByType, surveyStepSavedDataSchema, surveyRestartedDataSchema,
+import { parseEventByType, surveyStepSavedDataSchema, surveyGenerationDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
   welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
   welcomeArchiveSetDataSchema,
@@ -9,7 +9,7 @@ import type { Projection } from './runner.ts';
 type SavedStep = { step: number; ciphertext: string; ciphertextDigest: string; keyId: string;
   eventId: string; commandId: string; time: string; position: number };
 type Survey = { generation: number; steps: SavedStep[]; nextStep: number | null;
-  position: number; currentRevision?: number; currentRevisionId?: string;
+  position: number; skipped?: boolean; currentRevision?: number; currentRevisionId?: string;
   revisionCount?: number; approvedRevision?: number; approvedRevisionId?: string;
   approvedTime?: string;
   welcome?: { welcomeId: string; scriptVersion: 'welcome-v1'; variant: 'assistant' | 'no_assistant';
@@ -40,7 +40,7 @@ export async function readSurvey(db: Query, silo: string, memberId: string): Pro
   return result.rows[0]?.survey ?? null;
 }
 function restartSurvey(survey: Survey, event: EventEnvelope) {
-  const data = surveyRestartedDataSchema.parse(event.data);
+  const data = surveyGenerationDataSchema.parse(event.data);
   if (data.generation !== survey.generation + 1) {
     throw new Error('Invalid survey generation');
   }
@@ -154,7 +154,7 @@ function saveStep(survey: Survey, event: EventEnvelope, position: number, comman
   if (survey.welcome?.status !== 'completed') delete survey.welcome;
 }
 const personalTypes = new Set([
-  'onboarding.survey_step_saved', 'onboarding.survey_restarted',
+  'onboarding.survey_step_saved', 'onboarding.survey_restarted', 'onboarding.survey_skipped',
   'onboarding.persona_revised', 'onboarding.persona_approved',
   'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
   'onboarding.completed',
@@ -167,7 +167,7 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   if (!parseEventByType(event).success || !event.commandId) {
     throw new Error('Invalid survey event');
   }
-  const dataSchema = surveyStepSavedDataSchema.or(surveyRestartedDataSchema)
+  const dataSchema = surveyStepSavedDataSchema.or(surveyGenerationDataSchema)
     .or(personaRevisedDataSchema).or(personaApprovedDataSchema)
     .or(welcomeStartedDataSchema).or(welcomeAnswerRecordedDataSchema)
     .or(onboardingCompletedDataSchema).or(welcomeArchiveSetDataSchema);
@@ -176,6 +176,12 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   const survey: Survey = current ?? { generation: 1, steps: [], nextStep: 1, position: 0 };
   if (event.type === 'onboarding.survey_restarted') {
     restartSurvey(survey, event);
+  } else if (event.type === 'onboarding.survey_skipped') {
+    if (data.generation !== survey.generation || survey.skipped ||
+        survey.welcome?.status === 'completed') {
+      throw new Error('Invalid survey skip');
+    }
+    survey.skipped = true;
   } else if (event.type === 'onboarding.persona_revised') {
     await revisePersona(db, survey, event, position);
   } else if (event.type === 'onboarding.persona_approved') {

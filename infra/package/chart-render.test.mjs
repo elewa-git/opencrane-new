@@ -1011,7 +1011,7 @@ for (const [name, field, value] of [
 async function originalChartRender(values) {
   const directory = await mkdtemp(join(tmpdir(), 'original-package-chart-'));
   try {
-    const baseline = '3bf5b9c1639b9bd3c56b3edf417210f3625864ba';
+    const baseline = '8b5e2dec78f1ba6769a12662848fa6c640068471';
     const args = ['archive', baseline, 'infra/package/chart'];
     const archive = spawnSync('git', args);
     assert.equal(archive.status, 0, 'The original chart must be available in repository history');
@@ -1029,24 +1029,35 @@ async function originalChartRender(values) {
   }
 }
 
-async function defaultModelBytesStayTheSame() {
+const changedKeyResources = new Set([
+  'PersistentVolumeClaim/personal-secrets', 'PersistentVolumeClaim/memory-secrets',
+  'Deployment/server', 'Deployment/worker-dispatcher', 'Deployment/worker-members',
+]);
+
+function unchangedResources(render) {
+  function hasNoKeyChanges(text) {
+    const document = parseAllDocuments(text)[0];
+    const resource = document?.toJS();
+    if (!resource) return true;
+    return !changedKeyResources.has(resource.kind + '/' + resource.metadata.name);
+  }
+  const documents = render.split(/^---\n/mu);
+  const unchanged = documents.filter(hasNoKeyChanges);
+  return unchanged.join('---\n');
+}
+
+async function defaultOnlyAddsMemberKeys() {
   const values = chartValues();
   const original = renderChart(values);
   assert.equal(original.status, 0, original.stderr);
-  // Compare the original resources byte for byte and check the new Job separately.
   // Use the installed Helm for both charts because Helm 3 and 4 serialise YAML differently.
   const baseline = await originalChartRender(values);
-  const manifests = original.stdout.split(/(?=^---\n)/mu);
-  function wasInOriginalChart(manifest) {
-    const header = '---\n# Source: opencrane-local/templates/computer-image-pull.yaml\n';
-    return !manifest.startsWith(header);
-  }
-  const originalManifests = manifests.filter(wasInOriginalChart);
-  assert.equal(originalManifests.join(''), baseline);
+  assert.equal(unchangedResources(original.stdout), unchangedResources(baseline));
   values.models = { mode: 'stub' };
   assert.equal(renderChart(values).stdout, original.stdout);
 }
-test('default and explicit stub mode preserve the original chart bytes', defaultModelBytesStayTheSame);
+test('default and explicit stub mode keep the original resources outside member key storage',
+  defaultOnlyAddsMemberKeys);
 
 function rendersOnboardingAndMemoryStorage() {
   const resources = renderedResources(chartValues());
@@ -1065,10 +1076,10 @@ function rendersOnboardingAndMemoryStorage() {
   assertKeyDirectory(dispatcher, 'worker', 'MEMORY_KEY_DIRECTORY', memory);
   assert.ok(projection, 'Run the Memory projection with the member worker');
   assertKeyDirectory(members, 'memory', 'MEMORY_KEY_DIRECTORY', memory, true);
-  assert.deepEqual(keyMounts(resources, 'personal-secrets'), [
+  assert.deepEqual(keyReaders(resources, 'personal-secrets'), [
     'Deployment/server:private-member-keys', 'Deployment/server:server',
   ]);
-  assert.deepEqual(keyMounts(resources, 'memory-secrets'), [
+  assert.deepEqual(keyReaders(resources, 'memory-secrets'), [
     'Deployment/server:private-member-keys', 'Deployment/server:server',
     'Deployment/worker-dispatcher:private-memory-keys', 'Deployment/worker-dispatcher:worker',
     'Deployment/worker-members:memory', 'Deployment/worker-members:private-memory-keys',
@@ -1089,6 +1100,13 @@ function assertKeyDirectory(pod, name, variable, root, readOnly = false) {
   assert.equal(volume?.persistentVolumeClaim?.claimName, volumeName);
 }
 
+function keyReaders(resources, claimName) {
+  function nameMount(mount) { return mount.workload + ':' + mount.container; }
+  const mounts = keyMounts(resources, claimName);
+  const readers = mounts.map(nameMount);
+  return readers.sort();
+}
+
 function keyMounts(resources, claimName) {
   const mounts = [];
   for (const resource of resources.values()) {
@@ -1098,16 +1116,18 @@ function keyMounts(resources, claimName) {
     for (const volume of pod?.volumes ?? []) {
       if (volume.persistentVolumeClaim?.claimName === claimName) claims.add(volume.name);
     }
-    function usesClaim(mount) { return claims.has(mount.name); }
     const containers = [...(pod?.initContainers ?? []), ...(pod?.containers ?? []),
       ...(pod?.ephemeralContainers ?? [])];
     for (const container of containers) {
-      if (container.volumeMounts?.some(usesClaim)) {
-        mounts.push(resource.kind + '/' + resource.metadata.name + ':' + container.name);
+      for (const mount of container.volumeMounts ?? []) {
+        if (claims.has(mount.name)) {
+          const workload = resource.kind + '/' + resource.metadata.name;
+          mounts.push({ workload, container: container.name, ...mount });
+        }
       }
     }
   }
-  return mounts.sort();
+  return mounts;
 }
 test('packages private persistent keys for onboarding and Memory', rendersOnboardingAndMemoryStorage);
 
@@ -1141,26 +1161,7 @@ test('provider updates stop the budget leader before starting the replacement',
   replacesProviderLeaderBeforeStartingItsSuccessor);
 
 function assertPrivateProviderMounts(resources) {
-  const mounts = [];
-  for (const resource of resources.values()) {
-    const workload = `${resource.kind}/${resource.metadata.name}`;
-    const pod = resource.kind === 'Pod' ? resource.spec :
-      resource.spec?.jobTemplate?.spec?.template?.spec ?? resource.spec?.template?.spec;
-    const claims = new Map();
-    for (const volume of pod?.volumes ?? []) {
-      claims.set(volume.name, volume.persistentVolumeClaim?.claimName);
-    }
-    const containers = [...(pod?.initContainers ?? []), ...(pod?.containers ?? []),
-      ...(pod?.ephemeralContainers ?? [])];
-    for (const container of containers) {
-      for (const mount of container.volumeMounts ?? []) {
-        if (claims.get(mount.name) === 'provider-secrets') {
-          const entry = { workload, container: container.name, ...mount };
-          mounts.push(entry);
-        }
-      }
-    }
-  }
+  const mounts = keyMounts(resources, 'provider-secrets');
   assert.deepEqual(mounts, [
     { workload: 'Deployment/server', container: 'private-provider-keys',
       name: 'provider-secrets',

@@ -705,6 +705,7 @@ Endpoint diagnostics accept only known route words and decimal entity ids;
 unexpected provider identifiers receive a fixed `unrecognised endpoint` label.
 
 `claim.sh` prints one free secondary id, or exits non-zero when both ids are in use.
+With `--id 1` or `--id 2`, it only checks and claims the selected slot.
 The owner file records the worktree, claiming process id and claim start time. A
 worktree that claims again gets its existing id. A claim stays reserved for 15 minutes
 from its `startedAt` timestamp, even after the claiming process has ended. This gives

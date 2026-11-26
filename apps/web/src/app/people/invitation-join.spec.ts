@@ -155,6 +155,7 @@ it('retries a lost join reply with the original command', async function retryJo
   fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
   fetchSpy.mockImplementationOnce(stallRequest);
   fetchSpy.mockResolvedValueOnce(reply({ status: 'already_joined' }));
+  fetchSpy.mockResolvedValueOnce(reply({ next: 'workspace' }));
   const { element, fixture } = await openInvitation('input[name=displayName]');
   accept(element);
   const sent = fetchSpy.mock.calls[1]?.[1];
@@ -166,10 +167,10 @@ it('retries a lost join reply with the original command', async function retryJo
     expect(element.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(false);
   });
 
+  vi.mocked(AbortSignal.timeout).mockRestore();
   accept(element);
-  await vi.waitFor(function showsWorkspace() {
-    fixture.detectChanges();
-    expect(element.querySelector('a[href="/workspace"]')).not.toBeNull();
+  await vi.waitFor(function opensWorkspace() {
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/workspace');
   });
   const repeated = fetchSpy.mock.calls[2]?.[1];
   expect(typeof sent?.body).toBe('string');

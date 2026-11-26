@@ -2,6 +2,20 @@
 
 For people, read [README.md](README.md) first.
 
+`GET /api/onboarding/entry` checks current membership and returns only `next`.
+It uses saved survey history without decrypting any content. New and part-finished
+surveys send the member to `survey`. A completed survey without approval sends
+them to `persona`. Approval or a started welcome sends them to `welcome`. A saved
+skip or welcome completion sends them to `workspace`. An unconfigured service
+returns 204.
+
+`POST /api/onboarding/survey` accepts `operation: skip` with the same command id,
+generation and expected position as other survey changes. It saves one
+`onboarding.survey_skipped` event without removing answers or creating a key.
+Later survey changes keep the skip choice. The first saved answer can prepare the
+member's key when it does not already exist. Once an answer has used a key,
+a missing key still refuses reads and writes that need it.
+
 `POST /api/onboarding/persona` accepts `operation: approve`, `commandId`,
 `generation`, `expectedPosition`, `revision` and `revisionId`. The number and id
 must identify the current candidate in the member's personal stream. The server

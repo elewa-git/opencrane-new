@@ -7,6 +7,7 @@ export {
   connectComputers,
   connectProjectionDb,
 } from "./pg.ts";
+export { memoryProjectionDatabaseUrl, initialiseMemoryProjectionSchema } from './memory-database.ts';
 export { pgliteDb } from "./pglite.ts";
 export {
   ProjectionRunner,

@@ -10,6 +10,13 @@
         @case ('loading') {
           <p role="status">Checking your sign-in…</p>
         }
+        @case ('opening') {
+          <p role="status">Invitation accepted. Opening your workspace…</p>
+        }
+        @case ('entry-failed') {
+          <p role="alert">Invitation accepted. We could not open your workspace.</p>
+          <button class="button" type="button" (click)="openEntry()">Try again</button>
+        }
         @case ('unavailable') {
           <p role="alert">We could not check your sign-in. Reload this page to try again.</p>
         }

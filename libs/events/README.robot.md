@@ -12,6 +12,9 @@ reviewed identity tool name and revision, and safe account metadata. The review 
 may name `identityTool`; older records without these fields remain readable. It defines envelopes, per-type data schemas and examples; it does not
 append, project or dispatch events. Its routine fold rebuilds facts in memory.
 
+`onboarding.survey_skipped` records the member and current survey generation.
+It follows the same subject, actor and command id checks as other survey events.
+
 `onboarding.welcome_archive_set` requires the member's personal subject and
 human principal. Its strict data contains the member, frozen welcome id and
 generation, and archive choice. It contains no answer text.

@@ -22,7 +22,7 @@ flowchart LR
   ci["GitHub packaging job<br/>approved images"] --> package
   package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
-  package --> services["Private databases, event log,<br/>file store and scanner"]
+  package --> services["Private databases, event log,<br/>keys, file store and scanner"]
   apps --> models["Model gateway"]
   package -->|verified backup| recovery["Empty recovery install"]
 ```
@@ -38,6 +38,7 @@ flowchart LR
 - Prepare databases, the event log and development sign-in.
 - Let the first person claim ownership with a one-time token in public-address mode.
 - Choose the stand-in model or private storage for a provider connected in Settings.
+- Keep the encryption keys for the welcome survey, persona and Memory on private storage.
 - Set the installation's public organisation name.
 - Give assistant computers the private gateway address and short-lived passes.
 - Save scheduled backups of events, databases and uploaded files together.
@@ -65,6 +66,8 @@ Not built yet:
    create the test owner; public-address mode waits for a signed-in person to claim
    ownership with a one-time token. Workers start an assistant's computer when needed.
    The worker that sends saved events to reactions can use a full CPU when work arrives together.
+   The server keeps survey, persona and Memory keys across restarts. The Memory
+   worker reads its keys to build the list of saved facts.
 3. **An owner connects a model provider.** With `models.mode: provider`, they save
    its key in Settings, run the quoted test, select the chat model and switch on.
    Members can then get real replies. The default install keeps the stand-in.
@@ -86,6 +89,8 @@ Not built yet:
    that saved events account for every stored file. It checks that writers stayed
    stopped before services restart. It publishes the backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
+   The backup does not yet include the survey, persona or Memory keys. A new
+   installation cannot open the original answers, personas or facts without them.
 8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.

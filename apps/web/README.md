@@ -52,8 +52,9 @@ Not built yet:
 
 1. **A person signs in.** Their company account identifies them.
    The first owner can claim a new installation. An invited person accepts
-   their link with the account it was sent to. The welcome survey saves personal
-   wishes without granting access to tools or groups.
+   their link with the account it was sent to. Sign-in opens the welcome survey
+   or the step they last reached. After they finish or skip setup, sign-in opens
+   the workspace. Survey answers grant no access to tools or groups.
 2. **A person chats.** They press Enter or Send to send their current text and watch the assistant's reply
    arrive.
    Stop requests an end to the reply; a spending stop explains the relevant limit.

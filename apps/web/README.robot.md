@@ -102,7 +102,10 @@ transcript both as the failure arrives and after loading the saved rows again.
 The Node test configuration includes the Node 22 promise types used by the report writer.
 
 This Angular app provides the organisation settings shell, MCP register and Memory panel.
-`/welcome/survey` is a separate page without a chat composer. It reads
+`/api/onboarding/entry` chooses the next page after ordinary sign-in or a
+confirmed invitation. It returns only a destination. An invitation can finish
+before its membership read is ready, so the page waits for the workers without
+resending acceptance. `/welcome/survey` is a separate page without a chat composer. It reads
 `/api/onboarding` and opens the first unsaved step. The name and optional pronouns
 form sends one checked `save_step` command. A confirmed save reads progress again.
 Step 2 reads `GET /api/chat/groups?limit=16` every time it opens. It uses the

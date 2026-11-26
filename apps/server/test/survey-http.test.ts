@@ -808,10 +808,12 @@ async function welcomeStartReadiness() {
   const current = await progress();
   expect((await welcome({ ...early, commandId: 'before-approval',
     expectedPosition: current.survey.position, variant: 'assistant' })).statusCode).toBe(409);
+  await readsEntry('persona');
   const revision = (await revise('readiness-revision', current.survey.position,
     'Private welcome persona')).json<RevisionReceipt>();
   const approval = (await approve('readiness-approval', revision.position,
     revision)).json<PositionReceipt>();
+  await readsEntry('welcome');
   expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
     .toMatchObject({ status: 'not_started', requiredStep: null,
       assistantAssigned: true });
@@ -1134,6 +1136,7 @@ async function completedWelcomeFromSavedAnswer() {
   const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
   expect(projected).toMatchObject({ welcome: { status: 'completed', answered: 1 } });
   expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 3);
+  await readsEntry('workspace');
 }
 it('keeps the final answer pending until its saved intent completes exactly once',
   completedWelcomeFromSavedAnswer, 60_000);

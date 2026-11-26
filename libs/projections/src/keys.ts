@@ -1,6 +1,6 @@
 import { sha256Hex } from '@opencrane/events/digest';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { existsSync, linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 
 function reference(silo: string, conversation: string) {
@@ -31,6 +31,19 @@ function wrappingKey(path: string | undefined) {
   return key;
 }
 
+function publishKey(path: string, key: Buffer) {
+  // Publish only a complete key when a server and worker both try to create it.
+  const temporary = `${path}-${randomUUID()}.pending`;
+  writeFileSync(temporary, key, { flag: 'wx', mode: 0o600 });
+  try {
+    linkSync(temporary, path);
+  } catch (error) {
+    if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
 /** Store each conversation key separately so deleting one does not affect another. */
 export function conversationKeys(directory: string, wrappingKeyFile?: string) {
   const masterKey = wrappingKey(wrappingKeyFile);
@@ -56,16 +69,14 @@ export function conversationKeys(directory: string, wrappingKeyFile?: string) {
 
   return {
     provision(silo: string, conversation: string) {
+      const path = keyPath(silo, conversation);
+      if (existsSync(path)) return;
       mkdirSync(directory, { recursive: true, mode: 0o700 });
       const newKey = randomBytes(32);
       const storedKey = masterKey
         ? encryptBytes(masterKey, identity(silo, conversation), newKey)
         : newKey;
-      try {
-        writeFileSync(keyPath(silo, conversation), storedKey, { flag: 'wx', mode: 0o600 });
-      } catch (error) {
-        if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
-      }
+      publishKey(path, storedKey);
     },
     encrypt(silo: string, conversation: string, text: string) {
       const bytes = Buffer.from(text, 'utf8');

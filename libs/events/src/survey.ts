@@ -58,7 +58,7 @@ export const surveyStepSavedDataSchema = z.strictObject({
 }).refine(hasMatchingCiphertextDigest, {
   path: ['ciphertextDigest'], message: 'Ciphertext digest does not match encrypted bytes',
 });
-export const surveyRestartedDataSchema = z.strictObject(identity);
+export const surveyGenerationDataSchema = z.strictObject(identity);
 function hasMatchingPersonaDigest(data: { encrypted: string; encryptedDigest: string }) {
   const ciphertext = data.encrypted;
   const ciphertextDigest = data.encryptedDigest;
@@ -133,7 +133,9 @@ export const surveyEvents: readonly EventDefinition[] = [
   event('onboarding.survey_step_saved', 'personal',
     'A member saved one encrypted survey step.', surveyStepSavedDataSchema, savedExample),
   event('onboarding.survey_restarted', 'personal',
-    'A member started a new survey generation.', surveyRestartedDataSchema, exampleIdentity),
+    'A member started a new survey generation.', surveyGenerationDataSchema, exampleIdentity),
+  event('onboarding.survey_skipped', 'personal',
+    'A member chose to go straight to the workspace.', surveyGenerationDataSchema, exampleIdentity),
   event('onboarding.persona_revised', 'personal',
     'A member saved one encrypted, immutable persona revision.', personaRevisedDataSchema,
     { ...exampleIdentity, revision: 1, rendererVersion: 'persona-v1', mode: 'generate',
