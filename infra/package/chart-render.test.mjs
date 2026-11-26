@@ -158,9 +158,16 @@ function nodeApi(nodes) {
   const resources = [{ name: 'nodes', kind: 'Node', namespaced: false, verbs: ['list'] }];
   const discovery = { kind: 'APIResourceList', groupVersion: 'v1', resources };
   const nodeList = { apiVersion: 'v1', kind: 'NodeList', items: nodes };
+  const responses = {
+    '/version': { gitVersion: 'v1.32.0' },
+    '/api': { kind: 'APIVersions', versions: ['v1'] },
+    '/apis': { kind: 'APIGroupList', groups: [] },
+    '/api/v1': discovery,
+    '/api/v1/nodes': nodeList,
+  };
   function respond(request, response) {
     const { pathname } = new URL(request.url, 'http://localhost');
-    const body = { '/api/v1': discovery, '/api/v1/nodes': nodeList }[pathname];
+    const body = responses[pathname];
     const missing = { kind: 'Status', code: 404, reason: 'NotFound' };
     response.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });
     response.end(JSON.stringify(body ?? missing));
@@ -168,21 +175,32 @@ function nodeApi(nodes) {
   return createServer(respond);
 }
 
+async function copyImagePullChart(chart) {
+  const source = 'infra/package/chart';
+  await mkdir(join(chart, 'templates'), { recursive: true });
+  const files = ['Chart.yaml', 'values.yaml', 'templates/_computer.tpl',
+    'templates/computer-image-pull.yaml'];
+  for (const file of files) await copyFile(join(source, file), join(chart, file));
+}
+
 async function renderForNodes(nodes) {
   const values = chartValues();
   const temporary = await mkdtemp(join(tmpdir(), 'chart-node-render-'));
   const input = join(temporary, 'values.json');
+  const chart = join(temporary, 'chart');
   const server = nodeApi(nodes);
   try {
+    await copyImagePullChart(chart);
     await writeFile(input, JSON.stringify(values));
     function listen(resolve) {
       server.listen(0, '127.0.0.1', resolve);
     }
     await new Promise(listen);
     const address = `http://127.0.0.1:${server.address().port}`;
-    const args = ['template', 'chart-test', 'infra/package/chart', '--dry-run=server',
+    const args = ['template', 'chart-test', chart, '--dry-run=server',
       '--kube-apiserver', address, '--values', input];
-    const result = await execute('helm', args);
+    const env = { ...process.env, KUBECONFIG: join(temporary, 'unused-kubeconfig') };
+    const result = await execute('helm', args, { env });
     return result.stdout;
   } finally {
     server.close();

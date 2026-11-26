@@ -24,6 +24,7 @@ const files = [
   'infra/dev-stack/identity.ts',
   'infra/dev-stack/journey-guard.ts',
   'infra/dev-stack/packaged.ts',
+  'infra/dev-stack/package-error.ts',
   'infra/dev-stack/package-review.ts',
   'infra/dev-stack/package-hosts.ts',
   'infra/package/host-preflight.mjs',
