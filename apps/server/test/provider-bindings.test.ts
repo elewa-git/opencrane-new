@@ -265,6 +265,8 @@ async function previewsRetirementWithoutChangingHistory() {
     return row.kind === 'silo_default';
   }
   if (!saved.rows.some(isDefault)) {
+    const verification = chatVerification('primary');
+    await appendAndAuthorise(verification);
     const defaultChoice = await input({ kind: 'silo_default', dependantId: 'acme' });
     expect((await request('POST', 'primary', defaultChoice)).statusCode).toBe(200);
   }
