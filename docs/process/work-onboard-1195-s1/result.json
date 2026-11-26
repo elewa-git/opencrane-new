@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "6b980827f5afe912e193356ea407c833fd42398d",
+  "sourceCommit": "464989640d2ae317c63d9d5cba3bd58c4380374f",
   "steps": [
     "signed-out visitor is asked to sign in before seeing survey answers at 1280 px",
     "signed-out visitor is asked to sign in before seeing survey answers at 390 px",
@@ -7,8 +7,8 @@
     "skipped owner signs in and goes straight to the workspace at both widths",
     "connects the free stand-in in Models and switches on member chat",
     "accepts an invitation and opens the survey on first sign-in at 1280 px",
-    "opens the fresh survey from a workspace sign-in at 1280 px",
-    "resumes the half-finished survey from a workspace sign-in at 1280 px",
+    "opens the fresh survey from /workspace/ at 1280 px",
+    "resumes the half-finished survey from /workspace/conversations at 1280 px",
     "saves the remaining survey answers at 1280 px",
     "reviews and approves the saved persona at 1280 px",
     "reaches and completes the welcome chat at 1280 px",
@@ -17,8 +17,8 @@
     "saves and lists a personal fact at 1280 px",
     "saves and lists a personal fact at 1280 px",
     "accepts an invitation and opens the survey on first sign-in at 390 px",
-    "opens the fresh survey from a workspace sign-in at 390 px",
-    "resumes the half-finished survey from a workspace sign-in at 390 px",
+    "opens the fresh survey from /workspace/conversations at 390 px",
+    "resumes the half-finished survey from /workspace/ at 390 px",
     "saves the remaining survey answers at 390 px",
     "reviews and approves the saved persona at 390 px",
     "reaches and completes the welcome chat at 390 px",
@@ -34,32 +34,38 @@
       "welcome": "completed",
       "ordinaryChat": {
         "reply": "Hello from your computer.",
+        "dispatcherExec": "allowed",
         "duringSurvey": {
-          "computerId": "computer-9ba9cd30cdc067f5193aa9332d52898c",
+          "computerId": "computer-68c807887b150b4296c746893a80affe",
           "generation": 1,
-          "pod": "27cecec6d45e3c9f",
+          "pod": "9aa42dad02d18722",
           "phase": "Running",
           "restartCount": 0,
-          "startedAt": "2026-11-26T14:17:25Z"
+          "startedAt": "2026-11-26T18:12:11Z"
         },
         "before": {
-          "computerId": "computer-9ba9cd30cdc067f5193aa9332d52898c",
+          "computerId": "computer-68c807887b150b4296c746893a80affe",
           "generation": 1,
-          "pod": "27cecec6d45e3c9f",
+          "pod": "9aa42dad02d18722",
           "phase": "Running",
           "restartCount": 0,
-          "startedAt": "2026-11-26T14:17:25Z"
+          "startedAt": "2026-11-26T18:12:11Z"
         },
         "after": {
-          "computerId": "computer-9ba9cd30cdc067f5193aa9332d52898c",
+          "computerId": "computer-68c807887b150b4296c746893a80affe",
           "generation": 1,
-          "pod": "27cecec6d45e3c9f",
+          "pod": "9aa42dad02d18722",
           "phase": "Running",
           "restartCount": 0,
-          "startedAt": "2026-11-26T14:17:25Z"
+          "startedAt": "2026-11-26T18:12:11Z"
         }
       },
       "signedOutStatus": 401,
+      "workspaceReturns": {
+        "fresh": "/workspace/",
+        "resumed": "/workspace/conversations",
+        "completed": "/workspace/"
+      },
       "savedFacts": 1
     },
     {
@@ -68,32 +74,38 @@
       "welcome": "completed",
       "ordinaryChat": {
         "reply": "Hello from your computer.",
+        "dispatcherExec": "allowed",
         "duringSurvey": {
-          "computerId": "computer-b29cb1a54ce5f44460ce83bfded01037",
+          "computerId": "computer-a95308a621bd3e5fd15ee2b679269724",
           "generation": 1,
-          "pod": "378bf7058a40de82",
+          "pod": "e9608730b02263d8",
           "phase": "Running",
           "restartCount": 0,
-          "startedAt": "2026-11-26T14:18:17Z"
+          "startedAt": "2026-11-26T18:13:11Z"
         },
         "before": {
-          "computerId": "computer-b29cb1a54ce5f44460ce83bfded01037",
+          "computerId": "computer-a95308a621bd3e5fd15ee2b679269724",
           "generation": 1,
-          "pod": "378bf7058a40de82",
+          "pod": "e9608730b02263d8",
           "phase": "Running",
           "restartCount": 0,
-          "startedAt": "2026-11-26T14:18:17Z"
+          "startedAt": "2026-11-26T18:13:11Z"
         },
         "after": {
-          "computerId": "computer-b29cb1a54ce5f44460ce83bfded01037",
+          "computerId": "computer-a95308a621bd3e5fd15ee2b679269724",
           "generation": 1,
-          "pod": "378bf7058a40de82",
+          "pod": "e9608730b02263d8",
           "phase": "Running",
           "restartCount": 0,
-          "startedAt": "2026-11-26T14:18:17Z"
+          "startedAt": "2026-11-26T18:13:11Z"
         }
       },
       "signedOutStatus": 401,
+      "workspaceReturns": {
+        "fresh": "/workspace/conversations",
+        "resumed": "/workspace/",
+        "completed": "/workspace/conversations"
+      },
       "savedFacts": 1
     }
   ]

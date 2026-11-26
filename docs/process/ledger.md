@@ -180,7 +180,7 @@ Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1
 
 | Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
 | --- | --- | --- | --- | --- |
-| Packaged onboarding, first chat and saved Memory | [#1195](https://github.com/elewa-git/opencrane-new/issues/1195) | No | PASS 2026-11-26 `6b980827f` | [Receipt](work-onboard-1195-s1/journey.md) |
+| Packaged onboarding, first chat and saved Memory | [#1195](https://github.com/elewa-git/opencrane-new/issues/1195) | No | PASS 2026-11-26 `464989640` | [Receipt](work-onboard-1195-s1/journey.md) |
 
 ## Still NOT RUN
 
