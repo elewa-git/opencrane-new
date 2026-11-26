@@ -165,7 +165,7 @@ jobs:
           infra/dev-stack/demo-seed-run.test.ts
           infra/dev-stack/stack-real-mode.test.ts infra/dev-stack/fleet-task.test.ts
           infra/dev-stack/stack-start.test.ts infra/dev-stack/journey-refusal.test.ts
-          infra/dev-stack/live-view-repeat.test.ts
+          infra/dev-stack/live-view-repeat.test.ts infra/dev-stack/screenshot-shared-chat.test.ts
           infra/dev-stack/handler-upgrade.test.ts infra/dev-stack/dispatcher-ready.test.ts
           infra/dev-stack/scanner-settings.test.ts
           infra/dev-stack/package-hosts.test.ts

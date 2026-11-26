@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import type { Page } from 'playwright';
+import type { APIResponse, Page } from 'playwright';
 import { z } from 'zod';
 import { childRequestStatusSchema } from '@opencrane/protocol';
 import type { memberAuthorisation } from '@opencrane/authz';
@@ -8,13 +8,13 @@ import { postJourneyCommand, readJourneyApi } from './browser-api.ts';
 import type { BudgetAssistant } from './budget-fixture.ts';
 
 export interface SharedScreenshotChat {
-  requester: Page;
-  reader: Page;
+  requester: Pick<Page, 'request'>;
+  reader: Pick<Page, 'request'>;
   origin: string;
   assistant: BudgetAssistant;
   requesterId: string;
   readerId: string;
-  authorisation: ReturnType<typeof memberAuthorisation>;
+  authorisation: Pick<ReturnType<typeof memberAuthorisation>, 'conversation'>;
   until: (check: () => Promise<boolean>) => Promise<void>;
 }
 
@@ -46,7 +46,7 @@ export async function createSharedScreenshotChat(options: SharedScreenshotChat) 
   const { review } = z.object({ review: z.string() }).parse(await reviewed.json());
   const started = await postJourneyCommand(requester, origin, `${basePath}/children`,
     { requestId, sourceMessageId, review });
-  assert.equal(started.status(), 202, 'Start the shared assistant chat');
+  await verifyStartReply(started, requestId);
 
   let conversationId: string | undefined;
   async function sharedChatCreated() {
@@ -55,7 +55,9 @@ export async function createSharedScreenshotChat(options: SharedScreenshotChat) 
     assert.equal(status.status(), 200);
     const child = childRequestStatusSchema.parse(await status.json());
     assert.notEqual(child.state, 'failed', 'The shared assistant chat opens');
-    if (child.state !== 'queued' || !child.childConversationId) return false;
+    if (child.state !== 'queued') return false;
+    assert.equal(child.requestId, requestId);
+    if (!child.childConversationId) return false;
     conversationId = child.childConversationId;
     const permission = await authorisation.conversation(readerId, conversationId, 'read');
     if (!permission.allowed) return false;
@@ -66,4 +68,16 @@ export async function createSharedScreenshotChat(options: SharedScreenshotChat) 
   await until(sharedChatCreated);
   assert(conversationId);
   return conversationId;
+}
+
+async function verifyStartReply(response: APIResponse, requestId: string) {
+  if (response.status() === 425) {
+    // Follow the saved request while permission for its first input is still applying.
+    const applying = z.object({ status: z.literal('access_applying') });
+    applying.parse(await response.json());
+    return;
+  }
+  assert.equal(response.status(), 202, 'Start the shared assistant chat');
+  const queued = z.object({ state: z.literal('queued'), requestId: z.literal(requestId) });
+  queued.parse(await response.json());
 }
