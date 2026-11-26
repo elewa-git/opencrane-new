@@ -489,18 +489,18 @@ async function onboardingIdleLimit(firstChat: boolean) {
         conversationId: 'onboarding-chat', authorId: 'alice', authorKind: 'human',
         utterance: 'My first ordinary message', contentType: 'text',
       });
-      const finished = envelope('test', conversation, 'agent.turn_completed', { turnId: posted.id });
+      const finished = envelope('test', conversation, 'agent.turn_completed', {
+        conversationId: 'onboarding-chat', turnId: posted.id,
+      });
       const time = new Date(now).toISOString();
-      await nats.seed([{ ...created, time }, { ...posted, time }, { ...finished, time }]);
+      await nats.seed([{ ...created, time }]);
+      await nats.seed([{ ...posted, time }]);
+      await nats.seed([{ ...finished, time }]);
       now = joinedAt + 32 * minute;
     } else {
       now = joinedAt + 59 * minute;
-      const survey = envelope('test', 'personal-alice', 'onboarding.survey_step_saved',
-        { memberId: 'alice' });
-      const persona = envelope('test', 'personal-alice', 'onboarding.persona_revised',
-        { memberId: 'alice' });
       const time = new Date(now).toISOString();
-      await nats.seed([{ ...survey, time }, { ...persona, time }]);
+      await saveOnboardingActivity(nats, time);
       now = joinedAt + 60 * minute;
     }
     await until(isSuspended, 2500);
@@ -510,6 +510,19 @@ async function onboardingIdleLimit(firstChat: boolean) {
     vi.restoreAllMocks();
     await nats.close();
     await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function saveOnboardingActivity(nats: Awaited<ReturnType<typeof computerFixture>>['nats'],
+  time: string) {
+  const subject = 'personal-alice';
+  const types = ['onboarding.survey_step_saved', 'onboarding.survey_step_saved',
+    'onboarding.persona_revised'];
+  for (const [index, type] of types.entries()) {
+    const fixture = event(`onboarding-${index}`, subject, type);
+    const data = { ...fixture.data, memberId: 'alice' };
+    const principal = { kind: 'human' as const, id: 'alice' };
+    await nats.seed([{ ...fixture, source: 'opencrane-server', data, principal, time }]);
   }
 }
 

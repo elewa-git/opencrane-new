@@ -26,7 +26,7 @@ let runner: ProjectionRunner;
 let directory: string;
 let keys: ReturnType<typeof conversationKeys>;
 let binding: Awaited<ReturnType<typeof createStore>>;
-let restartServer: (auth?: AuthConfig) => Promise<void>;
+let restartServer: (auth?: AuthConfig, silo?: string) => Promise<void>;
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 0, exp: 2000000000 };
 let headers = { origin: 'https://app.example.test',
@@ -64,9 +64,9 @@ async function start() {
     binding, feed: { memberId } };
   const onboarding = { ...chat, keys };
   app = buildServer(config, { chat, onboarding });
-  restartServer = async function restartOnboardingServer(auth = config) {
+  restartServer = async function restartOnboardingServer(auth = config, silo = onboarding.silo) {
     await app.close();
-    app = buildServer(auth, { chat, onboarding });
+    app = buildServer(auth, { chat, onboarding: { ...onboarding, silo } });
   };
   const logger = createLogger('survey-http', { level: 'silent' });
   runner = new ProjectionRunner(db, nats.reader, logger);
@@ -184,6 +184,9 @@ async function restartRace() {
   const first = { operation: 'restart', commandId: 'restart-one', generation: 1,
     expectedPosition: current.survey.position };
   const second = { ...first, commandId: 'restart-two' };
+  const wrongRevision = { ...second, revision: 1 };
+  expect((await approve('wrong-approval-number', second.position, wrongRevision)).statusCode)
+    .toBe(409);
   const append = nats.store.append.bind(nats.store);
   const bothReady = Promise.withResolvers<void>();
   let count = 0;
@@ -1174,6 +1177,10 @@ function listed(section = 'recent', q = '') {
 
 async function welcomeArchiveAndList() {
   const welcomeId = await completedWelcomeForArchive();
+  const completedSurvey = await progress();
+  const skip = { operation: 'skip', commandId: 'skip-after-completion', generation: 1,
+    expectedPosition: completedSurvey.survey.position };
+  expect((await post(skip)).statusCode).toBe(409);
   const ordinary = { ...event('ordinary-list', 'conversation-ordinary',
     'conversation.created'), source: 'opencrane-server',
   principal: { kind: 'human' as const, id: 'alice' },
@@ -1422,6 +1429,8 @@ async function remembersSkip() {
   const before = await progress();
   const skip = { operation: 'skip', commandId: 'skip-welcome',
     generation: before.survey.generation, expectedPosition: before.survey.position };
+  const wrongGeneration = { ...skip, commandId: 'wrong-skip-generation', generation: 2 };
+  expect((await post(wrongGeneration)).statusCode).toBe(409);
   const saved = await post(skip);
   expect(saved.statusCode).toBe(200);
   expect(saved.json()).toMatchObject({ operation: 'onboarding.survey_skipped' });
@@ -1429,6 +1438,8 @@ async function remembersSkip() {
   expect(retry.json()).toEqual(saved.json());
   expect((await post({ ...skip, commandId: 'stale-skip' })).statusCode).toBe(409);
   const stored = await progress();
+  const repeat = { ...skip, commandId: 'repeated-skip', expectedPosition: stored.survey.position };
+  expect((await post(repeat)).statusCode).toBe(409);
   expect(stored.survey.nextStep).toBe(2);
   await restartServer();
   await readsEntry('workspace');
@@ -1502,3 +1513,35 @@ async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') 
 it.each(['skipped', 'completed'] as const)(
   'checks onboarding after a workspace login and returns there once setup is %s',
   workspaceLoginUsesSavedProgress, 60_000);
+
+function memberHeaders(sub: string, orgId = 'org-test') {
+  const cookie = encodeSession(config, { ...session, sub, orgId });
+  return { ...headers, cookie: `${config.cookieName}=${cookie}` };
+}
+
+async function entryChecksSessionAndMembership() {
+  const route = '/api/onboarding/entry';
+  const joined = event('bob-joined', 'member-bob', 'member.joined');
+  const auth = memberAuthorisation(binding);
+  await nats.seed([joined]);
+  await auth.handler.handle(joined, pgDb(dbs.queue));
+  const skip = { operation: 'skip', commandId: 'alice-skips', generation: 1, expectedPosition: 0 };
+  expect((await post(skip)).statusCode).toBe(200);
+  const bobHeaders = memberHeaders('bob');
+  const bob = await app.inject({ url: route + '?memberId=alice', headers: bobHeaders });
+  expect(bob.statusCode).toBe(200);
+  expect(bob.json()).toEqual({ next: 'survey' });
+  await readsEntry('workspace');
+  expect((await app.inject({ url: route })).statusCode).toBe(401);
+  const wrongOrg = memberHeaders('bob', 'another-organisation');
+  expect((await app.inject({ url: route, headers: wrongOrg })).statusCode).toBe(403);
+  await restartServer(config, 'another-silo');
+  expect((await app.inject({ url: route, headers: bobHeaders })).statusCode).toBe(403);
+  await restartServer();
+  const removed = event('bob-removed', 'member-bob', 'member.removed');
+  await nats.seed([removed]);
+  expect((await app.inject({ url: route, headers: bobHeaders })).statusCode).toBe(403);
+  await readsEntry('workspace');
+}
+it('checks the entry session, organisation, silo and active member before reading their own progress',
+  entryChecksSessionAndMembership);
