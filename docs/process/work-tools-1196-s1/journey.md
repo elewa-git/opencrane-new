@@ -1,6 +1,31 @@
 # My tools on a fresh dev stack
 
-Journey on a fresh dev stack: FAIL
+## Fresh slot 1 rerun
+
+**Fresh-stack journey — FAIL.** Run on 26 November 2026 at
+`f0deaa22d3bc6161cbd15725e7bbc84eb3e35005`.
+
+| Step | Verdict |
+| --- | --- |
+| Fresh startup and both local HTTPS fixtures ready | PASS |
+| Admin accepts the fixture invitation | PASS |
+| Admin opens the People page to invite the test member | FAIL |
+| Admin adds and publishes the personal-key and no-key servers | NOT RUN |
+| Member sees both statuses at 1280 px and 390 px | NOT RUN |
+| Member selects a personal key and sees Ready for you | NOT RUN |
+| Member without grants sees Not available to you at both widths | NOT RUN |
+
+Invitation acceptance returned HTTP 200 at 18:53:12 UTC. The People page's
+members directory read returned HTTP 403 one second later. The page only shows
+**Invite people** when that read grants permission, so the browser timed out
+waiting for the button. The exact reason for the directory refusal is unknown.
+The run ended before any tool was added or any screenshot was taken.
+
+Startup and service logs were saved before teardown. The private copies include
+`startup.log`, `service-stage-b-server.log` and `browser-diagnostics.log`.
+Slot 1 was stopped and reported free.
+
+## Previous fresh-stack attempts
 
 Tested source commit: `9306fee13db8be1b98b7493303a5822fb0823fba`.
 
@@ -11,7 +36,7 @@ Tested source commit: `9306fee13db8be1b98b7493303a5822fb0823fba`.
 | Member selects their own key and sees Ready for you | NOT RUN | NOT RUN |
 | Member without grants sees Not available to you | NOT RUN | NOT RUN |
 
-## What happened
+### What happened
 
 1. Fresh slot 1 startup and the local HTTPS fixtures passed. The built-in
    approval demo was deferred so the register started empty. The member's
