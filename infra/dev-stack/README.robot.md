@@ -40,8 +40,9 @@ approved for the current checkout. `package-rollback --revision` returns that
 release to a recorded revision. See the
 [pilot update steps](../package/README.robot.md#update-the-running-pilot).
 
-The [daily scanner refresh](../package/README.robot.md#daily-scanner-refresh) uses
-the same slot lock and ownership checks and replaces the scanner in a running package.
+The [daily scanner refresh](../package/README.robot.md#daily-scanner-refresh) has
+a host timer for each installed slot. The timer uses the same slot lock and
+ownership checks as the manual command.
 `claim.sh --id 1` tries only slot 1. A busy slot returns a failure, with no fallback
 to the other slot.
 Do not run Compose in the same slot. Always run `run.sh package-down` and `down.sh`

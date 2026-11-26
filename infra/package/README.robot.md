@@ -385,7 +385,8 @@ contains its TLS key and certificate, public issuer trust and initial release fi
 An init container copies the TLS and release files into regular files on a
 memory-backed volume. The wrapper still refuses symlinks when it reads them.
 The server receives the scanner CA and mounts `approved-manifests` from the
-`scanner-config` ConfigMap. It reads that file for each scan. It uses
+`scanner-config` ConfigMap. It reads the file before sending bytes and again
+before accepting the scanner reply for storage. It uses
 `https://scanner:8443/scan/upload`, with normal CA and hostname verification,
 request bindings and a fresh short-lived pass per scan.
 
@@ -404,11 +405,22 @@ The server receives no provisioning credential.
 
 ### Daily scanner refresh
 
-The orchestrator runs this command from the worktree that owns the installed slot.
-Run it twice each day, for example at 00:00 and 12:00 UTC. The 24-hour limit starts
-when CI checks the virus list. A full day between refreshes can leave a gap.
-It uses the existing authenticated GitHub CLI and the recorded Kubernetes target.
-The scanner itself has no GitHub or Kubernetes credentials.
+The operator installs the user systemd timer on the host from the worktree that
+owns the running package. `DEV_STACK_ID` is the installed secondary slot. The
+host account needs its usual access to GitHub, Docker and Kubernetes. Its systemd
+user manager needs to stay running after logout. On hosts that stop it at logout,
+the host administrator can enable lingering for that account with `loginctl`.
+
+```sh
+infra/dev-stack/install-scanner-refresh-timer.sh --id "$DEV_STACK_ID"
+```
+
+The timer runs at 00:00 and 12:00 UTC every day. It catches up on a missed run
+when the user manager starts again. The 24-hour limit starts when CI checks the
+virus list, so the timer leaves room for the time between CI builds. The service
+runs the same command the operator can use for an immediate check. The command
+uses the recorded Kubernetes target and the host account's existing GitHub CLI
+login. The scanner itself has no GitHub or Kubernetes credentials.
 
 ```sh
 infra/dev-stack/run.sh package-refresh-scanner --id "$DEV_STACK_ID"
@@ -419,6 +431,8 @@ successful scanner run on this repository's `main` branch. The exact commit,
 image digest and manifest hash must all match the approved run. A build older
 than the active scanner is skipped. If the operator has an expected digest pin,
 `--image IMAGE@sha256:DIGEST` requires it to match the selected approval.
+This is the same CI approval the installer trusts. There is no separate signature
+on the approval file.
 
 The command checks the owning slot and Helm release. It verifies and publishes
 the exact image bytes before changing anything in Kubernetes. It adds the
@@ -431,9 +445,24 @@ the replacement is ready, the command removes the previous hash and release file
 from the ConfigMap. If that cleanup fails, the previous approval still expires
 at its original time, and the command reports that cleanup is pending.
 
-The task log gives `PASS` with the active pin, manifest hash, last virus list check
-and the GitHub run considered. A refusal exits non-zero and names the failed step. An image
-that fails approval or publication never changes the running scanner. If the new
+The service log gives `PASS` with the active pin, manifest hash, last virus list check
+and the GitHub run considered. A refusal exits non-zero and names the failed step.
+These commands show the time of the last and next run, its exit status and its log.
+
+```sh
+systemctl --user list-timers "opencrane-scanner-refresh@$DEV_STACK_ID.timer"
+systemctl --user show "opencrane-scanner-refresh@$DEV_STACK_ID.service" -p Result -p ExecMainStatus
+journalctl --user -u "opencrane-scanner-refresh@$DEV_STACK_ID.service" -n 20
+```
+
+The timer and any running refresh are stopped before removing the package.
+
+```sh
+systemctl --user disable --now "opencrane-scanner-refresh@$DEV_STACK_ID.timer"
+systemctl --user stop "opencrane-scanner-refresh@$DEV_STACK_ID.service"
+```
+
+An image that fails approval or publication never changes the running scanner. If the new
 Pod fails to become ready, the command restores the previous pins. If Kubernetes
 cannot confirm the restore, the report says so. An expired scanner refuses uploads
 even if a later refresh fails.

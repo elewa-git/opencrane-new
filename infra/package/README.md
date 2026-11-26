@@ -80,8 +80,9 @@ Not built yet:
    A missing or changed cluster target stops forwarding.
 6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
-7. **An operator refreshes the scanner.** The daily command checks the latest
-   scanner image approved on `main` and starts it alongside the old one. The old
+7. **A host timer refreshes the scanner each day.** The operator installs the
+   timer for the running package. It checks the latest scanner image approved on
+   `main` and starts it alongside the old one. The old
    scanner stays available while the replacement gets ready. The command reports
    which image is serving or why the refresh stopped. The 24-hour limit still applies.
 8. **A backup runs.** The job stops writes, drains read tables and saves matching
