@@ -267,8 +267,12 @@ async function refusesMismatchedCaptureResources(mismatch: CaptureBinding) {
   const fileOptions = { ...chat, ...services };
   const view = { ...chat, open };
   if (mismatch === 'silo') {
-    view.silo = 'another';
-    view.binding = { ...binding, silo: 'another' };
+    fileOptions.silo = 'another';
+    fileOptions.binding = { ...binding, silo: 'another' };
+    function memberId(_silo: string, issuer: string, subject: string) {
+      return feed.memberId('test', issuer, subject);
+    }
+    fileOptions.feed = { memberId };
   } else if (mismatch === 'store') {
     fileOptions.store = nats.reader;
   } else {
