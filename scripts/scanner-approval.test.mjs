@@ -84,7 +84,9 @@ async function readNewestMainApproval() {
     const result = await fetchLatestScannerApproval(fixture.directory);
     expect(result).toMatchObject({ image: fixture.image, runId: main.id });
     const calls = vi.mocked(execFileSync).mock.calls;
-    for (const [program] of calls) expect(program).toBe('gh');
+    for (const [program] of calls) {
+      expect(program).toBe('gh');
+    }
     expect(calls[0][1][2]).toContain('branch=main');
     expect(calls.at(-1)[1]).toContain('scanner-image');
   } finally {
@@ -161,6 +163,23 @@ async function noTemporaryEvidencePaths() {
 }
 test('leaves temporary evidence paths private when the caller owns no directory',
   noTemporaryEvidencePaths);
+
+async function latestWithoutCallerDirectoryKeepsPathsPrivate() {
+  const fixture = await approvalFixture();
+  try {
+    const { fetchLatestScannerApproval } = await import('../infra/clamav/approval.mjs');
+    const main = { ...fixture.run, head_branch: 'main' };
+    setup(main, fixture.files);
+    const result = await fetchLatestScannerApproval();
+    expect(result).toMatchObject({ image: fixture.image, runId: main.id });
+    expect(result).not.toHaveProperty('manifestPath');
+    expect(result).not.toHaveProperty('releasePath');
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+}
+test('also keeps upstream temporary paths private when the caller owns no directory',
+  latestWithoutCallerDirectoryKeepsPathsPrivate);
 
 for (const field of ['status', 'conclusion', 'event', 'path', 'head_branch', 'head_sha',
   'repository', 'head_repository']) {
