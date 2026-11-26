@@ -171,6 +171,12 @@ Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1
 | --- | --- | --- | --- | --- |
 | Packaged connected-provider chat | [#1110](https://github.com/elewa-git/opencrane-new/issues/1110) | No | PASS (24 November 2026, `f7acfefaa`, restricted free stand-in) | [Receipt](work-pilot-1110-s1/journey.md#fresh-packaged-run-on-24-november-2026) |
 
+## Choosing the chat provider
+
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| First chat default on a later connection | [#1190](https://github.com/elewa-git/opencrane-new/issues/1190) | This PR, `f9ea4faea` | PASS 2026-11-26 `f9ea4faea` (dev stack and free stand-in) | [Receipt](work-bug-1190-s1/journey.md) |
+
 ## Still NOT RUN
 
 The evidence does not qualify these conditions yet:
