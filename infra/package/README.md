@@ -20,10 +20,9 @@ in the recorded Kubernetes cluster.
 flowchart LR
   stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install and update"]
   ci["GitHub packaging job<br/>approved images"] --> package
-  package -->|daily scanner update| scanner["Private upload scanner"]
   package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
-  package --> services["Private databases, event log and file store"]
+  package -->|starts services and refreshes the scanner| services["Private databases, event log,<br/>file store and scanner"]
   apps --> models["Model gateway"]
   package -->|verified backup| recovery["Empty recovery install"]
 ```
