@@ -683,6 +683,17 @@ if (program === 'helm' && args.includes('list')) {
     fs.rmSync(home + '/.config/opencrane/dev-stack-1/package-owner.json');
   }
 }
+if (program === 'helm' && args[0] === 'rollback' && state.pilot) {
+  // The source pilot keeps a recovery claim that no running workload mounts.
+  if (args.includes('--wait')) { save(); process.exit(1); }
+}
+if (program === 'helm' && args[0] === 'get' && args[1] === 'values' && state.pilot) {
+  output({ models: { mode: 'provider', qualification: true } });
+}
+if (program === 'kubectl' && state.pilot) {
+  if (args.includes('sh.helm.release.v1.opencrane-package-1.v1')) output(state.pilot.release);
+  if (args.includes('services,ingresses')) output({ items: [] });
+}
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
 if (program === 'kubectl' && args.includes('config') && args.includes('view')) {
   process.stdout.write('PRIVATE-FORWARD-CONNECTION');
@@ -711,6 +722,7 @@ type TargetState = {
   holdForward?: boolean;
   loseAfterHelm?: boolean;
   retain?: boolean;
+  pilot?: { release: { metadata: { uid: string; labels: Record<string, string> } } };
   recordBeforeCreate?: { id: string };
 };
 async function targetFixture() {
@@ -728,8 +740,8 @@ async function targetFixture() {
   async function loadState() {
     Object.assign(state, JSON.parse(await readFile(`${fixture.home}/target-state.json`, 'utf8')));
   }
-  async function run(action: string) {
-    return exec('infra/dev-stack/run.sh', [action, '--id', '1'], { env: fixture.env });
+  async function run(action: string, args: string[] = []) {
+    return exec('infra/dev-stack/run.sh', [action, '--id', '1', ...args], { env: fixture.env });
   }
   async function close() {
     await rm(fixture.home, { recursive: true, force: true });
@@ -737,6 +749,38 @@ async function targetFixture() {
   await saveState();
   return { ...fixture, state, saveState, loadState, run, close };
 }
+
+async function rollsBackWithUnusedRecoveryClaim() {
+  const fixture = await targetFixture();
+  try {
+    const namespace = 'opencrane-package-1';
+    const namespaceUid = 'owned-namespace';
+    const installId = 'original-install';
+    const releaseSecretUid = 'original-release';
+    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-ocn', namespace, namespaceUid,
+      release: namespace, installId, releaseSecretUid };
+    const annotations = { 'opencrane.dev/worktree': owner.worktree, 'opencrane.dev/slot': '1' };
+    fixture.state.namespace = { metadata: { uid: namespaceUid, annotations } };
+    const labels = { 'opencrane.dev/install-id': installId };
+    fixture.state.pilot = { release: { metadata: { uid: releaseSecretUid, labels } } };
+    await fixture.saveState();
+    await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(owner));
+    await fixture.run('package-rollback', ['--revision', '1']);
+    await fixture.loadState();
+    function isRollback(call: string[]) { return call[0] === 'helm' && call[1] === 'rollback'; }
+    const rollback = fixture.state.calls.find(isRollback);
+    assert.ok(rollback?.includes('--wait=false'));
+    function waitedForServer(call: string[]) {
+      return call.includes('rollout') && call.includes('deployment/server');
+    }
+    assert.ok(fixture.state.calls.some(waitedForServer));
+  } finally {
+    await fixture.close();
+  }
+}
+
+test('pilot rollback waits for the server and leaves the unused recovery claim alone',
+  rollsBackWithUnusedRecoveryClaim);
 
 async function targetLifecycle() {
   const fixture = await targetFixture();
