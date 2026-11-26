@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import type { Page } from 'playwright';
+import type { Page, WebSocket as BrowserWebSocket } from 'playwright';
 import { grantStream } from '@opencrane/authz';
 import { namespace, stackId } from './identity.ts';
 import type { EventStore } from '@opencrane/event-store';
@@ -166,9 +166,14 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const secondConversation = new URL(page.url()).searchParams.get('conversation');
   assert(secondConversation, 'The second chat has been saved');
   if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
+  function isSecondViewer(socket: BrowserWebSocket) {
+    return new URL(socket.url()).pathname === `/ws/conversations/${secondConversation}/view`;
+  }
+  const connected = page.waitForEvent('websocket', { predicate: isSecondViewer });
   const nextAdmission = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${secondConversation}/view` && response.status() === 200);
   await open();
   const watching = await (await nextAdmission).json() as { sessionId: string };
+  const viewerSocket = await connected;
   const duringTurnStartedAt = performance.now();
   await viewer.getByText('Viewing', { exact: true }).waitFor({ timeout: 20_000 });
   await replies.nth(before).getByText('Done', { exact: true }).waitFor();
@@ -177,11 +182,16 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const watchingAudit = await history(store, `view-${watching.sessionId}`, silo);
   assert.equal(watchingAudit.length, 1);
   assert.equal(watchingAudit[0]?.event.type, 'computer.view_started');
+  await canvas.waitFor({ state: 'visible' });
+  // Watch the socket and picture because losing chat access can remove the entire dialog.
+  const socketClosed = viewerSocket.waitForEvent('close', { timeout: 2000 });
+  const pictureCleared = canvas.waitFor({ state: 'detached', timeout: 2000 });
   const revokedAt = performance.now();
   const revokedAtTime = new Date().toISOString();
   const removal = { conversationId: secondConversation, participantId: member, removedBy: admin };
-  await append('participant.removed', `participation-${secondConversation}`, removal);
-  await viewer.getByText('Access changed', { exact: true }).waitFor({ timeout: 2000 });
+  const removed = append('participant.removed', `participation-${secondConversation}`, removal);
+  const checks = [removed, socketClosed, pictureCleared];
+  await Promise.all(checks);
   const revokedMs = Math.round(performance.now() - revokedAt);
   assert(revokedMs < 2000, 'The view closes within two seconds of participant removal');
   const duringTurnStoppedAt = performance.now();
@@ -222,7 +232,7 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
     revokedMs, transitions, pauses: duringTurnPauses.count,
     pauseMs: duringTurnPauses.durationMs, noGrant: 'PASS', keyboard: 'PASS',
     targets44px: 'PASS', assistantStubTurn: 'PASS', status: 'PASS' }, null, 2));
-  await page.keyboard.press('Escape');
+  if (await viewer.isVisible()) await page.keyboard.press('Escape');
   if (width === 390 && await page.getByRole('dialog', { name: 'Session', exact: true }).isVisible()) {
     await page.keyboard.press('Escape');
   }
