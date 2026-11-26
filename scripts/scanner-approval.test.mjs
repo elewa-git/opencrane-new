@@ -39,14 +39,18 @@ async function approvalFixture() {
   return { directory, image, ...fixture };
 }
 
-function setup(run, files, checkout = {}, candidates = [run]) {
+function setup(run, files, checkout = {}, candidates = [run], secondPage = []) {
   function execute(program, args) {
     if (program === 'git') {
       if (args.includes('HEAD')) return (checkout.revision ?? revision) + '\n';
       return (checkout.branch ?? 'work/pilot-15-s1') + '\n';
     }
     expect(program).toBe('gh');
-    if (args[0] === 'api') return JSON.stringify({ workflow_runs: candidates });
+    if (args[0] === 'api') {
+      const query = new URL(args[2], 'https://api.github.com');
+      const runs = query.searchParams.get('page') === '2' ? secondPage : candidates;
+      return JSON.stringify({ workflow_runs: runs });
+    }
     expect(args.slice(0, 3)).toEqual(['run', 'download', String(run.id)]);
     const directory = args[args.indexOf('--dir') + 1];
     for (const [name, bytes] of Object.entries(files)) {
@@ -89,6 +93,74 @@ async function readNewestMainApproval() {
 }
 test('daily refresh selects the newest successful upstream run and checks its exact source',
   readNewestMainApproval);
+
+async function pagedMainApproval() {
+  const fixture = await approvalFixture();
+  try {
+    const { fetchLatestScannerApproval } = await import('../infra/clamav/approval.mjs');
+    const main = { ...fixture.run, head_branch: 'main' };
+    const recent = [];
+    for (let index = 0; index < 20; index++) {
+      const conclusion = ['failure', 'cancelled', null][index % 3];
+      const status = conclusion === null ? 'queued' : 'completed';
+      recent.push({ ...main, id: main.id + index + 1, conclusion, status });
+    }
+    setup(main, fixture.files, {}, recent, [main]);
+    const result = await fetchLatestScannerApproval(fixture.directory);
+    expect(result).toMatchObject({ image: fixture.image, runId: main.id });
+    expect(result.manifestPath).toBe(join(fixture.directory, 'signatures.json'));
+    expect(result.releasePath).toBe(join(fixture.directory, 'release.json'));
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+}
+test('finds a successful upstream run after twenty unsuccessful runs', pagedMainApproval);
+
+async function refusesMatchingMalformedMainRevision() {
+  const fixture = await approvalFixture();
+  try {
+    const { fetchLatestScannerApproval } = await import('../infra/clamav/approval.mjs');
+    const main = { ...fixture.run, head_branch: 'main', head_sha: 'z'.repeat(40) };
+    fixture.approval.revision = main.head_sha;
+    fixture.files['approval.json'] = JSON.stringify(fixture.approval);
+    setup(main, fixture.files);
+    await expect(fetchLatestScannerApproval(fixture.directory)).rejects.toThrow('CI approval refused');
+    expect(execFileSync).toHaveBeenCalledTimes(1);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+}
+test('refuses a malformed main SHA even when the approval has the same SHA',
+  refusesMatchingMalformedMainRevision);
+
+async function refusesAnotherCheckoutRevision() {
+  const fixture = await approvalFixture();
+  try {
+    const checkout = { revision: 'c'.repeat(40) };
+    setup(fixture.run, fixture.files, checkout);
+    await expect(loadApproval()).rejects.toThrow('CI approval refused');
+    expect(execFileSync).toHaveBeenCalledTimes(3);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+}
+test('refuses an approval for another valid SHA in the same branch',
+  refusesAnotherCheckoutRevision);
+
+async function noTemporaryEvidencePaths() {
+  const fixture = await approvalFixture();
+  try {
+    setup(fixture.run, fixture.files);
+    const result = await loadApproval();
+    expect(result).toMatchObject({ runId: fixture.run.id, image: fixture.image });
+    expect(result).not.toHaveProperty('manifestPath');
+    expect(result).not.toHaveProperty('releasePath');
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+}
+test('leaves temporary evidence paths private when the caller owns no directory',
+  noTemporaryEvidencePaths);
 
 for (const field of ['status', 'conclusion', 'event', 'path', 'head_branch', 'head_sha',
   'repository', 'head_repository']) {
