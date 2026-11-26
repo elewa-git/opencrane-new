@@ -38,7 +38,19 @@ The server checks that requester's access again after reading the computer. A cl
 
 ## How it connects
 
-The [server](../../README.md) registers these requests. [Chat](../chat/README.md) supplies conversation access and delivers pause requests. [Members](../members/README.md) checks current membership. The [assistant computer](../../../computer/README.md) supplies desktop pictures over authenticated Kubernetes access, the private management connection to the running computer.
+The [server](../../README.md) registers these requests. [Chat](../chat/README.md)
+checks who can read a conversation and delivers pause requests. The
+[assistant computer](../../../computer/README.md) supplies desktop pictures over
+the private Kubernetes connection. [Files](../files/README.md) scans and saves
+screenshots.
+
+```mermaid
+flowchart LR
+  server[Server] --> computers[Desktop views and capture]
+  chat[Chat] -->|checks access| computers
+  assistant[Assistant computer] -->|sends desktop pictures| computers
+  computers -->|saves screenshots| files[Files]
+```
 
 ## Not done here
 
