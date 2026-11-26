@@ -2,6 +2,7 @@ import { computed, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import type { IntegrationRow, IntegrationsResponse } from '@opencrane/protocol';
 import type { MockInstance } from 'vitest';
+import { deferredReply } from '../../test/support/deferred-reply';
 import { App } from './app';
 import { NAVIGATE } from './core/navigate';
 import { WebSocketService } from './core/websocket.service';
@@ -153,7 +154,7 @@ describe('opening a workspace address directly', function workspaceRoutes() {
     const savedProgress = { next: 'survey' };
     const survey = Response.json(savedProgress);
     const request = vi.spyOn(globalThis, 'fetch');
-    const pending = Promise.withResolvers<Response>();
+    const pending = deferredReply();
     request.mockReturnValueOnce(pending.promise);
     request.mockResolvedValueOnce(survey);
     const fixture = await renderApp();
@@ -161,7 +162,7 @@ describe('opening a workspace address directly', function workspaceRoutes() {
     const page = root(fixture);
     expect(page.textContent).toContain('Checking your welcome progress');
     expect(page.querySelector('oc-conversations')).toBeNull();
-    pending.resolve(unavailable);
+    pending.release(unavailable);
 
     function showsFailure() {
       expect(page.textContent).toContain('We could not check your welcome progress.');
