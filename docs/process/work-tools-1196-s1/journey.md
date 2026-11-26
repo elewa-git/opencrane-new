@@ -1,5 +1,42 @@
 # My tools on a fresh dev stack
 
+## Fresh slot 1 journey rerun 2
+
+**Fresh-stack journey — PARTIAL.** Tested on 26 November 2026 at
+`2e1827dbd06f2100ef042cdd455daa5e48b9bf73`.
+
+| Step | 1280 px | 390 px |
+| --- | --- | --- |
+| Start a fresh stack and its two local TLS fixtures | FAIL | PASS |
+| Create and accept the admin and two member invitations through the API | NOT RUN | PASS |
+| Open My tools from Settings and see the empty list | NOT RUN | [PASS](rerun2-empty-390.png) |
+| Discover the personal-key server | NOT RUN | PASS |
+| Review the tool modes and audience | NOT RUN | FAIL |
+| Publish both tool servers | NOT RUN | NOT RUN |
+| See Needs your account and Ready for you | NOT RUN | NOT RUN |
+| Verify and select a key, then see Ready for you | NOT RUN | NOT RUN |
+| See Not available to you and the access message for both tools | NOT RUN | NOT RUN |
+
+The desktop attempt stopped in the development owner bootstrap after five
+ownership migration conflicts. In the phone attempt, the admin and both
+members signed in with separate fixture accounts. All six calls to create and
+accept the invitations returned HTTP 200. The admin discovered the personal-key
+server before the driver stalled on a visually clipped radio input. The driver
+now clicks the visible mode label, as the existing integration screen checks do.
+
+The corrected browser run is **NOT RUN**. A later retry reached four and a half
+minutes of the required five-minute load window before another job took slot 1.
+The wait ended before the slot and load checks cleared again, leaving too
+little time for another fresh run within the 90-minute limit.
+
+Local checks passed for 155 focused My tools and connection-selection tests,
+typecheck, changed-file ESLint, Markdown lint, Knip, event catalogue,
+whole-stream reads and changelog.
+
+Startup, service and browser logs were saved before teardown, including
+`startup.log`, `service-last-error.log`, `service-stage-b-server.log` and
+`browser-diagnostics.log`. Slot 1 reported free after teardown.
+
 ## Fresh slot 1 rerun
 
 **Fresh-stack journey — FAIL.** Run on 26 November 2026 at
