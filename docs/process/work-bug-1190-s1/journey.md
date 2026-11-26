@@ -1,6 +1,6 @@
 # Choose the chat default on the second connection
 
-**PASS** on 26 November 2026 at `6bd328dbe3b0c267400b6d48552171073fc74f68`.
+**PASS** on 26 November 2026 at `8bd4f690798f424ff2c8e63bfe2a84f55ae13b62`.
 The fresh dev stack used slot 1 and the free model stand-in. The browser started
 with an empty installation. Paid provider calls were zero.
 
@@ -16,9 +16,10 @@ with an empty installation. Paid provider calls were zero.
    `gpt-6.1-sol` on the second.
 3. Before the model answered, Models disabled Select chat default and pointed
    to the priced test on the Verify step. It offered no Pause new calls button.
-   A separate request from the owner's browser session returned HTTP 403 with
-   `connection_not_ready`. The bindings reply before and after the refusal
-   showed zero saved bindings and no default.
+   Separate requests from the owner's browser session to select the default and
+   start a pause both returned HTTP 403 with `connection_not_ready`. The bindings
+   reply still showed zero saved bindings and no default. The pause status was
+   the same before and after the refusal.
    [1280 px](setup-refusal-1280.png) · [390 px](setup-refusal-390.png)
 4. The stand-in answered the test. The owner selected the chat default on the
    second connection, paused new calls and switched on member chats. The saved
@@ -33,7 +34,7 @@ with an empty installation. Paid provider calls were zero.
    [1280 px](member-reply-1280.png) · [390 px](member-reply-390.png)
 7. Copied the six screenshots before `down.sh --id 1`. Teardown passed and
    `status.sh --id 1` reported `free`. The browser run is recorded in
-   `journey-20261126T123516Z.log`.
+   `journey-20261126T175314Z.log`.
 
 ## Earlier attempts
 
@@ -47,4 +48,5 @@ Startup and service logs were kept outside the repository before teardown.
 The browser logs are `journey-20261126T053644Z.log`,
 `journey-20261126T054629Z.log`, `journey-20261126T055632Z.log` and
 `journey-20261126T060650Z.log`. The first passing run is recorded in
-`journey-20261126T061713Z.log`.
+`journey-20261126T061713Z.log`. The earlier repeat at `6bd328dbe` is recorded in
+`journey-20261126T123516Z.log`.
