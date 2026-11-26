@@ -96,7 +96,7 @@ function cluster() {
   const clusterState = { failRollout: false };
   async function command(args) {
     const [verb, resource] = args;
-    if (verb === 'get') return readResource(resource);
+    if (verb === 'get') return readResource(resource, args[3]);
     if (verb === '--request-timeout=10s') return config.data['approved-manifests'];
     if (verb === 'rollout') {
       if (clusterState.failRollout) throw new Error('Scanner did not become ready');
@@ -121,12 +121,14 @@ function cluster() {
     }
     return '';
   }
-  function readResource(resource) {
+  function readResource(resource, output) {
     if (resource === 'deployment/scanner') return JSON.stringify(scanner);
     if (resource === 'deployment/server') return JSON.stringify(server);
     if (resource === 'configmap/scanner-config') return JSON.stringify(config);
     expect(resource).toBe('secret/scanner-secret');
-    return Buffer.from(JSON.stringify(runningRelease)).toString('base64');
+    const data = { 'release.json': Buffer.from(JSON.stringify(runningRelease)).toString('base64') };
+    if (output === String.raw`jsonpath={.data.release\.json}`) return data['release.json'];
+    return '';
   }
   const kubectl = vi.fn(command);
   return { kubectl, scanner, initialTemplate, config, patches, clusterState };
