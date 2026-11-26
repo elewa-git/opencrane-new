@@ -3,13 +3,15 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
 import { afterEach, expect, it } from 'vitest';
+import { Pool } from 'pg';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
 import { seedOwnership } from '@opencrane/models';
-import { members, memoryScopeId, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { members, memoryScopeId, pgDb, ProjectionRunner, groups, computers, conversations } from '@opencrane/projections';
+import { grantPackageReads } from '../../../infra/package/package-database.ts';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -20,6 +22,7 @@ let directory: string;
 let worker: ChildProcess | undefined;
 let workerStopped: Promise<unknown[]> | undefined;
 let workerOutput = '';
+let projectionPool: Pool | undefined;
 
 afterEach(async function cleanup() {
   await server?.stop();
@@ -27,6 +30,8 @@ afterEach(async function cleanup() {
     worker.kill('SIGTERM');
   }
   await workerStopped;
+  await projectionPool?.end();
+  projectionPool = undefined;
   await storage?.close();
   await fga?.close();
   await nats?.close();
@@ -42,24 +47,22 @@ async function setup(applyOwnershipSeed = true, isolatedMemory = false) {
   await mkdir(`${directory}/memory-keys`, { mode: 0o700 });
   await mkdir(`${directory}/personal-keys`, { mode: 0o700 });
   const binding = await createStore(fga.apiUrl, 'acme');
-  const databaseUrl = storage.queue.options.connectionString;
   const bridge = await bridgeProcessSettings(directory);
-  const memorySchema = 'opencrane_memory';
-  if (isolatedMemory) {
-    await storage.queue.query('CREATE SCHEMA opencrane_memory');
-  }
+  const roles = await databaseRoles(isolatedMemory);
   const env = {
-    ...(isolatedMemory ? { MEMORY_PROJECTION_SCHEMA: memorySchema } : {}),
-    ...bridge, ...TEST_OIDC_ENV, ...nats.env(), SILO_ID: 'acme', DATABASE_URL: databaseUrl,
+    ...(isolatedMemory ? { MEMORY_PROJECTION_SCHEMA: 'opencrane_memory' } : {}),
+    ...bridge, ...TEST_OIDC_ENV, ...nats.env(), SILO_ID: 'acme', DATABASE_URL: roles.server,
     OIDC_EXPECTED_ORG_ID: 'org-acme', OPENFGA_API_URL: binding.apiUrl,
     OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId,
     MEMORY_KEY_DIRECTORY: `${directory}/memory-keys`,
     PERSONAL_KEY_DIRECTORY: `${directory}/personal-keys`, CONVERSATION_KEYS_DIR: '',
   };
-  const db = pgDb(storage.queue);
+  const db = pgDb(projectionPool ?? storage.queue);
   const runner = new ProjectionRunner(db, nats.reader, createLogger('memory-main'));
-  await runner.initialise(members);
-  startMemoryWorker(env, isolatedMemory);
+  for (const projection of [members, groups, computers, conversations]) {
+    await runner.initialise(projection);
+  }
+  startMemoryWorker(env, roles.projection);
   function ready() { return memoryReady(isolatedMemory); }
   await until(ready);
   expect(await nats.store.head()).toBe(0);
@@ -93,21 +96,42 @@ async function setup(applyOwnershipSeed = true, isolatedMemory = false) {
   const headers = { cookie: `${config.cookieName}=${encodeSession(config, session)}`,
     origin: 'https://app.example.test', 'content-type': 'application/json' };
   const origin = `http://127.0.0.1:${server.port}`;
-  return { headers, origin, env, assistant, auth, db, applyOwnership };
+  return { headers, origin, env, assistant, auth, db, applyOwnership, runner };
 }
 
-function startMemoryWorker(env: NodeJS.ProcessEnv, isolatedMemory: boolean) {
+async function databaseRoles(isolatedMemory: boolean) {
+  const base = storage.queue.options.connectionString!;
+  if (!isolatedMemory) {
+    return { server: base, projection: base };
+  }
+  // Authenticate to the disposable fixture, then let PostgreSQL enforce the package roles.
+  for (const role of ['projection', 'server']) {
+    await storage.queue.query(`DO $$ BEGIN CREATE ROLE ${role} NOLOGIN;
+      EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
+  }
+  const database = new URL(base).pathname.slice(1);
+  if (!/^authz_[a-f0-9]+$/u.test(database)) {
+    throw new Error('Expected the disposable Memory fixture database');
+  }
+  await storage.queue.query(`ALTER DATABASE ${database} OWNER TO projection`);
+  const projection = withRole(base, 'projection');
+  const server = withRole(base, 'server');
+  await grantPackageReads(projection);
+  projectionPool = new Pool({ connectionString: projection });
+  return { server, projection };
+}
+
+function withRole(address: string, role: 'projection' | 'server') {
+  const url = new URL(address);
+  url.searchParams.set('options', `-c role=${role}`);
+  return url.href;
+}
+
+function startMemoryWorker(env: NodeJS.ProcessEnv, databaseUrl: string) {
   const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'memory'];
   const workerEnv: NodeJS.ProcessEnv = {
-    ...process.env, ...env, ...nats.env('projection'), LOG_LEVEL: 'info',
+    ...process.env, ...env, ...nats.env('projection'), LOG_LEVEL: 'info', DATABASE_URL: databaseUrl,
   };
-  // Use the test database owner for both processes, with only the worker searching Memory first.
-  if (isolatedMemory) {
-    delete workerEnv['MEMORY_PROJECTION_SCHEMA'];
-    const database = new URL(env['DATABASE_URL']!);
-    database.searchParams.set('options', '-c search_path=opencrane_memory,public');
-    workerEnv['DATABASE_URL'] = database.href;
-  }
   worker = spawn(process.execPath, args, { env: workerEnv });
   function collect(chunk: Buffer) {
     workerOutput += chunk.toString();
@@ -135,6 +159,9 @@ it('loads empty personal memory, saves a fact and recalls it through the dev-sta
     const { origin, headers, env } = await setup(true, true);
     const ordinary = await storage.queue.query("SELECT to_regclass('public.memory_facts') AS name");
     expect(ordinary.rows).toEqual([{ name: null }]);
+    const schemaOwner = await storage.queue.query(
+      "SELECT nspowner::regrole::text AS name FROM pg_namespace WHERE nspname='opencrane_memory'");
+    expect(schemaOwner.rows).toEqual([{ name: 'projection' }]);
     const scopes = await fetch(`${origin}/api/memory/scopes?assistantId=personal`, { headers });
     const scopesBody: unknown = await scopes.json();
     expect({ status: scopes.status, body: scopesBody }, server?.stdout()).toMatchObject({ status: 200,
@@ -150,7 +177,10 @@ it('loads empty personal memory, saves a fact and recalls it through the dev-sta
     const savedBody: unknown = await saved.json();
     expect({ status: saved.status, body: savedBody }).toMatchObject({ status: 200,
       body: { outcome: 'saved', revision: 1 } });
-    await until(function ready() { return memoryReady(true); });
+    function projected() {
+      return memoryReady(true);
+    }
+    await until(projected);
     const recalled = await fetch(`${path}?q=jasmine`, { headers });
     expect(recalled.status).toBe(200);
     expect(await recalled.json()).toMatchObject({ returnedCount: 1,
@@ -262,3 +292,112 @@ async function refusesMalformedDatabaseUrlSafely() {
 }
 it('keeps a malformed database address out of worker startup diagnostics',
   refusesMalformedDatabaseUrlSafely);
+
+type MemoryFixture = Awaited<ReturnType<typeof setup>>;
+type FixtureEvent = Omit<Parameters<typeof appendEvent>[1], 'silo'>;
+
+async function saveFixtureEvent(fixture: MemoryFixture, fields: FixtureEvent) {
+  const row = await appendEvent(nats.store, { ...fields, silo: 'acme' });
+  await fixture.auth.handler.handle(row.event, fixture.db);
+  return row.event;
+}
+
+async function addOtherMember(fixture: MemoryFixture) {
+  const memberId = 'bob';
+  const data = { memberId, role: 'member', email: 'bob@example.test', displayName: 'Bob',
+    identity: { issuer: fixture.env.OIDC_ISSUER_URL, sub: memberId },
+    personalAssistant: 'none' };
+  const principal = { kind: 'human' as const, id: memberId };
+  await saveFixtureEvent(fixture, { subject: 'member-bob', type: 'member.joined', data, principal });
+  await fixture.runner.run(members);
+  const config = loadAuthConfig(fixture.env);
+  const now = Math.floor(Date.now() / 1000);
+  const session = { sub: memberId, orgId: 'org-acme', roles: [], authTime: now, exp: now + 300 };
+  const cookie = encodeSession(config, session);
+  return { ...fixture.headers, cookie: `${config.cookieName}=${cookie}` };
+}
+
+async function addGroupAndSource(fixture: MemoryFixture) {
+  const teamId = 'sales';
+  const createdBy = 'bootstrap-owner';
+  const team = { teamId, name: 'Sales', createdBy };
+  await saveFixtureEvent(fixture, { subject: 'team-sales', type: 'team.created', data: team });
+  const added = { teamId, memberId: 'bob', addedBy: createdBy };
+  await saveFixtureEvent(fixture, { subject: 'team-sales', type: 'team.member_added', data: added });
+  const conversationId = 'shared-source';
+  const subject = `conversation-${conversationId}`;
+  const data = { conversationId, mode: 'direct', createdBy: 'bob',
+    participantIds: ['bob', createdBy] };
+  await saveFixtureEvent(fixture, { subject, type: 'conversation.created', data });
+  const message = { conversationId, authorId: 'bob', authorKind: 'human',
+    utterance: 'Synthetic source for Memory', contentType: 'text' };
+  const posted = await saveFixtureEvent(fixture, { subject, type: 'message.posted', data: message });
+  for (const projection of [groups, computers, conversations]) {
+    await fixture.runner.run(projection);
+  }
+  return { conversationId, messageId: posted.id };
+}
+
+function memoryFacts(origin: string, kind: 'person' | 'group' | 'assistant_notes', id: string) {
+  return `${origin}/api/memory/${memoryScopeId('acme', kind, id)}/facts`;
+}
+
+function postFact(path: string, headers: HeadersInit, commandId: string,
+  sources: { conversationId: string; messageId: string }[] = []) {
+  const input = { commandId, text: 'I prefer jasmine tea', kind: 'preference',
+    pinned: false, expiresAt: null, sources, dependsOn: [] };
+  return fetch(path, { method: 'POST', headers, body: JSON.stringify(input) });
+}
+
+async function checksGroupAndForeignMemoryAcrossSchemas() {
+  const fixture = await setup(true, true);
+  const { origin } = fixture;
+  const bob = await addOtherMember(fixture);
+  const source = await addGroupAndSource(fixture);
+  const shared = memoryFacts(origin, 'group', 'sales');
+  const privateFacts = memoryFacts(origin, 'person', 'bootstrap-owner');
+  expect((await fetch(privateFacts, { headers: bob })).status).toBe(404);
+  expect((await postFact(privateFacts, bob, 'foreign-write')).status).toBe(404);
+  expect((await fetch(shared, { headers: fixture.headers })).status).toBe(404);
+  expect((await postFact(shared, fixture.headers, 'foreign-group-write')).status).toBe(404);
+  const missing = { ...source, messageId: 'missing-message' };
+  expect((await postFact(shared, bob, 'missing-source', [missing])).status).toBe(404);
+  expect((await postFact(shared, bob, 'group-fact', [source])).status).toBe(200);
+  function projected() {
+    return memoryReady(true);
+  }
+  await until(projected);
+  const recalled = await fetch(shared, { headers: bob });
+  expect(recalled.status).toBe(200);
+  expect(await recalled.json()).toMatchObject({ facts: [{ text: 'I prefer jasmine tea' }] });
+}
+it('checks private, group and source access with packaged database roles',
+  checksGroupAndForeignMemoryAcrossSchemas, 60_000);
+
+async function checksNotesPermissionsAcrossSchemas() {
+  const fixture = await setup(true, true);
+  const { origin, headers, assistant } = fixture;
+  await fixture.auth.handler.handle(assistant, fixture.db);
+  const path = memoryFacts(origin, 'assistant_notes', 'personal');
+  const scopeId = memoryScopeId('acme', 'assistant_notes', 'personal');
+  const bob = await addOtherMember(fixture);
+  await addGroupAndSource(fixture);
+  expect((await fetch(path, { headers })).status).toBe(404);
+  expect((await postFact(path, headers, 'no-write-grant')).status).toBe(404);
+  for (const granteeId of ['bootstrap-owner', 'bob']) {
+    const data = { resourceType: 'memory_read', resourceId: scopeId, granteeKind: 'member',
+      granteeId, grantedBy: 'bootstrap-owner' };
+    await saveFixtureEvent(fixture, { subject: grantStream('memory_read', scopeId),
+      type: 'grant.given', data });
+  }
+  expect((await fetch(path, { headers })).status).toBe(200);
+  expect((await postFact(path, headers, 'read-only-grant')).status).toBe(404);
+  expect((await fetch(path, { headers: bob })).status).toBe(404);
+  const write = { resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
+    granteeId: 'bootstrap-owner', grantedBy: 'bootstrap-owner' };
+  await saveFixtureEvent(fixture, { subject: grantStream('memory_write', scopeId),
+    type: 'grant.given', data: write });
+  expect((await postFact(path, headers, 'notes-write')).status).toBe(200);
+}
+it('requires the personal assistant owner and independent note grants with packaged database roles',
+  checksNotesPermissionsAcrossSchemas, 60_000);

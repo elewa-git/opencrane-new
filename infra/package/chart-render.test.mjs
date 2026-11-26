@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 import { sharedCertificates, certificates, issueCertificate }
   from '../../libs/event-store/test/certificates.ts';
 import { parseAllDocuments } from 'yaml';
@@ -1340,3 +1340,13 @@ function ordinaryWorkerCannotReachOtherPods() {
 }
 test('an unrelated projection worker cannot create pods or run commands in another pod',
   ordinaryWorkerCannotReachOtherPods);
+
+function comparesOtherPartsOfTheKeyDeployments() {
+  const original = renderChart(chartValues()).stdout;
+  const edited = original.replace('apps/server/src/main.ts', 'apps/server/src/another-entry.ts');
+  assert.notEqual(edited, original);
+  const equivalent = isDeepStrictEqual(unchangedResources(edited), unchangedResources(original));
+  assert.equal(equivalent, false);
+}
+test('the chart comparison sees an unrelated server change beside the key mounts',
+  comparesOtherPartsOfTheKeyDeployments);

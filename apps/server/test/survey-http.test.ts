@@ -184,9 +184,6 @@ async function restartRace() {
   const first = { operation: 'restart', commandId: 'restart-one', generation: 1,
     expectedPosition: current.survey.position };
   const second = { ...first, commandId: 'restart-two' };
-  const wrongRevision = { ...second, revision: 1 };
-  expect((await approve('wrong-approval-number', second.position, wrongRevision)).statusCode)
-    .toBe(409);
   const append = nats.store.append.bind(nats.store);
   const bothReady = Promise.withResolvers<void>();
   let count = 0;
@@ -327,8 +324,8 @@ async function removalDuringHistory(method: 'GET' | 'POST') {
 it.each(['GET', 'POST'] as const)('refuses %s when membership is removed during history loading',
   removalDuringHistory);
 
-async function completeSurvey() {
-  for (let step = 1; step <= 4; step++) {
+async function completeSurvey(startStep = 1) {
+  for (let step = startStep; step <= 4; step++) {
     const current = await progress();
     expect((await save(step, current.survey.position)).statusCode).toBe(200);
   }
@@ -629,6 +626,9 @@ async function approvalRaceAndReplay() {
   const first = (await revise('approval-r1', surveyPosition, 'First')).json<RevisionReceipt>();
   const second = (await revise('approval-r2', first.position, 'Private second'))
     .json<RevisionReceipt>();
+  const wrongRevision = { ...second, revision: 1 };
+  expect((await approve('wrong-approval-number', second.position, wrongRevision)).statusCode)
+    .toBe(409);
   const append = nats.store.append.bind(nats.store);
   const bothReady = Promise.withResolvers<void>();
   let waiting = 0;
@@ -1142,12 +1142,13 @@ async function completedWelcomeFromSavedAnswer() {
   expect(projected).toMatchObject({ welcome: { status: 'completed', answered: 1 } });
   expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 3);
   await readsEntry('workspace');
+  await refusesReplayedSkip(2);
 }
 it('keeps the final answer pending until its saved intent completes exactly once',
   completedWelcomeFromSavedAnswer, 60_000);
 
-async function completedWelcomeForArchive() {
-  const position = await completeSurvey();
+async function completedWelcomeForArchive(startStep = 1) {
+  const position = await completeSurvey(startStep);
   const started = (await welcome({ operation: 'start', commandId: 'archive-start',
     generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
     variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
@@ -1446,6 +1447,7 @@ async function remembersSkip() {
   await runner.rebuild(personalSettings);
   const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
   expect(projected).toMatchObject({ skipped: true, nextStep: 2 });
+  await refusesReplayedSkip(1);
 }
 it('keeps the member in the workspace after a saved skip, even after replay', remembersSkip);
 
@@ -1484,26 +1486,7 @@ async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') 
         generation: 1, expectedPosition: before.survey.position };
       expect((await post(skip)).statusCode).toBe(200);
     } else {
-      for (let step = 2; step <= 4; step++) {
-        const before = await progress();
-        expect((await save(step, before.survey.position)).statusCode).toBe(200);
-      }
-      const before = await progress();
-      const started = await welcome({ operation: 'start', commandId: 'start-before-login',
-        generation: 1, expectedPosition: before.survey.position, scriptVersion: 'welcome-v1',
-        variant: 'no_assistant' });
-      expect(started.statusCode).toBe(200);
-      const start = started.json<{ position: number; welcomeId: string }>();
-      const answered = await welcome({ operation: 'answer', commandId: 'answer-before-login',
-        generation: 1, expectedPosition: start.position, welcomeId: start.welcomeId,
-        scriptVersion: 'welcome-v1', stepId: 'continue_to_workspace', stepNumber: 1,
-        answer: 'Continue to workspace' });
-      expect(answered.statusCode).toBe(200);
-      const last = await nats.store.head('personal-alice');
-      for await (const answer of nats.store.readStream('personal-alice', last)) {
-        const reaction = welcomeCompletionHandler(nats.store);
-        await reaction.handle(answer.event, pgDb(dbs.queue));
-      }
+      await completedWelcomeForArchive(2);
     }
     expect(await loginWithReturnPath(auth, workspace)).toBe(workspace);
   } finally {
@@ -1545,3 +1528,20 @@ async function entryChecksSessionAndMembership() {
 }
 it('checks the entry session, organisation, silo and active member before reading their own progress',
   entryChecksSessionAndMembership);
+
+async function refusesReplayedSkip(generation: number) {
+  const fixture = event('replayed-invalid-skip', 'personal-alice', 'onboarding.survey_skipped');
+  const principal = { kind: 'human' as const, id: 'alice' };
+  const data = { ...fixture.data, memberId: 'alice', generation };
+  const invalid = { ...fixture, source: 'opencrane-server', principal, data };
+  const position = await nats.store.head('personal-alice');
+  await expect(personalSettings.apply(pgDb(dbs.queue), invalid, position + 1))
+    .rejects.toThrow('Invalid survey skip');
+  await nats.seed([invalid]);
+  const entry = await app.inject({ url: '/api/onboarding/entry', headers });
+  expect(entry.statusCode).toBe(503);
+}
+async function refusesReplayedSkipGeneration() {
+  await refusesReplayedSkip(2);
+}
+it('refuses a skip of the wrong generation in both survey readers', refusesReplayedSkipGeneration);
