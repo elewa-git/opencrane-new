@@ -126,16 +126,17 @@ function stallRequest(_resource: RequestInfo | URL, options?: RequestInit): Prom
 
 function controlDeadline() {
   const deadline = new AbortController();
-  vi.spyOn(AbortSignal, 'timeout').mockImplementation(function timeout(milliseconds) {
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(function timeout(milliseconds) {
     expect(milliseconds).toBeGreaterThan(0);
     expect(milliseconds).toBeLessThanOrEqual(15_000);
     return deadline.signal;
   });
-  return deadline;
+  function restore() { timeoutSpy.mockRestore(); }
+  return { deadline, restore };
 }
 
 it('ends the session check when the reply stalls', async function boundSessionCheck() {
-  const deadline = controlDeadline();
+  const { deadline } = controlDeadline();
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockImplementationOnce(stallRequest);
   const { element, fixture } = await openInvitation('[role=status]');
@@ -150,7 +151,7 @@ it('ends the session check when the reply stalls', async function boundSessionCh
 });
 
 it('retries a lost join reply with the original command', async function retryJoin() {
-  const deadline = controlDeadline();
+  const { deadline, restore } = controlDeadline();
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
   fetchSpy.mockImplementationOnce(stallRequest);
@@ -167,7 +168,7 @@ it('retries a lost join reply with the original command', async function retryJo
     expect(element.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(false);
   });
 
-  vi.mocked(AbortSignal.timeout).mockRestore();
+  restore();
   accept(element);
   await vi.waitFor(function opensWorkspace() {
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/workspace');

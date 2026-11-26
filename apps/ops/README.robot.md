@@ -538,8 +538,9 @@ identity `personal:<memberId>`; keys are never returned to events or computers.
 Duplicate delivery retains the same key. Current membership is checked from events
 before old joins/bootstrap records prepare custody, including `personalAssistant: none`.
 The reaction appends nothing and provisions no assistant. Enable/backfill its two
-subscriptions through the existing handler upgrade procedure. Missing configuration
-leaves the reaction disabled; future survey commands must refuse unavailable custody.
+subscriptions through the existing handler upgrade procedure. The package leaves this
+reaction disabled and the server prepares the key when it first saves an answer.
+Both paths leave a missing key visible as an error once saved answers need it.
 Offline survey replay uses ProjectionRunner with reactions off; no replay CLI is added.
 
 `complete-welcome` subscribes to `onboarding.welcome_answer_recorded`. It reads

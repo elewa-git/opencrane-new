@@ -65,6 +65,13 @@ async function revisePersona(db: Query, survey: Survey, event: EventEnvelope, po
   survey.currentRevisionId = event.id;
   survey.revisionCount = revised.revision;
 }
+function skipSurvey(survey: Survey, generation: number) {
+  if (generation !== survey.generation || survey.skipped || survey.welcome?.status === 'completed') {
+    throw new Error('Invalid survey skip');
+  }
+  survey.skipped = true;
+}
+
 function approvePersona(survey: Survey, event: EventEnvelope) {
   const approved = personaApprovedDataSchema.parse(event.data);
   if (approved.generation !== survey.generation ||
@@ -177,11 +184,7 @@ async function apply(db: Query, event: EventEnvelope, position: number): Promise
   if (event.type === 'onboarding.survey_restarted') {
     restartSurvey(survey, event);
   } else if (event.type === 'onboarding.survey_skipped') {
-    if (data.generation !== survey.generation || survey.skipped ||
-        survey.welcome?.status === 'completed') {
-      throw new Error('Invalid survey skip');
-    }
-    survey.skipped = true;
+    skipSurvey(survey, data.generation);
   } else if (event.type === 'onboarding.persona_revised') {
     await revisePersona(db, survey, event, position);
   } else if (event.type === 'onboarding.persona_approved') {

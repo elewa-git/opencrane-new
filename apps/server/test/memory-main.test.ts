@@ -98,13 +98,15 @@ async function setup(applyOwnershipSeed = true, isolatedMemory = false) {
 
 function startMemoryWorker(env: NodeJS.ProcessEnv, isolatedMemory: boolean) {
   const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'memory'];
-  const workerEnv = { ...process.env, ...env, ...nats.env('projection'), LOG_LEVEL: 'info' };
+  const workerEnv: NodeJS.ProcessEnv = {
+    ...process.env, ...env, ...nats.env('projection'), LOG_LEVEL: 'info',
+  };
   // Use the test database owner for both processes, with only the worker searching Memory first.
   if (isolatedMemory) {
     delete workerEnv['MEMORY_PROJECTION_SCHEMA'];
     const database = new URL(env['DATABASE_URL']!);
     database.searchParams.set('options', '-c search_path=opencrane_memory,public');
-    workerEnv.DATABASE_URL = database.href;
+    workerEnv['DATABASE_URL'] = database.href;
   }
   worker = spawn(process.execPath, args, { env: workerEnv });
   function collect(chunk: Buffer) {
