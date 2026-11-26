@@ -242,3 +242,23 @@ it('identifies pending ownership permissions and loads personal memory after the
     expect(facts.status).toBe(200);
     expect(await facts.json()).toMatchObject({ facts: [], returnedCount: 0 });
   }, 60_000);
+
+async function refusesMalformedDatabaseUrlSafely() {
+  const marker = 'synthetic-password-marker';
+  const args = ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'memory'];
+  const env = { ...process.env, MEMORY_PROJECTION_SCHEMA: 'opencrane_memory',
+    DATABASE_URL: `postgres://memory:${marker}@[invalid-host/opencrane` };
+  const child = spawn(process.execPath, args, { env });
+  let output = '';
+  function collect(chunk: Buffer) {
+    output += chunk.toString();
+  }
+  child.stderr.on('data', collect);
+  child.stdout.on('data', collect);
+  const [status] = await once(child, 'close');
+  expect(status).toBe(1);
+  expect(output.includes(marker)).toBe(false);
+  expect(output).toContain('Invalid Memory database address');
+}
+it('keeps a malformed database address out of worker startup diagnostics',
+  refusesMalformedDatabaseUrlSafely);

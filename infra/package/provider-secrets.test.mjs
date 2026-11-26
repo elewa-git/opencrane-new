@@ -77,3 +77,32 @@ async function preparesMemberKeys() {
 }
 test('startup prepares both member key folders without interrupting live key writes',
   preparesMemberKeys);
+
+async function refusesUnsafeMemberKey(kind) {
+  const root = await mkdtemp(join(tmpdir(), 'unsafe-member-key-'));
+  const keys = join(root, 'keys');
+  const file = join(keys, 'a'.repeat(64));
+  try {
+    await mkdir(keys, { mode: 0o700 });
+    if (kind === 'symlink') {
+      await symlink('missing-key', file);
+    } else {
+      await writeFile(file, 'synthetic-member-key', { mode: 0o640 });
+      await chmod(file, 0o640);
+    }
+    const args = ['infra/package/provider-secrets.mjs', '--directory-only', root];
+    const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
+    assert.equal(result.status, 1, `Accepted an unsafe ${kind} key`);
+    assert.match(result.stderr, /Key custody/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+function refusesLinkedMemberKey() {
+  return refusesUnsafeMemberKey('symlink');
+}
+function refusesReadableMemberKey() {
+  return refusesUnsafeMemberKey('group-readable');
+}
+test('startup refuses a member key that is a symbolic link', refusesLinkedMemberKey);
+test('startup refuses a member key that is group-readable', refusesReadableMemberKey);

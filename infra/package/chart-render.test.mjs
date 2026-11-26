@@ -1313,3 +1313,30 @@ function detectsRelocatedProviderContainers() {
 }
 test('provider isolation refuses the same container names and mounts moved into the backup',
   detectsRelocatedProviderContainers);
+
+function ordinaryWorkerCannotReachOtherPods() {
+  const resources = renderedResources(chartValues());
+  const worker = resources.get('Deployment/worker-files').spec.template.spec;
+  const identity = worker.serviceAccountName ?? 'default';
+  const grantedRules = [];
+  for (const binding of resources.values()) {
+    if (binding.kind !== 'RoleBinding') continue;
+    function workerSubject(subject) {
+      return subject.kind === 'ServiceAccount' && subject.name === identity;
+    }
+    if (!binding.subjects.some(workerSubject)) continue;
+    const role = resources.get(binding.roleRef.kind + '/' + binding.roleRef.name);
+    grantedRules.push(...role.rules);
+  }
+  for (const resource of ['pods', 'pods/exec']) {
+    function canCreate(rule) {
+      return rule.apiGroups.includes('') &&
+        (rule.resources.includes(resource) || rule.resources.includes('*')) &&
+        (rule.verbs.includes('create') || rule.verbs.includes('*'));
+    }
+    assert.equal(grantedRules.some(canCreate), false, 'Unrelated worker can create ' + resource);
+  }
+  assert.equal(worker.automountServiceAccountToken, false);
+}
+test('an unrelated projection worker cannot create pods or run commands in another pod',
+  ordinaryWorkerCannotReachOtherPods);
