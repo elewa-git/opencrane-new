@@ -1,6 +1,7 @@
 import { nextBinaryMessage, recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
 import { memberAuthorisation } from '@opencrane/authz';
 import { viewFixture } from './support/view-fixture.ts';
+import { teamViewChat, viewHeaders } from './support/view-requests.ts';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -388,40 +389,35 @@ it('admits a replacement ready computer without a desktop grant', async () => {
   } finally { await fixture.close(); }
 }, 30_000);
 
-async function admitsSharedChatParticipant() {
-  function openDesktop() {
+async function requiresPrivateTeamReader() {
+  const openDesktop = vi.fn(function openDesktop() {
     return Promise.resolve(new PassThrough());
-  }
+  });
   const fixture = await viewFixture(openDesktop);
-  const { app, append, config } = fixture;
+  const { app, append, config, runner } = fixture;
   try {
-    const assistant = { assistantId: 'shared', ownerId: 'sales', kind: 'team',
-      payingGroupId: 'sales' };
-    await append('assistant-shared', 'assistant.created', assistant, true);
-    const computer = { assistantId: 'shared', computerId: 'shared-desktop', generation: 1 };
-    const claimed = { ...computer, tokenId: 'token:shared' };
-    await append('computer-shared', 'computer.claimed', claimed);
-    const ready = { ...computer, podUid: 'shared-pod' };
-    await append('computer-shared', 'computer.ready', ready);
-    const chat = { conversationId: 'shared', assistantId: 'shared', createdBy: 'alice',
-      mode: 'agent_session', payingGroupId: 'sales' };
-    await append('conversation-shared', 'conversation.created', chat, true);
-    const session = { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1,
-      exp: Math.floor(Date.now() / 1000) + 120 };
-    const cookie = encodeSession(config, session);
-    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
-      cookie: `${config.cookieName}=${cookie}` };
-    const request = { method: 'POST' as const, url: '/api/conversations/shared/view', headers };
-    expect((await app.inject(request)).statusCode).toBe(403);
-    const joined = { conversationId: 'shared', participantId: 'bob', addedBy: 'alice' };
-    await append('participation-shared', 'participant.added', joined, true);
-    expect((await app.inject(request)).statusCode).toBe(200);
+    await teamViewChat(fixture);
+    await append('participation-team-session', 'participant.added', {
+      conversationId: 'team-session', participantId: 'bob', addedBy: 'alice',
+    }, true);
+    await runner.run(conversations);
+    const chat = '/api/conversations/team-session';
+    const alice = viewHeaders(config);
+    const bob = viewHeaders(config, 'bob');
+    expect((await app.inject({ url: `${chat}/messages`, headers: alice })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: `${chat}/view`, headers: alice })).statusCode)
+      .toBe(200);
+    expect((await app.inject({ url: `${chat}/messages`, headers: bob })).statusCode).toBe(403);
+    const refused = await app.inject({ method: 'POST', url: `${chat}/view`, headers: bob });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).not.toHaveProperty('ticket');
+    expect(openDesktop).not.toHaveBeenCalled();
   } finally {
     await fixture.close();
   }
 }
-it('admits a participant of a shared assistant chat without a desktop grant',
-  admitsSharedChatParticipant, 30_000);
+it('lets only the private team-chat requester watch, even with another applied join',
+  requiresPrivateTeamReader, 30_000);
 
 it('does not renew the desktop lease from a delayed authority reply after revocation', async () => {
   const fixture = await viewFixture(() => {
@@ -458,7 +454,6 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admitted.json<{ ticket: string }>().ticket], { headers });
     socket.on('error', () => undefined); expect(await nextBinaryMessage(socket)).toEqual(Buffer.from('RFB 003.008\n'));
     slow = true; await pending;
-    const notices = recordLeaseNotices(socket);
     let closeCode: unknown;
     socket.once('close', function closed(code: number) { closeCode = code; });
     const revokedAt = performance.now();
@@ -466,23 +461,81 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
       conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
     });
     blocked = true;
-    function deniedOrPaused() {
-      return closeCode === 4003 || notices.some(function paused(entry) {
-        return entry.notice.lease === 'paused';
-      });
+    function denied() {
+      return closeCode === 4003;
     }
-    await until(deniedOrPaused, 2000);
+    await until(denied, 2000);
     expect(performance.now() - revokedAt).toBeLessThan(2000);
-    if (closeCode !== 4003) {
-      let binaryAfterPause = false;
-      socket.on('message', function receive(_bytes: unknown, binary: boolean) {
-        if (binary) binaryAfterPause = true;
-      });
-      await delay(500);
-      expect(binaryAfterPause).toBe(false);
-    }
   } finally {
     release(); socket?.terminate(); vi.restoreAllMocks(); proxy.closeAllConnections();
     await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();
   }
 }, 30_000);
+
+
+async function closesWhileMemberReadStalls() {
+  function openDesktop() {
+    const readable = new PassThrough();
+    const writable = new PassThrough();
+    writable.resume();
+    readable.write(Buffer.from('RFB 003.008\n'));
+    return Promise.resolve(Duplex.from({ readable, writable }));
+  }
+  const fixture = await viewFixture(openDesktop);
+  const { app, config, nats, append } = fixture;
+  const blocked = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const read = nats.store.readStream.bind(nats.store);
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  const clock = nats.store.clock;
+  function sleep(milliseconds: number, signal?: AbortSignal) {
+    // Keep the store timeout pending while the independent viewer timer still runs.
+    if (milliseconds > 1000 && milliseconds <= 1200) {
+      return release.promise;
+    }
+    return clock.sleep(milliseconds, signal);
+  }
+  Object.assign(nats.store, { clock: { ...clock, sleep } });
+  let socket: WebSocket | undefined;
+  try {
+    const headers = viewHeaders(config);
+    const url = '/api/conversations/chat/view';
+    const admission = await app.inject({ method: 'POST', url, headers });
+    expect(admission.statusCode).toBe(200);
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    const ticket = admission.json<{ ticket: string }>().ticket;
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`,
+      ['binary', ticket], { headers });
+    expect(await nextBinaryMessage(socket)).toEqual(Buffer.from('RFB 003.008\n'));
+    readSpy.mockImplementation(async function* stallMember(...args) {
+      if (args[0] === 'member-alice') {
+        blocked.resolve();
+        await release.promise;
+      }
+      yield* read(...args);
+    });
+    await blocked.promise;
+    let closeCode: number | undefined;
+    socket.once('close', function recordClose(code: number) {
+      closeCode = code;
+    });
+    const started = performance.now();
+    await append('participation-chat', 'conversation.closed', {
+      conversationId: 'chat', closedBy: 'alice',
+    });
+    function hasClosed() {
+      return closeCode !== undefined;
+    }
+    await until(hasClosed, 2000);
+    expect(closeCode).toBe(4003);
+    expect(performance.now() - started).toBeLessThan(2000);
+  } finally {
+    release.resolve();
+    Object.assign(nats.store, { clock });
+    readSpy.mockRestore();
+    socket?.terminate();
+    await fixture.close();
+  }
+}
+it('closes a viewer within two seconds when chat closes beside a stalled member read',
+  closesWhileMemberReadStalls, 30_000);

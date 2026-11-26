@@ -1,14 +1,15 @@
 import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
-import { fileUploadedDataSchema } from '@opencrane/events';
+import { fileUploadedDataSchema, parseEventByType } from '@opencrane/events';
 import { PassThrough, Duplex } from 'node:stream';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { files, conversations } from '@opencrane/projections';
 import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { uploadServices } from './support/upload-services.ts';
+import { teamViewChat, viewHeaders } from './support/view-requests.ts';
 
 // Record desktop traffic through the authenticated connection and use known red pixels.
 function desktop(width = 2, height = 2) {
@@ -148,58 +149,96 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
   } finally { await app.close(); await fixture.close(); await services.close(); }
 }, 180_000);
 
-// Use the screenshot probe to refuse a shared session before opening its desktop.
-async function refusesTeamScreenshotBeforeCapture() {
-  let captures = 0;
-  function open() {
-    captures++;
-    return desktop();
-  }
-  const fixture = await viewFixture(open);
+async function savesTeamScreenshot() {
+  const fixture = await viewFixture(desktop);
   const services = await uploadServices();
-  const { config, nats, binding, feed, db } = fixture;
+  const { config, nats, binding, feed, db, runner } = fixture;
   const options = { silo: 'test', store: nats.store, binding, feed, db };
-  const files = { ...options, ...services };
-  const view = { ...options, open };
-  const app = buildServer(config, { files, liveView: view });
+  const fileOptions = { ...options, ...services };
+  const view = { ...options, open: () => desktop() };
+  const app = buildServer(config, { chat: options, files: fileOptions, liveView: view });
   try {
-    await fixture.append('team-sales', 'team.created', {
-      teamId: 'sales', name: 'Sales', createdBy: 'alice',
-    }, true);
-    await fixture.append('team-sales', 'team.member_added', {
-      teamId: 'sales', memberId: 'alice', addedBy: 'alice',
-    }, true);
-    await fixture.append('assistant-team-sales', 'assistant.created', {
-      assistantId: 'team-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
-    }, true);
-    await fixture.append('computer-team-sales', 'computer.claimed', {
-      assistantId: 'team-sales', computerId: 'team-desktop', generation: 1, tokenId: 'token:test',
-    });
-    await fixture.append('computer-team-sales', 'computer.ready', {
-      assistantId: 'team-sales', computerId: 'team-desktop', generation: 1, podUid: 'pod',
-    });
-    await fixture.append('conversation-team-session', 'conversation.created', {
-      conversationId: 'team-session', assistantId: 'team-sales', createdBy: 'alice',
-      mode: 'agent_session', payingGroupId: 'sales',
-    }, true);
-    const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
-      exp: Math.floor(Date.now() / 1000) + 300 };
-    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
-      'idempotency-key': 'team-shot',
-      cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-    const response = await app.inject({ method: 'POST',
-      url: '/api/conversations/team-session/screenshots', headers });
-    expect(response.statusCode, response.body).toBe(403);
-    expect(captures).toBe(0);
-    expect(response.body).toContain('share one workspace');
+    await teamViewChat(fixture);
+    await runner.run(conversations);
+    const headers = { ...viewHeaders(config), 'idempotency-key': 'team-shot' };
+    const chat = '/api/conversations/team-session';
+    expect((await app.inject({ url: `${chat}/messages`, headers })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: `${chat}/view`, headers })).statusCode)
+      .toBe(200);
+    const uploadHeaders = { ...headers, 'content-type': 'application/octet-stream',
+      'x-file-name': 'notes.txt', 'idempotency-key': 'ordinary-upload' };
+    const upload = await app.inject({ method: 'POST', url: `${chat}/files`,
+      headers: uploadHeaders, payload: Buffer.from('Notes') });
+    expect(upload.statusCode).toBe(403);
+    expect(upload.body).toContain('share one workspace');
+
+    const request = { method: 'POST' as const, url: `${chat}/screenshots`, headers };
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(201);
+    const repeated = await app.inject(request);
+    expect(repeated.statusCode).toBe(201);
+    expect(repeated.json()).toEqual(response.json());
+    await runner.initialise(files);
+    await runner.run(files);
+    await runner.run(conversations);
+    const list = await app.inject({ url: `${chat}/files`, headers });
+    const saved = list.json<{ rows: { path: string }[] }>().rows;
+    expect(saved).toHaveLength(1);
+    const path = encodeURIComponent(saved[0]!.path);
+    const preview = await app.inject({ url: `${chat}/files/view?path=${path}&preview=true`, headers });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers['content-type']).toContain('image/png');
+    expect(preview.rawPayload.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
   } finally {
     await app.close();
     await fixture.close();
     await services.close();
   }
 }
-it('refuses a team screenshot before capturing the shared desktop',
-  refusesTeamScreenshotBeforeCapture, 120_000);
+it('lets a current team-chat reader save and reopen a screenshot', savesTeamScreenshot, 120_000);
+
+async function refusesPublicationAfterRemoval() {
+  const fixture = await viewFixture(desktop);
+  const services = await uploadServices();
+  const { config, nats, binding, feed, db, append } = fixture;
+  const options = { silo: 'test', store: nats.store, binding, feed, db };
+  const fileOptions = { ...options, ...services };
+  const view = { ...options, open: () => desktop() };
+  const app = buildServer(config, { files: fileOptions, liveView: view });
+  const publish = nats.store.append.bind(nats.store);
+  let reachedPublication = false;
+  const publication = vi.spyOn(nats.store, 'append');
+  publication.mockImplementation(async function removeBeforePublication(input) {
+    const parsed = parseEventByType(input.event);
+    if (parsed.success && parsed.event.type === 'file.uploaded') {
+      reachedPublication = true;
+      await append('participation-chat', 'participant.removed', {
+        conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
+      });
+    }
+    return publish(input);
+  });
+  try {
+    const headers = { ...viewHeaders(config), 'idempotency-key': 'publication' };
+    const url = '/api/conversations/chat/screenshots';
+    const response = await app.inject({ method: 'POST', url, headers });
+    expect(reachedPublication).toBe(true);
+    expect(response.statusCode, response.body).toBe(403);
+    const rows = await history(nats.store, 'conversation-chat', 'test');
+    function isFileEvent(row: (typeof rows)[number]) {
+      return row.event.type === 'file.uploaded' || row.event.type === 'file.rejected';
+    }
+    expect(rows.filter(isFileEvent)).toEqual([]);
+    expect(response.json()).toMatchObject({ reason: 'access_changed' });
+  } finally {
+    publication.mockRestore();
+    await app.close();
+    await fixture.close();
+    await services.close();
+  }
+}
+it('publishes no screenshot file event when participation ends at append',
+  refusesPublicationAfterRemoval, 120_000);
 
 function cleanVerdict() {
   return 'clean' as const;
