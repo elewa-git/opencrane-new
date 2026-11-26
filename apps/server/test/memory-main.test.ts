@@ -413,14 +413,18 @@ async function checksNotesPermissionsAcrossSchemas() {
   const scopeId = memoryScopeId('acme', 'assistant_notes', 'personal');
   const bob = await addOtherMember(fixture);
   await addGroupAndSource(fixture);
-  expect((await fetch(path, { headers })).status).toBe(404);
-  expect((await postFact(path, headers, 'no-write-grant')).status).toBe(404);
+  const ownerRequest = { headers };
+  const listWithoutReadGrant = await fetch(path, ownerRequest);
+  expect(listWithoutReadGrant.status).toBe(404);
+  const writeWithoutGrant = await postFact(path, headers, 'no-write-grant');
+  expect(writeWithoutGrant.status).toBe(404);
   const scopeGrant = { resourceType: 'memory_write', resourceId: scopeId, granteeKind: 'member',
     granteeId: 'bootstrap-owner' };
   const writeSubject = grantStream('memory_write', scopeId);
   const allowWrite = { ...scopeGrant, grantedBy: 'bootstrap-owner' };
   await saveFixtureEvent(fixture, { subject: writeSubject, type: 'grant.given', data: allowWrite });
-  expect((await fetch(path, { headers })).status).toBe(404);
+  const listWithWriteGrant = await fetch(path, ownerRequest);
+  expect(listWithWriteGrant.status).toBe(404);
   const written = await postFact(path, headers, 'notes-write');
   expect(written.status).toBe(200);
   const saved: unknown = await written.json();
@@ -430,7 +434,8 @@ async function checksNotesPermissionsAcrossSchemas() {
   }
   await until(isolatedMemoryIsCurrent);
   const detail = `${path}/${saved.memoryId}`;
-  expect((await fetch(detail, { headers })).status).toBe(404);
+  const detailWithWriteGrant = await fetch(detail, ownerRequest);
+  expect(detailWithWriteGrant.status).toBe(404);
   const revokeWrite = { ...scopeGrant, revokedBy: 'bootstrap-owner' };
   await saveFixtureEvent(fixture, { subject: writeSubject, type: 'grant.revoked', data: revokeWrite });
   for (const granteeId of ['bootstrap-owner', 'bob']) {
@@ -440,16 +445,23 @@ async function checksNotesPermissionsAcrossSchemas() {
       type: 'grant.given', data });
   }
   await until(isolatedMemoryIsCurrent);
-  expect((await fetch(path, { headers })).status).toBe(200);
-  expect((await fetch(detail, { headers })).status).toBe(200);
-  expect((await postFact(path, headers, 'read-only-grant')).status).toBe(404);
+  const listWithReadGrant = await fetch(path, ownerRequest);
+  expect(listWithReadGrant.status).toBe(200);
+  const detailWithReadGrant = await fetch(detail, ownerRequest);
+  expect(detailWithReadGrant.status).toBe(200);
+  const writeWithReadGrant = await postFact(path, headers, 'read-only-grant');
+  expect(writeWithReadGrant.status).toBe(404);
   // Make the permission service report access so this checks the saved assistant owner.
   const client = new TupleClient(fixture.binding);
   const delegated = { user: objectId('person', 'acme', 'bob'), relation: 'acts_for',
     object: objectId('assistant', 'acme', 'personal') };
-  await client.write([delegated], []);
-  expect((await fixture.auth.actsFor('bob', 'personal')).allowed).toBe(true);
-  expect((await fetch(path, { headers: bob })).status).toBe(404);
+  const tuples = [delegated];
+  await client.write(tuples, []);
+  const delegatedAccess = await fixture.auth.actsFor('bob', 'personal');
+  expect(delegatedAccess.allowed).toBe(true);
+  const delegatedRequest = { headers: bob };
+  const delegatedRead = await fetch(path, delegatedRequest);
+  expect(delegatedRead.status).toBe(404);
 }
 it('requires the personal assistant owner and independent note grants with packaged database roles',
   checksNotesPermissionsAcrossSchemas, 60_000);

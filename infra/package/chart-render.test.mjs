@@ -1450,19 +1450,24 @@ test('an unrelated projection worker cannot create pods or run commands in anoth
   ordinaryWorkerCannotReachOtherPods);
 
 function dispatcherUsesSeparateComputerExecRole() {
-  const resources = renderedResources(chartValues());
-  const identity = resources.get('Deployment/worker-dispatcher').spec.template.spec.serviceAccountName;
+  const values = chartValues();
+  const resources = renderedResources(values);
+  const dispatcher = resources.get('Deployment/worker-dispatcher');
+  const identity = dispatcher.spec.template.spec.serviceAccountName;
   const lifecycle = resources.get('Role/' + identity);
   function grantsExec(rule) {
     return rule.resources.includes('pods/exec');
   }
-  assert.equal(lifecycle.rules.some(grantsExec), false,
-    'The dispatcher lifecycle role must not grant exec');
+  const lifecycleGrantsExec = lifecycle.rules.some(grantsExec);
+  assert.equal(lifecycleGrantsExec, false, 'The dispatcher lifecycle role must not grant exec');
   const execRole = resources.get('Role/package-computer-exec');
-  assert.deepEqual(execRole.rules, [{ apiGroups: [''], resources: ['pods/exec'],
-    verbs: ['create', 'get'] }]);
+  const execRoleRules = [{
+    apiGroups: [''], resources: ['pods/exec'], verbs: ['create', 'get'],
+  }];
+  assert.deepEqual(execRole.rules, execRoleRules);
   const execBinding = resources.get('RoleBinding/package-computer-exec');
-  assert.deepEqual(execBinding.subjects, [{ kind: 'ServiceAccount', name: identity }]);
+  const execSubjects = [{ kind: 'ServiceAccount', name: identity }];
+  assert.deepEqual(execBinding.subjects, execSubjects);
   assert.equal(execBinding.roleRef.name, execRole.metadata.name);
   checksComputerExecPolicy(resources, identity);
 }
@@ -1471,29 +1476,35 @@ function checksComputerExecPolicy(resources, identity) {
   const namespace = 'cluster-test';
   const execPolicy = resources.get(`ValidatingAdmissionPolicy/${namespace}-computer-exec`);
   const podPolicy = resources.get(`ValidatingAdmissionPolicy/${namespace}-computer-pod-name`);
-  assert.deepEqual(execPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],
-    apiVersions: ['v1'], operations: ['CONNECT'], resources: ['pods/exec'] }]);
-  assert.equal(execPolicy.spec.matchConditions[0].expression,
-    `request.userInfo.username == 'system:serviceaccount:${namespace}:${identity}'`);
+  const execOperations = [{
+    apiGroups: [''], apiVersions: ['v1'], operations: ['CONNECT'], resources: ['pods/exec'],
+  }];
+  assert.deepEqual(execPolicy.spec.matchConstraints.resourceRules, execOperations);
+  const dispatcherAccount = `system:serviceaccount:${namespace}:${identity}`;
+  const dispatcherCondition = `request.userInfo.username == '${dispatcherAccount}'`;
+  assert.equal(execPolicy.spec.matchConditions[0].expression, dispatcherCondition);
   assert.match(execPolicy.spec.validations[0].expression, /request\.name\.matches/u);
   assert.match(execPolicy.spec.validations[0].expression, /object\.container == 'computer'/u);
-  assert.deepEqual(podPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],
+  const podOperations = [{ apiGroups: [''],
     apiVersions: ['v1'], operations: ['CREATE', 'UPDATE'],
-    resources: ['pods', 'pods/ephemeralcontainers'] }]);
+    resources: ['pods', 'pods/ephemeralcontainers'] }];
+  assert.deepEqual(podPolicy.spec.matchConstraints.resourceRules, podOperations);
   const controllerOnlyCreation = "request.operation != 'CREATE' || request.userInfo.username == "
     + "'system:serviceaccount:agent-sandbox-system:agent-sandbox-controller'";
   function checksCreator(validation) {
     return validation.expression === controllerOnlyCreation;
   }
-  assert.ok(podPolicy.spec.validations.some(checksCreator),
+  const hasCreatorCheck = podPolicy.spec.validations.some(checksCreator);
+  assert.ok(hasCreatorCheck,
     'Only the computer controller may create a pod with a reserved computer name');
+  const validationActions = ['Deny'];
+  const namespaceLabels = { 'kubernetes.io/metadata.name': namespace };
   for (const policy of [execPolicy, podPolicy]) {
     const binding = resources.get(`ValidatingAdmissionPolicyBinding/${policy.metadata.name}`);
     assert.equal(policy.spec.failurePolicy, 'Fail');
     assert.equal(binding.spec.policyName, policy.metadata.name);
-    assert.deepEqual(binding.spec.validationActions, ['Deny']);
-    assert.deepEqual(binding.spec.matchResources.namespaceSelector.matchLabels,
-      { 'kubernetes.io/metadata.name': namespace });
+    assert.deepEqual(binding.spec.validationActions, validationActions);
+    assert.deepEqual(binding.spec.matchResources.namespaceSelector.matchLabels, namespaceLabels);
   }
 }
 test('the dispatcher exec role is separate and admission restricts it to computer pods',
