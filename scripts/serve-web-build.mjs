@@ -9,11 +9,16 @@ const contentTypes = {
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
 };
+const welcomeEntry = '/api/onboarding/entry';
+
+export function usesApiFixture(pathname) {
+  return pathname.startsWith('/api/') && pathname !== welcomeEntry;
+}
 
 export async function serveWebBuild(route, buildDirectory) {
   const request = route.request();
   const url = new URL(request.url());
-  if (url.pathname === '/api/onboarding/entry' && request.method() === 'GET') {
+  if (url.pathname === welcomeEntry && request.method() === 'GET') {
     // Serve the response for an installation with welcome setup turned off.
     const disabled = { status: 204 };
     await route.fulfill(disabled);
