@@ -789,7 +789,7 @@
   },
   "libs/models/src/provider-bindings.ts": {
     "max-params": {
-      "count": 2
+      "count": 1
     }
   },
   "libs/models/src/provider-retirement-preview.ts": {

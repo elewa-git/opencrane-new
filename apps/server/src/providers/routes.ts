@@ -12,7 +12,7 @@ import { providerAuthority, providerCommand, providerReceipt,
   ProviderRefused, ProviderUnpriced, ProviderConflict, AuthorityApplying,
   providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
-  providerVerificationSchema, providerPermission } from '@opencrane/models';
+  providerVerificationSchema, providerPermission, providerStatus } from '@opencrane/models';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 
@@ -289,25 +289,7 @@ async function cleanProviderSecrets(options: ProviderOptions, providerId: string
   }
 }
 function providerRow(state: Awaited<ReturnType<typeof readProviders>>[number]) {
-  if (state.retired) {
-    return { ...state, status: 'retired' };
-  }
-  let status = 'needs_key';
-  if (state.saved) {
-    status = 'saved_unverified';
-  }
-  if (state.reachable?.outcome === 'pass') {
-    status = 'connected_not_tested';
-  }
-  if (state.reachable?.outcome === 'pass' && state.modelAnswer) {
-    const outcome = state.modelAnswer.outcome;
-    if (outcome === 'pass') {
-      status = 'ready';
-    } else if (outcome !== 'skipped') {
-      status = `model_test_${outcome}`;
-    }
-  }
-  return { ...state, status };
+  return { ...state, status: providerStatus(state) };
 }
 async function bindings(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {

@@ -147,7 +147,7 @@ async function firstChatDefaultOnSecondConnection() {
   const fixture = await mount(serve);
   expect(screenElement(fixture).querySelectorAll('.provider-row')).toHaveLength(2);
   clickButton(fixture, 'Select chat default');
-  await settle(fixture);
+  await waitForText(fixture, 'Chat default saved.');
   expect(posts).toHaveLength(1);
   const post = posts[0];
   if (!post) throw new Error('Expected a chat default command');

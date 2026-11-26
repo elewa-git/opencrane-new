@@ -1669,9 +1669,12 @@ widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.
 ## Switching on a chat provider
 
 Models & providers shows member-chat setup for connections with enabled models.
-`provider-chat.ts` selects a model through the existing bindings route, pauses calls
-through the drain route and requests switch-on. Each action reads current positions
-first. If the bindings read returns 503 while selecting the chat default, the page
+The page gives the next setup step until the connection is reachable and a model has
+answered. `provider-chat.ts` reads the current chat default across connections and
+sends `select_chat_default` through the bindings route. A `null` default means the
+first choice uses binding position zero. Moving an existing choice uses its saved
+position and the current revision of the other connection. The drain and switch-on
+routes use their own current positions. If the bindings read returns 503, the page
 reads it once more. The server uses the same unavailable response when provider
 history changes and when it cannot prepare dependencies for another reason. If the
 second read fails, the page shows an error and sends no command. An unknown

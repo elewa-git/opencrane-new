@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ProviderChat } from './provider-chat';
 
 const provider = { providerId: 'primary', provider: 'openai' as const, name: 'Primary',
-  revision: 2, position: 7, enabledModels: ['gpt-6.1-sol'], status: 'tested' };
+  revision: 2, position: 7, enabledModels: ['gpt-6.1-sol'], status: 'ready' };
 
 async function switchesOnThroughCheckedCommands(historyChanges: boolean) {
   const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -30,8 +30,9 @@ async function switchesOnThroughCheckedCommands(historyChanges: boolean) {
         return new Response('{"status":"unavailable"}', { status: 503 });
       }
       const position = historyChanges ? 8 : 6;
+      const chatDefault = historyChanges ? { position, sourceRevision: 4 } : { position };
       return new Response(JSON.stringify({ expectedProviderSequence: position + 1,
-        rows: [{ kind: 'silo_default', dependantId: 'dev', position }] }));
+        chatDefault }));
     }
     return new Response(JSON.stringify({ revision: 2, sequence: 8,
       expectedProviderSequence: 7, draining, enabled }));
@@ -42,10 +43,11 @@ async function switchesOnThroughCheckedCommands(historyChanges: boolean) {
   fixture.detectChanges();
   await fixture.componentInstance.selectDefault();
   expect(bindingReads).toBe(historyChanges ? 2 : 1);
-  expect(requests[0]?.body).toMatchObject({ action: 'select', kind: 'silo_default',
-    dependantId: 'dev', model: 'gpt-6.1-sol', expectedRevision: 2,
+  expect(requests[0]?.body).toMatchObject({ action: 'select_chat_default',
+    model: 'gpt-6.1-sol', expectedRevision: 2,
     expectedProviderSequence: historyChanges ? 9 : 7,
     expectedBindingSequence: historyChanges ? 8 : 6 });
+  expect(requests[0]?.body['expectedSourceRevision']).toBe(historyChanges ? 4 : undefined);
   await fixture.componentInstance.startDrain();
   expect(requests[1]?.body).toMatchObject({ action: 'start', expectedRevision: 2,
     expectedProviderSequence: 7, expectedDrainSequence: 8 });
@@ -158,3 +160,26 @@ it('honours an access refusal on the first bindings read',
   defaultCannotBeRead.bind(null, [403], refusedDefault));
 it('does not repeat a bindings read after any other server error',
   defaultCannotBeRead.bind(null, [500], unavailableDefault));
+
+async function explainsMissingModelAnswer(): Promise<void> {
+  const fetchReply = vi.fn();
+  vi.stubGlobal('fetch', fetchReply);
+  const fixture = TestBed.createComponent(ProviderChat);
+  const untested = { ...provider, status: 'connected_not_tested' };
+  fixture.componentRef.setInput('provider', untested);
+  fixture.detectChanges();
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected a chat setup element');
+  function isSelect(button: HTMLButtonElement) {
+    return button.textContent?.trim() === 'Select chat default';
+  }
+  const buttons = Array.from(element.querySelectorAll('button'));
+  const select = buttons.find(isSelect);
+  if (!select) throw new Error('Expected a chat default button');
+  expect(select.disabled).toBe(true);
+  expect(element.textContent).toContain('Open this connection and run the priced test');
+  select.click();
+  await fixture.whenStable();
+  expect(fetchReply).not.toHaveBeenCalled();
+}
+it('shows how to finish verification before selecting a default', explainsMissingModelAnswer);

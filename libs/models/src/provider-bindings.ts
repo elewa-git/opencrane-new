@@ -15,31 +15,45 @@ import { models } from './state.ts';
 import { providerRoutinePresence } from './provider-routine-presence.ts';
 import {
   ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
-  providerReceipt, providerSecretRef,
+  providerReceipt, providerSecretRef, providerStatus,
 } from './providers.ts';
 
 const sequence = z.int().nonnegative();
-const common = {
+const positions = {
   commandId: providerIdSchema,
   expectedProviderSequence: sequence,
   expectedRevision: z.int().positive(),
   expectedSourceRevision: z.int().positive().optional(),
+  expectedBindingSequence: sequence,
+};
+const identity = {
   kind: z.enum(['assistant', 'silo_default']),
   dependantId: providerIdSchema,
   task: z.literal('chat_turn'),
-  expectedBindingSequence: sequence,
 };
-const selection = { ...common, action: z.literal('select'), model: providerModelIdSchema };
+const common = { ...positions, ...identity };
+const selection = { ...positions, model: providerModelIdSchema };
+const select = { ...selection, ...identity, action: z.literal('select') };
+const selectChatDefault = { ...selection, action: z.literal('select_chat_default') };
 const pause = { ...common, action: z.literal('pause') };
 const commandSchema = z.discriminatedUnion('action', [
-  z.object(selection).strict(), z.object(pause).strict(),
+  z.object(select).strict(), z.object(pause).strict(), z.object(selectChatDefault).strict(),
 ]);
-type BindingInput = z.infer<typeof commandSchema>;
 type Inventory = Awaited<ReturnType<typeof inventory>>;
 export type Choice = z.infer<typeof providerBindingSchema> & { position: number };
+type BindingIdentity = Pick<Choice, 'kind' | 'dependantId' | 'task'>;
+type BindingInput = z.infer<typeof commandSchema> & BindingIdentity;
 
-export function choiceKey(choice: Pick<Choice, 'kind' | 'dependantId' | 'task'>) {
+export function choiceKey(choice: BindingIdentity) {
   return JSON.stringify([choice.kind, choice.dependantId, choice.task]);
+}
+
+function bindingChoice(current: Inventory, choice: BindingIdentity) {
+  return current.bindings.get(choiceKey(choice));
+}
+
+function chatDefaultIdentity(silo: string) {
+  return { kind: 'silo_default' as const, dependantId: silo, task: 'chat_turn' as const };
 }
 
 export async function inventory(store: EventStore, silo: string) {
@@ -94,7 +108,10 @@ function requireOpenTarget(state: ProviderState | undefined) {
 export async function providerBindingCommand(store: EventStore, binding: Binding,
   memberId: string, providerId: string, raw: unknown) {
   providerIdSchema.parse(providerId);
-  const input = commandSchema.parse(raw);
+  const command = commandSchema.parse(raw);
+  const input = command.action === 'select_chat_default'
+    ? { ...command, ...chatDefaultIdentity(binding.silo) }
+    : command;
   return recordBinding(store, binding, memberId, providerId, input);
 }
 
@@ -102,7 +119,6 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
   providerId: string, input: BindingInput) {
   // Read growing histories before starting the short access check.
   const current = await inventory(store, binding.silo);
-  const previous = current.bindings.get(choiceKey(input));
   if (input.kind === 'silo_default') {
     if (input.dependantId !== binding.silo) {
       throw new ProviderRefused();
@@ -123,9 +139,8 @@ async function recordBinding(store: EventStore, binding: Binding, memberId: stri
       row.event.commandId === input.commandId;
   }
   const original = current.rows.find(matches);
-  if (!original) {
-    await checkBinding(current, input, providerId, binding, memberId, previous);
-  }
+  const previous = original ? bindingChoice(current, input)
+    : await checkBinding(current, input, providerId, binding, memberId);
   const payload = bindingPayload(input, providerId, memberId, previous, original);
   if (original) {
     reconcileBinding(original, binding.silo, providerId, input.commandId, memberId, payload);
@@ -172,7 +187,7 @@ function reconcileBinding(saved: StoredEvent, silo: string, providerId: string,
 function bindingPayload(input: BindingInput, providerId: string, memberId: string,
   previous: Choice | undefined, original: StoredEvent | undefined) {
   let model = previous?.model;
-  if (input.action === 'select') {
+  if (input.action !== 'pause') {
     model = input.model;
   } else if (original?.event.type === 'provider.model_binding_set') {
     model = providerBindingSchema.parse(original.event.data).model;
@@ -183,15 +198,16 @@ function bindingPayload(input: BindingInput, providerId: string, memberId: strin
     previousBindingSequence: input.expectedBindingSequence,
     expectedProviderSequence: input.expectedProviderSequence,
     ...(input.expectedSourceRevision ? { sourceRevision: input.expectedSourceRevision } : {}),
-    state: input.action === 'select' ? 'active' : 'paused', model,
+    state: input.action === 'pause' ? 'paused' : 'active', model,
     ...(input.action === 'pause' ? { reason: 'Paused by an administrator' } : {}),
   };
   return providerBindingSchema.parse(payload);
 }
 
 async function checkBinding(current: Inventory, input: BindingInput, providerId: string,
-  binding: Binding, memberId: string, previous: Choice | undefined) {
+  binding: Binding, memberId: string) {
   const target = current.providers.get(providerId);
+  const previous = bindingChoice(current, input);
   if (current.position !== input.expectedProviderSequence ||
     target?.revision !== input.expectedRevision ||
     (previous?.position ?? 0) !== input.expectedBindingSequence) {
@@ -199,15 +215,26 @@ async function checkBinding(current: Inventory, input: BindingInput, providerId:
   }
   requireOpenTarget(target);
   if (previous && previous.providerId !== providerId) {
-    await providerPermission(binding, memberId, connectionRows(current.rows, previous.providerId));
-    if (current.providers.get(previous.providerId)?.revision !== input.expectedSourceRevision) {
-      throw new ProviderConflict();
-    }
+    await checkSource(current, previous, input.expectedSourceRevision, binding, memberId);
   }
-  if (input.action === 'select') {
+  if (input.action !== 'pause') {
     checkSelection(current, providerId, binding.silo);
     requireSelectable(target, input.model);
+    if (input.action === 'select_chat_default' && providerStatus(target) !== 'ready') {
+      throw new ProviderRefused();
+    }
   } else if (!previous || previous.providerId !== providerId) {
+    throw new ProviderConflict();
+  }
+  return previous;
+}
+
+async function checkSource(current: Inventory, previous: Choice, revision: number | undefined,
+  binding: Binding, memberId: string) {
+  const rows = connectionRows(current.rows, previous.providerId);
+  await providerPermission(binding, memberId, rows);
+  const source = current.providers.get(previous.providerId);
+  if (source?.revision !== revision) {
     throw new ProviderConflict();
   }
 }
@@ -304,8 +331,22 @@ export async function providerDependencies(store: EventStore, binding: Binding,
   }
   return {
     rows, expectedProviderSequence: current.position, ordinaryCallsAvailable: false,
+    chatDefault: chatDefaultPosition(current, binding.silo, providerId),
     routines: { status: routines.status, position: routines.position },
   };
+}
+
+function chatDefaultPosition(current: Inventory, silo: string, providerId: string) {
+  const identity = chatDefaultIdentity(silo);
+  const choice = bindingChoice(current, identity);
+  if (!choice) {
+    return null;
+  }
+  if (choice.providerId === providerId) {
+    return { position: choice.position };
+  }
+  const source = current.providers.get(choice.providerId);
+  return { position: choice.position, sourceRevision: source?.revision };
 }
 
 export function providerDefaultHandler(store: EventStore, binding: Binding) {
@@ -324,10 +365,8 @@ export function providerDefaultHandler(store: EventStore, binding: Binding) {
         throw new Error('Provider selection unavailable');
       }
     }
-    const identity = {
-      kind: 'silo_default' as const, dependantId: binding.silo, task: 'chat_turn' as const,
-    };
-    if (current.bindings.has(choiceKey(identity)) || !current.firstVerified) {
+    const choice = chatDefaultIdentity(binding.silo);
+    if (bindingChoice(current, choice) || !current.firstVerified) {
       return;
     }
     const target = current.providers.get(current.firstVerified);
@@ -339,7 +378,7 @@ export function providerDefaultHandler(store: EventStore, binding: Binding) {
     const changedBy = actorSchema.parse(trigger.data).changedBy;
     // Reserve an id containing a colon, which user provider commands cannot supply.
     const command: BindingInput = {
-      ...identity, commandId: 'system:seed-provider-default',
+      ...choice, commandId: 'system:seed-provider-default',
       expectedProviderSequence: current.position, expectedRevision: target.revision,
       expectedBindingSequence: 0, action: 'select', model,
     };

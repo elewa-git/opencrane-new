@@ -8,8 +8,8 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 - Stores keys in the secret store and saves only references in the event log.
 - Offers a price estimate for a connection test and requests the chosen checks.
 - Reports connection and model-test results without returning keys.
-- Saves provider choices, counts affected assistants and returns original saved results.
-- Shows saved assistant bindings, safe replacement choices and unresolved routines
+- Sets or moves the chat default to a ready connection and returns the saved result.
+- Shows saved assistant bindings, counts affected assistants and lists unresolved routines
   before a provider can retire. It checks the payer and spending limits. A
   proposed choice changes nothing.
 - Pauses new model turns before a provider change and records when managed provider calls are switched on.
@@ -45,7 +45,7 @@ The [server](../../README.md) registers these requests for the [website](../../.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>provider pages"] -->|requests| routes["providers<br/>server routes"]
+  web["apps/web<br/>provider pages"] -->|requests including chat default choice| routes["providers<br/>server routes"]
   routes -.-> models["libs/models<br/>provider and retirement rules"]
   models -->|reads provider, payer and spending changes| store["event log<br/>saved changes"]
   routes -->|reads progress| tables["read tables<br/>routine view"]

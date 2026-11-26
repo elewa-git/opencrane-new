@@ -26,13 +26,13 @@ flowchart LR
   computer["apps/computer<br/>assistant computers"] -.-> models
   models <-->|call checks and usage| gateway["agentgateway<br/>AI gateway"]
   models -.-> auth["libs/auth and libs/authz<br/>passes and permissions"]
-  models -.->|saves publication and dated tool checks| store["libs/event-store<br/>saved event log"]
+  models -.->|saves provider choices and tool checks| store["libs/event-store<br/>saved event log"]
   models -.->|check saved decision records| projections["libs/projections<br/>read tables"]
 ```
 
 ## What it is responsible for
 
-- Choose models for tasks and check saved provider choices for new turns.
+- Choose models for tasks, save the chat default and check provider choices for new turns.
 - Check current membership, grants and permissions before allowing calls.
 - Keep spending limits and prices as integer euro cents.
 - Set money aside before a paid call, then record its cost or keep it held for review.

@@ -386,10 +386,14 @@ async function movesAutomaticChatDefault() {
   const wrongRevision = { ...command, expectedSourceRevision: 2 };
   await refused('second', wrongRevision, 409);
   const move = { ...command, expectedSourceRevision: 3 };
-  expect((await request('POST', 'second', move)).statusCode).toBe(200);
+  const saved = await request('POST', 'second', move);
+  expect(saved.statusCode).toBe(200);
+  const position = saved.json<{ sequence: number }>().sequence;
   const read = await request('GET', 'second');
-  expect(read.json()).toMatchObject({ chatDefault: { position: expect.any(Number) },
-    rows: [{ kind: 'silo_default', providerId: 'second', previousBindingSequence: first.sequence }] });
+  expect(read.json()).toMatchObject({
+    chatDefault: { position },
+    rows: [{ kind: 'silo_default', providerId: 'second', previousBindingSequence: first.sequence }],
+  });
 }
 it('moves an already seeded default only with the current binding and source revision',
   movesAutomaticChatDefault);

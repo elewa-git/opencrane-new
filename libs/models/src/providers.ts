@@ -205,3 +205,23 @@ export async function providerCommand(store: EventStore, binding: Binding,
   return appendProvider(store, binding.silo, input.providerId, memberId, input.commandId,
     type, payload, rows.at(-1)?.sequence ?? 0, fresh);
 }
+
+export function providerStatus(state: ProviderState): string {
+  if (state.retired) {
+    return 'retired';
+  }
+  if (state.reachable?.outcome === 'pass') {
+    const outcome = state.modelAnswer?.outcome;
+    if (outcome === 'pass') {
+      return 'ready';
+    }
+    if (outcome && outcome !== 'skipped') {
+      return `model_test_${outcome}`;
+    }
+    return 'connected_not_tested';
+  }
+  if (state.saved) {
+    return 'saved_unverified';
+  }
+  return 'needs_key';
+}
