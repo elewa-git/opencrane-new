@@ -1,5 +1,26 @@
 # First computer start on a fresh package
 
+## Quiet-host rerun on 26 November 2026
+
+**NOT RUN at 1280 px and 390 px.** Between 13:02 and 14:13 UTC, the
+one-minute load ranged from 1.98 to 20.33 over 144 admission checks.
+Slot 1 was busy on 41 checks. The longest sampled period with slot 1
+free and load below 4 was 3 minutes 45 seconds. The ten-minute window
+did not open in time for two fresh installs within the 90-minute limit.
+
+There are no new send-to-turn-start measurements or observations of the
+workspace read after invitation acceptance. The original timing result
+below still fails the 20-second Send limit at 390 px.
+
+**NOT RUN for the live installer refusal.** Slot 1 became free at 14:20 UTC. The
+load was at least 8.45 for all later samples, so the five-minute window
+below 6 did not open before the last safe start.
+
+The private admission samples are in `admission-load.log`,
+`390-admission.log` and `refusal-admission.log`.
+
+## Original timing run
+
 **FAIL.** Neither width met the 20-second limit from package readiness.
 The desktop message reached the computer within 20 seconds of Send.
 The mobile message took 42.1 seconds after Send. Both first replies used
