@@ -241,7 +241,8 @@ function cluster() {
 async function updatedOnlyScanner() {
   const fixture = cluster();
   const result = await refreshScanner(fixture.kubectl, newRelease.image);
-  expect(publishPackageImage).toHaveBeenCalledWith(expect.stringMatching(/\/scanner\.tar$/u),
+  const [approvalDirectory] = vi.mocked(fetchLatestScannerApproval).mock.calls[0];
+  expect(publishPackageImage).toHaveBeenCalledWith(join(approvalDirectory, 'scanner.tar'),
     newRelease.image);
   expect(result).toMatchObject({ status: 'updated', image: newRelease.image, runId: 42 });
   expect(fixture.patches).toEqual([
@@ -425,8 +426,6 @@ const installDrift = [
   ['database copy name', 'scanner.spec.template.spec.initContainers.1.name', 'other'],
   ['database copy image', 'scanner.spec.template.spec.initContainers.1.image', newRelease.image],
   ['scanner evidence volume', 'scanner.spec.template.spec.volumes.0.name', 'other'],
-  ['scanner evidence source count', 'scanner.spec.template.spec.volumes.0.projected.sources', []],
-  ['scanner trust source', 'scanner.spec.template.spec.volumes.0.projected.sources.0.secret', {}],
   ['scanner evidence source', 'scanner.spec.template.spec.volumes.0.projected.sources.1.secret.name', 'other'],
   ['installed image binding', 'runningRelease.imageDigest', `sha256:${'a'.repeat(64)}`],
   ['installed manifest binding', 'runningRelease.manifestDigest', `sha256:${'a'.repeat(64)}`],
@@ -466,6 +465,53 @@ async function refusesChangedSettings(_description, path, value) {
   expectInstallUnchanged(fixture, previous);
 }
 test.each(installDrift)('refuses changed %s before touching the installed package', refusesChangedSettings);
+
+async function refusesExtraEvidenceSource() {
+  const fixture = cluster();
+  const sources = fixture.scanner.spec.template.spec.volumes[0].projected.sources;
+  const additional = { configMap: { name: 'extra-config' } };
+  sources.push(additional);
+  const previous = snapshotInstall(fixture);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'install' });
+  expectInstallUnchanged(fixture, previous);
+}
+test('refuses an extra evidence source while both expected sources are valid',
+  refusesExtraEvidenceSource);
+
+function setInstalledConfigMapEvidence(fixture) {
+  const sources = fixture.scanner.spec.template.spec.volumes[0].projected.sources;
+  const manifestKey = `signatures-${runningSha}.json`;
+  const releaseKey = `release-${runningSha}.json`;
+  const evidence = { name: 'scanner-config', items: [
+    { key: manifestKey, path: 'signatures.json' },
+    { key: releaseKey, path: 'release.json' },
+  ] };
+  sources[1] = { configMap: evidence };
+  fixture.config.data[releaseKey] = JSON.stringify(fixture.runningRelease);
+  return sources;
+}
+
+async function refusesMissingTrustWithReleaseFromConfigMap() {
+  const fixture = cluster();
+  const sources = setInstalledConfigMapEvidence(fixture);
+  delete sources[0].secret.name;
+  const previous = snapshotInstall(fixture);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'install' });
+  expectInstallUnchanged(fixture, previous);
+}
+test('refuses a missing trust source even with the correct release ConfigMap',
+  refusesMissingTrustWithReleaseFromConfigMap);
+
+async function refusesDifferentReleaseConfigMap() {
+  const fixture = cluster();
+  const sources = setInstalledConfigMapEvidence(fixture);
+  sources[1].configMap.name = 'other-config';
+  const previous = snapshotInstall(fixture);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'install' });
+  expectInstallUnchanged(fixture, previous);
+}
+test('refuses a different release ConfigMap while its saved record still matches',
+  refusesDifferentReleaseConfigMap);
 
 async function refusesMalformedInstalledPin(field) {
   const fixture = cluster();
