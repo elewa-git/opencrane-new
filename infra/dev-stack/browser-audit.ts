@@ -4,8 +4,9 @@ import { execFile } from 'node:child_process';
 import { copyFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { APIResponse, Locator, Page, Request, Response } from 'playwright';
+import type { Locator, Page, Request, Response } from 'playwright';
 import { auditResponseSchema, chatFeedSchema, type AuditRow } from '@opencrane/protocol';
+import { readJourneyApi } from './browser-api.ts';
 import { directory, root } from './config.ts';
 import { project } from './identity.ts';
 
@@ -19,49 +20,21 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
   await mkdir(output, { recursive: true });
   for (const width of [1280, 390]) await copyFile(`${directory}/workspace-${width}.png`, `${output}/${run}-stub-chat-${width}.png`);
   for (const page of members) {
-    const conversation = new URL(page.url()).searchParams.get('conversation');
-    assert(conversation);
+    const { conversation, row, history } = await readSuccessfulTurnAudit(page, origin, auditPrompt);
     const path = `/api/conversations/${conversation}/history`;
-    const messages = await page.request.get(`${origin}/api/conversations/${conversation}/messages`);
-    assert.equal(messages.status(), 200);
-    const feed = chatFeedSchema.parse(await messages.json());
-    const turn = feed.rows.find(row => row.type === 'message.posted' && row.data['text'] === auditPrompt);
-    assert(turn, 'The member posted the privacy canary through the real chat');
-    const deadline = Date.now() + 90_000;
-    for (;;) {
-      const response: APIResponse = await page.request.get(`${origin}${path}?turnId=${turn.id}`);
-      if (response.status() === 503) {
-        // Wait for the audit history to catch up with the saved turn decision.
-        assert(Date.now() < deadline, 'Audit history is available after the saved turn');
-        await delay(100);
-        continue;
-      }
-      assert.equal(response.status(), 200);
-      const history = auditResponseSchema.parse(await response.json());
-      const row = history.rows.find(row => row.turnId === turn.id && row.decision === 'allow' && row.outcome === 'success');
-      if (row) {
-        assert.equal(row.requesterId, requesterId);
-        assert.equal(row.conversationId, conversation);
-        assert(row.contextDigest && row.permitId && row.requestId);
-        assert(!('reservedCents' in row) && !('settledCents' in row),
-          'Member action history does not expose money amounts');
-        await assertAuditMoney(owner, origin, row);
-        assert(!JSON.stringify(history).includes('canary'));
-        break;
-      }
-      assert(Date.now() < deadline, 'Stub turn has a recorded decision and observed success');
-      await delay(100);
-    }
+    assert.equal(row.requesterId, requesterId);
+    await assertAuditMoney(owner, origin, row);
+    assert(!JSON.stringify(history).includes('canary'));
     assert.equal((await fetch(`${origin}${path}`, { headers: { cookie: otherCookie } })).status, 403,
       'Another joined member cannot read this private action history');
-    assert.equal((await owner.request.get(`${origin}${path}`)).status(), 403,
+    assert.equal((await readJourneyApi(owner, `${origin}${path}`)).status(), 403,
       'The owner role does not grant access to private action history');
     await checkActionHistory(page, `${origin}/history/${conversation}`);
     await capture(page, `${output}/${run}-action-${page.viewportSize()!.width}.png`);
     console.log(`PASS ${run} audit ${page.viewportSize()!.width}px: own stub turn, allow and success shown separately; other member and owner refused private history`);
   }
   const publication = await assertPublishedAudit(owner, origin);
-  assert.equal((await members[0]!.request.get(`${origin}/api/org/history`)).status(), 403);
+  assert.equal((await readJourneyApi(members[0]!, `${origin}/api/org/history`)).status(), 403);
   for (const width of [1280, 390]) {
     await owner.setViewportSize({ width, height: 900 });
     await openChangeHistory(owner, `${origin}/org/history`);
@@ -93,10 +66,47 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
   }
 }
 
-export async function assertAuditMoney(owner: Pick<Page, 'request'>, origin: string, memberRow: AuditRow) {
+export async function readSuccessfulTurnAudit(page: Pick<Page, 'request' | 'url'>, origin: string,
+  prompt: string) {
+  const conversation = new URL(page.url()).searchParams.get('conversation');
+  assert(conversation, 'The member has a saved conversation');
+  const path = `${origin}/api/conversations/${conversation}`;
+  const messages = await readJourneyApi(page, `${path}/messages`);
+  assert.equal(messages.status(), 200);
+  const feed = chatFeedSchema.parse(await messages.json());
+  const turn = feed.rows.find(row => row.type === 'message.posted' && row.data['text'] === prompt);
+  assert(turn, 'The member posted the expected message in chat');
+  const turnId = turn.id;
+  function successfulCall(row: AuditRow) {
+    return row.turnId === turnId && row.decision === 'allow' && row.outcome === 'success';
+  }
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const response = await readJourneyApi(page, `${path}/history?turnId=${turnId}`);
+    if (response.status() !== 503) {
+      assert.equal(response.status(), 200);
+      const history = auditResponseSchema.parse(await response.json());
+      for (const entry of history.rows) {
+        assert(!('reservedCents' in entry) && !('settledCents' in entry),
+          'Member action history does not expose money amounts');
+      }
+      const row = history.rows.find(successfulCall);
+      if (row) {
+        assert.equal(row.conversationId, conversation);
+        assert(row.contextDigest && row.permitId && row.requestId);
+        return { conversation, row, history };
+      }
+    }
+    await delay(100);
+  }
+  assert.fail('Chat turn has a recorded decision and observed success');
+}
+
+export async function assertAuditMoney(owner: Pick<Page, 'request'>, origin: string,
+  memberRow: AuditRow) {
   assert(memberRow.requestId && memberRow.permitId);
   const query = new URLSearchParams({ requestId: memberRow.requestId });
-  const response = await owner.request.get(`${origin}/api/org/history?${query}`);
+  const response = await readJourneyApi(owner, `${origin}/api/org/history?${query}`);
   assert.equal(response.status(), 200);
   const changes = auditResponseSchema.parse(await response.json());
   function sameCall(row: AuditRow) {
@@ -107,9 +117,35 @@ export async function assertAuditMoney(owner: Pick<Page, 'request'>, origin: str
   assert.equal(row.requesterId, memberRow.requesterId);
   assert.equal(row.conversationId, memberRow.conversationId);
   assert.equal(row.turnId, memberRow.turnId);
-  assert(Number.isSafeInteger(row.reservedCents) && Number.isSafeInteger(row.settledCents),
+  const { reservedCents, settledCents } = row;
+  assert(reservedCents !== undefined && settledCents !== undefined,
     'Admin Change history keeps integer reserved and settled euro cents');
   assert(!JSON.stringify(changes).includes('canary'));
+  return { auditId: row.id, reservedCents, chargedCents: settledCents };
+}
+
+export async function openTurnSpending(admin: Page, origin: string, auditId: string) {
+  await openChangeHistory(admin, `${origin}/org/history`);
+  const search = admin.getByRole('searchbox', { name: 'Safe reference', exact: true });
+  await search.fill(auditId);
+  function searched(response: Response): boolean {
+    const url = new URL(response.url());
+    return url.pathname === '/api/org/history' && url.searchParams.get('reference') === auditId;
+  }
+  const searchReply = admin.waitForResponse(searched);
+  await search.press('Enter');
+  const found = await searchReply;
+  assert.equal(found.status(), 200);
+  const loaded = admin.getByText('History loaded', { exact: true });
+  await loaded.waitFor();
+  const row = admin.locator('oc-audit article .row-button');
+  const detailUrl = `${origin}/api/org/history/${encodeURIComponent(auditId)}`;
+  const detailReply = admin.waitForResponse(detailUrl);
+  await row.click();
+  const reply = await detailReply;
+  assert.equal(reply.status(), 200, 'Change history opens the matching call');
+  const detail = admin.getByRole('dialog');
+  return detail.locator('dl[aria-label="Turn spending"]');
 }
 
 export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin: string) {
@@ -123,7 +159,7 @@ export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin:
   }
   while (Date.now() < deadline) {
     const query = before === undefined ? '' : `?before=${before}`;
-    const response = await owner.request.get(`${origin}/api/org/history${query}`);
+    const response = await readJourneyApi(owner, `${origin}/api/org/history${query}`);
     assert.equal(response.status(), 200);
     const changes = auditResponseSchema.parse(await response.json());
     assert(!JSON.stringify(changes).includes('canary'));

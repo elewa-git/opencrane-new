@@ -37,6 +37,10 @@ function refusesProviderKey(authorization: string | undefined) {
   return !value || authorization !== `Bearer ${value}`;
 }
 const server = createServer((req, res) => {
+  // Count arrivals even when the route or credential is refused.
+  if (req.url?.startsWith('/v1/')) {
+    modelRequests += 1;
+  }
   if ((req.url === '/v1/models' || req.url === '/v1/responses') &&
       refusesProviderKey(req.headers.authorization)) {
     req.resume();
@@ -93,7 +97,6 @@ const server = createServer((req, res) => {
   req.on('data', (chunk: Buffer) => chunks.push(chunk));
   if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
   req.on('end', () => { void (async () => {
-    modelRequests += 1;
     countProviderRequest(req.headers.authorization);
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
     const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean;

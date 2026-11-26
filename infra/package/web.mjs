@@ -10,6 +10,10 @@ const logger = createLogger('web-upgrade');
 const webRoot = '/app/apps/web/dist/web/browser';
 const indexPath = join(webRoot, 'index.html');
 const proxyPaths = ['/api', '/auth', '/ws', '/members'];
+const connectionHeaders = [
+  'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
+  'proxy-connection', 'te', 'trailer', 'transfer-encoding', 'upgrade',
+];
 const mime = {
   '.css': 'text/css', '.html': 'text/html', '.ico': 'image/x-icon',
   '.jpg': 'image/jpeg', '.js': 'text/javascript', '.json': 'application/json',
@@ -29,17 +33,28 @@ function sendError(response, code) {
   response.end();
 }
 
+function forwardedHeaders(headers) {
+  const forwarded = { ...headers };
+  const connectionOptions = headers.connection?.split(',') ?? [];
+  for (const option of connectionOptions) delete forwarded[option.trim().toLowerCase()];
+  for (const name of connectionHeaders) delete forwarded[name];
+  return forwarded;
+}
+
 function proxyRequest(incoming, response) {
   function onUpstreamResponse(upstreamResponse) {
-    response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+    // Let each connection advertise its own keep-alive timeout and frame its own body.
+    const headers = forwardedHeaders(upstreamResponse.headers);
+    response.writeHead(upstreamResponse.statusCode ?? 502, headers);
     upstreamResponse.pipe(response);
   }
   function onUpstreamError() {
     if (response.headersSent) response.destroy();
     else sendError(response, 502);
   }
+  const headers = forwardedHeaders(incoming.headers);
   const upstream = request({ hostname: 'server', port: 8080, method: incoming.method,
-    path: incoming.url, headers: incoming.headers }, onUpstreamResponse);
+    path: incoming.url, headers }, onUpstreamResponse);
   upstream.on('error', onUpstreamError);
   incoming.pipe(upstream);
 }

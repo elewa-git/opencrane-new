@@ -27,7 +27,11 @@ guard. `runtime-context.test.mjs` checks these paths in the Docker build context
 before the application image is built. The context includes `web.mjs` and its
 shared `web-page.mjs` renderer.
 The development static server imports the upgrade handler from `web.mjs`;
-importing it does not start a package listener. The upgrade handler
+importing it does not start a package listener. For ordinary HTTP, the package
+proxy removes connection-specific headers in both directions, including any
+fields named in `Connection`. This lets each connection use its own idle timeout
+and body framing. `web-proxy.test.mjs` checks that a budget read through a forward
+opens a new connection after the website connection expires. The upgrade handler
 uses Node's HTTP upgrade response, preserves both initial byte buffers and closes
 both connections on either peer's error or closure. It logs connection errors
 through the structured logger before closing. A failed viewer write cannot stop
@@ -289,24 +293,37 @@ The private probe passes the credential through stdin and records only its statu
 It reads the native Fetch response's numeric status; the browser request API has
 a different status method. `journey-provider-probe.test.ts` pins the native 401 response.
 The runner waits for the model answer to appear before capturing either width. It
-clicks Select chat default in Settings and waits for the recorded change before
-starting the drain.
-The driver inspects each browser API response while Chromium holds it, then lets
-Chromium deliver the same response to the page. The page can navigate as soon as
-it receives a reply, so a collector that reads afterwards can lose the body.
-`journey-provider-navigation.test.ts` reproduces that loss as the page navigates
-and verifies that a failed disclosure inspection still refuses navigation.
-Before the driver navigates, it waits for current network activity and pending
-inspections. An inspection failure still fails the journey and is recorded.
-Before recording PASS, the driver closes the browser and checks again for any
-inspection failure received during shutdown.
+waits for the background worker to save the first chat default, then clicks
+Select chat default in Settings once. It waits for the explicit choice to be
+recorded before starting the drain.
+The driver listens for API replies as Chromium delivers them to the page. It
+reads each body when the request finishes. Chromium keeps the bodies outside the
+page so that a page change does not discard them. The browser keeps up to
+8 MiB per reply and 32 MiB per page for these reads. A missing or incomplete
+body fails the check. The driver never sends the request again.
+Before a driver navigation or reload, it waits for active API requests and their
+response inspections. This includes requests that start after the page first
+reports idle. At shutdown the driver blocks new API requests and finishes
+checking the replies Chromium has reported. It keeps listening while it closes
+the pages, their contexts and the browser. Once Chromium confirms both the page
+and its listener have closed, a request with no reply may be left out. The
+driver still checks a reply reported during close. An unreadable reply fails
+the journey.
+`journey-provider-navigation.test.ts` covers an immediate page change, a late
+request before navigation, and shutdown with a finished reply, a new chat
+approval poll, or an unreadable reply that the page received.
 The event-disclosure command reads the saved events inside the server Pod and
 returns only the number checked. Its fixture runs the same command against a
 disposable event store and requires a matching event to be refused.
 The result records the current operation, a fixed expected condition and a bounded
-error category on failure. It never copies exception messages, names or page content
-into the public result. Detailed failures remain in the private slot for collection
-before teardown. `journey-provider-failure.test.ts` checks the safe result contract.
+error category on failure. If Chromium fails to read an API response,
+the result includes the operation and HTTP status. It identifies the chat approval
+read without its conversation ID or query. It never copies upstream exception
+messages or page content. A successful result records the number of replies checked.
+The claimed slot's private `browser-shutdown.log` records the failed shutdown
+step and the exception class, message and stack, including causes. The driver
+removes the journey credentials from these records. The public result keeps
+its fixed error details.
 
 The runtime installs Debian main `ca-certificates` 20230311+deb12u1 (GPL-2.0-or-later
 packaging and MPL-2.0 certificate data), `openssl` and `libssl3` 3.0.20-1~deb12u2
@@ -2160,6 +2177,37 @@ The receipt says PARTIAL. Collector or cleanup failure prevents the next install
 The [receipt](../../docs/process/p5-11-pr1/receipt.md) gives the later claim-based
 command, source checks and live blockers. Fixtures and Stage B captures cannot
 replace live packaged checks. Full inherited product acceptance remains NOT RUN.
+
+`journey-entry.ts --budget` checks a single fresh installation with
+`models: { mode: provider, qualification: true }`. Prepare it with the exact
+checkout's approved images and private values using the
+[operator commands](#local-operator-guide). Run `package-check` and start the
+loopback forward before running the browser check. The runner requires the claimed
+namespace and the separate qualification stand-in before it begins provider setup.
+Direct Playwright API requests keep the browser's session and use a fresh HTTP
+connection for each read or command through the forward. The driver checks
+those replies before it reads their JSON. Before reporting success, the driver
+checks that each required page and API operation supplied inspected replies.
+
+The owner connects the provider in Settings. A separate admin sets the paying
+group's monthly ceiling to 500 cents in Spending. At 1280 and 390 px a member
+opens a shared assistant session once its saved change is applied and gets a
+completed reply using the memory-free option. The driver checks that member
+action history keeps the amounts private. It opens admin Change history for the
+same turn and captures its 16-cent reservation and 1-cent charge. Spending shows
+the new settled total in whole euro cents.
+The admin saves a ceiling one cent below the total. Chat shows the monthly limit
+for the next turn, and the stand-in's `/journey-counts` counter stays the same.
+It counts every request to a `/v1/` route before checking the route or key.
+The disclosure check includes values read from the installed Helm release and
+logs from the server and stand-in pods. It reads the previous log from every
+container that restarted. Failed reads and missing server or stand-in output
+fail the check. A successful read can be empty for a container that writes no logs.
+
+Copy the masked screenshots and `result.json` from the slot's
+`package-budget-journey` directory before `package-down` and `down.sh`. On failure,
+keep the private step diagnostics and sanitised startup and service logs before
+teardown. Qualification makes zero paid calls.
 
 ## Company acceptance checklist
 

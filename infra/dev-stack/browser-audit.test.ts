@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import { test } from 'node:test';
-import { request } from 'playwright';
-import { assertAuditMoney, assertPublishedAudit } from './browser-audit.ts';
+import { request, type Page } from 'playwright';
+import { assertAuditMoney, assertPublishedAudit, readSuccessfulTurnAudit } from './browser-audit.ts';
 import type { AuditRow } from '@opencrane/protocol';
 
 async function checksAdminMoney() {
@@ -15,6 +15,9 @@ async function checksAdminMoney() {
     { row: adminRow, passes: true },
     { row: { ...adminRow, reservedCents: 0, settledCents: 0 }, passes: true },
     { row: memberRow, passes: false },
+    { row: { ...memberRow, settledCents: 1 }, passes: false },
+    { row: { ...memberRow, reservedCents: 17 }, passes: false },
+    { row: { ...adminRow, reservedCents: 16.5 }, passes: false },
     { row: { ...adminRow, settledCents: 0.5 }, passes: false },
     { row: { ...adminRow, requestId: 'another-request' }, passes: false },
     { row: { ...adminRow, permitId: 'another-permit' }, passes: false },
@@ -40,10 +43,15 @@ async function checksAdminMoney() {
     for (const example of cases) {
       current = example;
       async function check() {
-        await assertAuditMoney(owner, origin, memberRow);
+        return assertAuditMoney(owner, origin, memberRow);
       }
-      if (example.passes) await check();
-      else await assert.rejects(check);
+      if (example.passes) {
+        const amounts = await check();
+        assert.deepEqual(amounts, {
+          auditId: example.row.id, reservedCents: example.row.reservedCents,
+          chargedCents: example.row.settledCents,
+        });
+      } else await assert.rejects(check);
     }
   } finally {
     await client.dispose();
@@ -103,3 +111,43 @@ async function closeServer(server: Server) {
   server.close();
   await closed;
 }
+
+async function checksMemberMoneyPrivacy() {
+  const prompt = 'Fixture member turn';
+  const message = { id: 'turn', position: 1, type: 'message.posted', time: 'now',
+    data: { text: prompt } };
+  const feed = { rows: [message], position: 1, generation: 1, computerState: 'ready' };
+  const memberRow: AuditRow = { id: 'call', requestId: 'request', permitId: 'permit',
+    requesterId: 'member', conversationId: 'conversation', turnId: 'turn',
+    contextDigest: 'a'.repeat(64), decision: 'allow', outcome: 'success', records: [] };
+  let history = { rows: [memberRow] };
+  function handle(incoming: import('node:http').IncomingMessage,
+    response: import('node:http').ServerResponse): void {
+    incoming.resume();
+    response.setHeader('content-type', 'application/json');
+    const body = incoming.url?.endsWith('/messages') ? feed : history;
+    response.end(JSON.stringify(body));
+  }
+  const server = createServer(handle);
+  const origin = await listen(server);
+  const client = await request.newContext();
+  function workspaceUrl(): string {
+    return `${origin}/workspace?conversation=conversation`;
+  }
+  const page: Pick<Page, 'request' | 'url'> = { request: client, url: workspaceUrl };
+  const readTurn = readSuccessfulTurnAudit.bind(undefined, page, origin, prompt);
+  try {
+    const visible = await readTurn();
+    assert.equal(visible.row.id, memberRow.id);
+    history = { rows: [{ ...memberRow, reservedCents: 16 }] };
+    await assert.rejects(readTurn(), /Member action history does not expose money amounts/u);
+    history = { rows: [{ ...memberRow, settledCents: 1 }] };
+    await assert.rejects(readTurn(), /Member action history does not expose money amounts/u);
+  } finally {
+    await client.dispose();
+    await closeServer(server);
+  }
+}
+
+void test('the turn read used by the packaged journey refuses either member money field',
+  checksMemberMoneyPrivacy);

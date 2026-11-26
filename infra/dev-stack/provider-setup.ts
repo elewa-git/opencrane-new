@@ -5,23 +5,21 @@ import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models';
 import { secondary } from './identity.ts';
 import { authEnv, directory, root } from './config.ts';
+import { waitForSeededDefault, type ProviderBindings } from './provider-default.ts';
 
 type SetupOptions = {
   server: string; origin: string; cookie: string; silo: string; value: string; real?: boolean;
 };
-// Allow the background worker the same two minutes as a fresh secondary service start.
-const DEFAULT_BINDING_READINESS_MS = 120_000;
 const operations: Record<string, string> = {
   create: 'provider.created', save: 'provider.key_saved',
   reachability: 'provider.verification_requested', test: 'provider.verification_requested',
   models: 'provider.models_selected', default: 'provider.model_binding_set',
   drain: 'provider.managed_calls_drain_set', 'switch-on': 'provider.managed_calls_enabled',
 };
-type Reply = {
+type Reply = ProviderBindings & {
   operation?: string;
   revision: number; sequence: number; expectedProviderSequence: number;
   priceTableId: string; reservedCents: number;
-  rows?: Array<{ kind: string; position: number }>;
   projection?: { content: string; iam: string }; outcome?: string;
 };
 
@@ -119,30 +117,18 @@ export async function setupProvider(options: SetupOptions) {
   const selected = await save('models', '/api/org/providers', {
     action: 'models', providerId, expectedRevision: saved.revision, models: enabledModels,
   });
-  function isDefault(row: { kind: string }) {
-    return row.kind === 'silo_default';
-  }
-  async function seededDefault() {
-    const deadline = Date.now() + DEFAULT_BINDING_READINESS_MS;
-    while (Date.now() < deadline) {
-      let bindings: Reply;
-      try {
-        bindings = await request('bindings', `${route}/bindings`);
-      } catch (error) {
-        if (!(error instanceof Error) || error.message !== 'Provider setup bindings: 503') {
-          throw error;
-        }
-        await delay(100);
-        continue;
+  async function readBindings() {
+    try {
+      return await request('bindings', `${route}/bindings`);
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'Provider setup bindings: 503') {
+        throw error;
       }
-      const previous = bindings.rows?.find(isDefault);
-      if (previous) return { bindings, previous };
-      await delay(100);
+      return undefined;
     }
-    throw new Error('Provider setup default: timeout');
   }
   // Wait for the default scheduled by model selection before making the owner's choice.
-  const { bindings, previous } = await seededDefault();
+  const { bindings, previous } = await waitForSeededDefault(readBindings);
   await save('default', `${route}/bindings`, { action: 'select', kind: 'silo_default',
     dependantId: options.silo, task: 'chat_turn', model, expectedRevision: selected.revision,
     expectedProviderSequence: bindings.expectedProviderSequence,

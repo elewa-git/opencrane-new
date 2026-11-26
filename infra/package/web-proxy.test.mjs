@@ -2,8 +2,20 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer, request } from 'node:http';
+import { connect, createServer as createTcpServer } from 'node:net';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
+import { request as playwrightRequest } from 'playwright';
+import { readBudgetSummary } from '../dev-stack/browser-budgets.ts';
+
+function startWebProxy(backendPort) {
+  const options = {
+    env: { ...process.env, WEB_PROXY_TEST_PORT: String(backendPort) },
+    execArgv: ['--import', resolve('infra/package/web-proxy-fixture.mjs')],
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+  };
+  return fork(resolve('infra/package/web.mjs'), [], options);
+}
 
 function childMessage(child) {
   return new Promise(waitForMessage);
@@ -88,12 +100,7 @@ async function viewerWriteFailure(context) {
   backend.on('upgrade', accept);
   backend.listen(0, '127.0.0.1');
   await once(backend, 'listening');
-  const options = {
-    env: { ...process.env, WEB_PROXY_TEST_PORT: String(backend.address().port) },
-    execArgv: ['--import', resolve('infra/package/web-proxy-fixture.mjs')],
-    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
-  };
-  const child = fork(resolve('infra/package/web.mjs'), [], options);
+  const child = startWebProxy(backend.address().port);
   let diagnostics = '';
   function errorOutput(bytes) {
     diagnostics += bytes.toString();
@@ -141,3 +148,107 @@ async function viewerWriteFailure(context) {
 const testOptions = { timeout: 10_000 };
 test('a failed viewer write closes both connections and keeps packaged HTTP available',
   testOptions, viewerWriteFailure);
+
+function forwardWithDelayedClose(webPort) {
+  const websiteClosed = Promise.withResolvers();
+  const sockets = new Set();
+  let staleRequests = 0;
+  function forward(client) {
+    const website = connect(webPort, '127.0.0.1');
+    sockets.add(client);
+    client.pipe(website);
+    // A remote close can race a request on the local port-forward connection.
+    website.pipe(client, { end: false });
+    function closeWebsite() {
+      sockets.delete(client);
+      website.destroy();
+    }
+    function closeStaleClient() {
+      client.destroy();
+    }
+    function rejectStaleRequest() {
+      staleRequests++;
+      closeStaleClient();
+    }
+    function websiteEnded() {
+      client.once('data', rejectStaleRequest);
+      client.resume();
+      websiteClosed.resolve();
+    }
+    client.once('close', closeWebsite);
+    client.once('error', closeStaleClient);
+    website.once('error', closeStaleClient);
+    website.once('close', websiteEnded);
+  }
+  const server = createTcpServer(forward);
+  function stop() {
+    for (const client of sockets) client.destroy();
+    server.close();
+  }
+  function countStaleRequests() {
+    return staleRequests;
+  }
+  return { server, websiteClosed: websiteClosed.promise, countStaleRequests, stop };
+}
+
+async function rereadAfterWebsiteIdle(context) {
+  const cookies = [];
+  function budget(incoming, response) {
+    cookies.push(incoming.headers.cookie);
+    response.setHeader('content-type', 'application/json');
+    const budget = { sequence: cookies.length, ceilingCents: 500, todayCents: 0,
+      monthCents: 0, reservedCents: 0, periodStart: null, defaultPayingGroupId: 'example',
+      dailyCeilingCents: 0, ceilings: [] };
+    response.end(JSON.stringify({ budget }));
+  }
+  const backend = createServer({ keepAliveTimeout: 72_000 }, budget);
+  function closeBackend() {
+    backend.close();
+    backend.closeAllConnections();
+  }
+  context.after(closeBackend);
+  backend.listen(0, '127.0.0.1');
+  await once(backend, 'listening');
+  const child = startWebProxy(backend.address().port);
+  function closeWeb() {
+    child.kill();
+  }
+  context.after(closeWeb);
+  const ready = await childMessage(child);
+  assert.equal(ready.kind, 'ready');
+  const forward = forwardWithDelayedClose(ready.port);
+  context.after(forward.stop);
+  forward.server.listen(0, '127.0.0.1');
+  await once(forward.server, 'listening');
+  const session = { name: 'fixture', value: 'session', domain: '127.0.0.1', path: '/',
+    expires: -1, httpOnly: true, secure: false, sameSite: 'Lax' };
+  const client = await playwrightRequest.newContext({ storageState: {
+    cookies: [session], origins: [],
+  } });
+  function closeClient() {
+    return client.dispose();
+  }
+  context.after(closeClient);
+  const origin = `http://127.0.0.1:${forward.server.address().port}`;
+  const owner = { request: client };
+
+  const initial = await readBudgetSummary(owner, origin);
+  assert.equal(initial.sequence, 1);
+  assert.equal(initial.ceilingCents, 500);
+  await forward.websiteClosed;
+
+  const readback = await readBudgetSummary(owner, origin);
+  assert.equal(readback.sequence, 2);
+  assert.equal(readback.ceilingCents, 500);
+  assert.deepEqual(cookies, ['fixture=session', 'fixture=session'],
+    'Each budget GET arrives once with the same browser session');
+  assert.equal(forward.countStaleRequests(), 0);
+
+  const normalReply = await client.get(`${origin}/api/org/models`);
+  assert.equal(normalReply.status(), 200);
+  assert.match(normalReply.headers()['keep-alive'], /^timeout=5\b/u,
+    'A client that keeps connections open sees the website timeout');
+}
+
+test('a budget read uses a fresh connection after the website connection expires',
+  testOptions, rereadAfterWebsiteIdle);

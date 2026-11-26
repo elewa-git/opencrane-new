@@ -1,0 +1,53 @@
+{
+  "status": "FAIL",
+  "source": "f22b076e26b4c16316517997cf44c0a046ab5cb6",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "Settings connects, tests, selects and switches on",
+      "result": "PASS"
+    },
+    {
+      "check": "monthly spending and chat refusal at 1280px",
+      "result": "PASS",
+      "width": 1280,
+      "ceilingCents": 500,
+      "reservedCents": 16,
+      "chargedCents": 1,
+      "spentCents": 1,
+      "loweredCents": 0,
+      "requestsBefore": 4,
+      "requestsAfterReply": 5,
+      "requestsAfterRefusal": 5
+    },
+    {
+      "check": "monthly spending and chat refusal at 390px",
+      "result": "PASS",
+      "width": 390,
+      "ceilingCents": 500,
+      "reservedCents": 16,
+      "chargedCents": 1,
+      "spentCents": 2,
+      "loweredCents": 1,
+      "requestsBefore": 5,
+      "requestsAfterReply": 6,
+      "requestsAfterRefusal": 6
+    },
+    {
+      "check": "credential disclosure checks",
+      "result": "FAIL",
+      "errorType": "AssertionError",
+      "detail": "No inspected artifact or event may disclose a credential."
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

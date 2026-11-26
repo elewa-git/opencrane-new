@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { once } from 'node:events';
 import { test } from 'node:test';
 import { chromium } from 'playwright';
 import { checkProviderStatus, createProviderConnection, enterProviderKey, finishSelectingProviderModels,
-  saveProviderKey } from './provider-settings.ts';
+  saveProviderKey, selectChatDefault } from './provider-settings.ts';
 
 const fixture = `
 <div class="page-actions"><button onclick="setup.showModal()">Connect a provider</button></div>
@@ -71,6 +73,64 @@ async function followsVisibleSetup(): Promise<void> {
 
 test('new-key setup follows Check status and ignores the closed replacement field at both widths',
   followsVisibleSetup);
+
+const chatDefaultFixture = `
+<section aria-label="Member chat setup">
+  <label>Chat model <select><option>gpt-6.1-sol</option></select></label>
+  <button onclick="selectDefault()">Select chat default</button>
+  <p id="status" role="status"></p>
+</section>
+<script>
+async function selectDefault() {
+  const response = await fetch('/select-default', { method: 'POST' });
+  document.querySelector('#status').textContent = response.ok
+    ? 'Change recorded. Check chat setup to read its current status.'
+    : 'The chat default is still applying. Select chat default again.';
+}
+</script>`;
+
+async function waitsForTheSeededDefault() {
+  let reads = 0;
+  let selections = 0;
+  function serve(request: IncomingMessage, response: ServerResponse) {
+    if (request.url === '/api/org/providers/fixture/bindings') {
+      reads++;
+      response.setHeader('content-type', 'application/json');
+      if (reads === 2) response.statusCode = 503;
+      const rows = reads >= 3 ? [{ kind: 'silo_default', position: 7 }] : [];
+      response.end(JSON.stringify({ rows }));
+    } else if (request.url === '/select-default' && request.method === 'POST') {
+      selections++;
+      response.writeHead(reads >= 3 ? 200 : 409);
+      response.end();
+    } else {
+      response.setHeader('content-type', 'text/html');
+      response.end(chatDefaultFixture);
+    }
+  }
+  const server = createServer(serve);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert(address && typeof address !== 'string');
+  const origin = `http://127.0.0.1:${address.port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(1000);
+    await page.goto(origin);
+    await selectChatDefault(page, origin, 'fixture', 'gpt-6.1-sol');
+    assert.equal(reads, 3, 'Wait through an empty binding and an unavailable read');
+    assert.equal(selections, 1, 'Select only after the first binding is saved');
+  } finally {
+    await browser.close();
+    const closed = once(server, 'close');
+    server.close();
+    await closed;
+  }
+}
+test('the package selects the chat default once the background worker has first saved it',
+  waitsForTheSeededDefault);
 
 async function followsAutomaticAdvance(): Promise<void> {
   const browser = await chromium.launch({ headless: true });

@@ -161,7 +161,7 @@ async function supportsManagedVerification() {
     const counts = await fetch(`${origin}/provider-counts`);
     assert.deepEqual(await counts.json(), { managed: 2, other: 1 });
     const journey = await fetch(`${origin}/journey-counts`);
-    assert.deepEqual(await journey.json(), { modelRequests: 2 });
+    assert.deepEqual(await journey.json(), { modelRequests: 3 });
     assert.equal(JSON.stringify(answer).includes(value), false);
     assert.equal(events.includes(value), false);
     assert.equal(diagnostics.includes(value), false);
@@ -308,6 +308,16 @@ async function refusesWrongQualificationKey() {
     const port = /Stub ready (\d+)/u.exec(String(output))?.[1];
     assert(port);
     const origin = `http://127.0.0.1:${port}`;
+    const initialCount = await fetch(`${origin}/journey-counts`);
+    assert.deepEqual(await initialCount.json(), { modelRequests: 0 });
+    const unauthorisedList = await fetch(`${origin}/v1/models`);
+    assert.equal(unauthorisedList.status, 401);
+    await unauthorisedList.text();
+    const afterList = await fetch(`${origin}/journey-counts`);
+    assert.deepEqual(await afterList.json(), { modelRequests: 1 });
+    const unknownRoute = await fetch(`${origin}/v1/unused?fixture=1`);
+    assert.equal(unknownRoute.status, 404);
+    await unknownRoute.text();
     for (const credential of ['', 'synthetic-wrong-key', value]) {
       const headers = { authorization: `Bearer ${credential}` };
       const expected = credential === value ? 200 : 401;
@@ -322,6 +332,9 @@ async function refusesWrongQualificationKey() {
       assert.equal(answer.includes(value), false);
       assert.equal(answer.includes(file), false);
     }
+    const counts = await fetch(`${origin}/journey-counts`);
+    assert.deepEqual(await counts.json(), { modelRequests: 8 },
+      'A request that reaches the stand-in counts even if its key is refused');
   } finally {
     const stopped = once(stub, 'exit');
     stub.kill('SIGTERM');

@@ -127,6 +127,18 @@
       <p role="status">Evidence unavailable. Saved evidence may be stale.</p>
       <button type="button" (click)="loadDetail(selected)">Check status</button>
     }
+    @if (detailState() === 'ready' && selectedRow(); as row) {
+      @if (row.reservedCents !== undefined || row.settledCents !== undefined) {
+        <dl aria-label="Turn spending">
+          @if (row.reservedCents !== undefined) {
+            <div><dt>Reservation</dt><dd>{{ centsLabel(row.reservedCents) }}</dd></div>
+          }
+          @if (row.settledCents !== undefined) {
+            <div><dt>Charge</dt><dd>{{ centsLabel(row.settledCents) }}</dd></div>
+          }
+        </dl>
+      }
+    }
     @for (record of detail(); track record.eventId) {
       <section class="evidence">
         <h3>{{ recordTitle(record) }}</h3>

@@ -6,6 +6,7 @@ import type { Page } from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 import { root } from './config.ts';
+import type { BeforePageNavigation } from './browser-signin.ts';
 
 async function draft(page: Page, origin: string) {
   page.setDefaultTimeout(120_000);
@@ -15,7 +16,7 @@ async function draft(page: Page, origin: string) {
   await page.getByText('Draft', { exact: true }).waitFor();
 }
 
-async function sendForReply(page: Page, prompt: string) {
+export async function sendForReply(page: Page, prompt: string) {
   const loadedHistory = page.locator('.transcript[aria-busy="false"]');
   await loadedHistory.waitFor({ state: 'attached' });
   const replies = page.getByRole('article', { name: 'Agent reply', exact: true });
@@ -27,13 +28,15 @@ async function sendForReply(page: Page, prompt: string) {
   return replies.nth(previousReplyCount);
 }
 
-export async function answer(page: Page, prompt: string, facts: RegExp[]) {
+export async function answer(page: Page, prompt: string, facts: RegExp[],
+  beforeNavigate?: BeforePageNavigation) {
   const reply = await sendForReply(page, prompt);
   const completedOptions = { hasText: /^\s*Done\s*$/u };
   const completed = reply.locator('.turn-status', completedOptions);
   await completed.waitFor();
   const text = await reply.locator('.prose').innerText();
   for (const fact of facts) assert(fact.test(text), 'The real reply must contain the expected fact');
+  await beforeNavigate?.(page);
   await page.reload();
   await completed.waitFor();
   assert.equal(await reply.locator('.prose').innerText(), text, 'Reload keeps the answer');

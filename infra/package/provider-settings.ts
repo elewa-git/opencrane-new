@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Locator, Page, Response } from 'playwright';
 import { z } from 'zod';
+import { readJourneyApi } from '../dev-stack/browser-api.ts';
+import { waitForSeededDefault, type ProviderBindings } from '../dev-stack/provider-default.ts';
 
 const verificationFacts = {
   'Check provider reachability': 'reachable',
@@ -48,7 +50,7 @@ async function waitForVerificationFact(
 ): Promise<void> {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const response = await page.request.get(providerUrl);
+    const response = await readJourneyApi(page, providerUrl);
     assert.equal(response.status(), 200, 'Provider status read failed');
     const result = verificationStatus.parse(await response.json());
     if (result.rows[0]?.[fact]?.outcome === outcome) return;
@@ -59,6 +61,26 @@ async function waitForVerificationFact(
 
 export async function finishSelectingProviderModels(page: Page): Promise<void> {
   await waitForProviderStep(page, 'Step 5 of 6 · Access');
+}
+
+export async function selectChatDefault(page: Page, origin: string, providerId: string,
+  model: string): Promise<Locator> {
+  const bindingUrl = `${origin}/api/org/providers/${encodeURIComponent(providerId)}/bindings`;
+  async function readBindings() {
+    const response = await readJourneyApi(page, bindingUrl);
+    if (response.status() === 503) return undefined;
+    assert.equal(response.status(), 200, 'Provider bindings are readable');
+    const body = await response.json() as ProviderBindings;
+    return body;
+  }
+  // Wait for the saved automatic selection before clicking the one explicit selection.
+  await waitForSeededDefault(readBindings);
+  const chat = page.getByRole('region', { name: 'Member chat setup' });
+  await chat.getByLabel('Chat model').selectOption(model);
+  await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
+  const recorded = 'Change recorded. Check chat setup to read its current status.';
+  await chat.getByText(recorded, { exact: true }).waitFor();
+  return chat;
 }
 
 export async function createProviderConnection(page: Page, name: string): Promise<void> {

@@ -1,0 +1,57 @@
+{
+  "status": "PASS",
+  "source": "f9117476e9b7bcb37034ff8a562e12133af563e3",
+  "outcomes": [
+    {
+      "check": "wrong credential receives HTTP 401 from the separate stand-in",
+      "result": "PASS",
+      "status": 401
+    },
+    {
+      "check": "wrong key refused without disclosure",
+      "result": "PASS"
+    },
+    {
+      "check": "Settings connects, tests, selects and switches on",
+      "result": "PASS"
+    },
+    {
+      "check": "monthly spending and chat refusal at 1280px",
+      "result": "PASS",
+      "width": 1280,
+      "ceilingCents": 500,
+      "reservedCents": 16,
+      "chargedCents": 1,
+      "spentCents": 1,
+      "loweredCents": 0,
+      "requestsBefore": 1,
+      "requestsAfterReply": 2,
+      "requestsAfterRefusal": 2
+    },
+    {
+      "check": "monthly spending and chat refusal at 390px",
+      "result": "PASS",
+      "width": 390,
+      "ceilingCents": 500,
+      "reservedCents": 16,
+      "chargedCents": 1,
+      "spentCents": 2,
+      "loweredCents": 1,
+      "requestsBefore": 2,
+      "requestsAfterReply": 3,
+      "requestsAfterRefusal": 3
+    },
+    {
+      "check": "keys absent from values, manifests, environment values, logs and events",
+      "result": "PASS",
+      "checkedEvents": 166
+    },
+    {
+      "check": "finish API disclosure inspections",
+      "result": "PASS",
+      "checkedReplies": 129
+    }
+  ],
+  "paidCalls": 0,
+  "paidCents": 0
+}

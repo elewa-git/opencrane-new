@@ -7,14 +7,20 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
+import { postJourneyCommand, readJourneyApi } from '../dev-stack/browser-api.ts';
+import { chargedBudgetJourney } from '../dev-stack/charged-budget-journey.ts';
 import { directory, root } from '../dev-stack/config.ts';
 import { stackId } from '../dev-stack/identity.ts';
-import { finishBrowserReplies, navigateWithReplies, watchBrowserReplies }
-  from './provider-navigation.ts';
-import { providerFailure } from './provider-failure.ts';
-import { providerEventDisclosureScript, wrongKeyStatusScript } from './provider-probe.ts';
+import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrowserReplies,
+  watchBrowserReplies } from './provider-navigation.ts';
+import { assertNoBrowserDisclosure, checkProviderArtifacts } from './provider-disclosure.ts';
+import { providerJourneyCoverage } from './provider-journey-coverage.ts';
+import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
+import { providerEventDisclosureScript, qualificationRequestCountScript, withBudgetQualification,
+  wrongKeyStatusScript }
+  from './provider-probe.ts';
 import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
-  verifyProvider } from './provider-settings.ts';
+  selectChatDefault, verifyProvider } from './provider-settings.ts';
 import { completeProviderSignIn } from '../dev-stack/browser-signin.ts';
 import { packageConnectionArgs, verifyPackageOwner } from '../dev-stack/packaged.ts';
 
@@ -23,19 +29,25 @@ const owner = await verifyPackageOwner();
 const connection = await packageConnectionArgs(owner);
 const execute = promisify(execFile);
 const origin = `http://127.0.0.1:${25000 + Number(stackId) * 100 + 6}`;
-const output = `${root}/docs/process/work-pilot-1110-s1/live`;
-const setup = JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'));
-const credential = (await readFile(`${directory}/model-qualification-key`, 'utf8')).trim();
+const budget = process.argv[2] === '--budget';
+const output = budget ? `${directory}/package-budget-journey`
+  : `${root}/docs/process/work-pilot-1110-s1/live`;
 const wrongCredential = randomUUID();
-const secrets = [credential, wrongCredential];
+const secrets = [wrongCredential];
+const inspectBrowserBody = assertNoBrowserDisclosure.bind(undefined, secrets);
 const responses = [];
 const outcomes = [];
+let setup;
+let credential;
 let browser;
 let stage = { check: 'browser launch', detail: 'Chromium must launch for the packaged journey.' };
 
 function step(check, detail) {
   stage = { check, detail };
 }
+
+const recordShutdownFailure = writeShutdownFailure.bind(
+  undefined, `${directory}/browser-shutdown.log`, secrets);
 
 async function kube(args) {
   const result = await execute('kubectl', [...connection.args, '-n', owner.namespace, ...args],
@@ -66,7 +78,7 @@ async function wrongKeyStatus() {
 async function login(role) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
-  await watchBrowserReplies(page, origin, responses, assertNoBrowserDisclosure);
+  await watchBrowserReplies(page, origin, responses, inspectBrowserBody);
   page.setDefaultTimeout(30_000);
   const user = setup.users[role];
   assert(user, 'The claimed slot must have this separate test identity');
@@ -76,10 +88,6 @@ async function login(role) {
   secrets.push(password.trim());
   await completeProviderSignIn(page, user.login, password, origin, setup.issuer);
   return page;
-}
-
-function assertNoBrowserDisclosure(body) {
-  for (const secret of secrets) assert(!body.includes(secret), 'An API reply disclosed a key');
 }
 
 async function capture(page, name, width) {
@@ -105,8 +113,7 @@ async function invite(ownerPage, role, membershipRole) {
     personalAssistant: 'provision', expectedSequence: 0 };
   stage = { check: `invite ${membershipRole}`, expectedHttpStatus: 200,
     detail: 'The owner must be able to save the invitation.' };
-  const response = await ownerPage.request.post(`${origin}/api/invitations`,
-    { headers: { origin }, data });
+  const response = await postJourneyCommand(ownerPage, origin, '/api/invitations', data);
   assert.equal(response.status(), 200, 'The owner can invite a separate journey identity');
   const invitation = await response.json();
   assert(invitation.invitationId, 'The invitation must be recorded');
@@ -114,18 +121,18 @@ async function invite(ownerPage, role, membershipRole) {
   const page = await login(role);
   stage = { check: `${membershipRole} accepts invitation`, expectedHttpStatus: 200,
     detail: 'The separately signed-in person must be able to accept the invitation.' };
-  const joined = await page.request.post(`${origin}/members/join`, { headers: { origin },
-    data: { memberId, invitationId: invitation.invitationId, commandId: randomUUID(),
-      displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' } });
+  const join = { memberId, invitationId: invitation.invitationId, commandId: randomUUID(),
+    displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' };
+  const joined = await postJourneyCommand(page, origin, '/members/join', join);
   assert.equal(joined.status(), 200, 'The separately signed-in person can accept');
   assert.equal((await joined.json()).status, 'joined');
-  return page;
+  return { page, memberId };
 }
 
 async function waitForModels(page, providerId) {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
-    const response = await page.request.get(`${origin}/api/org/providers/${providerId}`);
+    const response = await readJourneyApi(page, `${origin}/api/org/providers/${providerId}`);
     assert.equal(response.status(), 200);
     const result = await response.json();
     if (result.rows[0]?.enabledModels.includes('gpt-6.1-sol')) {
@@ -138,12 +145,12 @@ async function waitForModels(page, providerId) {
 }
 
 async function connect(admin) {
-  step('open Settings', 'The admin must reach Models & providers through Settings.');
+  step('open Settings', 'The person setting up the provider must reach Models & providers.');
   await navigateWithReplies(admin, `${origin}/workspace`, responses);
   await admin.getByRole('link', { name: 'Settings', exact: true }).click();
   await admin.getByRole('link', { name: /Models/ }).click();
   await admin.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
-  await screenshots(admin, 'admin-settings');
+  await screenshots(admin, budget ? 'owner-settings' : 'admin-settings');
   step('create provider connection', 'The saved connection must advance to its Key step.');
   await createProviderConnection(admin, 'Package free provider');
   const setup = providerSetup(admin);
@@ -159,7 +166,7 @@ async function connect(admin) {
   step('save wrong synthetic key', 'Saving the key must advance to the Verify step.');
   await saveProviderKey(admin, wrongCredential);
   await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).waitFor();
-  const inventory = await admin.request.get(`${origin}/api/org/providers`);
+  const inventory = await readJourneyApi(admin, `${origin}/api/org/providers`);
   const providerId = (await inventory.json()).rows[0].providerId;
   const providerUrl = `${origin}/api/org/providers/${providerId}`;
   step('wrong-key reachability', 'Verification must report failed reachability for the wrong key.');
@@ -191,17 +198,13 @@ async function connect(admin) {
   await admin.getByRole('button', { name: 'Next', exact: true }).click();
   await admin.getByRole('button', { name: 'Go to Models', exact: true }).click();
   step('select chat default', 'Selecting the chat default must save its model binding.');
-  const chat = admin.getByRole('region', { name: 'Member chat setup' });
-  await chat.getByLabel('Chat model').selectOption('gpt-6.1-sol');
-  await chat.getByRole('button', { name: 'Select chat default', exact: true }).click();
-  await chat.getByText('Change recorded. Check chat setup to read its current status.',
-    { exact: true }).waitFor();
+  const chat = await selectChatDefault(admin, origin, providerId, 'gpt-6.1-sol');
   step('switch on member chats', 'Drained provider admission must allow member chats to switch on.');
   await chat.getByRole('button', { name: 'Pause new calls', exact: true }).click();
   await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();
   await chat.getByText('Member chats switched on', { exact: true }).waitFor();
   await screenshots(admin, 'provider-switched-on');
-  outcomes.push({ check: 'admin Settings connects, tests, selects and switches on', result: 'PASS' });
+  outcomes.push({ check: 'Settings connects, tests, selects and switches on', result: 'PASS' });
 }
 
 const modeScript = `
@@ -284,25 +287,61 @@ async function memberChats(member) {
   }
 }
 
-async function checkDisclosure() {
-  const values = await readFile(`${directory}/package-values.json`, 'utf8');
-  const manifests = await kube(['get', 'deployment,statefulset,cronjob,job,configmap', '-o', 'json']);
-  const logs = await kube(['logs', '-l', 'app=server', '--all-containers=true',
-    '--prefix=true', '--tail=-1']);
-  for (const content of [values, manifests, logs]) {
-    for (const secret of secrets) assert(!content.includes(secret), 'A public artifact disclosed a key');
-  }
-  const inspected = await privateScript(providerEventDisclosureScript, secrets);
-  assert(inspected.checkedEvents > 0);
-  outcomes.push({ check: 'keys absent from values, manifests, environment values, logs and events',
-    result: 'PASS', checkedEvents: inspected.checkedEvents });
+function readRequestCount() {
+  return privateScript(qualificationRequestCountScript, null);
 }
 
-try {
-  await mkdir(output, { recursive: true });
+function inspectBeforeNavigation(page) {
+  return waitForBrowserReplies(page, responses);
+}
+
+async function runMemberJourney(ownerPage, admin, member) {
+  if (budget) {
+    const pages = { owner: ownerPage, admin: admin.page, member: member.page };
+    const journey = { ...pages, memberId: member.memberId, origin, readRequestCount, capture, step,
+      beforeNavigate: inspectBeforeNavigation };
+    const results = await chargedBudgetJourney(journey);
+    outcomes.push(...results);
+  } else {
+    step('provider Pod recreation', 'Private custody must survive server Pod recreation.');
+    await recreateProviderPod();
+    step('member chat', 'Member chats must receive replies at both viewport widths.');
+    await memberChats(member.page);
+  }
+}
+
+async function checkDisclosure() {
+  function readLocalValues() {
+    return readFile(`${directory}/package-values.json`, 'utf8');
+  }
+  async function readInstalledValues() {
+    const args = ['get', 'values', owner.release, '--all', '-o', 'json',
+      '--kube-context', owner.context, '-n', owner.namespace];
+    const result = await execute('helm', args, { env: connection.environment, timeout: 30_000,
+      maxBuffer: 4 * 1024 * 1024 });
+    return result.stdout;
+  }
+  const reader = { kube, readLocalValues, readInstalledValues };
+  const logs = await checkProviderArtifacts(reader, secrets);
+  const inspected = await privateScript(providerEventDisclosureScript, secrets);
+  assert(inspected.checkedEvents > 0);
+  outcomes.push({ check: 'keys absent from local and installed values, manifests, logs and events',
+    result: 'PASS', ...logs, checkedEvents: inspected.checkedEvents });
+}
+
+async function runProviderJourney() {
+  step('read qualification settings', 'The claimed slot must have its free test accounts and key.');
+  const savedSetup = await readFile(`${directory}/zitadel.json`, 'utf8');
+  setup = JSON.parse(savedSetup);
+  const savedCredential = await readFile(`${directory}/model-qualification-key`, 'utf8');
+  credential = savedCredential.trim();
+  assert(credential, 'The qualification key must be present');
+  secrets.push(credential);
+
   // Save the wrong key privately so the collector can remove it from failure logs.
   const privateFileOptions = { mode: 0o600 };
   await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
+  step('browser launch', 'Chromium must launch for the packaged journey.');
   browser = await chromium.launch({ headless: true, channel: 'chromium' });
   step('owner sign-in', 'The owner must finish single sign-on into the fresh installation.');
   const ownerPage = await login('owner');
@@ -310,22 +349,35 @@ try {
   const admin = await invite(ownerPage, 'without-assistant', 'admin');
   step('member invitation and sign-in', 'The separate member must accept the owner invitation.');
   const member = await invite(ownerPage, 'member', 'member');
-  step('Settings setup', 'The admin must complete provider setup.');
-  await connect(admin);
-  step('provider Pod recreation', 'Private custody must survive server Pod recreation.');
-  await recreateProviderPod();
-  step('member chat', 'Member chats must receive replies at both viewport widths.');
-  await memberChats(member);
+  step('Settings setup', 'Provider setup must finish before starting member chats.');
+  await connect(budget ? ownerPage : admin.page);
+  await runMemberJourney(ownerPage, admin, member);
   step('credential disclosure checks', 'No inspected artifact or event may disclose a credential.');
   await checkDisclosure();
   step('finish API disclosure inspections',
     'All response inspections must pass through browser shutdown.');
-  await finishBrowserReplies(browser, responses);
+  const expectedReplies = providerJourneyCoverage(ownerPage, admin.page, member.page, budget);
+  await finishBrowserReplies(browser, responses, recordShutdownFailure, expectedReplies);
   browser = undefined;
+  const browserDisclosure = { check: stage.check, result: 'PASS',
+    checkedReplies: responses.length };
+  outcomes.push(browserDisclosure);
   const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
   await writeFile(`${output}/result.json`, JSON.stringify({ status: 'PASS', source: git.stdout.trim(),
     outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
-  console.log('PASS packaged provider Settings, refusal, private restart and member chats at 1280/390');
+  const completion = budget ? 'provider setup, charged turns and budget refusals'
+    : 'provider Settings, refusal, private restart and member chats';
+  console.log(`PASS packaged ${completion} at 1280/390`);
+}
+
+try {
+  await mkdir(output, { recursive: true });
+  if (budget) {
+    step('verify qualification', 'The separate free stand-in must be reachable before setup.');
+    await withBudgetQualification(kube, readRequestCount, runProviderJourney);
+  } else {
+    await runProviderJourney();
+  }
 } catch (error) {
   const failure = providerFailure(stage, error);
   outcomes.push(failure);
@@ -333,14 +385,17 @@ try {
   const result = { status: 'FAIL', source: git.stdout.trim(), outcomes, paidCalls: 0, paidCents: 0 };
   const serialisedResult = JSON.stringify(result, null, 2) + '\n';
   await writeFile(`${output}/result.json`, serialisedResult);
-  let diagnostic = String(error?.stack ?? error);
-  for (const secret of secrets) diagnostic = diagnostic.replaceAll(secret, '[redacted]');
-  diagnostic = diagnostic.replaceAll(root, '[worktree]').replaceAll(directory, '[slot]');
-  diagnostic = diagnostic.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[address]');
-  await writeFile(`${directory}/provider-journey-failure.txt`, diagnostic, { mode: 0o600 });
   // Keep page content, credentials and local paths out of diagnostics.
   console.error(`FAIL packaged provider journey during ${failure.check}: ${failure.detail}`);
   process.exitCode = 1;
 } finally {
-  await browser?.close();
+  if (browser) {
+    const closeBrowser = browser.close.bind(browser);
+    try {
+      await runShutdownStep('closing the browser', closeBrowser, recordShutdownFailure);
+    } catch {
+      console.error('FAIL while closing Chromium; inspect the claimed slot');
+      process.exitCode = 1;
+    }
+  }
 }

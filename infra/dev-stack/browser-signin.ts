@@ -10,6 +10,8 @@ import { decodeSession, type AuthConfig } from '@opencrane/auth';
 import { buildServer } from '../../apps/server/src/server.ts';
 import { directory } from './config.ts';
 
+export type BeforePageNavigation = (page: Page) => Promise<void>;
+
 const userSchema = z.object({ id: z.string(), login: z.string(), passwordFile: z.string() });
 const setupSchema = z.object({ users: z.object({ owner: userSchema, member: userSchema }) });
 export async function testUsers() {

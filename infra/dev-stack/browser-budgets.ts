@@ -7,9 +7,11 @@ import type { Locator, Page, Response } from 'playwright';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { history, migrateBudgetDefault } from '@opencrane/models';
-import { budgetSummarySchema } from '@opencrane/protocol';
+import { budgetSummarySchema, type BudgetSummary } from '@opencrane/protocol';
 import { readEvents } from '@opencrane/projections';
+import { postJourneyCommand, readJourneyApi } from './browser-api.ts';
 import { directory, root } from './config.ts';
+import type { BeforePageNavigation } from './browser-signin.ts';
 
 /** Real owner edits and member refusals against the secondary stack's stub provider. */
 export async function browserBudgetJourney(owner: Page, members: Page[], origin: string,
@@ -44,47 +46,16 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     assert.equal(starting.dailyCeilingCents, 5000, 'Plain startup preserves the owner daily cap');
     for (const scope of ['paying_group', 'assistant'] as const) assert.equal(starting.ceilings.find(row => row.scope === scope && row.scopeId === (scope === 'assistant' ? assistantId : groupId))?.ceilingCents, 20000, 'Plain startup preserves the owner monthly ceilings');
   }
-  const save = async (scope: 'global' | 'paying_group' | 'assistant', scopeId: string, cents: number) => {
-    const budgetScope = await loadBudgetEditor(owner, origin);
-    await budgetScope.selectOption(scope);
-    if (scope === 'global') await owner.getByLabel('Daily safety cap (euro cents)', { exact: true }).fill('5000');
-    else await owner.getByLabel(scope === 'assistant' ? 'Assistant id' : 'Paying group id', { exact: true }).fill(scopeId);
-    await owner.getByLabel('Monthly ceiling (euro cents)', { exact: true }).fill(String(cents));
-    const saving = owner.waitForResponse(response => response.url() === `${origin}/api/org/models` && response.request().method() === 'POST');
-    await owner.getByRole('button', { name: 'Save budget', exact: true }).click();
-    const response = await saving;
-    assert.equal(response.status(), 200);
-    const saved = budgetSummarySchema.parse((await response.json() as { budget: unknown }).budget);
-    await owner.getByText('Budget saved', { exact: true }).waitFor();
-    const deadline = Date.now() + 90_000;
-    let projected = await summary();
-    while (projected.sequence < saved.sequence) {
-      assert(Date.now() < deadline, 'Saved ceiling reaches the budget projection');
-      await delay(100); projected = await summary();
-    }
-    if (scope === 'global') {
-      assert.equal(projected.ceilingCents, cents);
-      assert.equal(projected.dailyCeilingCents, 5000);
-      assert.equal(projected.defaultPayingGroupId, defaultPayingGroupId);
-    } else {
-      function matchesScope(row: typeof projected.ceilings[number]) {
-        return row.scope === scope && row.scopeId === scopeId;
-      }
-      const ceiling = projected.ceilings.find(matchesScope);
-      assert.equal(ceiling?.ceilingCents, cents);
-    }
-    assert(await owner.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Budget editor fits the viewport');
-  };
   for (const width of [1280, 390]) {
     await owner.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const member = members.find(page => page.viewportSize()?.width === width);
     assert(member);
     for (const scope of ['paying_group', 'assistant'] as const) {
-      await save('paying_group', groupId, 20000);
-      await save('assistant', assistantId, 20000);
+      await saveBudgetCeiling(owner, origin, { scope: 'paying_group', scopeId: groupId, cents: 20000 });
+      await saveBudgetCeiling(owner, origin, { scope: 'assistant', scopeId: assistantId, cents: 20000 });
       const scopeId = scope === 'assistant' ? assistantId : groupId;
       try {
-        await save(scope, scopeId, 0);
+        await saveBudgetCeiling(owner, origin, { scope, scopeId, cents: 0 });
         await owner.screenshot({ path: `${output}/${run}-${scope}-${width}.png`, fullPage: true });
         const conversationId = new URL(member.url()).searchParams.get('conversation');
         assert(conversationId);
@@ -131,11 +102,59 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   }
   if (run === 'fresh') {
     // Stop retains unconfirmed reservations; leave enough headroom for plain startup.
-    await save('paying_group', groupId, 20000);
-    await save('assistant', assistantId, 20000);
-    await save('global', groupId, 20000);
+    await saveBudgetCeiling(owner, origin, { scope: 'paying_group', scopeId: groupId, cents: 20000 });
+    await saveBudgetCeiling(owner, origin, { scope: 'assistant', scopeId: assistantId, cents: 20000 });
+    const global = await saveBudgetCeiling(owner, origin,
+      { scope: 'global', dailyCents: 5000, cents: 20000 });
+    assert.equal(global.defaultPayingGroupId, defaultPayingGroupId);
     await owner.screenshot({ path: `${output}/fresh-repeat-headroom-390.png`, fullPage: true });
   }
+}
+
+export type JourneyBudgetCeiling = { scope: 'global'; cents: number; dailyCents: number }
+  | { scope: 'paying_group' | 'assistant'; scopeId: string; cents: number };
+
+export function scopedBudget(budget: BudgetSummary,
+  scope: 'paying_group' | 'assistant', scopeId: string) {
+  function matchesScope(row: BudgetSummary['ceilings'][number]) {
+    return row.scope === scope && row.scopeId === scopeId;
+  }
+  const ceiling = budget.ceilings.find(matchesScope);
+  assert(ceiling, 'The saved spending scope is present');
+  return ceiling;
+}
+
+export async function saveBudgetCeiling(owner: Page, origin: string, limit: JourneyBudgetCeiling,
+  beforeNavigate?: BeforePageNavigation) {
+  const budgetScope = await loadBudgetEditor(owner, origin, undefined, beforeNavigate);
+  await budgetScope.selectOption(limit.scope);
+  if (limit.scope === 'global') {
+    const daily = owner.getByLabel('Daily safety cap (euro cents)', { exact: true });
+    await daily.fill(String(limit.dailyCents));
+  } else {
+    const label = limit.scope === 'assistant' ? 'Assistant id' : 'Paying group id';
+    await owner.getByLabel(label, { exact: true }).fill(limit.scopeId);
+  }
+  const monthly = owner.getByLabel('Monthly ceiling (euro cents)', { exact: true });
+  await monthly.fill(String(limit.cents));
+  function isSave(response: Response) {
+    return response.url() === `${origin}/api/org/models` && response.request().method() === 'POST';
+  }
+  const saving = owner.waitForResponse(isSave);
+  await owner.getByRole('button', { name: 'Save budget', exact: true }).click();
+  const saved = await budgetFromResponse(await saving);
+  await owner.getByText('Budget saved', { exact: true }).waitFor();
+  const projected = await waitForProjectedBudget(owner, origin, saved.sequence);
+  if (limit.scope === 'global') {
+    assert.equal(projected.ceilingCents, limit.cents);
+    assert.equal(projected.dailyCeilingCents, limit.dailyCents);
+  } else {
+    const ceiling = scopedBudget(projected, limit.scope, limit.scopeId);
+    assert.equal(ceiling.ceilingCents, limit.cents);
+  }
+  assert(await owner.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    'Budget editor fits the viewport');
+  return projected;
 }
 
 async function visibleState(locator: Locator): Promise<boolean | null> {
@@ -161,7 +180,8 @@ async function readEditorState(owner: Page) {
 }
 
 export async function loadBudgetEditor(owner: Page, origin: string,
-  captureDirectory = directory): Promise<Locator> {
+  captureDirectory = directory, beforeNavigate?: BeforePageNavigation): Promise<Locator> {
+  await beforeNavigate?.(owner);
   const budgetReadStatuses: number[] = [];
   const effectReadStatuses: number[] = [];
   function recordResponse(response: Response) {
@@ -208,22 +228,29 @@ async function restoreBudgetCeiling(owner: Page, origin: string, store: EventSto
     scope, ceilingCents: 20000,
     ...(scope === 'global' ? { dailyCeilingCents: 5000 } : { scopeId }),
   };
-  const request = { headers: { origin }, data: command };
-  const response = await owner.request.post(`${origin}/api/org/models`, request);
+  const response = await postJourneyCommand(owner, origin, '/api/org/models', command);
   assert.equal(response.status(), 200, `Restore the ${scope} test ceiling`);
-  const body = await response.json() as { budget: unknown };
-  const saved = budgetSummarySchema.parse(body.budget);
+  const saved = await budgetFromResponse(response);
+  await waitForProjectedBudget(owner, origin, saved.sequence);
+}
+
+async function waitForProjectedBudget(owner: Page, origin: string, sequence: number) {
   const deadline = Date.now() + 90_000;
   let projected = await readBudgetSummary(owner, origin);
-  while (projected.sequence < saved.sequence) {
-    assert(Date.now() < deadline, 'Restored ceilings reach the budget projection');
+  while (projected.sequence < sequence) {
+    assert(Date.now() < deadline, 'Saved ceiling reaches the budget projection');
     await delay(100);
     projected = await readBudgetSummary(owner, origin);
   }
+  return projected;
 }
 
-async function readBudgetSummary(owner: Page, origin: string) {
-  const response = await owner.request.get(`${origin}/api/org/models`);
+export async function readBudgetSummary(owner: Page, origin: string) {
+  const response = await readJourneyApi(owner, `${origin}/api/org/models`);
+  return budgetFromResponse(response);
+}
+
+async function budgetFromResponse(response: Pick<Response, 'status' | 'json'>) {
   assert.equal(response.status(), 200);
   const body = await response.json() as { budget: unknown };
   return budgetSummarySchema.parse(body.budget);
