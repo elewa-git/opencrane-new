@@ -332,15 +332,13 @@ function defaultCommand(overrides: Record<string, unknown> = {}) {
 async function refusesUnansweredDefault(action: string) {
   await connection('ready-except-answer');
   const identity = { kind: 'silo_default', dependantId: 'acme', task: 'chat_turn' };
-  const command = action === 'select'
-    ? await defaultCommand({ action, ...identity })
-    : await defaultCommand();
+  const selection = { action, ...identity };
+  const overrides = action === 'select' ? selection : undefined;
+  const command = await defaultCommand(overrides);
   const refusal = await refused('ready-except-answer', command);
   expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
   await answerChatModel('ready-except-answer');
-  const ready = action === 'select'
-    ? await defaultCommand({ action, ...identity })
-    : await defaultCommand();
+  const ready = await defaultCommand(overrides);
   const saved = await request('POST', 'ready-except-answer', ready);
   expect(saved.statusCode).toBe(200);
 }
@@ -440,7 +438,9 @@ async function competingFirstChoices() {
   const requests = [request('POST', 'first', first), request('POST', 'second', second)];
   const responses = await Promise.all(requests);
   spy.mockRestore();
-  expect(responses.map(statusCode).sort()).toEqual([200, 409]);
+  const statuses = responses.map(statusCode);
+  statuses.sort();
+  expect(statuses).toEqual([200, 409]);
   const firstHistory = await storedBindings('first');
   const secondHistory = await storedBindings('second');
   expect([...firstHistory, ...secondHistory]).toHaveLength(1);
@@ -472,7 +472,8 @@ async function movesAutomaticChatDefault() {
   await refused('second', wrongRevision, 409);
   const saved = await request('POST', 'second', command);
   expect(saved.statusCode).toBe(200);
-  const position = saved.json<{ sequence: number }>().sequence;
+  const receipt = saved.json<{ sequence: number }>();
+  const position = receipt.sequence;
   const read = await request('GET', 'second');
   const row = { kind: 'silo_default', providerId: 'second',
     previousBindingSequence: first.sequence, sourceRevision: 3 };
