@@ -765,7 +765,12 @@ async function rollsBackWithUnusedRecoveryClaim() {
     fixture.state.pilot = { release: { metadata: { uid: releaseSecretUid, labels } } };
     await fixture.saveState();
     await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(owner));
-    await fixture.run('package-rollback', ['--revision', '1']);
+    try {
+      await fixture.run('package-rollback', ['--revision', '1']);
+    } catch (cause) {
+      const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
+      throw new Error(failure, { cause });
+    }
     await fixture.loadState();
     function isRollback(call: string[]) { return call[0] === 'helm' && call[1] === 'rollback'; }
     const rollback = fixture.state.calls.find(isRollback);
@@ -774,6 +779,13 @@ async function rollsBackWithUnusedRecoveryClaim() {
       return call.includes('rollout') && call.includes('deployment/server');
     }
     assert.ok(fixture.state.calls.some(waitedForServer));
+    fixture.state.fail = 'helm';
+    await fixture.saveState();
+    await assert.rejects(fixture.run('package-rollback', ['--revision', '1']), {
+      stderr: /Package command refused/u,
+    });
+    const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
+    assert.equal(failure, 'Error: Package command failed');
   } finally {
     await fixture.close();
   }
