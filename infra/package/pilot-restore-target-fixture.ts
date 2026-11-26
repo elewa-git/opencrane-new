@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { database } from '@opencrane/projections/testing';
 import { pilotBackupFixture } from './pilot-restore-fixture.ts';
+import { lockPackageTestRoles, unlockPackageTestRoles }
+  from './pilot-restore-postgres-fixture.ts';
 
 const held = ['server', 'worker-dispatcher', 'worker-members', 'worker-mcp-catalogue',
   'worker-computers', 'worker-conversations', 'worker-files', 'worker-budgets',
@@ -116,7 +118,7 @@ async function targetDatabaseFixture() {
   const content = await database('pg');
   const admin = new Pool({ connectionString: process.env['PG_TEST_URL'] });
   const coordination = await admin.connect();
-  await coordination.query("SELECT pg_advisory_lock(hashtext('pilot_restore_tests'))");
+  await lockPackageTestRoles(coordination);
   const inventory = await content.db.query<{ name: string }>('SELECT current_database() AS name');
   const contentUrl = new URL(process.env['PG_TEST_URL']!);
   contentUrl.pathname = `/${inventory.rows[0]!.name}`;
@@ -160,7 +162,7 @@ async function targetDatabaseFixture() {
     await admin.query(`DROP DATABASE IF EXISTS ${application} WITH (FORCE)`);
     await admin.query(`DROP ROLE IF EXISTS ${role}`);
     await content.close();
-    await coordination.query("SELECT pg_advisory_unlock(hashtext('pilot_restore_tests'))");
+    await unlockPackageTestRoles(coordination);
     coordination.release();
     await admin.end();
   }

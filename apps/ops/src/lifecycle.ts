@@ -4,8 +4,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
 import { isEventStoreUnavailable, readBeforeDeadline,
   type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { conversationCreatedDataSchema, memberJoinedDataSchema,
-  type EventEnvelope } from '@opencrane/events';
+import { memberJoinedDataSchema, type EventEnvelope } from '@opencrane/events';
+import { personalAssistantId } from '@opencrane/models';
+import { computerActivity } from './computer-activity.ts';
 import { EventReadTimeoutError, readEvents } from '@opencrane/projections';
 import { recoverJetStreamOperation, registerHandler,
   type JetStreamRecoveryReporter } from '@opencrane/handlers';
@@ -84,7 +85,7 @@ export function lifecycleHandlers(store: Store) {
     if (memberFacts.at(-1)?.event.type === 'member.removed') {
       return;
     }
-    const assistantId = stable('personal', event.silo, memberId);
+    const assistantId = personalAssistantId(event.silo, memberId);
     const subject = `assistant-${assistantId}`;
     const events = await history(store, subject);
     if (events.length) {
@@ -144,39 +145,14 @@ function readyPodUid(state: ComputerState): string | undefined {
   return typeof data === 'object' && data !== null && 'podUid' in data && typeof data.podUid === 'string'
     ? data.podUid : undefined;
 }
-interface ComputerActivity {
-  time: number;
-  openTurns: Set<string>;
-}
 interface ComputerWatchState {
   position: number;
   computers: Map<string, ComputerState>;
-  conversations: Map<string, string>;
-  activity: Map<string, ComputerActivity>;
+  activity: ReturnType<typeof computerActivity>;
   histories: Map<string, StoredEvent[]>;
 }
 const IDLE_CHECK_INTERVAL_MS = 30_000;
 const SUSPENDED_CHECK_INTERVAL_MS = 60_000;
-
-function recordActivity(snapshot: ComputerWatchState, event: EventEnvelope) {
-  if (event.type === 'conversation.created') {
-    const created = conversationCreatedDataSchema.parse(event.data);
-    if (created.mode === 'agent_session') {
-      snapshot.conversations.set(event.subject, created.assistantId);
-    }
-  }
-  const assistantId = snapshot.conversations.get(event.subject);
-  if (!assistantId) return;
-  const activity = snapshot.activity.get(assistantId) ?? { time: 0, openTurns: new Set<string>() };
-  if (event.type === 'message.posted' && field(event.data, 'authorKind') === 'human') {
-    activity.openTurns.add(event.id);
-  }
-  if (['agent.turn_completed', 'agent.turn_failed'].includes(event.type)) {
-    activity.openTurns.delete(field(event.data, 'turnId'));
-  }
-  activity.time = Math.max(activity.time, Date.parse(event.time));
-  snapshot.activity.set(assistantId, activity);
-}
 
 async function updateComputers(store: EventStore, kube: SandboxClient,
   silo: string, snapshot: ComputerWatchState, signal: AbortSignal) {
@@ -184,7 +160,7 @@ async function updateComputers(store: EventStore, kube: SandboxClient,
   for await (const row of readEvents(store, snapshot.position + 1, head, signal)) {
     const { event, sequence } = row;
     if (event.silo === silo) {
-      recordActivity(snapshot, event);
+      snapshot.activity.record(event);
       if (event.subject.startsWith('computer-')) {
         const events = snapshot.histories.get(event.subject) ?? [];
         events.push(row);
@@ -400,13 +376,6 @@ async function observeReady(store: EventStore, state: ComputerState, events: Sto
   }
 }
 
-function isIdle(state: ComputerState, activity: ComputerActivity | undefined,
-  idleMs: number, checkedAt: number): boolean {
-  if (!state.ready || activity?.openTurns.size) return false;
-  const idleSince = Math.max(Date.parse(state.ready.time), activity?.time ?? 0);
-  return checkedAt - idleSince >= idleMs;
-}
-
 function skipComputerCheck(state: ComputerState, stable: boolean, eventsMoved: boolean,
   lastCheckAt: number, checkedAt: number): boolean {
   if (!stable) return false;
@@ -455,8 +424,7 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
   const { idleMs, signal } = options;
   const logger = createLogger('computer-lifecycle');
   const snapshot: ComputerWatchState = {
-    position: 0, computers: new Map(), conversations: new Map(), activity: new Map(),
-    histories: new Map(),
+    position: 0, computers: new Map(), activity: computerActivity(), histories: new Map(),
   };
   const applied = new Map<string, string>();
   const idleChecks = new Map<string, number>();
@@ -473,8 +441,9 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
       idleChecks.set(state.computerId, checkedAt);
       // Read messages that arrived during the Kubernetes call before deciding to suspend.
       await refreshComputers();
-      const activity = snapshot.activity.get(state.assistantId);
-      return isIdle(state, activity, idleMs, checkedAt);
+      const readyAt = state.ready?.time;
+      return Boolean(readyAt && snapshot.activity.isIdle(state.assistantId, readyAt,
+        checkedAt, idleMs));
     }
     try {
       const storedEvents = snapshot.histories.get(`computer-${state.assistantId}`) ?? [];

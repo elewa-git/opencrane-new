@@ -249,17 +249,21 @@ and `MEMORY_KEY_DIRECTORY=/var/lib/opencrane/memory-secrets/keys`. Only the serv
 mounts the personal keys. The Memory projection mounts its keys read-only. The
 dispatcher can remove retired Memory keys. The setup containers check the
 directories before these processes start. They set mode 0700 and uid 1000.
-Processes create files with mode 0600. The setup check leaves live key files
-alone because Memory can briefly give a key two names while saving it.
+Processes create files with mode 0600. The setup containers check that existing
+key files are regular files owned by uid 1000 with mode 0600. Memory can briefly
+give a key two names while saving it.
 `fsGroupChangePolicy: OnRootMismatch` preserves private permissions on remount.
-The server Deployment stops the old Pod before starting the new one.
+The server Deployment stops the old Pod before starting the new one. The server
+and dispatcher have separate Kubernetes accounts for computer operations.
+Projection workers have no Kubernetes role or mounted account token.
 The Memory worker builds its read tables and checkpoint in `opencrane_memory`.
 The server and dispatcher use that schema for Memory and keep their ordinary
 read tables in `public`. The existing restore check can still compare and
 rebuild the public tables while Memory stays off in the read-only installation.
 
-Helm values, logs and saved events do not carry these key bytes. Backup does not
-include the key folders yet. The read-only restore mode leaves both folders
+Helm values, logs and saved events do not carry these key bytes. The database
+backup contains readable text from the Memory search table. Backup does not include
+the key folders yet. The read-only restore mode leaves both folders
 unmounted and the Memory worker stopped.
 
 ## Default render regression

@@ -3,13 +3,28 @@ import type { Query } from './db.ts';
 const schema = 'opencrane_memory';
 
 export function memoryProjectionDatabaseUrl(databaseUrl: string) {
-  const setting = process.env['MEMORY_PROJECTION_SCHEMA'];
-  if (setting === undefined) return undefined;
-  if (setting !== schema) throw new Error('Invalid Memory projection schema');
+  // Reject malformed addresses without attaching the supplied credentials to the error.
+  if (!URL.canParse(databaseUrl)) {
+    throw new Error('Invalid Memory database address');
+  }
   const url = new URL(databaseUrl);
+  if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+    throw new Error('Invalid Memory database address');
+  }
+  const setting = process.env['MEMORY_PROJECTION_SCHEMA'];
+  if (setting === undefined) {
+    return undefined;
+  }
+  if (setting !== schema) {
+    throw new Error('Invalid Memory projection schema');
+  }
   const existingOptions = url.searchParams.get('options');
-  let options = `-c search_path=${schema},public`;
-  if (existingOptions) options = `${existingOptions} ${options}`;
+  // Find Memory tables first and keep shared chat and group tables in public.
+  const searchPath = `-c search_path=${schema},public`;
+  let options = searchPath;
+  if (existingOptions) {
+    options = `${existingOptions} ${searchPath}`;
+  }
   url.searchParams.set('options', options);
   return url.href;
 }

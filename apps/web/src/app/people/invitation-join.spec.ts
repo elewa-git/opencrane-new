@@ -65,9 +65,10 @@ it('accepts the invitation as the signed-in person', async function acceptInvita
   fetchSpy.mockResolvedValueOnce(reply({ next: 'survey' }));
   const { element } = await openInvitation('input[name=displayName]');
   accept(element);
-  await vi.waitFor(function opensSurvey() {
+  function opensSurvey() {
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/welcome/survey');
-  });
+  }
+  await vi.waitFor(opensSurvey);
   const request = fetchSpy.mock.calls[1];
   expect(request?.[0]).toBe('/members/join');
   expect(request?.[1]?.method).toBe('POST');
@@ -126,11 +127,13 @@ function stallRequest(_resource: RequestInfo | URL, options?: RequestInit): Prom
 
 function controlDeadline() {
   const deadline = new AbortController();
-  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation(function timeout(milliseconds) {
+  function timeout(milliseconds: number) {
     expect(milliseconds).toBeGreaterThan(0);
     expect(milliseconds).toBeLessThanOrEqual(15_000);
     return deadline.signal;
-  });
+  }
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+  timeoutSpy.mockImplementation(timeout);
   function restore() { timeoutSpy.mockRestore(); }
   return { deadline, restore };
 }
@@ -170,9 +173,10 @@ it('retries a lost join reply with the original command', async function retryJo
 
   restore();
   accept(element);
-  await vi.waitFor(function opensWorkspace() {
+  function opensWorkspace() {
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/workspace');
-  });
+  }
+  await vi.waitFor(opensWorkspace);
   const repeated = fetchSpy.mock.calls[2]?.[1];
   expect(typeof sent?.body).toBe('string');
   expect(repeated?.body).toBe(sent?.body);

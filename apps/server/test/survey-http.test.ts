@@ -41,7 +41,9 @@ type RevisionReceipt = { position: number; revision: number; revisionId: string 
 type RevisionDetail = RevisionReceipt & { replacement: string; current: boolean };
 type RevisionList = { revisions: { revision: number }[]; nextBefore: number | null };
 type PositionReceipt = { position: number };
+let identityLookups = 0;
 function memberId(_silo: string, _issuer: string, sub: string) {
+  identityLookups += 1;
   return Promise.resolve(sub);
 }
 async function start() {
@@ -1519,7 +1521,9 @@ async function entryChecksSessionAndMembership() {
   const wrongOrg = memberHeaders('bob', 'another-organisation');
   expect((await app.inject({ url: route, headers: wrongOrg })).statusCode).toBe(403);
   await restartServer(config, 'another-silo');
+  const lookupsBeforeRefusal = identityLookups;
   expect((await app.inject({ url: route, headers: bobHeaders })).statusCode).toBe(403);
+  expect(identityLookups).toBe(lookupsBeforeRefusal);
   await restartServer();
   const removed = event('bob-removed', 'member-bob', 'member.removed');
   await nats.seed([removed]);

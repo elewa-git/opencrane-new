@@ -8,7 +8,7 @@ import { memberJoinedDataSchema, siloOwnerBootstrappedDataSchema,
   welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import { currentMembership, isAuthorityChanged } from '@opencrane/models';
+import { currentMembership, isAuthorityChanged, personalAssistantId } from '@opencrane/models';
 import { chatAccess, isChatRefused, writeChatAccess }
   from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
@@ -28,12 +28,6 @@ const inputSchema = z.discriminatedUnion('operation', [start, answer]);
 type Input = z.infer<typeof inputSchema>;
 type History = Awaited<ReturnType<typeof surveyHistory>>;
 type Saved = NonNullable<Awaited<ReturnType<typeof savedCommand>>>;
-
-function assignedAssistantId(silo: string, memberId: string) {
-  const identity = [silo, memberId].join('\0');
-  const digest = sha256Hex(identity);
-  return `personal-${digest.slice(0, 32)}`;
-}
 
 async function admissionChoice(options: OnboardingOptions, memberId: string, deadline: number) {
   const member = await currentMembership(options.store, options.silo, memberId,
@@ -76,7 +70,7 @@ function checkedAssistant(creation: StoredEvent | undefined,
 }
 
 async function assistantAssignment(options: OnboardingOptions, memberId: string) {
-  const assistantId = assignedAssistantId(options.silo, memberId);
+  const assistantId = personalAssistantId(options.silo, memberId);
   const subject = `assistant-${assistantId}`;
   const deadline = performance.now() + 10_000;
   const choice = await admissionChoice(options, memberId, deadline);

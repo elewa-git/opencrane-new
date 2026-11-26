@@ -25,6 +25,9 @@
       <p role="alert">We could not open your workspace. Try again.</p>
       <button class="button primary" type="button" (click)="openEntry()">Try again</button>
       <oc-sign-out />
+    } @else if (accessDenied()) {
+      <p role="alert">You do not have access to this workspace. Ask an admin for help.</p>
+      <oc-sign-out />
     } @else if (authenticated()) {
       <h2>You are signed in</h2>
       <oc-shared-state kind="ready" message="Your workspace session is active"

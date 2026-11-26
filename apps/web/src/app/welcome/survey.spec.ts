@@ -147,8 +147,9 @@ describe('welcome survey', () => {
     const sent = fetchSpy.mock.calls.find(wasSurveyCommand);
     const body = sent?.[1]?.body;
     if (typeof body !== 'string') throw new Error('Missing skip command');
-    const parsed = z.object({ operation: z.literal('skip'), commandId: z.string(),
-      generation: z.literal(1), expectedPosition: z.literal(0) }).parse(JSON.parse(body));
+    const skipSchema = z.object({ operation: z.literal('skip'), commandId: z.string(),
+      generation: z.literal(1), expectedPosition: z.literal(0) });
+    const parsed = skipSchema.parse(JSON.parse(body));
     fetchSpy.mockResolvedValueOnce(Response.json({ status: 'confirmed' }));
     buttonNamed(element, 'Check status').click();
     function opensWorkspace() {

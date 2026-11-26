@@ -113,8 +113,12 @@ function renderChart(values, chart = 'infra/package/chart', flags = []) {
 function renderedResources(values, flags = []) {
   const result = renderChart(values, 'infra/package/chart', flags);
   assert.equal(result.status, 0, result.stderr);
+  return chartResources(result.stdout);
+}
+
+function chartResources(render) {
   const resources = new Map();
-  for (const document of parseAllDocuments(result.stdout)) {
+  for (const document of parseAllDocuments(render)) {
     assert.deepEqual(document.errors, []);
     const resource = document.toJS();
     resources.set(`${resource.kind}/${resource.metadata.name}`, resource);
@@ -1029,21 +1033,71 @@ async function originalChartRender(values) {
   }
 }
 
-const changedKeyResources = new Set([
+const keyVolumes = ['personal-secrets', 'memory-secrets'];
+const keySettings = ['PERSONAL_KEY_DIRECTORY', 'MEMORY_KEY_DIRECTORY', 'MEMORY_PROJECTION_SCHEMA'];
+const changedResources = [
   'PersistentVolumeClaim/personal-secrets', 'PersistentVolumeClaim/memory-secrets',
-  'Deployment/server', 'Deployment/worker-dispatcher', 'Deployment/worker-members',
-]);
+  'ServiceAccount/package-worker', 'Role/package-worker', 'RoleBinding/package-worker',
+  'ServiceAccount/package-server', 'Role/package-server', 'RoleBinding/package-server',
+  'ServiceAccount/package-dispatcher', 'Role/package-dispatcher', 'RoleBinding/package-dispatcher',
+  'ServiceAccount/package-projection',
+];
+
+function entriesWithout(entries, names) {
+  function keep(entry) {
+    return !names.includes(entry.name);
+  }
+  return entries.filter(keep);
+}
+
+function withoutKeyChanges(pod) {
+  delete pod.securityContext.fsGroupChangePolicy;
+  pod.initContainers = entriesWithout(pod.initContainers, ['private-member-keys', 'private-memory-keys']);
+  pod.volumes = entriesWithout(pod.volumes, keyVolumes);
+  pod.containers = entriesWithout(pod.containers, ['memory']);
+  for (const container of pod.containers) {
+    if (['server', 'worker'].includes(container.name)) {
+      container.env = entriesWithout(container.env, keySettings);
+      container.volumeMounts = entriesWithout(container.volumeMounts, keyVolumes);
+    }
+  }
+}
+
+function withoutAccountChanges(pod, name) {
+  delete pod.serviceAccountName;
+  if (name === 'server' || name === 'worker-dispatcher') {
+    return;
+  }
+  delete pod.automountServiceAccountToken;
+  pod.initContainers = entriesWithout(pod.initContainers, ['kubeconfig']);
+  pod.volumes = entriesWithout(pod.volumes, ['kubeconfig']);
+  const worker = pod.containers[0];
+  worker.env = entriesWithout(worker.env, ['KUBECONFIG', 'KUBE_NAMESPACE']);
+  worker.volumeMounts = entriesWithout(worker.volumeMounts, ['kubeconfig']);
+}
 
 function unchangedResources(render) {
-  function hasNoKeyChanges(text) {
-    const document = parseAllDocuments(text)[0];
-    const resource = document?.toJS();
-    if (!resource) return true;
-    return !changedKeyResources.has(resource.kind + '/' + resource.metadata.name);
+  const resources = chartResources(render);
+  for (const name of changedResources) {
+    resources.delete(name);
   }
-  const documents = render.split(/^---\n/mu);
-  const unchanged = documents.filter(hasNoKeyChanges);
-  return unchanged.join('---\n');
+  for (const resource of resources.values()) {
+    if (resource.kind !== 'Deployment') {
+      continue;
+    }
+    const name = resource.metadata.name;
+    const pod = resource.spec.template.spec;
+    if (name === 'server' || name === 'worker-dispatcher' || name === 'worker-members') {
+      withoutKeyChanges(pod);
+    }
+    if (name === 'server' || name.startsWith('worker-')) {
+      withoutAccountChanges(pod, name);
+    }
+    if (name === 'server') {
+      delete resource.spec.strategy;
+    }
+  }
+  return resources;
 }
 
 async function defaultOnlyAddsMemberKeys() {
@@ -1052,7 +1106,9 @@ async function defaultOnlyAddsMemberKeys() {
   assert.equal(original.status, 0, original.stderr);
   // Use the installed Helm for both charts because Helm 3 and 4 serialise YAML differently.
   const baseline = await originalChartRender(values);
-  assert.equal(unchangedResources(original.stdout), unchangedResources(baseline));
+  const originalResources = unchangedResources(original.stdout);
+  const baselineResources = unchangedResources(baseline);
+  assert.deepEqual(originalResources, baselineResources);
   values.models = { mode: 'stub' };
   assert.equal(renderChart(values).stdout, original.stdout);
 }
@@ -1061,16 +1117,26 @@ test('default and explicit stub mode keep the original resources outside member 
 
 function rendersOnboardingAndMemoryStorage() {
   const resources = renderedResources(chartValues());
-  const server = resources.get('Deployment/server').spec.template.spec;
+  const serverDeployment = resources.get('Deployment/server');
+  assert.deepEqual(serverDeployment.spec.strategy, { type: 'Recreate' });
+  const server = serverDeployment.spec.template.spec;
   const members = resources.get('Deployment/worker-members').spec.template.spec;
   const dispatcher = resources.get('Deployment/worker-dispatcher').spec.template.spec;
   const projection = members.containers.find(isMemoryProjection);
-  function isMemoryProjection(container) { return container.name === 'memory'; }
+  function isMemoryProjection(container) {
+    return container.name === 'memory';
+  }
   const personal = '/var/lib/opencrane/personal-secrets';
   const memory = '/var/lib/opencrane/memory-secrets';
   assert.ok(resources.has('PersistentVolumeClaim/personal-secrets'));
   assert.ok(resources.has('PersistentVolumeClaim/memory-secrets'));
-  assert.deepEqual(server.securityContext, { fsGroup: 1000, fsGroupChangePolicy: 'OnRootMismatch' });
+  const keyGroup = { fsGroup: 1000, fsGroupChangePolicy: 'OnRootMismatch' };
+  assert.deepEqual(server.securityContext, keyGroup);
+  assert.deepEqual(members.securityContext, keyGroup);
+  assert.deepEqual(dispatcher.securityContext, keyGroup);
+  assertKeySetup(server, 'private-member-keys', [personal, memory]);
+  assertKeySetup(members, 'private-memory-keys', [memory]);
+  assertKeySetup(dispatcher, 'private-memory-keys', [memory]);
   assertKeyDirectory(server, 'server', 'PERSONAL_KEY_DIRECTORY', personal);
   assertKeyDirectory(server, 'server', 'MEMORY_KEY_DIRECTORY', memory);
   assertKeyDirectory(dispatcher, 'worker', 'MEMORY_KEY_DIRECTORY', memory);
@@ -1086,11 +1152,28 @@ function rendersOnboardingAndMemoryStorage() {
   ]);
 }
 
+function assertKeySetup(pod, name, paths) {
+  function keySetup(container) {
+    return container.name === name;
+  }
+  const setup = pod.initContainers.find(keySetup);
+  assert.deepEqual(setup?.command, ['node', 'infra/package/provider-secrets.mjs',
+    '--directory-only', ...paths]);
+  assert.deepEqual(setup.securityContext, { runAsUser: 0, allowPrivilegeEscalation: false,
+    readOnlyRootFilesystem: true });
+}
+
 function assertKeyDirectory(pod, name, variable, root, readOnly = false) {
   const volumeName = root.split('/').at(-1);
-  function namedContainer(container) { return container.name === name; }
-  function namedSetting(setting) { return setting.name === variable; }
-  function namedMount(mount) { return mount.name === volumeName; }
+  function namedContainer(container) {
+    return container.name === name;
+  }
+  function namedSetting(setting) {
+    return setting.name === variable;
+  }
+  function namedMount(mount) {
+    return mount.name === volumeName;
+  }
   const container = pod.containers.find(namedContainer);
   assert.equal(container.env.find(namedSetting)?.value, root + '/keys');
   const mount = container.volumeMounts.find(namedMount);
@@ -1101,7 +1184,9 @@ function assertKeyDirectory(pod, name, variable, root, readOnly = false) {
 }
 
 function keyReaders(resources, claimName) {
-  function nameMount(mount) { return mount.workload + ':' + mount.container; }
+  function nameMount(mount) {
+    return mount.workload + ':' + mount.container;
+  }
   const mounts = keyMounts(resources, claimName);
   const readers = mounts.map(nameMount);
   return readers.sort();
@@ -1328,25 +1413,43 @@ function ordinaryWorkerCannotReachOtherPods() {
     const role = resources.get(binding.roleRef.kind + '/' + binding.roleRef.name);
     grantedRules.push(...role.rules);
   }
-  for (const resource of ['pods', 'pods/exec']) {
-    function canCreate(rule) {
+  const checks = [['create', 'pods'], ['create', 'pods/exec'], ['get', 'pods/exec']];
+  const allowed = [];
+  for (const [verb, resource] of checks) {
+    function matches(rule) {
       return rule.apiGroups.includes('') &&
         (rule.resources.includes(resource) || rule.resources.includes('*')) &&
-        (rule.verbs.includes('create') || rule.verbs.includes('*'));
+        (rule.verbs.includes(verb) || rule.verbs.includes('*'));
     }
-    assert.equal(grantedRules.some(canCreate), false, 'Unrelated worker can create ' + resource);
+    if (grantedRules.some(matches)) {
+      allowed.push([verb, resource]);
+    }
   }
+  assert.deepEqual(allowed, []);
   assert.equal(worker.automountServiceAccountToken, false);
+  assert.equal(resources.get('ServiceAccount/' + identity).automountServiceAccountToken, false);
+  assert.notEqual(identity,
+    resources.get('Deployment/worker-dispatcher').spec.template.spec.serviceAccountName);
+  assert.notEqual(identity,
+    resources.get('Deployment/server').spec.template.spec.serviceAccountName);
 }
 test('an unrelated projection worker cannot create pods or run commands in another pod',
   ordinaryWorkerCannotReachOtherPods);
 
 function comparesOtherPartsOfTheKeyDeployments() {
   const original = renderChart(chartValues()).stdout;
-  const edited = original.replace('apps/server/src/main.ts', 'apps/server/src/another-entry.ts');
-  assert.notEqual(edited, original);
-  const equivalent = isDeepStrictEqual(unchangedResources(edited), unchangedResources(original));
-  assert.equal(equivalent, false);
+  const comparison = unchangedResources(original);
+  const changes = [
+    ['apps/server/src/main.ts', 'apps/server/src/another-entry.ts'],
+    ['key: HANDLER_DATABASE_URL', 'key: DIFFERENT_DATABASE_URL'],
+    ['key: PROJECTION_DATABASE_URL', 'key: DIFFERENT_DATABASE_URL'],
+  ];
+  for (const [existing, changed] of changes) {
+    const edited = original.replace(existing, changed);
+    assert.notEqual(edited, original);
+    const editedResources = unchangedResources(edited);
+    assert.equal(isDeepStrictEqual(editedResources, comparison), false);
+  }
 }
 test('the chart comparison sees an unrelated server change beside the key mounts',
   comparesOtherPartsOfTheKeyDeployments);

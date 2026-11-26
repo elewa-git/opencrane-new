@@ -89,8 +89,9 @@ Not built yet:
    that saved events account for every stored file. It checks that writers stayed
    stopped before services restart. It publishes the backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-   The backup does not yet include the survey, persona or Memory keys. A new
-   installation cannot open the original answers, personas or facts without them.
+   The backup includes readable text from the Memory search tables, so operators
+   keep it in private backup storage. It leaves out the survey, persona and Memory
+   keys. A new installation needs those keys to open the original records.
 8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.

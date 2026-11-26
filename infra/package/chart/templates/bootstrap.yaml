@@ -33,33 +33,79 @@ roleRef:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: package-worker
+  name: package-projection
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: package-server
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: package-dispatcher
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: package-worker
+  name: package-server
 rules:
-  - apiGroups: ["extensions.agents.x-k8s.io"]
-    resources: [sandboxclaims, sandboxtemplates]
-    verbs: [create, get]
-  - apiGroups: ["agents.x-k8s.io"]
-    resources: [sandboxes]
-    verbs: [get, patch, update]
   - apiGroups: [""]
-    resources: [persistentvolumeclaims, pods, pods/proxy, pods/exec]
-    verbs: [get, list, create]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/proxy]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: package-worker
+  name: package-server
 subjects:
-  - { kind: ServiceAccount, name: package-worker }
+  - { kind: ServiceAccount, name: package-server }
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: package-worker
+  name: package-server
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: package-dispatcher
+rules:
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: [sandboxclaims]
+    verbs: [create, get]
+  - apiGroups: ["extensions.agents.x-k8s.io"]
+    resources: [sandboxtemplates]
+    verbs: [get]
+  - apiGroups: ["agents.x-k8s.io"]
+    resources: [sandboxes]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: package-dispatcher
+subjects:
+  - { kind: ServiceAccount, name: package-dispatcher }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: package-dispatcher
 {{- if not .Values.pilotRestore.enabled }}
 {{- $bootstrapImage := default .Values.images.server .Values.bootstrapImage }}
 {{- if not (regexMatch "@sha256:[a-f0-9]{64}$" $bootstrapImage) }}

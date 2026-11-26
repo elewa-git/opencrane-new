@@ -305,7 +305,8 @@ async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin:
 }
 async function checkLogs(idToken: string) {
   for (const name of ['server', 'web', 'members', 'mcp-catalogue', 'dispatcher']) {
-    assert(!(await readFile(`${directory}/${name}.log`, 'utf8')).includes(idToken), 'Stack logs must not contain the ID token');
+    const log = await readFile(`${directory}/${name}.log`, 'utf8');
+    assert(!log.includes(idToken), 'Stack logs must not contain the ID token');
   }
 }
 async function workspaceLogoutForm(page: Page, origin: string) {

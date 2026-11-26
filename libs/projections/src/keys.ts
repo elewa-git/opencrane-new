@@ -1,6 +1,10 @@
 import { sha256Hex } from '@opencrane/events/digest';
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync,
+  rmSync, writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { z } from 'zod';
 
 function reference(silo: string, conversation: string) {
@@ -31,17 +35,49 @@ function wrappingKey(path: string | undefined) {
   return key;
 }
 
+function syncDirectory(directory: string) {
+  const descriptor = openSync(directory, 'r');
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 function publishKey(path: string, key: Buffer) {
   // Publish only a complete key when a server and worker both try to create it.
   const temporary = `${path}-${randomUUID()}.pending`;
-  writeFileSync(temporary, key, { flag: 'wx', mode: 0o600 });
+  const descriptor = openSync(temporary, 'wx', 0o600);
   try {
+    try {
+      writeFileSync(descriptor, key);
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
     linkSync(temporary, path);
   } catch (error) {
-    if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
+    // A concurrent writer can publish first and remove this unused name.
+    const anotherKeyPublished = error instanceof Error && 'code' in error &&
+      (error.code === 'EEXIST' || (error.code === 'ENOENT' && existsSync(path)));
+    if (!anotherKeyPublished) {
+      throw error;
+    }
   } finally {
     rmSync(temporary, { force: true });
   }
+}
+
+function finishPublication(path: string) {
+  const directory = dirname(path);
+  const prefix = basename(path) + '-';
+  // Remove abandoned names only once the real key exists, so a competing writer can use it.
+  for (const name of readdirSync(directory)) {
+    if (name.startsWith(prefix) && name.endsWith('.pending')) {
+      rmSync(join(directory, name), { force: true });
+    }
+  }
+  syncDirectory(directory);
 }
 
 /** Store each conversation key separately so deleting one does not affect another. */
@@ -59,7 +95,9 @@ export function conversationKeys(directory: string, wrappingKeyFile?: string) {
   function conversationKey(silo: string, conversation: string) {
     const storedKey = readFileSync(keyPath(silo, conversation));
     if (!masterKey) {
-      if (storedKey.length !== 32) throw new Error('Conversation key is damaged');
+      if (storedKey.length !== 32) {
+        throw new Error('Conversation key is damaged');
+      }
       return storedKey;
     }
     const unwrapped = decryptBytes(masterKey, identity(silo, conversation), storedKey);
@@ -70,13 +108,18 @@ export function conversationKeys(directory: string, wrappingKeyFile?: string) {
   return {
     provision(silo: string, conversation: string) {
       const path = keyPath(silo, conversation);
-      if (existsSync(path)) return;
-      mkdirSync(directory, { recursive: true, mode: 0o700 });
-      const newKey = randomBytes(32);
-      const storedKey = masterKey
-        ? encryptBytes(masterKey, identity(silo, conversation), newKey)
-        : newKey;
-      publishKey(path, storedKey);
+      if (!existsSync(path)) {
+        const firstCreated = mkdirSync(directory, { recursive: true, mode: 0o700 });
+        if (firstCreated) {
+          syncDirectory(dirname(firstCreated));
+        }
+        const newKey = randomBytes(32);
+        const storedKey = masterKey
+          ? encryptBytes(masterKey, identity(silo, conversation), newKey)
+          : newKey;
+        publishKey(path, storedKey);
+      }
+      finishPublication(path);
     },
     encrypt(silo: string, conversation: string, text: string) {
       const bytes = Buffer.from(text, 'utf8');

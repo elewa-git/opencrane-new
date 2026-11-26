@@ -86,7 +86,8 @@ export { memoryMaintenanceBoundDataSchema } from './memory.ts';
 export { mcpInstanceStartSchema, mcpInstanceStopSchema,
   mcpInstanceObservedSchema } from './mcp-instance.ts';
 
-export { budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
+export { agentTurnCompletedDataSchema, agentTurnFailedDataSchema,
+  budgetExhaustedDataSchema, budgetStopReasonSchema } from './data.ts';
 export { budgetCallDispatchAdmittedDataSchema } from './data.ts';
 export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausingDataSchema,
   takeoverPausedDataSchema, takeoverFailedDataSchema, takeoverStartedLeaseDataSchema,
@@ -94,6 +95,7 @@ export { takeoverRefusedDataSchema, takeoverRequestedDataSchema, takeoverPausing
   takeoverEndedWithProofDataSchema, takeoverClosureUnknownDataSchema,
   takeoverEndReasonSchema } from './takeover.ts';
 export { surveyAnswersSchema, surveyStepSavedDataSchema, surveyGenerationDataSchema,
+  surveyGenerationDataSchema as surveyRestartedDataSchema,
   personaApprovedDataSchema,
   personaRevisedDataSchema, welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema,
   welcomeArchiveSetDataSchema,

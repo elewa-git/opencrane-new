@@ -4,11 +4,11 @@ import { recordIdPattern } from '@opencrane/protocol';
 import { z } from 'zod';
 import { SignOut } from '../sign-in/sign-out';
 import { NAVIGATE } from '../core/navigate';
-import { onboardingEntry } from '../welcome/entry';
+import { onboardingEntry, reportEntryFailure } from '../welcome/entry';
 
 type InvitationLink = { memberId: string; invitationId: string };
 type JoinState = 'loading' | 'signin' | 'fresh-signin' | 'ready' | 'joined' |
-  'opening' | 'entry-failed' | 'wrong-account' | 'unavailable';
+  'opening' | 'entry-failed' | 'access-denied' | 'wrong-account' | 'unavailable';
 type JoinAttempt = { displayName: string; commandId: string };
 
 const sessionSchema = z.object({ authenticated: z.boolean() });
@@ -103,12 +103,30 @@ export class InvitationJoin implements OnInit, OnDestroy {
     this.state.set('opening');
     const signal = this.entryRequest.signal;
     try {
-      const path = await onboardingEntry(signal, true);
-      if (signal.aborted) return;
-      if (path) this.navigate(path);
-      else this.state.set('joined');
-    } catch {
-      if (!signal.aborted) this.state.set('entry-failed');
+      const entry = await onboardingEntry(signal, true);
+      if (signal.aborted) {
+        return;
+      }
+      switch (entry.kind) {
+        case 'destination':
+          this.navigate(entry.path);
+          break;
+        case 'disabled':
+          this.state.set('joined');
+          break;
+        case 'signed-out':
+          this.state.set('signin');
+          this.message.set('Your session has expired. Sign in again to continue.');
+          break;
+        case 'denied':
+          this.state.set('access-denied');
+          break;
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        reportEntryFailure(error, 'invitation');
+        this.state.set('entry-failed');
+      }
     }
   }
 

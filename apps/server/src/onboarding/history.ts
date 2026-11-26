@@ -1,3 +1,4 @@
+import { surveyCanBeSkipped } from '@opencrane/projections';
 import type { OnboardingOptions } from './options.ts';
 import { parseEventByType, surveyGenerationDataSchema, surveyStepSavedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
@@ -140,11 +141,15 @@ function applyChange(survey: Survey, row: StoredEvent) {
 
 function restartSurvey(survey: Survey, row: StoredEvent) {
   const data = surveyGenerationDataSchema.parse(row.event.data);
-  if (data.generation !== survey.generation + 1) throw new Error('Invalid generation');
+  if (data.generation !== survey.generation + 1) {
+    throw new Error('Invalid generation');
+  }
   survey.generation = data.generation;
   survey.steps = [];
   survey.currentRevision = null;
-  if (!survey.welcome?.completion) survey.welcome = null;
+  if (!survey.welcome?.completion) {
+    survey.welcome = null;
+  }
 }
 
 function saveSkip(survey: Survey, row: StoredEvent) {
@@ -164,11 +169,13 @@ function saveStep(survey: Survey, row: StoredEvent) {
   survey.steps.push(row);
   survey.hasSavedAnswers = true;
   survey.currentRevision = null;
-  if (!survey.welcome?.completion) survey.welcome = null;
+  if (!survey.welcome?.completion) {
+    survey.welcome = null;
+  }
 }
 
 export function canSkipSurvey(survey: Survey) {
-  return !survey.skipped && !survey.welcome?.completion;
+  return surveyCanBeSkipped(survey.skipped, Boolean(survey.welcome?.completion));
 }
 
 function add(survey: Survey, row: StoredEvent) {

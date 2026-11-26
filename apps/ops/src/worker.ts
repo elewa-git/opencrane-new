@@ -121,7 +121,9 @@ async function runProjectionWorker(projection: Projection, store: EventStore) {
   const runner = new ProjectionRunner(db.db, store, logger);
   // Hold the database lock while creating shared tables. Other workers may start together.
   async function initialiseProjection(locked: Db) {
-    if (memoryDatabaseUrl) await initialiseMemoryProjectionSchema(locked);
+    if (memoryDatabaseUrl) {
+      await initialiseMemoryProjectionSchema(locked);
+    }
     const lockedRunner = new ProjectionRunner(locked, store, logger);
     await lockedRunner.initialise(projection);
   }

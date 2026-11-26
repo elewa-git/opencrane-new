@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
 import { afterEach, expect, it } from 'vitest';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -13,6 +13,7 @@ import { seedOwnership } from '@opencrane/models';
 import { members, memoryScopeId, pgDb, ProjectionRunner, groups, computers, conversations } from '@opencrane/projections';
 import { objectId, TupleClient } from '../../../libs/authz/src/client.ts';
 import { grantPackageReads } from '../../../infra/package/package-database.ts';
+import { lockPackageTestRoles } from '../../../infra/package/pilot-restore-postgres-fixture.ts';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -24,6 +25,9 @@ let worker: ChildProcess | undefined;
 let workerStopped: Promise<unknown[]> | undefined;
 let workerOutput = '';
 let projectionPool: Pool | undefined;
+let rolePool: Pool | undefined;
+let roleSession: PoolClient | undefined;
+const fixtureRoles: string[] = [];
 
 afterEach(async function cleanup() {
   await server?.stop();
@@ -31,9 +35,13 @@ afterEach(async function cleanup() {
     worker.kill('SIGTERM');
   }
   await workerStopped;
-  await projectionPool?.end();
-  projectionPool = undefined;
-  await storage?.close();
+  try {
+    await projectionPool?.end();
+    projectionPool = undefined;
+    await storage?.close();
+  } finally {
+    await releaseDatabaseRoles();
+  }
   await fga?.close();
   await nats?.close();
   if (directory) await rm(directory, { recursive: true, force: true });
@@ -105,12 +113,9 @@ async function databaseRoles(isolatedMemory: boolean) {
   if (!isolatedMemory) {
     return { server: base, projection: base };
   }
-  // Authenticate to the disposable fixture, then let PostgreSQL enforce the package roles.
-  for (const role of ['projection', 'server']) {
-    await storage.queue.query(`DO $$ BEGIN CREATE ROLE ${role} NOLOGIN;
-      EXCEPTION WHEN duplicate_object THEN NULL; END $$`);
-  }
-  const database = new URL(base).pathname.slice(1);
+  await claimDatabaseRoles(base);
+  const baseAddress = new URL(base);
+  const database = baseAddress.pathname.slice(1);
   if (!/^authz_[a-f0-9]+$/u.test(database)) {
     throw new Error('Expected the disposable Memory fixture database');
   }
@@ -120,6 +125,39 @@ async function databaseRoles(isolatedMemory: boolean) {
   await grantPackageReads(projection);
   projectionPool = new Pool({ connectionString: projection });
   return { server, projection };
+}
+
+async function claimDatabaseRoles(address: string) {
+  const database = new URL(address);
+  database.pathname = '/postgres';
+  const connectionString = process.env['PG_TEST_URL'] ?? database.href;
+  rolePool = new Pool({ connectionString });
+  roleSession = await rolePool.connect();
+  // Use the restore tests' lock while the shared database has these fixed role names.
+  await lockPackageTestRoles(roleSession);
+  for (const role of ['projection', 'server']) {
+    const existing = await roleSession.query('SELECT 1 FROM pg_roles WHERE rolname=$1', [role]);
+    if (existing.rows.length === 0) {
+      await roleSession.query(`CREATE ROLE ${role} NOLOGIN`);
+      fixtureRoles.push(role);
+    }
+  }
+}
+
+async function releaseDatabaseRoles() {
+  const session = roleSession;
+  const pool = rolePool;
+  roleSession = undefined;
+  rolePool = undefined;
+  try {
+    // Drop the fixture database first, since its tables and grants refer to these roles.
+    for (const role of fixtureRoles.splice(0)) {
+      await session?.query(`DROP ROLE ${role}`);
+    }
+  } finally {
+    session?.release();
+    await pool?.end();
+  }
 }
 
 function withRole(address: string, role: 'projection' | 'server') {
@@ -155,6 +193,10 @@ async function memoryReady(isolatedMemory = false) {
   return Number(result.rows[0]?.sequence) === await nats.store.head();
 }
 
+function isolatedMemoryIsCurrent() {
+  return memoryReady(true);
+}
+
 it('loads empty personal memory, saves a fact and recalls it through the dev-stack entrypoint',
   async function firstMemory() {
     const { origin, headers, env } = await setup(true, true);
@@ -178,10 +220,7 @@ it('loads empty personal memory, saves a fact and recalls it through the dev-sta
     const savedBody: unknown = await saved.json();
     expect({ status: saved.status, body: savedBody }).toMatchObject({ status: 200,
       body: { outcome: 'saved', revision: 1 } });
-    function projected() {
-      return memoryReady(true);
-    }
-    await until(projected);
+    await until(isolatedMemoryIsCurrent);
     const recalled = await fetch(`${path}?q=jasmine`, { headers });
     expect(recalled.status).toBe(200);
     expect(await recalled.json()).toMatchObject({ returnedCount: 1,
@@ -352,10 +391,7 @@ async function checksGroupAndForeignMemoryAcrossSchemas() {
   await fixture.db.query('UPDATE conversation_feed SET event_id=$1 WHERE event_id=$2',
     [missing.messageId, source.messageId]);
   expect((await postFact(personal, bob, 'wrong-source', [missing])).status).toBe(404);
-  function projected() {
-    return memoryReady(true);
-  }
-  await until(projected);
+  await until(isolatedMemoryIsCurrent);
   const recalled = await fetch(shared, { headers: bob });
   expect(recalled.status).toBe(200);
   expect(await recalled.json()).toMatchObject({ facts: [{ text: 'I prefer jasmine tea' }] });
@@ -388,6 +424,7 @@ async function checksNotesPermissionsAcrossSchemas() {
     await saveFixtureEvent(fixture, { subject: grantStream('memory_read', scopeId),
       type: 'grant.given', data });
   }
+  await until(isolatedMemoryIsCurrent);
   expect((await fetch(path, { headers })).status).toBe(200);
   expect((await postFact(path, headers, 'read-only-grant')).status).toBe(404);
   // Make the permission service report access so this checks the saved assistant owner.

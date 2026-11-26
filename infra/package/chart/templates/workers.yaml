@@ -21,13 +21,19 @@ spec:
     metadata:
       labels: { app: worker-{{ $mode }} }
     spec:
-      serviceAccountName: package-worker
+      {{- if $dispatcher }}
+      serviceAccountName: package-dispatcher
+      {{- else }}
+      serviceAccountName: package-projection
+      automountServiceAccountToken: false
+      {{- end }}
       {{- if $memory }}
       securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
       {{- else }}
       securityContext: { fsGroup: 1000 }
       {{- end }}
       initContainers:
+        {{- if $dispatcher }}
         - name: kubeconfig
           image: {{ $root.Values.images.server | quote }}
           command: [node, infra/package/kubeconfig.mjs]
@@ -36,6 +42,7 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+        {{- end }}
         - name: wait-for-binding
           image: {{ $root.Values.images.server | quote }}
           command: [sh, -c, 'until [ "$(cat /run/opencrane/OPENFGA_STORE_ID)" != pending ]; do sleep 2; done']
@@ -93,14 +100,18 @@ spec:
             {{- include "opencrane.memoryKeyEnvironment" . | nindent 12 }}
             {{- end }}
             - { name: MODEL_DECISION_URL, value: "http://server:43001" }
+            {{- if $dispatcher }}
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
             - name: KUBE_NAMESPACE
               valueFrom:
                 fieldRef: { fieldPath: metadata.namespace }
+            {{- end }}
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            {{- if $dispatcher }}
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
+            {{- end }}
             {{- if $memoryWriter }}
             - { name: memory-secrets, mountPath: /var/lib/opencrane/memory-secrets }
             {{- end }}
@@ -126,9 +137,6 @@ spec:
             - { name: NATS_NKEY_SEED_FILE, value: /run/opencrane/files/projection.seed }
             - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
             {{- include "opencrane.memoryKeyEnvironment" . | nindent 12 }}
-            - name: KUBE_NAMESPACE
-              valueFrom:
-                fieldRef: { fieldPath: metadata.namespace }
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
@@ -149,6 +157,8 @@ spec:
           secret:
             secretName: {{ $root.Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
+        {{- if $dispatcher }}
         - name: kubeconfig
           emptyDir: { medium: Memory }
+        {{- end }}
 {{- end }}

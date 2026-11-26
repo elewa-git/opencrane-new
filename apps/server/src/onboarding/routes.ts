@@ -1,4 +1,5 @@
 import type { OnboardingOptions } from './options.ts';
+import { onboardingDestination } from './entry.ts';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest, FastifyError } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
@@ -66,22 +67,17 @@ function registerEntryRoute(app: FastifyInstance, config: AuthConfig, options?: 
   app.get('/api/onboarding/entry', entry);
   async function entry(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
-    if (!options) return reply.code(204).send();
+    if (!options) {
+      return reply.code(204).send();
+    }
     try {
       const context = await requireMember(request, reply, config, options, { write: false });
-      const history = await surveyHistory(options, context.memberId);
-      return { next: entryDestination(history) };
+      const next = await onboardingDestination(context.options, context.memberId);
+      return { next };
     } catch (error) {
       return surveyRefusal(request, reply, error);
     }
   }
-}
-
-function entryDestination(history: History): 'survey' | 'persona' | 'welcome' | 'workspace' {
-  if (history.skipped || history.welcome?.completion) return 'workspace';
-  if (history.welcome) return 'welcome';
-  // Send members without an assistant to the same review page, which can offer the welcome.
-  return welcomeRequiredStep(history, true) ?? 'welcome';
 }
 
 function writeOnboardingRoute(request: FastifyRequest, options: OnboardingOptions,
@@ -124,8 +120,12 @@ function readProgress(options: OnboardingOptions, memberId: string, history: His
   const recentReceipts = recentReferences.map(receiptFor);
   const survey = { generation: history.generation, position: history.position, nextStep, steps };
   const allowedActions = ['save_step', 'restart'];
-  if (canSkipSurvey(history)) allowedActions.push('skip');
-  if (history.currentRevision !== null) allowedActions.push('approve');
+  if (canSkipSurvey(history)) {
+    allowedActions.push('skip');
+  }
+  if (history.currentRevision !== null) {
+    allowedActions.push('approve');
+  }
   return { state, allowedActions, recentReceipts, survey,
     currentRevision: history.currentRevision, approval: history.approval };
 }

@@ -17,6 +17,10 @@
           <p role="alert">Invitation accepted. We could not open your workspace.</p>
           <button class="button" type="button" (click)="openEntry()">Try again</button>
         }
+        @case ('access-denied') {
+          <p role="alert">You do not have access to this workspace. Ask an admin for help.</p>
+          <oc-sign-out />
+        }
         @case ('unavailable') {
           <p role="alert">We could not check your sign-in. Reload this page to try again.</p>
         }

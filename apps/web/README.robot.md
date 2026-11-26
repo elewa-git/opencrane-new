@@ -105,7 +105,9 @@ This Angular app provides the organisation settings shell, MCP register and Memo
 `/api/onboarding/entry` chooses the next page after ordinary sign-in or a
 confirmed invitation. It returns only a destination. An invitation can finish
 before its membership read is ready, so the page waits for the workers without
-resending acceptance. `/welcome/survey` is a separate page without a chat composer. It reads
+resending acceptance. It gives the membership worker up to ten seconds to apply the change.
+If the session expires, sign-in is offered again. If membership is refused, the page
+explains the lost access. `/welcome/survey` is a separate page without a chat composer. It reads
 `/api/onboarding` and opens the first unsaved step. The name and optional pronouns
 form sends one checked `save_step` command. A confirmed save reads progress again.
 Step 2 reads `GET /api/chat/groups?limit=16` every time it opens. It uses the

@@ -55,7 +55,8 @@ try {
     const page = await context.newPage();
     await page.goto(origin);
     stage = `${width}px SSO button`;
-    await page.getByRole('button', { name: 'Continue with single sign-on' }).click();
+    const signIn = page.getByRole('button', { name: 'Continue with single sign-on' });
+    await signIn.click();
     stage = `${width}px provider sign-in`;
     const password = await readFile(owner.passwordFile, 'utf8');
     await completeProviderSignIn(page, owner.login, password, origin, setup.issuer);

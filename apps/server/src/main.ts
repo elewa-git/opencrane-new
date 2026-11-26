@@ -52,6 +52,8 @@ let computers: ReturnType<typeof connectComputers> | undefined;
 let modelDb: ReturnType<typeof connectProjectionDb> | undefined;
 const databaseUrl = process.env['DATABASE_URL'];
 const memoryKeysConfigured = Boolean(process.env['MEMORY_KEY_DIRECTORY']?.trim());
+const memoryDatabaseUrl = databaseUrl && memoryKeysConfigured
+  ? memoryProjectionDatabaseUrl(databaseUrl) : undefined;
 if (databaseUrl) {
   const apiUrl = process.env['OPENFGA_API_URL'];
   const storeId = process.env['OPENFGA_STORE_ID'];
@@ -64,8 +66,6 @@ if (databaseUrl) {
   computers = connectComputers(databaseUrl);
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
 }
-const memoryDatabaseUrl = databaseUrl && memoryKeysConfigured
-  ? memoryProjectionDatabaseUrl(databaseUrl) : undefined;
 const memoryDb = memoryDatabaseUrl ? connectProjectionDb(memoryDatabaseUrl, reportMemoryDbError)
   : undefined;
 function reportMemoryDbError(error: Error) {

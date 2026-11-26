@@ -61,7 +61,7 @@ spec:
     metadata:
       labels: { app: server }
     spec:
-      serviceAccountName: package-worker
+      serviceAccountName: package-server
       securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
       initContainers:
         - name: kubeconfig

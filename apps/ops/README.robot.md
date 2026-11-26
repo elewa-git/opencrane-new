@@ -256,6 +256,9 @@ dispatcher NATS credentials for delivery and `COMMAND_NATS_*` credentials for th
 single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
 `TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER` are required; the signing key is read by
 path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
+A new member's personal computer stays awake for up to an hour from joining.
+Survey and persona saves do not move that deadline. The first ordinary chat message
+from that member ends the extra time, and the ordinary idle rule applies to the turn.
 Run one active lifecycle reconciler per silo. Commands append intent before any
 Kubernetes effect; restart retries claims, modes and credential delivery from events.
 The Kubernetes identity can create/get claims, get/patch/update Sandboxes, get
@@ -540,8 +543,10 @@ before old joins/bootstrap records prepare custody, including `personalAssistant
 The reaction appends nothing and provisions no assistant. Enable/backfill its two
 subscriptions through the existing handler upgrade procedure. The package leaves this
 reaction disabled and the server prepares the key when it first saves an answer.
-Both paths leave a missing key visible as an error once saved answers need it.
-Offline survey replay uses ProjectionRunner with reactions off; no replay CLI is added.
+Replaying a join for an active member can recreate a missing key. The new key
+cannot open answers saved with the old one. The packaged server refuses a missing
+key once an answer has used it. Offline survey replay uses ProjectionRunner with
+reactions off.
 
 `complete-welcome` subscribes to `onboarding.welcome_answer_recorded`. It reads
 personal history with a ten-second limit before the two-second access check.

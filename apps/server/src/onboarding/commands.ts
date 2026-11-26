@@ -35,8 +35,12 @@ function encrypt(options: OnboardingOptions, memberId: string, value: string) {
 function eventData(options: OnboardingOptions, memberId: string, input: z.infer<typeof commandSchema>,
   history: Awaited<ReturnType<typeof surveyHistory>>) {
   const identity = { schemaVersion: 1, memberId, generation: input.generation };
-  if (input.operation === 'restart') return { ...identity, generation: input.generation + 1 };
-  if (input.operation === 'skip') return identity;
+  if (input.operation === 'restart') {
+    return { ...identity, generation: input.generation + 1 };
+  }
+  if (input.operation === 'skip') {
+    return identity;
+  }
   if (input.operation === 'approve') {
     return { ...identity, revision: input.revision, revisionId: input.revisionId };
   }
@@ -50,7 +54,9 @@ function eventData(options: OnboardingOptions, memberId: string, input: z.infer<
   }
   // Create the key on the first save, including for members who joined before setup was enabled.
   // Leave a missing key visible as a failure once any answer has used it.
-  if (!history.hasSavedAnswers) options.keys.provision(options.silo, `personal:${memberId}`);
+  if (!history.hasSavedAnswers) {
+    options.keys.provision(options.silo, `personal:${memberId}`);
+  }
   return { ...identity, step: input.answers.step,
     ...encrypt(options, memberId, JSON.stringify(input.answers)) };
 }
@@ -103,7 +109,9 @@ function eventType(input: z.infer<typeof commandSchema>) {
   if (input.operation === 'save_step') return 'onboarding.survey_step_saved';
   if (input.operation === 'revise') return 'onboarding.persona_revised';
   if (input.operation === 'approve') return 'onboarding.persona_approved';
-  if (input.operation === 'skip') return 'onboarding.survey_skipped';
+  if (input.operation === 'skip') {
+    return 'onboarding.survey_skipped';
+  }
   return 'onboarding.survey_restarted';
 }
 export async function surveyCommand(options: OnboardingOptions, memberId: string, body: unknown,

@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
 import { chatIdSchema } from '@opencrane/events';
 import { chatAccess, ChatAccessApplying, isChatRefused, type ChatOptions }
   from '../chat/access.ts';
@@ -43,6 +43,14 @@ export async function requireMember<Options extends MemberOptions>(
 ) {
   reply.header('cache-control', 'no-store');
   const session = sessionFor(request, config, new Date());
+  const originAllowed = !checks.write || sameOrigin(request, config);
+  return requireMemberSession(session, config, options, checks, originAllowed);
+}
+
+export async function requireMemberSession<Options extends MemberOptions>(
+  session: SessionData | undefined, config: AuthConfig, options: Options | undefined,
+  checks: MemberChecks, originAllowed = false,
+) {
   if (!session) throw new MemberRefusal(401, 'refused');
   if (!options || !options.silo || !config.expectedOrgId) {
     throw new MemberRefusal(503, 'unavailable');
@@ -51,7 +59,9 @@ export async function requireMember<Options extends MemberOptions>(
   if (!isOrganisationSession(config, session) || options.silo !== options.binding.silo) {
     throw new MemberRefusal(403, 'refused');
   }
-  if (checks.write && !sameOrigin(request, config)) throw new MemberRefusal(403, 'refused');
+  if (checks.write && !originAllowed) {
+    throw new MemberRefusal(403, 'refused');
+  }
   try {
     const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
     if (!memberId) throw new MemberRefusal(403, 'refused');

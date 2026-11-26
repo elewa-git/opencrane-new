@@ -6,6 +6,7 @@ import { assistantCreatedDataSchema, onboardingCompletedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
 import { authorityFence } from './authority.ts';
+import { personalAssistantId } from './personal-assistant-id.ts';
 import { currentMembership } from './ownership.ts';
 
 type Store = Pick<EventStore, 'readStream' | 'head' | 'append' | 'clock'>;
@@ -46,9 +47,7 @@ function currentWelcome(rows: StoredEvent[]) {
 
 async function checkAssistant(store: Store, silo: string, memberId: string,
   assistantId: string) {
-  const digest = sha256Hex([silo, memberId].join('\0'));
-  const suffix = digest.slice(0, 32);
-  const expectedId = `personal-${suffix}`;
+  const expectedId = personalAssistantId(silo, memberId);
   if (assistantId !== expectedId) throw new Error('Invalid welcome assistant');
   const subject = `assistant-${assistantId}`;
   const deadline = performance.now() + 10_000;

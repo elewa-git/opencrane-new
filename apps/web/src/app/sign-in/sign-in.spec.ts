@@ -217,10 +217,11 @@ describe('where a signed-in member lands', function entryRules() {
     if (!(element instanceof HTMLElement)) {
       throw new Error('Missing sign-in root');
     }
+    const rootElement = element;
     function seesRefusal() {
       fixture.detectChanges();
-      expect(element.textContent).toContain(message);
-      expect(element.textContent).not.toContain('You are signed in');
+      expect(rootElement.textContent).toContain(message);
+      expect(rootElement.textContent).not.toContain('You are signed in');
     }
     await vi.waitFor(seesRefusal);
     expect(navigate).not.toHaveBeenCalled();

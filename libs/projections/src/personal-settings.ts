@@ -65,8 +65,13 @@ async function revisePersona(db: Query, survey: Survey, event: EventEnvelope, po
   survey.currentRevisionId = event.id;
   survey.revisionCount = revised.revision;
 }
+export function surveyCanBeSkipped(skipped: boolean | undefined, completed: boolean) {
+  return !skipped && !completed;
+}
+
 function skipSurvey(survey: Survey, generation: number) {
-  if (generation !== survey.generation || survey.skipped || survey.welcome?.status === 'completed') {
+  if (generation !== survey.generation ||
+      !surveyCanBeSkipped(survey.skipped, survey.welcome?.status === 'completed')) {
     throw new Error('Invalid survey skip');
   }
   survey.skipped = true;
