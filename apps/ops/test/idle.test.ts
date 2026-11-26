@@ -4,6 +4,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import * as observability from '@opencrane/observability';
 import { until } from '@opencrane/authz/testing';
 import { envelope } from '@opencrane/models';
+import { sha256Hex } from '@opencrane/events/digest';
+import { event } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import { fakeKubectl } from './fake-kubectl.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
@@ -437,3 +439,87 @@ async function upgradesRunningComputerAtNextSuspend() {
 
 it('keeps an outdated running computer until its next committed suspend',
   upgradesRunningComputerAtNextSuspend);
+
+const minute = 60_000;
+
+async function onboardingIdleLimit(firstChat: boolean) {
+  const assistantHash = sha256Hex('test' + '\0' + 'alice');
+  const assistantId = 'personal-' + assistantHash.slice(0, 32);
+  const fixture = await computerFixture({ suspended: false, assistantId });
+  const { nats, directory, stop, tokens, subject } = fixture;
+  const joinedAt = Date.now();
+  let now = joinedAt;
+  function clock() {
+    return now;
+  }
+  vi.spyOn(Date, 'now').mockImplementation(clock);
+  const joined = event('joined-alice', 'member-alice', 'member.joined');
+  await nats.seed([{ ...joined, time: new Date(joinedAt).toISOString() }]);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const sandbox = { uid: 'sandbox', podUid: 'old-pod', ready: true, suspended: false };
+  vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
+  vi.spyOn(kube, 'mode').mockResolvedValue();
+  const sink = vi.fn().mockResolvedValue(undefined);
+  const conversation = 'conversation-onboarding-chat';
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 15 * minute, signal: stop.signal });
+  function checkedOnce() {
+    return sink.mock.calls.length >= 1;
+  }
+  function checkedTwice() {
+    return sink.mock.calls.length >= 2;
+  }
+  async function isSuspended() {
+    const rows = await history(nats.store, subject);
+    return rows.at(-1)?.event.type === 'computer.suspended';
+  }
+  try {
+    await until(checkedOnce);
+    now = joinedAt + 16 * minute;
+    async function checkedAgain() {
+      return checkedTwice() || await isSuspended();
+    }
+    await until(checkedAgain);
+    expect(await isSuspended()).toBe(false);
+    if (firstChat) {
+      const created = envelope('test', conversation, 'conversation.created', {
+        conversationId: 'onboarding-chat', assistantId, createdBy: 'alice', mode: 'agent_session',
+      });
+      const posted = envelope('test', conversation, 'message.posted', {
+        conversationId: 'onboarding-chat', authorId: 'alice', authorKind: 'human',
+        utterance: 'My first ordinary message', contentType: 'text',
+      });
+      const finished = envelope('test', conversation, 'agent.turn_completed', { turnId: posted.id });
+      const time = new Date(now).toISOString();
+      await nats.seed([{ ...created, time }, { ...posted, time }, { ...finished, time }]);
+      now = joinedAt + 32 * minute;
+    } else {
+      now = joinedAt + 59 * minute;
+      const survey = envelope('test', 'personal-alice', 'onboarding.survey_step_saved',
+        { memberId: 'alice' });
+      const persona = envelope('test', 'personal-alice', 'onboarding.persona_revised',
+        { memberId: 'alice' });
+      const time = new Date(now).toISOString();
+      await nats.seed([{ ...survey, time }, { ...persona, time }]);
+      now = joinedAt + 60 * minute;
+    }
+    await until(isSuspended, 2500);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+function expiresAfterAnHour() {
+  return onboardingIdleLimit(false);
+}
+function firstChatEndsExtraTime() {
+  return onboardingIdleLimit(true);
+}
+it('keeps a new member’s computer awake for up to an hour even with repeated onboarding saves',
+  expiresAfterAnHour);
+it('returns to the ordinary idle rule after the new member sends their first chat',
+  firstChatEndsExtraTime);

@@ -7,7 +7,7 @@ import { envelope } from '@opencrane/models';
 import { expect } from 'vitest';
 import { history } from '../src/lifecycle.ts';
 
-export async function computerFixture({ suspended = true } = {}) {
+export async function computerFixture({ suspended = true, assistantId = 'assistant' } = {}) {
   const nats = await natsFixture();
   const directory = await mkdtemp(`${tmpdir()}/computer-idle-`);
   const stop = new AbortController();
@@ -20,10 +20,10 @@ export async function computerFixture({ suspended = true } = {}) {
   const privateKeyPath = `${directory}/key.pem`;
   await writeFile(privateKeyPath, key.privateKey, { mode: 0o600 });
   const tokens = await tokenIssuer({ privateKeyPath, issuer: 'https://idle.test/' });
-  const subject = 'computer-assistant';
+  const subject = `computer-${assistantId}`;
   async function record(type: string, extra: Record<string, unknown>) {
     const rows = await history(nats.store, subject);
-    const data = { assistantId: 'assistant', computerId: 'computer', ...extra };
+    const data = { assistantId, computerId: 'computer', ...extra };
     const event = envelope('test', subject, type, data);
     const result = await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
     expect(result.status).toBe('appended');
