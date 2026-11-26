@@ -8,7 +8,8 @@ import { appendEvent, event, natsFixture } from '@opencrane/event-store/testing'
 import { history } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import type { Query } from '@opencrane/projections';
-import { groups, members, pgDb, ProjectionRunner, auditTrail, rebuildAuditProjection } from '@opencrane/projections';
+import { groups, members, pgDb, ProjectionRunner, auditTrail, rebuildAuditProjection,
+  connectMemberFeed } from '@opencrane/projections';
 import { memberDirectorySchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -657,15 +658,62 @@ async function createCompetingInvitations() {
   return { firstCommand, secondCommand };
 }
 
-function acceptInvitation(payload: unknown) {
+function inviteeHeaders() {
   const identity = { sub: 'person', orgId: 'org-acme', roles: [], email,
     emailVerified: true, authTime: clock.getTime() / 1000, exp: 2000000000 };
-  const headers = { origin: 'https://app.example.test', 'content-type': 'application/json',
+  return { origin: 'https://app.example.test', 'content-type': 'application/json',
     cookie: `${config.cookieName}=${encodeSession(config, identity)}` };
+}
+
+function acceptInvitation(payload: unknown) {
+  const headers = inviteeHeaders();
   const options = { method: 'POST' as const, url: '/members/join', headers,
     payload: JSON.stringify(payload) };
   return app.inject(options);
 }
+
+async function readsAsNewAdmin(membersProjected: boolean) {
+  const runner = await prepareAcceptanceProjection();
+  await runner.initialise(groups);
+  const invitation = { ...input, role: 'admin' };
+  const invited = await request('POST', invitation, 'owner');
+  expect(invited.statusCode).toBe(200);
+  const { invitationId } = invited.json<{ invitationId: string }>();
+  const join = { memberId, invitationId, commandId: 'join-admin', displayName: 'Person' };
+  const joined = await acceptInvitation(join);
+  expect(joined.statusCode).toBe(200);
+  expect(joined.json()).toMatchObject({ status: 'joined' });
+  const db = pgDb(dbs.queue);
+  const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
+  const memberReads = { silo: 'acme', store: nats.store, binding, db, feed };
+  const directoryApp = buildServer(config, { memberReads });
+  const read = { url: '/api/members', headers: inviteeHeaders() };
+  try {
+    if (membersProjected) await runner.run(members);
+    const applying = await directoryApp.inject(read);
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+
+    const rows = await records();
+    const saved = rows.at(-1);
+    expect(saved?.event.type).toBe('member.joined');
+    if (!saved) throw new Error('Expected a saved join');
+    const auth = memberAuthorisation(binding);
+    await auth.handler.handle(saved.event, db);
+    await runner.run(members);
+    await runner.run(groups);
+    const accepted = await directoryApp.inject(read);
+    expect(accepted.statusCode).toBe(200);
+    const directory = memberDirectorySchema.parse(accepted.json());
+    expect(directory.permissions.invite).toBe(true);
+    expect(directory.rows).toContainEqual(expect.objectContaining({ memberId, role: 'admin' }));
+  } finally {
+    await directoryApp.close();
+    await feed.close();
+  }
+}
+it.each([true, false])('lets a newly joined admin read People (members projected: %s)',
+  readsAsNewAdmin);
 
 async function readsMembersAfterAcceptance(countsAvailable: boolean) {
   const runner = await prepareAcceptanceProjection();

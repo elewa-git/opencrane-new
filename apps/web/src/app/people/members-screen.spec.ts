@@ -75,6 +75,22 @@ it('starts with a bounded member page and appends distinct rows once', async () 
   expect(root(fixture).textContent).toContain('Not available yet');
 });
 
+async function showsPeopleAfterJoinApplies() {
+  const urls: string[] = [];
+  function read(url: string) {
+    urls.push(url);
+    if (urls.length === 1) return response({ status: 'access_applying' }, 425);
+    return response(page([alice], null));
+  }
+  const fixture = await mount(read);
+  await waitForText(fixture, 'Alice');
+  expect(root(fixture).querySelector('.page-actions button.primary')?.textContent)
+    .toBe('Invite people');
+  expect(urls).toEqual(['/api/members?q=&after=&limit=20', '/api/members?q=&after=&limit=20']);
+}
+it('loads the directory and invite button when the new admin’s access is ready',
+  showsPeopleAfterJoinApplies);
+
 it('keeps loaded rows and focus after a failed Refresh', async () => {
   let reads = 0;
   const fixture = await mount(() => {
