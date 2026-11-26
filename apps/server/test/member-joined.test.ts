@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
-import { databases } from '@opencrane/authz/testing';
+import { databases, openfga, permissionStore } from '@opencrane/authz/testing';
 import { encodeSession, type SessionData } from '@opencrane/auth';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { connectMemberFeed, groups, members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { memberDirectorySchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import type { JoinResult, JoinStore } from '../src/members/join.ts';
 import { testAuthConfig, tamperCookie } from './support/test-auth-config.ts';
@@ -23,6 +24,7 @@ const input = { memberId: 'alice', invitationId: 'invite-alice', commandId: 'joi
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let app: FastifyInstance;
 let dbs: Awaited<ReturnType<typeof databases>>;
+let runner: ProjectionRunner;
 
 async function openAcceptanceDatabase() {
   dbs = await databases();
@@ -39,7 +41,7 @@ beforeEach(async () => {
   await seedInviter();
   const db = pgDb(dbs.queue);
   await members.drop(db);
-  const runner = new ProjectionRunner(db, nats.reader, createLogger('test'));
+  runner = new ProjectionRunner(db, nats.reader, createLogger('test'));
   await runner.initialise(members);
   await db.query("UPDATE projection_checkpoints SET sequence = 0 WHERE name = 'members'");
   await db.query("DELETE FROM projection_events WHERE projection = 'members'");
@@ -54,11 +56,15 @@ afterEach(async () => {
 function server(store: JoinStore) {
   return buildServer(config, { membership: { silo: 'acme', store, db: pgDb(dbs.queue), now: () => clock } });
 }
-function accept(body: unknown = input, identity: SessionData = session) {
-  return app.inject({ method: 'POST', url: '/members/join', payload: JSON.stringify(body), headers: {
+function sessionHeaders(identity: SessionData) {
+  return {
     'content-type': 'application/json', origin: 'https://app.example.test',
     cookie: `${config.cookieName}=${encodeSession(config, identity)}`,
-  } });
+  };
+}
+function accept(body: unknown = input, identity: SessionData = session) {
+  const headers = sessionHeaders(identity);
+  return app.inject({ method: 'POST', url: '/members/join', payload: JSON.stringify(body), headers });
 }
 function invitation(patch: Record<string, unknown> = {}, silo = 'acme') {
   return {
@@ -77,6 +83,98 @@ async function history() {
   for await (const stored of nats.store.readStream('member-alice')) records.push(stored);
   return records;
 }
+
+let fga: Awaited<ReturnType<typeof openfga>>;
+
+async function startPermissions() {
+  fga = await openfga();
+}
+async function stopPermissions() {
+  await fga?.close();
+}
+async function joinedReader(role: 'admin' | 'member') {
+  await runner.initialise(groups);
+  await invite({ role, invitedIdentity: undefined });
+  const joined = await accept();
+  expect(joined.statusCode).toBe(200);
+  expect(joined.json()).toMatchObject({ status: 'joined' });
+  const { binding, auth } = await permissionStore(fga, 'acme');
+  const db = pgDb(dbs.queue);
+  const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
+  const memberReads = { silo: 'acme', store: nats.store, binding, db, feed };
+  const directoryApp = buildServer(config, { memberReads });
+  const headers = sessionHeaders(session);
+
+  function read(url: string) {
+    return directoryApp.inject({ url, headers });
+  }
+
+  async function applyJoin() {
+    const rows = await history();
+    const saved = rows.at(-1);
+    if (saved?.event.type !== 'member.joined') throw new Error('Expected a saved join');
+    await auth.handler.handle(saved.event, db);
+    await runner.run(members);
+    await runner.run(groups);
+  }
+
+  async function close() {
+    await directoryApp.close();
+    await feed.close();
+  }
+
+  return { read, applyJoin, close };
+}
+
+async function readsAsNewAdmin(membersProjected: boolean) {
+  const reader = await joinedReader('admin');
+  try {
+    if (membersProjected) await runner.run(members);
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+
+    await reader.applyJoin();
+    const accepted = await reader.read('/api/members');
+    expect(accepted.statusCode).toBe(200);
+    const directory = memberDirectorySchema.parse(accepted.json());
+    expect(directory.permissions.invite).toBe(true);
+    expect(directory.rows).toContainEqual(expect.objectContaining({ memberId: 'alice',
+      role: 'admin' }));
+  } finally {
+    await reader.close();
+  }
+}
+async function limitsNewMemberToHeader() {
+  const reader = await joinedReader('member');
+  try {
+    const header = '/api/members/alice';
+    const applying = await reader.read(header);
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+    expect((await reader.read('/api/members')).statusCode).toBe(403);
+
+    await reader.applyJoin();
+    const accepted = await reader.read(header);
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({ memberId: 'alice', displayName: 'Alice', role: 'member',
+      permissions: { changeRole: false, remove: false, manageOwnership: false } });
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+function firstMemberReads() {
+  beforeAll(startPermissions, 120_000);
+  afterAll(stopPermissions);
+  it.each([true, false])('lets a newly joined admin read People (members projected: %s)',
+    readsAsNewAdmin);
+  it('gives a newly joined member their header and refuses the directory', limitsNewMemberToHeader);
+}
+describe('first member reads after accepting an invitation', firstMemberReads);
 
 const assistantChoices = ['none', 'provision', undefined] as const;
 async function carriesAssistantChoice(choice: typeof assistantChoices[number]) {

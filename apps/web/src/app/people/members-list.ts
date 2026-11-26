@@ -1,14 +1,12 @@
 import {
   ChangeDetectionStrategy, Component, output, signal, type OnDestroy, type OnInit,
 } from '@angular/core';
-import { memberDirectorySchema } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
 import { checkTimeLabel } from './group-wording';
-import { classifyStatus } from './groups-api';
+import { searchMembers, type MemberDirectory } from './member-search-api';
 
-type Directory = ReturnType<typeof memberDirectorySchema.parse>;
-type Member = Directory['rows'][number];
+type Member = MemberDirectory['rows'][number];
 type State = 'loading' | 'ready' | 'failed' | 'access';
 
 @Component({
@@ -91,10 +89,9 @@ export class MembersList implements OnInit, OnDestroy {
     const generation = this.generation;
     if (after) this.loadingMore.set(true);
     else this.state.set('loading');
-    const parameters = new URLSearchParams({ q: this.search(), after, limit: '20' });
-    const result = await this.read(`/api/members?${parameters.toString()}`);
+    const result = await searchMembers(this.search(), after, this.request.signal);
     if (this.request.signal.aborted) return;
-    if (result.kind === 'access') {
+    if (result.kind === 'access_changed') {
       this.clearForAccessChange(result.status);
       return;
     }
@@ -102,7 +99,7 @@ export class MembersList implements OnInit, OnDestroy {
     if (generation !== this.generation) return;
     this.readInFlight = false;
     this.loadingMore.set(false);
-    if (result.kind === 'failed') {
+    if (result.kind !== 'ok') {
       this.state.set('failed');
       return;
     }
@@ -123,25 +120,6 @@ export class MembersList implements OnInit, OnDestroy {
       ? directory.counts.members.value ?? undefined : undefined);
     this.loadedAt.set(new Date().toISOString());
     this.state.set('ready');
-  }
-
-  private async read(url: string): Promise<{ kind: 'ok'; value: Directory }
-    | { kind: 'failed' } | { kind: 'access'; status: number }> {
-    try {
-      const response = await fetch(url, { headers: { accept: 'application/json' },
-        signal: this.request.signal });
-      if (!response.ok) {
-        const kind = classifyStatus(response.status, 'GET');
-        if (kind === 'access_changed') return { kind: 'access', status: response.status };
-        return { kind: 'failed' };
-      }
-      const raw: unknown = await response.json();
-      const parsed = memberDirectorySchema.safeParse(raw);
-      if (!parsed.success) return { kind: 'failed' };
-      return { kind: 'ok', value: parsed.data };
-    } catch {
-      return { kind: 'failed' };
-    }
   }
 
   private clearForAccessChange(status: number): void {

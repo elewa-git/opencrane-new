@@ -1,7 +1,7 @@
 import { sha256HexOfJson } from '@opencrane/events/digest';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { legacyMemberRole } from '@opencrane/events';
+import { legacyMemberRole, memberJoinedDataSchema, type MemberJoinedData } from '@opencrane/events';
 import { history } from '@opencrane/models';
 import type { Query } from '@opencrane/projections';
 
@@ -12,10 +12,18 @@ const fields = z.object({
   expiresAt: z.string().optional(),
 });
 
+export function invitationJoin(row: StoredEvent | undefined) {
+  if (row?.event.type !== 'member.joined') return undefined;
+  const joined = memberJoinedDataSchema.parse(row.event.data);
+  if (!joined.invitationId) return undefined;
+  return joined;
+}
+
 function admission(rows: StoredEvent[], issuer: string, subject: string, now: Date) {
   let bound = false;
   let conflicting = false;
   let role: string | undefined;
+  let latestMembership: StoredEvent | undefined;
   let pending = false;
   for (const row of rows) {
     const data = fields.parse(row.event.data);
@@ -30,6 +38,7 @@ function admission(rows: StoredEvent[], issuer: string, subject: string, now: Da
     const nextRole = legacyMemberRole(row.event);
     if (nextRole !== undefined) {
       role = nextRole;
+      latestMembership = row;
       pending = false;
     }
     if (row.event.type === 'member.invited' && role === undefined) {
@@ -44,7 +53,7 @@ function admission(rows: StoredEvent[], issuer: string, subject: string, now: Da
   } else if (pending) {
     membership = 'pending';
   }
-  return { membership, bound, conflicting };
+  return { membership, bound, conflicting, latestMembership };
 }
 
 function memberSequence(rows: StoredEvent[]) {
@@ -175,6 +184,8 @@ export async function readActiveIdentity(store: IdentityStore, db: Query, silo: 
   const projected = await projectedIdentity(db, silo, issuer, subject);
   await includeUnprojectedIdentities(store, silo, issuer, subject, projected.sequence,
     memberHead, projected.candidates, deadline);
+  let active = false;
+  let joiningRole: MemberJoinedData['role'] | undefined;
   for (const candidate of projected.candidates) {
     const rows = await identityHistory(store, candidate, silo, memberHead, deadline);
     const state = admission(rows, issuer, subject, now);
@@ -182,8 +193,14 @@ export async function readActiveIdentity(store: IdentityStore, db: Query, silo: 
       throw new Error('Identity history mismatch');
     }
     if (state.bound && state.membership === 'joined') {
-      return { active: true, memberSequence: memberHead };
+      // Keep admission blocked for an ambiguous account and never label its access as applying.
+      if (active) return { active, memberSequence: memberHead, joiningRole: undefined };
+      active = true;
+      const latest = state.latestMembership;
+      if (latest && latest.sequence > projected.sequence) {
+        joiningRole = invitationJoin(latest)?.role;
+      }
     }
   }
-  return { active: false, memberSequence: memberHead };
+  return { active, memberSequence: memberHead, joiningRole };
 }

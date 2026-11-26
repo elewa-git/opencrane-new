@@ -8,6 +8,13 @@ Reads use `no-store`, verified session identity, current events and IAM; they ap
 | Same route for Owner/Admin | Adds email, joined status, recorded `joinedAt`, groups with id/name/membership source, `memberSequence` and `ownershipSequence`. |
 | `GET /api/members?q=&after=&limit=20` | Owner/Admin-only name/email search. Returns `rows`, `next`, `counts`, `checkedAt`, `projection.content` and `permissions.invite: true`. |
 
+After a caller accepts an invitation, these two reads return HTTP 425 with
+`{ "status": "access_applying" }` while the member table or OpenFGA is still
+applying the caller's saved join. The reply contains no member data. The website
+repeats the read for a few seconds. A signed-in person who lacks the required
+role or permission receives 403. An ordinary member receives 403 from the
+directory even while their join is applying.
+
 Only Owners get `manageOwnership: true` for the existing ownership API. For an
 active non-owner target, Owner/Admin detail replies set `changeRole` and `remove`
 to true, including when the caller is the target. Owner targets keep both false.

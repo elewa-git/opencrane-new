@@ -3,11 +3,13 @@ import { isEventStoreUnavailable } from '@opencrane/event-store';
 import type { FastifyBaseLogger, FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
+import { memberAuthorisation } from '@opencrane/authz';
 import { AuthorityApplying, currentMembership, readActiveMember,
   MemberAccessRefused } from '@opencrane/models';
 import { memberHeaderSchema, memberPageQuerySchema, memberDetailSchema,
   memberDirectorySchema } from '@opencrane/protocol';
 import { registerToolExplanation } from '../integrations/explanation-routes.ts';
+import { invitationJoin, readActiveIdentity } from './admission.ts';
 import { registerMemberInventory } from './inventory-routes.ts';
 import { memberCounts } from './read-counts.ts';
 import type { GroupOptions } from './group-routes.ts';
@@ -20,6 +22,10 @@ class InvalidMemberRequest extends Error {
     super('Invalid member request', { cause: error });
   }
 }
+
+class MemberJoinApplying extends Error {}
+
+type Membership = Awaited<ReturnType<typeof currentMembership>>;
 
 export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
@@ -50,8 +56,7 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
       let query: z.infer<typeof memberPageQuerySchema> | undefined;
       if (!memberId) query = parseRequest(memberPageQuerySchema, request.query);
       stage = 'caller_identity';
-      const caller = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-      if (!caller) throw new MemberAccessRefused('Active membership required');
+      const caller = await resolveCaller(options, config.issuerUrl, session.sub, !memberId);
       stage = 'caller_membership';
       const membership = await currentMembership(options.store, options.silo, caller);
       const management = isManager(membership.role);
@@ -59,7 +64,8 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
       let requiredRole: 'member' | 'admin' = 'member';
       if (management) requiredRole = 'admin';
       stage = 'caller_authorisation';
-      await readActiveMember(options.store, options.binding, caller, requiredRole);
+      const applied = await requireJoinApplied(options, caller, membership);
+      await readActiveMember(options.store, options.binding, caller, requiredRole, applied);
       if (!memberId) {
         stage = 'member_directory';
         const directory = await readDirectory(options, query, request.log);
@@ -74,6 +80,9 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
       if (reply.sent) return reply;
       if (error instanceof InvalidMemberRequest) return reply.code(400).send({ status: 'refused' });
       if (error instanceof MemberAccessRefused) return reply.code(403).send({ status: 'refused' });
+      if (error instanceof MemberJoinApplying) {
+        return reply.code(425).send({ status: 'access_applying' });
+      }
       const reason = memberReadFailure(error);
       request.log.error({ stage, reason }, 'Member read unavailable');
       return reply.code(503).send({ status: 'unavailable' });
@@ -81,6 +90,47 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
       clearTimeout(watchdog);
     }
   }
+}
+
+async function resolveCaller(options: GroupOptions, issuer: string, sub: string,
+  directory: boolean) {
+  const { silo, store, db, feed } = options;
+  const caller = await feed.memberId(silo, issuer, sub);
+  if (caller) return caller;
+
+  // Confirm the signed-in account has its own saved join before asking it to wait.
+  const identity = await readActiveIdentity(store, db, silo, issuer, sub, new Date());
+  if (identity.joiningRole && (!directory || isManager(identity.joiningRole))) {
+    throw new MemberJoinApplying();
+  }
+  if (identity.active) {
+    // Read again if the table already caught up after the first lookup.
+    const projected = await feed.memberId(silo, issuer, sub);
+    if (projected) return projected;
+  }
+  throw new MemberAccessRefused('Active membership required');
+}
+
+async function requireJoinApplied(options: GroupOptions, caller: string, membership: Membership) {
+  const subject = `member-${caller}`;
+  function concernsCaller(row: Membership['facts'][number]) {
+    return row.event.subject === subject;
+  }
+  const latest = membership.facts.findLast(concernsCaller);
+  if (!latest || !invitationJoin(latest) || !membership.role) return undefined;
+
+  // Check the join receipt before asking for access. OpenFGA writes both together.
+  const auth = memberAuthorisation(options.binding);
+  const joinId = latest.event.id;
+  const receipt = await auth.checkApplied(joinId);
+  if (receipt.status === 'unavailable') throw new Error('IAM unavailable', { cause: receipt.error });
+  if (!receipt.allowed) throw new MemberJoinApplying();
+
+  function applied(eventId: string) {
+    if (eventId === joinId) return Promise.resolve(true);
+    return auth.applied(eventId);
+  }
+  return applied;
 }
 
 function memberReadFailure(error: unknown) {

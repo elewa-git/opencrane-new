@@ -151,16 +151,18 @@ export async function followChange(
   return { kind: 'still_applying' };
 }
 
-function waitForNextRead(signal: AbortSignal): Promise<void> {
+export function waitForNextRead(signal: AbortSignal): Promise<void> {
   return new Promise<void>(scheduleNextRead.bind(null, signal));
 }
 
 function scheduleNextRead(signal: AbortSignal, resolve: () => void): void {
-  const timer = globalThis.setTimeout(resolve, 500);
-  signal.addEventListener('abort', cancelWait.bind(null, timer, resolve), { once: true });
-}
+  const timer = globalThis.setTimeout(finish, 500);
+  signal.addEventListener('abort', finish, { once: true });
+  if (signal.aborted) finish();
 
-function cancelWait(timer: number, resolve: () => void): void {
-  globalThis.clearTimeout(timer);
-  resolve();
+  function finish(): void {
+    globalThis.clearTimeout(timer);
+    signal.removeEventListener('abort', finish);
+    resolve();
+  }
 }
