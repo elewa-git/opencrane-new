@@ -151,8 +151,10 @@ async function recordsAndRecovers() {
   expect(await nats.store.head()).toBe(position);
   const changed = { ...command, action: 'cancel' };
   expect((await request('POST', 'primary', changed)).statusCode).toBe(409);
-  const cancel = await input('cancel');
-  expect((await request('POST', 'primary', cancel, 'admin')).statusCode).toBe(200);
+  const cancelOverrides = {};
+  const cancel = await input('cancel', cancelOverrides, 'unverified');
+  const cancelled = await request('POST', 'unverified', cancel, 'admin');
+  expect(cancelled.statusCode).toBe(200);
   expect(await nats.store.head()).toBe(position + 1);
   expect((await request('GET')).json()).toMatchObject({ draining: false, enabled: false });
   // Recover the original start without silently starting another drain.

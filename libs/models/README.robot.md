@@ -2350,6 +2350,9 @@ P4-22 row 4d is the first split of the remaining migration work. It provides
 provider management permission and the applied provider creation receipt. POST
 also requires the trusted Origin. Status uses the existing changes GET URL.
 
+Starting a drain requires a current reachability pass, a passing model test
+and at least one enabled model. The server reads those facts from the provider
+events. It returns HTTP 403 with `connection_not_ready` if any is missing.
 Each command makes one conditional append to `provider-*`. A same-id retry returns
 the original receipt, even after cancellation. Changed arguments or a different
 administrator conflict. A stale position or revision conflicts. Configuration

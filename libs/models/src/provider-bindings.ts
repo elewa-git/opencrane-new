@@ -6,7 +6,6 @@ import {
   providerModelIdSchema, type EventEnvelope,
 } from '@opencrane/events';
 import type { Binding } from '@opencrane/authz';
-import type { ProviderChoiceRefusal } from '@opencrane/protocol';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { applyProvider, retirementBinding, type ProviderState, type Query } from '@opencrane/projections';
 import { history } from './actor.ts';
@@ -15,7 +14,7 @@ import { modelForTask } from './routing.ts';
 import { models } from './state.ts';
 import { providerRoutinePresence } from './provider-routine-presence.ts';
 import {
-  ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
+  ProviderChoiceRefused, ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
   providerReceipt, providerSecretRef, providerStatus,
 } from './providers.ts';
 
@@ -91,14 +90,6 @@ function connectionRows(rows: StoredEvent[], providerId: string) {
     return row.event.subject === `provider-${providerId}`;
   }
   return rows.filter(belongs);
-}
-
-export class ProviderChoiceRefused extends ProviderRefused {
-  readonly reason: ProviderChoiceRefusal;
-  constructor(reason: ProviderChoiceRefusal) {
-    super(reason);
-    this.reason = reason;
-  }
 }
 
 function requireSelectable(target: ProviderState, model: string, needsAnswer: boolean) {

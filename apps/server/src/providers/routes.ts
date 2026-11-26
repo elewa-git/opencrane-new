@@ -71,6 +71,9 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
         if (error instanceof AuthorityApplying) {
           return reply.code(425).send({ status: 'access_applying' });
         }
+        if (error instanceof ProviderChoiceRefused) {
+          return reply.code(403).send({ status: 'refused', reason: error.reason });
+        }
         const code = errorCode(error);
         const result = { status: code === 503 ? 'unavailable' : 'refused',
           ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
@@ -300,9 +303,8 @@ async function bindings(request: FastifyRequest, reply: FastifyReply,
         memberId, providerId, request.body);
       return reply.send(receipt);
     } catch (error) {
-      if (error instanceof ProviderRefused) {
-        const reason = error instanceof ProviderChoiceRefused ? error.reason : 'permission_denied';
-        return reply.code(403).send({ status: 'refused', reason });
+      if (error instanceof ProviderRefused && !(error instanceof ProviderChoiceRefused)) {
+        return reply.code(403).send({ status: 'refused', reason: 'permission_denied' });
       }
       throw error;
     }

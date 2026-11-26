@@ -10,8 +10,8 @@ import { history } from './actor.ts';
 import { appendCheckedState } from './append-checked-state.ts';
 import { managedProviderCallsEnabled } from './provider-turns.ts';
 import {
-  ProviderConflict, ProviderRefused, providerAuthority, providerPermission, providerReceipt,
-  reconcileProvider,
+  ProviderChoiceRefused, ProviderConflict, ProviderRefused, providerAuthority, providerPermission,
+  providerReceipt, providerStatus, reconcileProvider,
 } from './providers.ts';
 
 const commandSchema = z.object({
@@ -60,6 +60,10 @@ export async function providerDrainStatus(store: EventStore, binding: Binding,
     expectedProviderSequence: current.position, revision: current.state?.revision };
 }
 
+function canStartDrain(state: ProviderState): boolean {
+  return providerStatus(state) === 'ready' && state.enabledModels.length > 0;
+}
+
 export async function providerDrainCommand(store: EventStore, binding: Binding,
   memberId: string, providerId: string, raw: unknown) {
   const input = commandSchema.parse(raw);
@@ -97,6 +101,10 @@ export async function providerDrainCommand(store: EventStore, binding: Binding,
     current.state?.revision !== input.expectedRevision ||
     current.sequence !== input.expectedDrainSequence || current.draining === data.draining) {
     throw new ProviderConflict();
+  }
+  // Use saved check results because the page could still show an older result.
+  if (data.draining && !canStartDrain(current.state)) {
+    throw new ProviderChoiceRefused('connection_not_ready');
   }
   const command = {
     event, expectedSequence: current.position, expectedSubject: 'provider-*',

@@ -13,7 +13,8 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 - Shows saved assistant bindings, counts affected assistants and lists unresolved routines
   before a provider can retire. It checks the payer and spending limits. A
   proposed choice changes nothing.
-- Pauses new model turns before a provider change and records when managed provider calls are switched on.
+- Checks that the connection is ready before pausing new model turns. It also records
+  when managed provider calls are switched on.
 
 A turn is one message and the assistant's reply. New managed turns use the assistant's chosen provider or the installation default. Renewing, repeating or closing a saved turn keeps its original model and provider. Running turns keep their original path during a pause. Provider lists also report that the model-access requests are available. Starting or cancelling the pause saves a change.
 
@@ -38,7 +39,7 @@ take a new key, model selection or check. Confirming retirement is still unavail
 | File | What it does |
 | --- | --- |
 | [routes.ts](routes.ts) | Handles provider lists, keys, verification, model choices, pauses and switch-on. |
-| [README.robot.md](README.robot.md) | Gives the preview route contract and safety limits. |
+| [README.robot.md](README.robot.md) | Describes chat defaults, pauses and retirement previews. |
 
 ## How it connects
 

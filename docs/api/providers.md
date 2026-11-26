@@ -255,6 +255,22 @@ The selected model must be supported and enabled. A 403 can name
 `permission_denied`, `connection_not_ready` or `model_not_enabled`. HTTP 425
 means the attempt did not save because membership was still being applied.
 
+## Pausing new calls
+
+`GET /api/org/providers/:providerId/drain` returns the current provider revision,
+provider and pause positions, and whether calls are paused or switched on.
+`POST` on the same route takes `commandId`, `action`, `expectedRevision`,
+`expectedProviderSequence` and `expectedDrainSequence`. The action is `start`
+or `cancel`. Both requests require current Owner/Admin access, permission to
+manage the connection and an applied creation receipt. The write also requires
+the configured Origin.
+
+To start a pause, the connection's latest saved reachability check and model
+test must pass, and at least one model must be enabled. A start with current
+positions returns HTTP 403 with `connection_not_ready` if the connection is
+unready, without saving a pause. If the saved positions changed, it returns
+HTTP 409. An existing pause can still be cancelled if readiness is lost.
+
 ## Switching on managed calls
 
 `POST /api/org/providers/:providerId/switch-on` takes `commandId`, `expectedRevision`,

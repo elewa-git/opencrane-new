@@ -5,6 +5,7 @@ import { parseEventByType, providerIdSchema, providerModelIdSchema,
   type EventEnvelope } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import type { ProviderChoiceRefusal } from '@opencrane/protocol';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { authorityFence } from './authority.ts';
@@ -28,6 +29,13 @@ export const providerCommandSchema = z.discriminatedUnion('action', [
   z.object({ ...common, action: z.literal('models'), models: z.array(modelId).max(11) }).strict(),
 ]);
 export class ProviderRefused extends Error {}
+export class ProviderChoiceRefused extends ProviderRefused {
+  readonly reason: ProviderChoiceRefusal;
+  constructor(reason: ProviderChoiceRefusal) {
+    super(reason);
+    this.reason = reason;
+  }
+}
 export class ProviderUnpriced extends ProviderRefused {}
 export class ProviderConflict extends Error {}
 

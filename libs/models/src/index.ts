@@ -36,15 +36,16 @@ export { ownershipConfirmationHandler } from './ownership-confirmation.ts';
 export { seedOwnership, ownershipSeedHandler,
   ownershipSubject, ownershipState, currentMembership, currentOwnershipMembership } from './ownership.ts';
 export { providerCommand, providerCommandSchema, providerAuthority, providerReceipt,
-  ProviderRefused, ProviderUnpriced, ProviderConflict, providerSecretRef, providerHistory,
+  ProviderChoiceRefused, ProviderRefused, ProviderUnpriced, ProviderConflict,
+  providerSecretRef, providerHistory,
   providerPermission, providerStatus } from './providers.ts';
 export { providerSecrets, type ProviderSecrets } from './provider-secrets.ts';
 export { providerVerificationSchema, requestProviderVerification, providerTestQuote,
   type ProviderVerificationOptions } from './provider-verification.ts';
 
 export { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';
-export { providerBindingCommand, providerDependencies, providerDefaultHandler,
-  ProviderChoiceRefused } from './provider-bindings.ts';
+export { providerBindingCommand, providerDependencies, providerDefaultHandler }
+  from './provider-bindings.ts';
 export { providerRetirementPreview } from './provider-retirement-preview.ts';
 
 export { parseMemoryRequest } from './mcp.ts';

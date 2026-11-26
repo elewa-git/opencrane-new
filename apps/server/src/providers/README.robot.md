@@ -22,6 +22,15 @@ refusal can name `permission_denied`, `connection_not_ready` or
 `model_not_enabled`. HTTP 425 means membership is still being applied and
 this attempt saved nothing.
 
+## Pause new calls
+
+`POST /api/org/providers/:providerId/drain` checks the latest saved reachability
+and model test results before starting a pause. Both must pass, and at least
+one model must be enabled. If the connection is unready, a start with current
+positions returns HTTP 403 with `connection_not_ready` and saves nothing.
+The [models library](../../../../libs/models/README.robot.md#recorded-draining-before-managed-calls)
+describes the positions, cancellation and receipt handling.
+
 ## Retirement preview
 
 `provider.retired` is readable through provider detail and change status. Detail
